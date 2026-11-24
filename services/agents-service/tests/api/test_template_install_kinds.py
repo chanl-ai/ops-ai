@@ -91,7 +91,10 @@ async def test_a_skill_copy_is_the_teams_draft_and_its_tools_are_checked(client:
     wire(client, [SKILL], tools=TOOLS[:1])  # the team is not offered close_case
     refused = await install(client, "close-politely")
     assert refused.status_code in (400, 422), refused.text
-    assert ok(await client.get("/v1/templates", params={"kind": "skill"}, headers=OPS))[0]["installed"]["copies"] == 0
+    assert (
+        ok(await client.get("/v1/templates", params={"kind": "skill"}, headers=OPS))["data"][0]["installed"]["copies"]
+        == 0
+    )
     wire(client, [SKILL])
     made = ok(await install(client, "close-politely"), 201)["copy"]
     skill = ok(await client.get(f"/v1/skills/{made['recordId']}", headers=OPS))
@@ -115,7 +118,7 @@ async def test_a_workflow_that_fails_the_engines_checks_is_refused_and_nothing_i
     wire(client, [broken])
     r = await install(client, "case-review")
     assert r.status_code == 422 and r.json()["error"]["code"] == "definition_checks", r.text
-    listed = ok(await client.get("/v1/templates", params={"kind": "workflow"}, headers=OPS))
+    listed = ok(await client.get("/v1/templates", params={"kind": "workflow"}, headers=OPS))["data"]
     assert listed[0]["installed"]["copies"] == 0
 
 
@@ -126,7 +129,7 @@ async def test_deleting_a_skill_or_workflow_copy_marks_it_removed(client: AsyncC
     for path in (f"/v1/skills/{sid}", f"/v1/workflows/definitions/{wid}"):
         gone = await client.delete(path, headers=OPS)
         assert gone.status_code == 204, gone.text
-    listed = ok(await client.get("/v1/templates", headers=OPS))
+    listed = ok(await client.get("/v1/templates", headers=OPS))["data"]
     assert {t["id"]: t["installed"]["copies"] for t in listed} == {"close-politely": 0, "case-review": 0}
 
 
@@ -137,5 +140,5 @@ async def test_a_skill_template_whose_body_fails_the_skill_checks_is_refused_not
     wire(client, [broken])
     r = await install(client, "close-politely")
     assert r.status_code == 422 and r.json()["error"]["code"] == "template_invalid", r.text
-    listed = ok(await client.get("/v1/templates", params={"kind": "skill"}, headers=OPS))
+    listed = ok(await client.get("/v1/templates", params={"kind": "skill"}, headers=OPS))["data"]
     assert listed[0]["installed"]["copies"] == 0

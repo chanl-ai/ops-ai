@@ -50,4 +50,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Nothing to restore: the names the rows held are gone."""
+    # Data only, and the names the rows held are gone: the code before this revision reads an owner team id as it reads
+    # a name. Rendered as SQL it writes nothing, as the upgrade's rewrite is safe to run again.
+    if not op.get_context().as_sql:
+        print("20261124_0257_skill_owner_ids: each skill keeps its holding team as its owner team")

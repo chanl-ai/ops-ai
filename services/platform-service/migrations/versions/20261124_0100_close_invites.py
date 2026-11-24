@@ -37,4 +37,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    pass
+    # Data only: the code before this revision never reads an active member's invite expiry, so the cleared expiries
+    # stay. Rendered as SQL it writes nothing.
+    if not op.get_context().as_sql:
+        print("20261124_0100_close_invites: active members keep a cleared invite expiry")

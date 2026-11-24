@@ -1,6 +1,6 @@
 # A watched folder brings files in
 
-Status: current on the branch. Id: `uc-772`. Service: `files-service` with tools-service. Layers: api, ui.
+Status: current on the branch. Id: `uc-779`. Service: `files-service` with tools-service. Layers: api, ui.
 
 Short title: A watched folder brings files in
 
@@ -50,7 +50,7 @@ and its Microsoft sign-in, which a fake Graph and a fake Microsoft sign-in serve
 
 ## Steps and expected results
 
-Steps 1-7 are the api script (`test-uc-772-api.py`); steps 11-20 the ui script (`test-uc-772-ui.mjs`), every screen at
+Steps 1-7 are the api script (`test-uc-779-api.py`); steps 11-20 the ui script (`test-uc-779-ui.mjs`), every screen at
 1440 and 390 wide.
 
 | # | Step | Expected |
@@ -78,8 +78,8 @@ Steps 1-7 are the api script (`test-uc-772-api.py`); steps 11-20 the ui script (
 
 | Layer | Script | State |
 |---|---|---|
-| api | `files-service/scripts/test-uc-772-api.py` | passing |
-| ui | `files-service/scripts/test-uc-772-ui.mjs` | see the latest run |
+| api | `files-service/scripts/test-uc-779-api.py` | passing |
+| ui | `files-service/scripts/test-uc-779-ui.mjs` | see the latest run |
 
 ## Non-vacuous check
 

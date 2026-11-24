@@ -80,7 +80,7 @@ async function body(consoleUrl) {
       await page.getByRole('button', { name: 'Start run' }).first().click({ timeout: 120_000 });
       const picker = page.getByRole('dialog', { name: 'Start a run' });
       await picker.waitFor();
-      await picker.getByTestId('start-run-workflow').getByRole('button', { name: /Choose a workflow/ }).click();
+      await picker.getByTestId('start-run-workflow').getByRole('button', { name: 'Choose', exact: true }).click();
       await page.getByPlaceholder('Search workflows', { exact: true }).fill(name);
       await page.getByRole('option', { name: new RegExp(name.replace(/[()]/g, '\\$&')) }).first().click();
       // What the person sees right after choosing: the form, or a picker still waiting for another click.

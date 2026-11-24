@@ -148,7 +148,7 @@ await withUiStack(
       const blank = page.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith('/v1/tool-modules/blank'), { timeout: 60_000 });
       await page.getByTestId('new-module-save').click();
       const body = JSON.parse((await blank).postData() ?? '{}');
-      await page.waitForURL((u) => /^\/tools\/[^/]+$/.test(u.pathname) && !u.pathname.endsWith('/calls'), { timeout: 60_000 });
+      await page.waitForURL((u) => /^\/data\/tools\/[^/]+$/.test(u.pathname) && !u.pathname.endsWith('/calls'), { timeout: 60_000 });
       const blankMod = await send('GET', `/${new URL(page.url()).pathname.split('/').pop()}`, J);
       const header = ((await page.getByTestId('page-description').innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ');
       await shoot(page, 'new-module-app');

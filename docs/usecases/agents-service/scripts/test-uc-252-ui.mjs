@@ -38,7 +38,7 @@ await withUiStack(
         const listed = await page.getByRole('row').filter({ hasText: NAME }).first().waitFor({ timeout: 15_000 }).then(() => true, () => false);
         await page.getByRole('button', { name: 'Start run' }).first().click({ timeout: 60_000 });
         const picker = page.getByRole('dialog', { name: 'Start a run' });
-        await picker.getByTestId('start-run-workflow').getByRole('button', { name: /Choose a workflow/ }).click();
+        await picker.getByTestId('start-run-workflow').getByRole('button', { name: 'Choose', exact: true }).click();
         await page.getByPlaceholder('Search workflows', { exact: true }).fill(TAG);
         const offered = await page.getByRole('option', { name: new RegExp(NAME) }).first().waitFor({ timeout: 10_000 }).then(() => true, () => false);
         await page.keyboard.press('Escape');

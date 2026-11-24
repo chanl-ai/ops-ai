@@ -71,6 +71,7 @@ from .schemas import (
     DraftEdit,
     FileIdsIn,
     Item,
+    ItemChunk,
     ItemWithDetail,
     KnowledgeBase,
     KnowledgeBaseDetail,
@@ -618,6 +619,11 @@ def create_kb_app(
     @items.put("/{item_id}/owner", response_model=Envelope[Item])
     async def set_item_owner(item_id: str, body: OwnerIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.set_item_owner(who, item_id, body.owner))
+
+    @items.get("/{item_id}/chunks", response_model=Envelope[ListResult[ItemChunk]])
+    async def list_item_chunks(item_id: str, who: Caller, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """A page of the document's pieces in reading order; `search` matches a piece's text and section."""
+        return ok(await service.item_chunks(who, item_id, q))
 
     @items.get("/{item_id}", response_model=Envelope[ItemWithDetail])
     async def get_item(item_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

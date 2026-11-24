@@ -6,6 +6,7 @@
  * by documents-service and every other kind by agents-service, so a list without a kind reads both.
  */
 import type { Raw } from './client.js';
+import { everyPage } from './transport.js';
 
 // biome-ignore lint/suspicious/noExplicitAny: a template row is read as the service answers it
 type Obj = Record<string, any>;
@@ -25,9 +26,9 @@ export class Templates {
    * `source` one pack or app (`plugin:<id>`). */
   async list({ kind, source }: { kind?: string; source?: string } = {}): Promise<Obj[]> {
     const out: Obj[] = [];
-    if (kind !== DOCUMENT_TYPE) out.push(...(await call(this.raw, 'agents', 'templates_list_templates', { query: { kind, source } })));
+    if (kind !== DOCUMENT_TYPE) out.push(...(await everyPage((query) => call(this.raw, 'agents', 'templates_list_templates', { query }), { kind, source })));
     if (kind === undefined || kind === DOCUMENT_TYPE) {
-      const docs: Obj[] = await call(this.raw, 'documents', 'templates_list_templates', { query: { kind } });
+      const docs: Obj[] = await everyPage((query) => call(this.raw, 'documents', 'templates_list_templates', { query }), { kind });
       out.push(...docs.filter((t) => source === undefined || t.source === source));
     }
     return out;
@@ -39,7 +40,7 @@ export class Templates {
     let k = kind ?? (typeof template === 'string' ? undefined : template.kind);
     if (k === undefined) {
       // agents-service keeps every kind but document types, so it is asked first.
-      const mine: Obj[] = await call(this.raw, 'agents', 'templates_list_templates', { query: { source: ref.slice(0, ref.lastIndexOf(':')) } });
+      const mine: Obj[] = await everyPage((query) => call(this.raw, 'agents', 'templates_list_templates', { query }), { source: ref.slice(0, ref.lastIndexOf(':')) });
       k = mine.find((t) => refOf(t) === ref)?.kind ?? DOCUMENT_TYPE;
     }
     return call(this.raw, k === DOCUMENT_TYPE ? 'documents' : 'agents', 'resources_copy_resource', { path: { resource: ref }, body: fields });

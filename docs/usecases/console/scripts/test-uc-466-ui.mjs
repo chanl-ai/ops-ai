@@ -80,7 +80,7 @@ await withUiStack(
       const composer = page.getByRole('dialog', { name: /^Send a test email: Court order notices by email \(uc-466\)/ });
       /** The workflows the open picker offers for a search. */
       const offered = async (search) => {
-        await picker.getByTestId('start-run-workflow').getByRole('button', { name: /Choose a workflow/ }).click();
+        await picker.getByTestId('start-run-workflow').getByRole('button', { name: 'Choose', exact: true }).click();
         await page.getByPlaceholder('Search workflows', { exact: true }).fill(search);
         // The search runs on the server: wait for its rows (or its empty answer) before reading them.
         await page.getByRole('option').or(page.getByText('Nothing matches.')).first().waitFor({ timeout: 30_000 }).catch(() => undefined);

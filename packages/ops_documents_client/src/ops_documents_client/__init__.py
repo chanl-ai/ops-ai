@@ -179,12 +179,21 @@ class DocumentsClient:
         return listed
 
     async def template_copies(self, tenant: str, team: str) -> list[dict[str, Any]]:
-        """The document types the team's apps bring, each with its state for the team and the team's copy."""
-        try:
-            listed = await self._documents.request("GET", "/v1/templates", tenant=tenant, team=team)
-        except ServiceCallError as e:
-            raise _refused(e) from e
-        return listed
+        """The document types the team's apps bring, each with its state for the team and the team's copy: every page
+        of the list."""
+        rows: list[Json] = []
+        page = 1
+        while True:
+            try:
+                got = await self._documents.request(
+                    "GET", "/v1/templates", tenant=tenant, team=team, params={"page": page, "pageSize": 50}
+                )
+            except ServiceCallError as e:
+                raise _refused(e) from e
+            rows += got["data"]
+            if not got["pagination"]["hasNext"]:
+                return rows
+            page += 1
 
     async def extraction(self, tenant: str, team: str, extraction_id: str) -> Json:
         """An extraction as it is now: queued, running, or finished with its answer."""

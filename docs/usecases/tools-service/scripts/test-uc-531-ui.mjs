@@ -112,7 +112,7 @@ await withUiStack(
         await page.goto(`${consoleUrl}/workflows`, { waitUntil: 'domcontentloaded' });
         await page.getByRole('button', { name: 'Start run' }).first().click({ timeout: 120_000 });
         const picker = page.getByRole('dialog', { name: 'Start a run' });
-        await picker.getByTestId('start-run-workflow').getByRole('button', { name: /Choose a workflow/ }).click();
+        await picker.getByTestId('start-run-workflow').getByRole('button', { name: 'Choose', exact: true }).click();
         await page.getByPlaceholder('Search workflows', { exact: true }).fill('Card limit check');
         await page.getByRole('option', { name: /Card limit check \(uc-531 ui\)/ }).first().click();
         const form = page.getByRole('dialog', { name: /^Start a run(:| of)/ });

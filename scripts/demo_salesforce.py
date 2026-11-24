@@ -396,7 +396,7 @@ def add_templates() -> int:
         )
         say("MADE", "AI steps in workflows on for the team")
     print(f"As {LEAD} in {TEAM_NAME}, through the Python SDK (ops_ai):")
-    listed = [t for t in ops.raw.agents.templates_list_templates() if t["source"] == SOURCE]
+    listed = ops.templates.list(source=SOURCE)
     if not listed:
         raise SystemExit("FAIL  Salesforce brings no templates to the team: connect it for the team first (story 2)")
     for t in listed:

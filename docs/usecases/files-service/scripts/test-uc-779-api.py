@@ -1,6 +1,6 @@
 # The use case runner puts docs/usecases/lib (usecase_harness) on the path; pyright alone cannot see it.
 # pyright: basic, reportMissingImports=false
-"""uc-772 a watched folder brings files in, api layer: docs/usecases/files-service/a-watched-folder-brings-files-in.md.
+"""uc-779 a watched folder brings files in, api layer: docs/usecases/files-service/a-watched-folder-brings-files-in.md.
 The built-in SharePoint plugin (builtin-plugins/ops_plugin_sharepoint, the copy every stack ships) runs in tools-service
 against its fake from the plugins checkout (OPS_PLUGINS_REPO), served on https under graph.microsoft.com
 (docs/usecases/lib/fake_sharepoint_confluence.py), with one file in the library whose size Graph reports as 30 MB. Everyone signs in through platform-service, so the seeded roles decide: Priya (admin)
