@@ -31,7 +31,7 @@ export default function SsoCallbackPage() {
     const code = params.get('code');
     if (linkRequired) return; // Shown below as its own message, not as an error.
     if (returned === 'refused') {
-      setError(link ? 'Your company sign-in did not confirm it is you. Try again.' : stepUp ? 'Your company sign-in did not confirm it is you. Try again.' : 'Your company sign-in did not let you in. Try again, or ask your workspace admin.');
+      setError(link ? 'Your company sign-in did not link: it must be your own, verified email at the provider. Nothing was linked.' : stepUp ? 'Your company sign-in did not confirm it is you. Try again.' : 'Your company sign-in did not let you in. Try again, or ask your workspace admin.');
       return;
     }
     if (!code) {
@@ -41,7 +41,7 @@ export default function SsoCallbackPage() {
     if (link) {
       completeLink.mutateAsync(code).then(
         () => (toast.success('Linked', { description: 'You can now sign in with your company account.' }), router.replace(safeNext(params.get('next')))),
-        (e: Error & { status?: number }) => setError(e.status === 409 ? 'This account at your company’s provider is linked already, or you already have one linked. Nothing changed.' : e.message),
+        (e: Error & { status?: number }) => setError(e.status === 409 ? 'This account at your company’s provider is linked already, or you already have one linked. Nothing changed.' : e.message === 'Sign in again.' ? 'Your company sign-in did not link: it must be your own, verified email at the provider, from this browser. Nothing was linked.' : e.message),
       );
       return;
     }

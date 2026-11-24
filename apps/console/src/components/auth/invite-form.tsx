@@ -12,8 +12,9 @@ import type { InvitePreview } from '@/lib/types/invites';
 const PASSWORD_MIN = 12;
 
 /**
- * Accept an invitation: your name, then a password, or Continue with SSO when the email belongs to a verified SSO
- * domain. The page signs you in with what you chose; this form only collects it.
+ * Accept an invitation: your name, then a password, or Continue with the company provider when the email belongs to a
+ * verified SSO domain (the provider gives the name, and the round trip carries the invitation). The page signs you in
+ * with what you chose; this form only collects it.
  */
 export function InviteForm({ invite, pending, error, onSubmit }: { invite: InvitePreview; pending: boolean; error?: string; onSubmit: (input: { name: string; password?: string }) => void }) {
   const [name, setName] = React.useState('');
@@ -23,7 +24,7 @@ export function InviteForm({ invite, pending, error, onSubmit }: { invite: Invit
   // No password to set: SSO signs in at the IdP, and a passwordless invitation signs in when accepted.
   const noPassword = invite.sso || invite.passwordless;
   const errors = {
-    name: name.trim().length < 2 ? 'Enter your name.' : undefined,
+    name: !invite.sso && name.trim().length < 2 ? 'Enter your name.' : undefined,
     password: noPassword ? undefined : password.length < PASSWORD_MIN ? `Use at least ${PASSWORD_MIN} characters.` : undefined,
     confirm: noPassword ? undefined : confirm !== password ? 'The two passwords do not match.' : undefined,
   };
@@ -44,9 +45,11 @@ export function InviteForm({ invite, pending, error, onSubmit }: { invite: Invit
         </p>
       </div>
       <AuthError message={error ?? null} />
-      <FormField id="inv-name" label="Your name" error={err('name')}>
-        <Input id="inv-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="e.g. Sam Ortiz" aria-invalid={!!err('name')} autoFocus />
-      </FormField>
+      {!invite.sso && (
+        <FormField id="inv-name" label="Your name" error={err('name')}>
+          <Input id="inv-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="e.g. Sam Ortiz" aria-invalid={!!err('name')} autoFocus />
+        </FormField>
+      )}
       {invite.sso ? (
         <p className="flex items-start gap-2 text-sm text-muted-foreground">
           <ShieldCheck className="mt-0.5 size-4 shrink-0" /> {invite.email.split('@')[1]} signs in with {invite.ssoProviderLabel ?? 'your company’s identity provider'}. You will not set a password here.
@@ -65,7 +68,7 @@ export function InviteForm({ invite, pending, error, onSubmit }: { invite: Invit
       <LoadingButton type="submit" isLoading={pending} loadingText={invite.sso ? 'Redirecting…' : 'Joining…'} data-testid="invite-accept">
         {invite.sso ? (
           <>
-            <ShieldCheck className="size-4" /> Continue with SSO
+            <ShieldCheck className="size-4" /> Continue with {invite.ssoProviderLabel ?? 'SSO'}
           </>
         ) : (
           <>

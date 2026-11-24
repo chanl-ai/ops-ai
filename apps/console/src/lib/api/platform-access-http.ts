@@ -62,6 +62,8 @@ export function createPlatformAccessHttp(
       invite: (i) => send('POST', '/settings/members/invite', { emails: i.emails, role: i.role }),
       setRole: (ids, role) => send('POST', '/settings/members/role', { ids, role }),
       remove: (ids) => send('POST', '/settings/members/delete', { ids }),
+      reinvite: (ids) => send('POST', '/settings/members/reinvite', ids ? { ids } : {}),
+      unlink: (ids) => send('POST', '/settings/members/unlink', { ids }),
       options: (p) => get(`/settings/members/options?${optionsQs(p)}`),
     },
     invites: {

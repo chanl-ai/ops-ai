@@ -109,7 +109,11 @@ export const useCompleteSsoStepUp = () => useAuthWrite((code: string) => authPro
 /** The company providers the signed-in person can link, with whether each is linked (My security). */
 export const useSsoLinks = () => useSessionQuery({ queryKey: ['sso-links'], queryFn: () => authProvider.ssoLinks(), retry: false });
 /** Link the person's account at their company's provider: the redirect, which comes back through /sso/callback?link=1. */
-export const useStartSsoLink = () => useAuthWrite((input: { returnTo: string }) => authProvider.startSsoLink(input));
+export const useStartSsoLink = () => useAuthWrite((input: { returnTo: string; stepUp: string }) => authProvider.startSsoLink(input));
+export function useUnlinkSso() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (providerId: string) => authProvider.unlinkSso(providerId), onSuccess: () => qc.invalidateQueries({ queryKey: ['sso-links'] }) });
+}
 export function useCompleteSsoLink() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: (code: string) => authProvider.completeSsoLink(code), onSuccess: () => qc.invalidateQueries({ queryKey: ['sso-links'] }) });

@@ -24,6 +24,7 @@ export function unconfigured(name: 'oidc' | 'firebase', envHint: string): AuthPr
     reauthenticate: async () => fail(),
     ssoLinks: async () => fail(),
     startSsoLink: async () => fail(),
+    unlinkSso: async () => fail(),
     completeSsoLink: async () => fail(),
     startSsoStepUp: async () => fail(),
     completeSsoStepUp: async () => fail(),

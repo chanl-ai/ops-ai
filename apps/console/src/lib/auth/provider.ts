@@ -96,8 +96,10 @@ export interface AuthProvider {
   completeSsoStepUp(code: string): Promise<StepUp>;
   /** The company providers the signed-in person can sign in with, and whether each is linked to them yet. */
   ssoLinks(): Promise<SsoLink[]>;
-  /** Links the person's account at their company's provider, from their own session: where to send the browser; the provider returns to /sso/callback?link=1. */
-  startSsoLink(input: { returnTo: string }): Promise<{ redirectUrl: string }>;
+  /** Links the person's account at their company's provider, from their own session and a fresh step-up (the provider asks for credentials again): where to send the browser; the provider returns to /sso/callback?link=1. */
+  startSsoLink(input: { returnTo: string; stepUp: string }): Promise<{ redirectUrl: string }>;
+  /** Removes the person's own link at a provider; any session that link opened ends, which may be this one. */
+  unlinkSso(providerId: string): Promise<void>;
   /** Finishes the link from the callback. Rejects with status 409 when that account is linked already. */
   completeSsoLink(code: string): Promise<void>;
   /** The step-up an IdP round trip left, cleared on read so a reload does not reuse it unseen; null when none or expired. */

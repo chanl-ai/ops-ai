@@ -27,7 +27,7 @@ identity provider and no model is called.
 | 6 | The provider vouches for an address outside its domains | `error=no_access`; nobody is made |
 | ui | On the console, type the domain's email: the form becomes Continue with SSO naming Harbor & Pine SSO; continue | The fake provider sends the browser back and the console signs the teller in |
 | ui | An existing clerk (password account in the same domain) continues with SSO, at 1280 and 390 | The callback says the email already has an account: sign in the usual way and link from My security, or ask for a new invite |
-| ui | The clerk, signed in, opens My security and links the provider | The page lists the provider as Not linked with a Link button; after the round trip it shows Linked and no button |
+| ui | The clerk, signed in, opens My security and links the provider | The page lists the provider as Not linked with a Link button; after a password confirmation and the round trip it shows Linked; Unlink asks first, then Link is offered again |
 
 ## Acceptance layers
 

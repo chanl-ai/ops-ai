@@ -290,10 +290,15 @@ export function createPlatformProvider(baseUrl: string): AuthProvider & { identi
       return (await call<SsoLink[]>('/v1/auth/sso/links', { token: s.token })) ?? [];
     },
     /** A signed-in person adding their account at the company provider: the same round trip as sign-in, from their own session. */
-    async startSsoLink({ returnTo }) {
+    async startSsoLink({ returnTo, stepUp }) {
       const s = read();
       if (!s) throw new AuthError('Sign in again to continue.', 'no_session');
-      return begin('/v1/auth/sso/link/start', { next: returnTo }, s.token);
+      return begin('/v1/auth/sso/link/start', { next: returnTo, stepUp }, s.token);
+    },
+    async unlinkSso(providerId) {
+      const s = read();
+      if (!s) throw new AuthError('Sign in again to continue.', 'no_session');
+      await call(`/v1/auth/sso/links/${encodeURIComponent(providerId)}`, { method: 'DELETE', token: s.token });
     },
     async completeSsoLink(code) {
       const s = read();

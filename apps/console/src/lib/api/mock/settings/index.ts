@@ -99,7 +99,7 @@ export function createSettingsMock({ log, me }: { log: AuditLog; me: string }): 
             if (allowed.length && !allowed.some((d) => e.endsWith(`@${d}`))) return `Not an allowed domain in Sign-in settings (${allowed.join(', ')})`;
             if (members.some((x) => x.email === e && x.teamId === t.id)) return `Already in ${t.name}`;
             const name = e.split('@')[0].split('.').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
-            const invited = { id: id('mem'), name, email: e, role: input.role, teamId: t.id, team: t.name, status: 'invited' as const, needsInvite: false, invitedAt: new Date().toISOString() };
+            const invited = { id: id('mem'), name, email: e, role: input.role, teamId: t.id, team: t.name, status: 'invited' as const, needsInvite: false, linksOwnSession: false, invitedAt: new Date().toISOString() };
             const token = linkFor(invited);
             links.push({ email: e, memberId: invited.id, token });
             members.unshift({ ...invited, inviteToken: token });
@@ -124,6 +124,28 @@ export function createSettingsMock({ log, me }: { log: AuditLog; me: string }): 
             if (x.role === 'admin' && members.filter((y) => y.teamId === x.teamId && y.role === 'admin' && !ids.includes(y.id)).length === 0) return `Last admin of ${x.team}`;
             log({ action: 'edited', target: { type: 'member', name: x.name, href: '/settings/members' }, summary: 'Changed role', diff: [{ field: 'Role', before: ROLE_LABEL[x.role], after: ROLE_LABEL[role] }] });
             x.role = role;
+          }),
+        ),
+      reinvite: (ids) =>
+        respond(() => {
+          const mailed: { memberId: string; email: string }[] = [];
+          const res = bulk(ids ?? members.filter((m) => m.needsInvite).map((m) => m.id), (mid) => {
+            const x = members.find((y) => y.id === mid);
+            if (!x) return 'not_found';
+            if (x.linksOwnSession) return 'links_own_session';
+            if (!x.needsInvite) return 'not_affected';
+            mailed.push({ memberId: x.id, email: x.email });
+            log({ action: 'invited', target: { type: 'member', name: x.email, href: '/settings/members' }, summary: 'Mailed a new invite that links their company sign-in', diff: [] });
+          });
+          return { ...res, mailed };
+        }),
+      unlink: (ids) =>
+        respond(() =>
+          bulk(ids, (mid) => {
+            const x = members.find((y) => y.id === mid);
+            if (!x) return 'not_found';
+            x.needsInvite = true;
+            log({ action: 'edited', target: { type: 'member', name: x.email, href: '/settings/members' }, summary: 'Removed their company sign-in link', diff: [] });
           }),
         ),
       remove: (ids) =>

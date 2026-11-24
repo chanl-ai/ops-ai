@@ -344,6 +344,13 @@ export function createMockAuthProvider(opts: { stepUpUrl?: string } = {}): AuthP
       if (!currentSignInPolicy().methods.sso) throw new AuthError('This workspace does not sign in through a company provider.', 'policy', 422);
       return { redirectUrl: `/sso/callback?link=1&code=${encodeURIComponent(btoa(s.user.email))}&next=${encodeURIComponent(returnTo)}` };
     },
+    unlinkSso: async () => {
+      const s = current();
+      if (!s) throw new AuthError('Sign in again to continue.', 'no_session');
+      const { [s.user.id]: _gone, ...rest } = read().ssoLinked ?? {};
+      write({ ...read(), ssoLinked: rest });
+      auditSession('edited', s.user, `Removed ${idpName()} as a way to sign in`);
+    },
     completeSsoLink: async (code) => {
       const s = current();
       if (!s) throw new AuthError('Sign in again to continue.', 'no_session');

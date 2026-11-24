@@ -123,6 +123,7 @@ export const authProvider: AuthProvider = {
   reauthenticate: noSignIn,
   ssoLinks: noSignIn,
   startSsoLink: noSignIn,
+  unlinkSso: noSignIn,
   completeSsoLink: noSignIn,
   startSsoStepUp: noSignIn,
   completeSsoStepUp: noSignIn,

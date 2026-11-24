@@ -1,11 +1,12 @@
 'use client';
 
-import { KeyRound, Link2 } from 'lucide-react';
+import { KeyRound, Link2, Unlink } from 'lucide-react';
 
 import { QueryError } from '@/components/shared/query-states';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { SettingsSection } from '@/components/shared/settings-section';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { relativeTime } from '@/lib/format';
 import type { SsoLink } from '@/lib/auth';
@@ -21,6 +22,7 @@ export function SsoLinksSection({
   retrying,
   onRetry,
   onLink,
+  onUnlink,
   linkingId,
   linkError,
 }: {
@@ -30,6 +32,7 @@ export function SsoLinksSection({
   retrying: boolean;
   onRetry: () => void;
   onLink: (link: SsoLink) => void;
+  onUnlink: (link: SsoLink) => void;
   linkingId: string | null;
   linkError?: string;
 }) {
@@ -57,7 +60,12 @@ export function SsoLinksSection({
                   </div>
                 </div>
                 {l.linked ? (
-                  <Badge variant="secondary">Linked</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">Linked</Badge>
+                    <Button size="sm" variant="outline" onClick={() => onUnlink(l)} data-testid="unlink-sso">
+                      <Unlink className="size-4" /> Unlink
+                    </Button>
+                  </div>
                 ) : (
                   <LoadingButton size="sm" variant="outline" isLoading={linkingId === l.providerId} loadingText="Opening…" onClick={() => onLink(l)} data-testid="link-sso">
                     <Link2 className="size-4" /> Link {l.label}

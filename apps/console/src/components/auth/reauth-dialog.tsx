@@ -18,7 +18,7 @@ import type { StepUp } from '@/lib/auth';
  * enrolled. SSO and Google accounts go back to their identity provider, which applies its own MFA, and return here
  * with a step-up waiting; the person then presses Approve again. Either way the token is good for 5 minutes.
  */
-export function ReauthDialog({ open, onOpenChange, action, onVerified }: { open: boolean; onOpenChange: (o: boolean) => void; action: string; onVerified: (s: StepUp) => void }) {
+export function ReauthDialog({ open, onOpenChange, action, reason, onVerified }: { open: boolean; onOpenChange: (o: boolean) => void; action: string; reason?: string; onVerified: (s: StepUp) => void }) {
   const { session } = useSession();
   const { data: policy } = useSignInPolicy();
   const reauth = useReauthenticate();
@@ -63,7 +63,7 @@ export function ReauthDialog({ open, onOpenChange, action, onVerified }: { open:
       onOpenChange={onOpenChange}
       size="md"
       title="Confirm it is you"
-      description={`${action} needs two reviewers. Confirm your identity to continue; you will not be asked again for 5 minutes.`}
+      description={`${reason ?? `${action} needs two reviewers.`} Confirm your identity to continue; you will not be asked again for 5 minutes.`}
       footer={
         <div className="flex w-full justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={reauth.isPending || startSso.isPending}>
@@ -121,7 +121,7 @@ export const isStepUpRefusal = (e: unknown) => e instanceof Error && (e as Error
  * want of one it opens "Confirm it is you", then retries once with the new token. Render `dialog` once on the page.
  */
 export function useStepUpGate() {
-  const [pending, setPending] = React.useState<{ label: string; resolve: (t: string) => void; reject: (e: Error) => void } | null>(null);
+  const [pending, setPending] = React.useState<{ label: string; reason?: string; resolve: (t: string) => void; reject: (e: Error) => void } | null>(null);
   // Back from an identity-provider step-up: keep its token so the next Approve goes straight through.
   const takeStepUp = useTakeStepUp();
   React.useEffect(() => {
@@ -130,14 +130,14 @@ export function useStepUpGate() {
     cached = s;
     toast.success('Identity confirmed', { description: 'Approve now; the confirmation lasts 5 minutes.' });
   }, [takeStepUp]);
-  const ask = React.useCallback((label: string) => new Promise<string>((resolve, reject) => setPending({ label, resolve, reject })), []);
+  const ask = React.useCallback((label: string, reason?: string) => new Promise<string>((resolve, reject) => setPending({ label, reason, resolve, reject })), []);
   /** `upfront`: the server marked the action as needing a step-up, so ask before sending rather than after its 422. */
-  const withStepUp = React.useCallback(async <T,>(label: string, run: (token?: string) => Promise<T>, opts?: { upfront?: boolean }): Promise<T> => {
+  const withStepUp = React.useCallback(async <T,>(label: string, run: (token?: string) => Promise<T>, opts?: { upfront?: boolean; reason?: string }): Promise<T> => {
     try {
-      return await run(fresh() ?? (opts?.upfront ? await ask(label) : undefined));
+      return await run(fresh() ?? (opts?.upfront ? await ask(label, opts.reason) : undefined));
     } catch (e) {
       if (!isStepUpRefusal(e)) throw e;
-      return run(await ask(label));
+      return run(await ask(label, opts?.reason));
     }
   }, [ask]);
   const dialog = (
@@ -149,6 +149,7 @@ export function useStepUpGate() {
         setPending(null);
       }}
       action={pending?.label ?? 'This approval'}
+      reason={pending?.reason}
       onVerified={(s) => {
         cached = s;
         pending?.resolve(s.token);

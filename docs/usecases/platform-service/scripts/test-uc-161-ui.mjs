@@ -103,10 +103,21 @@ await withUiStack(
         await p.screenshot({ path: join(SHOTS, `uc-161-security-unlinked-${name}.png`) });
         if (name === 'desktop') {
           await p.getByTestId('link-sso').click();
+          // Linking asks for a fresh confirmation first: the clerk's password.
+          await p.getByTestId('reauth-dialog').waitFor({ timeout: 30_000 });
+          await p.locator('#reauth-secret').fill('northfield-demo-clerk-1');
+          await p.getByTestId('reauth-submit').click();
           await p.waitForURL((u) => u.pathname === '/settings/account/security', { timeout: 120_000 });
           await p.getByText('Linked', { exact: true }).first().waitFor({ timeout: 60_000 });
           check('after the round trip My security shows the provider linked, with no Link button', (await p.getByTestId('link-sso').count()) === 0);
           await p.screenshot({ path: join(SHOTS, 'uc-161-security-linked-desktop.png') });
+          // Unlinking asks first, then the provider is offered again.
+          await p.getByTestId('unlink-sso').click();
+          await p.getByTestId('delete-company sign-in-dialog').waitFor({ timeout: 30_000 });
+          await p.screenshot({ path: join(SHOTS, 'uc-161-unlink-confirm-desktop.png') });
+          await p.getByTestId('delete-company sign-in-dialog').getByRole('button', { name: 'Unlink' }).click();
+          await p.getByTestId('link-sso').waitFor({ timeout: 60_000 });
+          check('after unlinking My security offers Link again', (await p.getByTestId('unlink-sso').count()) === 0);
         }
         check(`${name}: no page errors`, problems.length === 0, problems);
         await ctx.close();

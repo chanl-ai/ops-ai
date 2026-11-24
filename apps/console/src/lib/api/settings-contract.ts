@@ -7,6 +7,7 @@ import type {
   DeliveryFilters,
   InviteInput,
   InviteResult,
+  ReinviteResult,
   Member,
   MemberFilters,
   MemberRole,
@@ -27,6 +28,10 @@ export interface SettingsApi {
     invite(input: InviteInput): Promise<InviteResult>;
     setRole(ids: string[], role: MemberRole): Promise<BulkResult>;
     remove(ids: string[]): Promise<BulkResult>;
+    /** Mails a new link invite to each member who cannot sign in (`needsInvite`); every such member of the team when `ids` is omitted. */
+    reinvite(ids?: string[]): Promise<ReinviteResult>;
+    /** Removes the members' company sign-in link, so the next sign-in there must link again; ends the sessions it opened. */
+    unlink(ids: string[]): Promise<BulkResult>;
     /** The team's active people as picker choices, by email (a task sent back to a person), searched on the server. */
     options(params: OptionsParams): Promise<OptionsPage>;
   };
