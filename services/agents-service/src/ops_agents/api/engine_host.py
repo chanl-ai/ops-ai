@@ -227,11 +227,12 @@ class GatewayExpressions:
 
 
 class StarterApprovals:
-    """A review step approving one write, decided as the run starter's own when they may approve it: the run recorded at
-    its start that they held Approvals decide in its team, and the write's send asks again whether they hold it now.
-    Only a write one person approves without a step-up qualifies, the operation's policy and the workspace's stepUp
-    read live; anything unread leaves the step waiting for a person. The approval is recorded as the starter's, so the
-    tool node mints its token from it as from any decision."""
+    """A review step approving one write, decided as the run starter's own. Whether they may approve it is read at the
+    write's send, where tools-service asks platform-service whether they hold Approvals · decide in the team now and
+    refuses with own_request when not; the flag a run stored at its start is not read, so a cell unticked while the
+    run waits counts (L12). Only a write one person approves without a step-up qualifies, the operation's policy and
+    the workspace's stepUp read live; anything unread leaves the step waiting for a person. The approval is recorded
+    as the starter's, so the tool node mints its token from it as from any decision."""
 
     def __init__(self, db: AsyncEngine, gateway: GatewayClient | None, policies: PolicySource | None = None) -> None:
         self.db = db
@@ -240,7 +241,7 @@ class StarterApprovals:
 
     async def decision(self, run_id: str, node_id: str, payload: Json) -> Json | None:
         run = await RunStore(EngineTransactions(self.db)).row(run_id)
-        if run is None or not run.started_by_approver or self.gateway is None:
+        if run is None or self.gateway is None:
             return None
         call = dict(cast(Json, payload["call"]))
         tool = str(call["tool"])

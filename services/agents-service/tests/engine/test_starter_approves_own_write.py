@@ -1,7 +1,7 @@
 """A workflow step approving a write is decided as the starter's own when they may approve it, on PostgreSQL with the
-real worker, by failure mode: a run started by an approver still waits for a person; a
-run started by someone who may not approve skips the person; and a write two people approve, or one that asks for a
-step-up, skips them."""
+real worker, by failure mode: a run started by an approver still waits for a person; the flag a run stored at its start
+decides the step, so a cell unticked while the run waits still self-approves; and a write two people approve, or one
+that asks for a step-up, skips them."""
 
 from __future__ import annotations
 
@@ -135,9 +135,15 @@ async def test_an_approvers_run_writes_without_waiting_and_the_approval_is_their
     assert approvers == ["priya@harborpine.example"], approvers
 
 
-async def test_a_run_started_by_someone_who_may_not_approve_waits(engine: AsyncEngine) -> None:
-    run, sent, _ = await _run(engine, approver=False, approval={"approvers": 1})
-    assert (run["status"], run["waiting"]["node"], sent) == ("waiting", "review", 0), run
+async def test_the_flag_stored_at_the_runs_start_no_longer_decides_its_review_step(engine: AsyncEngine) -> None:
+    """Whether the starter may approve is read live at the send (tools-service asks platform-service's access check),
+    so a flag stored when the run started, true or false, is never what decides: the step is the starter's either way
+    and a starter who does not hold Approvals · decide now is refused there with own_request."""
+    run, sent, tenant = await _run(engine, approver=False, approval={"approvers": 1})
+    assert (run["status"], sent) == ("succeeded", 1), run
+    with tenant_scope(tenant):
+        approvers = await ReviewStore(engine).approvers(str(run["id"]), f"{run['id']}:note:1:1")
+    assert approvers == ["priya@harborpine.example"], approvers
 
 
 @pytest.mark.parametrize("approval", [{"approvers": 2}, {"approvers": 1, "stepUp": True}])
