@@ -13,6 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DefinitionEditor } from '@/components/workflows/definition-editor/definition-editor';
 import { ReviewNotice } from '@/components/shared/review-notice';
+import { IdleScheduleNotices } from '@/components/workflows/definition-editor/schedule-panel';
 import { SaveState } from '@/components/shared/save-state';
 import { workflowHeader } from '@/components/workflows/definition-editor/editor-shell';
 import { useWorkingCopy } from '@/components/workflows/definition-editor/use-working-copy';
@@ -149,6 +150,7 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
                 </p>
               </NewerCopyNotice>
             )}
+            <IdleScheduleNotices workflowId={id} schedules={view.schedules} />
             {/* The step sheet fills a phone screen and is not modal, so the notice floats above it there to stay reachable. */}
             {copy.stale && (
               <Alert data-testid="definition-stale" className="max-md:fixed max-md:inset-x-2 max-md:top-2 max-md:z-[60] max-md:w-auto max-md:shadow-lg">

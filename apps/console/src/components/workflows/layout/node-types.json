@@ -4571,7 +4571,7 @@
     "ui": {
       "fields": {
         "inputSchema": {
-          "help": "The fields a start must send; empty takes any",
+          "help": "A scheduled run's input is the time it was due (dueAt). The schema may not require anything else.",
           "label": "Input form",
           "widget": "json"
         },

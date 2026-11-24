@@ -1,10 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import { Plus, X } from 'lucide-react';
+import { ChevronDown, Plus, X } from 'lucide-react';
 
 import { FormField } from '@/components/shared/form-field';
 import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
@@ -78,6 +79,7 @@ export function NodeSettingsForm({
   onChange,
   errors,
   testIds,
+  advanced,
 }: {
   form: NodeForm;
   schema: Record<string, unknown>;
@@ -89,21 +91,35 @@ export function NodeSettingsForm({
   errors?: Record<string, string>;
   /** A control's test id, by parameter name. */
   testIds?: Record<string, string>;
+  /** Settings drawn inside a closed "Advanced" section, after the rest. */
+  advanced?: string[];
 }) {
   const schema = raw as Schema;
   const required = new Set(schema.required ?? []);
+  const field = (name: string) => {
+    const spec = form.fields[name];
+    const id = `${idPrefix}-${name}`;
+    return (
+      <FormField key={name} id={id} label={spec.label} optional={!required.has(name)} hint={spec.help} error={errors?.[name]}>
+        <FieldControl id={id} spec={spec} schema={schema.properties?.[name] ?? {}} value={value[name]} steps={steps} onChange={(v) => onChange(without(value, name, v))} testId={testIds?.[name]} />
+      </FormField>
+    );
+  };
+  const [advancedOpen, setAdvancedOpen] = React.useState(false);
+  const later = form.order.filter((n) => advanced?.includes(n));
   return (
     <div className="flex flex-col gap-4" data-testid="node-settings-form">
-      {form.order.map((name) => {
-        const spec = form.fields[name];
-        const field = schema.properties?.[name] ?? {};
-        const id = `${idPrefix}-${name}`;
-        return (
-          <FormField key={name} id={id} label={spec.label} optional={!required.has(name)} hint={spec.help} error={errors?.[name]}>
-            <FieldControl id={id} spec={spec} schema={field} value={value[name]} steps={steps} onChange={(v) => onChange(without(value, name, v))} testId={testIds?.[name]} />
-          </FormField>
-        );
-      })}
+      {form.order.filter((n) => !later.includes(n)).map(field)}
+      {later.length > 0 && (
+        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} data-testid="node-settings-advanced">
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="ghost" size="sm" className="-ml-2 self-start" data-testid="node-settings-advanced-open">
+              <ChevronDown className={advancedOpen ? '' : '-rotate-90'} /> Advanced
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="flex flex-col gap-4 pt-2">{later.map(field)}</CollapsibleContent>
+        </Collapsible>
+      )}
     </div>
   );
 }

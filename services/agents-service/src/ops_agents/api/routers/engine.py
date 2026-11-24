@@ -9,6 +9,7 @@ import contextlib
 import json
 from collections.abc import AsyncGenerator, Iterable
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypeAlias, TypedDict, cast
 
 from fastapi import APIRouter, Depends, Query
@@ -65,6 +66,7 @@ from ...store.definition_list import definitions_page
 from ...store.engine import DatabaseError, EngineTransactions
 from ...store.events import EventLog
 from ...store.mailboxes import MailboxStore
+from ...store.schedules import WorkflowSchedules
 from ...store.template_copies import TemplateCopies
 from ...store.tenancy import current_team, current_tenant
 from ...store.trigger_events import TriggerEvents
@@ -94,6 +96,7 @@ from ..envelope import ok
 from ..file_names import named, names_asked_once
 from ..publish_policy import decide, team_document
 from ..run_story import Decision, decisions_in, files_in, steps_view
+from ..schedule_view import ScheduleView, schedule_views
 from ..schemas import (  # pyright: ignore[reportPrivateImportUsage]
     SSE_RESPONSE,
     DocumentRead,
@@ -368,6 +371,8 @@ class DefinitionView(Out):
     outdated_copy: OutdatedCopyView | None = None
     # The copy the next working copy save must name: the working copy, else the newest version.
     save_base: SaveBase
+    # The schedules saved on its trigger steps, which live outside the versions and apply to the live one.
+    schedules: list[ScheduleView] = Field(default_factory=list[ScheduleView])
 
 
 def definitions(rt: Runtime) -> DefinitionStore:
@@ -711,6 +716,8 @@ async def delete_definition(rt: Rt, me: Me, _: Tx, workflow_id: str) -> Response
         )
     # A workflow installed from a template stops counting as the team's copy, so the template can be installed again.
     await TemplateCopies(rt.db).removed_record("workflow", workflow_id)
+    # Its schedules live outside the versions, so they go with it here.
+    await WorkflowSchedules(rt.db).delete_workflow(workflow_id)
     return Response(status_code=204)
 
 
@@ -844,8 +851,8 @@ async def definition_view(rt: Runtime, me: Principal, workflow_id: str, version:
         raise NotFound(f"Workflow definition {workflow_id}")
     request = await engine_lifecycle.pending(rt, workflow_id)
     stored = await store.versions(workflow_id)
-    # The serving version is read from the versions listed here, not by a statement of its own: all versions of an id
-    # belong to one team, which `row` has already checked, so `serving` would pick the same one.
+    # The version that serves the workflow, from the versions listed here (they carry no definition; the schedules'
+    # idle reason reads one, which `store.serving` below fetches).
     current = next((v for v in reversed(stored) if v.stage in CURRENT), None)
     versions = [
         {
@@ -870,6 +877,8 @@ async def definition_view(rt: Runtime, me: Principal, workflow_id: str, version:
     # A copy made on an older version than the newest (one saved through the API or CLI since) is kept and shown, so
     # its unpublished change is never lost; saves are made on the newest version.
     outdated = held if held is not None and copy is None else None
+    now = datetime.now(UTC)
+    served = await store.serving(workflow_id, team=current_team())
     return {
         "workflowId": workflow_id,
         "name": row.name,
@@ -885,6 +894,9 @@ async def definition_view(rt: Runtime, me: Principal, workflow_id: str, version:
         "startForm": start_form(row.definition, REGISTRY),
         "workingCopy": copy and _copy_view(copy),
         "saveBase": _save_base(copy) if copy else {"version": newest["version"], "digest": newest["digest"]},
+        "schedules": await schedule_views(
+            rt.db, await WorkflowSchedules(rt.db).for_workflow(workflow_id), now, served, REGISTRY
+        ),
         "outdatedCopy": outdated
         and _copy_view(outdated)
         | {"newerVersion": newest["version"], "newerBy": newest.get("createdBy"), "newerAt": newest.get("createdAt")},

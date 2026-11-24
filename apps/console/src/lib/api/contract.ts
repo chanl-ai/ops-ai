@@ -2,6 +2,7 @@ import type { PublishPreview } from '@/lib/types/publish-preview';
 import type { SaveBase } from '@/lib/save-base';
 import type { CasesApi } from './cases-contract';
 import type { ChannelsApi } from './channels-contract';
+import type { SchedulesApi } from './schedules-contract';
 import type { EngineApi } from './engine-contract';
 import type { ChatApi } from './chat-contract';
 import type { KnowledgeApi } from './knowledge-contract';
@@ -150,6 +151,7 @@ export interface OpsApi {
   engine: EngineApi;
   /** Channels > Email: the team's mailboxes. */
   channels: ChannelsApi;
+  schedules: SchedulesApi;
   workflows: {
     get(id: string): Promise<WorkflowDetail>;
     create(input: WorkflowInput): Promise<Workflow>;

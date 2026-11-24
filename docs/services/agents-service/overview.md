@@ -68,6 +68,7 @@ in `services/agents-service/tests/conftest.py`. The seeded agents, granted seede
 | `services/agents-service/src/ops_agents/graphs` | LangGraph graphs `agent_wrapper`, `simple_workflow`, `complex_workflow`; JSON definitions, versions, SLA settings |
 | `services/agents-service/src/ops_agents/activities` | Tool, knowledge and gateway calls the graphs and the kernel make; seed catalogue loader |
 | `packages/ops_agent_kernel/src/ops_agent_kernel/present.py` | The built-in `present(shape, data, hint?)` tool every turn offers: the model returns a comparison table as `rows`, a figure as `metric`, a record or a series, and the turn emits it as a widget part with no tool result behind it. The chat shows only the part, never a tool card for it; a malformed part is refused as a tool error |
+| `services/agents-service/src/ops_agents/store/outbox.py` | `agents_outbox`: the audit entries of schedule saves and clears, written with the change and delivered to platform-service by the worker's `agents_relay` |
 | `migrations/` | Its own Alembic chain (the default `alembic_version` table), which also creates the `ops_engine` tables and the checkpointer's tables |
 | `tests/` | API, unit, checkpointer, gateway and timer tests; `tests/fixtures/` is the only place fixture data lives |
 | `experiments/` | Experiment scripts; their write-ups are in `experiments/` next to this page |
@@ -225,7 +226,7 @@ The approval token's `system` claim is true for a handler's runs, and tools-serv
 only from tool_access_request's. A service reports only the events it owns in the catalogue
 (`EVENT_OWNERS`, 403 `event_not_owned`), and the event's team is the one its token names (403 `team_mismatch`).
 Services write their events through `ops_store.outbox` in the same transaction as the change, and its relay delivers
-them at least once.
+them at least once. agents-service's own outbox, `agents_outbox`, holds the audit entries of schedule changes.
 
 ## Deciding and combining in a workflow
 

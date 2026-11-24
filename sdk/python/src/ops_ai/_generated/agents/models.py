@@ -1080,6 +1080,12 @@ class KindRow(TypedDict, closed=True):
     type: str
 
 
+class KindView(TypedDict, closed=True):
+    label: str
+    name: str
+    schema: dict[str, JsonValue]
+
+
 class KnowledgeBaseRef(TypedDict, closed=True):
     id: str
     name: str
@@ -1362,6 +1368,12 @@ class PersonRef(TypedDict, closed=True):
     name: str
 
 
+class PlaceSchedule(TypedDict, closed=True):
+    nextRun: str | None
+    triggerStep: str
+    words: str
+
+
 class PlanInput(TypedDict, closed=True):
     resources: list[str]
 
@@ -1393,6 +1405,17 @@ class PortView(TypedDict, closed=True):
     connection: str
     label: str
     name: str
+
+
+class PreviewIn(TypedDict, closed=True):
+    after: NotRequired[str | None]
+    rule: dict[str, JsonValue]
+
+
+class PreviewView(TypedDict, closed=True):
+    nextRuns: list[str]
+    rule: dict[str, JsonValue]
+    words: str
 
 
 class PromptVariable(TypedDict, closed=True):
@@ -1652,6 +1675,10 @@ class RoutedVersion(TypedDict, closed=True):
     workflowId: str
 
 
+class RuleIn(TypedDict, closed=True):
+    rule: dict[str, JsonValue]
+
+
 class RunChild(TypedDict, closed=True):
     index: int
     nodeId: str
@@ -1781,6 +1808,23 @@ class SavedCaseCheck(TypedDict, closed=True):
 
 class SavedCaseContext(TypedDict, closed=True):
     collections: NotRequired[list[str]]
+
+
+class ScheduleView(TypedDict, closed=True):
+    changedAt: str
+    changedBy: str
+    changedByName: NotRequired[str]
+    idle: NotRequired[str | None]
+    idleCode: NotRequired[Literal["no_live_version", "paused", "step_missing", "not_schedulable"] | None]
+    lastOutcome: NotRequired[str | None]
+    lastOutcomeReason: NotRequired[str | None]
+    lastRunId: NotRequired[str | None]
+    lastSlotAt: NotRequired[str | None]
+    nextRuns: list[str]
+    rule: dict[str, JsonValue]
+    triggerStep: str
+    words: str
+    workflowId: str
 
 
 class Serves(TypedDict, closed=True):
@@ -3101,6 +3145,7 @@ class DefinitionView(TypedDict, closed=True):
     paused: bool
     review: OpenPublishRequest | None
     saveBase: SaveBase
+    schedules: NotRequired[list[ScheduleView]]
     stage: Literal["draft", "in_review", "live", "paused", "superseded"]
     startForm: NotRequired[StartFormView | None]
     version: int
@@ -3262,6 +3307,11 @@ class EnvelopePlatformEventOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopePreviewView(TypedDict, closed=True):
+    data: PreviewView
+    success: Literal[True]
+
+
 class EnvelopePublishDecisionFields(TypedDict, closed=True):
     data: PublishDecisionFields
     success: Literal[True]
@@ -3309,6 +3359,11 @@ class EnvelopeRouted(TypedDict, closed=True):
 
 class EnvelopeRunStarted(TypedDict, closed=True):
     data: RunStarted
+    success: Literal[True]
+
+
+class EnvelopeScheduleView(TypedDict, closed=True):
+    data: ScheduleView
     success: Literal[True]
 
 
@@ -3374,6 +3429,11 @@ class EnvelopeListGraphVersion(TypedDict, closed=True):
 
 class EnvelopeListInboxItem(TypedDict, closed=True):
     data: list[InboxItem]
+    success: Literal[True]
+
+
+class EnvelopeListKindView(TypedDict, closed=True):
+    data: list[KindView]
     success: Literal[True]
 
 
@@ -3638,6 +3698,7 @@ class LivePlace(TypedDict, closed=True):
     health: Health | None
     lastActivityAt: str | None
     pinned: bool
+    schedule: NotRequired[PlaceSchedule | None]
     traffic24H: int | None
     version: int | Literal["latest"] | None
     where: Where

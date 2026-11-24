@@ -272,6 +272,12 @@ transactions = 2
 connections = 2
 query = { follow = "false" }
 
+["GET /v1/schedules/kinds"]
+queries = 0
+
+["GET /v1/schedules/zones"]
+queries = 0
+
 ["GET /v1/skills"]
 queries = 7
 
@@ -374,7 +380,8 @@ queries = 4
 query = { app = "salesforce", name = "Main" }
 
 ["GET /v1/workflows/definitions/{workflow_id}"]
-queries = 4
+# The workflow's saved schedules and the serving version they are read against are two reads beyond the definition's.
+queries = 6
 
 ["GET /v1/workflows/definitions/{workflow_id}/diff"]
 # Each side is its own store read in its own transaction (the definition row, then the two sides); a fixed count.
@@ -385,10 +392,14 @@ query = { from = "live", to = "working-copy" }
 
 ["GET /v1/workflows/definitions/{workflow_id}/publish-preview"]
 # No request transaction by design: the publish policy is read from platform-service between the store reads. The
-# blocker list adds two reads, the open publish request and the stored versions (a copy equal to the live one).
-queries = 5
-transactions = 5
-connections = 5
+# blocker list adds two reads, the open publish request and the stored versions (a copy equal to the live one), and
+# the saved schedules a version must still be able to fill.
+queries = 6
+transactions = 6
+connections = 6
+
+["GET /v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule"]
+not_budgeted = "needs a saved schedule on a trigger step; the budget seed saves none yet"
 
 ["GET /v1/workflows/definitions/{workflow_id}/sample"]
 # A fixed number of store reads, each in its own transaction: none of them repeats per step.

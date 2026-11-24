@@ -160,6 +160,8 @@ class NodeType:
     # per-attempt limit.
     tries: str = ""
     limit: str = ""
+    # A trigger a saved schedule may sit on: the schedule clock starts its runs with `dueAt` as the only input.
+    schedulable: bool = False
 
     @property
     def key(self) -> tuple[str, int]:
@@ -634,7 +636,14 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         },
         ui=_form(
             ("key", _f("Start name", "text", "A second start with the same name runs nothing")),
-            ("inputSchema", _f("Input form", "json", "The fields a start must send; empty takes any")),
+            (
+                "inputSchema",
+                _f(
+                    "Input form",
+                    "json",
+                    "A scheduled run's input is the time it was due (dueAt). The schema may not require anything else.",
+                ),
+            ),
         ),
         start=StartSpec(
             kind="schedule",
@@ -643,6 +652,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             via="schedule",
             form_parameter="inputSchema",
         ),
+        schedulable=True,
     ),
     NodeType(
         id="ops.data.combine",

@@ -1,3 +1,4 @@
+import type { ScheduleView } from './schedules';
 import type { RunFailure } from '@/lib/failure-words';
 import type { PublishPreview } from './publish-preview';
 import type { DocumentRead } from '@/lib/types/domain';
@@ -156,6 +157,8 @@ export interface DefinitionView {
   outdatedCopy?: OutdatedCopy | null;
   /** The copy the next save names: the working copy, else the newest version (`baseOf` reads it). */
   saveBase: { version: number; digest: string };
+  /** The schedules saved on this workflow's trigger steps, outside its versions. */
+  schedules?: ScheduleView[];
 }
 
 /** A workflow's one mutable copy: saved on every change, checks and all, and never run. */

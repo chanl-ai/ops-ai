@@ -7,6 +7,7 @@ import type { CasesApi } from './cases-contract';
 import { createCasesHttp } from './cases-http';
 import { createChatHttp } from './chat-http';
 import { createChannelsHttp } from './channels-http';
+import { createSchedulesHttp } from './schedules-http';
 import { createEngineHttp } from './engine-http';
 import { createKnowledgeHttp } from './knowledge-http';
 import { createKnowledgeChangesHttp } from './knowledge-changes-http';
@@ -181,8 +182,8 @@ export function createRegistryToolsDirectory(baseUrl: string): Pick<OpsApi['tool
   };
 }
 
-export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'references' | 'widgets' | 'widgetDeployments' | 'batches' | 'caseRecords' | 'activity' | 'overview' | 'assurance' | 'evals'> {
-  const { agents, workflows, engine, channels, skills, references, widgets, widgetDeployments, batches, caseRecords, activity, overview, assurance, evals } = createHttpApi(`${baseUrl}/v1`);
+export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'schedules' | 'skills' | 'references' | 'widgets' | 'widgetDeployments' | 'batches' | 'caseRecords' | 'activity' | 'overview' | 'assurance' | 'evals'> {
+  const { agents, workflows, engine, channels, schedules, skills, references, widgets, widgetDeployments, batches, caseRecords, activity, overview, assurance, evals } = createHttpApi(`${baseUrl}/v1`);
   const { bulkUpdate: _au, bulkRemove: _ar, ...agentCalls } = agents;
   const { bulkUpdate: _wu, ...workflowCalls } = workflows;
   const notServed = (what: string) => () => Promise.reject(new ApiError(`${what} is not available on this backend yet.`, 501));
@@ -191,6 +192,7 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
     workflows: workflowCalls,
     engine,
     channels,
+    schedules,
     references,
     widgets,
     widgetDeployments,
@@ -326,6 +328,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     files: createFilesHttp(get, send, qs),
     engine: createEngineHttp(get, send),
     channels: createChannelsHttp(get, send),
+    schedules: createSchedulesHttp(get, send),
     templates: createTemplatesHttp(get, send, qs),
     prompts: createPromptsHttp(get),
     skills: createSkillsHttp(get, send, qs, baseUrl),
