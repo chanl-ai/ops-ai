@@ -172,6 +172,14 @@ async def test_a_long_read_carries_on_from_its_next_page_after_a_restart(
             return _Entered(opened, reader)
 
         monkeypatch.setattr(readings_module, "open_file", watched)
+        # A restart resumes every tenant's unfinished readings; another test's row left pending (a reading whose start
+        # was refused) is not this restart's, so the resume sees this test's tenant only.
+        every_pending = store.pending
+
+        async def this_tenants() -> list[ReadingRow]:
+            return [r for r in await every_pending() if r.tenant_id == s.tenant]
+
+        monkeypatch.setattr(store, "pending", this_tenants)
         restarted = Readings(s.extractor.files, store)
         assert await restarted.resume() == 1
         await restarted.drain()
