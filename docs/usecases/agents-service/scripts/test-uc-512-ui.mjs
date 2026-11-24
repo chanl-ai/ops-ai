@@ -54,6 +54,11 @@ async function openStep(page, id) {
 }
 
 const sheetText = async (page) => (await page.getByTestId('step-sheet').innerText()).replace(/\s+/g, ' ');
+// Sheets and popovers slide and fade in; a screenshot waits for them to settle.
+const shot = async (page, name) => {
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: path.join(SHOTS, name) });
+};
 const noSideScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 
 await withUiStack(
@@ -93,7 +98,7 @@ await withUiStack(
       check('6 Done reads in plain words: its summary, the Fields values from the run with the email masked, when it fails and what it gives',
         /Ends the workflow/.test(text) && (await receives.innerText()).includes('42') && !text.includes('alex.moreau') && (await page.getByTestId('step-when-it-fails').isVisible()) && (await page.getByTestId('step-what-it-gives').isVisible()),
         text.slice(0, 600));
-      await page.screenshot({ path: path.join(SHOTS, 'sheet-done-1440.png') });
+      await shot(page, 'sheet-done-1440.png');
 
       // 7. Text scan at 1440 and 390.
       const leaks = (t) => ['ops.', '$.', 'Effects:'].filter((w) => t.includes(w));
@@ -101,7 +106,7 @@ await withUiStack(
       await page.setViewportSize({ width: 390, height: 844 });
       await page.waitForTimeout(500);
       const narrow = await noSideScroll(page);
-      await page.screenshot({ path: path.join(SHOTS, 'sheet-done-390.png') });
+      await shot(page, 'sheet-done-390.png');
       await page.setViewportSize({ width: 1440, height: 1000 });
       check('7 no type id, path or Effects shows in the sheet, and neither width scrolls sideways', leaks(text).length === 0 && wide && narrow, { leaks: leaks(text), wide, narrow });
 
@@ -111,7 +116,7 @@ await withUiStack(
       const how = await top('step-how-it-starts');
       const settings = await top('step-settings');
       check('8 How it starts shows on the trigger, above Settings', how < settings, { how, settings });
-      await page.screenshot({ path: path.join(SHOTS, 'sheet-trigger-1440.png') });
+      await shot(page, 'sheet-trigger-1440.png');
 
       // 9. Use a field…: no match, then Fields → Amount.
       await openStep(page, 'done');
@@ -120,9 +125,9 @@ await withUiStack(
       const picker = page.getByTestId('field-picker');
       await picker.getByPlaceholder('Search fields…').fill('zzzz');
       const none = await picker.getByText('Nothing matches.').isVisible().catch(() => false);
-      await page.screenshot({ path: path.join(SHOTS, 'picker-no-match-1440.png') });
+      await shot(page, 'picker-no-match-1440.png');
       await picker.getByPlaceholder('Search fields…').fill('fields.out.amount');
-      await page.screenshot({ path: path.join(SHOTS, 'picker-results-1440.png') });
+      await shot(page, 'picker-results-1440.png');
       await picker.getByRole('option').first().click();
       const chip = await output.getByTestId('field-chip').innerText().catch(() => '');
       check('9 the picker says Nothing matches for a miss and puts Fields → Amount as a chip with its sample', none && chip.includes('Fields → Amount') && chip.includes('42'), { none, chip });
@@ -145,7 +150,7 @@ await withUiStack(
       });
       await openStep(page, 'fields');
       const loading = await page.getByTestId('step-receives-loading').isVisible();
-      await page.screenshot({ path: path.join(SHOTS, 'receives-loading-1440.png') });
+      await shot(page, 'receives-loading-1440.png');
       await page.unroute('**/sample?*');
       check('11 What it receives shows skeleton rows while the sample loads', loading, { loading });
 
@@ -155,12 +160,12 @@ await withUiStack(
       await openStep(page, 'done');
       const failed = await page.getByTestId('step-receives-error').waitFor({ timeout: 60_000 }).then(() => true, () => false);
       const editable = await page.locator('#definition-node-name').isEditable();
-      await page.screenshot({ path: path.join(SHOTS, 'receives-error-1440.png') });
+      await shot(page, 'receives-error-1440.png');
       check('12 a failing sample shows its own error with Retry while the Name field stays editable', failed && editable, { failed, editable });
       await page.unroute('**/sample?*');
       await page.getByTestId('step-receives-error').getByRole('button').first().click();
       const noRun = await page.getByTestId('step-receives-no-run').waitFor({ timeout: 60_000 }).then(() => true, () => false);
-      await page.screenshot({ path: path.join(SHOTS, 'receives-no-run-1440.png') });
+      await shot(page, 'receives-no-run-1440.png');
       check('13 a workflow that never ran says No run yet', noRun, { noRun });
 
       // 14-15, 17: a loose step, a type that is not installed and a tool step with no operation, in B's working copy.
@@ -171,7 +176,7 @@ await withUiStack(
       await openStep(page, 'ghost');
       const missing = await page.getByTestId('step-not-installed').isVisible();
       const locked = !(await page.locator('#definition-node-name').isEditable());
-      await page.screenshot({ path: path.join(SHOTS, 'not-installed-1440.png') });
+      await shot(page, 'not-installed-1440.png');
       check("15 a step whose type is not installed says so and its settings are read-only", missing && locked, { missing, locked });
       await openStep(page, 'lookup');
       const fix = page.getByTestId('step-problem-fix').first();
@@ -179,7 +184,7 @@ await withUiStack(
       if (hasFix) await fix.click();
       await page.waitForTimeout(800);
       const focused = await page.evaluate(() => document.activeElement?.id || document.activeElement?.getAttribute('data-field') || '');
-      await page.screenshot({ path: path.join(SHOTS, 'problems-fix-1440.png') });
+      await shot(page, 'problems-fix-1440.png');
       check('17 Fix on a problem focuses the field it names', hasFix && focused.includes('lookup'), { hasFix, focused });
 
       // 16. Ravi, a viewer: no Delete, no picker, fields disabled.
@@ -189,7 +194,7 @@ await withUiStack(
       const del = await viewer.getByTestId('definition-node-delete').count();
       const pick = await viewer.getByTestId('field-picker-open').count();
       const disabled = !(await viewer.locator('#definition-node-name').isEditable());
-      await viewer.screenshot({ path: path.join(SHOTS, 'viewer-1440.png') });
+      await shot(viewer, 'viewer-1440.png');
       check('16 a viewer sees no Delete and no field picker, and cannot change a field', del === 0 && pick === 0 && disabled, { del, pick, disabled });
       if (errors.length) console.log('page errors', errors.slice(0, 3));
     } finally {
