@@ -326,3 +326,59 @@ async def test_each_version_of_a_watched_file_is_scanned_read_held_and_deleted_o
         assert [objects.head(k) for k in keys] == [None, None]
         await admin.post("/v1/files/scan-results", json={**named, "fileId": other}, headers=scanner)
         assert (await admin.get(f"/v1/files/{other}/content", headers=OPS)).content == paid
+
+
+def _service(tenant: str, service: str, scopes: list[str]) -> dict[str, str]:
+    token = mint_service_token(
+        dev_service_signer(), service=service, audience="files", tenant_id=tenant, scopes=scopes, team_id="team_ops"
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+class Uses:
+    """agents-service's answer to which live and draft workflows name each watch; None when it cannot be asked."""
+
+    def __init__(self) -> None:
+        self.used: dict[str, list[dict[str, JsonValue]]] | None = {}
+
+    async def of(self, tenant: str, team: str, ids: list[str]) -> dict[str, list[dict[str, JsonValue]]] | None:
+        return None if self.used is None else {i: self.used.get(i, []) for i in ids}
+
+
+async def test_agents_service_asks_a_check_and_another_service_is_refused(
+    client: Client,  # noqa: F811
+    tenant: str,
+) -> None:
+    async with client(reader=Declaring()) as builder:
+        watch_id = _data(await builder.post("/v1/watches", json=WATCH, headers=OPS))["id"]
+        by = {"by": "trigger:files:wf_invoices"}
+        refused = await builder.post(
+            f"/v1/watches/{watch_id}/check", json=by, headers=_service(tenant, "kb", ["files:view"])
+        )
+        asked = await builder.post(
+            f"/v1/watches/{watch_id}/check", json=by, headers=_service(tenant, "agents", ["files:view", "files:check"])
+        )
+        seen = _data(await builder.get(f"/v1/watches/{watch_id}", headers=OPS))
+    assert (refused.status_code, refused.json()["error"]["code"]) == (403, "scope_required"), refused.text
+    assert asked.status_code == 202, asked.text
+    assert (seen["checking"], seen["lastEvent"]) == (True, 0), seen
+
+
+async def test_a_watch_a_workflow_uses_is_not_deleted_and_names_the_workflow(
+    client: Client,  # noqa: F811
+) -> None:
+    uses = Uses()
+    async with client(reader=Declaring(), watch_uses=uses) as builder:
+        watch_id = _data(await builder.post("/v1/watches", json=WATCH, headers=OPS))["id"]
+        uses.used = {watch_id: [{"workflowId": "wf_invoices", "name": "Supplier invoice intake", "live": True}]}
+        listed = _data(await builder.get("/v1/watches", headers=OPS))["data"][0]
+        kept = await builder.delete(f"/v1/watches/{watch_id}", headers=OPS)
+        uses.used = None
+        unasked = await builder.delete(f"/v1/watches/{watch_id}", headers=OPS)
+        uses.used = {}
+        gone = await builder.delete(f"/v1/watches/{watch_id}", headers=OPS)
+    assert (listed["inUse"], [u["name"] for u in listed["usedBy"]]) == (True, ["Supplier invoice intake"]), listed
+    assert (kept.status_code, kept.json()["error"]["code"]) == (409, "watch_in_use"), kept.text
+    assert kept.json()["error"]["details"]["usedBy"][0]["workflowId"] == "wf_invoices", kept.text
+    assert unasked.status_code == 503, unasked.text
+    assert gone.status_code == 204, gone.text

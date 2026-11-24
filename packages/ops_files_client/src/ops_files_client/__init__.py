@@ -29,6 +29,8 @@ __all__ = [
     "FilesRefused",
     "Purpose",
     "StoredFile",
+    "WatchEvent",
+    "WatchInfo",
 ]
 
 ReferenceType = Literal["source", "case", "chat", "eval_set", "test_set", "evidence", "export", "tool_module"]
@@ -76,6 +78,32 @@ class FileInfo(_In):
 class StoredFile(_In):
     file: FileInfo
     deduplicated: bool
+
+
+class WatchInfo(_In):
+    """A watched folder as a Files changed trigger reads it: where its events end and how its last check ended."""
+
+    id: str
+    name: str
+    plugin: str
+    checking: bool
+    last_event: int = 0
+    last_check_at: str | None = None
+    last_check: Json | None = None
+
+
+class WatchEvent(_In):
+    """One numbered finding of a watch's checks; `code` says why a failed one failed (too_large, fetch_failed)."""
+
+    number: int
+    file_id: str | None = None
+    version: int | None = None
+    kind: Literal["new", "changed", "renamed", "removed", "failed"]
+    reason: str | None = None
+    code: str | None = None
+    size: int | None = None
+    path: str | None = None
+    at: str
 
 
 class FilesRefused(Exception):
@@ -261,6 +289,46 @@ class FilesClient:
         if digest is not None:
             body["digest"] = digest
         return await self._json("POST", "/v1/files/scan-results", tenant, None, json=body)
+
+    async def watch(self, tenant: str, team: str, watch_id: str) -> WatchInfo:
+        """The team's watch; `FileNotFound` when it is gone or another team's."""
+        try:
+            data = await self._files.request("GET", f"/v1/watches/{_file(watch_id)}", tenant=tenant, team=team)
+        except ServiceCallError as e:
+            raise _refused(e) from e
+        return WatchInfo.model_validate(data)
+
+    async def watch_events(
+        self, tenant: str, team: str, watch_id: str, *, after: int, limit: int = 500
+    ) -> tuple[list[WatchEvent], int | None]:
+        """The watch's events after number `after`, oldest first, and the `after` of the next page (None at the end)."""
+        try:
+            page: JsonValue = await self._files.request(
+                "GET",
+                f"/v1/watches/{_file(watch_id)}/events",
+                params={"after": after, "limit": limit},
+                tenant=tenant,
+                team=team,
+            )
+        except ServiceCallError as e:
+            raise _refused(e) from e
+        body = cast(Json, page if isinstance(page, dict) else {})
+        rows = cast(JsonList, body.get("data") or [])
+        more = body.get("nextAfter")
+        return [WatchEvent.model_validate(r) for r in rows], int(more) if isinstance(more, int) else None
+
+    async def ask_check(self, tenant: str, team: str, watch_id: str, *, by: str) -> bool:
+        """Asks a check of the watch as `by` (the audit actor); False when one is already asked for or running.
+        Needs the files:check scope."""
+        try:
+            await self._files.request(
+                "POST", f"/v1/watches/{_file(watch_id)}/check", json={"by": by}, tenant=tenant, team=team
+            )
+        except ServiceCallError as e:
+            if e.status == 409 and e.code == "already_checking":
+                return False
+            raise _refused(e) from e
+        return True
 
     async def aclose(self) -> None:
         await self._files.http.aclose()

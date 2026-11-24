@@ -130,6 +130,15 @@ class WatchEvent(TypedDict):
     at: datetime
 
 
+def refused_since(before: dict[str, JsonValue] | None, outcome: dict[str, JsonValue], at: datetime) -> str | None:
+    """While checks keep ending refused, when the first of the run ended; None once one is not refused. A trigger
+    keys its one outage notice by it, so three refused checks are one outage."""
+    if outcome.get("status") != "refused":
+        return None
+    kept = (before or {}).get("refusedSince") if (before or {}).get("status") == "refused" else None
+    return kept if isinstance(kept, str) else at.isoformat()
+
+
 class LeaseLost(Exception):
     """The check's lease passed to another check (it ran past its lease), so this one writes nothing more."""
 
@@ -365,6 +374,8 @@ class WatchesStore(Store):
         once. A check that lost its lease writes neither."""
         w = file_watches
         async with self.tx() as c:
+            before = (await c.execute(sa.select(w.c.last_outcome).where(*self._mine(watch_id)))).scalar()
+            outcome = {**outcome, "refusedSince": refused_since(cast(dict[str, JsonValue] | None, before), outcome, at)}
             q = (
                 sa.update(w)
                 .where(*self._mine(watch_id), w.c.lease_owner == owner)

@@ -23,6 +23,7 @@ from ops_files.settings import StorageSettings, build_store
 from ops_files.store import FilesStore, ReadRequestsStore, SettingsStore, engine_for
 from ops_files.store.files import SYSTEM_ROLE, service_outbox
 from ops_files.tenant_files import TenantFiles
+from ops_files.watch_uses import AgentsWatchUses
 from ops_files.watches import WatchChecks, keep_checking
 from ops_identity import Auth, ServiceClient
 from ops_service_kit.logging import configure_logging
@@ -132,6 +133,10 @@ def main() -> None:
     # A watched folder's check reads the source through tools-service with the team's sign-in, as knowledge does.
     tools = ServiceClient.for_settings(settings, service="files", audience="tools", scopes=["tools:view", "tools:run"])
     reader = ToolReader(tools, key_prefix="files")
+    # Which workflows use a watch, so Stop watching is refused while one does.
+    uses = AgentsWatchUses(
+        ServiceClient.for_settings(settings, service="files", audience="agents", scopes=["workflows:view"])
+    )
     checks = WatchChecks(files, reader)
     background: list[Callable[[], Coroutine[Any, Any, None]]] = [
         lambda: keep_purging(files),
@@ -145,6 +150,7 @@ def main() -> None:
         settings=files.settings,
         background=background,
         reader=reader,
+        watch_uses=uses,
     )
     uvicorn.run(app, host=settings.bind_host, port=settings.files_port, log_config=None, access_log=False)
 

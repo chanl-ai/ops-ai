@@ -272,7 +272,7 @@ OPERATIONS: dict[str, Operation] = {
         "stream": False,
     },
     "watches_check_watch": {
-        "body": None,
+        "body": "json",
         "headers": [],
         "method": "POST",
         "path": "/v1/watches/{watch_id}/check",
@@ -607,9 +607,9 @@ class Operations:
         "Delete Watch"
         return self._t.call(SERVICE, OPERATIONS["watches_delete_watch"], {"watch_id": watch_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def watches_check_watch(self, watch_id: str) -> CheckAsked:
+    def watches_check_watch(self, watch_id: str, body: CheckIn) -> CheckAsked:
         "Check Watch"
-        return self._t.call(SERVICE, OPERATIONS["watches_check_watch"], {"watch_id": watch_id}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["watches_check_watch"], {"watch_id": watch_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def watches_watch_events(self, watch_id: str, *, after: int | None = None, limit: int | None = None) -> WatchEvents:
         "Watch Events"
@@ -893,9 +893,9 @@ class AsyncOperations:
         "Delete Watch"
         return await self._t.call(SERVICE, OPERATIONS["watches_delete_watch"], {"watch_id": watch_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def watches_check_watch(self, watch_id: str) -> CheckAsked:
+    async def watches_check_watch(self, watch_id: str, body: CheckIn) -> CheckAsked:
         "Check Watch"
-        return await self._t.call(SERVICE, OPERATIONS["watches_check_watch"], {"watch_id": watch_id}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["watches_check_watch"], {"watch_id": watch_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def watches_watch_events(
         self, watch_id: str, *, after: int | None = None, limit: int | None = None

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "A watched folder a workflow uses is not stopped",
+  "description": "Stop watching is refused while a workflow's Files changed trigger reads the folder, and the message names the workflow.",
+  "tag": "improved"
+}

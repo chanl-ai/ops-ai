@@ -32,6 +32,10 @@ class CheckAsked(TypedDict, closed=True):
     status: Literal["asked"]
 
 
+class CheckIn(TypedDict, closed=True):
+    by: NotRequired[str | None]
+
+
 class CredentialInput(TypedDict, closed=True):
     kind: Literal["aws_access_key", "azure_service_principal"]
     values: dict[str, str]
@@ -187,6 +191,7 @@ class LastCheck(TypedDict, closed=True):
     code: NotRequired[str]
     failed: NotRequired[int]
     failures: NotRequired[list[FailedFile]]
+    refusedSince: NotRequired[str | None]
     removed: NotRequired[int]
     status: str
     stopped: NotRequired[str]
@@ -462,6 +467,12 @@ class UploadTicket(TypedDict, closed=True):
     uploadUrl: str
 
 
+class UsedBy(TypedDict, closed=True):
+    live: bool
+    name: str
+    workflowId: str
+
+
 class WatchChange(TypedDict, closed=True):
     name: NotRequired[str | None]
     names: NotRequired[dict[str, dict[str, str]] | None]
@@ -505,10 +516,12 @@ class WatchView(TypedDict, closed=True):
     inUse: bool
     lastCheck: LastCheck | None
     lastCheckAt: str | None
+    lastEvent: int
     name: str
     plugin: str
     source: str
     updatedAt: str
+    usedBy: list[UsedBy]
     values: dict[str, JsonValue]
 
 
