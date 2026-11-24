@@ -90,7 +90,8 @@ Only a failure whose kind is retryable in `ops_contracts.errors.CODES` is tried 
 a non-retryable kind fails at once. Every wait is drawn over its whole span (full jitter) and is never shorter than
 the error's retry-after. A step's attempts also stop at its total duration (900 s by default), whichever runs out
 first. A run gets four passes (waits up to 5, 30 and 120 s); one whose passes are used pauses as Stuck with its last
-error, and Retry continues it from its last recorded step. A busy lease, a shutdown or a deploy gives the claim back
+error, and Retry continues it from its last recorded step. Redrive sends a Failed or Stuck run on from its failed
+step on its pinned version ([redrive and dead letters](durability-failure-and-audit.md#redrive-and-dead-letters)). A busy lease, a shutdown or a deploy gives the claim back
 without using an attempt, and the heartbeat keeps renewing through a database blip, so a long tool call is not
 reclaimed as lost (`ops_engine/worker.py`). Tests: `packages/ops_engine/tests/test_retry_classes.py`,
 `services/agents-service/tests/engine/test_retry_accounting.py`.

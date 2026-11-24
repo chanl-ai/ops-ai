@@ -70,6 +70,7 @@ Every command reads its address and sign-in from your profile ([Install the comm
 | Look at a run | `opsai workflows inspect <run-id>`, `opsai workflows trace <run-id>` | The run, and its timeline step by step |
 | Decide a task | `opsai workflows decide <task-id> approve` | Answers the human task a run waits on |
 | Retry | `opsai workflows retry <run-id>` | Retries a stuck run from its last recorded step |
+| Redrive | `opsai runs redrive <run-id>`, `opsai runs bulk redrive --code tool_failed` | Runs a Failed or Stuck run again from the step that failed, on the version it started on, once you have fixed the cause. Steps that finished return what they recorded and run nothing. A failed write is sent again, on its earlier approval, only when its answer proves it did nothing; any other is settled by the gateway's record first ([recovery and redrive](../security/recovery-and-redrive.md)). `bulk` redrives or cancels every run of your team that a filter matches (workflow, kind, code, time) |
 | Replay, fork, evaluate | `opsai workflows replay`, `fork`, `eval` | Planned |
 
 From Python; TypeScript has the same method names on `ops.workflows`, taking a parsed object or JSON:

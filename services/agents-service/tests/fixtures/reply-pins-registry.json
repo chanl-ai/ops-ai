@@ -1353,7 +1353,7 @@
         "loading": "on_match",
         "name": "Hardship request triage",
         "origin": "blank",
-        "ownerTeam": "Retail",
+        "ownerTeam": "team_ops",
         "parts": [],
         "provenance": {
           "citations": [],
@@ -1453,7 +1453,8 @@
             "loading": "on_match",
             "name": "Hardship request triage",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": null,
             "parts": [],
             "publishedVersion": null,
             "slug": "hardship-request-triage",
@@ -1475,7 +1476,7 @@
             "blank": 1
           },
           "ownerTeam": {
-            "Retail": 1
+            "team_ops": 1
           },
           "status": {
             "draft": 1
@@ -1489,6 +1490,7 @@
           "total": 1,
           "totalPages": 1
         },
+        "teamNames": {},
         "viewCounts": {
           "all": 1,
           "always": 0,
@@ -1519,6 +1521,12 @@
           "tokenBudget": 6000,
           "useWhenMaxChars": 1024
         },
+        "ownerTeams": [
+          {
+            "id": "team_ops",
+            "name": null
+          }
+        ],
         "teams": [
           "team_ops"
         ],
@@ -1691,7 +1699,7 @@
         "loading": "on_match",
         "name": "Hardship request triage",
         "origin": "blank",
-        "ownerTeam": "Retail",
+        "ownerTeam": "team_ops",
         "parts": [],
         "provenance": {
           "citations": [],
@@ -1826,7 +1834,8 @@
         "loading": "on_match",
         "name": "Hardship request triage",
         "origin": "blank",
-        "ownerTeam": "Retail",
+        "ownerTeam": "team_ops",
+        "ownerTeamName": null,
         "parts": [],
         "provenance": {
           "citations": [],

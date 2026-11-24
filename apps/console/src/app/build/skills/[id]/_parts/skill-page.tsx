@@ -127,7 +127,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
             <SkillStatusBadge status={s.status} />
             <span className="text-xs text-muted-foreground">
               {s.publishedVersion ? `v${s.publishedVersion} published` : 'Not published'}
-              {s.draftVersion && s.draftVersion !== s.publishedVersion ? ` · draft v${s.draftVersion}` : ''} · {s.ownerTeam} ·{' '}
+              {s.draftVersion && s.draftVersion !== s.publishedVersion ? ` · draft v${s.draftVersion}` : ''} · {s.ownerTeamName ?? s.ownerTeam} ·{' '}
               <Button variant="link" size="sm" onClick={() => setPanel('used_by')} data-testid="skill-used-by-link">
                 Used by {plural(s.usedBy, 'agent')}
               </Button>
@@ -268,7 +268,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
               rail={
                 <>
                   <AttributeCard title="Details" icon={Sparkles}>
-                    <FieldRow label="Owner team" value={s.ownerTeam} />
+                    <FieldRow label="Owner team" value={s.ownerTeamName ?? s.ownerTeam} />
                     <FieldRow label="Loading" value={SKILL_LOADING_LABEL[s.loading]} />
                     <FieldRow label="Identifier" value={s.slug} mono />
                     <FieldRow label="Published" value={s.publishedVersion ? `v${s.publishedVersion}` : undefined} />
@@ -364,7 +364,7 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
             isPending={request.isPending}
             onSubmit={async (note) => {
               const d = await request.mutateAsync(note);
-              announcePublish({ name: s.name, version: newest.version, live: !d.pendingReview, liveNote: 'Agents can attach it now.', decidedBy: `${plural(d.pendingReview?.needed ?? 1, 'approver')} from ${s.ownerTeam}`, reviewId: d.pendingReview?.id, openReview: (id) => router.push(`/work/tasks?review=${id}`) });
+              announcePublish({ name: s.name, version: newest.version, live: !d.pendingReview, liveNote: 'Agents can attach it now.', decidedBy: `${plural(d.pendingReview?.needed ?? 1, 'approver')} from ${s.ownerTeamName ?? s.ownerTeam}`, reviewId: d.pendingReview?.id, openReview: (id) => router.push(`/work/tasks?review=${id}`) });
             }}
           />
           <DeprecateSkillDialog

@@ -481,6 +481,8 @@ signin_identities = sa.Table(
     sa.Column("last_used_at", sa.String(40), nullable=False),
     # One person per provider subject: two first sign-ins racing each other link one person.
     sa.UniqueConstraint("tenant_id", "provider_id", "subject", name="uq_signin_identities_subject"),
+    # One provider subject per person: a second account at the provider never becomes another way into the person.
+    sa.UniqueConstraint("tenant_id", "provider_id", "user_id", name="uq_signin_identities_person"),
     sa.ForeignKeyConstraint(
         ["tenant_id", "provider_id"],
         ["signin_providers.tenant_id", "signin_providers.id"],
@@ -499,7 +501,7 @@ signin_flows = sa.Table(
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), nullable=False, index=True),
     sa.Column("provider_id", sa.String(64), nullable=False),
-    sa.Column("purpose", sa.String(16), nullable=False),  # sign_in | step_up | test
+    sa.Column("purpose", sa.String(16), nullable=False),  # sign_in | step_up | test | link
     sa.Column("state_hash", sa.String(64), nullable=False, unique=True),
     # The hash of the key the starting browser holds; completing the flow needs it.
     sa.Column("browser_hash", sa.String(64), nullable=False),
@@ -517,6 +519,10 @@ signin_flows = sa.Table(
     # A test sign-in's result (0033): state, subject, email, name, groups, or the check that failed. Read only by the
     # admin who started it (`user_id`); a test flow never gets a handoff, so it can never become a session.
     sa.Column("test_result", sa.JSON(none_as_null=True)),
+    # A link flow's provider subject, kept from the provider's answer until the session that started it completes.
+    sa.Column("subject", sa.String(255)),
+    # The hash of the invite a sign-in was started from; the answer may then link the invited person.
+    sa.Column("invite_hash", sa.String(64)),
     sa.ForeignKeyConstraint(
         ["tenant_id", "provider_id"],
         ["signin_providers.tenant_id", "signin_providers.id"],

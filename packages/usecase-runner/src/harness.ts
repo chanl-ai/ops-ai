@@ -1020,6 +1020,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
               OPS_PLATFORM_PUBLIC_URL: `http://127.0.0.1:${PLATFORM_PORT}`,
               OPS_CONSOLE_URL: consoleUrl,
               OPS_SIGNIN_DNS_SERVERS: JSON.stringify([`127.0.0.1:${IDP_PORT}`]),
+              // The fake provider serves plain http on loopback; provider fetches otherwise refuse all but public https.
+              OPS_SIGNIN_FETCH_LOCAL: 'true',
               OPS_MAIL_PROVIDER: 'fake',
               OPS_MAIL_FROM: 'ops@harborpine.example',
               OPS_MAIL_FAKE_OUT_DIR: stack.mailDir,

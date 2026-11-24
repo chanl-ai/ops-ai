@@ -35,7 +35,6 @@ REFUND: dict[str, Any] = {
     "name": "Refund a charge",
     "useWhen": "The customer asks for a card charge to be refunded.",
     "instructions": "Quote the amount back before any refund.",
-    "ownerTeam": "Retail",
     "toolIds": ["lookup_customer"],
 }
 STEPS: list[dict[str, Any]] = [

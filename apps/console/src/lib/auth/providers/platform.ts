@@ -1,7 +1,7 @@
 
 import type { SignedInIdentity } from '@/lib/api/request-identity';
 
-import { AuthError, type AuthMethod, type AuthProvider, type DemoPerson, type ReauthInput, type Session, type SignInOptions, type SignInResult, type StepUp } from '../provider.ts';
+import { AuthError, type AuthMethod, type AuthProvider, type DemoPerson, type ReauthInput, type Session, type SsoLink, type SignInOptions, type SignInResult, type StepUp } from '../provider.ts';
 
 /** platform-service's caller, as GET /v1/auth/session and the sign-in response return it. */
 interface Principal {
@@ -280,9 +280,30 @@ export function createPlatformProvider(baseUrl: string): AuthProvider & { identi
       const options = await call<SignInOptions>('/v1/auth/options', { method: 'POST', body: JSON.stringify({ email: email.trim() }) });
       return options ?? { password: true, sso: null };
     },
-    startSso: async ({ email, next }) => {
+    startSso: async ({ email, next, invite }) => {
       if (!email) throw new AuthError('Enter your work email.', 'invalid_credentials');
-      return begin('/v1/auth/sso/start', { email: email.trim(), ...(next ? { next } : {}) });
+      return begin('/v1/auth/sso/start', { email: email.trim(), ...(next ? { next } : {}), ...(invite ? { invite } : {}) });
+    },
+    async ssoLinks() {
+      const s = read();
+      if (!s) throw new AuthError('Sign in again to continue.', 'no_session');
+      return (await call<SsoLink[]>('/v1/auth/sso/links', { token: s.token })) ?? [];
+    },
+    /** A signed-in person adding their account at the company provider: the same round trip as sign-in, from their own session. */
+    async startSsoLink({ returnTo, stepUp }) {
+      const s = read();
+      if (!s) throw new AuthError('Sign in again to continue.', 'no_session');
+      return begin('/v1/auth/sso/link/start', { next: returnTo, stepUp }, s.token);
+    },
+    async unlinkSso(providerId) {
+      const s = read();
+      if (!s) throw new AuthError('Sign in again to continue.', 'no_session');
+      await call(`/v1/auth/sso/links/${encodeURIComponent(providerId)}`, { method: 'DELETE', token: s.token });
+    },
+    async completeSsoLink(code) {
+      const s = read();
+      if (!s) throw new AuthError('Sign in again to continue.', 'no_session');
+      await call('/v1/auth/sso/link/complete', { method: 'POST', token: s.token, body: JSON.stringify({ code, flowKey: flowKey() }) });
     },
     async completeSso(code): Promise<SignInResult> {
       const issued = await call<Issued>('/v1/auth/sso/complete', { method: 'POST', body: JSON.stringify({ code, flowKey: flowKey() }) });

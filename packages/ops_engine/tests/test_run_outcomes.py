@@ -59,6 +59,16 @@ async def test_a_write_the_system_refused_takes_its_error_port() -> None:
     assert (await g.aget_state(config("u2"))).values[channel("failed")]["out"]["outcome"] == "tool_failed"
 
 
+async def test_a_write_a_plugin_could_not_reach_takes_its_error_port_on_its_first_pass() -> None:
+    # Only a Redrive reads UPSTREAM_UNREACHABLE as may-have-run (journal.definitely_not_done); a run's own pass routes
+    # it to the error port the workflow drew for it.
+    tools = AnsweringTools({"code": "UPSTREAM_UNREACHABLE", "message": "ConnectError reaching CRM", "side": "upstream"})
+    g = build(tools, MemoryJournal(), InMemorySaver())
+    await g.ainvoke({"input": PAYLOAD}, config("u7"), durability="sync")
+    assert (await g.aget_state(config("u7"))).values[channel("failed")]["out"]["outcome"] == "tool_failed"
+    assert tools.calls == ["u7:lookup:1:1"]
+
+
 async def test_a_write_the_gateway_lost_fails_the_run_and_is_not_sent_again() -> None:
     lost = ToolResult(False, {"callId": "gwc_1", "error": None}, reason="the gateway lost the call", lost=True)
     tools, journal, saver = FakeTools(access="write", recorded=lost), MemoryJournal(), InMemorySaver()

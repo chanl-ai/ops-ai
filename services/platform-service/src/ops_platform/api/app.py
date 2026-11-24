@@ -132,6 +132,8 @@ from .schemas import (
     ProviderIn,
     ProviderOut,
     Refresh,
+    ReinviteBulkOut,
+    ReinviteIn,
     ResetIn,
     RoleCellsIn,
     RoleCreatedOut,
@@ -151,6 +153,9 @@ from .schemas import (
     SignInTestOut,
     SignInTestStartOut,
     SsoCompleteIn,
+    SsoLink,
+    SsoLinked,
+    SsoLinkStartIn,
     SsoStarted,
     SsoStartIn,
     StepUpIn,
@@ -410,7 +415,7 @@ def create_public_app(
         if body.provider is not None:
             started = await sso.start_tile(body.provider, next_path=body.next)
         else:
-            started = await sso.start(body.email or "", next_path=body.next)
+            started = await sso.start(body.email or "", next_path=body.next, invite=body.invite)
         return ok({"redirectUrl": started.redirect_url, "flowKey": started.flow_key})
 
     @app.get("/v1/auth/oidc/callback", tags=["auth"], status_code=303, responses=ERRORS)
@@ -494,6 +499,39 @@ def create_public_app(
         issued = await sso.step_up_complete(token, code=body.code, flow_key=body.flow_key, request_id=new_id("req"))
         return ok({"token": issued.token, "expiresAt": issued.expires_at})
 
+    @app.post("/v1/auth/sso/link/start", tags=["auth"], response_model=Envelope[SsoStarted], responses=ERRORS)
+    async def sso_link_start(  # pyright: ignore[reportUnusedFunction]
+        body: SsoLinkStartIn, token: Annotated[str, Depends(_bearer)]
+    ) -> Any:
+        """A signed-in person's round trip to their workspace's provider, to sign in with their account there. It
+        needs this session's step-up, the provider asks for credentials again, and it must answer with the person's
+        own email: 401 `step_up_required` without one."""
+        started = await sso.link_start(token, step_up=body.step_up, next_path=body.next)
+        return ok({"redirectUrl": started.redirect_url, "flowKey": started.flow_key})
+
+    @app.delete("/v1/auth/sso/links/{provider_id}", tags=["auth"], status_code=204, responses=ERRORS)
+    async def sso_unlink(  # pyright: ignore[reportUnusedFunction]
+        provider_id: Annotated[str, Path(pattern=r"^[A-Za-z0-9_-]{1,64}$")], token: Annotated[str, Depends(_bearer)]
+    ) -> Response:
+        """Removes the signed-in person's own link to this provider, audited, and ends the sessions it opened."""
+        await sso.unlink_own(token, provider_id, request_id=new_id("req"))
+        return Response(status_code=204)
+
+    @app.get("/v1/auth/sso/links", tags=["auth"], response_model=Envelope[list[SsoLink]], responses=ERRORS)
+    async def sso_links(token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """The company providers the signed-in person can link and whether they have; empty when their email's
+        domain names none in their workspace."""
+        return ok(await sso.links(token))
+
+    @app.post("/v1/auth/sso/link/complete", tags=["auth"], response_model=Envelope[SsoLinked], responses=ERRORS)
+    async def sso_link_complete(  # pyright: ignore[reportUnusedFunction]
+        body: SsoCompleteIn, token: Annotated[str, Depends(_bearer)]
+    ) -> Any:
+        """Links the provider account the round trip answered with, for the session that started it; 409
+        `already_linked` when that account is someone's or the person has one there already."""
+        p = await sso.link_complete(token, code=body.code, flow_key=body.flow_key, request_id=new_id("req"))
+        return ok({"providerId": p.id, "kind": p.kind})
+
     @app.post("/v1/auth/password/forgot", tags=["auth"], status_code=204, responses=ERRORS)
     async def forgot_password(body: ForgotIn) -> Response:  # pyright: ignore[reportUnusedFunction]
         """Mails a reset link when the email can sign in by password; the answer is the same either way."""
@@ -507,7 +545,7 @@ def create_public_app(
         return Response(status_code=204)
 
     team_store = TeamStore(store.db)
-    people = Members(team_store)
+    people = Members(team_store, mail=sign.mail, console_url=sign.console_url, signin=signin_store)
     settings = Settings()
     lifecycle = WorkspaceLifecycle(
         LifecycleStore(store.db),
@@ -662,8 +700,10 @@ def create_public_app(
         joined = [str(m["user_id"]) for m in page["data"] if m["user_id"]]
         wide = await RoleStore(store.db).workspace_roles(actor.tenant_id, joined, now=now_iso())
         shown = [MemberRow.model_validate(m) for m in page["data"]]
+        own = await team_store.admins_among(actor.tenant_id, [str(m.user_id) for m in shown if m.needs_invite])
         page["data"] = [
             m.model_dump(by_alias=True, exclude={"created_at"})
+            | ({"needsInvite": False, "linksOwnSession": True} if m.user_id in own else {"linksOwnSession": False})
             | ({"invitedAt": m.created_at} if m.status == "invited" else {})
             | {"workspaceRoles": wide.get(str(m.user_id), [])}
             for m in shown
@@ -690,6 +730,21 @@ def create_public_app(
     @app.post("/v1/settings/members/invite", tags=["members"], response_model=Envelope[InviteBulkOut], responses=ERRORS)
     async def invite_members(_: Tx, body: InviteIn, actor: Annotated[Actor, Depends(acting_as_person)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(await people.invite(actor, body.emails, body.role))
+
+    @app.post(
+        "/v1/settings/members/reinvite", tags=["members"], response_model=Envelope[ReinviteBulkOut], responses=ERRORS
+    )
+    async def reinvite_members(_: Tx, body: ReinviteIn, actor: Annotated[Actor, Depends(acting_as_person)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """A link invite for each member who `needsInvite`, every such member of the team when `ids` is omitted,
+        mailed to the member's own address and never returned; the member stays active, others are skipped
+        `not_affected`, admins `links_own_session`. Signing in through the provider from it links them, once."""
+        return ok(await people.reinvite(actor, body.ids))
+
+    @app.post("/v1/settings/members/unlink", tags=["members"], response_model=Envelope[BulkOut], responses=ERRORS)
+    async def unlink_members(_: Tx, body: DeleteIn, actor: Annotated[Actor, Depends(acting_as_person)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """Removes each member's company sign-in links and ends the sessions they opened, audited; `not_linked` for a
+        member with none."""
+        return ok(await people.unlink(actor, body.ids))
 
     async def users_of(actor: Actor, member_ids: list[str]) -> list[str]:
         rows = await team_store.members(actor.tenant_id, actor.team_id, roles=[], statuses=[])

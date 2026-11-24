@@ -38,7 +38,6 @@ ops = OpsAI()
 
 skill = ops.raw.agents.agents_create_skill({
     "name": "Return checklist",
-    "ownerTeam": "Customer Support",
     "useWhen": "A customer wants to return an item.",
     "loading": "on_match",
     "instructions": (
@@ -61,7 +60,6 @@ const ops = new OpsAI();
 const skill = await ops.raw.agents.agents_create_skill({
   body: {
     name: 'Return checklist (TypeScript)',
-    ownerTeam: 'Customer Support',
     useWhen: 'A customer wants to return an item.',
     loading: 'on_match',
     instructions:
@@ -87,7 +85,7 @@ opsai skills show "$SKILL"
 | Field | What it does |
 |---|---|
 | `name` | The skill's name. A team uses each name once |
-| `ownerTeam` | The team that answers for the skill. Required |
+| `ownerTeam` | The id of the team that answers for the skill, one of `ownerTeams` in `GET /v1/skills/options` (each with its name). The team you act in when left out; another team you may not create skills in is refused with 400 `unknown_owner_team`. Reads return the id and `ownerTeamName` |
 | `useWhen` | One line that says when the skill applies. The agent reads it to decide whether to load the skill |
 | `loading` | `on_match` loads the skill when a request matches `useWhen`. `always` puts it in every reply |
 | `instructions` | The procedure the agent follows. Required |
@@ -169,14 +167,14 @@ skill's version and the inputs it was given.
 Skills get their own verbs, so a skill is a file you apply and publish like an agent.
 
 ```python
-skill = ops.skills.create({"name": "Return checklist", "ownerTeam": "Customer Support", "instructions": "..."})
+skill = ops.skills.create({"name": "Return checklist", "instructions": "..."})
 ops.skills.save_draft(skill["id"], {"instructions": "..."}, note="Adds the receipt step")
 ops.skills.publish(skill["id"], note="Adds the receipt step")
 ops.skills.references("refund", for_skill=skill["id"])
 ```
 
 ```ts
-const skill = await ops.skills.create({ name: 'Return checklist', ownerTeam: 'Customer Support', instructions: '...' });
+const skill = await ops.skills.create({ name: 'Return checklist', instructions: '...' });
 await ops.skills.saveDraft(skill.id, { instructions: '...' }, { note: 'Adds the receipt step' });
 await ops.skills.publish(skill.id, 'Adds the receipt step');
 await ops.skills.references('refund', skill.id);
