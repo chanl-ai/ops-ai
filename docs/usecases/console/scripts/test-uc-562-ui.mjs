@@ -225,7 +225,7 @@ await withUiStack(
         await shot('runs-one-list-1440');
         await go('/workflows');
         await page.locator('main tbody tr').first().waitFor({ timeout: 30_000 });
-        const list = await page.evaluate((old) => ({ kind: document.querySelectorAll('[data-testid=workflow-kind]').length, old: new RegExp(old).test(document.querySelector('main')?.innerText ?? ''), links: [...document.querySelectorAll('main tbody a[href^="/workflows/"]')].map((a) => a.getAttribute('href')).filter((h) => !h.startsWith('/workflows/definitions/') && !h.startsWith('/workflows/runs')) }), OLD.source);
+        const list = await page.evaluate((old) => ({ kind: document.querySelectorAll('[data-testid=workflow-kind]').length, old: new RegExp(old).test(document.querySelector('main')?.innerText ?? ''), rows: document.querySelectorAll('main tbody tr').length, links: [...document.querySelectorAll('main tbody a[href]')].map((a) => a.getAttribute('href')).filter((h) => !h.startsWith('/build/workflows/definitions/') && !h.startsWith('/build/runs')) }), OLD.source);
         // New workflow is a builder's button; James builds, Maya approves.
         const builder = await consoleSignIn(browser, consoleUrl, JAMES, PASSWORD, errors);
         await builder.goto(`${consoleUrl}/workflows`, { waitUntil: 'load' });
@@ -235,7 +235,7 @@ await withUiStack(
         const shapes = await dialog.locator('[role=radio]').count();
         const dialogOld = OLD.test(await dialog.innerText()) || /\bv[12]\b/.test(await dialog.innerText());
         await builder.context().close();
-        check('6 a builder sees one Runs list and one Workflows list, with no engine names', runs.tabs === 0 && !runs.old && list.kind === 0 && !list.old && !list.links.length && shapes === 0 && !dialogOld, { runs, list, shapes, dialogOld });
+        check('6 a builder sees one Runs list and one Workflows list, with no engine names', runs.tabs === 0 && !runs.old && list.kind === 0 && !list.old && list.rows > 0 && !list.links.length && shapes === 0 && !dialogOld, { runs, list, shapes, dialogOld });
       });
 
       await step('7 an old workflow link lands on the workflow, or says it is no longer available', async () => {
@@ -244,11 +244,11 @@ await withUiStack(
         const current = new URL(page.url()).pathname;
         await go('/workflows/dispute_email');
         await page.waitForTimeout(1500);
-        const gone = await page.evaluate(() => ({ path: location.pathname, text: document.querySelector('main')?.innerText ?? '', back: !!document.querySelector('main a[href="/workflows"]') }));
+        const gone = await page.evaluate(() => ({ path: location.pathname, text: document.querySelector('main')?.innerText ?? '', back: !!document.querySelector('a[href="/build/workflows"]') }));
         await shot('old-workflow-link-1440');
         await go('/workflows/runs?run=thr_from_an_old_workflow');
         const oldRun = await page.evaluate(() => document.querySelector('main')?.innerText ?? '');
-        check('7 an old workflow link lands on the workflow, or says it is no longer available', current === '/workflows/definitions/uc562_credit' && /no longer available/i.test(gone.text) && gone.back && /no longer available/i.test(oldRun), { current, gone: { ...gone, text: gone.text.slice(0, 200) }, oldRun: oldRun.slice(0, 200) });
+        check('7 an old workflow link lands on the workflow, or says it is no longer available', current === '/build/workflows/definitions/uc562_credit' && /no longer available/i.test(gone.text) && gone.back && /no longer available/i.test(oldRun), { current, gone: { ...gone, text: gone.text.slice(0, 200) }, oldRun: oldRun.slice(0, 200) });
       });
 
       await step('8 the services are down for 30 s and the page says so, then recovers by itself', async () => {
