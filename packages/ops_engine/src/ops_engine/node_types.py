@@ -461,7 +461,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             },
         },
         ui=_form(
-            ("inputSchema", _f("Input schema", "json", "JSON Schema the payload must match; empty accepts any object")),
+            ("inputSchema", _f("Input form", "json", "The fields a start must send (JSON Schema); empty takes any")),
             (
                 ONLY_FROM_WORKFLOWS,
                 _f("Only other workflows start this", "switch", "Start run and Files leave it out of their lists"),
@@ -563,7 +563,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             ("event", _f("Event", "text", "The event's name, such as file.deleted", placeholder="file.deleted")),
             (
                 "inputSchema",
-                _f("Input schema", "json", "JSON Schema Start run shows; empty means only the event starts it"),
+                _f("Input form", "json", "The fields Start run asks for (JSON Schema); empty: event only"),
             ),
         ),
         start=StartSpec(
@@ -598,7 +598,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         },
         ui=_form(
             ("key", _f("Key", "text", "A second fire with this key starts no run")),
-            ("inputSchema", _f("Input schema", "json", "JSON Schema the payload must match; empty accepts any object")),
+            ("inputSchema", _f("Input form", "json", "The fields a start must send (JSON Schema); empty takes any")),
         ),
         start=StartSpec(
             kind="schedule",

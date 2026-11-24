@@ -118,9 +118,9 @@ function FieldControl({ id, spec, schema, value, steps, onChange, testId }: { id
     case 'source':
       return <SourceSelect id={id} source={spec.source} value={value} steps={steps} onChange={onChange} />;
     case 'mapping':
-      return <MappingInput id={id} value={value} steps={steps} onChange={onChange} />;
+      return <MappingInput id={id} value={value} onChange={onChange} />;
     case 'mappings':
-      return <MappingsInput id={id} value={asObject(value)} steps={steps} onChange={(v) => onChange(Object.keys(v).length ? v : undefined)} />;
+      return <MappingsInput id={id} value={asObject(value)} onChange={(v) => onChange(Object.keys(v).length ? v : undefined)} />;
     case 'list':
       return spec.item ? <ListInput id={id} item={spec.item} schema={schema.items ?? {}} value={asList(value)} steps={steps} onChange={(v) => onChange(v.length ? v : undefined)} /> : null;
     case 'options':
@@ -189,13 +189,13 @@ const kindOf = (v: unknown): Kind => (typeof v === 'number' ? 'number' : typeof 
  * (`$.input…` or `$.nodes.<step>.out…`), or a value typed here: text, a number or yes/no. The kind is stored in the
  * value's own type; no field evaluates code. A path typed under All settings shows as its chip.
  */
-export function MappingInput({ id, value, onChange }: { id: string; value: unknown; steps?: StepRefs; onChange: (v: unknown) => void }) {
+export function MappingInput({ id, value, onChange }: { id: string; value: unknown; onChange: (v: unknown) => void }) {
   const source = React.useContext(FieldSourceContext);
   const [kind, setKind] = React.useState<Kind>(() => kindOf(value));
   React.useEffect(() => {
     if (value !== undefined && value !== '' && !isPath(value)) setKind(kindOf(value));
   }, [value]);
-  if (isPath(value)) return <div data-mapping={id}><FieldChip path={value} readOnly={source.readOnly} onClear={() => onChange(undefined)} /></div>;
+  if (isPath(value)) return <div data-mapping={id}><FieldChip path={value} fieldId={id} readOnly={source.readOnly} onClear={() => onChange(undefined)} /></div>;
   const text = value === undefined || value === null ? '' : String(value);
   const switchKind = (k: Kind) => {
     setKind(k);
@@ -249,7 +249,7 @@ export function MappingInput({ id, value, onChange }: { id: string; value: unkno
 }
 
 /** Named values, each a mapping; the names keep the order they were added in. */
-function MappingsInput({ id, value, steps, onChange }: { id: string; value: Params; steps: StepRefs; onChange: (v: Params) => void }) {
+function MappingsInput({ id, value, onChange }: { id: string; value: Params; onChange: (v: Params) => void }) {
   const entries = Object.entries(value);
   const rename = (from: string, to: string) => onChange(Object.fromEntries(entries.map(([k, v]) => [k === from ? to : k, v])));
   const add = () => {
@@ -267,7 +267,7 @@ function MappingsInput({ id, value, steps, onChange }: { id: string; value: Para
               <X />
             </Button>
           </div>
-          <MappingInput id={`${id}-${i}`} value={v} steps={steps} onChange={(nv) => onChange({ ...value, [key]: nv ?? '' })} />
+          <MappingInput id={`${id}-${i}`} value={v} onChange={(nv) => onChange({ ...value, [key]: nv ?? '' })} />
         </div>
       ))}
       <Button type="button" variant="outline" size="sm" className="self-start" onClick={add}>

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Plus } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Plus } from 'lucide-react';
 
 import { ConnectMailbox } from '@/components/channels/connect-mailbox';
 import { MailboxStatusDot } from '@/components/channels/mailbox-panels';
@@ -10,6 +10,7 @@ import { KeyValues, Section } from '@/components/shared/surface';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useMailboxes } from '@/hooks/channels-queries';
 import type { EngineNode } from '@/lib/types/engine';
 
@@ -141,52 +142,58 @@ function EmailTriggerDetails({ parameters, readOnly, onConnected }: { parameters
   );
 }
 
-/** How a run of this workflow starts, and the input it must send. */
+/** How a run of this workflow starts, and the input it must send. The call and tool name an app or agent uses sit behind
+ * Technical details, so the sheet reads in plain words. */
 function TriggerDetails({ workflowId, schema }: { workflowId: string; schema: InputSchema }) {
   const fields = Object.entries(schema.properties ?? {});
   return (
     <>
       <div data-testid="trigger-how-it-starts">
-      <Section title="How it starts" description="Every run of this workflow begins here.">
-        <KeyValues
-          rows={[
-            [
-              'From an app',
-              <span>
-                An authenticated call that starts a run, <code className="font-mono text-xs">POST /v1/runs</code>
-              </span>,
-            ],
-            [
-              'From an agent',
-              <span>
-                An agent that has this workflow as a tool, <code className="font-mono text-xs break-all">workflow__{workflowId}</code>
-              </span>,
-            ],
-            ['From here', 'Test run, with an input you type'],
-          ]}
-        />
-      </Section>
+        <Section title="How it starts" description="Every run of this workflow begins here.">
+          <KeyValues
+            rows={[
+              ['From an app', 'Another app starts it with a signed-in call'],
+              ['From an agent', 'An agent that has this workflow as a tool starts it'],
+              ['From here', 'Test run, with an input you type'],
+            ]}
+          />
+          <Collapsible className="mt-3" data-testid="trigger-technical">
+            <CollapsibleTrigger className="group flex items-center gap-1 text-xs font-medium text-muted-foreground" data-testid="trigger-technical-toggle">
+              <ChevronDown className="size-3.5 transition-transform group-data-[state=open]:rotate-180" />
+              Technical details
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-3">
+              <KeyValues
+                rows={[
+                  ['App call', <code className="font-mono text-xs">POST /v1/runs</code>],
+                  ['Agent tool name', <code className="font-mono text-xs break-all">workflow__{workflowId}</code>],
+                ]}
+              />
+            </CollapsibleContent>
+          </Collapsible>
+        </Section>
       </div>
       <div data-testid="trigger-run-input">
-      <Section title="Run input" description="What a run must send; checked against the input schema before the first step.">
-        {fields.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Any object: the input schema below names no fields.</p>
-        ) : (
-          <KeyValues
-            rows={fields.map(([name, p]) => [
-              name,
-              <span className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="font-mono">
-                  {p.type ?? 'any'}
-                </Badge>
-                {schema.required?.includes(name) && <Badge variant="secondary">required</Badge>}
-                {p.description && <span className="text-muted-foreground">{p.description}</span>}
-              </span>,
-            ])}
-          />
-        )}
-      </Section>
+        <Section title="Run input" description="What a run must send; checked against the input form before the first step.">
+          {fields.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Any input: the input form names no fields.</p>
+          ) : (
+            <KeyValues
+              rows={fields.map(([name, p]) => [
+                name,
+                <span className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline">{TYPE_WORDS[p.type ?? ''] ?? 'Any value'}</Badge>
+                  {schema.required?.includes(name) && <Badge variant="secondary">required</Badge>}
+                  {p.description && <span className="text-muted-foreground">{p.description}</span>}
+                </span>,
+              ])}
+            />
+          )}
+        </Section>
       </div>
     </>
   );
 }
+
+/** A field's JSON type in a builder's words. */
+const TYPE_WORDS: Record<string, string> = { string: 'Text', number: 'Number', integer: 'Whole number', boolean: 'Yes or no', object: 'Group of fields', array: 'List' };

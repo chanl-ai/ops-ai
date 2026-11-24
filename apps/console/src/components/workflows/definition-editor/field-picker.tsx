@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { CornerDownRight, X } from 'lucide-react';
 
+import { QueryError } from '@/components/shared/query-states';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -17,6 +18,10 @@ import type { SampleStep } from '@/lib/types/engine';
 export interface FieldSource {
   steps: SampleStep[];
   loading: boolean;
+  /** The sample read failed: the picker and What it gives show it with Retry, as What it receives does. */
+  error?: unknown;
+  retry?: () => void;
+  retrying?: boolean;
   /** The working copy does not hold this step yet: its fields list once the autosave lands. */
   unsaved: boolean;
   /** Every step of the workflow by id, to name a chip whose path the sample does not list. */
@@ -50,12 +55,12 @@ export function chipFor(path: string, source: FieldSource): { label: string; sam
   return { label: `${name} → ${rest || 'all of it'}`, sample: null, missing: false };
 }
 
-/** A picked value: the step and field by name, with last run's value under it. */
-export function FieldChip({ path, onClear, readOnly }: { path: string; onClear: () => void; readOnly?: boolean }) {
+/** A picked value: the step and field by name, with last run's value under it. `fieldId` lets a problem's Fix focus it. */
+export function FieldChip({ path, onClear, readOnly, fieldId }: { path: string; onClear: () => void; readOnly?: boolean; fieldId?: string }) {
   const source = React.useContext(FieldSourceContext);
   const chip = chipFor(path, source);
   return (
-    <div className="flex min-w-0 items-start gap-2 rounded-md border px-2 py-1.5" data-testid="field-chip">
+    <div className="flex min-w-0 items-start gap-2 rounded-md border px-2 py-1.5" data-testid="field-chip" data-field={fieldId} tabIndex={fieldId ? -1 : undefined}>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <Badge variant={chip.missing ? 'destructive' : 'secondary'} className="max-w-full justify-start truncate">
           <CornerDownRight className="size-3" /> <span className="truncate">{chip.label}</span>
@@ -63,7 +68,7 @@ export function FieldChip({ path, onClear, readOnly }: { path: string; onClear: 
         {chip.sample !== null && <span className="truncate text-xs text-muted-foreground">Sample: {chip.sample}</span>}
       </div>
       {!readOnly && (
-        <Button type="button" variant="ghost" size="icon" aria-label="Clear the field" onClick={onClear}>
+        <Button type="button" id={fieldId} variant="ghost" size="icon" aria-label="Clear the field" onClick={onClear}>
           <X />
         </Button>
       )}
@@ -92,6 +97,10 @@ export function FieldPicker({ onPick, label = 'Use a field…' }: { onPick: (pat
                 <Skeleton className="h-4 w-2/3" />
                 <Skeleton className="h-4 w-1/2" />
               </div>
+            ) : source.error ? (
+              <div className="p-3">
+                <QueryError what="this step's fields" error={source.error} onRetry={() => source.retry?.()} retrying={source.retrying} testId="field-picker-error" />
+              </div>
             ) : source.unsaved ? (
               <p className="p-3 text-sm text-muted-foreground">{SAVE_FIRST}</p>
             ) : groups.length === 0 ? (
@@ -104,7 +113,8 @@ export function FieldPicker({ onPick, label = 'Use a field…' }: { onPick: (pat
                     {s.fields.map((f) => (
                       <CommandItem
                         key={f.path}
-                        value={`${s.name} ${f.label} ${f.path}`}
+                        // Searched by the words a person reads; the step's id keeps two steps of one name apart.
+                        value={`${s.name} ${f.label} ${f.name} ${s.id}`}
                         onSelect={() => {
                           onPick(f.path);
                           setOpen(false);

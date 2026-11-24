@@ -4020,8 +4020,8 @@
           "widget": "text"
         },
         "inputSchema": {
-          "help": "JSON Schema Start run shows; empty means only the event starts it",
-          "label": "Input schema",
+          "help": "The fields Start run asks for (JSON Schema); empty: event only",
+          "label": "Input form",
           "widget": "json"
         }
       },
@@ -4078,8 +4078,8 @@
     "ui": {
       "fields": {
         "inputSchema": {
-          "help": "JSON Schema the payload must match; empty accepts any object",
-          "label": "Input schema",
+          "help": "The fields a start must send (JSON Schema); empty takes any",
+          "label": "Input form",
           "widget": "json"
         },
         "onlyFromWorkflows": {
@@ -4141,8 +4141,8 @@
     "ui": {
       "fields": {
         "inputSchema": {
-          "help": "JSON Schema the payload must match; empty accepts any object",
-          "label": "Input schema",
+          "help": "The fields a start must send (JSON Schema); empty takes any",
+          "label": "Input form",
           "widget": "json"
         },
         "key": {

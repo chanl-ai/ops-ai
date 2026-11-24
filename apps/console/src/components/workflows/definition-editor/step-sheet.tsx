@@ -74,6 +74,9 @@ export function StepSheet({ node, type, workflowId, steps, checks, order, readOn
   const source: FieldSource = {
     steps: sample.data?.steps ?? [],
     loading: sample.isLoading,
+    error: sample.isError ? sample.error : undefined,
+    retry: () => void sample.refetch(),
+    retrying: sample.isFetching,
     unsaved: sample.data ? !sample.data.saved : false,
     names: node ? { ...names, [node.id]: node.name || type?.label || '' } : names,
     readOnly: locked,
@@ -164,7 +167,7 @@ export function StepSheet({ node, type, workflowId, steps, checks, order, readOn
               </Section>
             </div>
             {type && <WhenItFails type={type} parameters={node.parameters ?? {}} />}
-            <WhatItGives given={sample.data?.given ?? null} loading={sample.isLoading} unsaved={source.unsaved} />
+            <WhatItGives given={sample.data?.given ?? null} source={source} />
           </div>
         </FieldSourceContext.Provider>
       )}
@@ -178,7 +181,7 @@ function HowThisStepWorks({ text }: { text: string }) {
   return (
     <Collapsible open={open} onOpenChange={setOpen} data-testid="step-how-it-works">
       <CollapsibleTrigger asChild>
-        <Button type="button" variant="ghost" size="sm" className="-ml-2" aria-label="How this step works" data-testid="step-how-it-works-open">
+        <Button type="button" variant="ghost" size="sm" className="-ml-2" aria-label="Learn more: how this step works" data-testid="step-how-it-works-open">
           <ChevronDown className={open ? '' : '-rotate-90'} /> Learn more
         </Button>
       </CollapsibleTrigger>
@@ -252,11 +255,16 @@ function WhenItFails({ type, parameters }: { type: EngineNodeType; parameters: R
   );
 }
 
-function WhatItGives({ given, loading, unsaved }: { given: SampleStep | null; loading: boolean; unsaved: boolean }) {
+function WhatItGives({ given, source }: { given: SampleStep | null; source: FieldSource }) {
+  let body: React.ReactNode;
+  if (source.loading) body = <SampleSkeleton testId="step-gives-loading" />;
+  else if (source.error) body = <QueryError what="what this step gives" error={source.error} onRetry={() => source.retry?.()} retrying={source.retrying} testId="step-gives-error" />;
+  else if (source.unsaved || !given) body = <p className="text-sm text-muted-foreground">{SAVE_FIRST}</p>;
+  else body = <SampleRows step={given} />;
   return (
     <div data-testid="step-what-it-gives">
       <Section title="What it gives" description="What later steps can pick from this step.">
-        {loading ? <SampleSkeleton testId="step-gives-loading" /> : unsaved || !given ? <p className="text-sm text-muted-foreground">{SAVE_FIRST}</p> : <SampleRows step={given} />}
+        {body}
       </Section>
     </div>
   );

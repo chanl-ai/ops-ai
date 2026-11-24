@@ -46,7 +46,8 @@ async function openStep(page, id) {
   // The sheet may sit over the step to open next, so it closes first.
   const sheet = page.getByTestId('step-sheet');
   if (await sheet.isVisible().catch(() => false)) {
-    await page.keyboard.press('Escape');
+    // Its close button, not Escape: Escape goes to whatever holds focus, which a closed picker may still have.
+    await sheet.getByRole('button', { name: 'Close', exact: true }).click();
     await sheet.waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => undefined);
   }
   await page.locator(`[data-testid="definition-node"][data-node-id="${id}"]`).dblclick();
@@ -59,7 +60,27 @@ const shot = async (page, name) => {
   await page.waitForTimeout(600);
   await page.screenshot({ path: path.join(SHOTS, name) });
 };
-const noSideScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+// The page and the sheet's own scroller: the sheet is fixed, so the page alone could not show it overflowing.
+const noSideScroll = (page) =>
+  page.evaluate(() => {
+    const body = document.querySelector('[data-testid="step-sheet"] .overflow-y-auto');
+    const page = { scroll: document.documentElement.scrollWidth, width: window.innerWidth };
+    const sheet = body ? { scroll: body.scrollWidth, width: body.clientWidth } : null;
+    return { ok: page.scroll <= page.width && (!sheet || sheet.scroll <= sheet.width), page, sheet };
+  });
+// What reads as code to a builder: type ids, paths, Effects, the run call, an agent tool name and "input schema".
+const leaks = (t) => ['ops.', '$.', 'Effects:', 'POST /v1/runs', 'workflow__', 'input schema'].filter((w) => t.toLowerCase().includes(w.toLowerCase()));
+const atWidths = async (page, name) => {
+  const wide = await noSideScroll(page);
+  await shot(page, `${name}-1440.png`);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(500);
+  const narrow = await noSideScroll(page);
+  await shot(page, `${name}-390.png`);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.waitForTimeout(300);
+  return { wide, narrow, ok: wide.ok && narrow.ok };
+};
 
 await withUiStack(
   async (consoleUrl, stack) => {
@@ -74,6 +95,10 @@ await withUiStack(
     const c = await saveAndPublish(H, refund(C));
     const cv = (await (await fetch(`${agents}/v1/workflows/definitions/${C}`, { headers: H })).json()).data;
     const copy = refund(C);
+    // An Email received trigger whose daily cap breaks its rule (at least 1), so its sheet has a problem to fix.
+    copy.nodes[0] = node('start', 'ops.trigger.email', 'Email in', { folder: 'inbox', dailyCap: 0 });
+    // Done reads a step no longer in the workflow: its chip says Missing step.
+    copy.nodes[2] = node('done', 'ops.flow.end', 'Done', { outcome: 'ok', output: '$.nodes.gone.out.total' });
     copy.nodes.push(node('loose', 'ops.data.set', 'Loose note', { values: { note: 'x' } }), node('ghost', 'ops.flow.teleport', 'Old step'), node('lookup', 'ops.action.tool', 'Look up the order'));
     // Each one wired, so the canvas lays it out; Loose note only leads into Done, so nothing runs before it.
     copy.connections.push(wire('fields', 'out', 'lookup'), wire('fields', 'out', 'ghost'), wire('loose', 'out', 'done'));
@@ -98,25 +123,23 @@ await withUiStack(
       check('6 Done reads in plain words: its summary, the Fields values from the run with the email masked, when it fails and what it gives',
         /Ends the workflow/.test(text) && (await receives.innerText()).includes('42') && !text.includes('alex.moreau') && (await page.getByTestId('step-when-it-fails').isVisible()) && (await page.getByTestId('step-what-it-gives').isVisible()),
         text.slice(0, 600));
-      await shot(page, 'sheet-done-1440.png');
 
-      // 7. Text scan at 1440 and 390.
-      const leaks = (t) => ['ops.', '$.', 'Effects:'].filter((w) => t.includes(w));
-      const wide = await noSideScroll(page);
-      await page.setViewportSize({ width: 390, height: 844 });
-      await page.waitForTimeout(500);
-      const narrow = await noSideScroll(page);
-      await shot(page, 'sheet-done-390.png');
-      await page.setViewportSize({ width: 1440, height: 1000 });
-      check('7 no type id, path or Effects shows in the sheet, and neither width scrolls sideways', leaks(text).length === 0 && wide && narrow, { leaks: leaks(text), wide, narrow });
-
-      // 8. The trigger's own panel sits under Problems and above Settings.
+      // 7. Text scan at 1440 and 390, on Done and on the Request trigger.
+      const doneWidths = await atWidths(page, 'sheet-done');
       await openStep(page, 'start');
+      const triggerText = await sheetText(page);
+      const triggerWidths = await atWidths(page, 'sheet-trigger');
+      const found = [...leaks(text), ...leaks(triggerText)];
+      check('7 no type id, path, Effects, run call, tool name or "input schema" shows on Done or the trigger, and neither width scrolls sideways',
+        found.length === 0 && doneWidths.ok && triggerWidths.ok, { found, doneWidths, triggerWidths });
+
+      // 8. The trigger's own panel sits above Settings; the call and tool name wait behind Technical details.
       const top = async (id) => (await page.getByTestId(id).boundingBox())?.y ?? NaN;
       const how = await top('step-how-it-starts');
       const settings = await top('step-settings');
-      check('8 How it starts shows on the trigger, above Settings', how < settings, { how, settings });
-      await shot(page, 'sheet-trigger-1440.png');
+      await page.getByTestId('trigger-technical-toggle').click();
+      const technical = await page.getByTestId('trigger-technical').innerText();
+      check('8 How it starts shows on the trigger above Settings, and Technical details names the run call and tool', how < settings && technical.includes('POST /v1/runs') && technical.includes(`workflow__${A}`), { how, settings, technical });
 
       // 9. Use a field…: no match, then Fields → Amount.
       await openStep(page, 'done');
@@ -126,9 +149,10 @@ await withUiStack(
       await picker.getByPlaceholder('Search fields…').fill('zzzz');
       const none = await picker.getByText('Nothing matches.').isVisible().catch(() => false);
       await shot(page, 'picker-no-match-1440.png');
-      await picker.getByPlaceholder('Search fields…').fill('fields.out.amount');
+      await picker.getByPlaceholder('Search fields…').fill('amou');
       await shot(page, 'picker-results-1440.png');
-      await picker.getByRole('option').first().click();
+      // The trigger gives an amount too; the one wanted is Fields'.
+      await picker.locator('[cmdk-group]').filter({ hasText: 'Fields' }).getByRole('option').first().click();
       const chip = await output.getByTestId('field-chip').innerText().catch(() => '');
       check('9 the picker says Nothing matches for a miss and puts Fields → Amount as a chip with its sample', none && chip.includes('Fields → Amount') && chip.includes('42'), { none, chip });
 
@@ -161,8 +185,14 @@ await withUiStack(
       await openStep(page, 'done');
       const failed = await page.getByTestId('step-receives-error').waitFor({ timeout: 60_000 }).then(() => true, () => false);
       const editable = await page.locator('#definition-node-name').isEditable();
+      const givesError = await page.getByTestId('step-gives-error').isVisible();
       await shot(page, 'receives-error-1440.png');
-      check('12 a failing sample shows its own error with Retry while the Name field stays editable', failed && editable, { failed, editable });
+      await page.locator('[data-mapping="node-done-output"]').getByTestId('field-picker-open').click();
+      const pickerError = await page.getByTestId('field-picker-error').waitFor({ timeout: 10_000 }).then(() => true, () => false);
+      await shot(page, 'picker-error-1440.png');
+      // Its own button closes the picker; Escape could close the sheet as well.
+      await page.locator('[data-mapping="node-done-output"]').getByTestId('field-picker-open').click();
+      check('12 a failing sample shows its own error with Retry in What it receives, What it gives and the picker, while the Name field stays editable', failed && editable && givesError && pickerError, { failed, editable, givesError, pickerError });
       await page.unroute('**/sample?*');
       await page.getByTestId('step-receives-error').getByRole('button').first().click();
       const noRun = await page.getByTestId('step-receives-no-run').waitFor({ timeout: 60_000 }).then(() => true, () => false);
@@ -170,8 +200,18 @@ await withUiStack(
       check('13 a workflow that never ran says No run yet', noRun, { noRun });
 
       // 14-15, 17: a loose step, a type that is not installed and a tool step with no operation, in B's working copy.
+      await page.route('**/sample?*', async (route) => {
+        await new Promise((r) => setTimeout(r, 4000));
+        await route.continue().catch(() => undefined);
+      });
       await openEditor(page, consoleUrl, C);
       await openStep(page, 'loose');
+      await page.getByTestId('step-settings').getByTestId('field-picker-open').first().click();
+      const pickerLoading = await page.getByTestId('field-picker-loading').isVisible();
+      await shot(page, 'picker-loading-1440.png');
+      await page.getByTestId('step-settings').getByTestId('field-picker-open').first().click();
+      await page.unroute('**/sample?*');
+      check('11b the picker shows skeleton rows while the sample loads', pickerLoading, { pickerLoading });
       const firstStep = await page.getByTestId('step-receives').getByText('This is the first step').waitFor({ timeout: 30_000 }).then(() => true, () => false);
       check('14 a step nothing runs before says This is the first step', put.ok && firstStep, { put: put.status, firstStep });
       await openStep(page, 'ghost');
@@ -188,6 +228,22 @@ await withUiStack(
       await shot(page, 'problems-fix-1440.png');
       check('17 Fix on a problem focuses the field it names', hasFix && focused.includes('lookup'), { hasFix, focused });
 
+      // 18. An Email received trigger with a problem: Problems, then How it starts, then Settings, at both widths.
+      await openStep(page, 'start');
+      const problems = await page.getByTestId('step-sheet-errors').waitFor({ timeout: 30_000 }).then(() => true, () => false);
+      const order = [await top('step-sheet-errors'), await top('step-how-it-starts'), await top('step-settings')];
+      const emailText = await sheetText(page);
+      const emailWidths = await atWidths(page, 'sheet-email-trigger');
+      check('18 an Email received trigger shows Problems, then How it starts, then Settings, in plain words, at 1440 and 390 with no sideways scroll',
+        problems && order[0] < order[1] && order[1] < order[2] && /from a mailbox/i.test(emailText) && leaks(emailText).length === 0 && emailWidths.ok,
+        { problems, order, leaks: leaks(emailText), emailWidths });
+
+      // 19. A value read from a step that is gone shows as Missing step.
+      await openStep(page, 'done');
+      const missingChip = await page.locator('[data-mapping="node-done-output"]').getByTestId('field-chip').innerText().catch(() => '');
+      await shot(page, 'chip-missing-step-1440.png');
+      check('19 a value read from a step that is gone shows the Missing step chip', missingChip.includes('Missing step'), { missingChip });
+
       // 16. Ravi, a viewer: no Delete, no picker, fields disabled.
       const viewer = await signIn(browser, consoleUrl, RAVI);
       await openEditor(viewer, consoleUrl, A);
@@ -196,7 +252,11 @@ await withUiStack(
       const pick = await viewer.getByTestId('field-picker-open').count();
       const disabled = !(await viewer.locator('#definition-node-name').isEditable());
       await shot(viewer, 'viewer-1440.png');
-      check('16 a viewer sees no Delete and no field picker, and cannot change a field', del === 0 && pick === 0 && disabled, { del, pick, disabled });
+      await viewer.setViewportSize({ width: 390, height: 844 });
+      await viewer.waitForTimeout(500);
+      const viewerNarrow = await noSideScroll(viewer);
+      await shot(viewer, 'viewer-390.png');
+      check('16 a viewer sees no Delete and no field picker, and cannot change a field, with no sideways scroll at 390', del === 0 && pick === 0 && disabled && viewerNarrow.ok, { del, pick, disabled, viewerNarrow });
       if (errors.length) console.log('page errors', errors.slice(0, 3));
     } finally {
       await browser.close();

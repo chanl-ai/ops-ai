@@ -123,7 +123,8 @@ export function useSetDefinitionPaused(workflowId: string) {
 
 /**
  * What a step receives, for the step sheet and its field picker. Keyed by the saved copy's digest, so a step the
- * server did not hold yet is asked again once the autosave lands.
+ * server did not hold yet is asked again once the autosave lands. While that new read runs, the same step's last reply
+ * stays on screen; another step's never does, so moving to a step shows its own loading state.
  */
 export const useStepSample = (workflowId: string, step: string | undefined, savedDigest: string) =>
   useTeamQuery({
@@ -131,6 +132,7 @@ export const useStepSample = (workflowId: string, step: string | undefined, save
     queryFn: () => api.engine.sample(workflowId, step as string),
     enabled: !!workflowId && !!step,
     staleTime: 30_000,
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[2] === workflowId && prevQuery?.queryKey[3] === (step ?? '') ? prev : undefined),
   });
 
 /** Choices for a node form field; `steps` is the definition on screen, so it is never fetched. */
