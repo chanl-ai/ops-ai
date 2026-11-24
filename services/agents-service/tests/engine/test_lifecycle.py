@@ -382,8 +382,15 @@ async def test_a_cancel_during_a_write_lets_the_write_finish_and_journals_it(
     await publish(c, wid)
     run_id = data(await start(c, wid, 70))["runId"]
     tools = SlowWrite()
-    # Heartbeats every 0.5 s, so several pass while the write is held.
-    passing = asyncio.create_task(worker(engine, tools, ttl=1.5).work_once())
+    # Heartbeats every 0.5 s, so several pass while the write is held. The test database is shared, so work an
+    # earlier test left (a retry come due) may be claimed first: the worker keeps claiming until it reaches this write.
+    held = worker(engine, tools, ttl=1.5)
+
+    async def until_the_write() -> None:
+        while await held.work_once() and not tools.started.is_set():
+            pass
+
+    passing = asyncio.create_task(until_the_write())
     await asyncio.wait_for(tools.started.wait(), 20)
     assert data(await c.post(f"/v1/runs/{run_id}/cancel", headers=JAMES))["status"] == "cancelled"
     await asyncio.sleep(1.6)
