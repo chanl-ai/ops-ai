@@ -119,7 +119,7 @@ function EmailTriggerDetails({ parameters, readOnly, onConnected }: { parameters
                 </span>,
               ],
               ['When it goes live', 'Publishing puts the workflow on the mailbox; it needs the right to add deployments in this team'],
-              ['From here', 'Test run, with an email you type as JSON'],
+              ['From here', 'Test run, with an email you type in'],
             ]}
           />
         </Section>

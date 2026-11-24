@@ -9029,6 +9029,11 @@ export interface components {
             inputs: components["schemas"]["PortView"][];
             /** Label */
             label: string;
+            /**
+             * Limit
+             * @default
+             */
+            limit: string;
             /** Optionaloutputs */
             optionalOutputs: components["schemas"]["OptionalPortView"][];
             /** Outputs */
@@ -9046,6 +9051,11 @@ export interface components {
             summary: string;
             /** Timeoutseconds */
             timeoutSeconds: number;
+            /**
+             * Tries
+             * @default
+             */
+            tries: string;
             /** Ui */
             ui: {
                 [key: string]: components["schemas"]["JsonValue"];

@@ -16,6 +16,7 @@
       }
     ],
     "label": "Add to case",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -55,6 +56,20 @@
             "open",
             "waiting_on_customer",
             "resolved"
+          ],
+          "oneOf": [
+            {
+              "const": "open",
+              "title": "Open"
+            },
+            {
+              "const": "waiting_on_customer",
+              "title": "Waiting on the customer"
+            },
+            {
+              "const": "resolved",
+              "title": "Resolved"
+            }
           ]
         },
         "timeoutSeconds": {
@@ -76,10 +91,11 @@
     },
     "summary": "Adds this run to an existing case of your team and can move the case on.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "caseId": {
-          "help": "The case's id, e.g. `$.nodes.<step>.out.caseId`",
+          "help": "The case's id, from an earlier step or the run input",
           "label": "Case",
           "widget": "mapping"
         },
@@ -131,6 +147,7 @@
       }
     ],
     "label": "Open case",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -213,6 +230,7 @@
     },
     "summary": "Opens a case for a customer issue in your team, with this run as its first entry.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "assignee": {
@@ -285,6 +303,7 @@
       }
     ],
     "label": "Send a message",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -323,6 +342,7 @@
     },
     "summary": "Replies to the person who started the workflow, on the same channel they used.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "body": {
@@ -366,6 +386,7 @@
       }
     ],
     "label": "Call a tool",
+    "limit": "",
     "optionalOutputs": [
       {
         "parameter": "onTimeout",
@@ -412,7 +433,8 @@
           "not": {
             "pattern": "^\\$\\."
           },
-          "type": "string"
+          "type": "string",
+          "x-problem": "must be typed or chosen here, not picked from another step"
         },
         "input": {
           "additionalProperties": {
@@ -422,10 +444,20 @@
         },
         "onTimeout": {
           "default": "error",
-          "description": "When the system does not answer in time: the error port, or a timeout port",
+          "description": "When the system does not answer in time: the Error way out, or a Timeout way out",
           "enum": [
             "error",
             "port"
+          ],
+          "oneOf": [
+            {
+              "const": "error",
+              "title": "Take the Error way out"
+            },
+            {
+              "const": "port",
+              "title": "Take a Timeout way out"
+            }
           ]
         },
         "operation": {
@@ -433,7 +465,8 @@
           "not": {
             "pattern": "^\\$\\."
           },
-          "type": "string"
+          "type": "string",
+          "x-problem": "must be typed or chosen here, not picked from another step"
         },
         "timeoutSeconds": {
           "exclusiveMinimum": 0,
@@ -454,6 +487,7 @@
     },
     "summary": "Reads from or writes to a connected app.",
     "timeoutSeconds": 60.0,
+    "tries": "",
     "ui": {
       "fields": {
         "accounts": {
@@ -462,14 +496,15 @@
           "widget": "account"
         },
         "approvalToken": {
-          "help": "Only for a token minted outside this workflow",
-          "label": "Approval token",
+          "help": "Only for an approval given outside this workflow",
+          "label": "Outside approval",
           "widget": "mapping"
         },
         "approvedBy": {
-          "help": "A review step whose Approve authorises this write",
+          "help": "The review whose Approve allows this change",
           "label": "Approved by",
           "source": "steps",
+          "stepType": "ops.flow.humanReview",
           "widget": "source"
         },
         "input": {
@@ -478,12 +513,12 @@
           "widget": "mappings"
         },
         "onTimeout": {
-          "help": "The error port, or a Timeout port of its own",
+          "help": "Take the Error way out, or a Timeout way out of its own",
           "label": "When it does not answer",
           "widget": "select"
         },
         "operation": {
-          "help": "A registry operation the tool gateway calls",
+          "help": "What this step does in the app",
           "label": "Operation",
           "source": "tools",
           "widget": "source"
@@ -523,6 +558,7 @@
       }
     ],
     "label": "Start workflow",
+    "limit": "Starting takes a moment. With Wait for them on, the Give up after setting says how long it waits for the started workflows.",
     "optionalOutputs": [
       {
         "parameter": "wait",
@@ -599,7 +635,8 @@
           "not": {
             "pattern": "^\\$\\."
           },
-          "type": "string"
+          "type": "string",
+          "x-problem": "must be typed or chosen here, not picked from another step"
         }
       },
       "required": [
@@ -616,6 +653,7 @@
     },
     "summary": "Starts another of your team's workflows, once or once for each item in a list.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "batchSize": {
@@ -624,22 +662,22 @@
           "widget": "number"
         },
         "forEach": {
-          "help": "A list from an earlier step; empty starts one child",
+          "help": "A list from an earlier step; empty starts one workflow",
           "label": "For each",
           "widget": "mapping"
         },
         "input": {
-          "help": "The child's input; `$.item` is the current item",
+          "help": "What each started workflow receives",
           "label": "Input",
           "widget": "mappings"
         },
         "label": {
-          "help": "What each child is about, e.g. {$.item.name}; the item's first text when empty",
+          "help": "What each started workflow is about; the item's first text when empty",
           "label": "Label",
           "widget": "text"
         },
         "maxItems": {
-          "help": "Most children one step starts; 50 when empty",
+          "help": "Most workflows one step starts; 50 when empty",
           "label": "Limit",
           "widget": "number"
         },
@@ -654,12 +692,12 @@
           "widget": "number"
         },
         "wait": {
-          "help": "Pause until every child has ended, then go on with their results",
+          "help": "Pause until every started workflow has ended, then go on with their results",
           "label": "Wait for them",
           "widget": "switch"
         },
         "workflow": {
-          "help": "The workflow each child runs",
+          "help": "The workflow this step starts",
           "label": "Workflow",
           "source": "workflows",
           "widget": "source"
@@ -696,6 +734,7 @@
       }
     ],
     "label": "Agent",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -719,7 +758,8 @@
           "not": {
             "pattern": "^\\$\\."
           },
-          "type": "string"
+          "type": "string",
+          "x-problem": "must be typed or chosen here, not picked from another step"
         },
         "input": {
           "additionalProperties": {
@@ -738,7 +778,8 @@
           "not": {
             "pattern": "^\\$\\."
           },
-          "type": "string"
+          "type": "string",
+          "x-problem": "must be typed or chosen here, not picked from another step"
         },
         "outputSchema": {
           "description": "JSON Schema the answer must match",
@@ -767,6 +808,7 @@
     },
     "summary": "Hands the work to one of your published agents, with its own tools and knowledge.",
     "timeoutSeconds": 120.0,
+    "tries": "",
     "ui": {
       "fields": {
         "agent": {
@@ -791,8 +833,8 @@
           "widget": "text"
         },
         "outputSchema": {
-          "help": "JSON Schema the answer must match; empty takes any answer",
-          "label": "Answer schema",
+          "help": "The fields the answer must have; empty takes any answer",
+          "label": "Answer format",
           "widget": "json"
         },
         "prompt": {
@@ -837,6 +879,7 @@
       }
     ],
     "label": "Classify",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [],
     "outputsFrom": "categories",
@@ -858,7 +901,8 @@
                     "error"
                   ]
                 },
-                "type": "string"
+                "type": "string",
+                "x-problem": "cannot be called Otherwise or Error; the step already has those ways out"
               }
             },
             "required": [
@@ -885,7 +929,8 @@
           "not": {
             "pattern": "^\\$\\."
           },
-          "type": "string"
+          "type": "string",
+          "x-problem": "must be typed or chosen here, not picked from another step"
         },
         "text": {
           "description": "What the model reads: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
@@ -910,12 +955,13 @@
     },
     "summary": "Uses AI to sort text into one of the categories you define.",
     "timeoutSeconds": 120.0,
+    "tries": "",
     "ui": {
       "fields": {
         "categories": {
-          "help": "Each is an out port; describe what belongs in it",
+          "help": "Each category is a way out; describe what belongs in it",
           "label": "Categories",
-          "widget": "options"
+          "widget": "categories"
         },
         "instructions": {
           "help": "Anything the model should know or do besides the step's job",
@@ -923,17 +969,17 @@
           "widget": "textarea"
         },
         "minConfidence": {
-          "help": "Below it the step leaves by otherwise; 0.6 when empty",
+          "help": "Below it the step takes the Otherwise way out; 0.6 when empty",
           "label": "Confidence floor",
           "widget": "number"
         },
         "model": {
-          "help": "A model alias for this step; empty uses the workspace's",
+          "help": "The model this step uses; empty uses the workspace's",
           "label": "Model",
           "widget": "text"
         },
         "text": {
-          "help": "What the model reads, e.g. $.input.body",
+          "help": "The text the model reads; pick a field or type it",
           "label": "Text",
           "widget": "mapping"
         },
@@ -971,6 +1017,7 @@
       }
     ],
     "label": "Draft",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -998,7 +1045,8 @@
           "not": {
             "pattern": "^\\$\\."
           },
-          "type": "string"
+          "type": "string",
+          "x-problem": "must be typed or chosen here, not picked from another step"
         },
         "text": {
           "description": "What the model reads: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
@@ -1023,6 +1071,7 @@
     },
     "summary": "Uses AI to write a draft, such as a reply or a note, from the text and your instructions.",
     "timeoutSeconds": 120.0,
+    "tries": "",
     "ui": {
       "fields": {
         "instructions": {
@@ -1031,12 +1080,12 @@
           "widget": "textarea"
         },
         "model": {
-          "help": "A model alias for this step; empty uses the workspace's",
+          "help": "The model this step uses; empty uses the workspace's",
           "label": "Model",
           "widget": "text"
         },
         "text": {
-          "help": "What the model reads, e.g. $.input.body",
+          "help": "The text the model reads; pick a field or type it",
           "label": "Text",
           "widget": "mapping"
         },
@@ -1072,6 +1121,7 @@
       }
     ],
     "label": "Extract from file",
+    "limit": "",
     "optionalOutputs": [
       {
         "parameter": "onTimeout",
@@ -1178,7 +1228,9 @@
               },
               "key": {
                 "pattern": "^[a-z][a-z0-9_]{0,63}$",
-                "type": "string"
+                "title": "Name",
+                "type": "string",
+                "x-problem": "must start with a lowercase letter and use only lowercase letters, digits and underscores"
               },
               "label": {
                 "type": "string"
@@ -1204,6 +1256,28 @@
                   "money",
                   "date",
                   "enum"
+                ],
+                "oneOf": [
+                  {
+                    "const": "text",
+                    "title": "Text"
+                  },
+                  {
+                    "const": "number",
+                    "title": "Number"
+                  },
+                  {
+                    "const": "money",
+                    "title": "Money"
+                  },
+                  {
+                    "const": "date",
+                    "title": "Date"
+                  },
+                  {
+                    "const": "enum",
+                    "title": "One of a list"
+                  }
                 ]
               }
             },
@@ -1253,6 +1327,16 @@
           "enum": [
             "error",
             "port"
+          ],
+          "oneOf": [
+            {
+              "const": "error",
+              "title": "Take the Error way out"
+            },
+            {
+              "const": "port",
+              "title": "Take a Timeout way out"
+            }
           ]
         },
         "proposePages": {
@@ -1307,7 +1391,8 @@
       "required": [
         "file"
       ],
-      "type": "object"
+      "type": "object",
+      "x-problem": "Say what to read: name its fields, pick a document type, or let the step detect the kind."
     },
     "retry": {
       "attempts": 2,
@@ -1318,6 +1403,7 @@
     },
     "summary": "Uses AI to read the fields you define from an uploaded file, such as an invoice or a court notice.",
     "timeoutSeconds": 120.0,
+    "tries": "",
     "ui": {
       "fields": {
         "detect": {
@@ -1326,12 +1412,12 @@
           "widget": "switch"
         },
         "documentType": {
-          "help": "{id, version}: the version is pinned when the workflow is saved",
+          "help": "The document type to read with; its version is fixed when the workflow is saved",
           "label": "Document type",
           "widget": "json"
         },
         "fields": {
-          "help": "Each field: key, label, type, required, reviewBelow, alwaysReview",
+          "help": "The fields to read: each has a name, a label, a type and whether it is required",
           "label": "Fields",
           "widget": "json"
         },
@@ -1356,8 +1442,8 @@
           "widget": "number"
         },
         "maxTokens": {
-          "help": "Stops a long read early with what it read",
-          "label": "Stop after (tokens)",
+          "help": "Pieces of text of about four letters each; a long read stops early with what was read",
+          "label": "Stop after (text pieces)",
           "widget": "number"
         },
         "ocr": {
@@ -1366,7 +1452,7 @@
           "widget": "switch"
         },
         "onTimeout": {
-          "help": "Leave by Error, or by a Timeout way of its own",
+          "help": "Take the Error way out, or a Timeout way out of its own",
           "label": "If the read takes longer",
           "widget": "select"
         },
@@ -1433,6 +1519,7 @@
       }
     ],
     "label": "Extract from text",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -1492,7 +1579,8 @@
           "not": {
             "pattern": "^\\$\\."
           },
-          "type": "string"
+          "type": "string",
+          "x-problem": "must be typed or chosen here, not picked from another step"
         },
         "text": {
           "description": "What the model reads: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
@@ -1516,10 +1604,11 @@
     },
     "summary": "Uses AI to pull named fields out of text, such as an email body or a note.",
     "timeoutSeconds": 120.0,
+    "tries": "",
     "ui": {
       "fields": {
         "documentType": {
-          "help": "{\"id\": ...}: its fields; its newest version when none",
+          "help": "The document type whose fields to read; its newest version when none is named",
           "label": "Document type",
           "widget": "json"
         },
@@ -1534,12 +1623,12 @@
           "widget": "textarea"
         },
         "model": {
-          "help": "A model alias for this step; empty uses the workspace's",
+          "help": "The model this step uses; empty uses the workspace's",
           "label": "Model",
           "widget": "text"
         },
         "text": {
-          "help": "What the model reads, e.g. $.input.body",
+          "help": "The text the model reads; pick a field or type it",
           "label": "Text",
           "widget": "mapping"
         },
@@ -1577,6 +1666,7 @@
       }
     ],
     "label": "Retrieve from knowledge",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -1624,6 +1714,7 @@
     },
     "summary": "Searches your team's knowledge bases for passages that answer a question.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "kbIds": {
@@ -1668,6 +1759,7 @@
       }
     ],
     "label": "Summarise",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -1701,7 +1793,8 @@
           "not": {
             "pattern": "^\\$\\."
           },
-          "type": "string"
+          "type": "string",
+          "x-problem": "must be typed or chosen here, not picked from another step"
         },
         "text": {
           "description": "What the model reads: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
@@ -1725,6 +1818,7 @@
     },
     "summary": "Uses AI to write a short summary of the text, keeping names, amounts and dates exactly as written.",
     "timeoutSeconds": 120.0,
+    "tries": "",
     "ui": {
       "fields": {
         "instructions": {
@@ -1738,12 +1832,12 @@
           "widget": "number"
         },
         "model": {
-          "help": "A model alias for this step; empty uses the workspace's",
+          "help": "The model this step uses; empty uses the workspace's",
           "label": "Model",
           "widget": "text"
         },
         "text": {
-          "help": "What the model reads, e.g. $.input.body",
+          "help": "The text the model reads; pick a field or type it",
           "label": "Text",
           "widget": "mapping"
         },
@@ -1780,6 +1874,7 @@
       }
     ],
     "label": "Combine facts",
+    "limit": "",
     "optionalOutputs": [
       {
         "parameter": "onDisagreement",
@@ -1819,6 +1914,24 @@
                   "number",
                   "money",
                   "date"
+                ],
+                "oneOf": [
+                  {
+                    "const": "text",
+                    "title": "Text"
+                  },
+                  {
+                    "const": "number",
+                    "title": "Number"
+                  },
+                  {
+                    "const": "money",
+                    "title": "Money"
+                  },
+                  {
+                    "const": "date",
+                    "title": "Date"
+                  }
                 ]
               }
             },
@@ -1878,6 +1991,7 @@
     },
     "summary": "Merges the same facts from several sources, trusting the sources in the order you set.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "fields": {
@@ -1958,6 +2072,7 @@
       }
     ],
     "label": "Calculate",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -1983,7 +2098,8 @@
             "not": {
               "pattern": "\\$\\."
             },
-            "type": "string"
+            "type": "string",
+            "x-problem": "must be a formula using the value names, not a value picked from a step"
           },
           "maxProperties": 50,
           "minProperties": 1,
@@ -2010,15 +2126,16 @@
     },
     "summary": "Works out new values with formulas, such as the smaller of two amounts or a date twenty business days on.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "expressions": {
-          "help": "Each result's name and its formula over the values, e.g. min(levy.amount, balance); later formulas can use earlier results. Functions: min, max, abs, round, floor, ceil, sum, len, business_days(date, n), add_days(date, n), days_between(a, b)",
+          "help": "Each result's name and its formula over the values, such as the smaller of two amounts; later formulas can use earlier results",
           "label": "Formulas",
           "widget": "mappings"
         },
         "values": {
-          "help": "The data the formulas read, each by a name: a path to the input or a step",
+          "help": "The data the formulas read, each by a name: a field of the input or of an earlier step",
           "label": "Values",
           "widget": "mappings"
         }
@@ -2047,6 +2164,7 @@
       }
     ],
     "label": "Filter",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -2074,6 +2192,16 @@
           "enum": [
             "all",
             "any"
+          ],
+          "oneOf": [
+            {
+              "const": "all",
+              "title": "All of these"
+            },
+            {
+              "const": "any",
+              "title": "Any of these"
+            }
           ]
         },
         "conditions": {
@@ -2093,6 +2221,44 @@
                   "contains",
                   "exists",
                   "empty"
+                ],
+                "oneOf": [
+                  {
+                    "const": "eq",
+                    "title": "Equal to"
+                  },
+                  {
+                    "const": "ne",
+                    "title": "Not equal to"
+                  },
+                  {
+                    "const": "gt",
+                    "title": "Greater than"
+                  },
+                  {
+                    "const": "gte",
+                    "title": "At least"
+                  },
+                  {
+                    "const": "lt",
+                    "title": "Less than"
+                  },
+                  {
+                    "const": "lte",
+                    "title": "At most"
+                  },
+                  {
+                    "const": "contains",
+                    "title": "Contains"
+                  },
+                  {
+                    "const": "exists",
+                    "title": "Has a value"
+                  },
+                  {
+                    "const": "empty",
+                    "title": "Is empty"
+                  }
                 ]
               },
               "right": {
@@ -2127,6 +2293,7 @@
     },
     "summary": "Keeps the items of a list that meet your conditions and sets the rest aside.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "combine": {
@@ -2190,6 +2357,7 @@
       }
     ],
     "label": "Match",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -2217,7 +2385,8 @@
                 "not": {
                   "pattern": "^\\$\\."
                 },
-                "type": "string"
+                "type": "string",
+                "x-problem": "must be typed or chosen here, not picked from another step"
               },
               "minLength": {
                 "description": "Overlaps: the shorter value's least length",
@@ -2228,6 +2397,16 @@
                 "enum": [
                   "equals",
                   "overlaps"
+                ],
+                "oneOf": [
+                  {
+                    "const": "equals",
+                    "title": "Equals"
+                  },
+                  {
+                    "const": "overlaps",
+                    "title": "Overlaps"
+                  }
                 ]
               },
               "right": {
@@ -2236,7 +2415,8 @@
                 "not": {
                   "pattern": "^\\$\\."
                 },
-                "type": "string"
+                "type": "string",
+                "x-problem": "must be typed or chosen here, not picked from another step"
               }
             },
             "required": [
@@ -2259,7 +2439,8 @@
                 "not": {
                   "pattern": "^\\$\\."
                 },
-                "type": "string"
+                "type": "string",
+                "x-problem": "must be typed or chosen here, not picked from another step"
               },
               "minLength": {
                 "description": "Overlaps: the shorter value's least length",
@@ -2270,6 +2451,16 @@
                 "enum": [
                   "equals",
                   "overlaps"
+                ],
+                "oneOf": [
+                  {
+                    "const": "equals",
+                    "title": "Equals"
+                  },
+                  {
+                    "const": "overlaps",
+                    "title": "Overlaps"
+                  }
                 ]
               },
               "right": {
@@ -2278,7 +2469,8 @@
                 "not": {
                   "pattern": "^\\$\\."
                 },
-                "type": "string"
+                "type": "string",
+                "x-problem": "must be typed or chosen here, not picked from another step"
               }
             },
             "required": [
@@ -2313,6 +2505,7 @@
     },
     "summary": "Finds the records in a list that match one record, by rules on their fields.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "all": {
@@ -2414,6 +2607,7 @@
       }
     ],
     "label": "Set fields",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -2447,10 +2641,11 @@
     },
     "summary": "Puts values under the names you choose, so later steps can use them.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "values": {
-          "help": "Each field's value: text, a number, or a path to the input or an earlier step",
+          "help": "Each field's value: text, a number, or a field of the input or of an earlier step",
           "label": "Fields",
           "widget": "mappings"
         }
@@ -2478,6 +2673,7 @@
       }
     ],
     "label": "Transform",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -2519,6 +2715,7 @@
     },
     "summary": "Copies one value from the workflow and gives it a new name.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "as": {
@@ -2527,7 +2724,7 @@
           "widget": "text"
         },
         "expression": {
-          "help": "A path such as $.input.a",
+          "help": "A field of the input or of an earlier step",
           "label": "Expression",
           "widget": "mapping"
         }
@@ -2556,6 +2753,7 @@
       }
     ],
     "label": "Purge what was read from a file",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -2592,10 +2790,11 @@
     },
     "summary": "Removes everything that was read from a file after the file is deleted.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "file": {
-          "help": "The deleted file, such as $.input.fileId",
+          "help": "The file that was deleted",
           "label": "File",
           "widget": "mapping"
         }
@@ -2623,6 +2822,7 @@
       }
     ],
     "label": "Save data on file",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -2670,6 +2870,7 @@
     },
     "summary": "Saves what an earlier Extract from file step read onto the file itself.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "checked": {
@@ -2683,7 +2884,7 @@
           "widget": "mapping"
         },
         "read": {
-          "help": "The Extract from file step's output, such as $.nodes.read.out",
+          "help": "What the Extract from file step read",
           "label": "Read",
           "widget": "mapping"
         },
@@ -2719,6 +2920,7 @@
       }
     ],
     "label": "Ask",
+    "limit": "Until the reply comes or the Time limit setting passes.",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -2761,11 +2963,12 @@
     },
     "summary": "Asks a person a question in the conversation and waits for their reply.",
     "timeoutSeconds": 30.0,
+    "tries": "No. It waits for the reply.",
     "ui": {
       "fields": {
         "key": {
-          "help": "The conversation key the reply is posted on",
-          "label": "Key",
+          "help": "Names the conversation the reply is posted in",
+          "label": "Conversation",
           "widget": "text"
         },
         "prompt": {
@@ -2775,7 +2978,7 @@
         },
         "timeoutSeconds": {
           "help": "0 times out without pausing",
-          "label": "Timeout seconds",
+          "label": "Time limit (seconds)",
           "widget": "number"
         }
       },
@@ -2804,6 +3007,7 @@
       }
     ],
     "label": "End",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [],
     "outputsFrom": null,
@@ -2822,6 +3026,16 @@
           "enum": [
             "succeeded",
             "failed"
+          ],
+          "oneOf": [
+            {
+              "const": "succeeded",
+              "title": "Succeeded"
+            },
+            {
+              "const": "failed",
+              "title": "Failed"
+            }
           ]
         }
       },
@@ -2836,6 +3050,7 @@
     },
     "summary": "Ends the workflow with an outcome you name.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "outcome": {
@@ -2844,7 +3059,7 @@
           "widget": "text"
         },
         "output": {
-          "help": "The run's result: a value or a path to an earlier step's output",
+          "help": "The run's result: a value or a field of an earlier step",
           "label": "Output",
           "widget": "mapping"
         },
@@ -2879,6 +3094,7 @@
       }
     ],
     "label": "Human review",
+    "limit": "Until someone decides. The Deadline setting says when it shows as overdue, and Past the deadline says what happens then.",
     "optionalOutputs": [
       {
         "parameter": "onTimeout",
@@ -2907,7 +3123,8 @@
           "not": {
             "pattern": "^\\$\\."
           },
-          "type": "string"
+          "type": "string",
+          "x-problem": "must be typed or chosen here, not picked from another step"
         },
         "editable": {
           "description": "What the reviewer may correct: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`",
@@ -2918,10 +3135,20 @@
         },
         "onTimeout": {
           "default": "wait",
-          "description": "Past the deadline: wait (shown overdue) or expire (leave on the timeout port)",
+          "description": "Past the deadline: wait (shown overdue) or expire (take the Timeout way out)",
           "enum": [
             "wait",
             "expire"
+          ],
+          "oneOf": [
+            {
+              "const": "wait",
+              "title": "Keep waiting, shown overdue"
+            },
+            {
+              "const": "expire",
+              "title": "Expire and take the Timeout way out"
+            }
           ]
         },
         "options": {
@@ -2939,7 +3166,8 @@
                         "not": {
                           "pattern": "^\\$\\."
                         },
-                        "type": "string"
+                        "type": "string",
+                        "x-problem": "must be typed or chosen here, not picked from another step"
                       }
                     },
                     "required": [
@@ -2971,6 +3199,24 @@
                             "number",
                             "integer",
                             "boolean"
+                          ],
+                          "oneOf": [
+                            {
+                              "const": "string",
+                              "title": "Text"
+                            },
+                            {
+                              "const": "number",
+                              "title": "Number"
+                            },
+                            {
+                              "const": "integer",
+                              "title": "Whole number"
+                            },
+                            {
+                              "const": "boolean",
+                              "title": "Yes or no"
+                            }
                           ]
                         }
                       },
@@ -3036,7 +3282,8 @@
                   "not": {
                     "pattern": "^\\$\\."
                   },
-                  "type": "string"
+                  "type": "string",
+                  "x-problem": "must be typed or chosen here, not picked from another step"
                 },
                 "version": {
                   "minimum": 1,
@@ -3069,16 +3316,18 @@
     },
     "summary": "Pauses the workflow until a person decides, from Reviews, which way it goes.",
     "timeoutSeconds": 30.0,
+    "tries": "No. It waits for a person instead.",
     "ui": {
       "fields": {
         "approves": {
-          "help": "The tool step whose write Approve authorises",
+          "help": "The app step whose change Approve allows",
           "label": "Approves",
           "source": "steps",
+          "stepType": "ops.action.tool",
           "widget": "source"
         },
         "editable": {
-          "help": "A value the reviewer may correct, read on as `edited`",
+          "help": "A value the reviewer may correct; the corrected value goes on to later steps",
           "label": "Editable",
           "widget": "mapping"
         },
@@ -3088,17 +3337,17 @@
           "widget": "mapping"
         },
         "onTimeout": {
-          "help": "Wait shows it overdue; Expire leaves on a Timeout port",
+          "help": "Wait shows it overdue; Expire takes the Timeout way out",
           "label": "Past the deadline",
           "widget": "select"
         },
         "options": {
-          "help": "Each option is an out port; Approve and Reject when empty",
+          "help": "Each option is a way out; Approve and Reject when empty",
           "label": "Options",
           "widget": "options"
         },
         "params": {
-          "help": "The values the task type's params read, each a value or a path",
+          "help": "The values the task screen shows, each a value or a field of an earlier step",
           "label": "Task values",
           "widget": "json"
         },
@@ -3123,7 +3372,7 @@
           "widget": "mapping"
         },
         "taskType": {
-          "help": "{\"id\": ...}: the task screen; its newest version when none is named",
+          "help": "The task screen the reviewer sees; its newest version when none is named",
           "label": "Task type",
           "widget": "json"
         },
@@ -3166,6 +3415,7 @@
       }
     ],
     "label": "If",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -3188,6 +3438,16 @@
           "enum": [
             "all",
             "any"
+          ],
+          "oneOf": [
+            {
+              "const": "all",
+              "title": "All of these"
+            },
+            {
+              "const": "any",
+              "title": "Any of these"
+            }
           ]
         },
         "conditions": {
@@ -3207,6 +3467,44 @@
                   "contains",
                   "exists",
                   "empty"
+                ],
+                "oneOf": [
+                  {
+                    "const": "eq",
+                    "title": "Equal to"
+                  },
+                  {
+                    "const": "ne",
+                    "title": "Not equal to"
+                  },
+                  {
+                    "const": "gt",
+                    "title": "Greater than"
+                  },
+                  {
+                    "const": "gte",
+                    "title": "At least"
+                  },
+                  {
+                    "const": "lt",
+                    "title": "Less than"
+                  },
+                  {
+                    "const": "lte",
+                    "title": "At most"
+                  },
+                  {
+                    "const": "contains",
+                    "title": "Contains"
+                  },
+                  {
+                    "const": "exists",
+                    "title": "Has a value"
+                  },
+                  {
+                    "const": "empty",
+                    "title": "Is empty"
+                  }
                 ]
               },
               "right": {
@@ -3237,6 +3535,7 @@
     },
     "summary": "Sends the workflow one of two ways, depending on whether your conditions hold.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "combine": {
@@ -3294,6 +3593,7 @@
       }
     ],
     "label": "Join",
+    "limit": "No limit of its own: it goes on once every branch that will arrive has.",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -3310,6 +3610,12 @@
           "default": "all",
           "enum": [
             "all"
+          ],
+          "oneOf": [
+            {
+              "const": "all",
+              "title": "Every branch"
+            }
           ]
         }
       },
@@ -3324,10 +3630,11 @@
     },
     "summary": "Waits for parallel branches to finish, then goes on once with all of their results.",
     "timeoutSeconds": 30.0,
+    "tries": "No. It waits for the branches.",
     "ui": {
       "fields": {
         "waitFor": {
-          "help": "Every branch that will arrive; a branch an If or Switch sent elsewhere is null. It waits for every step of the run that can still run, not only its own branches.",
+          "help": "Every branch that will arrive; a branch an If or Switch sent elsewhere has no value. It waits for every step of the run that can still run, not only its own branches.",
           "label": "Waits for",
           "widget": "select"
         }
@@ -3355,6 +3662,7 @@
       }
     ],
     "label": "Repeat",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -3382,6 +3690,16 @@
           "enum": [
             "all",
             "any"
+          ],
+          "oneOf": [
+            {
+              "const": "all",
+              "title": "All of these"
+            },
+            {
+              "const": "any",
+              "title": "Any of these"
+            }
           ]
         },
         "conditions": {
@@ -3401,6 +3719,44 @@
                   "contains",
                   "exists",
                   "empty"
+                ],
+                "oneOf": [
+                  {
+                    "const": "eq",
+                    "title": "Equal to"
+                  },
+                  {
+                    "const": "ne",
+                    "title": "Not equal to"
+                  },
+                  {
+                    "const": "gt",
+                    "title": "Greater than"
+                  },
+                  {
+                    "const": "gte",
+                    "title": "At least"
+                  },
+                  {
+                    "const": "lt",
+                    "title": "Less than"
+                  },
+                  {
+                    "const": "lte",
+                    "title": "At most"
+                  },
+                  {
+                    "const": "contains",
+                    "title": "Contains"
+                  },
+                  {
+                    "const": "exists",
+                    "title": "Has a value"
+                  },
+                  {
+                    "const": "empty",
+                    "title": "Is empty"
+                  }
                 ]
               },
               "right": {
@@ -3437,6 +3793,7 @@
     },
     "summary": "Runs a part of the workflow again until a condition holds, up to a limit you set.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "combine": {
@@ -3502,6 +3859,7 @@
       }
     ],
     "label": "Switch",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -3522,6 +3880,16 @@
                 "enum": [
                   "all",
                   "any"
+                ],
+                "oneOf": [
+                  {
+                    "const": "all",
+                    "title": "All of these"
+                  },
+                  {
+                    "const": "any",
+                    "title": "Any of these"
+                  }
                 ]
               },
               "conditions": {
@@ -3541,6 +3909,44 @@
                         "contains",
                         "exists",
                         "empty"
+                      ],
+                      "oneOf": [
+                        {
+                          "const": "eq",
+                          "title": "Equal to"
+                        },
+                        {
+                          "const": "ne",
+                          "title": "Not equal to"
+                        },
+                        {
+                          "const": "gt",
+                          "title": "Greater than"
+                        },
+                        {
+                          "const": "gte",
+                          "title": "At least"
+                        },
+                        {
+                          "const": "lt",
+                          "title": "Less than"
+                        },
+                        {
+                          "const": "lte",
+                          "title": "At most"
+                        },
+                        {
+                          "const": "contains",
+                          "title": "Contains"
+                        },
+                        {
+                          "const": "exists",
+                          "title": "Has a value"
+                        },
+                        {
+                          "const": "empty",
+                          "title": "Is empty"
+                        }
                       ]
                     },
                     "right": {
@@ -3591,6 +3997,7 @@
     },
     "summary": "Sends the workflow down the first of several named ways whose rules hold.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "cases": {
@@ -3659,7 +4066,7 @@
     "extraOutputs": [],
     "fails": "When its settings give it an Error path, it goes on by it. Without one: if the cause can pass, such as an app not answering, the run is tried again later and then waits as Stuck for your team to retry it. Otherwise the run stops as Failed.",
     "group": "flow",
-    "how": "When the time is up the workflow goes on by itself. A date already past goes on at once. A value that is not a date goes on to the Error path, naming the value. A date with no time means midnight UTC.",
+    "how": "When the time is up the workflow goes on by itself. A date already past goes on at once. A value that is not a date goes on to the Error path, naming the value. A date with no time means midnight in universal time.",
     "id": "ops.flow.wait",
     "inputs": [
       {
@@ -3669,6 +4076,7 @@
       }
     ],
     "label": "Wait",
+    "limit": "As long as the time or date you set.",
     "optionalOutputs": [
       {
         "parameter": "mode",
@@ -3707,6 +4115,16 @@
           "enum": [
             "duration",
             "until"
+          ],
+          "oneOf": [
+            {
+              "const": "duration",
+              "title": "A length of time"
+            },
+            {
+              "const": "until",
+              "title": "A date"
+            }
           ]
         },
         "seconds": {
@@ -3733,6 +4151,7 @@
     },
     "summary": "Pauses the workflow for a while, or until a date taken from an earlier step.",
     "timeoutSeconds": 30.0,
+    "tries": "No. Waiting cannot fail and be tried again.",
     "ui": {
       "fields": {
         "mode": {
@@ -3776,6 +4195,7 @@
       }
     ],
     "label": "Wait for",
+    "limit": "Until the other system answers or the Time limit setting passes.",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -3824,6 +4244,7 @@
     },
     "summary": "Waits for another system to finish its work, then goes on with the result.",
     "timeoutSeconds": 30.0,
+    "tries": "No. It waits for the other system.",
     "ui": {
       "fields": {
         "event": {
@@ -3833,12 +4254,12 @@
         },
         "key": {
           "help": "With an event: the value the event carries, such as an id an earlier step returned",
-          "label": "Event key",
+          "label": "Event match",
           "widget": "mapping"
         },
         "outputSchema": {
           "help": "The fields of the answer, so later steps can pick them; empty takes any answer",
-          "label": "Answer schema",
+          "label": "Answer format",
           "widget": "json"
         },
         "timeoutSeconds": {
@@ -3867,6 +4288,7 @@
     "id": "ops.trigger.email",
     "inputs": [],
     "label": "Email received",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -3917,6 +4339,7 @@
     },
     "summary": "Starts the workflow when a new email arrives in a mailbox you choose.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "dailyCap": {
@@ -3975,6 +4398,7 @@
     "id": "ops.trigger.event",
     "inputs": [],
     "label": "Service event",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -3990,7 +4414,8 @@
         "event": {
           "description": "The event's name, such as file.deleted",
           "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
-          "type": "string"
+          "type": "string",
+          "x-problem": "must be lowercase words joined by dots, such as file.deleted"
         },
         "inputSchema": {
           "description": "JSON Schema Start run shows; empty means only the event starts the workflow",
@@ -4011,6 +4436,7 @@
     },
     "summary": "Starts a system workflow when something happens in the platform, such as a file being deleted.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "event": {
@@ -4020,7 +4446,7 @@
           "widget": "text"
         },
         "inputSchema": {
-          "help": "The fields Start run asks for (JSON Schema); empty: event only",
+          "help": "The fields Start run asks for; empty means only the event starts it",
           "label": "Input form",
           "widget": "json"
         }
@@ -4043,6 +4469,7 @@
     "id": "ops.trigger.request",
     "inputs": [],
     "label": "Request",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -4075,10 +4502,11 @@
     },
     "summary": "Starts the workflow when another app, another workflow or a person starts it with the details it needs.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "inputSchema": {
-          "help": "The fields a start must send (JSON Schema); empty takes any",
+          "help": "The fields a start must send; empty takes any",
           "label": "Input form",
           "widget": "json"
         },
@@ -4102,10 +4530,11 @@
     "extraOutputs": [],
     "fails": "If the cause can pass, such as an app not answering, the run is tried again later and then waits as Stuck for your team to retry it. Otherwise the run stops as Failed.",
     "group": "trigger",
-    "how": "When the clock reaches the due time, the workflow starts with the details saved with the schedule. A scheduled start with the same key never runs twice, even if it fires again.",
+    "how": "When the clock reaches the due time, the workflow starts with the details saved with the schedule. A scheduled start with the same name never runs twice, even if it fires again.",
     "id": "ops.trigger.schedule",
     "inputs": [],
     "label": "Schedule",
+    "limit": "",
     "optionalOutputs": [],
     "outputs": [
       {
@@ -4138,16 +4567,17 @@
     },
     "summary": "Starts the workflow when its scheduled time comes.",
     "timeoutSeconds": 30.0,
+    "tries": "",
     "ui": {
       "fields": {
         "inputSchema": {
-          "help": "The fields a start must send (JSON Schema); empty takes any",
+          "help": "The fields a start must send; empty takes any",
           "label": "Input form",
           "widget": "json"
         },
         "key": {
-          "help": "A second fire with this key starts no run",
-          "label": "Key",
+          "help": "A second start with the same name runs nothing",
+          "label": "Start name",
           "widget": "text"
         }
       },

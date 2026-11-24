@@ -22,8 +22,8 @@ Delete step button.
 | Fix before you publish | What is wrong with this step, in words, naming the step. **Fix** takes you to the setting to change |
 | How it starts | On a trigger only: how a run begins, with the details a caller needs behind **Technical details** |
 | What it receives | The fields of every earlier step, each with the value from your team's newest finished run. Before any run it says "No run yet" |
-| Settings | The step's own settings. Required settings carry a mark, and each hint is one sentence |
-| When it fails | How many times the step tries again, what happens if it still fails, and how long it may take |
+| Settings | The step's own settings. A setting that may stay empty says "(optional)" beside its name, and each hint is one sentence |
+| When it fails | How many times the step tries again, what happens if it still fails, and how long it may take. A step that waits, such as a review or a Wait step, says what it waits for instead |
 | What it gives | The fields later steps can pick from this step |
 
 Values that look like an email address or another personal detail are masked in What it receives.

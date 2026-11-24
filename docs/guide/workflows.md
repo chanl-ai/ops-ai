@@ -52,7 +52,7 @@ opsai workflows run route_support_message --wait --input '{"text": "I was charge
 The run ends with the outcome `billing`. A model answer outside the categories leaves by `error` and ends as
 `classify_failed`. `opsai workflows types` lists every step type with its ports and settings.
 
-You do not need the console to build a workflow, but it shows and edits the same graph under **Build › Workflows**.
+You do not need the console to build a workflow, but it shows and edits the same graph under **Build › Workflows**. [Open a workflow step and pick a field](edit-a-workflow-step.md) shows how to read and fill one step there.
 
 ## Lifecycle
 

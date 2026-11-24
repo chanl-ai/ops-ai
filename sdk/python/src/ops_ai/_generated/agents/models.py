@@ -3654,6 +3654,7 @@ class NodeTypeView(TypedDict, closed=True):
     id: str
     inputs: list[PortView]
     label: str
+    limit: NotRequired[str]
     optionalOutputs: list[OptionalPortView]
     outputs: list[PortView]
     outputsFrom: str | None
@@ -3662,6 +3663,7 @@ class NodeTypeView(TypedDict, closed=True):
     retry: RetryView
     summary: str
     timeoutSeconds: float
+    tries: NotRequired[str]
     ui: dict[str, JsonValue]
     unavailable: NotRequired[str | None]
     version: int

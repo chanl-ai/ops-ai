@@ -30,5 +30,6 @@ def test_a_dangling_way_out_names_the_step_not_its_id_and_a_choice_names_its_wor
     )
     messages = [str(c["message"]) for c in validate(d, default_registry())]
     assert "Nothing follows the True way out of If." in messages
-    assert any("Equal to" in m and "Has a value" in m for m in messages)
+    wrong = [m for m in messages if "must be one of" in m or "accepts" in m]
+    assert len(wrong) == 1 and wrong[0].startswith("If: Conditions, row 1, Is must be one of Equal to")
     assert not [m for m in messages if "zz0" in m or " port " in m]

@@ -67,7 +67,9 @@ function fixField(nodeId: string, field: string) {
 export function StepSheet({ node, type, workflowId, steps, checks, order, readOnly, savedDigest = '', onClose, onMove, onChange, onDelete }: StepSheetProps) {
   const index = node ? order.indexOf(node.id) : -1;
   const errors = checks.filter((c) => c.level === 'error');
-  const byField = Object.fromEntries(errors.filter((c) => c.field).map((c) => [c.field as string, c.message]));
+  // Under its own field a problem drops the step's name that opens it in the lists of problems.
+  const stepName = `${node?.name || type?.label || ''}: `;
+  const byField = Object.fromEntries(errors.filter((c) => c.field).map((c) => [c.field as string, c.message.startsWith(stepName) ? c.message.slice(stepName.length) : c.message]));
   const look = groupLook(type?.group, node?.type);
   const trigger = type?.group === 'trigger';
   const installed = !!type;
@@ -240,27 +242,18 @@ function WhatItReceives({ sample }: { sample: ReturnType<typeof useStepSample> }
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
-/** How long a review waits, from its deadline and what happens past it. */
-function waitingWords(parameters: Record<string, unknown>): string {
-  const hours = typeof parameters.slaHours === 'number' ? parameters.slaHours : undefined;
-  const past = parameters.onTimeout === 'expire' ? 'then it expires and takes the Timeout way out' : 'then it shows as overdue and keeps waiting';
-  return hours ? `Until someone decides. After ${plural(hours, 'hour')}, ${past}.` : `Until someone decides. After your workspace's review deadline, ${past}.`;
-}
-
 /** Retries and the time limit in words, then what a failure does as the engine says it (its Error path or the run). */
 function WhenItFails({ type, parameters }: { type: EngineNodeType; parameters: Record<string, unknown> }) {
   const again = Math.max(0, (type.retry?.attempts ?? 1) - 1);
   const timeout = typeof parameters.timeoutSeconds === 'number' ? parameters.timeoutSeconds : type.timeoutSeconds;
-  // A step that asks a person waits as long as they take, so a try has no 30-second limit.
-  const person = type.group === 'human';
   return (
     <div data-testid="step-when-it-fails">
       <Section title="When it fails">
         <KeyValues
           rows={[
-            ['Tries again', person ? 'No. It waits for a person instead.' : again === 0 ? 'No. It tries once.' : `Up to ${plural(again, 'more time')}, waiting a little longer each time.`],
+            ['Tries again', type.tries || (again === 0 ? 'No. It tries once.' : `Up to ${plural(again, 'more time')}, waiting a little longer each time.`)],
             ['If it still fails', type.fails || 'The run stops as Failed and your team sees it in Runs.'],
-            person ? ['Waits for a person', waitingWords(parameters)] : ['Gives up after', `${plural(Math.round(timeout), 'second')} for each try.`],
+            type.limit ? ['How long it waits', type.limit] : ['Gives up after', `${plural(Math.round(timeout), 'second')} for each try.`],
           ]}
         />
       </Section>

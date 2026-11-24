@@ -290,7 +290,14 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
   }, [def, opened, typeOf]);
   // Steps in the order they run, left to right then top to bottom; the sheet's previous and next follow it.
   const runOrder = React.useMemo(() => [...def.nodes].sort((a, b) => (a.position?.x ?? 0) - (b.position?.x ?? 0) || (a.position?.y ?? 0) - (b.position?.y ?? 0)).map((n) => n.id), [def.nodes]);
-  const nodeName = React.useCallback((id: string) => def.nodes.find((n) => n.id === id)?.name || id, [def.nodes]);
+  // A step as the problems list names it: its own name, else its type's, never its id.
+  const nodeName = React.useCallback(
+    (id: string) => {
+      const n = def.nodes.find((x) => x.id === id);
+      return n?.name || (n ? typeOf(n)?.label : undefined) || id;
+    },
+    [def.nodes, typeOf],
+  );
 
   const selectNode = (id: string) => {
     setSelectedId(id);

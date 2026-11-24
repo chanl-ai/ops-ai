@@ -96,22 +96,30 @@ def sample_view(
     last = cast(Json, values.get("output") or {})
     registry = default_registry()
 
+    def called(n: NodeInstance) -> str:
+        t = registry.find(n.type, n.type_version)
+        return n.name or (t.label if t else n.id)
+
+    # A Join gives one field per branch under that branch step's id; the field is labelled with the step's name.
+    step_names = {n.id: called(n) for n in d.nodes}
+
     def entry(n: NodeInstance) -> dict[str, Any]:
         t = registry.find(n.type, n.type_version)
         output = last.get(n.id)
         trigger = t is not None and t.group == TRIGGER
+        joins = t is not None and t.deferred
         if trigger and output is None:
             output = values.get("input")
         fields: list[dict[str, Any]] = [
             {
                 "name": name,
-                "label": _label(name, schema),
+                "label": step_names.get(name) or _label(name, schema) if joins else _label(name, schema),
                 "path": f"$.input.{name}" if trigger else f"$.nodes.{n.id}.out.{name}",
                 "sample": shown(cast(Json, output).get(name) if isinstance(output, dict) else None),
             }
             for name, schema in _field_names(shapes.get(n.id, {}), output)
         ]
-        name = n.name or (t.label if t else n.id)
+        name = called(n)
         return {"id": n.id, "name": name, "kind": t.label if t else None, "installed": t is not None, "fields": fields}
 
     listed = [entry(n) for n in d.nodes if saved and n.id in before]

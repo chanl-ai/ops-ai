@@ -157,6 +157,9 @@ class NodeTypeView(Out):
     # Plain words for the step sheet: one sentence, then how it works, fails or waits and what it hands on.
     summary: str
     how: str
+    # What "When it fails" says about retries and the time limit for a step that waits; empty when it works.
+    tries: str = ""
+    limit: str = ""
     # What a failure does once the retries are used: goes on by the Error path, or stops the run as Failed.
     fails: str
     inputs: list[PortView]
@@ -1190,6 +1193,12 @@ MAILBOX_KINDS = {"gmail": "Gmail", "imap": "IMAP", "graph": "Microsoft 365", "de
 OptionSource: TypeAlias = Literal["agents", "tools", "workflows", "mailboxes"]  # noqa: UP040
 
 
+def _spoken(slug: str) -> str:
+    """An agent's slug as a name a builder reads: `branch-concierge` is "Branch concierge"."""
+    words = slug.replace("-", " ").replace("_", " ").strip()
+    return words[:1].upper() + words[1:]
+
+
 @router.get("/option-sources", response_model=Envelope[list[OptionView]])
 async def option_sources(rt: Rt, me: Me, source: OptionSource) -> JSONResponse:
     """The choices a node form offers for a field with an option source (`ui.fields.*.source`): published agents,
@@ -1213,7 +1222,10 @@ async def option_sources(rt: Rt, me: Me, source: OptionSource) -> JSONResponse:
         ]
     elif source == "agents":
         agents = [a for a in await agent_registry(rt).rows() if a.published_version is not None]
-        options = [{"value": a.id, "label": a.slug, "description": f"Published v{a.published_version}"} for a in agents]
+        options = [
+            {"value": a.id, "label": _spoken(a.slug), "description": f"Published v{a.published_version}"}
+            for a in agents
+        ]
     elif source == "tools":
         tools = [t for t in await known_tools(rt) if not str(t["id"]).startswith("workflow:")]
         options = [

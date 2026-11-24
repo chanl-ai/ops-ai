@@ -56,6 +56,9 @@ export interface EngineNodeType {
   summary?: string;
   /** A few plain sentences behind "How this step works". */
   how?: string;
+  /** What "When it fails" says about retries and the time limit for a step that waits; empty when the sheet words the retry policy. */
+  tries?: string;
+  limit?: string;
   /** What a failure does once the retries are used, in the engine's words: the Error path or a Failed run. */
   fails?: string;
   inputs: EnginePort[];

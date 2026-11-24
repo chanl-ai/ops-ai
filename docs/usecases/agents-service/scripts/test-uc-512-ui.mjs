@@ -55,6 +55,16 @@ async function openStep(page, id) {
 }
 
 const sheetText = async (page) => (await page.getByTestId('step-sheet').innerText()).replace(/\s+/g, ' ');
+// The sheet without the fields of other steps (What it receives, What it gives): those are data names, not the sheet's words.
+const wordsOf = (page) =>
+  page.evaluate(() => {
+    const sheet = document.querySelector('[data-testid="step-sheet"]');
+    const hidden = ['step-receives', 'step-what-it-gives'].map((id) => sheet.querySelector(`[data-testid="${id}"]`)).filter(Boolean);
+    hidden.forEach((el) => { el.style.display = 'none'; });
+    const text = sheet.innerText.replace(/\s+/g, ' ');
+    hidden.forEach((el) => { el.style.display = ''; });
+    return text;
+  });
 // Sheets and popovers slide and fade in; a screenshot waits for them to settle.
 const shot = async (page, name) => {
   await page.waitForTimeout(600);
@@ -72,8 +82,15 @@ const noSideScroll = (page) =>
 const leaks = (t) => ['ops.', '$.', 'Effects:', 'POST /v1/runs', 'workflow__', 'input schema'].filter((w) => t.toLowerCase().includes(w.toLowerCase()));
 // Every kind of code word the sheet and its open lists must never show: type ids, paths, port words, schema words,
 // backticks, operator codes, snake_case and camelCase names, an `[object Object]` and the scan's own step ids.
-const CODE_WORDS = [/\bops\.[a-z]/i, /\$\./, /\bports?\b/i, /json schema/i, /\bschemas?\b/i, /`/, /\b(?:Eq|Ne|Gt|Gte|Lt|Lte)\b/, /\b[a-z]+_[a-z]+\b/, /\b[a-z]+[A-Z][a-zA-Z]+\b/, /\[object Object\]/, /\bzz\d\d\b/];
-const codeIn = (t) => CODE_WORDS.map((re) => re.exec(t)).filter(Boolean).map((m) => `${m[0]} in "${t.slice(Math.max(0, m.index - 40), m.index + 40)}"`);
+const CODE_WORDS = [
+  /\bops\.[a-z]/i, /\$\./, /\bports?\b/i, /json/i, /\bschemas?\b/i, /`/, /\b(?:Eq|Ne|Gt|Gte|Lt|Lte)\b/, /\b(?:eq|ne|gt|gte|lt|lte)\b/,
+  /\b[a-z]+_[a-z]+\b/, /\b[a-z]+[A-Z][a-zA-Z]+\b/, /\[object Object\]/, /zz\d\d/i, /\bnodes?\b/i, /\bnull\b/i, /\bpayloads?\b/i,
+  /\{id, version\}/, /\bUTC\b/, /\btokens?\b/i, /\bchild(?:ren)?\b/i, /\bkeys?\b/i, /\b[a-z]+\([^)]*\)/, /\bregistry\b/i, /\bgateway\b/i,
+  /does not match|is not valid|is not one of|is a required property|should not|\(\d+\.\w+\)/i,
+];
+// A list of choices must also show no id of an agent or another record (lowercase words joined by a hyphen).
+const LIST_WORDS = [...CODE_WORDS, /\b[a-z]{3,}-[a-z]{3,}\b/];
+const codeIn = (t, words = CODE_WORDS) => words.map((re) => re.exec(t)).filter(Boolean).map((m) => `${m[0]} in "${t.slice(Math.max(0, m.index - 40), m.index + 40)}"`);
 const atWidths = async (page, name) => {
   const wide = await noSideScroll(page);
   await shot(page, `${name}-1440.png`);
@@ -115,10 +132,47 @@ await withUiStack(
     const ev = (await (await fetch(`${agents}/v1/workflows/definitions/${E}`, { headers: H })).json()).data;
     const installed = (await (await fetch(`${agents}/v1/workflows/node-types`, { headers: H })).json()).data;
     const newest = [...new Map(installed.sort((x, y) => x.version - y.version).map((t) => [t.id, t])).values()].sort((x, y) => x.group.localeCompare(y.group) || x.id.localeCompare(y.id));
-    const NAMED = { 'ops.action.tool': 'Pay the refund', 'ops.flow.humanReview': 'Check the refund' };
+    const NAMED = { 'ops.action.tool': 'Pay the refund', 'ops.flow.humanReview': 'Check the refund', 'ops.ai.classify': 'Sort the mail', 'ops.data.match': 'Match payers', 'ops.ai.extract': 'Read the invoice', 'ops.flow.if': 'Check the amount' };
+    // A value for a setting, from its schema: the first listed choice, one entry of a list, the required fields of an object.
+    const sample = (sc) => {
+      if (!sc || typeof sc !== 'object') return 'sample';
+      const titled = (sc.oneOf ?? []).find((o) => o.const !== undefined);
+      if (titled) return titled.const;
+      if (sc.enum) return sc.enum[0];
+      if (sc.anyOf) return sample(sc.anyOf[0]);
+      if (sc.type === 'string') return sc.format === 'file' ? '$.input.amount' : 'sample';
+      if (sc.type === 'number' || sc.type === 'integer') return Math.max(1, sc.minimum ?? 1);
+      if (sc.type === 'boolean') return true;
+      if (sc.type === 'array') return [sample(sc.items)];
+      if (sc.type === 'object') return Object.fromEntries((sc.required ?? []).map((k) => [k, sample(sc.properties?.[k])]));
+      return 'sample';
+    };
+    const filled = (t) => {
+      const props = t.parameters.properties ?? {};
+      const need = [...(t.parameters.required ?? [])];
+      if (t.parameters.anyOf?.every((o) => o.required)) need.push(...t.parameters.anyOf[0].required);
+      return Object.fromEntries(need.map((k) => [k, sample(props[k])]));
+    };
+    // Settings a person might mistype, to read what Problems say about them.
+    const MISTYPED = {
+      'ops.ai.classify': { categories: [{ name: 'otherwise' }, { name: 'billing' }] },
+      'ops.data.match': { item: '$.input.amount', candidates: '$.input.amount', all: [{ left: '$.input.amount', op: 'equals', right: 'amount' }] },
+      'ops.ai.extract': { file: '$.input.amount', fields: [{ key: 'Bad Key', type: 'text' }] },
+      'ops.flow.if': { conditions: [{ left: 1, op: 'big' }] },
+    };
     const every = refund(E);
-    every.nodes = newest.map((t, i) => ({ ...node(`zz${String(i).padStart(2, '0')}`, t.id, NAMED[t.id]), typeVersion: t.version, position: { x: (i % 6) * 320, y: Math.floor(i / 6) * 200 } }));
-    every.connections = [];
+    every.nodes = newest.map((t, i) => ({ ...node(`zz${String(i).padStart(2, '0')}`, t.id, NAMED[t.id], { ...filled(t), ...MISTYPED[t.id] }), typeVersion: t.version, position: { x: (i % 6) * 320, y: Math.floor(i / 6) * 200 } }));
+    // One chain from the Request trigger through every step to End, each by its first way out, so every step has a step
+    // before it and the field picker has something to list. The other triggers stand alone.
+    const chain = every.nodes.filter((n) => n.type !== 'ops.trigger.request' && !n.type.startsWith('ops.trigger.') && n.type !== 'ops.flow.end');
+    const order = [every.nodes.find((n) => n.type === 'ops.trigger.request'), ...chain, every.nodes.find((n) => n.type === 'ops.flow.end')];
+    const firstOut = (n) => {
+      const t = newest.find((x) => x.id === n.type);
+      const list = t.outputsFrom ? n.parameters[t.outputsFrom] : undefined;
+      if (Array.isArray(list) && list.length) return typeof list[0] === 'string' ? list[0] : list[0].name;
+      return t.outputs[0]?.name ?? t.extraOutputs?.[0] ?? 'out';
+    };
+    every.connections = order.slice(0, -1).map((n, i) => wire(n.id, firstOut(n), order[i + 1].id));
     const putAll = await fetch(`${agents}/v1/workflows/definitions/${E}/working-copy`, { method: 'PUT', headers: H, body: JSON.stringify({ definition: every, baseVersion: ev.saveBase.version, baseDigest: ev.saveBase.digest }) });
     if (!e.live || !putAll.ok) throw new Error(`setup: E ${e.live} ${putAll.status}`);
     const worker = await stack.startWorker();
@@ -263,6 +317,15 @@ await withUiStack(
 
 
       // 20. Every installed step type, opened one after the other with every list open: no code word anywhere.
+      // The checks the editor shows come with the working copy (a save) or with a validation; the newest says which
+      // setting each problem is about.
+      let checksNow = [];
+      page.on('response', async (r) => {
+        if (!r.url().includes('/definitions/')) return;
+        const body = await r.json().catch(() => undefined);
+        const got = body?.data?.checks ?? body?.data?.workingCopy?.checks;
+        if (Array.isArray(got) && (r.url().includes(E) || r.url().includes('/validate'))) checksNow = got;
+      });
       await openEditor(page, consoleUrl, E);
       // Thirty-odd steps do not fit the canvas at a readable size, so each opens by a click event rather than a pointer.
       await page.locator('[data-testid="definition-node"][data-node-id="zz00"]').dispatchEvent('click');
@@ -270,6 +333,8 @@ await withUiStack(
       const seen = [];
       const lists = {};
       const badFix = [];
+      const problemsOf = {};
+
       // A control a step lacks must not hold the scan for the default half minute.
       page.setDefaultTimeout(4000);
       for (let i = 0; i < newest.length; i += 1) {
@@ -283,17 +348,29 @@ await withUiStack(
           const before = await adds.count();
           for (let k = 0; k < before; k += 1) await adds.nth(k).click().catch(() => undefined);
         }
-        const found = [await sheetText(page)];
+        // The editor checks the draft a moment after each change.
+        await page.waitForTimeout(1500);
+        const found = [await wordsOf(page)];
         const names = await sheet.getByRole('combobox').count();
         for (let k = 0; k < names; k += 1) {
           const box = sheet.getByRole('combobox').nth(k);
           await box.scrollIntoViewIfNeeded().catch(() => undefined);
           // Read before opening: an open list hides the rest of the page from the accessibility tree.
           const field = (await box.getAttribute('data-field')) ?? '';
+          // The app picker reads tools-service, which this stack starts only with its gateway; its list cannot load here.
+          if ((await box.getAttribute('aria-label')) === 'App') continue;
           await box.click();
           const list = page.getByRole('listbox');
           await list.waitFor({ timeout: 10_000 }).catch(() => undefined);
+          // A searched list loads its choices after it opens.
+          await page.waitForTimeout(600);
+          const opened = await list.isVisible().catch(() => false);
           const options = (await list.getByRole('option').allInnerTexts().catch(() => [])).map((o) => o.replace(/\s+/g, ' ').trim());
+          if (!opened || options.length === 0) seen.push({ type: t.id, hits: [`a list did not open or came back empty: ${field || k}`] });
+          if (field.endsWith('-operation') === false) {
+            const words = codeIn(options.join(' | '), LIST_WORDS);
+            if (words.length) seen.push({ type: t.id, hits: words.slice(0, 3) });
+          }
           lists[`${t.id}:${field.split('-').pop() || k}`] = options;
           // Tool operations are the names a team gave its tools: data, not a step's own words.
           if (!field.endsWith('-operation')) found.push(options.join(' | '));
@@ -304,7 +381,10 @@ await withUiStack(
         if (await opener.isVisible().catch(() => false)) {
           await opener.click();
           await page.getByTestId('field-picker').waitFor({ timeout: 10_000 }).catch(() => undefined);
-          found.push((await page.getByTestId('field-picker').innerText().catch(() => '')).replace(/\s+/g, ' '));
+          // The picker lists other steps' names and field names, which are data; only code words are scanned there.
+          const pickerText = (await page.getByTestId('field-picker').innerText().catch(() => '')).replace(/\s+/g, ' ');
+          const pickerHits = codeIn(pickerText, [CODE_WORDS[0], CODE_WORDS[1], /zz\d\d/i, /\[object Object\]/]);
+          if (pickerHits.length) seen.push({ type: t.id, hits: pickerHits });
           await opener.click();
         }
         const hits = codeIn(found.join(' || '));
@@ -313,13 +393,24 @@ await withUiStack(
         const problemTexts = (await sheet.getByTestId('step-sheet-errors').locator('li').allInnerTexts().catch(() => [])).map((x) => x.replace(/\s+/g, ' '));
         const codeInProblems = codeIn(problemTexts.join(' || '));
         if (codeInProblems.length) seen.push({ type: t.id, problems: codeInProblems.slice(0, 3) });
+        problemsOf[t.id] = problemTexts;
         for (let k = 0; k < problemTexts.length; k += 1) {
+          const text = problemTexts[k].replace(/\s*Fix$/, '');
+          const check = checksNow.find((c) => c.node === `zz${String(i).padStart(2, '0')}` && c.message === text);
           const fix = sheet.getByTestId('step-sheet-errors').locator('li').nth(k).getByTestId('step-problem-fix');
-          if (!(await fix.count())) continue;
+          const hasFix = (await fix.count()) > 0;
+          if (!check) { badFix.push({ type: t.id, problem: text, why: 'no matching check from the editor' }); continue; }
+          // A problem about a setting offers Fix and Fix reaches that setting; one about no setting offers none.
+          if (!check.field) { if (hasFix) badFix.push({ type: t.id, problem: text, why: 'Fix offered for a problem with no setting' }); continue; }
+          if (!hasFix) { badFix.push({ type: t.id, problem: text, why: `no Fix for the setting ${check.field}` }); continue; }
           await fix.click({ timeout: 5000 }).catch(() => undefined);
-          await page.waitForTimeout(300);
-          const at = await page.evaluate(() => document.activeElement?.id || '');
-          if (at === 'definition-node-name') badFix.push({ type: t.id, problem: problemTexts[k] });
+          await page.waitForTimeout(400);
+          const want = `node-${check.node}-${check.field}`;
+          const landed = await page.evaluate((w) => {
+            const el = document.activeElement;
+            return !!el && (el.id.startsWith(w) || (el.getAttribute('data-field') ?? '').startsWith(w) || !!el.closest(`[data-mapping^="${w}"], [data-testid^="${w}-rows"], [data-testid="step-settings"] [id^="${w}"]`));
+          }, want);
+          if (!landed) badFix.push({ type: t.id, problem: text, why: `Fix did not reach ${want}` });
         }
         // The next step opens by its own click: forty steps are not all on screen at a readable size.
         if (i < newest.length - 1) await (page.locator(`[data-testid="definition-node"][data-node-id="zz${String(i + 1).padStart(2, '0')}"]`).dispatchEvent('click'));
@@ -329,7 +420,18 @@ await withUiStack(
       await shot(page, 'every-type-last-1440.png');
       fs.writeFileSync(path.join(SHOTS, 'every-type-lists.json'), JSON.stringify({ lists, seen, badFix }, null, 2));
       check(`20 every one of ${newest.length} step types opened with every list open shows no type id, path, port, schema, operator code or snake_case word`, seen.length === 0, seen.slice(0, 12));
-      check('20b the Fix of a problem never lands on Name, and no problem names a step by its id', badFix.length === 0, badFix.slice(0, 6));
+      check('20b every problem about a setting offers Fix and Fix reaches that setting, and a problem about no setting offers none', badFix.length === 0, badFix.slice(0, 6));
+
+      // 20c. Mistyped settings read as one plain problem each that names the step and the setting.
+      const MIS = { 'ops.ai.classify': ['Sort the mail', 'Categories'], 'ops.data.match': ['Match payers', 'Record field'], 'ops.ai.extract': ['Read the invoice', 'Fields'], 'ops.flow.if': ['Check the amount', 'Is'] };
+      const mis = Object.entries(MIS).map(([type, [step, setting]]) => {
+        const all = problemsOf[type] ?? [];
+        const about = all.filter((x) => x.includes(setting));
+        // One problem per wrong value, each naming the step; a wrong choice reads as one problem, not two.
+        const choice = type === 'ops.flow.if' ? all.filter((x) => /must be one of|accepts/.test(x)).length === 1 : true;
+        return { type, step, setting, about, ok: about.length >= 1 && choice && about.every((x) => x.includes(step) && codeIn(x).length === 0) };
+      });
+      check('20c a mistyped category, rule field, field key or choice reads as one plain problem naming the step and the setting', mis.every((m) => m.ok), mis.filter((m) => !m.ok));
 
       // 21. The lists offer plain words and only what fits: Approves lists tool steps by name, Approved by lists
       // reviews, the operator list reads in words.

@@ -155,6 +155,11 @@ class NodeType:
     # waits and what it hands on. `description` stays the precise text models and docs read.
     summary: str = ""
     how: str = ""
+    # What the sheet's "When it fails" says about retries and the time limit for a step that waits rather than works:
+    # a review waits for a person, a Wait for the time it is given. Empty: the sheet words the type's retry policy and
+    # per-attempt limit.
+    tries: str = ""
+    limit: str = ""
 
     @property
     def key(self) -> tuple[str, int]:
@@ -200,6 +205,8 @@ class NodeType:
             "description": self.description,
             "summary": self.summary,
             "how": self.how,
+            "tries": self.tries,
+            "limit": self.limit,
             "fails": self.fails(),
             "inputs": [p.view() for p in self.inputs],
             "outputs": [p.view() for p in self.outputs],
@@ -296,7 +303,10 @@ class TypeRegistry:
 MAIN_IN = (Port("in"),)
 # A field that names what the step acts on (an operation, an agent, another step) is a literal: resolve() would read a
 # `$.` string from the run, so the input could choose what a reviewed workflow calls.
-_NOT_A_PATH: Json = {"not": {"pattern": r"^\$\."}}
+_NOT_A_PATH: Json = {
+    "not": {"pattern": r"^\$\."},
+    "x-problem": "must be typed or chosen here, not picked from another step",
+}
 CASE_PRIORITIES = ("low", "normal", "high", "urgent")
 END_RESULTS = ("succeeded", "failed")
 
@@ -575,6 +585,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                 "event": {
                     "type": "string",
                     "pattern": EVENT_NAME,
+                    "x-problem": "must be lowercase words joined by dots, such as file.deleted",
                     "description": "The event's name, such as file.deleted",
                 },
                 "inputSchema": {
@@ -608,7 +619,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         summary="Starts the workflow when its scheduled time comes.",
         how=(
             "When the clock reaches the due time, the workflow starts with the details saved with the schedule. A "
-            "scheduled start with the same key never runs twice, even if it fires again."
+            "scheduled start with the same name never runs twice, even if it fires again."
         ),
         description="Starts a run when the platform clock reaches the due time. The same key fires once.",
         executor="trigger.payload",
@@ -622,7 +633,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             },
         },
         ui=_form(
-            ("key", _f("Key", "text", "A second fire with this key starts no run")),
+            ("key", _f("Start name", "text", "A second start with the same name runs nothing")),
             ("inputSchema", _f("Input form", "json", "The fields a start must send; empty takes any")),
         ),
         start=StartSpec(
@@ -761,6 +772,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                         "minLength": 1,
                         "maxLength": 2000,
                         "not": {"pattern": r"\$\."},
+                        "x-problem": "must be a formula using the value names, not a value picked from a step",
                         "description": "A formula over the values by name, e.g. min(levy.amount, balance)",
                     },
                 },
@@ -780,9 +792,8 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                 _f(
                     "Formulas",
                     "mappings",
-                    "Each result's name and its formula over the values, e.g. min(levy.amount, balance); later "
-                    "formulas can use earlier results. Functions: min, max, abs, round, floor, ceil, sum, len, "
-                    "business_days(date, n), add_days(date, n), days_between(a, b)",
+                    "Each result's name and its formula over the values, such as the smaller of two amounts; later "
+                    "formulas can use earlier results",
                 ),
             ),
         ),
@@ -1015,6 +1026,8 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Ask",
+        tries="No. It waits for the reply.",
+        limit="Until the reply comes or the Time limit setting passes.",
         summary="Asks a person a question in the conversation and waits for their reply.",
         how=(
             "The workflow pauses until the reply arrives, then goes on by the Replied path with what they said. If no "
@@ -1035,7 +1048,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         },
         ui=_form(
             ("prompt", _f("Prompt", "textarea", "What the person is asked")),
-            ("key", _f("Key", "text", "The conversation key the reply is posted on")),
+            ("key", _f("Conversation", "text", "Names the conversation the reply is posted in")),
             ("timeoutSeconds", _f("Time limit (seconds)", "number", "0 times out without pausing")),
         ),
     ),
@@ -1173,7 +1186,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                     stepType="ops.flow.humanReview",
                 ),
             ),
-            ("approvalToken", _f("Approval token", "mapping", "Only for an approval given outside this workflow")),
+            ("approvalToken", _f("Outside approval", "mapping", "Only for an approval given outside this workflow")),
             _TIMEOUT,
             (
                 "onTimeout",
@@ -1379,7 +1392,15 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                         "additionalProperties": False,
                         "required": ["key", "type"],
                         "properties": {
-                            "key": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"},
+                            "key": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                                "title": "Name",
+                                "x-problem": (
+                                    "must start with a lowercase letter and use only lowercase letters, digits and "
+                                    "underscores"
+                                ),
+                            },
                             "label": {"type": "string"},
                             "type": _titled(*_FIELD_TYPES, ("enum", "One of a list")),
                             "required": {"type": "boolean"},
@@ -1409,7 +1430,14 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             ("hint", _f("What is it?", "text", "For proposed fields: a few words, e.g. a supplier invoice")),
             ("proposePages", _f("Propose from the first pages", "number", "5 if empty")),
             ("maxPages", _f("Pages to read", "number", "Every page if empty")),
-            ("maxTokens", _f("Stop after (tokens)", "number", "Stops a long read early with what it read")),
+            (
+                "maxTokens",
+                _f(
+                    "Stop after (text pieces)",
+                    "number",
+                    "Pieces of text of about four letters each; a long read stops early with what was read",
+                ),
+            ),
             (
                 "detect",
                 _f("Detect the kind", "switch", "Read with the document type the file is; unsure goes to review"),
@@ -1424,7 +1452,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             ),
             (
                 "fields",
-                _f("Fields", "json", "The fields to read: each has a key, a label, a type and whether it is required"),
+                _f("Fields", "json", "The fields to read: each has a name, a label, a type and whether it is required"),
             ),
             ("reviewBelow", _f("Review below", "number", "Fields under this confidence go to a person")),
             (
@@ -1457,7 +1485,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                     "required": ["name"],
                     "additionalProperties": False,
                     "properties": {
-                        "name": {"type": "string", "minLength": 1, "not": {"enum": ["otherwise", "error"]}},
+                        "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "not": {"enum": ["otherwise", "error"]},
+                            "x-problem": "cannot be called Otherwise or Error; the step already has those ways out",
+                        },
                         "description": {"type": "string"},
                     },
                 },
@@ -1551,6 +1584,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="human",
         label="Human review",
+        tries="No. It waits for a person instead.",
+        limit=(
+            "Until someone decides. The Deadline setting says when it shows as overdue, and Past the deadline says "
+            "what happens then."
+        ),
         summary="Pauses the workflow until a person decides, from Reviews, which way it goes.",
         how=(
             "The reviewer reads the summary, can correct values you allow, and picks one of the options, Approve and "
@@ -1781,6 +1819,10 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="action",
         label="Start workflow",
+        limit=(
+            "Starting takes a moment. With Wait for them on, the Give up after setting says how long it waits for the "
+            "started workflows."
+        ),
         summary="Starts another of your team's workflows, once or once for each item in a list.",
         how=(
             "Each started workflow gets its own input, and a retry never starts the same one twice. Without waiting, "
@@ -1825,15 +1867,22 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             },
         },
         ui=_form(
-            ("workflow", _f("Workflow", "source", "The workflow each child runs", source="workflows")),
-            ("forEach", _f("For each", "mapping", "A list from an earlier step; empty starts one child")),
+            ("workflow", _f("Workflow", "source", "The workflow this step starts", source="workflows")),
+            ("forEach", _f("For each", "mapping", "A list from an earlier step; empty starts one workflow")),
             ("input", _f("Input", "mappings", "What each started workflow receives")),
             (
                 "label",
                 _f("Label", "text", "What each started workflow is about; the item's first text when empty"),
             ),
-            ("maxItems", _f("Limit", "number", f"Most children one step starts; {DEFAULT_MAX_ITEMS} when empty")),
-            ("wait", _f("Wait for them", "switch", "Pause until every child has ended, then go on with their results")),
+            ("maxItems", _f("Limit", "number", f"Most workflows one step starts; {DEFAULT_MAX_ITEMS} when empty")),
+            (
+                "wait",
+                _f(
+                    "Wait for them",
+                    "switch",
+                    "Pause until every started workflow has ended, then go on with their results",
+                ),
+            ),
             (
                 "batchSize",
                 _f("At a time", "number", "With Wait for them: most unfinished at once; empty for all"),
@@ -1950,6 +1999,8 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Join",
+        tries="No. It waits for the branches.",
+        limit="No limit of its own: it goes on once every branch that will arrive has.",
         summary="Waits for parallel branches to finish, then goes on once with all of their results.",
         how=(
             "It waits for every step of the workflow that can still run, not only its own branches. The next step "
@@ -1976,7 +2027,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                 _f(
                     "Waits for",
                     "select",
-                    "Every branch that will arrive; a branch an If or Switch sent elsewhere is null. It waits for "
+                    "Every branch that will arrive; a branch an If or Switch sent elsewhere has no value. It waits for "
                     "every step of the run that can still run, not only its own branches.",
                 ),
             ),
@@ -1987,10 +2038,13 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Wait",
+        tries="No. Waiting cannot fail and be tried again.",
+        limit="As long as the time or date you set.",
         summary="Pauses the workflow for a while, or until a date taken from an earlier step.",
         how=(
             "When the time is up the workflow goes on by itself. A date already past goes on at once. A value that is "
-            "not a date goes on to the Error path, naming the value. A date with no time means midnight UTC."
+            "not a date goes on to the Error path, naming the value. A date with no time means midnight in universal "
+            "time."
         ),
         description=(
             "Pauses the run for a number of seconds, or until a date or date and time read from an earlier step, then "
@@ -2025,6 +2079,8 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Wait for",
+        tries="No. It waits for the other system.",
+        limit="Until the other system answers or the Time limit setting passes.",
         summary="Waits for another system to finish its work, then goes on with the result.",
         how=(
             "The workflow pauses without holding anything up. It wakes when the other system sends its answer back, "
@@ -2067,7 +2123,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             (
                 "key",
                 _f(
-                    "Event key",
+                    "Event match",
                     "mapping",
                     "With an event: the value the event carries, such as an id an earlier step returned",
                 ),

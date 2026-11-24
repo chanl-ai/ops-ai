@@ -14639,6 +14639,11 @@
             "title": "Label",
             "type": "string"
           },
+          "limit": {
+            "default": "",
+            "title": "Limit",
+            "type": "string"
+          },
           "optionalOutputs": {
             "items": {
               "$ref": "#/components/schemas/OptionalPortView"
@@ -14688,6 +14693,11 @@
           "timeoutSeconds": {
             "title": "Timeoutseconds",
             "type": "number"
+          },
+          "tries": {
+            "default": "",
+            "title": "Tries",
+            "type": "string"
           },
           "ui": {
             "additionalProperties": {

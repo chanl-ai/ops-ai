@@ -50,7 +50,7 @@ async def test_a_save_keeps_a_failing_copy_and_makes_no_version(client: AsyncCli
     assert ("ghost", "unknown_type") in {(c["node"], c["code"]) for c in checks}
     # A setting's error reads as the step's form names it, not as the schema validator words it.
     assert {(c["node"], c["message"]) for c in checks if c["code"] == "invalid_parameter"} == {
-        ("fields", "Fields must be a group of named values.")
+        ("fields", "Set fields: Fields must be a group of named values.")
     }, checks
     again = (await client.get(WF)).json()["data"]
     assert [v["version"] for v in again["versions"]] == [1]
