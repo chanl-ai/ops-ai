@@ -51,7 +51,8 @@ const inputLine = (r: BatchRow) =>
 function headline(b: BatchView): string {
   const unit = b.origin === 'check' ? 'file' : 'row';
   const more = [b.failed ? `${b.failed} failed` : '', b.waiting ? `${b.waiting} waiting for a person` : '', b.removed ? `${b.removed} removed` : ''].filter(Boolean);
-  return `${b.finished} of ${plural(b.total, unit)} finished${more.length ? `, ${more.join(', ')}` : ''}`;
+  // A spreadsheet's batch reads as it always has: "10 of 12 finished".
+  return `${b.finished} of ${b.origin === 'check' ? plural(b.total, unit) : b.total} finished${more.length ? `, ${more.join(', ')}` : ''}`;
 }
 
 function underHeadline(b: BatchView): string {
