@@ -78,7 +78,7 @@ await withUiStack(
         const agentsOffered = await page.getByRole('option', { name: /Wire Fraud Sentinel/ }).count();
         await search.fill('Card dispute intake');
         await page.getByRole('option', { name: /Card dispute intake/ }).click();
-        await dialog.getByTestId('start-run-next').click();
+        // Choosing a workflow opens its own form; the picker has no Next step.
         const form = await page.getByRole('dialog', { name: /Start a run of Card dispute intake/ }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
         check(
           '1 Start run on Workflows offers every workflow and no agent, searched on the server, then opens the chosen workflow\'s own form',
@@ -181,7 +181,8 @@ await withUiStack(
         const shown = await cell.waitFor({ timeout: 60_000 }).then(() => true, () => false);
         const text = shown ? (await cell.innerText()).trim() : '';
         const want = (ended.outcome ?? '').replace(/[_-]+/g, ' ').toLowerCase();
-        check('7 the runs list says how each run ended', shown && !!want && text.toLowerCase() === want, { text, outcome: ended.outcome });
+        // The list says the end in words (the end the run reached), not the stored outcome code.
+        check('7 the runs list says how each run ended', shown && !!want && /^Finished at the .+ end\.$/.test(text), { text, outcome: ended.outcome });
       });
 
       check('no page errors', errors.length === 0, errors.slice(0, 3));

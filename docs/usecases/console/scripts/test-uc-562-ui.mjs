@@ -8,7 +8,10 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, FILES_PORT, KB_PORT, PLATFORM_PORT, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, FILES_PORT, KB_PORT, PLATFORM_PORT, check, chromium, consoleSignIn, evidenceDir, expectSampleData, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+
+// Step 12 opens the Settings pages that still have sample parts, to check each says so and offers no Save.
+expectSampleData('/settings/account/security', '/settings/team/notifications', '/settings/team/webhooks', '/settings/policies/gates');
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const files = `http://127.0.0.1:${FILES_PORT}`;
@@ -175,7 +178,7 @@ await withUiStack(
         const back = await phone.evaluate(() => ({ coarse: matchMedia('(pointer: coarse)').matches, arrow: Number(getComputedStyle(document.querySelector('[data-testid=page-back-icon] > svg')).opacity), crumbs: [...document.querySelectorAll('header nav[aria-label=Breadcrumb] a[href]')].map((a) => a.getAttribute('href')) }));
         await phone.screenshot({ path: join(SHOTS, 'agent-record-390-touch.png') });
         await ctx.close();
-        check('3 on a phone, descriptions read in full, header actions wrap, tab strips scroll with a cue, and a record page shows a way back', clamped === false && !offEdge.length && !!tabs && tabs.scrolls && /auto|scroll/.test(tabs.overflow) && tabs.fade && back.coarse && back.arrow > 0.5 && back.crumbs.includes('/agents'), { clamped, offEdge, tabs, back });
+        check('3 on a phone, descriptions read in full, header actions wrap, tab strips scroll with a cue, and a record page shows a way back', clamped === false && !offEdge.length && !!tabs && tabs.scrolls && /auto|scroll/.test(tabs.overflow) && tabs.fade && back.coarse && back.arrow > 0.5 && back.crumbs.includes('/build/agents'), { clamped, offEdge, tabs, back });
       });
 
       await step('4 Settings pages name their place, personal pages have no duplicate tabs, and Profile shows Maya', async () => {
@@ -199,7 +202,7 @@ await withUiStack(
         await item.waitFor({ timeout: 30_000 });
         const cutInQueue = await item.evaluate((el) => [...el.querySelectorAll('*')].filter((x) => x.childElementCount === 0 && x.innerText?.trim() && x.scrollWidth > x.clientWidth + 1).map((x) => x.innerText.trim()));
         const mine = (await json(await fetch(`${agents}/reviews?view=mine&pageSize=1`, { headers: maya })))?.viewCounts?.mine;
-        const counts = { overview: await page.getByTestId('sidebar-overview-count').count(), reviews: Number((await page.getByTestId('sidebar-count-reviews').innerText().catch(() => 'NaN')).trim()) };
+        const counts = { overview: await page.getByTestId('sidebar-overview-count').count(), reviews: Number((await page.getByTestId('sidebar-count-work-tasks').innerText().catch(() => 'NaN')).trim()) };
         await go('/tools/calls');
         await page.waitForTimeout(4000);
         const calls = await page.evaluate(() => ({ skeletons: document.querySelectorAll('main [data-slot=skeleton], main .animate-pulse').length, notServed: /Totals are not served yet/.test(document.querySelector('main')?.innerText ?? '') }));
@@ -214,7 +217,7 @@ await withUiStack(
           await page.waitForURL((u) => u.pathname === '/data/secrets', { timeout: 15_000 }).catch(() => undefined);
           secretsLanded = new URL(page.url()).pathname;
         }
-        check('5 the queue shows amount and customer, one Human Tasks count, Tool calls settles, and Tools has no error', !cutInQueue.length && counts.overview === 0 && counts.reviews === mine && mine >= 1 && calls.skeletons === 0 && calls.notServed && tools.nested === 0 && tools.opens.every((n) => n === 1) && !toolErrors.length && tools.secrets > 0 && secretsLanded === '/integrations/credentials', { cutInQueue, counts, mine, calls, tools, toolErrors, secretsLanded });
+        check('5 the queue shows amount and customer, one Human Tasks count, Tool calls settles, and Tools has no error', !cutInQueue.length && counts.overview === 0 && counts.reviews === mine && mine >= 1 && calls.skeletons === 0 && calls.notServed && tools.nested === 0 && tools.opens.every((n) => n === 1) && !toolErrors.length && tools.secrets > 0 && secretsLanded === '/data/secrets', { cutInQueue, counts, mine, calls, tools, toolErrors, secretsLanded });
       });
 
       await step('6 a builder sees one Runs list and one Workflows list, with no engine names', async () => {
@@ -360,7 +363,7 @@ await withUiStack(
         const sent = [];
         admin.on('request', (r) => { if (r.method() === 'PATCH' && r.url().includes(`/v1/sources/${source.id}`)) sent.push(Object.keys(r.postDataJSON() ?? {})); });
         await admin.locator('#set-collection').fill(`Disputes ${Date.now() % 1000}`);
-        await admin.getByRole('button', { name: 'Save changes' }).click();
+        await admin.getByTestId('save-source-settings').click();
         const toast = await admin.locator('[data-sonner-toast]').first().innerText({ timeout: 15_000 }).catch(() => '');
         await admin.waitForTimeout(1000);
         await admin.screenshot({ path: join(SHOTS, 'source-settings-not-stored-1440.png') });

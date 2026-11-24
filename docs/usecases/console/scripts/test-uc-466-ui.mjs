@@ -121,7 +121,7 @@ await withUiStack(
         const run = runId ? await json(await fetch(`${agents}/v1/runs/${runId}`, { headers: james })) : null;
         const input = run?.input ?? {};
         const [attachment] = input.attachments ?? [];
-        check('2b the run gets the email input a mailbox email gives, the notice stored in Files', res.status() === 202 && JSON.stringify(Object.keys(input).sort()) === JSON.stringify(EMAIL_KEYS) && attachment?.name === 'levy_notice.pdf' && /^fil_/.test(attachment?.fileId ?? '') && attachment?.mime === 'application/pdf' && input.bodyFile?.name === 'email-body.txt' && !!input.mailbox, { status: res.status(), keys: Object.keys(input), attachment, bodyFile: input.bodyFile, mailbox: input.mailbox });
+        check('2b the run gets the email input a mailbox email gives, the notice stored in Files', res.status() === 202 && JSON.stringify(Object.keys(input).sort()) === JSON.stringify(EMAIL_KEYS) && attachment?.name === 'levy_notice.pdf' && /^fil_/.test(attachment?.fileId ?? '') && attachment?.mime === 'application/pdf' && input.bodyFile?.name === 'Notice of levy, case 2026-CV-1182.txt' && !!input.mailbox, { status: res.status(), keys: Object.keys(input), attachment, bodyFile: input.bodyFile, mailbox: input.mailbox });
         check('2c the run says James sent it as a test email', run?.startedBy?.via?.name === 'test email' && /richardson/i.test(`${run?.startedBy?.id} ${run?.startedBy?.name}`), run?.startedBy);
         // The notice is read in a child run (the intake waits for it); a person then has a Human Task in a child.
         const waiting = await until(async () => {
