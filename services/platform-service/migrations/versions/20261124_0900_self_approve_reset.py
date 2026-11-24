@@ -16,12 +16,14 @@ Revises: 20261123_1200_self_approval_cell
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any, cast
 
 import sqlalchemy as sa
 from alembic import op
 
 from ops_service_kit.ids import new_id, now_iso
+from ops_store.schema import TENANT_SCOPED, backfill_ddl
 
 revision = "20261124_0900_self_approve_reset"
 down_revision = "20261123_1200_self_approval_cell"
@@ -31,6 +33,7 @@ depends_on = None
 ACTOR = f"migration:{revision}"
 KEY = "requesterMayDecide"
 FLOOR = "approvalsFloor"
+POLICED = ("tenants", "teams", "policies", "audit_entries")
 
 audit_entries = sa.table(
     "audit_entries",
@@ -84,7 +87,29 @@ def _entry(
     }
 
 
+def _policed(names: tuple[str, ...]) -> list[sa.Table]:
+    md = sa.MetaData()
+    key = {"tenants": sa.Column("id", sa.String(64), primary_key=True)}
+    return [sa.Table(n, md, key.get(n, sa.Column("tenant_id", sa.String(64))), info=TENANT_SCOPED) for n in names]
+
+
+def _every_tenant(c: sa.Connection, work: Callable[[sa.Connection], None]) -> None:
+    """`work` over every tenant's rows. A deploy migrates with no tenant context, and on SQL Server the security
+    policies show such a login no row, so without this the revision would find nothing and change nothing; each policed
+    table's policy is set aside for the transaction and put back (`backfill_ddl`)."""
+    before, after = backfill_ddl(_policed(POLICED), c.dialect.name, chain="platform", kind="tenant")
+    for statement in before:
+        c.execute(sa.text(statement))
+    work(c)
+    for statement in after:
+        c.execute(sa.text(statement))
+
+
 def reset(c: sa.Connection) -> None:
+    _every_tenant(c, _reset)
+
+
+def _reset(c: sa.Connection) -> None:
     at = now_iso()
     stored = {
         t: _json(v)
@@ -138,7 +163,10 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Each value goes back from this revision's audit entries: a team's part, the workspace default (removed when
     the tenant stored none), and the floor as it was. The audit entries stay, since the audit log is append-only."""
-    c = op.get_bind()
+    _every_tenant(op.get_bind(), _put_back)
+
+
+def _put_back(c: sa.Connection) -> None:
     rows = c.execute(
         sa.text("SELECT tenant_id, target_id, detail FROM audit_entries WHERE actor = :a"), {"a": ACTOR}
     ).all()
