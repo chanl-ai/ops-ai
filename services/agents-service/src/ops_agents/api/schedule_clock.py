@@ -12,7 +12,8 @@ it saw, and starts nothing, so it first runs at its next slot. It is read from t
 memory: the rule differs from the one stored beside the slot, or `seen_at` is empty, which each pass makes it while
 the workflow is not live or its live version lacks the step. A tick that fails, or whose lease another machine holds,
 writes nothing, so its slot stays open and the next pass tries it again. After an outage the clock starts one catch-up
-run, marked late, when the latest slot is within half the interval; an older slot is recorded as missed.
+run, marked late, when the latest slot is within half the interval (never less than LATE_AFTER, the most a normal
+pass trails its slot by); an older slot is recorded as missed.
 
 The clock knows no rule's fields (the registry answers) and no target's work (the handler answers). Scheduled runs act
 for no person: each is started by `trigger:schedule:{workflow}`."""
