@@ -1,6 +1,6 @@
 # A Schedule trigger starts one run per tick key, and a saved schedule starts one run per slot
 
-Status: see the acceptance layers below. Id: `uc-workflows-1`. Service: `agents-service`. Layers: api, sdk, cli.
+Status: see the acceptance layers below. Id: `uc-workflows-1`. Service: `agents-service`. Layers: api, sdk, cli, ui.
 
 A morning report workflow starts on a Schedule trigger. A caller sends a tick with a key (the day) and its values. A
 tick that is due starts one run; the same key again starts none; a tick due in an hour waits in the queue; a tick
@@ -23,6 +23,7 @@ worker's schedule clock starts one run at each slot, keyed by the slot and start
 | S10 | A daily rule in a zone whose clocks change has one slot on each such day, at its local time | api | 13 | 13 |
 | S11 | A rule with a field its kind does not have is refused naming the field | api | 14 | 14 |
 | S12 | A schedule save, change and clear each reach the account's audit log with the old and new schedule in words | cli | 17 | 17 |
+| S13 | A builder reads and changes a saved schedule on the Schedule trigger, is refused beside the field, pauses, resumes and clears it; a member only reads it; an agent is scheduled from its Channels tab | ui | 20-31 | 31 |
 
 ## Preconditions
 
@@ -55,6 +56,7 @@ has no tool or model step. The run makes only the workflow it needs.
 | 13 | Preview a daily 01:30 rule in Europe/London from the days before the spring and autumn clock changes (`after`) | Next runs 28 Mar 01:30, 29 Mar 01:00 (the first minute after the gap), 30 Mar 00:30 UTC; 24 Oct 00:30, 25 Oct 00:30 (the first 01:30 only), 26 Oct 01:30 UTC |
 | 14 | Preview a daily rule written with `at` instead of `time` | 422 naming `at` |
 | 17 | cli, with platform-service and the worker's relay: save, change and clear a schedule, then read `GET /v1/audit` as an admin | Three entries for the workflow: "Set the schedule of…", "Changed the schedule of… from… to…", "Cleared the schedule of…; it was…" |
+| 20-31 | ui: a schedule saved through the API opens on the Schedule trigger; change it, a floor refusal beside the field, pause and resume, clear, a member reads only, schedule an agent from its Channels tab | The panel shows the form, hints, time zone and next runs; a refusal keeps what was typed; paused shows Resume and no next runs; a member has no Save, Clear or Resume and a direct save is 403; the dialog makes a workflow with the agent as its step |
 
 ## Acceptance layers
 
@@ -63,7 +65,7 @@ has no tool or model step. The run makes only the workflow it needs.
 | api | `agents-service/scripts/test-uc-workflows-1-api.py` | steps 0 to 10, with the clock |
 | sdk | `agents-service/scripts/test-uc-workflows-1-sdk.py` | steps 1 to 4 (`OpsAI.workflows.schedule`) and 11 (`OpsAI.workflows.schedules`) |
 | cli | `agents-service/scripts/test-uc-workflows-1-cli.py` | step 12 |
-| ui | none | The schedule trigger has no screen of its own; Start run on a schedule workflow is covered by the start-by-hand use cases |
+| ui | `agents-service/scripts/test-uc-workflows-1-ui.mjs` | steps 20 to 31, as James (builder) and Ravi (member), at 1440 and 390 |
 
 ## Non-vacuous check
 
