@@ -50,8 +50,10 @@ Every call goes through a typed client with a service token and the caller's tea
 | documents-service | platform-service | Reads the workspace floor and the team's `pageImages` policy live on each read; an unreadable policy counts as off | service token | `settings:view` |
 | `file_deleted_purge` on `file.deleted` | documents-service | Retention and legal-hold deletes remove the derived layout, extractions and samples. files-service emits the event and calls nobody | service event | `documents:delete` |
 | any service | agents-service | Reports a service event; the tenant's handler for it runs (below) | `POST /v1/events`, through the `ops_store.outbox` relay | `events:emit` |
-| kb-service (and any service with changes to audit) | platform-service | Delivers the audit entry it wrote with a settings change to the account's one audit log | `POST /v1/audit-events` on the internal port, through the `ops_store.audit` outbox relay | `audit:create` |
+| kb-service, files-service (and any service with changes to audit) | platform-service | Delivers the audit entry it wrote with a settings change to the account's one audit log | `POST /v1/audit-events` on the internal port, through the `ops_store.audit` outbox relay | `audit:create` |
 | kb-service | files-service | Knowledge uploads are stored as files | `ops_files_client` | `files:write` |
+| files-service (`files_watch_checks`) | tools-service | A watched folder's check lists and fetches the source's changed files with the team's sign-in, as knowledge does. When tools-service is down the check ends refused, its place kept, and the outcome shows on the watch | `POST /v1/calls` through `ops_sources.ToolReader` | `tools:view`, `tools:run` |
+| agents-service (Files changed trigger) | files-service | Reads a watch's events after its place and the watches a trigger's picker offers | `GET /v1/watches/options`, `GET /v1/watches/{id}/events` | `files:view` |
 | agents-service | tools-service | Every tool call to a bank system, with its approval token and the run's environment (production for live runs and chats, test otherwise) | tools client | approval token per call |
 | agents-service | tools-service | A write's policy (access, approvers, step-up; the approving team it still answers is ignored) for each review it draws or decides, `GET /v1/tools/{name}`; read once per tool per request (`tool_access.one_read_per_tool`), so a changed policy applies from the next request | tools client | service token |
 | agents-service, kb-service, documents-service | models-service | Every model call, with its alias and key | models client | key per identity |
@@ -76,12 +78,13 @@ event nobody handles is recorded `unhandled`.
 | `module_review.requested` | tools-service | The tool module's publish review | planned |
 | `file.deleted` | files-service | `file_deleted_purge`: purge what documents-service derived from the file | built |
 | `file.read_requested` | files-service | `system_extract`: read the file and save what was read on it | built |
+| `watch.checked` | files-service, once per finished check of a watched folder (key: the check), with its outcome and last event number | The Files changed trigger (increment B); until then `unhandled` | built (emitter) |
 | `extraction.corrected` | documents-service | `extraction_corrected_save`: save the corrected read on its file, so the files list's Read as and to-check count follow it; sent only for the file's newest read | built |
 | `extraction.read` | documents-service, when a read of a document type ends with fields | `extraction_read_save`: save what the file was read as, so a read by any workflow, agent or API call shows in Files | built |
 | `task.requested` | agents-service itself, from `POST /v1/tasks` (`api/routers/tasks.py:41`), with a new key per post | `api_task`: a Human Review step on the posted task type; the task id is the run id | built |
 
 A service reports only the events this catalogue gives it (`EVENT_OWNERS` in agents-service `api/service_events.py`:
-tools-service `tool_access.`, `tool_module.` and `module_review.`; files-service `file.`; documents-service
+tools-service `tool_access.`, `tool_module.` and `module_review.`; files-service `file.` and `watch.`; documents-service
 `extraction.`; agents-service `task.`; 403 `event_not_owned` otherwise), for the team its token names (403
 `team_mismatch`).
 

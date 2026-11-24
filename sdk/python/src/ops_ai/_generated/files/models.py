@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, NotRequired
+from typing import Any, Literal, NotRequired, TypeAlias
 
 from typing_extensions import TypedDict
 
@@ -28,6 +28,10 @@ class BulkDeleteIn(TypedDict, closed=True):
     ids: list[str]
 
 
+class CheckAsked(TypedDict, closed=True):
+    status: Literal["asked"]
+
+
 class CredentialInput(TypedDict, closed=True):
     kind: Literal["aws_access_key", "azure_service_principal"]
     values: dict[str, str]
@@ -48,6 +52,11 @@ class DownloadLink(TypedDict, closed=True):
     expiresAt: str
     ttlSeconds: int
     url: str
+
+
+class EnvelopeCheckAsked(TypedDict, closed=True):
+    data: CheckAsked
+    success: Literal[True]
 
 
 class EnvelopeCredentialView(TypedDict, closed=True):
@@ -78,6 +87,12 @@ class ErrorBody(TypedDict, closed=True):
 class ErrorEnvelope(TypedDict, closed=True):
     error: ErrorBody
     success: Literal[False]
+
+
+class FailedFile(TypedDict, closed=True):
+    path: str | None
+    reason: str | None
+    size: int | None
 
 
 class FileData(TypedDict, closed=True):
@@ -145,6 +160,18 @@ class FileVersion(TypedDict, closed=True):
 class Health(TypedDict, closed=True):
     reason: NotRequired[str | None]
     status: str
+
+
+JsonValue: TypeAlias = Any
+
+
+class LastCheck(TypedDict, closed=True):
+    brought: NotRequired[int]
+    failed: NotRequired[int]
+    failures: NotRequired[list[FailedFile]]
+    removed: NotRequired[int]
+    status: str
+    stopped: NotRequired[str]
 
 
 class LegalHold(TypedDict, closed=True):
@@ -415,6 +442,50 @@ class UploadTicket(TypedDict, closed=True):
     uploadUrl: str
 
 
+class WatchChange(TypedDict, closed=True):
+    name: NotRequired[str | None]
+    values: NotRequired[dict[str, JsonValue] | None]
+
+
+class WatchEventView(TypedDict, closed=True):
+    at: str
+    fileId: str | None
+    kind: str
+    number: int
+    path: str | None
+    reason: str | None
+    size: int | None
+    version: int | None
+
+
+class WatchEvents(TypedDict, closed=True):
+    data: list[WatchEventView]
+    nextAfter: int | None
+
+
+class WatchIn(TypedDict, closed=True):
+    connectionId: NotRequired[str | None]
+    name: str
+    plugin: str
+    source: str
+    values: dict[str, JsonValue]
+
+
+class WatchView(TypedDict, closed=True):
+    checking: bool
+    connectionId: str | None
+    createdAt: str
+    createdBy: str
+    id: str
+    lastCheck: LastCheck | None
+    lastCheckAt: str | None
+    name: str
+    plugin: str
+    source: str
+    updatedAt: str
+    values: dict[str, JsonValue]
+
+
 class BackgroundHealthOut(TypedDict, closed=True):
     processes: list[BackgroundProcessOut]
 
@@ -446,6 +517,16 @@ class EnvelopeUploadLimits(TypedDict, closed=True):
 
 class EnvelopeUploadTicket(TypedDict, closed=True):
     data: UploadTicket
+    success: Literal[True]
+
+
+class EnvelopeWatchEvents(TypedDict, closed=True):
+    data: WatchEvents
+    success: Literal[True]
+
+
+class EnvelopeWatchView(TypedDict, closed=True):
+    data: WatchView
     success: Literal[True]
 
 
@@ -525,6 +606,12 @@ class FileRow(TypedDict, closed=True):
     versionCount: int
 
 
+class ListResultWatchView(TypedDict, closed=True):
+    data: list[WatchView]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
 class ProbeResult(TypedDict, closed=True):
     ok: bool
     steps: list[ProbeStep]
@@ -570,6 +657,11 @@ class EnvelopeCompletedUpload(TypedDict, closed=True):
 
 class EnvelopeFileDetail(TypedDict, closed=True):
     data: FileDetail
+    success: Literal[True]
+
+
+class EnvelopeListResultWatchView(TypedDict, closed=True):
+    data: ListResultWatchView
     success: Literal[True]
 
 

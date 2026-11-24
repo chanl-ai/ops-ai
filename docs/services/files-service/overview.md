@@ -14,12 +14,12 @@ its retention class or a legal hold requires.
 | Owns | File metadata, the blobs behind them, references from other records, legal holds, read requests, the tenant's storage settings and their credentials, and the objects in the configured bucket or container |
 | Port | 8750 (`OPS_FILES_PORT`) |
 | Code | `services/files-service` (`ops_files`), with the storage adapters in `packages/ops_storage` and the client other services use in `packages/ops_files_client` |
-| Database | Own migration chain (`alembic_version_files`, `services/files-service/migrations`). Tables: `files`, `file_blobs`, `file_versions`, `file_references`, `file_legal_holds`, `file_idempotency`, `file_read_requests`, `storage_settings`, `storage_settings_audit`, `storage_credentials`, `files_outbox` |
+| Database | Own migration chain (`alembic_version_files`, `services/files-service/migrations`). Tables: `files`, `file_blobs`, `file_versions`, `file_references`, `file_legal_holds`, `file_idempotency`, `file_read_requests`, `storage_settings`, `storage_settings_audit`, `storage_credentials`, `file_watches`, `file_watch_events`, `files_outbox` |
 | Isolation | Every transaction runs as `ops_files_tenant` (`services/files-service/src/ops_files/store/files.py:175`); a file of another team is reported as missing. Tests: `services/files-service/tests/test_isolation.py`; use case uc-094 |
 | Secrets it holds | Storage credentials, sealed with AES-256-GCM under `OPS_SECRETS_KEY` and never returned (`services/files-service/src/ops_files/secrets.py`); a per-process key that signs local download addresses |
-| Calls out to | The object store a tenant's storage settings name (local disk, Amazon S3 or S3-compatible with Object Lock, Azure Blob Storage with version-level immutability); agents-service for its events. A malware scanner reports back on the scan hook |
-| Called by | The console (uploads, the Files pages, storage settings); agents-service (chat and mailbox attachments); kb-service (source files and snapshots); documents-service (bytes to read) |
-| Events it sends | `file.deleted` and `file.read_requested` to agents-service through `files_outbox` and the `files_relay` process, at least once; delivered rows are pruned after 7 days (`services/files-service/src/ops_files/__main__.py:106-114`) |
+| Calls out to | The object store a tenant's storage settings name (local disk, Amazon S3 or S3-compatible with Object Lock, Azure Blob Storage with version-level immutability); agents-service for its events; tools-service (`tools:view`, `tools:run`) for a watched folder's check, with the team's sign-in; platform-service's internal port (`audit:create`) for the audit entries of changes to watched folders. A malware scanner reports back on the scan hook |
+| Called by | The console (uploads, the Files pages, watched folders, storage settings); agents-service (chat and mailbox attachments; a watch's events for the Files changed trigger, `files:view`); kb-service (source files and snapshots); documents-service (bytes to read) |
+| Events it sends | `file.deleted`, `file.read_requested` and `watch.checked` (once per finished check, keyed by the check) to agents-service, and `audit.recorded` to platform-service's audit log, through `files_outbox` and the `files_relay` process, at least once; delivered rows are pruned after 7 days (`services/files-service/src/ops_files/__main__.py:106-114`) |
 | Events it receives | None. A scanner's verdict arrives on `POST /v1/files/scan-results` |
 | When something is down | A file waits as pending until the scan hook reports, and a download is refused (423) until it is clean. A storage settings save that cannot write, read and delete a probe object is refused naming the purpose, so a wrong target never takes uploads (`services/files-service/src/ops_files/settings.py`) |
 | Routes | API reference tab, HTTP API › Files, built from `services/files-service/openapi.json` |
@@ -79,6 +79,12 @@ The typed contract is in the API reference tab; this table adds the rule each ro
 | `POST /v1/files`, `GET /v1/files/{id}[/content]` | Server write (with `Idempotency-Key`) and reads for services, with a service token and `team` |
 | `POST`, `DELETE /v1/files/{id}/references...` | Attach (409 unless clean) and detach |
 | `POST /v1/files/scan-results` | The scan hook: a scanner's verdict for a file of its token's tenant |
+| `GET /v1/files/{id}/content?version=` | An earlier version of a watched folder's file, once that version's own scan is clean; the newest answers 423 until scanned |
+| `GET /v1/watches`, `GET /v1/watches/{id}` | The team's watched folders by name on the shared list contract, each with its last check (status, brought in, failed, the first failed files with their size) and whether a check is running; every member with files.view, and services holding `files:view` |
+| `GET /v1/watches/options` | The watches a picker offers (the Files changed trigger), searched and paged in the query |
+| `POST`, `PATCH`, `DELETE /v1/watches[/{id}]` | Add, rename or change the folders of, and delete a watch; watches.manage (Admin and Builder) and an audit entry naming the folders. New folders are listed whole on the next check; a delete keeps the files already brought in |
+| `POST /v1/watches/{id}/check` | Check now: 202, and the `files_watch_checks` process checks it within seconds; 409 `already_checking` while one is asked for or running; watches.manage and an audit entry |
+| `GET /v1/watches/{id}/events?after=&limit=` | What the checks found (new, changed, renamed, removed, failed with reason and size), oldest first, numbered in commit order |
 
 | Setting | Meaning |
 |---|---|
@@ -160,8 +166,8 @@ The typed contract is in the API reference tab; this table adds the rule each ro
 | ClamAV, Defender and GuardDuty adapters | not built: the scan hook route is built; the engines are not |
 | A tenant-wide platform admin role for legal holds | not built: holds need an admin of the file's team |
 | Checksum header on uploads to Object Lock buckets | not built: real S3 requires one per PUT; moto does not, so it is untested |
-| New versions of a file | store only: `put_source_version` writes version 2 and later for a watched folder's file; no route serves a version by number yet, and an upload still holds version 1 only |
-| Watched folders | not built past the store: the watch, its check through `ops_sources`, the routes, SDK, CLI and screens follow (design: folder batch extraction, increment A) |
+| New versions of a file | a watched folder's file only: a check writes version 2 and later, and `?version=` reads an earlier one; an upload still holds version 1 only |
+| Watched folders | routes and the check are built; the SDK, CLI and screens follow (design: folder batch extraction, increment A). A delete is not yet refused while a workflow uses the watch: nothing can use one until the Files changed trigger (increment B) |
 | Asynchronous scanning | not built: the scanner runs inline in `complete_upload` when configured; `record_scan` is the hook for an engine that reports later |
 | Previews and evidence export from `files.ts` | not built |
 | Azure immutability and legal hold against a real account | partial: Azurite does not implement them, so `AzureBlobObjectStore.set_retention`, `set_legal_hold` and the version-by-version delete have not run |

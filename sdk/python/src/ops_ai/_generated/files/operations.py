@@ -88,7 +88,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/files/{file_id}/content",
         "pathParams": ["file_id"],
-        "query": [],
+        "query": ["version"],
         "stream": False,
     },
     "files_get_file": {
@@ -262,6 +262,78 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "watches_change_watch": {
+        "body": "json",
+        "headers": [],
+        "method": "PATCH",
+        "path": "/v1/watches/{watch_id}",
+        "pathParams": ["watch_id"],
+        "query": [],
+        "stream": False,
+    },
+    "watches_check_watch": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/watches/{watch_id}/check",
+        "pathParams": ["watch_id"],
+        "query": [],
+        "stream": False,
+    },
+    "watches_create_watch": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/watches",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "watches_delete_watch": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/watches/{watch_id}",
+        "pathParams": ["watch_id"],
+        "query": [],
+        "stream": False,
+    },
+    "watches_get_watch": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/watches/{watch_id}",
+        "pathParams": ["watch_id"],
+        "query": [],
+        "stream": False,
+    },
+    "watches_list_watches": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/watches",
+        "pathParams": [],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
+        "stream": False,
+    },
+    "watches_watch_events": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/watches/{watch_id}/events",
+        "pathParams": ["watch_id"],
+        "query": ["after", "limit"],
+        "stream": False,
+    },
+    "watches_watch_options": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/watches/options",
+        "pathParams": [],
+        "query": ["search", "cursor", "limit", "ids"],
+        "stream": False,
+    },
 }
 
 
@@ -402,9 +474,11 @@ class Operations:
         "Delete File"
         return self._t.call(SERVICE, OPERATIONS["files_delete_file"], {"file_id": file_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def files_get_content(self, file_id: str) -> Any:
+    def files_get_content(self, file_id: str, *, version: int | None = None) -> Any:
         "Get Content"
-        return self._t.call(SERVICE, OPERATIONS["files_get_content"], {"file_id": file_id}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE, OPERATIONS["files_get_content"], {"file_id": file_id}, {"version": version}, {}, None
+        )  # type: ignore[no-any-return]
 
     def files_set_file_data(self, file_id: str, body: FileDataIn) -> FileDetail:
         "Set File Data"
@@ -471,6 +545,82 @@ class Operations:
     def settings_test_target(self, body: StorageTargetIn) -> ProbeResult:
         "Test Target"
         return self._t.call(SERVICE, OPERATIONS["settings_test_target"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def watches_list_watches(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultWatchView:
+        "List Watches"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["watches_list_watches"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    def watches_create_watch(self, body: WatchIn) -> WatchView:
+        "Create Watch"
+        return self._t.call(SERVICE, OPERATIONS["watches_create_watch"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def watches_watch_options(
+        self,
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        ids: list[str] | None = None,
+    ) -> OptionsPage:
+        "Watch Options"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["watches_watch_options"],
+            {},
+            {"search": search, "cursor": cursor, "limit": limit, "ids": ids},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    def watches_get_watch(self, watch_id: str) -> WatchView:
+        "Get Watch"
+        return self._t.call(SERVICE, OPERATIONS["watches_get_watch"], {"watch_id": watch_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def watches_change_watch(self, watch_id: str, body: WatchChange) -> WatchView:
+        "Change Watch"
+        return self._t.call(SERVICE, OPERATIONS["watches_change_watch"], {"watch_id": watch_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def watches_delete_watch(self, watch_id: str) -> Any:
+        "Delete Watch"
+        return self._t.call(SERVICE, OPERATIONS["watches_delete_watch"], {"watch_id": watch_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def watches_check_watch(self, watch_id: str) -> CheckAsked:
+        "Check Watch"
+        return self._t.call(SERVICE, OPERATIONS["watches_check_watch"], {"watch_id": watch_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def watches_watch_events(self, watch_id: str, *, after: int | None = None, limit: int | None = None) -> WatchEvents:
+        "Watch Events"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["watches_watch_events"],
+            {"watch_id": watch_id},
+            {"after": after, "limit": limit},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
 
 class AsyncOperations:
@@ -610,9 +760,11 @@ class AsyncOperations:
         "Delete File"
         return await self._t.call(SERVICE, OPERATIONS["files_delete_file"], {"file_id": file_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def files_get_content(self, file_id: str) -> Any:
+    async def files_get_content(self, file_id: str, *, version: int | None = None) -> Any:
         "Get Content"
-        return await self._t.call(SERVICE, OPERATIONS["files_get_content"], {"file_id": file_id}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE, OPERATIONS["files_get_content"], {"file_id": file_id}, {"version": version}, {}, None
+        )  # type: ignore[no-any-return]
 
     async def files_set_file_data(self, file_id: str, body: FileDataIn) -> FileDetail:
         "Set File Data"
@@ -679,3 +831,81 @@ class AsyncOperations:
     async def settings_test_target(self, body: StorageTargetIn) -> ProbeResult:
         "Test Target"
         return await self._t.call(SERVICE, OPERATIONS["settings_test_target"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def watches_list_watches(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultWatchView:
+        "List Watches"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["watches_list_watches"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    async def watches_create_watch(self, body: WatchIn) -> WatchView:
+        "Create Watch"
+        return await self._t.call(SERVICE, OPERATIONS["watches_create_watch"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def watches_watch_options(
+        self,
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        ids: list[str] | None = None,
+    ) -> OptionsPage:
+        "Watch Options"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["watches_watch_options"],
+            {},
+            {"search": search, "cursor": cursor, "limit": limit, "ids": ids},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    async def watches_get_watch(self, watch_id: str) -> WatchView:
+        "Get Watch"
+        return await self._t.call(SERVICE, OPERATIONS["watches_get_watch"], {"watch_id": watch_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def watches_change_watch(self, watch_id: str, body: WatchChange) -> WatchView:
+        "Change Watch"
+        return await self._t.call(SERVICE, OPERATIONS["watches_change_watch"], {"watch_id": watch_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def watches_delete_watch(self, watch_id: str) -> Any:
+        "Delete Watch"
+        return await self._t.call(SERVICE, OPERATIONS["watches_delete_watch"], {"watch_id": watch_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def watches_check_watch(self, watch_id: str) -> CheckAsked:
+        "Check Watch"
+        return await self._t.call(SERVICE, OPERATIONS["watches_check_watch"], {"watch_id": watch_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def watches_watch_events(
+        self, watch_id: str, *, after: int | None = None, limit: int | None = None
+    ) -> WatchEvents:
+        "Watch Events"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["watches_watch_events"],
+            {"watch_id": watch_id},
+            {"after": after, "limit": limit},
+            {},
+            None,
+        )  # type: ignore[no-any-return]

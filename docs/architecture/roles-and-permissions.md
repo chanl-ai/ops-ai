@@ -190,6 +190,14 @@ role holds are left out.
 | files | run | all | all | no | no | no | no | no |
 | files | decide | all | all | no | no | no | no | no |
 | files | manage | all | all | no | no | no | no | no |
+| watches | view | all | all | no | no | no | no | no |
+| watches | create | all | all | no | no | no | no | no |
+| watches | edit | all | all | no | no | no | no | no |
+| watches | publish | all | all | no | no | no | no | no |
+| watches | delete | all | all | no | no | no | no | no |
+| watches | run | all | all | no | no | no | no | no |
+| watches | decide | all | all | no | no | no | no | no |
+| watches | manage | all | all | no | no | no | no | no |
 | documents | view | all | all | all | all | no | no | no |
 | documents | create | all | all | no | no | no | no | no |
 | documents | edit | all | all | all | all | no | no | no |
@@ -442,6 +450,7 @@ answered here. Defaults follow the grid above for that cell.
 | End another person's sign-in (`POST /v1/apps/{app}/accounts/{id}/people/{person}/sign-out`, the People sheet, CLI `opsai apps end-sign-in`) | `connections.manage`; marks the person's sign-in refused with `ended_by_admin`, writes one `sign_in_ended` audit row, and changes nothing the second time | Admin; a custom role that ticks `connections.manage` | `services/tools-service/src/ops_tools/connections/service.py` (`end_sign_in`) |
 | A person's own app sign-ins (Settings › My apps, CLI `connectors connect` and `disconnect`) | `chat.run`, own accounts only | Admin, Builder, Reviewer, Viewer and Chat user, each their own | `services/tools-service/src/ops_tools/connections/service.py`; E52 |
 | Batches (`/build/runs/batches`) | Read (a batch's page and its results file): `workflows.view`; started: `workflows.run`; retried: `workflows.edit` | Read by every role but Security admin and Chat user | `services/agents-service/src/ops_agents/api/routers/batches.py` |
+| Watched folders (Files › Watched folders, `/v1/watches`) | Add, change, Check now and delete: `watches.manage`; read (the list, a watch, its events and the picker): `files.view`, and `files:view` on a service token | Changed by Admin and Builder; read by every member who reads Files. `files.manage` (legal holds, storage) is not widened for it, since a watch copies a folder into Files for every member while the source's own access list is not applied | `services/files-service/src/ops_files/watch_routes.py`; `packages/ops_access/src/ops_access/catalogue.py` |
 | Evals (`/govern/evals`, `POST /v1/agents/{id}/eval-runs`) | Run: `agents.edit` (E32); the console's menu entry asks `agents.decide` | Run by Admin and Builder; the page is offered to Admin, Builder and Reviewer | `services/agents-service/src/ops_agents/api/routers/agents.py`; `apps/console/src/lib/nav.ts` |
 | Models (`/govern/models`, Settings › Model providers) | Alias list: `agents.view`; providers and provider keys: `settings.manage` in the Security team; alias versions, model keys and the call log: the install's service token only (E24) | Alias list: every role but Security admin and Chat user; providers: Security admin and Admin of the Security team | `services/agents-service/src/ops_agents/api/routers/model_alias_catalog.py`; `services/models-service/src/ops_models/app.py` |
 | Templates (`GET /v1/templates`, install, MCP `list_templates` and `install_template`, CLI `templates`) | List: `agents.view`; install: `<area>.create` for the template's kind | List: every role but Security admin and Chat user; install: Admin and Builder | `services/agents-service/src/ops_agents/api/routers/templates.py` |
