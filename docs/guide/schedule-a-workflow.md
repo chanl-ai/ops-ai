@@ -49,6 +49,6 @@ yet", with the three ways to put it to work.
 
 ## Who can do what
 
-Anyone who can view the workflow reads its schedule, next runs and last run. Saving or clearing a schedule, and resuming
-a paused workflow, needs the right to edit the workflow and the right to add deployments in its team (Builders and
-Admins have both). A Member sees the schedule and no Save, Clear schedule or Resume.
+Anyone who can view the workflow reads its schedule, next runs and last run. Saving or clearing a schedule needs the right to edit the workflow and the right to add deployments in its team (Builders
+and Admins have both); resuming a paused workflow needs only the right to edit it. A Member sees the schedule and no
+Save, Clear schedule or Resume.
