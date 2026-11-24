@@ -2,6 +2,7 @@
 // docs/usecases/console/chat-budget-continue.md. Signed in through platform-service. An agent whose conversations may
 // make one model call: James's second message pauses on a budget card with the server's numbers, he continues and the
 // turn answers; Priya, a team admin, raises the budget on her own chat; the wrong person is refused on each action.
+// Builder and Admin hold chat.manage by default (roles-and-permissions.md D50), so James is offered Raise too.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack, replyDone } from '@ops-ai/usecase-runner/harness';
 import { saveAgent } from '../../lib/agent_save.mjs';
 
@@ -62,12 +63,13 @@ await withUiStack(
       const text = shown ? await card.innerText() : '';
       const ledger = (await (await fetch(`${agents}/chat/threads/${jt}`, { headers: J })).json()).data.messages.find((m) => m.budget)?.budget;
       const paused = { shown, text, ledger, raise: await james.getByTestId('budget-raise').count(), composer: await james.getByText('paused on its budget').count() };
-      check('a spent budget shows a card with the server’s numbers, Continue for the owner and no Raise for a builder', shown && !!ledger && text.includes(`${ledger.spent} of ${ledger.cap} model calls`) && paused.raise === 0 && paused.composer > 0, paused);
+      // Builder and Admin hold chat.manage by default, so James's card offers Raise beside Continue.
+      check('a spent budget shows a card with the server’s numbers, with Continue and, for a builder, Raise', shown && !!ledger && text.includes(`${ledger.spent} of ${ledger.cap} model calls`) && paused.raise === 1 && paused.composer > 0, paused);
 
       // The wrong person on each action is refused by the server.
       const otherContinue = await fetch(`${agents}/chat/threads/${jt}/budget`, { method: 'POST', headers: M, body: JSON.stringify({ action: 'continue' }) });
-      const builderRaise = await fetch(`${agents}/chat/threads/${jt}/budget`, { method: 'POST', headers: J, body: JSON.stringify({ action: 'raise', maxCalls: 10 }) });
-      check('someone else cannot continue James’s chat, and a builder cannot raise', otherContinue.status === 403 && builderRaise.status === 403, { otherContinue: otherContinue.status, builderRaise: builderRaise.status });
+      const otherRaise = await fetch(`${agents}/chat/threads/${jt}/budget`, { method: 'POST', headers: M, body: JSON.stringify({ action: 'raise', maxCalls: 10 }) });
+      check('someone else cannot continue James’s chat, and an approver without chat.manage cannot raise it', otherContinue.status === 403 && otherRaise.status === 403, { otherContinue: otherContinue.status, otherRaise: otherRaise.status });
 
       // Continue: the paused turn answers and the card says who continued.
       const answered = armed(james.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/chat/threads/${jt}/budget`), { timeout: 120_000 }));

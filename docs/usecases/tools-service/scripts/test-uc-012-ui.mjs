@@ -88,7 +88,7 @@ await withUiStack(
       // Sam acts in Security, so the team_ops module that calls the host is named by its id, without a link: its name
       // and page are that team's records. The list is read again on this visit, so the id is waited for.
       const named = await hostRow.getByText(forgedModule?.id ?? '-', { exact: true }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
-      check('the host names the module that calls it', named && (await hostRow.locator(`a[href="/tools/${forgedModule?.id}"]`).count()) === 0, { row: await hostRow.innerText(), forged: forgedModule?.id });
+      check('the host names the module that calls it', named && (await hostRow.locator(`a[href="/data/tools/${forgedModule?.id}"]`).count()) === 0, { row: await hostRow.innerText(), forged: forgedModule?.id });
       await hostRow.getByRole('button').last().click();
       await page.getByRole('menuitem', { name: 'Remove' }).click();
       const removed = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${tools}/v1/egress/hosts/remove`, { timeout: 60_000 }));
