@@ -59,7 +59,7 @@ class Every:
         days_raw = raw.get("days")
         days = list(DAYS) if days_raw is None else [str(d).lower()[:3] for d in _listed(days_raw, "days")]
         if not days or any(d not in DAYS for d in days):
-            raise InvalidSchedule(f"Choose at least one day: {', '.join(DAYS)}.", field="days")
+            raise InvalidSchedule("Choose at least one weekday.", field="days")
         tz = str(raw.get("tz") or "UTC")
         zone(tz)
         out: Rule = {"kind": self.name, "every": every, "unit": unit, "start": start}
