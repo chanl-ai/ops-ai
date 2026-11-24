@@ -22,7 +22,7 @@ is coming later. The page should still be true after a refactor.
 |---|---|
 | Write to "you" | "You approve the write", not "the reviewer approves the write" |
 | Say what the reader gets, then how | Open with the outcome; the steps and options follow |
-| One name per thing | Use the name in [the glossary](../glossary.md). Add a missing term there first |
+| One name per thing | Use the name in the glossary, `docs/guide/glossary.md`. Add a missing term there first |
 | Console paths copied from the screen | Bold, with `›` between parts, exactly as the glossary gives them: **Data Gateway › Apps** |
 | Short sentences | Under 25 words. One idea each |
 | Plain product language | Words a buyer would repeat. No keynote phrasing, no "simply", "just" or "easy" |

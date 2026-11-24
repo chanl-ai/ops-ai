@@ -3,14 +3,15 @@
 Every page in these docs uses one name for each thing, and the name is the one the console shows. Use this page to
 look up a word, or to find where something lives in the console.
 
-A console path reads left to right: the sidebar section, the row, then a tab on that page when there is one.
+A console path reads left to right: the sidebar section, the row, then a tab on that page when there is one. **New chat**
+sits above the sections.
 Settings has its own sidebar, which opens from **Governance › Settings**.
 
 ## What you work with
 
 | Name | What it is | In the console | Not |
 |---|---|---|---|
-| Chat | A conversation between a person and an agent | Work › New chat | |
+| Chat | A conversation between a person and an agent | New chat | |
 | Case | The record of one piece of work: its subject, what it waits on, its history | Work › Cases | |
 | Human task | A request for a person to decide something before work continues | Work › Human Tasks | HITL |
 | Team | A group of people that owns agents, workflows, knowledge and cases | Settings › Team › General | |

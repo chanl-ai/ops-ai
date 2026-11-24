@@ -28,7 +28,8 @@ goes back to `/ops-docs-write` instead.
 
 - Keep the page's job. If an edit would add a second topic, link to the page that owns it.
 - Every heading in sentence case. The opening stays free of paths and code spans.
-- A claim you cannot check against the code or a run is cut or marked planned, never softened with "should".
+- A claim you cannot check against the code or a run is cut, never softened with "should". A reader page does not
+  say planned; what is not built is listed only on the Feature status page.
 - Code blocks show only what a user types or sees: console steps, `opsai` commands, SDK calls, HTTP requests, output.
 - Keep the page shorter than it was unless the review asked for something missing.
 
