@@ -77,6 +77,8 @@ class FailedFile(Out):
     path: str | None
     size: int | None
     reason: str | None
+    # too_large (no retry brings it in) or fetch_failed; null on outcomes written before codes were kept.
+    code: str | None = None
 
 
 class LastCheck(Out):
@@ -132,6 +134,8 @@ class WatchEventView(Out):
     version: int | None
     kind: str
     reason: str | None
+    # Why a failed event failed: too_large or fetch_failed; null for other kinds.
+    code: str | None = None
     size: int | None
     path: str | None
     at: datetime

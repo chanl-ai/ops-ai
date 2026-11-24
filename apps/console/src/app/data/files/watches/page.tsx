@@ -120,9 +120,23 @@ function LastCheck({ w, stacked }: { w: Watch; stacked?: boolean }) {
   );
 }
 
-/** What a person does about a failed file, from the reason the check gave. */
-function nextStep(reason: string | null | undefined) {
-  return /larger than|too large|too big/i.test(reason ?? '')
+type Failure = NonNullable<NonNullable<Watch['lastCheck']>['failures']>[number];
+
+/** Too large to bring in: said by the check's code, or by the reason on outcomes kept before codes were. */
+function tooLarge(f: Failure | undefined) {
+  return f?.code === 'too_large' || (!f?.code && /larger than|too large|too big/i.test(f?.reason ?? ''));
+}
+
+/** Why the file failed, in the check's words: its size limit, or that it could not be fetched. */
+function why(f: Failure) {
+  if (f.code === 'too_large') return f.reason ?? 'Too large to bring in';
+  if (f.code === 'fetch_failed') return 'Could not be fetched';
+  return f.reason ?? '';
+}
+
+/** What a person does about a failed file, from the code the check gave. */
+function nextStep(f: Failure | undefined) {
+  return tooLarge(f)
     ? 'Split it or make it smaller, or upload it to Files directly. It stays out until then.'
     : 'The next checks try it again; if it keeps failing, change the file in the app or upload it directly.';
 }
@@ -138,10 +152,10 @@ function Failures({ w, stacked }: { w: Watch; stacked?: boolean }) {
   return (
     <span className={`flex min-w-0 max-w-80 flex-col gap-0.5 whitespace-normal break-words text-xs text-destructive-text ${stacked ? 'mt-1 sm:hidden' : 'max-sm:hidden'}`} data-testid={stacked ? `watch-failed-stacked-${w.id}` : `watch-failed-${w.id}`}>
       <span>
-        {c.failed} failed{first ? `: ${first.path ?? 'a file'}${first.size ? `, ${bytes(first.size)}` : ''}${first.reason ? ` (${first.reason})` : ''}` : ''}
+        {c.failed} failed{first ? `: ${first.path ?? 'a file'}${first.size ? `, ${bytes(first.size)}` : ''}${why(first) ? `. ${why(first)}` : ''}` : ''}
       </span>
       <span className="text-muted-foreground">
-        {nextStep(first?.reason)}{' '}
+        {nextStep(first)}{' '}
         <a href={`${WATCH_GUIDE}#failed-files`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 underline underline-offset-2" data-testid={stacked ? undefined : `watch-failed-help-${w.id}`}>
           What to do <ExternalLink className="size-3" />
         </a>

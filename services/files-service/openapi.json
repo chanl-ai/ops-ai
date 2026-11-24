@@ -718,6 +718,17 @@
       "FailedFile": {
         "additionalProperties": false,
         "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
           "path": {
             "anyOf": [
               {
@@ -3026,6 +3037,17 @@
             "format": "date-time",
             "title": "At",
             "type": "string"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
           },
           "fileId": {
             "anyOf": [

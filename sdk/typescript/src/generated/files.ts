@@ -869,6 +869,8 @@ export interface components {
         };
         /** FailedFile */
         FailedFile: {
+            /** Code */
+            code?: string | null;
             /** Path */
             path: string | null;
             /** Reason */
@@ -1682,6 +1684,8 @@ export interface components {
              * Format: date-time
              */
             at: string;
+            /** Code */
+            code?: string | null;
             /** Fileid */
             fileId: string | null;
             /** Kind */

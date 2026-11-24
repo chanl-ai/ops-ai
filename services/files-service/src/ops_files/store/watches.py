@@ -8,7 +8,7 @@ order the check wrote them. Events are kept 90 days and swept by the retention p
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal, NotRequired, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict, cast
 
 import sqlalchemy as sa
 from pydantic import JsonValue
@@ -56,6 +56,8 @@ file_watches = sa.Table(
     sa.Column("last_outcome", sa.JSON),
     # The number the next event takes; moved only by the lease holder, in the transaction that writes the events.
     sa.Column("next_event", sa.Integer, nullable=False, server_default="1"),
+    # {source id: size} of files refused for their size, so a check says one again only when its size changes.
+    sa.Column("refused_sizes", sa.JSON),
     sa.Index("ix_file_watches_requested", "check_requested_at"),
     info={**TENANT_SCOPED, **team_owned("team")},
 )
@@ -71,6 +73,8 @@ file_watch_events = sa.Table(
     sa.Column("version", sa.Integer),
     sa.Column("kind", sa.String(16), nullable=False),
     sa.Column("reason", sa.String(500)),
+    # Why a failed event failed: too_large (no retry brings it in) or fetch_failed; null for other kinds.
+    sa.Column("code", sa.String(32)),
     sa.Column("size", sa.BigInteger),
     sa.Column("path", sa.String(1024)),
     sa.Column("at", sa.DateTime(timezone=True), nullable=False),
@@ -79,6 +83,9 @@ file_watch_events = sa.Table(
 )
 
 EventKind = Literal["new", "changed", "renamed", "removed", "failed"]
+FailureCode = Literal["too_large", "fetch_failed"]
+# The most refused files a watch remembers by size; past it a file is said again on its next listing.
+REFUSED_KEPT = 500
 # Why the retention process and the check process read past one tenant.
 WATCHES_DUE = "background process: the watch check process lists each tenant's watches with a check asked for"
 EVENTS_DUE = "background process: the retention process deletes each tenant's watch events past 90 days"
@@ -117,6 +124,7 @@ class WatchEvent(TypedDict):
     version: int | None
     kind: EventKind
     reason: str | None
+    code: FailureCode | None
     size: int | None
     path: str | None
     at: datetime
@@ -166,6 +174,7 @@ class WatchRow(Out):
     last_check_at: datetime | None
     last_outcome: dict[str, JsonValue] | None
     next_event: int
+    refused_sizes: dict[str, JsonValue] | None = None
     # The watch's files in Files now: its entries not removed at the source.
     files_in_files: int = 0
 
@@ -179,6 +188,7 @@ class EventRow(Out):
     version: int | None
     kind: str
     reason: str | None
+    code: str | None = None
     size: int | None
     path: str | None
     at: datetime
@@ -374,6 +384,21 @@ class WatchesStore(Store):
                 key=owner,
                 payload={"watchId": watch_id, "lastEvent": int(row[1]) - 1, "checkedAt": at.isoformat(), **outcome},
             )
+
+    async def refused_sizes(self, watch_id: str) -> dict[str, int]:
+        """{source id: size} of the watch's files refused for their size at the last check that saw them."""
+        async with self.tx() as c:
+            found = (await c.execute(sa.select(file_watches.c.refused_sizes).where(*self._mine(watch_id)))).scalar()
+        sizes = cast(dict[str, object], found or {})
+        return {k: v for k, v in sizes.items() if isinstance(v, int)}
+
+    async def save_refused_sizes(self, watch_id: str, *, owner: str, sizes: dict[str, int]) -> bool:
+        """Keeps at most REFUSED_KEPT of `sizes` as `owner`; false when it no longer holds the lease."""
+        kept = dict(list(sizes.items())[:REFUSED_KEPT])
+        w = file_watches
+        async with self.tx() as c:
+            q = sa.update(w).where(*self._mine(watch_id), w.c.lease_owner == owner).values(refused_sizes=kept or None)
+            return (await c.execute(q)).rowcount == 1
 
     async def add_events(self, watch_id: str, *, owner: str, events: list[WatchEvent]) -> int:
         """Numbers and writes `events` as `owner`, in one transaction with the counter; 0 when it lost the lease."""

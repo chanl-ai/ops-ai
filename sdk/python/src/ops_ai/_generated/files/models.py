@@ -90,6 +90,7 @@ class ErrorEnvelope(TypedDict, closed=True):
 
 
 class FailedFile(TypedDict, closed=True):
+    code: NotRequired[str | None]
     path: str | None
     reason: str | None
     size: int | None
@@ -469,6 +470,7 @@ class WatchChange(TypedDict, closed=True):
 
 class WatchEventView(TypedDict, closed=True):
     at: str
+    code: NotRequired[str | None]
     fileId: str | None
     kind: str
     number: int

@@ -388,3 +388,49 @@ async def test_a_file_that_fails_every_fetch_is_one_failed_event_and_the_check_s
     assert row is not None and row.place.get("last_full_at") == "2026-12-02T09:00:00+00:00"
     assert [(e.kind, e.path) for e in events] == [("failed", "b.pdf"), ("removed", "c.pdf"), ("new", "Invoices/b.pdf")]
     assert (last.status, last.brought) == ("success", 1)
+
+
+async def test_a_file_refused_for_size_at_either_limit_is_one_failed_event_with_one_wording(
+    engine: AsyncEngine, tmp_path: Path, tenant: str
+) -> None:
+    reader = Recorded(
+        {None: {"items": [_row("a", "e1")], "next_cursor": None}},
+        {"drv!a": _file("a", "e1", b"a")},
+    )
+    checks, watch_id = await _setup(engine, tmp_path, tenant, reader)
+
+    def listing(c_size: int, c_etag: str) -> dict[str | None, Any]:
+        # b is over the listing's limit; c is under it but its answer is over the gateway's at fetch.
+        return {
+            None: {
+                "items": [
+                    _row("a", "e1"),
+                    _row("b", "e1", skipped="Larger than 25 MB", skipped_code="TOO_LARGE", size=31457280),
+                    _row("c", c_etag, size=c_size),
+                ],
+                "next_cursor": None,
+            }
+        }
+
+    with isolation.scope(tenant, TEAM):
+        await checks.check(watch_id)
+        clock[0] = datetime(2026, 12, 2, 9, 0, tzinfo=UTC)
+        reader.pages = listing(20971520, "e1")
+        reader.got["drv!c"] = Answer(False, code="RESPONSE_TOO_LARGE", message="The answer is over 25 MB.")
+        first = await checks.check(watch_id)
+        # Listed whole again a week on at the same sizes: nothing new to say, and c is not fetched again.
+        clock[0] = datetime(2026, 12, 10, 9, 0, tzinfo=UTC)
+        await checks.check(watch_id)
+        # c grows, a new version at the source: it is said once more.
+        reader.pages = listing(22020096, "e2")
+        clock[0] = datetime(2026, 12, 18, 9, 0, tzinfo=UTC)
+        await checks.check(watch_id)
+        events = await WatchesStore(engine).events(watch_id, after=1)
+    assert [(e.kind, e.path, e.code, e.reason) for e in events] == [
+        ("failed", "b.pdf", "too_large", "Larger than 25 MB"),
+        ("failed", "c.pdf", "too_large", "Larger than 18 MB"),
+        ("failed", "c.pdf", "too_large", "Larger than 18 MB"),
+    ]
+    assert [e.size for e in events][-1] == 22020096
+    assert [f.get("code") for f in first.failures] == ["too_large", "too_large"]
+    assert reader.fetched().count("drv!c") == 2

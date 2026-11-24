@@ -47,6 +47,9 @@ CHUNK = 4
 LEASE_S = 300.0
 # Error codes a fetch answers for a file larger than the gateway carries.
 TOO_LARGE = {"TOO_LARGE", "RESPONSE_TOO_LARGE", "PAYLOAD_TOO_LARGE"}
+# The largest file a fetch brings in: tools-service refuses an answer over 25 MB (MAX_RESPONSE_BYTES), and a file's
+# bytes travel base64 encoded, a third larger, so a file over about 18 MB is refused at fetch.
+FETCH_LIMIT_MB = 18
 
 
 def source_key(connection_id: str | None, source_id: str) -> str:
@@ -131,7 +134,9 @@ class CheckOutcome:
     def fail(self, event: WatchEvent) -> None:
         self.failed += 1
         if len(self.failures) < FAILURES_KEPT:
-            self.failures.append({"path": event["path"], "size": event["size"], "reason": event["reason"]})
+            self.failures.append(
+                {"path": event["path"], "size": event["size"], "reason": event["reason"], "code": event["code"]}
+            )
 
     def as_json(self) -> dict[str, JsonValue]:
         return cast(dict[str, JsonValue], dataclasses.asdict(self))
@@ -207,6 +212,8 @@ class WatchChecks:
         place = Place(**cast(dict[str, object], watch.place)) if watch.place else Place()  # pyright: ignore[reportArgumentType]
         counts = {"listed": 0, "unchanged": 0, "skipped": 0, "failed": 0}
         gets = _Gets(self.reader, tools.get)
+        refused = await self.watches.refused_sizes(watch_id)
+        refused_before = dict(refused)
         try:
             listing = await read_changes(
                 gets,
@@ -279,20 +286,35 @@ class WatchChecks:
                 then=then,
             )
             state.by_id[source_id] = HeldSource(file_id, str(r.get("marker") or ""), None, 0, name, False)
+            refused.pop(source_id, None)
             if version is not None:
                 outcome.brought += 1
 
         # Every file the listing refused is kept from removal; only a refusal for its size is a failed event, since a
         # file a folder's rule leaves out was never meant to come in.
+        # A file refused for its size is said once per size: listed again at the size it was refused at, it is
+        # neither a new event nor fetched again.
         skipped_ids: set[str] = set()
         for r in listing.skipped:
             skipped_ids.add(str(r["id"]))
             if r.get("skipped_code") not in TOO_LARGE:
                 continue
             held = state.by_id.get(str(r["id"]))
-            reason = str(r.get("skipped") or "")
-            failed.append(_event(held.file_id if held else None, None, "failed", reason, _size_of(r), _title(r), now))
-            outcome.fail(failed[-1])
+            reason = str(r.get("skipped") or "") or "Too large to bring in"
+            event = _event(
+                held.file_id if held else None, None, "failed", reason, _size_of(r), _title(r), now, code="too_large"
+            )
+            outcome.fail(event)
+            if _said(refused, str(r["id"]), _size_of(r)):
+                failed.append(event)
+        for r in listing.changed:
+            if (size := _size_of(r)) is not None and refused.get(str(r["id"])) == size:
+                skipped_ids.add(str(r["id"]))
+        if skipped_ids & {str(r["id"]) for r in listing.changed}:
+            listing = dataclasses.replace(
+                listing, changed=[r for r in listing.changed if str(r["id"]) not in skipped_ids]
+            )
+        by_row = {str(r["id"]): r for r in listing.changed}
         gone_now: list[str] = []
         errors: list[SourceError] = []
         for start in range(0, len(listing.changed), CHUNK):
@@ -315,9 +337,9 @@ class WatchChecks:
                         outcome.stopped = "Stopped at the system's rate limit; the next check continues."
                     stop = True
                     continue
-                reason = answer.message or answer.code
+                reason, code = answer.message or answer.code, "fetch_failed"
                 if answer.code in TOO_LARGE:
-                    reason = f"Too large to bring in: {reason}"
+                    reason, code = f"Larger than {FETCH_LIMIT_MB} MB", "too_large"
                 elif source_id in done.retrying and outcome.status == "success":
                     # A file that could not be fetched for another reason is tried again on the next check.
                     outcome.status, outcome.code = "partial", "fetch_failed"
@@ -326,11 +348,21 @@ class WatchChecks:
                 held = state.by_id.get(source_id)
                 r = by_row.get(source_id, {})
                 event = _event(
-                    held.file_id if held else None, None, "failed", reason, _size_of(r), _title(r, source_id), now
+                    held.file_id if held else None,
+                    None,
+                    "failed",
+                    reason,
+                    _size_of(r),
+                    _title(r, source_id),
+                    now,
+                    code=code,
                 )
                 outcome.fail(event)
                 # One failed event per version: a check that tries it again names it on the row, not as a new event.
-                if source_id in done.failed_first:
+                if code == "too_large":
+                    if _said(refused, source_id, _size_of(r)):
+                        failed.append(event)
+                elif source_id in done.failed_first:
                     failed.append(event)
             gets.failed.clear()
             if failed and not await self.watches.add_events(watch.id, owner=owner, events=failed):
@@ -354,6 +386,14 @@ class WatchChecks:
 
         await self.store.remove_sources([h.file_id for h in gone], now, then=removals)
         outcome.removed = len(gone)
+        if listing.full and listing.whole:
+            # A file no longer listed is forgotten, so it is said again if it comes back.
+            listed = set(listing.seen) | skipped_ids
+            refused = {i: n for i, n in refused.items() if i in listed}
+        if refused != refused_before and not await self.watches.save_refused_sizes(
+            watch.id, owner=owner, sizes=refused
+        ):
+            raise LeaseLost(watch.id)
         listing.settle(place, outcome.status)
         await state.save(place)
         return outcome
@@ -396,8 +436,24 @@ def _listing_code(listing: Listing) -> str:
     return "list_failed" if listing.status != "success" else ""
 
 
+def _said(refused: dict[str, int], source_id: str, size: int | None) -> bool:
+    """True, remembering the size, when a size refusal of the file has not been said at this size."""
+    if size is not None and refused.get(source_id) == size:
+        return False
+    refused[source_id] = size if size is not None else -1
+    return True
+
+
 def _event(  # noqa: PLR0917 - one event row, every column given
-    file_id: str | None, version: int | None, kind: str, reason: str | None, size: int | None, path: str, at: datetime
+    file_id: str | None,
+    version: int | None,
+    kind: str,
+    reason: str | None,
+    size: int | None,
+    path: str,
+    at: datetime,
+    *,
+    code: str | None = None,
 ) -> WatchEvent:
     return cast(
         WatchEvent,
@@ -406,6 +462,7 @@ def _event(  # noqa: PLR0917 - one event row, every column given
             "version": version,
             "kind": kind,
             "reason": (reason or None) and reason[:500],
+            "code": code,
             "size": size,
             "path": path[:1024],
             "at": at,
