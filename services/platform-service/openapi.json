@@ -31,6 +31,7 @@
       },
       "AccessCheckIn": {
         "additionalProperties": false,
+        "description": "The person by id, or by work email: a service deciding a request knows only the asker's address.",
         "properties": {
           "action": {
             "maxLength": 16,
@@ -41,6 +42,20 @@
             "maxLength": 32,
             "title": "Area",
             "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "minLength": 3,
+                "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
           },
           "owner": {
             "anyOf": [
@@ -55,9 +70,16 @@
             "title": "Owner"
           },
           "personId": {
-            "pattern": "^[A-Za-z0-9_\\-]{1,64}$",
-            "title": "Personid",
-            "type": "string"
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_\\-]{1,64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Personid"
           },
           "requestedBy": {
             "anyOf": [
@@ -73,7 +95,6 @@
           }
         },
         "required": [
-          "personId",
           "area",
           "action"
         ],
@@ -6227,7 +6248,7 @@
     },
     "/v1/access/check": {
       "post": {
-        "description": "Whether a person may take `area.action` in the team the request acts in, by the same `can()` the\nservices run with the workspace's policies: allowed with the granting roles, or refused with the reason. The\ncaller needs access.view there; each check is audited as access.check.",
+        "description": "Whether a person may take `area.action` in the team the request acts in, by the same `can()` the\nservices run with the workspace's policies: allowed with the granting roles, or refused with the reason. A\nperson caller needs access.view there and each check is audited as access.check. A service token needs the\n`access:view` scope and a team, and names the person by `email`: tools-service asks whether an asker may\ndecide their own request at the moment it is decided.",
         "operationId": "access_check_access",
         "parameters": [
           {

@@ -9,8 +9,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from ops_access import BY_KEY, Access, EffectiveAnswer, effective_answer, publish_mode, requester_may_decide, team_on
-from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable, principal_of
+from ops_access import Access, EffectiveAnswer, effective_answer, publish_mode, team_on
+from ops_identity import Principal, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import Json
 from ops_service_kit.narrow import json_object
@@ -171,68 +171,10 @@ def tool_mode(op: Operation) -> str | None:
 
 
 def approves_own_writes(access: Access, p: Principal) -> bool:
-    """Whether the caller is their own approver: a person holding reviews.decide in the team they
-    act in, as one who decides the team's reviews, while the requesterMayDecide policy lets an asker decide (off, the
-    four-eyes rule, someone else decides). A service or an API key never is."""
+    """Whether the caller is their own approver by their token: a person holding reviews.decide and Approvals decide in
+    the team they act in. The gateway confirms it live (`OwnRequests`) before a write skips its approval. A service or
+    an API key never is."""
     return p.kind == "person" and access.may(p, "reviews", "decide", requested_by=(p.email,))
-
-
-def asker_refusal(
-    access: Access, asker: ActingForPerson, tenant_id: str, approvers: list[str], *, may_decide: bool
-) -> Forbidden | None:
-    """The refusal `can` gives when an approval names the person the call acts for and requesterMayDecide, read at the
-    call (`may_decide`), does not let an asker decide; None when someone else approved or the policy allows it. Only
-    the separation-of-duties part counts here: the approver's role was checked when the approval was given. The asker
-    holds the roles their acting-for token carries, so an Admin of the team passes as `can` lets them."""
-    return own_request_refusal(
-        access,
-        tenant_id,
-        asker.email,
-        approvers,
-        may_decide=may_decide,
-        team_id=asker.team_id,
-        what="this write",
-        person=principal_of(asker, tenant_id),
-    )
-
-
-def own_request_refusal(
-    access: Access,
-    tenant_id: str,
-    asker: str,
-    deciders: Iterable[str | None],
-    *,
-    may_decide: bool,
-    sub: str | None = None,
-    name: str = "",
-    team_id: str | None = None,
-    what: str = "this",
-    person: Principal | None = None,
-) -> Forbidden | None:
-    """`can(requested_by=)`'s own_request refusal when one of `deciders` is `asker` (an email) and requesterMayDecide,
-    read live by the caller (`may_decide`), does not let an asker decide; None otherwise. The decider's role is checked
-    where the decision is made, so any other refusal `can` gives here does not count. `person` is the asker with the
-    roles a token says they hold (an Admin of the team decides their own request); without it they hold none."""
-    if not asker or asker.casefold() not in {str(d).casefold() for d in deciders if d}:
-        return None
-    held = person or Principal(
-        kind="person",
-        sub=sub or asker,
-        email=asker,
-        name=name or asker,
-        tenant_id=tenant_id,
-        team_id=team_id,
-        team_ids=[team_id] if team_id else [],
-        roles={},
-        scopes=[],
-        auth_method="session",
-    )
-    person = held.model_copy(update={"policies": {**held.policies, "requesterMayDecide": may_decide}})
-    try:
-        access.can(person, "reviews", "decide", team=team_id, requested_by=[asker], what=what)
-    except Forbidden as refused:
-        return refused if refused.code == "own_request" else None
-    return None
 
 
 def app_ids(module: ModuleColumns) -> set[str]:
@@ -263,26 +205,34 @@ class CheckBeforeSend:
             return True
 
 
-class RequesterMayDecide:
-    def __init__(self, platform: ServiceClient | None, *, dev: Json | None = None) -> None:
-        """The tenant's `requesterMayDecide`, read live from platform-service, for decisions this service
-        applies on a workflow's behalf (a tool access request), where the deciding person's token is not here.
-        With no platform-service (dev sign-in) it is the dev policies (OPS_DEV_POLICIES) at their open default, the
-        value a dev caller's own identity carries to every other decision."""
+class OwnRequests:
+    def __init__(self, platform: ServiceClient | None) -> None:
+        """Whether a request's asker may decide it themselves, asked of platform-service's access check
+        (POST /v1/access/check, this service's `access:view` token for the tenant and the deciding team) when the
+        decision is made: the asker holds Approvals decide there now, whatever a token minted earlier says. With no
+        platform-service (dev sign-in) every caller is the dev caller, which holds every cell (register E09)."""
         self.platform = platform
-        self.dev = dev or {}
 
-    async def allowed(self, tenant_id: str, team_id: str | None = None) -> bool:
-        """Whether whoever asked in `team_id` may also decide, read by `requester_may_decide`, the one reader of the
-        value's shape: the team's own part over the workspace's `*`, off while the Security team's floor
-        (`approvalsFloor`) locks it. A policy or floor that cannot be read counts as off: a person never decides their
-        own request because a read failed."""
+    async def refusal(
+        self, tenant_id: str, team_id: str | None, asker: str, deciders: Iterable[str | None], *, what: str = "this"
+    ) -> Forbidden | None:
+        """403 `own_request` when one of `deciders` is `asker` (an email) and the asker may not decide their own
+        request in `team_id`; None otherwise. Only that refusal counts: the decider's role was checked where the
+        decision was made. A check that cannot be made refuses, so a failed read never lets someone approve their own
+        request."""
+        if not asker or asker.casefold() not in {str(d).casefold() for d in deciders if d}:
+            return None
         if self.platform is None:
-            value = self.dev.get("requesterMayDecide", BY_KEY["requesterMayDecide"].default)
-            return requester_may_decide(value, team_id, REVIEWS, self.dev.get("approvalsFloor"))
+            return None
+        fallback = Forbidden(f"You asked for {what}, so someone else has to decide it.", code="own_request")
+        if team_id is None:
+            return fallback
+        body = {"email": asker, "area": REVIEWS, "action": "decide", "requestedBy": asker}
         try:
-            data = await self.platform.get("/v1/policies/requesterMayDecide", tenant=tenant_id)
-            floor = await self.platform.get("/v1/policies/approvalsFloor", tenant=tenant_id)
-            return requester_may_decide(data.get("value"), team_id, REVIEWS, floor.get("value"))
-        except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
-            return False
+            data = await self.platform.post("/v1/access/check", body, tenant=tenant_id, team=team_id)
+        except (ServiceCallError, ServiceUnreachable):
+            return fallback
+        refused = json_object(json_object(data).get("refusedBy"))
+        if refused.get("code") == "own_request":
+            return Forbidden(str(refused.get("reason") or fallback.message), code="own_request")
+        return None

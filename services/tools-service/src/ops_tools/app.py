@@ -54,7 +54,7 @@ from .held_hosts import install_held_hosts
 from .mcp_server import McpAdapter
 from .mocks import MockAnswers
 from .modules.directory import Directory, Sees
-from .modules.policy import RequesterMayDecide, WriteApprovals, approves_own_writes
+from .modules.policy import OwnRequests, WriteApprovals, approves_own_writes
 from .modules.service import ModuleService
 from .opa import POLICY_FILE, OpaClient, PolicyMismatchError, policy_hash, registered_identities
 from .plugins.executor import PluginExecutor
@@ -258,7 +258,7 @@ def create_gateway_app(
     cors_origins: tuple[str, ...] = (),
     background: tuple[Callable[[], Coroutine[Any, Any, None]], ...] = (),
     write_approvals: WriteApprovals | None = None,
-    requester_policy: RequesterMayDecide | None = None,
+    own_requests: OwnRequests | None = None,
     send_check: SendCheck | None = None,
     authenticator: Authenticator | None = None,
     directory: Directory | None = None,
@@ -281,8 +281,8 @@ def create_gateway_app(
     runs beside the server from start-up and is cancelled at shutdown (the copy of reviews into Reviews).
     `write_approvals` reads each team's appChanges and appChangesByApp live; without it only a tool's own setting
     decides.
-    `requester_policy` reads the tenant's requesterMayDecide live, so an approval the asker gave themselves is checked
-    again at the call; without it the dev policies decide.
+    `own_requests` asks platform-service whether a write's asker holds Approvals decide now, so an approval the asker
+    gave themselves is checked again at the call; without it (dev sign-in) the dev caller holds every cell.
     `authenticator` signs a module's calls in through its connection; without it a connection adds nothing.
     `directory` holds the teams the MCP adapter scopes each assistant's tools to; without it no /mcp.
     `flags` are the install's feature flags, none on unless given: /mcp is served only with `mcp_gateway` on.
@@ -338,8 +338,8 @@ def create_gateway_app(
         clock=clock,
         approvals=write_approvals,
         approver=approver,
-        # An approval the asker gave themselves counts only while today's policy lets an asker decide.
-        requester_may_decide=(requester_policy or RequesterMayDecide(None, dev=Settings().dev_policies)).allowed,
+        # An approval the asker gave themselves counts only while they hold Approvals decide now.
+        own_requests=own_requests,
     )
     if modules is not None:
         # A tool page's Real run is this gateway's call, never a path of the registry's own.

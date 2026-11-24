@@ -104,7 +104,7 @@ from . import openapi
 from .directory import Directory, Team, owns_module
 from .discovered import Discovered, DiscoveredOperation, DiscoverySummary, PublicDiscovered, PublicOperation
 from .executions import CallRowJson, DayJson, ModuleActivityJson, call_row
-from .policy import PublishPolicy, RequesterMayDecide, ToolsMode, WriteApprovals, own_request_refusal, tool_mode
+from .policy import OwnRequests, PublishPolicy, ToolsMode, WriteApprovals, tool_mode
 from .review_events import ACCESS_REQUESTED, access_event, policy_changed_event
 from .reviews import ReviewOpener
 from .schemas import (
@@ -832,7 +832,7 @@ class ModuleService:
         workflows: WorkflowDirectory | None = None,
         reviews: ReviewOpener | None = None,
         publish_policy: PublishPolicy | None = None,
-        requester_policy: RequesterMayDecide | None = None,
+        own_requests: OwnRequests | None = None,
         auth: Authenticator | None = None,
     ) -> None:
         """`egress` and `http` are what discovery and the test console's real reads go through: the same policy and
@@ -852,8 +852,9 @@ class ModuleService:
         # The team's publish-review mode, read live from platform-service on each publish. Without a
         # reader (no platform URL, the tests) a publish follows the default "major": a major version waits.
         self.publish_policy = publish_policy
-        # requesterMayDecide for access decisions applied for a workflow; without it the asker never decides.
-        self.requester_policy = requester_policy
+        # Whether an access request's asker may decide it, read live (__main__ always gives one); without it the asker
+        # never decides.
+        self.own_requests = own_requests
         # The tenant's connections, in this service's own database.
         self.connections = ConnectionStore(store.engine)
         # The Tools list, chosen and paged in SQL.
@@ -2755,8 +2756,7 @@ class ModuleService:
         """A tool access review's decision from Human Tasks, applied to the module's approval: approved grants
         it, anything else ends the request. Applying the same decision again changes nothing; a request already ended
         another way (revoked, or decided otherwise) is refused, so a late approval never revives a revoked grant.
-        `acting_for` is the person the call acts for, with the roles their acting-for token holds in the deciding team:
-        when that person is the asker, `can` reads those roles, so an Admin of the team decides their own request."""
+        `acting_for` is the person the call acts for; whether the asker may decide their own request is read live."""
         m = await self.store.get_any(tenant_id, module_id)
         if m is None:
             raise NotFound("Tool module")
@@ -2767,23 +2767,15 @@ class ModuleService:
             # The system workflow runs in the deciding team; a run in another team decides nothing here.
             raise Forbidden("This request is decided by another team.", code="team_forbidden")
         asker = str(a.get("requested_by_email") or "")
+        # Separation of duties at the moment of the decision: the asker decides their own request only while they
+        # hold Approvals decide in the deciding team, as platform-service answers now (never a token's copy).
         if asker and asker.casefold() in {str(d).casefold() for d in (*deciders, by or "")}:
-            # Separation of duties through can(requested_by=), with requesterMayDecide read now rather than from a
-            # token: the asker decides their own request only while it is on.
-            may_decide = self.requester_policy is not None and await self.requester_policy.allowed(
-                tenant_id, a.get("decider_team") or team_id
-            )
-            refused = own_request_refusal(
-                Access(),
-                tenant_id,
-                asker,
-                (*deciders, by),
-                may_decide=may_decide,
-                team_id=a.get("decider_team"),
-                what="this access",
-                person=acting_for
-                if acting_for is not None and acting_for.email.casefold() == asker.casefold()
-                else None,
+            refused = (
+                await self.own_requests.refusal(
+                    tenant_id, a.get("decider_team") or team_id, asker, (*deciders, by), what="this access"
+                )
+                if self.own_requests is not None
+                else Forbidden("You asked for this access, so someone else has to decide it.", code="own_request")
             )
             if refused is not None:
                 raise refused

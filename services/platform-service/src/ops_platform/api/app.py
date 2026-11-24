@@ -820,13 +820,35 @@ def create_public_app(
 
     @app.post("/v1/access/check", tags=["access"], response_model=Envelope[AccessCheckOut], responses=ERRORS)
     async def check_access(  # pyright: ignore[reportUnusedFunction]
-        _: Tx, body: AccessCheckIn, actor: Annotated[Actor, Depends(acting)]
+        _: Tx,
+        request: Request,
+        body: AccessCheckIn,
+        token: Annotated[str, Depends(_bearer)],
+        x_team_id: Annotated[str | None, Header()] = None,
     ) -> Any:
         """Whether a person may take `area.action` in the team the request acts in, by the same `can()` the
-        services run with the workspace's policies: allowed with the granting roles, or refused with the reason. The
-        caller needs access.view there; each check is audited as access.check."""
+        services run with the workspace's policies: allowed with the granting roles, or refused with the reason. A
+        person caller needs access.view there and each check is audited as access.check. A service token needs the
+        `access:view` scope and a team, and names the person by `email`: tools-service asks whether an asker may
+        decide their own request at the moment it is decided."""
         if body.area not in AREAS or body.action not in ACTIONS:
             raise ValidationFailed(f"{body.area}.{body.action} is not in the catalogue.", code="unknown_cell")
+        if readers.signs(token):
+            svc = await service_of(token)
+            if "access:view" not in svc.scopes:
+                raise Forbidden("This service token does not hold the access:view scope.", code="scope_required")
+            if svc.team_id is None or body.email is None:
+                raise ValidationFailed(
+                    "A service checks one person by email in its token's team.", code="team_required"
+                )
+            return ok(
+                await checker.for_service(
+                    svc.tenant_id, svc.team_id, body.email, body.area, body.action, requested_by=body.requested_by
+                )
+            )
+        if body.person_id is None:
+            raise ValidationFailed("Give the person's id.", code="person_required")
+        actor = await acting(await claims_of(request, token), x_team_id)
         return ok(
             await checker.check(
                 actor, body.person_id, body.area, body.action, owner=body.owner, requested_by=body.requested_by

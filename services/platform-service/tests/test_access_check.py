@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from ops_identity import dev_service_signer, mint_service_token
+
 from .conftest import DEMO_PASSWORD, SignInRig
 
 
@@ -106,3 +108,30 @@ async def test_whom_to_ask_never_names_the_caller(signin: SignInRig) -> None:
     held = await signin.public.get("/v1/access/holders?area=access&action=manage", headers=signin.admin)
     assert held.status_code == 200, held.text
     assert email not in [h["email"] for h in held.json()["data"]["holders"]], held.json()["data"]["holders"]
+
+
+async def test_a_service_asks_by_email_in_its_tokens_team_and_needs_access_view(signin: SignInRig) -> None:
+    """tools-service decides a request on a workflow's behalf and knows only the asker's address: its token names the
+    tenant and the deciding team, and the answer is the same can() a person's check gives."""
+    approver_email = f"svc.approver@{signin.zone}"
+    approver = await signin.person(approver_email, role="approver")
+    team = await _team_of(signin, approver)
+
+    def svc(scopes: list[str], tenant: str = signin.tenant) -> dict[str, str]:
+        token = mint_service_token(
+            dev_service_signer(), service="tools", audience="platform", tenant_id=tenant, scopes=scopes, team_id=team
+        )
+        return {"Authorization": f"Bearer {token}"}
+
+    own = {"email": approver_email, "area": "reviews", "action": "decide", "requestedBy": approver_email}
+    r = await signin.public.post("/v1/access/check", json=own, headers=svc(["access:view"]))
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["refusedBy"]["code"] == "own_request", r.text
+    other = await signin.public.post(
+        "/v1/access/check", json={**own, "requestedBy": "someone@else.test"}, headers=svc(["access:view"])
+    )
+    assert other.json()["data"]["allowed"] is True, other.text
+    no_scope = await signin.public.post("/v1/access/check", json=own, headers=svc(["settings:view"]))
+    assert (no_scope.status_code, no_scope.json()["error"]["code"]) == (403, "scope_required"), no_scope.text
+    elsewhere = await signin.public.post("/v1/access/check", json=own, headers=svc(["access:view"], "ten_other"))
+    assert elsewhere.status_code in (403, 404), elsewhere.text

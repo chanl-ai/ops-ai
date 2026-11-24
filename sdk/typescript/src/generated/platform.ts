@@ -53,8 +53,10 @@ export interface paths {
         /**
          * Check Access
          * @description Whether a person may take `area.action` in the team the request acts in, by the same `can()` the
-         *     services run with the workspace's policies: allowed with the granting roles, or refused with the reason. The
-         *     caller needs access.view there; each check is audited as access.check.
+         *     services run with the workspace's policies: allowed with the granting roles, or refused with the reason. A
+         *     person caller needs access.view there and each check is audited as access.check. A service token needs the
+         *     `access:view` scope and a team, and names the person by `email`: tools-service asks whether an asker may
+         *     decide their own request at the moment it is decided.
          */
         post: operations["access_check_access"];
         delete?: never;
@@ -1632,16 +1634,21 @@ export interface components {
             /** Password */
             password?: string | null;
         };
-        /** AccessCheckIn */
+        /**
+         * AccessCheckIn
+         * @description The person by id, or by work email: a service deciding a request knows only the asker's address.
+         */
         AccessCheckIn: {
             /** Action */
             action: string;
             /** Area */
             area: string;
+            /** Email */
+            email?: string | null;
             /** Owner */
             owner?: string | null;
             /** Personid */
-            personId: string;
+            personId?: string | null;
             /** Requestedby */
             requestedBy?: string | null;
         };

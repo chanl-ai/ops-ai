@@ -51,7 +51,7 @@ from .mcp_links import mcp_links_router
 from .mcp_server import platform_tools
 from .mock_routes import mocks_router
 from .modules.directory import Directory
-from .modules.policy import CheckBeforeSend, PublishPolicy, RequesterMayDecide, WriteApprovals
+from .modules.policy import CheckBeforeSend, OwnRequests, PublishPolicy, WriteApprovals
 from .modules.review_handoff import keep_handing_over
 from .modules.reviews import Reviews
 from .modules.routes import executions_router, modules_router
@@ -125,6 +125,10 @@ def main() -> None:
         http = httpx.AsyncClient(base_url=base_url, timeout=5)
         return ServiceClient.for_settings(settings, http, service="tools", audience=audience, scopes=scopes, timeout=5)
 
+    # Whether a request's asker may decide it themselves, asked of platform-service when it is decided (access:view).
+    own_requests = OwnRequests(
+        client("platform", settings.platform_url, ["access:view"]) if settings.platform_url else None
+    )
     # The account's egressNewHosts policy decides an unlisted host (ask Security, builders, any public host, block).
     new_hosts = (
         NewHosts(client("platform", settings.platform_url, ["settings:view"])) if settings.platform_url else None
@@ -168,10 +172,7 @@ def main() -> None:
         publish_policy=PublishPolicy(client("platform", settings.platform_url, ["settings:view"]))
         if settings.platform_url
         else None,
-        requester_policy=RequesterMayDecide(
-            client("platform", settings.platform_url, ["settings:view"]) if settings.platform_url else None,
-            dev=settings.dev_policies,
-        ),
+        own_requests=own_requests,
         auth=authenticator,
     )
     # A plugin's sign-in, token and test requests reach the hosts it declares without the tenant listing them.
@@ -276,10 +277,7 @@ def main() -> None:
         review_key=settings.review_key.get_secret_value(),
         auth=Auth.from_settings(settings, audience="tools"),
         write_approvals=write_approvals,
-        requester_policy=RequesterMayDecide(
-            client("platform", settings.platform_url, ["settings:view"]) if settings.platform_url else None,
-            dev=settings.dev_policies,
-        ),
+        own_requests=own_requests,
         # Check before sending: the team's checkBeforeSend read live, its sending policy here, and the judge on
         # this service's own model key; with no models-service, a team with the setting on has every write wait.
         send_check=SendCheck(

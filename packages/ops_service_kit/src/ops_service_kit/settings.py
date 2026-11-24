@@ -566,6 +566,9 @@ class Settings(BaseSettings):
                 "workflows:create",
                 "guardrails:create",
                 "workflows:run",
+                # access:view: platform-service's access check, asked when a request is decided whether its asker
+                # holds Approvals decide there now (modules/policy.py `OwnRequests`).
+                "access:view",
             ],
             # events:emit: it reports a deleted file as a service event, which purges what was derived from it.
             "files": ["events:emit"],

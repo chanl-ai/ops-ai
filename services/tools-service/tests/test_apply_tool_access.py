@@ -13,13 +13,13 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_identity import ActingForPerson, dev_service_signer, mint_service_token, principal_of
+from ops_identity import ActingForPerson, ServiceUnreachable, dev_service_signer, mint_service_token, principal_of
 from ops_policy import input_hash
 from ops_policy.approval import Binding
 from ops_policy.approval import mint_approval as mint
 from ops_service_kit.errors import Forbidden
 from ops_tools.modules.directory import Directory
-from ops_tools.modules.policy import RequesterMayDecide
+from ops_tools.modules.policy import OwnRequests
 from ops_tools.modules.service import ModuleService
 from ops_tools.store import CallLog
 from ops_tools.store.modules import ModuleStore
@@ -150,66 +150,79 @@ async def test_the_requester_does_not_approve_their_own_request(gateway: Gateway
     assert (await _status(gateway, approval))["status"] == "requested"
 
 
-class RequesterPolicy(RequesterMayDecide):
-    def __init__(self, on: bool) -> None:
-        super().__init__(cast(Any, None))
-        self.on = on
+class Platform:
+    """platform-service's access check as tools-service asks it: whether `email` may decide their own request in the
+    token's team, answered from who holds Approvals decide there now."""
 
-    async def allowed(self, tenant_id: str, team_id: str | None = None) -> bool:
-        return self.on
+    def __init__(self, holders: set[str]) -> None:
+        self.holders = holders
+        self.asked: list[tuple[str, str | None, str]] = []
 
-
-async def test_the_requester_approves_their_own_request_only_while_the_policy_allows_it(
-    gateway: Gateway,  # noqa: F811
-    engine: AsyncEngine,
-    seed: dict[str, Any],
-) -> None:
-    """Separation of duties on an access request follows requesterMayDecide, as every other decision does."""
-    approval = await _ask(gateway)
-    m = await ModuleStore(engine).get(gateway.tenant, "mod_core_banking")
-    assert m is not None
-    asker = next(a for a in m["approvals"] if a["id"] == approval["id"])["requested_by_email"]
-    directory = Directory.from_seed(seed, datetime.now(UTC))
-
-    def service(on: bool) -> ModuleService:
-        return ModuleService(ModuleStore(engine), directory, CallLog(engine), requester_policy=RequesterPolicy(on))
-
-    kw: dict[str, Any] = {"approval_id": approval["id"], "decision": "approved", "reason": None, "by": asker}
-    with pytest.raises(Forbidden):
-        await service(False).apply_access_decision(gateway.tenant, "mod_core_banking", **kw)
-    applied = await service(True).apply_access_decision(gateway.tenant, "mod_core_banking", **kw)
-    assert applied["status"] == "approved", applied
+    async def post(self, path: str, json: Any = None, *, tenant: str, team: str | None = None) -> Any:
+        assert path == "/v1/access/check", path
+        self.asked.append((tenant, team, json["email"]))
+        if json["email"] in self.holders:
+            return {"allowed": True, "refusedBy": None}
+        reason = f"{json['email']} asked for this, so someone else has to decide it."
+        return {"allowed": False, "refusedBy": {"code": "own_request", "reason": reason}}
 
 
-async def test_with_no_platform_service_the_requester_policy_is_the_dev_policy_at_its_default() -> None:
-    """With no platform URL the decision followed no policy and always refused; it follows the dev policies,
-    as the dev caller's own identity does for every other decision."""
-    assert await RequesterMayDecide(None).allowed("t") is True, "the asker decides by default"
-    assert await RequesterMayDecide(None, dev={"requesterMayDecide": False}).allowed("t") is False
-
-
-async def test_an_admin_of_the_deciding_team_applies_her_own_request_while_the_two_person_rule_is_on(
-    gateway: Gateway,  # noqa: F811
-    engine: AsyncEngine,
-    seed: dict[str, Any],
-) -> None:
-    """The call acts for the asker with her acting-for roles; an Admin there decides her own request, as `can` says."""
-    approval = await _ask(gateway)
-    m = await ModuleStore(engine).get(gateway.tenant, "mod_core_banking")
+async def _asked(gw: Gateway, engine: AsyncEngine) -> tuple[dict[str, Any], str, str]:
+    approval = await _ask(gw)
+    m = await ModuleStore(engine).get(gw.tenant, "mod_core_banking")
     assert m is not None
     asked = next(a for a in m["approvals"] if a["id"] == approval["id"])
-    asker, team = asked["requested_by_email"], asked.get("decider_team")
-    assert asker and team, asked
-    admin = principal_of(
+    assert asked["requested_by_email"] and asked.get("decider_team"), asked
+    return approval, str(asked["requested_by_email"]), str(asked["decider_team"])
+
+
+def _service(engine: AsyncEngine, seed: dict[str, Any], platform: Platform) -> ModuleService:
+    directory = Directory.from_seed(seed, datetime.now(UTC))
+    return ModuleService(ModuleStore(engine), directory, CallLog(engine), own_requests=OwnRequests(cast(Any, platform)))
+
+
+async def test_a_lone_admin_decides_her_own_access_request_through_the_system_workflow(
+    gateway: Gateway,  # noqa: F811
+    engine: AsyncEngine,
+    seed: dict[str, Any],
+) -> None:
+    """The decision arrives through the system workflow with no roles of the asker's to read; whether she holds
+    Approvals decide in the deciding team is asked of platform-service now, so an Admin is approved."""
+    approval, asker, team = await _asked(gateway, engine)
+    platform = Platform({asker})
+    kw: dict[str, Any] = {"approval_id": approval["id"], "decision": "approved", "reason": None, "by": asker}
+    applied = await _service(engine, seed, platform).apply_access_decision(gateway.tenant, "mod_core_banking", **kw)
+    assert applied["status"] == "approved", applied
+    assert platform.asked == [(gateway.tenant, team, asker)], platform.asked
+
+
+async def test_an_asker_without_the_cell_is_refused_whatever_her_acting_for_token_claims(
+    gateway: Gateway,  # noqa: F811
+    engine: AsyncEngine,
+    seed: dict[str, Any],
+) -> None:
+    """A Builder whose acting-for token claims Admin of the team is refused own_request: the live answer decides, never
+    the token; a failed check refuses too."""
+    approval, asker, team = await _asked(gateway, engine)
+    claims_admin = principal_of(
         ActingForPerson(sub="usr_asker", email=asker, name=asker, team_id=team, access={"access": {team: ["admin"]}}),
         gateway.tenant,
     )
-    strict = ModuleService(
-        ModuleStore(engine),
-        Directory.from_seed(seed, datetime.now(UTC)),
-        CallLog(engine),
-        requester_policy=RequesterPolicy(False),
-    )
     kw: dict[str, Any] = {"approval_id": approval["id"], "decision": "approved", "reason": None, "by": asker}
-    applied = await strict.apply_access_decision(gateway.tenant, "mod_core_banking", acting_for=admin, **kw)
+    with pytest.raises(Forbidden) as refused:
+        await _service(engine, seed, Platform(set())).apply_access_decision(
+            gateway.tenant, "mod_core_banking", acting_for=claims_admin, **kw
+        )
+    assert refused.value.code == "own_request"
+
+    class Down(Platform):
+        async def post(self, path: str, json: Any = None, *, tenant: str, team: str | None = None) -> Any:
+            raise ServiceUnreachable("platform did not answer")
+
+    with pytest.raises(Forbidden) as down:
+        await _service(engine, seed, Down({asker})).apply_access_decision(gateway.tenant, "mod_core_banking", **kw)
+    assert down.value.code == "own_request"
+    applied = await _service(engine, seed, Platform({asker})).apply_access_decision(
+        gateway.tenant, "mod_core_banking", **kw
+    )
     assert applied["status"] == "approved", applied

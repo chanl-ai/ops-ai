@@ -579,12 +579,21 @@ class HoldersOut(Out):
 
 
 class AccessCheckIn(In):
-    person_id: str = Field(pattern=r"^[A-Za-z0-9_\-]{1,64}$")
+    """The person by id, or by work email: a service deciding a request knows only the asker's address."""
+
+    person_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_\-]{1,64}$")
+    email: str | None = Field(default=None, min_length=3, max_length=320, pattern=EMAIL)
     area: str = Field(max_length=32)
     action: str = Field(max_length=16)
     # The record's owner or creator (email), for an `own` scope; the person who asked, for separation of duties.
     owner: str | None = Field(default=None, max_length=320)
     requested_by: str | None = Field(default=None, max_length=320)
+
+    @model_validator(mode="after")
+    def _one_person(self) -> AccessCheckIn:
+        if (self.person_id is None) == (self.email is None):
+            raise ValueError("give either personId or email")
+        return self
 
 
 class CheckRefusal(Out):

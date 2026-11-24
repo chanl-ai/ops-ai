@@ -89,6 +89,21 @@ class AccessCheck:
         )
         return answer
 
+    async def for_service(
+        self, tenant: str, team: str, email: str, area: str, action: str, *, requested_by: str | None
+    ) -> AccessAnswer:
+        """The answer for the person with `email` in `team`, read now, for a service deciding a request on a
+        workflow's behalf (tools-service: may the asker decide their own request). The service's `access:view` scope
+        and the token's tenant and team stand in for the person caller's access.view; a read changes nothing, so it
+        writes no audit entry. 404 when nobody active in the tenant has the address."""
+        person = next(
+            (u for u in await self.identity.users_by_email(email) if u.tenant_id == tenant),
+            None,
+        )
+        if person is None:
+            raise NotFound("No person with that email.")
+        return await self._answer(tenant, team, person.id, area, action, owner=None, requested_by=requested_by)
+
     async def why(self, caller: Actor, area: str, action: str) -> AccessAnswer:
         """The caller's own answer for `area.action` in the team they act in, the roles that grant it there, and who
         in the team can give roles, never the caller: what a locked button says. Not audited, as a person reads only
