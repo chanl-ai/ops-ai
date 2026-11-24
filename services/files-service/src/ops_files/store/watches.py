@@ -122,6 +122,30 @@ class WatchEvent(TypedDict):
     at: datetime
 
 
+class LeaseLost(Exception):
+    """The check's lease passed to another check (it ran past its lease), so this one writes nothing more."""
+
+
+async def write_events(c: AsyncConnection, watch_id: str, *, owner: str, events: list[WatchEvent]) -> None:
+    """Numbers and writes `events` on `c` as `owner`, so a version and its event commit together; raises `LeaseLost`,
+    rolling the transaction back, when `owner` no longer holds the watch's lease."""
+    w, e = file_watches, file_watch_events
+    tenant = isolation.tenant()
+    mine = (w.c.tenant_id == tenant, w.c.id == watch_id, team_visible(w))
+    held = (await c.execute(locked(sa.select(w).where(*mine, w.c.lease_owner == owner), w))).mappings().first()
+    if held is None:
+        raise LeaseLost(watch_id)
+    if not events:
+        return
+    start = int(held["next_event"])
+    rows = [
+        {"tenant_id": tenant, "watch_id": watch_id, "number": start + i, "team": held["team"], **ev}
+        for i, ev in enumerate(events)
+    ]
+    await c.execute(sa.insert(e), rows)
+    await c.execute(sa.update(w).where(*mine).values(next_event=start + len(events)))
+
+
 class WatchRow(Out):
     tenant_id: str
     id: str
@@ -313,11 +337,16 @@ class WatchesStore(Store):
             )
             return (await c.execute(q)).rowcount == 1
 
-    async def save_place(self, watch_id: str, *, owner: str, place: dict[str, JsonValue]) -> bool:
-        """Keeps the place; false when `owner` lost the lease, so a check that ran over never overwrites a newer one."""
+    async def save_place(self, watch_id: str, *, owner: str, place: dict[str, JsonValue], seconds: float) -> bool:
+        """Keeps the place and renews the lease for `seconds`, so a long listing keeps its lease page by page; false
+        when `owner` lost the lease, so a check that ran over never overwrites a newer one."""
         w = file_watches
         async with self.tx() as c:
-            q = sa.update(w).where(*self._mine(watch_id), w.c.lease_owner == owner).values(place=place)
+            q = (
+                sa.update(w)
+                .where(*self._mine(watch_id), w.c.lease_owner == owner)
+                .values(place=place, lease_until=db_after(seconds))
+            )
             return (await c.execute(q)).rowcount == 1
 
     async def finish(self, watch_id: str, *, owner: str, outcome: dict[str, JsonValue], at: datetime) -> None:
@@ -350,27 +379,11 @@ class WatchesStore(Store):
         """Numbers and writes `events` as `owner`, in one transaction with the counter; 0 when it lost the lease."""
         if not events:
             return 0
-        w, e = file_watches, file_watch_events
-        async with self.tx() as c:
-            q = locked(sa.select(w).where(*self._mine(watch_id), w.c.lease_owner == owner), w)
-            held = (await c.execute(q)).mappings().first()
-            if held is None:
-                return 0
-            start = int(held["next_event"])
-            await c.execute(
-                sa.insert(e),
-                [
-                    {
-                        "tenant_id": isolation.tenant(),
-                        "watch_id": watch_id,
-                        "number": start + i,
-                        "team": held["team"],
-                        **ev,
-                    }
-                    for i, ev in enumerate(events)
-                ],
-            )
-            await c.execute(sa.update(w).where(*self._mine(watch_id)).values(next_event=start + len(events)))
+        try:
+            async with self.tx() as c:
+                await write_events(c, watch_id, owner=owner, events=events)
+        except LeaseLost:
+            return 0
         return len(events)
 
     async def events(self, watch_id: str, *, after: int = 0, limit: int = 100) -> list[EventRow]:

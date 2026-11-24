@@ -10,7 +10,7 @@ by tenant and, through `team_visible`, by team, so it seeks on its index."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, ClassVar, NamedTuple, NotRequired, TypedDict
 
@@ -153,6 +153,11 @@ class HeldSource(NamedTuple):
     gone_count: int
     name: str
     removed: bool
+
+
+# What runs in a source version's own transaction once it is written: (connection, file id, the version's number, or
+# None when the bytes matched the newest version).
+Written = Callable[[AsyncConnection, str, "int | None"], Awaitable[None]]
 
 
 class SourceVersion(TypedDict):
@@ -819,12 +824,20 @@ class FilesStore(Store):
             )
 
     async def put_source_version(
-        self, team: str, new_file: NewUpload, found: SourceFile, version: SourceVersion
+        self,
+        team: str,
+        new_file: NewUpload,
+        found: SourceFile,
+        version: SourceVersion,
+        *,
+        then: Written | None = None,
     ) -> tuple[str, int | None]:
         """Writes what a check fetched for one source file: found by its source key only, never by its bytes, so two
         folders holding the same bytes are two entries. Bytes the same as the newest version write no version and
         answer (file id, None); else the next version is written unscanned and answered with its number. The entry's
-        name, path and access list follow the source either way. `new_file` is the row written when the key is new."""
+        name, path and access list follow the source either way. `new_file` is the row written when the key is new.
+        `then(c, file_id, number)` runs in the same transaction (a watch writes the version's event there), so what it
+        raises writes nothing."""
         tenant = isolation.tenant()
         f, v = files, file_versions
         where = (f.c.tenant_id == tenant, f.c.team == team, f.c.source_scope == "source",
@@ -863,6 +876,8 @@ class FilesStore(Store):
                 newest = (await c.execute(q.order_by(v.c.version.desc()).limit(1))).first()
                 await c.execute(sa.update(f).where(*where).values(**follows))
                 if newest is not None and newest.digest == version["digest"]:
+                    if then is not None:
+                        await then(c, file_id, None)
                     return file_id, None
             number = (newest.version if newest is not None else 0) + 1
             await c.execute(sa.update(v).where(v.c.tenant_id == tenant, v.c.file_id == file_id).values(current=False))
@@ -885,6 +900,8 @@ class FilesStore(Store):
                     storage_key=version["storage_key"],
                 )
             )
+            if then is not None:
+                await then(c, file_id, number)
         return file_id, number
 
     async def held_sources(self, team: str, watch_id: str) -> dict[str, HeldSource]:
@@ -913,8 +930,11 @@ class FilesStore(Store):
                 sa.update(files).where(files.c.tenant_id == isolation.tenant(), files.c.id == file_id).values(**given)
             )
 
-    async def remove_sources(self, file_ids: Sequence[str], at: datetime) -> None:
-        """Marks source files removed at the source; each entry stays for its retention."""
+    async def remove_sources(
+        self, file_ids: Sequence[str], at: datetime, *, then: Callable[[AsyncConnection], Awaitable[None]] | None = None
+    ) -> None:
+        """Marks source files removed at the source; each entry stays for its retention. `then(c)` runs in the same
+        transaction (a watch writes the removals' events there)."""
         if not file_ids:
             return
         f = files
@@ -924,6 +944,8 @@ class FilesStore(Store):
                 .where(f.c.tenant_id == isolation.tenant(), f.c.id.in_(list(file_ids)), f.c.removed_at.is_(None))
                 .values(removed_at=at)
             )
+            if then is not None:
+                await then(c)
 
     async def released_due(self, purposes: Sequence[str], today: date) -> list[tuple[str, str, str]]:
         """(tenant, team, file id) of every available file of `purposes` whose date has passed; whether each may go

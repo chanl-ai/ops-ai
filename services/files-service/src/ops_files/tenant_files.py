@@ -99,6 +99,7 @@ from ops_files.store import (
     UploadClaim,
     UploadCompleted,
 )
+from ops_files.store.files import Written
 from ops_service_kit.http import OptionsPage, Pagination, options_page, options_window
 from ops_service_kit.listing import ListParams
 from ops_storage.base import ObjectExistsError, StreamingObjectStore
@@ -853,11 +854,13 @@ class TenantFiles:
     # ── watched folders ──
 
     async def put_source(
-        self, tenant: str, team: str, found: SourceFile, content: bytes, *, actor: str
+        self, tenant: str, team: str, found: SourceFile, content: bytes, *, actor: str, then: Written | None = None
     ) -> tuple[str, int | None]:
         """What a check fetched for one source file, written as that file's next version: found by its source key
         only, never by its bytes. The same bytes as the newest version write nothing and answer (file id, None). A new
-        version is scanned on its own and answers 423 until it is clean, while older versions still download."""
+        version is scanned on its own and answers 423 until it is clean, while older versions still download. `then`
+        runs in the version's transaction (the watch's event); when it raises, nothing is written and the bytes are
+        deleted."""
         file_id = self._new_id()
         store, _ = await self._upload_placement(tenant, SOURCE_PURPOSE)
         digest = hashlib.sha256(content).hexdigest()
@@ -880,7 +883,13 @@ class TenantFiles:
         }  # fmt: skip
         version: SourceVersion = {"digest": digest, "size": len(content), "storage_key": key,
                                   "source_tag": found.get("marker"), "at": now}  # fmt: skip
-        entry, number = await self._files.put_source_version(team, new_file, {**found, "mime": proven.mime}, version)
+        try:
+            entry, number = await self._files.put_source_version(
+                team, new_file, {**found, "mime": proven.mime}, version, then=then
+            )
+        except BaseException:
+            await asyncio.to_thread(store.delete, key)
+            raise
         if number is None:
             # The newest version already holds these bytes: the object just written is nobody's.
             await asyncio.to_thread(store.delete, key)

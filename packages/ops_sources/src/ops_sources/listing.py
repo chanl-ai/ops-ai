@@ -52,6 +52,9 @@ class Listing:
     # large to fetch), so a reading service can record one as failed rather than as removed.
     skipped: list[Json] = field(default_factory=list[Json])
     watermark: str | None = None
+    # The changes tool's cursor the last page named; the place takes it only when the run settles as a success, so a
+    # change whose fetch failed is listed again by the next run.
+    changes_cursor: JsonValue = None
     # Seconds between two fetches: the source's own rate, or the slower pace its listing names.
     pace: float = 0.0
     errors: list[SourceError] = field(default_factory=list[SourceError])
@@ -60,10 +63,13 @@ class Listing:
     given: Json = field(default_factory=dict[str, JsonValue])
 
     def settle(self, place: Place, status: str) -> None:
-        """After a run that ended `status`: a finished listing moves the place on to its watermark."""
+        """After a run that ended `status`: a finished listing moves the place on to its watermark and its changes
+        cursor."""
         if status == "success":
             place.watermark = self.watermark
             place.cursor = None
+            if self.changes_cursor:
+                place.changes_cursor = self.changes_cursor
             if self.full:
                 place.last_full_at = self.started.isoformat()
 
@@ -233,7 +239,7 @@ async def read_changes(
             found.watermark = str(out.get("watermark") or (_less_overlap(newest) if newest else since or ""))
             # The last page of a listing or of changes names where the next run's changes start.
             if out.get("cursor"):
-                place.changes_cursor = out["cursor"]
+                found.changes_cursor = out["cursor"]
             break
 
     if not found.resumes:

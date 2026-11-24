@@ -1,11 +1,16 @@
 """The check of a watched folder: list what changed since the watch's place through ops_sources, fetch the changed
-files a few at once, write each as its file's next version, and number what it found as the watch's events.
+files a few at once, write each as its file's next version with its event in the version's own transaction, and number
+what it found as the watch's events.
 
 A check holds the watch's lease from start to end, so Check now while one runs answers "already checking" and two
 background workers never check one watch at once. Files keeps the place on the watch and each file's marker on its
 entry (`FileState`). Fetched bytes are held a few files at a time (`CHUNK`), never the whole check's. A file listed as
 too large, or refused at fetch for its size, is one failed event with its size, and an entry already held for it is
-not removed. When tools-service cannot be reached, the check ends refused, its place unchanged."""
+not removed; a file a folder's rule leaves out is no event. A fetch refused for another reason is a failed event and
+the check ends partial; a rate limit ends it partial; tools-service out of reach ends it refused. Only a check that
+ends success moves the place on, so the next check lists the same changes again. Only a full listing read whole
+removes the files it did not list. A check that loses its lease (saving its place, renewing it, or writing a version)
+stops at once."""
 
 from __future__ import annotations
 
@@ -19,13 +24,17 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import cast
 
+from sqlalchemy.ext.asyncio import AsyncConnection
+
 from ops_files.store import FilesStore, HeldSource, WatchesStore, WatchEvent, WatchRow
+from ops_files.store.watches import LeaseLost, write_events
 from ops_files.tenant_files import TenantFiles
 from ops_identity import ServiceCallError, ServiceUnreachable
+from ops_service_kit.errors import Conflict
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import new_id
-from ops_sources import Answer, Declared, Fetcher, Held, Place, Reader, SourceError, read_changes
-from ops_sources.contract import access_list
+from ops_sources import Answer, Declared, Fetcher, Held, Listing, Place, Reader, SourceError, read_changes
+from ops_sources.contract import RECONNECT, access_list
 from ops_store import background, isolation
 
 log = logging.getLogger(__name__)
@@ -61,9 +70,15 @@ class FileState:
         return Held(marker=h.marker, tag=h.tag, current=True, gone_count=h.gone_count, title=h.name)
 
     async def save(self, place: Place) -> None:
-        await self.watches.save_place(
-            self.watch.id, owner=self.owner, place=cast(dict[str, JsonValue], dataclasses.asdict(place))
+        """Saves the place after each page, renewing the lease; a check that lost its lease stops here."""
+        kept = await self.watches.save_place(
+            self.watch.id,
+            owner=self.owner,
+            place=cast(dict[str, JsonValue], dataclasses.asdict(place)),
+            seconds=LEASE_S,
         )
+        if not kept:
+            raise LeaseLost(self.watch.id)
 
     async def mark(self, item_id: str, marker: str) -> None:
         if (h := self.by_id.get(item_id)) is not None:
@@ -106,6 +121,9 @@ class CheckOutcome:
     failed: int = 0
     removed: int = 0
     stopped: str = ""
+    # Why a check was refused or stopped partial (needs_reconnect, unreachable, rate_limited, fetch_failed, ...), so
+    # the console says the actual reason; empty on a success.
+    code: str = ""
     # The first failed files ({path, size, reason}), so the Watched folders row says which file failed and why.
     failures: list[dict[str, JsonValue]] = dataclasses.field(default_factory=list[dict[str, JsonValue]])
 
@@ -157,9 +175,12 @@ class WatchChecks:
         owner = new_id("chk")
         if not await self.watches.claim(watch_id, owner=owner, seconds=LEASE_S):
             return CheckOutcome("already_checking", stopped="A check of this folder is already running.")
-        outcome = CheckOutcome("failed", stopped="The check stopped before it finished.")
+        outcome = CheckOutcome("failed", code="stopped", stopped="The check stopped before it finished.")
         try:
             outcome = await self._run(watch_id, owner)
+        except LeaseLost:
+            # It ran past its lease and another check took the folder; that check's writes are the ones kept.
+            outcome = CheckOutcome("failed", code="lease_lost", stopped="Another check took this folder over.")
         finally:
             await self.watches.finish(watch_id, owner=owner, outcome=outcome.as_json(), at=self.clock())
         return outcome
@@ -167,15 +188,17 @@ class WatchChecks:
     async def _run(self, watch_id: str, owner: str) -> CheckOutcome:
         watch = await self.watches.get(watch_id)
         if watch is None:
-            return CheckOutcome("failed", stopped="The watch is gone.")
+            return CheckOutcome("failed", code="gone", stopped="The watch is gone.")
         tenant, team = watch.tenant_id, watch.team
         try:
             declared = await self.reader.declared(tenant, team)
         except (ServiceUnreachable, ServiceCallError) as e:
-            return CheckOutcome("refused", stopped=f"Apps could not be reached: {e}")
+            return CheckOutcome("refused", code="unreachable", stopped=f"Apps could not be reached: {e}")
         row = next((d for d in declared if (d.get("plugin"), d.get("source")) == (watch.plugin, watch.source)), None)
         if row is None:
-            return CheckOutcome("refused", stopped=f"{watch.plugin} is not installed or is off for this team.")
+            return CheckOutcome(
+                "refused", code="not_installed", stopped=f"{watch.plugin} is not installed or is off for this team."
+            )
         found = Declared.model_validate(row)
         tools = found.tools
         state = FileState(self.store, self.watches, watch, owner)
@@ -200,12 +223,19 @@ class WatchChecks:
                 clock=self.clock,
             )
         except (ServiceUnreachable, ServiceCallError) as e:
-            return CheckOutcome("refused", stopped=f"Apps could not be reached: {e}")
+            return CheckOutcome("refused", code="unreachable", stopped=f"Apps could not be reached: {e}")
+        except Conflict as e:
+            # The connection refused its sign-in on an earlier check and is still not healthy.
+            if e.code != "needs_reconnect":
+                raise
+            return CheckOutcome("refused", code="needs_reconnect", stopped=str(e))
+        code = _listing_code(listing)
         if listing.status in ("failed", "skipped") and not listing.seen:
             await state.save(place)
-            return CheckOutcome("refused", stopped=listing.stopped)
-        outcome = CheckOutcome("success" if listing.status == "success" else listing.status, stopped=listing.stopped)
-        events: list[WatchEvent] = []
+            return CheckOutcome("refused", code=code, stopped=listing.stopped)
+        ok = listing.status == "success"
+        outcome = CheckOutcome("success" if ok else listing.status, code="" if ok else code, stopped=listing.stopped)
+        failed: list[WatchEvent] = []
         now = self.clock()
         by_row = {str(r["id"]): r for r in listing.changed}
 
@@ -216,6 +246,18 @@ class WatchChecks:
             path = str(item.get("folder") or r.get("folder") or "").strip("/")
             name = str(item.get("title") or r.get("title") or source_id)
             full_path = f"{path}/{name}" if path else name
+
+            async def then(c: AsyncConnection, file_id: str, version: int | None) -> None:
+                # The version and its event commit together, and only while this check holds the lease.
+                if version is not None:
+                    kind = "new" if version == 1 else "changed"
+                    events = [_event(file_id, version, kind, None, len(content), full_path, now)]
+                elif before is not None and before.name != name:
+                    events = [_event(file_id, None, "renamed", None, len(content), full_path, now)]
+                else:
+                    events = []
+                await write_events(c, watch.id, owner=owner, events=events)
+
             file_id, version = await self.files.put_source(
                 tenant,
                 team,
@@ -233,32 +275,23 @@ class WatchChecks:
                 },
                 content,
                 actor=f"watch:{watch.id}",
+                then=then,
             )
             state.by_id[source_id] = HeldSource(file_id, str(r.get("marker") or ""), None, 0, name, False)
-            if version is None:
-                if before is not None and before.name != name:
-                    events.append(_event(file_id, None, "renamed", None, len(content), full_path, now))
-                return
-            kind = "new" if version == 1 else "changed"
-            events.append(_event(file_id, version, kind, None, len(content), full_path, now))
-            outcome.brought += 1
+            if version is not None:
+                outcome.brought += 1
 
+        # Every file the listing refused is kept from removal; only a refusal for its size is a failed event, since a
+        # file a folder's rule leaves out was never meant to come in.
         skipped_ids: set[str] = set()
         for r in listing.skipped:
             skipped_ids.add(str(r["id"]))
+            if r.get("skipped_code") not in TOO_LARGE:
+                continue
             held = state.by_id.get(str(r["id"]))
-            events.append(
-                _event(
-                    held.file_id if held else None,
-                    None,
-                    "failed",
-                    str(r.get("skipped") or ""),
-                    _size_of(r),
-                    str(r.get("title") or r["id"]),
-                    now,
-                )
-            )
-            outcome.fail(events[-1])
+            reason = str(r.get("skipped") or "")
+            failed.append(_event(held.file_id if held else None, None, "failed", reason, _size_of(r), _title(r), now))
+            outcome.fail(failed[-1])
         gone_now: list[str] = []
         errors: list[SourceError] = []
         for start in range(0, len(listing.changed), CHUNK):
@@ -268,49 +301,97 @@ class WatchChecks:
                 place, counts, errors, listing.log, on_listed=on_item, on_fetched=on_item
             )
             gone_now += done.gone_now
-            if done.rate_limited:
-                outcome.status, outcome.stopped = "partial", "Stopped at the system's rate limit."
-            await self.watches.renew(watch.id, owner=owner, seconds=LEASE_S)
-        for source_id, answer in gets.failed.items():
-            r = by_row.get(source_id, {})
-            held = state.by_id.get(source_id)
-            reason = answer.message or answer.code
-            if answer.code in TOO_LARGE:
-                reason = f"Too large to bring in: {reason}"
-            skipped_ids.add(source_id)
-            events.append(
-                _event(
-                    held.file_id if held else None,
-                    None,
-                    "failed",
-                    reason,
-                    _size_of(r),
-                    str(r.get("title") or source_id),
-                    now,
+            stop = False
+            for source_id, answer in gets.failed.items():
+                if answer.code == "UPSTREAM_UNREACHABLE":
+                    # Nothing was refused: the next check lists the same changes again and fetches them.
+                    outcome.status, outcome.code = "refused", "unreachable"
+                    outcome.stopped, stop = f"Apps could not be reached: {answer.message or answer.code}", True
+                    continue
+                if answer.code == "RATE_LIMITED":
+                    if outcome.status == "success":
+                        outcome.status, outcome.code = "partial", "rate_limited"
+                        outcome.stopped = "Stopped at the system's rate limit; the next check continues."
+                    stop = True
+                    continue
+                reason = answer.message or answer.code
+                if answer.code in TOO_LARGE:
+                    reason = f"Too large to bring in: {reason}"
+                elif outcome.status == "success":
+                    # A file that could not be fetched for another reason is tried again on the next check.
+                    outcome.status, outcome.code = "partial", "fetch_failed"
+                    outcome.stopped = "Some files could not be fetched; the next check tries them again."
+                skipped_ids.add(source_id)
+                held = state.by_id.get(source_id)
+                r = by_row.get(source_id, {})
+                failed.append(
+                    _event(
+                        held.file_id if held else None, None, "failed", reason, _size_of(r), _title(r, source_id), now
+                    )
                 )
-            )
-            outcome.fail(events[-1])
+                outcome.fail(failed[-1])
+            gets.failed.clear()
+            if failed and not await self.watches.add_events(watch.id, owner=owner, events=failed):
+                raise LeaseLost(watch.id)
+            failed = []
+            if not await self.watches.renew(watch.id, owner=owner, seconds=LEASE_S):
+                raise LeaseLost(watch.id)
+            if stop:
+                break
+        if failed and not await self.watches.add_events(watch.id, owner=owner, events=failed):
+            raise LeaseLost(watch.id)
         removed = set(listing.removed_at_source) | set(gone_now)
-        if listing.whole and listing.status == "success":
-            # Only a listing read whole sees every file; one listed but refused (too large) is not removed.
+        if listing.full and listing.whole and outcome.status == "success":
+            # Only a full listing read whole sees every file; one listed but refused (too large) is not removed.
             removed |= {i for i in state.by_id if i not in listing.seen and i not in skipped_ids}
         gone = [state.by_id[i] for i in removed if i in state.by_id and not state.by_id[i].removed]
-        await self.store.remove_sources([h.file_id for h in gone], now)
-        events += [_event(h.file_id, None, "removed", None, None, h.name, now) for h in gone]
+
+        async def removals(c: AsyncConnection) -> None:
+            events = [_event(h.file_id, None, "removed", None, None, h.name, now) for h in gone]
+            await write_events(c, watch.id, owner=owner, events=events)
+
+        await self.store.remove_sources([h.file_id for h in gone], now, then=removals)
         outcome.removed = len(gone)
-        await self.watches.add_events(watch.id, owner=owner, events=events)
-        listing.settle(place, "success" if outcome.status == "success" else outcome.status)
+        listing.settle(place, outcome.status)
         await state.save(place)
         return outcome
 
     async def run_asked(self) -> int:
-        """Every watch with a check asked for, each in its own tenant and team; the number checked."""
+        """Every watch with a check asked for, each in its own tenant and team; the number checked. A check that
+        raises is logged and the pass goes on to the next watch."""
         done = 0
         for tenant, team, watch_id in await self.watches.asked():
             with isolation.scope(tenant, team):
-                outcome = await self.check(watch_id)
+                try:
+                    outcome = await self.check(watch_id)
+                except Exception:
+                    log.exception("watch check failed", extra={"watch_id": watch_id, "tenant_id": tenant})
+                    done += 1
+                    continue
             done += outcome.status != "already_checking"
         return done
+
+
+def _title(r: Json, fallback: str = "") -> str:
+    return str(r.get("title") or r.get("id") or fallback)
+
+
+def _listing_code(listing: Listing) -> str:
+    """Why a listing stopped, as the code a refused or partial outcome carries; the console words it."""
+    error = str(listing.errors[-1].get("errorClass") or "") if listing.errors else ""
+    if error in RECONNECT:
+        return "needs_reconnect"
+    if error == "UPSTREAM_UNREACHABLE":
+        return "unreachable"
+    if error == "RATE_LIMITED":
+        return "rate_limited"
+    if error == "APP_OFF_FOR_TEAM":
+        return "app_off"
+    if error == "PLUGIN_DISABLED":
+        return "not_installed"
+    if listing.resumes:
+        return "continues"
+    return "list_failed" if listing.status != "success" else ""
 
 
 def _event(  # noqa: PLR0917 - one event row, every column given
