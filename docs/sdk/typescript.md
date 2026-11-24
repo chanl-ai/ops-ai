@@ -81,6 +81,21 @@ await ops.me.connectors.finish(state, code);
 const accounts = await ops.me.connectors.accounts();
 ```
 
+## Schedule a workflow
+
+```ts
+const step = 'start'; // the Schedule trigger step's id
+await ops.workflows.schedules.kinds(); // each rule kind, its label and the JSON Schema of its fields
+await ops.workflows.schedules.preview({ kind: 'every', every: 15, unit: 'minutes', tz: 'Europe/London' });
+await ops.workflows.schedules.save('held_wires', step, { kind: 'every', every: 15, unit: 'minutes', start: '07:00', tz: 'Europe/London' });
+await ops.workflows.schedules.show('held_wires', step); // the rule, its words, next runs and last outcome
+await ops.workflows.schedules.clear('held_wires', step);
+```
+
+The rule is its `kind` and that kind's own fields. A save applies at once to the live version and is refused (422,
+naming the field) for a rule under the install's shortest interval or a trigger whose input schema needs more than
+`dueAt`.
+
 ## Saved profile
 
 `new OpsAI({ profile: 'builder' })` reads the sign-in `opsai login` saved under that name; without `profile` it reads the
