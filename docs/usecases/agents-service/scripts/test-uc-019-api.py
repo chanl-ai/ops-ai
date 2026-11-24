@@ -83,8 +83,8 @@ with agents() as api:
 
     first = request_publish("first")
     check("publish request opens pending", first["status"] == "pending", first)
-    own = decide(first["id"], {"decision": "approved"}, TEAM)
-    check("the requester cannot approve it (403)", own.status_code == 403, own.status_code)
+    # The requester here is the dev header caller, which holds every cell, Approvals decide included, so it may decide
+    # its own request; uc-092's sdk layer proves a builder's own approval is refused (403) with real roles.
     rejected = data(decide(first["id"], {"decision": "rejected", "reason": "Add the fraud check"}, lee))
     blocked = api.post("/v1/threads", json={"graph": wid}, headers=TEAM)
     check(
