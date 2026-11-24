@@ -480,6 +480,109 @@ await withUiStack(
       });
       await maya.setViewportSize({ width: 1440, height: 1000 });
 
+      // 32. The list of sections is the workspace's. Priya (admin) adds Compliance notes on Settings > Agent
+      // instructions; the list then places it before Tone and renames Tone to Voice; James adds it to an agent from
+      // Add section and View prompt shows it in that place with Never last; the agent of step 28, saved before the
+      // change, shows the prompt it had; a viewer reads the settings page with no control to change it; Reset to
+      // default brings the first list back. What the page is asked for beyond the design's words: it is served at
+      // /settings/agent-instructions under a heading named Agent instructions; its Add section button opens a field
+      // labelled Section name that Enter confirms (a Save button, if the page has one, sends it); Reset to default is
+      // a button, and a dialog that asks first has a button whose name starts with Reset.
+      // TODO manual: moving a section with the page's own control. The move is saved through the list's route here,
+      // which is the save that control sends.
+      const LIST = `${agents}/v1/agent-instruction-sections`;
+      const VIEWER = 'r.menon@harborpine.example';
+      const P = as(await tokenFor(PRIYA));
+      const listNow = async () => (await (await fetch(LIST, { headers: P })).json().catch(() => ({}))).data ?? {};
+      const inOrder = (list) => [...(list.sections ?? [])].sort((a, b) => a.order - b.order);
+      const complianceIn = (list) => (list.sections ?? []).find((x) => x.label === 'Compliance notes');
+      const firstList = await listNow();
+      const settingsLog = [];
+      // These pages keep their own log, so a fault on the settings page fails this step and not step 19.
+      const signInApart = async (email) => {
+        const p = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
+        p.on('pageerror', (e) => settingsLog.push(`${email.split('@')[0]}: ${e.message}`));
+        p.on('response', (r) => r.status() >= 400 && r.status() !== 401 && settingsLog.push(`${email.split('@')[0]}: ${r.status()} ${r.request().method()} ${r.url()}`));
+        await p.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await p.getByLabel('Email').fill(email);
+        await p.getByLabel('Password').fill(PASSWORD);
+        await p.getByRole('button', { name: /^Sign in/ }).first().click();
+        await p.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
+        return p;
+      };
+      const openSettings = async (p) => {
+        await p.goto(`${consoleUrl}/settings/agent-instructions`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        return tried(p.getByRole('heading', { name: 'Agent instructions' }).first().waitFor({ timeout: 60_000 }));
+      };
+      const listControls = async (p) => ({ add: await p.getByRole('button', { name: 'Add section' }).count(), reset: await p.getByRole('button', { name: 'Reset to default' }).count() });
+      const sideways = (p) => p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      const oldPrompt = await servedPrompt();
+      try {
+        const priya = await signInApart(PRIYA);
+        const opened = await openSettings(priya);
+        const listSaved = armed(priya.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === LIST && r.ok(), { timeout: 30_000 }));
+        await priya.getByRole('button', { name: 'Add section' }).click({ timeout: 10_000 }).catch(() => undefined);
+        const typed = await tried(priya.getByLabel('Section name').fill('Compliance notes', { timeout: 10_000 }));
+        if (typed) await priya.keyboard.press('Enter');
+        await priya.getByRole('button', { name: 'Save', exact: true }).click({ timeout: 2_000 }).catch(() => undefined);
+        await listSaved.catch(() => undefined);
+        const added = complianceIn(await listNow()) ?? {};
+        check('32 an admin adds Compliance notes on Settings > Agent instructions, and the workspace list holds it as a menu section', opened && typed && Boolean(added.id) && added.kind === 'menu', { opened, typed, added });
+
+        // The list now puts Compliance notes before Tone and names Tone Voice; a list that only appends fails the order below.
+        const others = inOrder(await listNow()).filter((x) => x.label !== 'Compliance notes').map((x) => (x.id === 'tone' ? { ...x, label: 'Voice' } : x));
+        const at = Math.max(0, others.findIndex((x) => x.id === 'tone'));
+        const placed = [...others.slice(0, at), added, ...others.slice(at)].map((x, n) => ({ ...x, order: n }));
+        const moved = await fetch(LIST, { method: 'PUT', headers: P, body: JSON.stringify({ ...firstList, sections: placed }) });
+        const noted = await made('/v1/agents', { name: `Compliance desk ${RUN}`, role: 'Helps cardholders with disputes' });
+        const notedSave = await fetch(`${agents}/v1/agents/${noted.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ brief: { purpose: 'Help cardholders dispute a charge.', howToAnswer: 'Keep answers short.', handOff: ['The cardholder asks for a person.'], never: [NEVER_RULE], sections: [{ kind: 'tone', text: 'Calm and plain.' }] }, ...(await agentBase(agents, J, noted.id)) }) });
+        await page.goto(`${consoleUrl}/build/agents/${noted.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await brief.waitFor({ timeout: 120_000 });
+        await sectionOf(page, 'How to answer').waitFor({ timeout: 60_000 }).catch(() => undefined);
+        const notedSaved = armed(page.waitForResponse(async (r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${noted.id}` && r.ok() && ((await r.json().catch(() => ({}))).data?.brief?.sections ?? []).some((x) => x.name === 'Compliance notes' && x.text), { timeout: 30_000 }));
+        await addSection(page).click({ timeout: 10_000 }).catch(() => undefined);
+        await page.getByRole('menuitem', { name: 'Compliance notes', exact: true }).click({ timeout: 10_000 }).catch(() => undefined);
+        const drawn = await write('Compliance notes', 'Say the call is recorded.');
+        const stored = Boolean(await notedSaved.catch(() => null));
+        const notedPrompt = await promptShown(page);
+        const order = ['# Compliance notes', '# Voice', '# How to answer', '# Hand off when', '# Never'].map((h) => notedPrompt.split('\n').indexOf(h));
+        check(
+          '32 a builder adds Compliance notes from Add section, and View prompt shows it where the list puts it, before the renamed Tone, with Never last',
+          moved.status === 200 && notedSave.ok && drawn && stored && order.every((n, i) => n >= 0 && (i === 0 || n > order[i - 1])) && notedPrompt.endsWith(NEVER_RULE),
+          { moved: moved.status, notedSave: notedSave.status, drawn, stored, order, tail: notedPrompt.slice(-120) },
+        );
+        await page.goto(`${consoleUrl}/build/agents/${sectioned.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await brief.waitFor({ timeout: 120_000 });
+        await sectionOf(page, 'How to answer').waitFor({ timeout: 60_000 }).catch(() => undefined);
+        const oldShown = await promptShown(page);
+        check('32 the agent saved before the list changed shows the prompt it had, Tone under its first name', moved.status === 200 && oldShown.length > 0 && oldShown === oldPrompt && /^# Tone$/m.test(oldShown) && !/^# Voice$/m.test(oldShown), { same: oldShown === oldPrompt, head: oldShown.slice(0, 160) });
+
+        const viewer = await signInApart(VIEWER);
+        const viewerOpened = await openSettings(viewer);
+        const reads = { row: await tried(viewer.getByText('Compliance notes', { exact: true }).first().waitFor({ timeout: 30_000 })), ...(await listControls(viewer)) };
+        const admin = await listControls(priya);
+        check('32 a viewer reads the list on the settings page with no Add section and no Reset to default, which the admin has', viewerOpened && reads.row && reads.add === 0 && reads.reset === 0 && admin.add === 1 && admin.reset === 1, { viewerOpened, reads, admin });
+        const wide = {};
+        for (const [who, p] of [['admin', priya], ['member', viewer]]) {
+          await p.setViewportSize({ width: 390, height: 844 });
+          wide[who] = { row: await p.getByText('Compliance notes', { exact: true }).first().isVisible().catch(() => false), sideways: await sideways(p) };
+          await shootBothWidths(p, AREA, `uc-757-agent-instruction-sections-${who}`, async () => undefined);
+          await p.setViewportSize({ width: 1440, height: 1000 });
+        }
+        check('32 at 390 wide the settings page draws the list for both people and does not scroll sideways', Object.values(wide).every((w) => w.row && w.sideways <= 1), wide);
+
+        const listReset = armed(priya.waitForResponse((r) => r.request().method() === 'DELETE' && r.url() === LIST && r.ok(), { timeout: 30_000 }));
+        await priya.getByRole('button', { name: 'Reset to default' }).click({ timeout: 10_000 }).catch(() => undefined);
+        await priya.getByRole('alertdialog').getByRole('button', { name: /^Reset/ }).click({ timeout: 3_000 }).catch(() => undefined);
+        const resetSent = Boolean(await listReset.catch(() => null));
+        const lastList = await listNow();
+        check('32 Reset to default on the settings page brings the first list back', resetSent && (firstList.sections ?? []).length > 0 && JSON.stringify(inOrder(lastList)) === JSON.stringify(inOrder(firstList)), { resetSent, compliance: complianceIn(lastList) ?? null, sections: (lastList.sections ?? []).length });
+        check('32 the settings pages log no page errors and no refused requests', settingsLog.length === 0, settingsLog);
+      } finally {
+        // The later steps read the default list whatever this one did.
+        await fetch(LIST, { method: 'DELETE', headers: P }).catch(() => undefined);
+      }
+
       // 23. Pages reached by the sidebar's links, not by loading their URL: a client navigation keeps the shell mounted,
       // and the walks saw update loops only that way, at both widths.
       const viaSidebar = async (p, href) => {

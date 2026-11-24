@@ -116,3 +116,39 @@ def sections_brief(sections: list[dict[str, str]] | None = None) -> dict[str, An
 def headings(prompt: str) -> list[str]:
     """The prompt's headings in the order the model reads them."""
     return [line for line in prompt.splitlines() if line.startswith("# ")]
+
+
+# The workspace's list of sections (steps 29 to 32): an admin adds one of the workspace's own and renames Tone, so an
+# agent saved before the change shows whether its prompt was rewritten.
+SECTIONS_ROUTE = "/v1/agent-instruction-sections"
+COMPLIANCE: dict[str, Any] = {
+    "label": "Compliance notes",
+    "hint": "What the regulator asks the agent to say.",
+    "kind": "menu",
+    "required": False,
+    "hidden": False,
+    "drives": "none",
+}
+COMPLIANCE_TEXT = "Say the call is recorded."
+COMPLIANCE_HEADINGS = ["# Who you are", "# Voice", "# Compliance notes", "# How to answer", "# Hand off when", "# Never"]
+
+
+def with_compliance(listing: dict[str, Any]) -> dict[str, Any]:
+    """The list an admin saves from the one read: Tone renamed Voice and Compliance notes placed straight after it,
+    which is before How to answer, so a list that only appends a new section fails the heading order."""
+    items = sorted(listing.get("sections") or [], key=lambda s: s.get("order", 0))
+    at = next((n + 1 for n, s in enumerate(items) if s.get("id") == "tone"), len(items))
+    renamed = [{**s, "label": "Voice"} if s.get("id") == "tone" else s for s in items]
+    placed = [*renamed[:at], COMPLIANCE, *renamed[at:]]
+    return {**listing, "sections": [{**s, "order": n} for n, s in enumerate(placed)]}
+
+
+def compliance_id(listing: Any) -> str:
+    """The id the service gave Compliance notes, read from a list; empty when the list does not hold it."""
+    sections = listing.get("sections") if isinstance(listing, dict) else None
+    return next((str(s.get("id", "")) for s in sections or [] if s.get("label") == "Compliance notes"), "")
+
+
+def compliance_sections(section_id: str) -> list[dict[str, str]]:
+    """What a builder adds once the list holds it: the workspace's section and Tone, saved in that order."""
+    return [{"kind": section_id, "text": COMPLIANCE_TEXT}, {"kind": "tone", "text": "Calm and plain."}]
