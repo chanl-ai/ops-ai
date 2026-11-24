@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "Run a workflow on each new file in a watched folder",
+  "description": "The Files changed trigger checks a watched folder on the workflow's schedule and starts one run per new or changed file, gathered into one batch per check.",
+  "tag": "new"
+}

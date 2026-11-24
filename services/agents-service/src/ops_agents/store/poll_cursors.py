@@ -11,7 +11,7 @@ from typing import ClassVar
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
@@ -80,3 +80,27 @@ class PollCursors:
                 await c.execute(
                     t.update().where(t.c.tenant_id == current_tenant(), t.c.binding_id == binding_id).values(**values)
                 )
+
+
+async def move(c: AsyncConnection, binding_id: str, *, expected: str | None, to: PollCursor) -> bool:
+    """Moves the binding's cursor to `to` on `c` only while it still reads `expected` (None: no row yet, or a row
+    for another source), so a collector whose place another moved writes nothing; False then. Runs in the caller's
+    transaction, so the cursor commits with what was read up to it."""
+    t = poll_cursors
+    values = {"source": to.source, "folder": to.folder, "cursor": to.cursor, "updated_at": now_iso()}
+    mine = (t.c.tenant_id == current_tenant(), t.c.binding_id == binding_id)
+    if expected is None:
+        held = (await c.execute(sa.select(t.c.source).where(*mine))).first()
+        if held is None:
+            try:
+                async with c.begin_nested():
+                    await c.execute(t.insert().values(binding_id=binding_id, **values))
+            except IntegrityError:
+                return False
+            return True
+        if held.source == to.source:
+            return False
+        q = t.update().where(*mine, t.c.source == held.source)
+    else:
+        q = t.update().where(*mine, t.c.source == to.source, t.c.cursor == expected)
+    return (await c.execute(q.values(**values))).rowcount == 1

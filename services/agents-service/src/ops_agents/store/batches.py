@@ -40,8 +40,14 @@ run_batches = sa.Table(
     sa.Column("workflow_id", sa.String(200), nullable=False),
     sa.Column("version", sa.Integer, nullable=False),
     sa.Column("mode", sa.String(8), nullable=False),
-    sa.Column("file_id", sa.String(64), nullable=False),
+    # upload: rows of a spreadsheet; check: the new and changed files of one check of a watched folder.
+    sa.Column("origin", sa.String(8), nullable=False, server_default="upload"),
+    # The spreadsheet's file; null for a check, which names its watch instead.
+    sa.Column("file_id", sa.String(64)),
+    # The spreadsheet's name, or a check's label (its watch and check time).
     sa.Column("file_name", sa.String(300), nullable=False),
+    sa.Column("watch_id", sa.String(64)),
+    sa.Column("checked_at", sa.String(32)),
     sa.Column("total", sa.Integer, nullable=False),
     sa.Column("created_by", sa.String(320), nullable=False),
     sa.Column("created_at", sa.String(32), nullable=False),
@@ -60,12 +66,22 @@ run_batch_rows = sa.Table(
     # 1-based, as the file's rows are counted after the header.
     sa.Column("row", sa.Integer, primary_key=True),
     sa.Column("team_id", sa.String(64), nullable=False),
+    sa.Column("workflow_id", sa.String(200), nullable=False),
+    # What the row stands for: `<batch>:<row>` for a spreadsheet row, a digest of `<file>:<version>` for a check's
+    # file version, so one version is one row per workflow however many checks read it.
+    sa.Column("item_key", sa.String(96), nullable=False),
     sa.Column("attempt", sa.Integer, nullable=False, server_default="1"),
     sa.Column("input", sa.JSON, nullable=False),
-    # pending until a tick starts its attempt, then started with the run that attempt's key names.
+    # pending until a tick starts its attempt, then started with the run that attempt's key names. removed and
+    # failed (a file removed at the source, or one too large) are written so and never started.
     sa.Column("status", sa.String(16), nullable=False, server_default="pending"),
     sa.Column("run_id", sa.String(64)),
+    sa.Column("failure_code", sa.String(32)),
+    sa.Column("reason", sa.String(500)),
     sa.Index("ix_run_batch_rows_pending", "status", "tenant_id", "batch_id", "row"),
+    # One row per file version per workflow: two collectors of one check, or two overlapping checks, cannot both
+    # write it.
+    sa.Index("ux_run_batch_rows_item", "tenant_id", "workflow_id", "item_key", unique=True),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -78,8 +94,11 @@ class BatchOut(Out):
     workflow_id: str
     version: int
     mode: str
-    file_id: str
+    origin: str = "upload"
+    file_id: str | None
     file_name: str
+    watch_id: str | None = None
+    checked_at: str | None = None
     total: int
     created_by: str
     created_at: str
@@ -99,6 +118,8 @@ class BatchRowOut(Out):
     outcome: str | None
     output: Any
     error: str | None
+    failure_code: str | None = None
+    reason: str | None = None
 
 
 class PendingRowOut(Out):
@@ -118,8 +139,8 @@ class PendingRowOut(Out):
 
 _b = run_batches.c
 BATCH_COLUMNS = (
-    _b.id, _b.team_id, _b.workflow_id, _b.version, _b.mode, _b.file_id, _b.file_name, _b.total, _b.created_by,
-    _b.created_at, _b.stopped_reason, _b.stopped_at,
+    _b.id, _b.team_id, _b.workflow_id, _b.version, _b.mode, _b.origin, _b.file_id, _b.file_name, _b.watch_id,
+    _b.checked_at, _b.total, _b.created_by, _b.created_at, _b.stopped_reason, _b.stopped_at,
 )  # fmt: skip
 
 
@@ -158,7 +179,17 @@ class Batches(RuntimeStore):
             await c.execute(run_batches.insert().values(**batch))
             await c.execute(
                 run_batch_rows.insert(),
-                [{"batch_id": batch["id"], "row": i, "team_id": team_id, "input": r} for i, r in enumerate(rows, 1)],
+                [
+                    {
+                        "batch_id": batch["id"],
+                        "row": i,
+                        "team_id": team_id,
+                        "workflow_id": workflow_id,
+                        "item_key": f"{batch['id']}:{i}",
+                        "input": r,
+                    }
+                    for i, r in enumerate(rows, 1)
+                ],
             )
         return BatchOut.model_validate(batch)
 
@@ -170,11 +201,14 @@ class Batches(RuntimeStore):
         """Every row with its run's status, outcome, output and error, failed rows first, then in file order."""
         r, e = run_batch_rows, engine_runs
         joined = r.outerjoin(e, sa.and_(e.c.tenant_id == r.c.tenant_id, e.c.id == r.c.run_id))
-        failed_first = sa.case((e.c.status.in_(("failed", "cancelled")), 0), else_=1)
+        # Rows that never ran (a file too large, removed at the source) sort with the failed ones.
+        failed_first = sa.case(
+            (e.c.status.in_(("failed", "cancelled")), 0), (r.c.status.in_(("failed", "removed")), 0), else_=1
+        )
         q = (
             sa.select(
                 r.c.row, r.c.attempt, r.c.input, r.c.run_id, r.c.status.label("row_status"),
-                e.c.status.label("run_status"), e.c.outcome, e.c.output, e.c.error,
+                e.c.status.label("run_status"), e.c.outcome, e.c.output, e.c.error, r.c.failure_code, r.c.reason,
             )
             .select_from(joined)
             .where(r.c.batch_id == batch_id, team_visible(r))
