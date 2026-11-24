@@ -110,6 +110,7 @@ from .routers import chat_connectors as chat_connectors_routes
 from .routers import chat_settings as chat_settings_routes
 from .routers import engine as engine_routes
 from .routers import guardrails as guardrail_routes
+from .routers import instruction_sections as instruction_section_routes
 from .routers import knowledge_usage as knowledge_usage_routes
 from .routers import mailboxes as mailbox_routes
 from .routers import memories as memory_routes
@@ -585,6 +586,7 @@ def create_app(
     mount(widget_routes.router, "Agents")
     mount(model_alias_catalog.router, "Agents")
     mount(prompt_variables.router, "Agents")
+    mount(instruction_section_routes.router, "Agents")
     mount(publish_requests.router, "Reviews")
     mount(publish_requests.open_router, "Reviews")
     mount(graphs.versions_router, "Graphs")

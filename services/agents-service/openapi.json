@@ -3189,7 +3189,7 @@
             "items": {
               "$ref": "#/components/schemas/BriefSection"
             },
-            "maxItems": 12,
+            "maxItems": 50,
             "title": "Sections",
             "type": "array"
           },
@@ -3269,25 +3269,17 @@
       },
       "BriefSection": {
         "additionalProperties": false,
-        "description": "A headed section a builder adds to the brief. A menu kind is written under its fixed title, whatever name is\nsent; `kind` is the tag evals read. A custom section is prompt text only and drives nothing.",
+        "description": "A headed section a builder adds to the brief. `kind` is the id of a menu section in the workspace's list,\nwritten under that section's label, and the tag evals read; a `custom` section is written under its own name, is\nprompt text only and drives nothing. The save fills a menu section's name from the list.",
         "properties": {
           "kind": {
-            "enum": [
-              "personality",
-              "tone",
-              "environment",
-              "context",
-              "tool_use",
-              "error_handling",
-              "escalation",
-              "custom"
-            ],
+            "maxLength": 40,
+            "minLength": 1,
             "title": "Kind",
             "type": "string"
           },
           "name": {
+            "default": "",
             "maxLength": 200,
-            "minLength": 1,
             "title": "Name",
             "type": "string"
           },
@@ -3299,27 +3291,16 @@
           }
         },
         "required": [
-          "kind",
-          "name"
+          "kind"
         ],
         "title": "BriefSection",
         "type": "object"
       },
       "BriefSectionView": {
         "additionalProperties": false,
-        "description": "A section added to a brief, as replied: a menu kind carries its fixed title as `name`, whatever was stored.",
+        "description": "A section added to a brief, as replied: `kind` is the id of a menu section in the workspace's list (the tag\nevals read) or `custom`; `name` is the heading it was saved under.",
         "properties": {
           "kind": {
-            "enum": [
-              "personality",
-              "tone",
-              "environment",
-              "context",
-              "tool_use",
-              "error_handling",
-              "escalation",
-              "custom"
-            ],
             "title": "Kind",
             "type": "string"
           },
@@ -9236,6 +9217,25 @@
           "data"
         ],
         "title": "Envelope[SavedCases]",
+        "type": "object"
+      },
+      "Envelope_SectionList_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SectionList"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[SectionList]",
         "type": "object"
       },
       "Envelope_SkillDetail_": {
@@ -15739,6 +15739,94 @@
         "title": "PortView",
         "type": "object"
       },
+      "Preset": {
+        "additionalProperties": false,
+        "properties": {
+          "icon": {
+            "enum": [
+              "smile",
+              "sun",
+              "scale",
+              "briefcase",
+              "zap",
+              "message",
+              "heart",
+              "shield",
+              "star",
+              "book"
+            ],
+            "title": "Icon",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "icon",
+          "text"
+        ],
+        "title": "Preset",
+        "type": "object"
+      },
+      "PresetIn": {
+        "additionalProperties": false,
+        "description": "A sentence the editor offers as a chip above a section's text; picking it writes the text into the section.",
+        "properties": {
+          "icon": {
+            "default": "smile",
+            "enum": [
+              "smile",
+              "sun",
+              "scale",
+              "briefcase",
+              "zap",
+              "message",
+              "heart",
+              "shield",
+              "star",
+              "book"
+            ],
+            "title": "Icon",
+            "type": "string"
+          },
+          "id": {
+            "default": "",
+            "maxLength": 40,
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "text"
+        ],
+        "title": "PresetIn",
+        "type": "object"
+      },
       "PromptVariable": {
         "additionalProperties": false,
         "description": "A `{key}` an agent's instructions may name, filled at run time from the turn's variables.",
@@ -19131,6 +19219,221 @@
           "cases"
         ],
         "title": "SavedCases",
+        "type": "object"
+      },
+      "SectionItem": {
+        "additionalProperties": false,
+        "description": "One entry of the workspace's list, as stored and replied.",
+        "properties": {
+          "drives": {
+            "default": "none",
+            "enum": [
+              "none",
+              "handoff",
+              "never-last",
+              "eval-tag"
+            ],
+            "title": "Drives",
+            "type": "string"
+          },
+          "example": {
+            "default": "",
+            "title": "Example",
+            "type": "string"
+          },
+          "group": {
+            "default": "",
+            "title": "Group",
+            "type": "string"
+          },
+          "hidden": {
+            "default": false,
+            "title": "Hidden",
+            "type": "boolean"
+          },
+          "hint": {
+            "default": "",
+            "title": "Hint",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "fixed",
+              "menu",
+              "custom"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/Preset"
+            },
+            "title": "Presets",
+            "type": "array"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "order"
+        ],
+        "title": "SectionItem",
+        "type": "object"
+      },
+      "SectionItemIn": {
+        "additionalProperties": false,
+        "description": "One entry of the list as an admin sends it. An entry sent without `id` is new and given one from its label.",
+        "properties": {
+          "drives": {
+            "default": "none",
+            "enum": [
+              "none",
+              "handoff",
+              "never-last",
+              "eval-tag"
+            ],
+            "title": "Drives",
+            "type": "string"
+          },
+          "example": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Example",
+            "type": "string"
+          },
+          "group": {
+            "default": "",
+            "maxLength": 40,
+            "title": "Group",
+            "type": "string"
+          },
+          "hidden": {
+            "default": false,
+            "title": "Hidden",
+            "type": "boolean"
+          },
+          "hint": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Hint",
+            "type": "string"
+          },
+          "id": {
+            "default": "",
+            "maxLength": 40,
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "fixed",
+              "menu",
+              "custom"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "order": {
+            "default": 0,
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Order",
+            "type": "integer"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/PresetIn"
+            },
+            "maxItems": 100,
+            "title": "Presets",
+            "type": "array"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label",
+          "kind"
+        ],
+        "title": "SectionItemIn",
+        "type": "object"
+      },
+      "SectionList": {
+        "additionalProperties": false,
+        "description": "The workspace's list in order, and how many sections of their own a builder may add to one agent.",
+        "properties": {
+          "customMax": {
+            "default": 5,
+            "title": "Custommax",
+            "type": "integer"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SectionItem"
+            },
+            "title": "Sections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sections"
+        ],
+        "title": "SectionList",
+        "type": "object"
+      },
+      "SectionListIn": {
+        "additionalProperties": false,
+        "description": "The whole list, replacing the saved one.",
+        "properties": {
+          "customMax": {
+            "default": 5,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Custommax",
+            "type": "integer"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SectionItemIn"
+            },
+            "maxItems": 80,
+            "minItems": 1,
+            "title": "Sections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sections"
+        ],
+        "title": "SectionListIn",
         "type": "object"
       },
       "Serves": {
@@ -30941,6 +31244,549 @@
         "summary": "List Activity",
         "tags": [
           "Activity"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/agent-instruction-sections": {
+      "delete": {
+        "description": "Resets the list to the default and returns it; 200 when it already was.",
+        "operationId": "agents_reset_instruction_sections",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SectionList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Reset Instruction Sections",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      },
+      "get": {
+        "description": "The workspace's list, or the default when it has saved none.",
+        "operationId": "agents_get_instruction_sections",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SectionList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Get Instruction Sections",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      },
+      "put": {
+        "description": "Replaces the list with the one sent (422 `validation_failed` naming `sections` when it breaks a rule). Agents\nalready saved keep the prompt they were saved with; the next save of each is written in the new order.",
+        "operationId": "agents_put_instruction_sections",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SectionListIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SectionList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Put Instruction Sections",
+        "tags": [
+          "Agents"
         ],
         "x-ops-public": "sdk"
       }

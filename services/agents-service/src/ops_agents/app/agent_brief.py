@@ -18,6 +18,7 @@ from ops_service_kit.errors import Unprocessable, ValidationFailed
 from ops_service_kit.http import Json
 from ops_service_kit.narrow import json_list, json_object
 
+from .instruction_sections import SectionList, default_list, headings, menu_labels
 from .skill_content import Position, Problem
 
 PromptMode = Literal["brief", "full"]
@@ -96,9 +97,12 @@ def patched(
     mode: PromptMode | None,
     patterns: Patterns | None,
     writes_prompt: bool,
+    listing: SectionList | None = None,
 ) -> Json:
     """`spec`, already merged with the rest of a save, with the brief, the prompt mode and the patterns the save
-    carries. `writes_prompt` says the save also carries `instructions` or `role`.
+    carries. `writes_prompt` says the save also carries `instructions` or `role`. `listing` is the workspace's list
+    of sections (the default when None): it checks the brief's sections, names each menu section by its label and
+    sets the order the prompt is written in.
 
     A save that names neither the brief nor the mode leaves a version without a mode untouched. In brief mode the
     role and the instructions are written again on every save, because the prompt starts with the agent's name.
@@ -106,12 +110,20 @@ def patched(
     Raises:
         ValidationFailed: `validation_failed` when the mode is brief and no purpose can be found.
         Unprocessable: `validation_failed` (422) when the brief's sections break a rule `section_problem` names: a
-            menu section twice, more than five of the builder's own, or a name taken.
+            section the list does not hold, a menu section twice, more of the builder's own than the list allows,
+            or a name taken.
         Unprocessable: `brief_owns_prompt` when a save edits the instructions or the role of an agent in brief mode
             without changing the brief or switching to full prompt.
     """
-    if brief is not None and (problem := section_problem(brief.sections)):
-        raise Unprocessable(problem, code="validation_failed")
+    listing = listing or default_list()
+    order = headings(listing)
+    if brief is not None:
+        if problem := section_problem(brief.sections, order, listing.custom_max):
+            raise Unprocessable(problem, code="validation_failed")
+        labels = menu_labels(listing)
+        brief = brief.model_copy(
+            update={"sections": [s.model_copy(update={"name": labels.get(s.kind, s.name)}) for s in brief.sections]}
+        )
     out = dict(spec)
     if patterns is not None:
         out["patterns"] = patterns.model_dump(by_alias=True)
@@ -142,7 +154,7 @@ def patched(
         out["brief"] = brief.model_dump(by_alias=True)
     if now == "brief" and brief is not None:
         out["role"] = brief.purpose.strip()[:ROLE_MAX]
-        out["instructions"] = head(str(out.get("name") or ""), brief)
+        out["instructions"] = head(str(out.get("name") or ""), brief, order)
     return out
 
 
