@@ -62,6 +62,14 @@ tools:
       query: { type: string, required: false }
       parent: { type: string, required: false }
       cursor: { type: string, required: false }
+  - name: preview_files
+    title: Preview an S3 source
+    description: The first files an S3 source would take in, each with its outcome. Nothing is stored.
+    access: read
+    knowledge: preview
+    function: ops_plugin_s3.files:preview_files
+    input:
+      source: { type: object }
 
 knowledge_sources:
   - name: files
@@ -69,6 +77,7 @@ knowledge_sources:
     list: list_files
     get: get_file
     scopes: list_scopes
+    preview: preview_files
     # Its items are files, so Files can watch its folders.
     files: true
     # Every listing names every object: an object missing from one was removed.

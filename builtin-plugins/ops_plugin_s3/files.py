@@ -218,3 +218,25 @@ def list_scopes(
     if _text(page, "IsTruncated") == "true" and (nxt := _text(page, "NextContinuationToken")):
         out["next_cursor"] = nxt
     return out
+
+
+PREVIEW_FILES = 50
+
+
+@tool(access="read")
+def preview_files(ctx: Context, source: dict[str, Any]) -> dict[str, Any]:
+    """The first files the source would take in, each with its outcome, from the first listing page of each folder.
+    Nothing is fetched or stored."""
+    files: list[dict[str, Any]] = []
+    capped = False
+    for i in range(len(_folders(source))):
+        page = list_files(ctx, source, cursor=json.dumps({"folders": _folders(source), "i": i, "token": None}))
+        capped = capped or bool(page.get("next_cursor") and int(json.loads(page["next_cursor"])["i"]) == i)
+        for r in page["items"]:
+            files.append({"id": r["id"], "outcome": r.get("skipped") or "Will fetch", "will_fetch": "skipped" not in r})
+    return {
+        "found": len(files),
+        "will_fetch": sum(1 for f in files if f["will_fetch"]),
+        "pages": files[:PREVIEW_FILES],
+        "capped": capped or len(files) > PREVIEW_FILES,
+    }

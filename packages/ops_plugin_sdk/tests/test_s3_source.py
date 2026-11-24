@@ -101,6 +101,8 @@ def test_a_listing_over_three_pages_finds_every_object_and_an_unchanged_etag_fet
         if not cursor:
             break
     assert (pages, set(seen)) == (3, ids)
+    shown = call(s3(), "preview_files", {"source": source}, SETTINGS, fake)
+    assert (shown["found"], shown["will_fetch"], shown["capped"]) == (2, 2, True), shown
     one = sorted(ids)[0]
     got = call(s3(), "get_file", {"source": source, "id": one}, SETTINGS, fake)
     assert got["encoding"] == "base64" and got["marker"]
