@@ -14,9 +14,11 @@ from typing import Any, ClassVar, Literal
 import sqlalchemy as sa
 
 from ops_engine.store.tables import engine_runs
-from ops_service_kit.http import Json, Out
+from ops_service_kit.http import Json, ListPage, Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
+from ops_store.listing import list_page
 from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
@@ -196,6 +198,45 @@ class Batches(RuntimeStore):
     async def get(self, batch_id: str) -> BatchOut | None:
         async with self.tx() as c:
             return await one(c, sa.select(*BATCH_COLUMNS).where(_b.id == batch_id, team_visible(run_batches)), BatchOut)
+
+    async def of_workflow(self, workflow_id: str, params: ListParams) -> ListPage:
+        """One page of the workflow's batches, newest first, each with its rows counted in SQL by where they stand: a
+        row with no run is pending, unless it was written removed or failed (a check's file that never ran)."""
+        r, e, b = run_batch_rows, engine_runs, run_batches
+        run, mine = e.c.status, r.c.status
+
+        def count(cond: sa.ColumnElement[bool], name: str) -> sa.Label[Any]:
+            return sa.func.coalesce(sa.func.sum(sa.case((cond, 1), else_=0)), 0).label(name)
+
+        no_run = run.is_(None)
+        counts = (
+            sa.select(
+                r.c.tenant_id, r.c.batch_id,
+                count(run == "succeeded", "finished"),
+                count(run == "waiting", "waiting"),
+                count(sa.or_(run.in_(("failed", "cancelled")), sa.and_(no_run, mine == "failed")), "failed"),
+                count(sa.and_(no_run, mine == "removed"), "removed"),
+                count(sa.and_(no_run, mine.not_in(("failed", "removed"))), "pending"),
+                count(run.not_in(("succeeded", "failed", "cancelled", "waiting")), "running"),
+            )
+            .select_from(r.outerjoin(e, sa.and_(e.c.tenant_id == r.c.tenant_id, e.c.id == r.c.run_id)))
+            .where(r.c.tenant_id == current_tenant(), team_visible(r))
+            .group_by(r.c.tenant_id, r.c.batch_id)
+            .subquery()
+        )  # fmt: skip
+        n = counts.c
+        q = (
+            sa.select(
+                *BATCH_COLUMNS,
+                *(sa.func.coalesce(col, 0).label(col.name) for col in
+                  (n.finished, n.waiting, n.failed, n.removed, n.pending, n.running)),
+            )
+            .select_from(b.outerjoin(counts, sa.and_(n.tenant_id == b.c.tenant_id, n.batch_id == b.c.id)))
+            .where(b.c.tenant_id == current_tenant(), b.c.workflow_id == workflow_id, team_visible(b))
+        )  # fmt: skip
+        async with self.tx() as c:
+            # Newest first only: always one workflow's list, which `ix_run_batches_workflow` serves in this order.
+            return await list_page(c, q, params, default_sort=b.c.created_at.desc())
 
     async def rows(self, batch_id: str) -> list[BatchRowOut]:
         """Every row with its run's status, outcome, output and error, failed rows first, then in file order."""

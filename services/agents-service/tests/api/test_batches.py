@@ -185,3 +185,57 @@ async def test_the_results_download_lists_every_row_with_its_status(stack: Stack
     # The page and the download each read the batch and its rows on one connection.
     seen = await checkouts(c, [("get", f"/v1/batches/{bid}"), ("get", f"/v1/batches/{bid}/results.csv")], BUILDER)
     assert [(code, k) for _, code, k in seen] == [(200, 1), (200, 1)], seen
+
+
+async def test_a_workflows_batches_count_a_check_file_that_never_ran_and_a_waiting_run_apart(stack: Stack) -> None:  # noqa: F811
+    """A check's removed or too-large file has no run: the page and the list must not call it pending, and a run
+    paused on a person must not read as running."""
+    from ops_agents.store.check_batches import CheckBatch, CheckRow, write_check  # noqa: PLC0415
+
+    c, _ = stack
+    rt, files = wired(c)
+    upload = (await batch(c, await ready(c, files, csv(2)))).json()["data"]["id"]
+    assert await tick(rt) == 2
+    [paused, _] = await runs_of(c, WID)
+    async with rt.db.begin() as conn:
+        await conn.execute(
+            engine_runs.update()
+            .where(engine_runs.c.id == (paused.get("runId") or paused["id"]))
+            .values(status="waiting")
+        )
+    with tenant_scope(TENANT):
+        check = await write_check(
+            rt.db, binding_id=f"files:{WID}", watch_id="wat_inv", expected=None, to="3",
+            batch=CheckBatch(team_id="team_ops", workflow_id=WID, version=1, mode="live", watch_id="wat_inv",
+                             label="Invoices, 2 Dec 09:00", checked_at="2026-12-02T09:00:00Z", created_by="trigger"),
+            rows=[
+                CheckRow("f1:1", {"claim_ref": "a.pdf"}, "pending"),
+                CheckRow("f2:1", {"claim_ref": "b.pdf"}, "removed"),
+                CheckRow("f3:1", {"claim_ref": "c.zip"}, "failed", "too_large", "Larger than 25 MB"),
+            ],
+        )  # fmt: skip
+    assert check is not None
+    listed = await c.get(f"/v1/workflows/{WID}/batches", headers=BUILDER)
+    assert listed.status_code == 200, listed.text
+    lines = {b["id"]: b for b in listed.json()["data"]["data"]}
+    assert set(lines) == {upload, check.id}
+    counts = ("finished", "waiting", "failed", "removed", "running", "pending")
+    assert {k: lines[check.id][k] for k in counts} == dict.fromkeys(counts, 0) | {
+        "failed": 1,
+        "removed": 1,
+        "pending": 1,
+    }
+    assert lines[check.id]["origin"] == "check" and lines[check.id]["label"] == "Invoices, 2 Dec 09:00"
+    assert (lines[upload]["waiting"], lines[upload]["running"]) == (1, 1), lines[upload]
+    page = (await c.get(f"/v1/batches/{check.id}", headers=BUILDER)).json()["data"]
+    assert (page["pending"], page["removed"], page["failed"], page["retryable"], page["notRetryable"]) == (
+        1,
+        1,
+        1,
+        0,
+        1,
+    )
+    too_large = next(r for r in page["rows"] if r["status"] == "failed")
+    assert (too_large["failureCode"], too_large["reason"]) == ("too_large", "Larger than 25 MB"), page["rows"]
+    first = (await c.get(f"/v1/batches/{upload}", headers=BUILDER)).json()["data"]
+    assert (first["waiting"], first["running"]) == (1, 1), first

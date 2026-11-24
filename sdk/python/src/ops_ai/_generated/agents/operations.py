@@ -709,6 +709,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "batches_list_batches": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/workflows/{workflow_id}/batches",
+        "pathParams": ["workflow_id"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
+        "stream": False,
+    },
     "batches_retry_batch": {
         "body": None,
         "headers": [],
@@ -3602,6 +3611,34 @@ class Operations:
             SERVICE, OPERATIONS["workflows_delete_workflow"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    def batches_list_batches(
+        self,
+        workflow_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultBatchLine:
+        "List Batches"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["batches_list_batches"],
+            {"workflow_id": workflow_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def batches_start_batch(self, workflow_id: str, body: BatchIn) -> Any:
         "Start Batch"
         return self._t.call(SERVICE, OPERATIONS["batches_start_batch"], {"workflow_id": workflow_id}, {}, {}, body)  # type: ignore[no-any-return]
@@ -5347,6 +5384,34 @@ class AsyncOperations:
         "Delete Workflow"
         return await self._t.call(
             SERVICE, OPERATIONS["workflows_delete_workflow"], {"workflow_id": workflow_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def batches_list_batches(
+        self,
+        workflow_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultBatchLine:
+        "List Batches"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["batches_list_batches"],
+            {"workflow_id": workflow_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     async def batches_start_batch(self, workflow_id: str, body: BatchIn) -> Any:

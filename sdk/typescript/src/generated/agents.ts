@@ -3682,7 +3682,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Batches
+         * @description The workflow's batches, newest first, uploads and checks alike, each with its rows counted where they stand.
+         */
+        get: operations["batches_list_batches"];
         put?: never;
         /**
          * Start Batch
@@ -4795,12 +4799,42 @@ export interface components {
              */
             mode: "live" | "test";
         };
+        /** BatchLine */
+        BatchLine: {
+            /** Checkedat */
+            checkedAt?: string | null;
+            /** Createdat */
+            createdAt: string;
+            /** Failed */
+            failed: number;
+            /** Finished */
+            finished: number;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Origin */
+            origin: string;
+            /** Pending */
+            pending: number;
+            /** Removed */
+            removed: number;
+            /** Running */
+            running: number;
+            stopped?: components["schemas"]["Stopped"] | null;
+            /** Total */
+            total: number;
+            /** Waiting */
+            waiting: number;
+        };
         /** BatchRow */
         BatchRow: {
             /** Attempt */
             attempt: number;
             /** Error */
             error?: string | null;
+            /** Failurecode */
+            failureCode?: string | null;
             /** Input */
             input: {
                 [key: string]: components["schemas"]["JsonValue"];
@@ -4808,6 +4842,8 @@ export interface components {
             /** Outcome */
             outcome?: string | null;
             output?: components["schemas"]["JsonValue"];
+            /** Reason */
+            reason?: string | null;
             /** Row */
             row: number;
             /** Runid */
@@ -4824,6 +4860,8 @@ export interface components {
         };
         /** BatchView */
         BatchView: {
+            /** Checkedat */
+            checkedAt?: string | null;
             /** Failed */
             failed: number;
             /** Filename */
@@ -4832,10 +4870,20 @@ export interface components {
             finished: number;
             /** Id */
             id: string;
+            /** Mayretry */
+            mayRetry: boolean;
             /** Mode */
             mode: string;
+            /** Notretryable */
+            notRetryable: number;
+            /** Origin */
+            origin: string;
             /** Pending */
             pending: number;
+            /** Removed */
+            removed: number;
+            /** Retryable */
+            retryable: number;
             /** Rows */
             rows: components["schemas"]["BatchRow"][];
             /** Running */
@@ -4843,6 +4891,10 @@ export interface components {
             stopped?: components["schemas"]["Stopped"] | null;
             /** Total */
             total: number;
+            /** Waiting */
+            waiting: number;
+            /** Watchid */
+            watchId?: string | null;
             /** Workflowid */
             workflowId: string;
         };
@@ -6667,6 +6719,15 @@ export interface components {
         /** Envelope[ListResult[Agent]] */
         Envelope_ListResult_Agent__: {
             data: components["schemas"]["ListResult_Agent_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[BatchLine]] */
+        Envelope_ListResult_BatchLine__: {
+            data: components["schemas"]["ListResult_BatchLine_"];
             /**
              * Success
              * @constant
@@ -8552,6 +8613,18 @@ export interface components {
         ListResult_Agent_: {
             /** Data */
             data: components["schemas"]["Agent"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[BatchLine] */
+        ListResult_BatchLine_: {
+            /** Data */
+            data: components["schemas"]["BatchLine"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -34724,6 +34797,116 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_Workflow_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    batches_list_batches: {
+        parameters: {
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ListResult_BatchLine__"];
                 };
             };
             /** @description Invalid request */

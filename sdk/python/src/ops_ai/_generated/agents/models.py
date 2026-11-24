@@ -2864,28 +2864,54 @@ class BackgroundOut(TypedDict, closed=True):
     unreachable: list[str]
 
 
+class BatchLine(TypedDict, closed=True):
+    checkedAt: NotRequired[str | None]
+    createdAt: str
+    failed: int
+    finished: int
+    id: str
+    label: str
+    origin: str
+    pending: int
+    removed: int
+    running: int
+    stopped: NotRequired[Stopped | None]
+    total: int
+    waiting: int
+
+
 class BatchRow(TypedDict, closed=True):
     attempt: int
     error: NotRequired[str | None]
+    failureCode: NotRequired[str | None]
     input: dict[str, JsonValue]
     outcome: NotRequired[str | None]
     output: NotRequired[JsonValue]
+    reason: NotRequired[str | None]
     row: int
     runId: NotRequired[str | None]
     status: str
 
 
 class BatchView(TypedDict, closed=True):
+    checkedAt: NotRequired[str | None]
     failed: int
     fileName: str
     finished: int
     id: str
+    mayRetry: bool
     mode: str
+    notRetryable: int
+    origin: str
     pending: int
+    removed: int
+    retryable: int
     rows: list[BatchRow]
     running: int
     stopped: NotRequired[Stopped | None]
     total: int
+    waiting: int
+    watchId: NotRequired[str | None]
     workflowId: str
 
 
@@ -3551,6 +3577,12 @@ class Links(TypedDict, closed=True):
     emails: list[EmailLink]
     files: list[FileLink]
     runs: list[RunLink]
+
+
+class ListResultBatchLine(TypedDict, closed=True):
+    data: list[BatchLine]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
 
 
 class ListResultCaseRow(TypedDict, closed=True):
@@ -4379,6 +4411,11 @@ class EnvelopeGuardrailList(TypedDict, closed=True):
 
 class EnvelopeGuardrail(TypedDict, closed=True):
     data: Guardrail
+    success: Literal[True]
+
+
+class EnvelopeListResultBatchLine(TypedDict, closed=True):
+    data: ListResultBatchLine
     success: Literal[True]
 
 

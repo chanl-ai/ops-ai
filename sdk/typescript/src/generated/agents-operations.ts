@@ -911,6 +911,24 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "batches_list_batches": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/workflows/{workflow_id}/batches",
+    "pathParams": [
+      "workflow_id"
+    ],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
+    "stream": false
+  },
   "batches_retry_batch": {
     "body": null,
     "headers": [],
