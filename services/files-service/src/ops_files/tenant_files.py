@@ -995,17 +995,20 @@ class TenantFiles:
         if row is None:
             raise FileMissingError(file_id)
         versions = row.versions
+        newest = max((v.version for v in versions), default=None)
         if version is not None or digest is not None:
-            picked = [v for v in versions if v.version == version or (digest is not None and v.digest == digest)]
-            if not picked:
+            # Bytes that came back (version 3 the same as version 1) share a digest: the verdict holds for each.
+            numbers: list[int | None] = [
+                v.version for v in versions if v.version == version or (digest is not None and v.digest == digest)
+            ]
+            if not numbers:
                 raise FileMissingError(f"{file_id} has no version {version or digest}")
-            number: int | None = picked[0].version
         elif len(versions) > 1:
             raise InvalidUploadError(f"{file_id} has {len(versions)} versions; name the version the verdict is for")
         else:
-            number = versions[0].version if versions else None
-        newest = max((v.version for v in versions), default=None)
-        await self._scanned(file_id, number, result.status, result.engine, result.detail, newest=number == newest)
+            numbers = [versions[0].version if versions else None]
+        for number in numbers:
+            await self._scanned(file_id, number, result.status, result.engine, result.detail, newest=number == newest)
         done = await self._files.get(file_id)
         assert done is not None
         return self._detail(done, None)
