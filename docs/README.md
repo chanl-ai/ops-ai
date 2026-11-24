@@ -583,6 +583,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `guide/integrations/salesforce.md` | Salesforce: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
 | `guide/integrations/github.md` | GitHub: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
 | `guide/integrations/sharepoint.md` | SharePoint and OneDrive: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
+| `guide/integrations/s3.md` | Amazon S3: turn it on, what it brings, settings, permissions the key needs, limits |
 | `guide/integrations/confluence.md` | Confluence: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
 | `guide/integrations/website.md` | Website: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
 | `guide/integrations/sign-in-oauth.md` | Sign in with OAuth: team or personal sign-in, your own OAuth app |
