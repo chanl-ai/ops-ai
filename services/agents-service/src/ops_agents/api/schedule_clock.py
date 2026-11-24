@@ -169,6 +169,10 @@ def saved_before_slot(s: ScheduleRow, slot: datetime | None, now: datetime) -> b
     passed are not."""
     if slot is None or s.rule_digest == digest(s.rule) or now - slot > LATE_AFTER:
         return False
+    if s.rule_digest is not None and s.seen_at is None:
+        return (
+            False  # seen before and idle since (paused, archived): a resume waits for the next slot, whatever changed
+        )
     return datetime.fromisoformat(s.changed_at.replace("Z", "+00:00")) < slot
 
 
@@ -231,8 +235,8 @@ class ScheduleClock:
         return None
 
     async def _one(self, s: ScheduleRow, definition: DefinitionRow, handler: TargetHandler, now: datetime) -> int:
-        slot = self.kinds.last_slot(s.rule, now)
-        if not first_sighting(s) and (slot is None or (s.last_slot_at is not None and iso(slot) <= s.last_slot_at)):
+        seen = self.kinds.last_slot(s.rule, now)
+        if not first_sighting(s) and (seen is None or (s.last_slot_at is not None and iso(seen) <= s.last_slot_at)):
             return 0  # nothing new: no slot yet, or this one counted; the lease is for a slot still to count
         lease = lease_key(definition.tenant_id, s.workflow_id, s.trigger_step)
         try:
@@ -244,7 +248,8 @@ class ScheduleClock:
             fresh = await self.schedules.get(s.workflow_id, s.trigger_step)
             if fresh is None:
                 return 0
-            return await self._tick(fresh, definition, handler, slot=slot, now=now)
+            # The slot is read from the row as it is now: a rule changed since the first read is judged as itself.
+            return await self._tick(fresh, definition, handler, slot=self.kinds.last_slot(fresh.rule, now), now=now)
         finally:
             await self.leases.release(lease, KEY)
 
@@ -295,7 +300,7 @@ class ScheduleClock:
                 await self._log(
                     tick,
                     "missed",
-                    reason="The clock was down past half the gap to the next slot, so this slot did not run.",
+                    reason="The clock was down past half the gap to the neighbouring slot, so this slot did not run.",
                 )
             return 0
         if await handler.busy(tick):

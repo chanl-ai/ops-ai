@@ -216,6 +216,23 @@ async def test_pause_rule_change_archive_and_restore_each_wait_for_the_next_slot
     await clock.pass_once(at("13:00"))
     assert len(await env.runs()) == 4
 
+    # A rule changed while paused and resumed within a minute of its slot still waits for the next slot.
+    await env.publish("edited_paused")
+    await env.save(EVERY_15, at("09:50"), "edited_paused")
+    await env.minutes(clock, "09:59", "10:00")
+    with tenant_scope(TENANT):
+        await store.set_paused("edited_paused", True)
+    await env.save(HOURLY, at("10:50"), "edited_paused")
+    await env.saved_at("edited_paused", "2026-11-23T10:50:00.000Z")
+    await clock.pass_once(at("10:55"))
+    await env.finish_all("edited_paused")
+    with tenant_scope(TENANT):
+        await store.set_paused("edited_paused", False)
+    await clock.pass_once(at("11:00:20"))
+    assert len(await env.runs("edited_paused")) == 1, "a resume waits, whatever changed while paused"
+    await clock.pass_once(at("12:00"))
+    assert len(await env.runs("edited_paused")) == 2
+
 
 async def test_after_an_outage_one_catch_up_run_starts_marked_late_and_an_older_slot_is_missed(env: Env) -> None:
     await env.publish()

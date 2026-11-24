@@ -51,10 +51,16 @@ def upgrade() -> None:
         "WITH CHECK (tenant_id = current_setting('app.tenant_id', true))"
     )
     op.execute(f"GRANT DELETE ON trigger_events TO {TENANT_ROLE}")
+    # The grant is for the schedule clock's own rows: a restrictive policy leaves email trigger rows undeletable.
+    op.execute(
+        "CREATE POLICY trigger_events_schedule_delete ON trigger_events AS RESTRICTIVE FOR DELETE "
+        "USING (source LIKE 'schedule:%')"
+    )
 
 
 def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
+        op.execute("DROP POLICY IF EXISTS trigger_events_schedule_delete ON trigger_events")
         op.execute(f"REVOKE DELETE ON trigger_events FROM {TENANT_ROLE}")
         op.execute("DROP POLICY IF EXISTS workflow_schedules_tenant ON workflow_schedules")
     op.drop_table("workflow_schedules")

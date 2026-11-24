@@ -850,8 +850,8 @@ async def definition_view(rt: Runtime, me: Principal, workflow_id: str, version:
         raise NotFound(f"Workflow definition {workflow_id}")
     request = await engine_lifecycle.pending(rt, workflow_id)
     stored = await store.versions(workflow_id)
-    # The serving version is read from the versions listed here, not by a statement of its own: all versions of an id
-    # belong to one team, which `row` has already checked, so `serving` would pick the same one.
+    # The version that serves the workflow, from the versions listed here (they carry no definition; the schedules'
+    # idle reason reads one, which `store.serving` below fetches).
     current = next((v for v in reversed(stored) if v.stage in CURRENT), None)
     versions = [
         {
