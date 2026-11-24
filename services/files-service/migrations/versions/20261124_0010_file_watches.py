@@ -18,7 +18,14 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import mssql
 
-from ops_store.schema import TENANT_SCOPED, isolation_ddl, isolation_drop_ddl, mssql_predicates_ddl, team_owned
+from ops_store.schema import (
+    TENANT_SCOPED,
+    isolation_ddl,
+    isolation_drop_ddl,
+    mssql_drop_default_ddl,
+    mssql_predicates_ddl,
+    team_owned,
+)
 
 revision = "20261124_0010_file_watches"
 down_revision = "20261123_2345_source_files"
@@ -110,6 +117,9 @@ def downgrade() -> None:
                 op.execute(statement)
     op.drop_table("file_watch_events")
     op.drop_table("file_watches")
+    if dialect == "mssql":
+        # SQL Server refuses to drop a column while its default constraint is bound to it.
+        op.execute(mssql_drop_default_ddl("files", "gone_count"))
     with op.batch_alter_table("files") as b:
         for name in ("gone_count", "source_marker", "watch_id"):
             b.drop_column(name)

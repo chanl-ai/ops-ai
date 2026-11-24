@@ -21,12 +21,19 @@ decides what a fetched item becomes: knowledge keeps a snapshot and indexes it; 
 1. Read the place from where it keeps the source, and give the loop a `SourceState` over its own items.
 2. `read_changes(...)` lists what changed; `Listing.full` and `Listing.whole` say whether every item was seen, so
    the service may remove what was not listed. `Listing.skipped` holds the items listed but not taken in, each with
-   its reason, so a service can record one (a file too large) as failed rather than removed.
+   its reason, so a service can record one (a file too large) as failed rather than removed. A row refused for its
+   size also carries `skipped_code: "TOO_LARGE"`, which tells it apart from one a rule left out.
 3. `Fetcher(...).fetch_changed(..., on_listed=..., on_fetched=...)` hands each new version to the service in
    listing order.
-4. `Listing.settle(place, status)` moves the place on after a finished run, then the service saves it.
+4. `Listing.settle(place, status)` moves the place on after a finished run, then the service saves it. Only a
+   run settled as success takes the watermark and the changes cursor the last page named, so a run whose fetches
+   failed lists the same changes again.
 
-kb-service's adapter is `_KnowledgeState` in `services/kb-service/src/ops_kb/tool_sources.py`: the place lives in
+`contract.refusal_of` and `contract.source_values` check a declared source before a service saves one (a team
+sign-in, the declared inputs and their types); kb-service's create and files-service's watch create both ask them.
+
+files-service's adapter is `FileState` in `services/files-service/src/ops_files/watches.py`: the place lives on the
+watch, and the held items are the watch's source files. kb-service's adapter is `_KnowledgeState` in `services/kb-service/src/ops_kb/tool_sources.py`: the place lives in
 the knowledge source's `config`, and the held items are the source's knowledge items.
 
 ## Tests
