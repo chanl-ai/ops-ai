@@ -34,3 +34,13 @@ def test_a_second_migration_after_the_same_revision_fails_and_names_both_heads(t
     write(versions, "0002_claims", "0001_first")
     code, out = run(versions)
     assert code == 1 and "0002_runs" in out and "0002_claims" in out, out
+
+
+def test_a_revision_id_longer_than_the_version_column_fails(tmp_path: Path) -> None:
+    # alembic_version.version_num is VARCHAR(32): a longer id upgrades its tables, then fails writing the version row.
+    versions = tmp_path / "services/a-service/migrations/versions"
+    write(versions, "20261123_1200_self_approval_cell", None)
+    assert run(versions)[0] == 0, "a 32-character id fits"
+    write(versions, "20261123_1300_self_approval_reset_x", "20261123_1200_self_approval_cell")
+    code, out = run(versions)
+    assert code == 1 and "20261123_1300_self_approval_reset_x" in out and "32" in out, out
