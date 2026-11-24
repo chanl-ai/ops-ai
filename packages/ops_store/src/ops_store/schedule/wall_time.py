@@ -31,6 +31,17 @@ def clock(at: str, field: str = "time") -> time:
         raise InvalidSchedule(f"{at} is not a time of day (HH:MM).", field=field) from e
 
 
+def stored_clock(at: str, field: str = "time") -> time:
+    """A time of day as a rule stored before saves were strict reads it: "2", "2:5", "02:" and " 2:00" all parse, as
+    the first release's `time(int(hour), int(minute or 0))` read them. Only a stored rule is read this way; a save goes
+    through `clock`."""
+    hour, _, minute = at.partition(":")
+    try:
+        return time(int(hour), int(minute or 0))
+    except ValueError as e:
+        raise InvalidSchedule(f"{at} is not a time of day (HH:MM).", field=field) from e
+
+
 def wall(day: date, at: time, tz: ZoneInfo) -> datetime:
     """The UTC instant the wall clock in `tz` shows `at` on `day`."""
     local = datetime.combine(day, at, tzinfo=tz)  # fold=0: the first of a repeated time

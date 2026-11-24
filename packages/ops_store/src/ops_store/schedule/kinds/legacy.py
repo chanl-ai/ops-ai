@@ -16,7 +16,7 @@ from typing import ClassVar
 from pydantic import JsonValue
 
 from ..kind import InvalidSchedule, Rule
-from ..wall_time import DAY_NAMES, DAYS, clock, local_date, wall, zone
+from ..wall_time import DAY_NAMES, DAYS, clock, local_date, stored_clock, wall, zone
 
 HOURS = (1, 2, 4, 6, 12)
 
@@ -111,7 +111,7 @@ class Daily:
         return True
 
     def last_slot(self, rule: Mapping[str, JsonValue], now: datetime) -> datetime | None:
-        tz, at = zone(str(rule.get("tz") or "UTC")), clock(str(rule.get("time") or "02:00"))
+        tz, at = zone(str(rule.get("tz") or "UTC")), stored_clock(str(rule.get("time") or "02:00"))
         day = local_date(now, tz)
         for _ in range(8):
             if self._on(rule, day.weekday()) and (slot := wall(day, at, tz)) <= now:
@@ -120,7 +120,7 @@ class Daily:
         return None
 
     def next_slots(self, rule: Mapping[str, JsonValue], after: datetime, n: int) -> list[datetime]:
-        tz, at = zone(str(rule.get("tz") or "UTC")), clock(str(rule.get("time") or "02:00"))
+        tz, at = zone(str(rule.get("tz") or "UTC")), stored_clock(str(rule.get("time") or "02:00"))
         day, out = local_date(after, tz), list[datetime]()
         # Bounded: a stored rule whose day matches no weekday gives no slots instead of looping for good.
         for _ in range(8 * n + 8):
