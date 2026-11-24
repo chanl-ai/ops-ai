@@ -4,6 +4,7 @@ import * as React from 'react';
 import { Copy, LogOut, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { SsoLinksSection } from '@/components/account/sso-links-section';
 import { ConnectedAssistantsTable, MfaDevicesTable, SessionsTable } from '@/components/account/account-tables';
 import { PageLayout } from '@/components/page-layout';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -16,8 +17,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAccountProfile, useAccountSessions, useChangePassword, useMfaDevices, useRegenerateRecoveryCodes, useRemoveMfaDevice, useRevokeOtherSessions, useRevokeSession } from '@/hooks/account-queries';
-import { useReauthenticate, useSession } from '@/hooks/auth-queries';
+import { useReauthenticate, useSession, useSsoLinks, useStartSsoLink } from '@/hooks/auth-queries';
 import { useConnectedAssistants, useDisconnectAssistant } from '@/hooks/oauth-queries';
+import type { SsoLink } from '@/lib/auth';
 import type { AccountSession, MfaDevice } from '@/lib/types/account';
 import type { ConnectedAssistant } from '@/lib/types/oauth';
 
@@ -37,6 +39,10 @@ export default function AccountSecurityPage() {
   const revokeOthers = useRevokeOtherSessions();
   const assistants = useConnectedAssistants();
   const disconnect = useDisconnectAssistant();
+  const ssoLinks = useSsoLinks();
+  const startLink = useStartSsoLink();
+  const [linkingId, setLinkingId] = React.useState<string | null>(null);
+  const [linkError, setLinkError] = React.useState<string>();
   const [assistantBusy, setAssistantBusy] = React.useState<string | null>(null);
   const { session } = useSession();
   // Enrolled password accounts confirm the change with their authenticator code too, as at sign-in.
@@ -62,6 +68,12 @@ export default function AccountSecurityPage() {
     } catch (e) {
       setPwError((e as Error).message);
     }
+  };
+  const onLink = (l: SsoLink) => {
+    setLinkError(undefined);
+    setLinkingId(l.providerId);
+    // The provider sends the browser back to /sso/callback?link=1, which finishes the link and returns here.
+    startLink.mutate({ returnTo: '/settings/account/security' }, { onSuccess: (r) => window.location.assign(r.redirectUrl), onError: (e) => (setLinkError(e.message), setLinkingId(null)) });
   };
   const onRevoke = (s: AccountSession) => {
     setBusyId(s.id);
@@ -134,6 +146,7 @@ export default function AccountSecurityPage() {
             </div>
           </SettingsSection>
           </SampleData>
+          <SsoLinksSection links={ssoLinks.data} loading={ssoLinks.isPending} error={ssoLinks.error} retrying={ssoLinks.isFetching} onRetry={() => ssoLinks.refetch()} onLink={onLink} linkingId={linkingId} linkError={linkError} />
           <SettingsSection title="Connected assistants" description="Claude, Cursor, VS Code or ChatGPT, signed in as you at a team’s MCP address. Disconnect one and it stops working.">
             {/* A first answer that failed shows the error with Retry at once, not a skeleton while the retries run. */}
             {!assistants.data && (assistants.isError || assistants.failureCount > 0) ? (

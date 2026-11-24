@@ -92,7 +92,7 @@ export const useSignInAsDemo = () =>
     if (!authProvider.signInAsDemo) throw new Error('This sign-in adapter has no demo sign-in.');
     return authProvider.signInAsDemo(email);
   }, true);
-export const useStartSso = () => useAuthWrite((input: { email?: string; domain?: string; next?: string }) => authProvider.startSso(input));
+export const useStartSso = () => useAuthWrite((input: { email?: string; domain?: string; next?: string; invite?: string }) => authProvider.startSso(input));
 export const useCompleteSso = () => useAuthWrite((code: string) => authProvider.completeSso(code), true);
 /** How one email signs in, asked once (the forgot-password page, before it sends). */
 export const useAskSignInOptions = () => useAuthWrite((email: string) => authProvider.signInOptions(email));
@@ -106,6 +106,14 @@ export const useReauthenticate = () => useAuthWrite((input: ReauthInput) => auth
 /** Step-up for SSO and Google sessions: the redirect to the IdP, which comes back through /sso/callback?stepUp=1. */
 export const useStartSsoStepUp = () => useAuthWrite((input: { returnTo: string }) => authProvider.startSsoStepUp(input));
 export const useCompleteSsoStepUp = () => useAuthWrite((code: string) => authProvider.completeSsoStepUp(code));
+/** The company providers the signed-in person can link, with whether each is linked (My security). */
+export const useSsoLinks = () => useSessionQuery({ queryKey: ['sso-links'], queryFn: () => authProvider.ssoLinks(), retry: false });
+/** Link the person's account at their company's provider: the redirect, which comes back through /sso/callback?link=1. */
+export const useStartSsoLink = () => useAuthWrite((input: { returnTo: string }) => authProvider.startSsoLink(input));
+export function useCompleteSsoLink() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (code: string) => authProvider.completeSsoLink(code), onSuccess: () => qc.invalidateQueries({ queryKey: ['sso-links'] }) });
+}
 /** A stable function returning the step-up an IdP round trip left (cleared on read), or null. */
 export const useTakeStepUp = () => React.useCallback(() => authProvider.takeStepUp(), []);
 export const useSignOut = () => useAuthWrite(() => authProvider.signOut(), true);
