@@ -160,6 +160,8 @@ class NodeType:
     # per-attempt limit.
     tries: str = ""
     limit: str = ""
+    # A trigger a saved schedule may sit on: the schedule clock starts its runs with `dueAt` as the only input.
+    schedulable: bool = False
 
     @property
     def key(self) -> tuple[str, int]:
@@ -643,6 +645,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             via="schedule",
             form_parameter="inputSchema",
         ),
+        schedulable=True,
     ),
     NodeType(
         id="ops.data.combine",

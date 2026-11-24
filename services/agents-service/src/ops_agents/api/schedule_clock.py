@@ -53,6 +53,21 @@ LATE_AFTER = timedelta(seconds=90)
 BUSY = ("queued", "running")
 
 
+# The one input field the clock fills.
+CLOCK_FIELDS = frozenset({"dueAt"})
+
+
+def required_beyond_due(definition: Json, step: str) -> str | None:
+    """The first field the step's input schema requires that a tick cannot fill, or None: every tick would fail on
+    it, so a save and a publish refuse it."""
+    for node in cast(list[Json], definition.get("nodes") or []):
+        if node.get("id") == step:
+            schema = cast(Json, cast(Json, node.get("parameters") or {}).get("inputSchema") or {})
+            extra = sorted(set(cast(list[str], schema.get("required") or [])) - CLOCK_FIELDS)
+            return extra[0] if extra else None
+    return None
+
+
 def iso(t: datetime) -> str:
     return t.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 

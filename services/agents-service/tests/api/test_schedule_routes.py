@@ -77,3 +77,23 @@ async def test_kinds_preview_and_save_agree_and_a_save_needs_no_publish(client: 
     assert (await client.get(url(wid), headers=JAMES)).json()["data"]["rule"] == stored["rule"]
     assert (await client.delete(url(wid), headers=JAMES)).status_code == 204
     assert (await client.get(url(wid), headers=JAMES)).status_code == 404
+
+
+async def test_publishing_a_version_the_saved_schedule_cannot_fill_is_refused(client: AsyncClient) -> None:
+    wid = await saved(client)
+    put = await client.put(url(wid), json={"rule": {"kind": "every", "every": 15, "unit": "minutes"}}, headers=JAMES)
+    assert put.status_code == 200, put.text
+    shown = (await client.get(f"/v1/workflows/definitions/{wid}", headers=JAMES)).json()["data"]
+    assert [s["words"] for s in shown["schedules"]] == ["Every 15 minutes from 00:00, UTC"]
+
+    schema: dict[str, Any] = {"type": "object", "required": ["day"], "properties": {"day": {}}}
+    v2 = await client.post("/v1/workflows/definitions", json={"definition": definition(wid, schema)}, headers=JAMES)
+    assert v2.status_code < 300, v2.text
+    asked = await client.post(
+        f"/v1/workflows/definitions/{wid}/publish-requests",
+        json={"version": v2.json()["data"]["version"]},
+        headers=JAMES,
+    )
+    assert asked.status_code == 422, asked.text
+    assert asked.json()["error"]["code"] == "schedule_input_required"
+    assert asked.json()["error"]["details"]["field"] == "day"

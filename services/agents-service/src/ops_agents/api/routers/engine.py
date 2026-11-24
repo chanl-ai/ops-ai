@@ -9,6 +9,7 @@ import contextlib
 import json
 from collections.abc import AsyncGenerator, Iterable
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypeAlias, TypedDict, cast
 
 from fastapi import APIRouter, Depends, Query
@@ -95,6 +96,7 @@ from ..envelope import ok
 from ..file_names import named, names_asked_once
 from ..publish_policy import decide, team_document
 from ..run_story import Decision, decisions_in, files_in, steps_view
+from ..schedule_view import ScheduleView, schedule_view
 from ..schemas import (  # pyright: ignore[reportPrivateImportUsage]
     SSE_RESPONSE,
     DocumentRead,
@@ -368,6 +370,8 @@ class DefinitionView(Out):
     outdated_copy: OutdatedCopyView | None = None
     # The copy the next working copy save must name: the working copy, else the newest version.
     save_base: SaveBase
+    # The schedules saved on its trigger steps, which live outside the versions and apply to the live one.
+    schedules: list[ScheduleView] = Field(default_factory=list[ScheduleView])
 
 
 def definitions(rt: Runtime) -> DefinitionStore:
@@ -872,6 +876,7 @@ async def definition_view(rt: Runtime, me: Principal, workflow_id: str, version:
     # A copy made on an older version than the newest (one saved through the API or CLI since) is kept and shown, so
     # its unpublished change is never lost; saves are made on the newest version.
     outdated = held if held is not None and copy is None else None
+    now = datetime.now(UTC)
     return {
         "workflowId": workflow_id,
         "name": row.name,
@@ -887,6 +892,7 @@ async def definition_view(rt: Runtime, me: Principal, workflow_id: str, version:
         "startForm": start_form(row.definition, REGISTRY),
         "workingCopy": copy and _copy_view(copy),
         "saveBase": _save_base(copy) if copy else {"version": newest["version"], "digest": newest["digest"]},
+        "schedules": [schedule_view(s, now) for s in await WorkflowSchedules(rt.db).for_workflow(workflow_id)],
         "outdatedCopy": outdated
         and _copy_view(outdated)
         | {"newerVersion": newest["version"], "newerBy": newest.get("createdBy"), "newerAt": newest.get("createdAt")},

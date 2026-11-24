@@ -6014,6 +6014,8 @@ export interface components {
             paused: boolean;
             review: components["schemas"]["OpenPublishRequest"] | null;
             saveBase: components["schemas"]["SaveBase"];
+            /** Schedules */
+            schedules?: components["schemas"]["ScheduleView"][];
             /**
              * Stage
              * @enum {string}
