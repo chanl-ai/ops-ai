@@ -5,7 +5,7 @@ Status: current. Id: `uc-730`. Service: `console`. Layers: ui.
 Agents change apps without asking until a team admin turns on one switch on Settings > Approvals, "Ask before an agent
 changes anything in an app". Once on, the admin picks who answers: the person in the chat, or a reviewer of a chosen
 role. Under Advanced, "Test accounts never ask" is on until the team saves it off, and a line points to the Roles page:
-who may approve their own requests is the Approvals · decide cell (Decide in the Reviews row), not a setting here. The old
+who may approve their own requests is the Approvals · decide cell, not a setting here. The old
 approval rows and "Requester may decide" are no longer on Policies.
 Settings, defaults and who changes them: `docs/architecture/roles-and-permissions.md`, section Approvals.
 

@@ -244,7 +244,7 @@ export default function ApprovalsPage() {
                 <Link href="/govern/access/roles" className="underline underline-offset-4">
                   Roles
                 </Link>{' '}
-                page: a role with Decide ticked in the Reviews row may. Admin has it by default; everyone else needs someone else to approve.
+                page: a role with Approvals · Decide ticked may. Admin has it by default; everyone else needs someone else to approve.
               </p>
               <SettingCard
                 id="approvals-test-accounts"

@@ -64,6 +64,7 @@ await withUiStack(async (consoleUrl, stack) => {
       check('3 it is on by default', (await box.getAttribute('aria-checked')) === 'true');
       const own = page.getByTestId('approvals-own-requests');
       check('3 who approves their own requests points to the Roles page', (await own.getByRole('link', { name: 'Roles' }).getAttribute('href')) === '/govern/access/roles');
+      check('3 the text names the Approvals · Decide cell', /Approvals · Decide/.test(await own.innerText()) && !/Reviews row/.test(await own.innerText()));
       check('3 there is no two-person switch', (await page.getByTestId('approvals-two-person-switch').count()) === 0);
       await box.click();
       await page.getByTestId('setting-approvals-test-accounts').getByRole('button', { name: 'Save' }).click();
