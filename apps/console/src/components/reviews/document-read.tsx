@@ -288,7 +288,7 @@ function RecordTable({
       )}
       {others.length > 0 && (keyFields.length > 0 || onConfirm) ? (
         // Folded behind key fields, which carry the decision; open when nothing is marked key, so every value is seen.
-        <Collapsible defaultOpen={keyFields.length === 0} className="flex flex-col gap-1" data-testid={`read-other-fields-${index}`}>
+        <Collapsible defaultOpen={keyFields.length === 0 || notRead} className="flex flex-col gap-1" data-testid={`read-other-fields-${index}`}>
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <CollapsibleTrigger className="group flex items-center gap-1 font-medium" data-testid={`read-other-toggle-${index}`}>
               <ChevronRight className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
@@ -296,9 +296,9 @@ function RecordTable({
               {others.length === 1 ? '1 field' : `${others.length} fields`}
             </CollapsibleTrigger>
             <span className="text-xs text-muted-foreground" data-testid={`read-other-summary-${index}`}>
-              {keyFields.length ? `not marked key${toCheck ? ` · ${toCheck} to check` : ''}` : 'read with confidence'}
+              {notRead ? 'required ones are typed here too' : keyFields.length ? `not marked key${toCheck ? ` · ${toCheck} to check` : ''}` : 'read with confidence'}
             </span>
-            {onConfirm && (
+            {onConfirm && !notRead && (
               <Button type="button" size="sm" variant={accepted ? 'secondary' : 'outline'} className="ml-auto h-7" onClick={() => setAccepted((a) => !a)} aria-pressed={accepted} data-testid={`read-accept-others-${index}`}>
                 {accepted ? (
                   <>

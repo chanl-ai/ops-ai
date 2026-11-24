@@ -257,14 +257,14 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-394 | tools-service | A person signs a connection in once with the team's account, and tools use and refresh its token | api, ui | current |
 | uc-395 | tools-service | A tool presents a client certificate from its connection to a system that requires one | api, ui | current |
 | uc-396 | tools-service | A builder adds an MCP server behind OAuth by its address, signs in once, and its tools run through the same executor | api, ui | current |
-| uc-397 | tools-service | A workflow's tool step reaches its error and timeout ports on mock answers in a test run, and live reaches the system | api | current |
+| uc-397 | tools-service | A workflow's tool step reaches its error and timeout ports on mock answers in a test run, and live reaches the system | api, ui | current |
 | uc-410 | tools-service | An assistant lists and runs a team's read tools over MCP with an API key; writes, other teams and production are refused | api, ui | current |
 | uc-267 | console | Admins see roles, a person's effective access and why an action is refused | ui | current |
 | uc-233 | console | Start run is a form generated from the trigger's input schema; a file input uploads or picks files and the run gets their ids | ui | passing |
 | uc-257 | console | Tables size each column by what it holds: names trimmed to one line with the whole value on hover, numbers right-aligned, a dash for an empty cell, and the name pinned on a phone | ui | passing |
 | uc-248 | agents-service | A hold on a customer's account: matched, worked out, approved in time or by a supervisor after the deadline, placed, noted on a case, and the outside system told | ui | passing |
 | uc-249 | agents-service | A complaint email: each attachment recognised and its read kept, the complaint read and triaged by an agent, a case by urgency, a hold started, and an approved reply | ui | passing |
-| uc-250 | documents-service | Every fixture of four document types is read end to end | api | current |
+| uc-250 | documents-service | Every fixture of four document types is read end to end | api, ui | current |
 | uc-251 | agents-service | A case reads assembled: typed fields in its case type's order, what it waits on and the drafted action, its run, workflow and file; decided on the task page, the action reads decided | api, ui | passing |
 | uc-252 | agents-service | A builder archives a workflow: it starts no run and leaves both lists, its run kept; restored, it serves its live version again | api, ui | passing |
 | uc-400 | agents-service | A workflow forks into two checks and a Join: the step after it runs once with both by the step they came from; a skipped branch is null; a fork meeting at a plain step is warned | api, ui | passing |
@@ -333,7 +333,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-627 | tools-service | A team connects Salesforce at its company address and its agents query that org | api, ui | draft |
 | uc-628 | tools-service | An admin turns an app on in one window and everyone can use it | api, ui | draft |
 | uc-629 | files-service | A file's page shows its preview or says why not | ui | draft |
-| uc-668 | tools-service | An advisor's meeting log saves the opportunity and its note together, or neither | api | current |
+| uc-668 | tools-service | An advisor's meeting log saves the opportunity and its note together, or neither | api, ui | current |
 | uc-671 | tools-service | Connectors for people: one row per app, an app off for the team, a per-chat connector set | api, ui | current |
 | uc-672 | documents-service | A scan, a half scan and a filled form are each read once by documents-service and cited from a knowledge base by the OCR'd page | api, sdk | passing |
 | uc-673 | agents-service | A scanned file attached in chat is read with OCR and reaches the agent whole | api, ui | passing |
@@ -342,25 +342,25 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-676 | kb-service | Push knowledge from another system | api, sdk, cli, ui | passing |
 | uc-677 | kb-service | Turn on rerank and query rewrite | api, sdk, cli, ui | passing |
 | uc-678 | kb-service | Take in SharePoint libraries and Confluence spaces | api, sdk, cli, ui | passing |
-| uc-691 | tools-service | A second live org signs in at its own address and a call naming it reaches it | api | current |
-| uc-692 | tools-service | A second account of an app that is not Salesforce signs in at its own server | api | current |
-| uc-693 | tools-service | Every account row says what it points at, also for an app that declares nothing and a custom app | api | current |
-| uc-694 | tools-service | A call naming another person's own account or another team's account is refused | api | current |
-| uc-695 | agents-service | A workflow step that names an account runs in that account | api | current |
-| uc-696 | agents-service | An agent runs in the account it names, and a step it starts runs in the step's | api | current |
+| uc-691 | tools-service | A second live org signs in at its own address and a call naming it reaches it | api, ui | current |
+| uc-692 | tools-service | A second account of an app that is not Salesforce signs in at its own server | api, ui | current |
+| uc-693 | tools-service | Every account row says what it points at, also for an app that declares nothing and a custom app | api, ui | current |
+| uc-694 | tools-service | A call naming another person's own account or another team's account is refused | api, ui | current |
+| uc-695 | agents-service | A workflow step that names an account runs in that account | api, ui | current |
+| uc-696 | agents-service | An agent runs in the account it names, and a step it starts runs in the step's | api, ui | current |
 | uc-697 | agents-service | A chat uses the account picked for it, and a new chat starts on the default | ui | current |
-| uc-698 | tools-service | A call naming an account that no longer exists is refused, never sent to the default | api | current |
-| uc-699 | tools-service | Two accounts of one app in one team never share a name | api | current |
-| uc-700 | tools-service | A test run that names a live account uses the test account or is refused | api | current |
-| uc-701 | agents-service | Renaming an account changes no published version, and the next publish names the dead name | api | current |
+| uc-698 | tools-service | A call naming an account that no longer exists is refused, never sent to the default | api, ui | current |
+| uc-699 | tools-service | Two accounts of one app in one team never share a name | api, ui | current |
+| uc-700 | tools-service | A test run that names a live account uses the test account or is refused | api, ui | current |
+| uc-701 | agents-service | Renaming an account changes no published version, and the next publish names the dead name | api, ui | current |
 | uc-702 | tools-service | A person adds a second account of their own at their own address and makes it their default | api, cli | current |
 | uc-703 | tools-service | Add account is on the Accounts tab for whoever manages apps, and never for a member | ui | current |
-| uc-704 | agents-service | The model is told the account each app uses and cannot switch it in words | api | current |
+| uc-704 | agents-service | The model is told the account each app uses and cannot switch it in words | api, ui | current |
 | uc-705 | tools-service | Callers from before several accounts keep working | api, sdk | current |
-| uc-706 | tools-service | A package app runs on the chosen org and never on one without the package | api | current |
+| uc-706 | tools-service | A package app runs on the chosen org and never on one without the package | api, ui | current |
 | uc-707 | agents-service | An account a workflow or agent names is not deleted until nothing names it | api, ui | current |
-| uc-708 | agents-service | An expired sign-in on an account a step, agent or chat names waits for a new sign-in and never uses another account | api | current |
-| uc-709 | tools-service | Changing who signs in to each person makes calls act as the person, and schedules keep the shared login | api | current |
+| uc-708 | agents-service | An expired sign-in on an account a step, agent or chat names waits for a new sign-in and never uses another account | api, ui | current |
+| uc-709 | tools-service | Changing who signs in to each person makes calls act as the person, and schedules keep the shared login | api, ui | current |
 | uc-710 | console | A new row shows right after it is added, whatever page or search the list is on | ui | passing |
 | uc-720 | models-service | A refused model call in chat says what went wrong with the provider and what to do, worded for an admin or a member | ui | passing |
 | uc-721 | tools-service | A connected app writes at once: every tool on and writes run without asking until a team admin turns asking on, per team or per app; a turned-off tool says how to turn it on | api, sdk | passing |
@@ -401,4 +401,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-769 | console | My apps is a page of its own, the same for an admin and a member | ui | draft |
 | uc-770 | tools-service | Admins see people's app sign-ins and end one | ui | current |
 | uc-771 | agents-service | A builder takes a new skill to its first publish in under ten minutes | ui | current |
-| uc-776 | documents-service | A read no model reply answered goes to a person | api | current |
+| uc-776 | documents-service | A read no model reply answered goes to a person | api, ui | current |
