@@ -76,7 +76,7 @@ AREAS: dict[str, tuple[Area, str]] = {
     "documents": (documents_main, "document types and extractions"),
     "people": (people_main, "members, invites (printed unless --send), roles, me"),
     "models": (models_main, "model aliases, providers, keys, and a test turn (--confirm)"),
-    "batches": (batches_main, "a workflow's batch: get"),
+    "batches": (batches_main, "a workflow's batch: get, retry, csv"),
     "memories": (memories_main, "your memories: list, forget, forget-agent, export"),
     "test-data": (testdata_main, "list what test runs made ([test] prefix); clean --confirm removes it"),
 }

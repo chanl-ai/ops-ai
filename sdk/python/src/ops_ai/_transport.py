@@ -85,10 +85,12 @@ def _retryable(op: Operation, headers: Mapping[str, str]) -> bool:
 
 def _result(response: httpx.Response) -> Any:
     request_id = response.headers.get("x-request-id")
+    payload: Any
     try:
         payload = response.json() if response.content else None
     except json.JSONDecodeError:
-        payload = None
+        # A body that is not JSON (a CSV download) is the answer itself, as the TypeScript client returns it.
+        payload = response.text
     if response.is_error or (isinstance(payload, dict) and payload.get("success") is False):
         err = (payload or {}).get("error") if isinstance(payload, dict) else None
         raise error_for(response.status_code, err or {}, request_id, response.text[:500])

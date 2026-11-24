@@ -110,6 +110,14 @@ class Workflows:
         """One batch with its counts and every row, failed first."""
         return self._raw.agents.batches_batch_page(batch_id)
 
+    def retry_batch(self, batch_id: str) -> Any:
+        """Starts each failed run again (workflows.decide); `notRetryable` counts the files that never ran."""
+        return self._raw.agents.batches_retry_batch(batch_id)
+
+    def batch_csv(self, batch_id: str) -> str:
+        """The batch's results as CSV text, one line per row."""
+        return str(self._raw.agents.batches_batch_results(batch_id))
+
     def get(self, id: str, version: int | None = None) -> Any:
         return self.get_definition(id, version=version)
 
@@ -276,6 +284,12 @@ class AsyncWorkflows:
 
     async def get_batch(self, batch_id: str) -> Any:
         return await self._raw.agents.batches_batch_page(batch_id)
+
+    async def retry_batch(self, batch_id: str) -> Any:
+        return await self._raw.agents.batches_retry_batch(batch_id)
+
+    async def batch_csv(self, batch_id: str) -> str:
+        return str(await self._raw.agents.batches_batch_results(batch_id))
 
     async def get(self, id: str, version: int | None = None) -> Any:
         return await self.get_definition(id, version=version)
