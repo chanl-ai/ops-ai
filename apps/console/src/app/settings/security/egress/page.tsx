@@ -51,11 +51,19 @@ function hostColumns(canEdit: boolean, onRemove: (v: string) => void): ColumnDef
       cell: ({ row }) =>
         row.original.modules.length ? (
           <div className="flex flex-wrap gap-1">
-            {row.original.modules.map((m) => (
-              <Badge key={m.id} variant="outline" className="text-xs font-normal" asChild>
-                <Link href={`/data/tools/${encodeURIComponent(m.id)}`}>{m.name}</Link>
-              </Badge>
-            ))}
+            {row.original.modules.map((m) =>
+              // A module of a team the reader is not acting in comes back named by its id: its name and page are that
+              // team's records, so it is shown without a link to a page that would refuse the reader.
+              m.name === m.id ? (
+                <Badge key={m.id} variant="outline" className="font-mono text-xs font-normal">
+                  {m.id}
+                </Badge>
+              ) : (
+                <Badge key={m.id} variant="outline" className="text-xs font-normal" asChild>
+                  <Link href={`/data/tools/${encodeURIComponent(m.id)}`}>{m.name}</Link>
+                </Badge>
+              ),
+            )}
           </div>
         ) : (
           <span className="text-xs text-muted-foreground">No module yet</span>
