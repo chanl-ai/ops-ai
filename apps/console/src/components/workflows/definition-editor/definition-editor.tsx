@@ -378,7 +378,7 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
   });
 
   const actions = (
-    <div className="flex flex-wrap items-center justify-end gap-2">
+    <>
       <RecordActions
         status={
           <>
@@ -404,7 +404,7 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
           </>
         }
       />
-    </div>
+    </>
   );
 
   const canvas = (
@@ -507,7 +507,7 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
         frame({ actions, canvas })
       ) : (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-          {actions}
+          <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>
           {canvas}
         </div>
       )}

@@ -37,7 +37,7 @@ export function SaveState({ status, detail, onRetry, className }: { status: Save
       data-testid="save-state"
       data-state={shown}
       title={detail ?? undefined}
-      className={cn('inline-flex h-9 w-36 shrink-0 items-center gap-1.5 whitespace-nowrap text-sm', bad ? 'text-destructive-text' : 'text-muted-foreground', className)}
+      className={cn('inline-flex h-9 w-28 shrink-0 sm:w-36 items-center gap-1.5 whitespace-nowrap text-sm', bad ? 'text-destructive-text' : 'text-muted-foreground', className)}
     >
       {shown === 'saving' ? <Loader2 className="size-3.5 animate-spin" /> : bad ? <AlertTriangle className="size-3.5" /> : shown === 'saved' ? <Check className="size-3.5" /> : null}
       {LABEL[shown]}
