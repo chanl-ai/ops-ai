@@ -232,8 +232,8 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
         clock = ScheduleClock(db, Leases(db, owner=owner, ttl=settings.lease_ttl_seconds))
         ticking = asyncio.create_task(keep_schedules_ticking(clock, stop, heartbeats(db)))
         stack.push_async_callback(lambda: asyncio.wait_for(ticking, None))
-        # The audit entries of schedule saves and clears reach platform-service's audit log; with no internal endpoint
-        # they wait in the outbox, as kb-service's do.
+        # The audit entries of schedule saves and clears reach platform-service's audit log. With no internal endpoint
+        # no relay runs, so the entries wait in the outbox until an install that has one starts it.
         audit_log = (
             ServiceClient.for_settings(
                 settings, service="agents", audience="platform", scopes=[AUDIT_SCOPE], endpoint="platform_internal"
@@ -241,11 +241,13 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             if settings.platform_internal is not None
             else None
         )
-        targets = {"platform": audit_log} if audit_log is not None else {}
-        handing = asyncio.create_task(
-            run_relay(outbox_relay(db, targets), key="agents_relay", stop=stop, store=heartbeats(db))
-        )
-        stack.push_async_callback(lambda: asyncio.wait_for(handing, None))
+        if audit_log is not None:
+            handing = asyncio.create_task(
+                run_relay(
+                    outbox_relay(db, {"platform": audit_log}), key="agents_relay", stop=stop, store=heartbeats(db)
+                )
+            )
+            stack.push_async_callback(lambda: asyncio.wait_for(handing, None))
         listener = email_listener(settings, db, owner, stack)
         if listener is not None:
             listening = asyncio.create_task(keep_mail_listening(listener, stop, settings.email_poll_seconds))

@@ -219,7 +219,7 @@ RUNTIME_GRANTS: dict[str, Grants] = {
         "widget_deployments": (_SIU, ()),
         # Clearing a schedule and deleting its workflow remove the row (agents 20261123_1900).
         "workflow_schedules": ((*_SIU, "DELETE"), ()),
-        "agents_outbox": ((*_SIU, "DELETE"), ()),
+        "agents_outbox": (("INSERT",), ()),
         "widget_mint_key_audit": (_SI, ()),
         "widget_mint_keys": (_SIU, ()),
     },

@@ -6,13 +6,15 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 import sqlalchemy as sa
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.store.outbox import agents_outbox, outbox_relay
+from ops_agents.store.schedules import WorkflowSchedules
 from ops_agents.store.tenancy import tenant_scope, tenant_tx
-from tests.api.test_schedule_routes import EVERY_15, definition, url
+from tests.api.test_schedule_routes import EVERY_15, JAMES, definition, saved, url
 from tests.engine.test_lifecycle_rights import (  # noqa: F401
     BUILDER,
     TENANT,
@@ -85,6 +87,29 @@ async def test_the_relay_delivers_the_entry_to_platform_with_the_team_in_the_tok
     platform = Platform()
     assert await outbox_relay(engine, {"platform": platform}).once() == 1
     [(path, body, tenant, team)] = platform.posted
-    assert (path, tenant) == ("/v1/audit-events", TENANT) and team and "teamId" not in body
+    assert (path, tenant, team) == ("/v1/audit-events", TENANT, "team_ops") and "teamId" not in body
     assert body["name"] == "audit.recorded" and body["payload"]["action"] == "workflow.schedule.save"
     assert await outbox_relay(engine, {"platform": platform}).once() == 0
+
+
+async def test_the_entry_and_the_change_commit_together_or_not_at_all(
+    client: AsyncClient, database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # On PostgreSQL, where the request's transaction is real: SQLite's one shared connection takes no rollback.
+    wid = await saved(client)
+
+    async def fails(*_: Any, **__: Any) -> None:
+        raise RuntimeError("the outbox write failed")
+
+    monkeypatch.setattr(WorkflowSchedules, "audit", fails)
+    assert (await client.put(url(wid), json={"rule": EVERY_15}, headers=JAMES)).status_code == 500
+    monkeypatch.undo()
+    # The request's transaction took the save back with the failed entry: no schedule, no entry.
+    assert (await client.get(url(wid), headers=JAMES)).status_code == 404
+    db = create_async_engine(database_url)
+    try:
+        async with db.connect() as c:
+            left = await c.scalar(sa.select(sa.func.count()).select_from(agents_outbox))
+    finally:
+        await db.dispose()
+    assert left == 0

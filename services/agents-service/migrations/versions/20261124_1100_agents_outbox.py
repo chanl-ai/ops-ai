@@ -63,7 +63,7 @@ def upgrade() -> None:
     if dialect not in ("postgresql", "mssql"):
         return
     if dialect == "postgresql":
-        op.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {TABLE} TO {TENANT_ROLE}")
+        op.execute(f"GRANT INSERT ON {TABLE} TO {TENANT_ROLE}")
         op.execute(f"GRANT SELECT, UPDATE, DELETE ON {TABLE} TO {SYSTEM_ROLE}")
     for statement in isolation_ddl(_marked(), dialect, chain=CHAIN):
         op.execute(statement)

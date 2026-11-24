@@ -162,3 +162,7 @@ attachments of 2 KB:
 msgpack against JSON made no difference (90.6 against 91.9 KB). A saver that stores channel values per version, as
 LangGraph's own PostgreSQL saver does, would store attachments once per thread instead of once per step; estimated
 9× less for payload-heavy state, not measured.
+
+## Audit entries of schedule changes
+
+agents-service records a schedule save or clear through its outbox, `agents_outbox`, in the request's transaction, so the change and its entry commit together or not at all. The worker's `agents_relay` delivers the entry to platform-service's audit log at least once, where the workflow worker has an internal endpoint for it; without one the entries wait in the table. Its other writes still record no audit entry.

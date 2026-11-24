@@ -209,6 +209,21 @@ async def test_a_schedule_view_names_who_changed_it_why_the_last_slot_did_not_ru
                 detail={"reason": "The last scheduled run was still going."},
             )
         )
+        # Another step of the same workflow logged a reason for the same minute: it is not this schedule's.
+        await TriggerEvents(engine).add(
+            TriggerEvent(
+                team_id=row.team_id,
+                workflow_id="viewed",
+                source="schedule:other",
+                event_key="schedule:viewed:2026-11-23T10:00Z",
+                sender="",
+                subject="Every hour",
+                received_at="2026-11-23T10:00:00Z",
+                outcome="refused",
+                run_id=None,
+                detail={"reason": "another step's reason"},
+            )
+        )
     got = (await c.get(url("viewed"), headers=BUILDER)).json()["data"]
     assert (got["lastOutcome"], got["lastOutcomeReason"], got["lastRunId"]) == (
         "skipped",

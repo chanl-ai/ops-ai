@@ -21,8 +21,9 @@ RELAY_ROUTES = {AUDIT_EVENT: ("platform",)}
 
 
 def outbox_relay(engine: AsyncEngine, targets: Mapping[str, Poster]) -> Relay:
-    """agents_outbox's relay to the services in `targets` ("platform"); one this installation does not run is left
-    out, and its events are delivered by doing nothing."""
+    """agents_outbox's relay to the services in `targets` ("platform"). The worker starts it only where platform-service
+    has an internal endpoint, so an entry with nowhere to go waits in the table; a service left out of `targets` has
+    its events marked delivered."""
     return relay(
         engine,
         agents_outbox,
