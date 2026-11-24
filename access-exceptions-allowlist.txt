@@ -86,6 +86,7 @@ packages/ops_access/src/ops_access/policies.py policy-default approvalsFloor={} 
 # fails until it is classified here; a code no 409 carries any more is stale. An access-deciding 409 carries its own code.
 * conflict account_in_use 0 state
 * conflict address_taken 0 state
+* conflict already_checking 0 state
 * conflict admin_holds_every_cell 0 state
 * conflict agent_paused 0 state
 * conflict alias_exists 0 state
