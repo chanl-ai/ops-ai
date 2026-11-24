@@ -83,13 +83,18 @@ class UnsetTools(CountingTools):
         return ToolResult(False, {"error": error}, reason="This tool's app names no address for this environment.")
 
 
-async def failed_at_its_end(db: AsyncEngine, tenant: str, tools: UnsetTools) -> str:
+async def failed_at_its_end(db: AsyncEngine, tenant: str, tools: CountingTools, *, on_timeout: bool = False) -> str:
     """A run of BASIC with its Failed End marked as a failure, as a builder's is: the lookup leaves by its error port
     and the run fails there."""
     wire: dict[str, Any] = BASIC.wire()
     for n in wire["nodes"]:
         if n["id"] == "failed":
             n["parameters"] = {**n["parameters"], "result": "failed"}
+        if on_timeout and n["id"] == "lookup":
+            n["parameters"] = {**n["parameters"], "onTimeout": "port"}
+    if on_timeout:
+        timed_out = {"from": {"node": "lookup", "port": "timeout"}, "to": {"node": "failed", "port": "in"}}
+        wire["connections"].append(timed_out)
     failing = parse(wire)
     tx = EngineTransactions(db)
     with tenant_scope(tenant):
@@ -106,7 +111,7 @@ async def failed_at_its_end(db: AsyncEngine, tenant: str, tools: UnsetTools) -> 
     return run_id
 
 
-async def redriven(db: AsyncEngine, tenant: str, run_id: str, tools: UnsetTools) -> tuple[dict[str, Any], list[Any]]:
+async def redriven(db: AsyncEngine, tenant: str, run_id: str, tools: CountingTools) -> tuple[dict[str, Any], list[Any]]:
     runs = RunStore(EngineTransactions(db))
     with tenant_scope(tenant):
         _, changed = await runs.redrive(run_id)
@@ -151,6 +156,15 @@ async def test_a_redriven_step_keeps_its_own_retries_however_old_the_failure(
     lookup = [(s["attempt"], s["status"]) for s in steps if s["node_id"] == "lookup"]
     assert lookup == [(1, "redriven"), (2, "error"), (3, "ok")], lookup
     assert run["status"] == "waiting", run
+
+
+async def test_a_redrive_never_resends_a_write_that_left_by_its_timeout_port(engine: AsyncEngine) -> None:  # noqa: F811
+    # A write the system did not answer in time may have run; the gateway's record under its key decides, here done.
+    tenant, tools = f"t-{uuid4().hex[:8]}", AnsweredTools()
+    run_id = await failed_at_its_end(engine, tenant, tools, on_timeout=True)
+    run, steps = await redriven(engine, tenant, run_id, tools)
+    assert [k for k in tools.calls if k.startswith(run_id)] == [f"{run_id}:lookup:1:1"], "the write was sent again"
+    assert run["status"] == "waiting", (run, [(s["attempt"], s["status"], s["port"]) for s in steps])
 
 
 async def test_a_redrive_runs_the_version_the_run_pinned_not_the_latest(engine: AsyncEngine) -> None:  # noqa: F811

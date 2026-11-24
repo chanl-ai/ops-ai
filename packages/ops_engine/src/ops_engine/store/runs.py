@@ -548,36 +548,39 @@ class RunStore:
         return await self.retry(run_id, statuses=REDRIVABLE, failed_step=True)
 
     async def _set_aside_failed_step(self, c: Any, run: Any) -> None:
-        """Marks the failed step's recorded failing attempt `redriven`, in the redrive's own transaction. Every
-        recorded port is returned on a re-run (compiler.recorded), so without this a step that left by its error or
-        refused port returns that record and the run walks to the same failure End without running it. Only a definite
-        answer is set aside: an attempt with no port (a write whose outcome is unknown) keeps its row, so the wrapper
-        reconciles it by its key before any second send. The step is the one the run's failure names, at its latest
-        iteration; a failure that names no step (a run failed before the record existed) sets one aside only when the
-        run ended at a failure End, at its last failing step, as the worker's reason names it."""
+        """Sets the failed step's recorded failing attempt aside, in the redrive's own transaction. Every recorded port
+        is returned on a re-run (compiler.recorded), so without this a step that left by its error or refused port
+        returns that record and the run walks to the same failure End without running it. A definite answer is marked
+        `redriven` and the step takes its next attempt. A write that left by its timeout port may have run, so it is
+        made a dangling write instead (status error, no port): the wrapper reconciles it by its key before any second
+        send. An attempt with no port is left as it is, for the same reason. The step is the one the run's failure
+        names, at its latest attempt; a failure that names no step (a run failed before the record existed) sets one
+        aside only when the run ended at a failure End, at its last failing step, as the worker's reason names it."""
         s = engine_steps
-        mine = sa.and_(s.c.run_id == run.id, s.c.tenant_id == self.tx.tenant(), s.c.port.in_(FAILING_PORTS))
+        mine = sa.and_(s.c.run_id == run.id, s.c.tenant_id == self.tx.tenant())
         failure = cast(dict[str, Any] | None, run.failure) or {}
         step = cast(dict[str, Any] | None, failure.get("step")) or {}
         if step.get("id"):
-            mine = sa.and_(mine, s.c.node_id == str(step["id"]))
-        elif run.outcome is None:
+            named = sa.and_(mine, s.c.node_id == str(step["id"]))
+        elif run.outcome is not None:
+            named = sa.and_(mine, s.c.port.in_(FAILING_PORTS))
+        else:
             return
         last = (
             await c.execute(
-                sa.select(s.c.node_id, s.c.iteration)
-                .where(mine)
+                sa.select(s.c.node_id, s.c.iteration, s.c.attempt, s.c.port, s.c.effects, s.c.status)
+                .where(named)
                 .order_by(s.c.started_at.desc(), s.c.attempt.desc())
                 .limit(1)
             )
         ).first()
-        if last is None:
+        if last is None or last.port not in FAILING_PORTS or last.status not in ("ok", "error"):
             return
-        await c.execute(
-            s.update()
-            .where(mine, s.c.node_id == last.node_id, s.c.iteration == last.iteration, s.c.status.in_(("ok", "error")))
-            .values(status="redriven")
-        )
+        row = sa.and_(mine, s.c.node_id == last.node_id, s.c.iteration == last.iteration, s.c.attempt == last.attempt)
+        if last.effects == "write" and last.port == "timeout":
+            await c.execute(s.update().where(row).values(status="error", port=None))
+        else:
+            await c.execute(s.update().where(row).values(status="redriven"))
 
     async def step_rows(self, run_id: str) -> list[RunStep]:
         """Every attempt of every node, in the order they started."""
