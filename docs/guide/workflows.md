@@ -125,6 +125,8 @@ A definition has an `id`, a `name`, a list of `nodes` and a list of `connections
 
 ## Run a workflow on a schedule
 
+In the console, see [Schedule a workflow or an agent](schedule-a-workflow.md). From a terminal or a script:
+
 A workflow that starts with the Schedule trigger can run by itself: every 15 minutes, every day at 07:30, or weekdays
 between 07:00 and 18:00 in a time zone. The schedule is saved on the trigger step, outside the workflow's versions, so
 it applies to the live version at once with no publish. A tick whose last scheduled run is still going is skipped and

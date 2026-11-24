@@ -43,6 +43,7 @@ export const SITE = [
           { page: 'guide/how-work-flows.md', icon: 'workflow' },
           { page: 'guide/agents.md', icon: 'bot' },
           { page: 'guide/workflows.md', icon: 'git-branch' },
+          { page: 'guide/schedule-a-workflow.md', icon: 'calendar-clock' },
           { page: 'guide/edit-a-workflow-step.md', title: 'Open a workflow step', icon: 'mouse-pointer-click' },
           { page: 'guide/apps.md', title: 'Tools and apps', icon: 'app-window' },
           { page: 'guide/ops-assistant.md', title: 'Chat and channels', icon: 'message-square' },
