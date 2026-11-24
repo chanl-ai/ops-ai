@@ -94,7 +94,7 @@ await withUiStack(
         await page.getByRole('button', { name: 'Start run' }).first().click({ timeout: 120_000 });
         const picker = page.getByRole('dialog', { name: 'Start a run' });
         await picker.waitFor();
-        await picker.getByTestId('start-run-workflow').getByRole('button', { name: /Choose a workflow/ }).click();
+        await picker.getByTestId('start-run-workflow').getByRole('button', { name: 'Choose', exact: true }).click();
         await page.getByPlaceholder('Search workflows', { exact: true }).fill('uc-500');
         await page.getByRole('option', { name: /Card dispute intake \(uc-500\)/ }).first().click();
         const form = page.getByRole('dialog', { name: /^Start a run(:| of)/ });
@@ -159,7 +159,7 @@ await withUiStack(
         await page.getByRole('button', { name: 'Start run' }).first().click({ timeout: 120_000 });
         const picker = page.getByRole('dialog', { name: /^Start a run$/ });
         await picker.waitFor();
-        await picker.getByTestId('start-run-workflow').getByRole('button', { name: /Choose a workflow/ }).click();
+        await picker.getByTestId('start-run-workflow').getByRole('button', { name: 'Choose', exact: true }).click();
         await page.getByPlaceholder('Search workflows', { exact: true }).fill('uc-500');
         await page.getByRole('option', { name: /Levy mail \(uc-500\)/ }).first().click();
         const composer = page.getByRole('dialog', { name: /^Send a test email: Levy mail \(uc-500\)/ });
