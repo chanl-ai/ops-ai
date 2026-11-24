@@ -91,3 +91,28 @@ def brief(read: str) -> dict[str, Any]:
         "never": ["Never promise when a freeze will be lifted."],
         "success": ["The caller knows whether the account is frozen."],
     }
+
+
+# The sections a builder adds to a brief, saved out of their prompt order on purpose: the custom one first, Tone after.
+SECTIONS: list[dict[str, str]] = [
+    {"kind": "custom", "name": "Freeze wording", "text": "Say freeze, never lock or block."},
+    {"kind": "tone", "text": "Calm and plain."},
+]
+SECTION_HEADINGS = ["# Who you are", "# Tone", "# How to answer", "# Freeze wording", "# Hand off when", "# Never"]
+
+
+def sections_brief(sections: list[dict[str, str]] | None = None) -> dict[str, Any]:
+    """A brief that mentions nothing, with a hand-off rule so a custom section's place before it shows; `sections`
+    None leaves the field out, as every brief saved before sections did."""
+    body: dict[str, Any] = {
+        "purpose": "Freezes accounts for callers.",
+        "howToAnswer": "Keep answers short.",
+        "handOff": ["The caller asks for a person."],
+        "never": ["Never promise when a freeze will be lifted."],
+    }
+    return body if sections is None else {**body, "sections": sections}
+
+
+def headings(prompt: str) -> list[str]:
+    """The prompt's headings in the order the model reads them."""
+    return [line for line in prompt.splitlines() if line.startswith("# ")]

@@ -34,6 +34,7 @@ with a read and a write on a mock bank, published for the team, and platform sig
 | S4 | A developer does the same through the Python SDK | sdk | 7, 8 | 8 |
 | S5 | A developer does the same from files through `opsai` | cli | 9 | 9 |
 | S6 | A builder types `@` on the agent page, adds a tool, and the test chat shows the step | ui | 10, 12, 13, 17 | 13 |
+| S7 | A builder adds Tone and a section of his own to a brief, and the prompt shows them in order with Never last | api, sdk, cli, ui | 24, 25, 26, 27, 28 | 24 |
 
 ## Preconditions
 
@@ -63,6 +64,11 @@ with a read and a write on a mock bank, published for the team, and platform sig
 | 21 | Two sessions save the same skill draft (api); James saves the agent from elsewhere, then changes a field on the page (ui) | The second skill save is refused under the same version number; the page reads the agent again and saves with no message |
 | 22 | Two sessions send the skill as text (`source`, the text editor's save) from the same copy (api) | The second save is refused, 409 `stale_base` with the shared error shape naming who saved; the stored text is the first session's |
 | 23 | James and Maya reach the workflows list and canvas, the skill page (James types a mention, then resizes) and Human Tasks by the sidebar's links at 1440 and 390; with skill publishes set to always need a review, Maya opens James's publish from Human Tasks (ui) | No console errors on any of those pages; the open task is the `review-sheet` with its `review-approve` button |
+| 24 | James saves a brief with a custom section and Tone, in that order, and opens View prompt (the prompt route); he then names a custom section `never` | The reply's `brief.sections` holds both with `kind`, `name` (Tone's fixed title filled in) and `text`; the prompt's headings read Who you are, Tone, How to answer, his section, Hand off when, Never, ending with the never rule. The second save is refused, 422 `validation_failed`, the message naming `brief.sections`, and the stored sections stay |
+| 25 | James saves a brief with no `sections`, as every brief before them | `brief.sections` is `[]` and the prompt's headings are the ones it had: Who you are, How to answer, Hand off when, Never |
+| 26 | The SDK applies an agent definition whose brief has `sections`, reads it back and reads the prompt | The same two sections and the same heading order |
+| 27 | `opsai agents apply` on a file whose brief has `sections`, then `export` | The export prints `brief.sections` and `instructions` with the headings in order |
+| 28 | James opens an agent whose brief has no sections, picks Tone from Add section and then Add custom section (the menu's last item), names it and writes both; he opens View prompt; Maya opens the same agent (ui, 1440 and 390) | The agent opens with no added section and View prompt reads as the service writes it. Both sections save and are drawn, each with a Remove control; View prompt shows Tone before How to answer, his section after it and Never last; at 390 nothing scrolls sideways. Maya reads both sections and sees no Add section and no Remove |
 
 ## Acceptance layers
 
@@ -84,3 +90,8 @@ Step 6 also runs a skill whose steps hold the tool picked inside each sentence, 
 agent page's test chat. The account with money going on to step 2 is the paired check, so the skill does not end as
 blocked for any other reason. The freeze asked for before any skill is started is paired with the same call reaching a
 reviewer once the skill is on step 3.
+
+Step 24 is the check for the added sections: they are saved with the custom section first and the prompt still reads
+Tone before How to answer and the custom section after it, so a prompt written in saved order fails it. Step 25 is its
+pair: the same brief without sections gains no heading. In step 28 the builder seeing Add section and two Remove
+controls is paired with the person who cannot edit seeing none on the same agent.

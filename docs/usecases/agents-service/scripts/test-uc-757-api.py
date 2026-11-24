@@ -9,7 +9,17 @@ import json
 import time
 from typing import Any
 
-from brief_steps import CONFIRMS, brief, confirm_skill, freeze_skill, hold_skill
+from brief_steps import (
+    CONFIRMS,
+    SECTION_HEADINGS,
+    SECTIONS,
+    brief,
+    confirm_skill,
+    freeze_skill,
+    headings,
+    hold_skill,
+    sections_brief,
+)
 from main_chains import ACCOUNT, bank_stack, holds, publish_bank_module
 from usecase_harness import agents, check, data, finish, save_agent, sse
 
@@ -79,6 +89,42 @@ with bank_stack() as s:
         and again["added"] == []
         and again["agentVersion"] == added["agentVersion"],
         (blocked, code_of(refused), added, again),
+    )
+
+    # 24. A builder adds Tone and one section of his own. Each is replied with its kind and title, and View prompt
+    # shows them in their places with the never rules last, whatever order they were saved in.
+    desk = data(s.api.post("/v1/agents", json={"name": f"Sections desk {RUN}", "role": "Freezes accounts"}, headers=me))
+    with_sections = data(save_agent(s.api, desk["id"], {"brief": sections_brief(SECTIONS)}, headers=me))
+    replied = (with_sections.get("brief") or {}).get("sections")
+    shown = data(s.api.get(f"/v1/agents/{desk['id']}/prompt", headers=me))["text"]
+    check(
+        "24 a brief saved with Tone and a custom section replies both, and the prompt has them in order, Never last",
+        replied == [{**SECTIONS[0]}, {"kind": "tone", "name": "Tone", "text": "Calm and plain."}]
+        and headings(shown) == SECTION_HEADINGS
+        and shown.rstrip().endswith("- Never promise when a freeze will be lifted."),
+        (replied, headings(shown), shown[-80:]),
+    )
+    # A custom section may not take a fixed heading's name: the save is refused and the stored sections stay.
+    taken = save_agent(
+        s.api, desk["id"], {"brief": sections_brief([{"kind": "custom", "name": " never ", "text": "Anything."}])}, headers=me
+    )
+    said = str((taken.json().get("error") or {}).get("message", "")) if taken.status_code >= 400 else ""
+    after_refusal = (data(s.api.get(f"/v1/agents/{desk['id']}", headers=me)).get("brief") or {}).get("sections")
+    check(
+        "24 a custom section named like a fixed heading is refused, naming brief.sections, and nothing is stored",
+        code_of(taken) == (422, "validation_failed") and "brief.sections" in said and after_refusal == replied,
+        (code_of(taken), said, after_refusal),
+    )
+    # 25. A brief saved without sections, as every brief before them: no heading is added and it replies none.
+    plain = data(s.api.post("/v1/agents", json={"name": f"Plain desk {RUN}", "role": "Freezes accounts"}, headers=me))
+    unchanged = data(save_agent(s.api, plain["id"], {"brief": sections_brief()}, headers=me))
+    plain_prompt = data(s.api.get(f"/v1/agents/{plain['id']}/prompt", headers=me))["text"]
+    check(
+        "25 a brief saved without sections writes the prompt it wrote before them and replies no sections",
+        (unchanged.get("brief") or {}).get("sections") == []
+        and headings(plain_prompt) == ["# Who you are", "# How to answer", "# Hand off when", "# Never"]
+        and plain_prompt.startswith(unchanged["instructions"]),
+        ((unchanged.get("brief") or {}).get("sections", "absent"), headings(plain_prompt)),
     )
 
     # 20. Two sessions hold the same agent draft: the second save is refused and loses nothing the first saved.

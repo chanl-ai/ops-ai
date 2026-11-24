@@ -7,7 +7,7 @@ from __future__ import annotations
 import time
 
 from apps_walk import signed_sdk
-from brief_steps import brief, confirm_skill, freeze_skill
+from brief_steps import SECTION_HEADINGS, SECTIONS, brief, confirm_skill, freeze_skill, headings, sections_brief
 from main_chains import bank_stack, publish_bank_module
 from ops_ai.errors import OpsError
 from usecase_harness import check, finish
@@ -73,5 +73,19 @@ with bank_stack() as s:
         and after == {"canRequest": True, "problems": []}
         and live["publishedVersion"] == live["version"],
         (agent.get("promptMode"), before, added, after, live.get("publishedVersion"), live.get("version")),
+    )
+
+    # 26. The same sections through the SDK: the definition's `brief.sections` field, read back, and the prompt.
+    desk = ops.agents.apply(
+        {"name": f"Sections desk sdk {RUN}", "role": "Freezes accounts", "brief": sections_brief(SECTIONS)}
+    )
+    replied = (ops.agents.get(str(desk["id"])).get("brief") or {}).get("sections")
+    shown = ops.raw.agents.agents_agent_prompt(str(desk["id"]))["text"]
+    check(
+        "26 the SDK applies a brief with Tone and a custom section, reads both back and the prompt has them in order",
+        replied == [{**SECTIONS[0]}, {"kind": "tone", "name": "Tone", "text": "Calm and plain."}]
+        and headings(shown) == SECTION_HEADINGS
+        and shown.rstrip().endswith("- Never promise when a freeze will be lifted."),
+        (replied, headings(shown)),
     )
 finish()

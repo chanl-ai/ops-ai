@@ -396,6 +396,79 @@ await withUiStack(
       await maya.getByTestId('sop-editor-content').waitFor({ timeout: 120_000 });
       await shootBothWidths(maya, AREA, 'uc-757-skill-member', async () => {});
 
+      // 28. An agent whose brief was saved before sections opens as it was: no added section, and View prompt reads
+      // what the service writes. James then adds Tone from the Add section menu and a section of his own (the menu's
+      // last item), and View prompt shows both in their places with Never last. Maya, who cannot edit, reads the
+      // sections with no control to add or remove one.
+      const tried = (p) => p.then(() => true, () => false);
+      const MENU = ['Personality', 'Tone', 'Environment', 'Context', 'Tool use', 'Error handling', 'Escalation wording'];
+      const briefOf = (p) => p.getByTestId('agent-brief');
+      const sectionOf = (p, name) => briefOf(p).getByRole('group', { name, exact: true });
+      const addSection = (p) => briefOf(p).getByRole('button', { name: 'Add section' });
+      const removes = (p) => briefOf(p).getByRole('button', { name: /^Remove / });
+      const promptShown = async (p) => {
+        await p.getByTestId('agent-view-prompt').click({ timeout: 10_000 }).catch(() => undefined);
+        const text = await p.getByTestId('agent-prompt-text').innerText({ timeout: 15_000 }).catch(() => '');
+        await p.keyboard.press('Escape');
+        return text.trim();
+      };
+      const NEVER_RULE = 'Promise a refund before the review';
+      const sectioned = await made('/v1/agents', { name: `Sections desk ${RUN}`, role: 'Helps cardholders with disputes' });
+      await made(`/v1/agents/${sectioned.id}`, { brief: { purpose: 'Help cardholders dispute a charge.', howToAnswer: 'Keep answers short.', handOff: ['The cardholder asks for a person.'], never: [NEVER_RULE] }, ...(await agentBase(agents, J, sectioned.id)) }, 'PATCH');
+      const servedPrompt = async () => ((await (await fetch(`${agents}/v1/agents/${sectioned.id}/prompt`, { headers: J })).json()).data?.text ?? '').trim();
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(`${consoleUrl}/build/agents/${sectioned.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await brief.waitFor({ timeout: 120_000 });
+      await page.getByTestId('agent-uses-link').waitFor({ timeout: 60_000 });
+      await sectionOf(page, 'How to answer').waitFor({ timeout: 60_000 }).catch(() => undefined);
+      const before = { added: (await Promise.all(MENU.map((n) => sectionOf(page, n).count()))).reduce((a, b) => a + b, 0), prompt: await promptShown(page), served: await servedPrompt() };
+      check('28 a brief saved before sections opens with none added, and View prompt reads as the service writes it', before.added === 0 && before.prompt.length > 0 && before.prompt === before.served && !/^# Tone$/m.test(before.prompt), before);
+
+      const sectionsSaved = armed(page.waitForResponse(async (r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${sectioned.id}` && r.ok() && ((await r.json().catch(() => ({}))).data?.brief?.sections ?? []).filter((x) => x.text).length === 2, { timeout: 30_000 }));
+      const write = async (name, text) => {
+        const group = sectionOf(page, name);
+        if (!(await tried(group.waitFor({ timeout: 10_000 })))) return false;
+        // The section's text itself: the group's middle can fall on its locked heading, which takes no cursor.
+        await group.locator('[data-node-view-content]').first().click({ timeout: 5_000 }).catch(() => group.click({ timeout: 5_000 }).catch(() => undefined));
+        await page.keyboard.insertText(text);
+        return true;
+      };
+      await addSection(page).click({ timeout: 10_000 }).catch(() => undefined);
+      await page.getByRole('menuitem', { name: 'Tone', exact: true }).click({ timeout: 10_000 }).catch(() => undefined);
+      const toneDrawn = await write('Tone', 'Calm and plain.');
+      await addSection(page).click({ timeout: 10_000 }).catch(() => undefined);
+      await page.getByRole('menuitem', { name: 'Add custom section' }).click({ timeout: 10_000 }).catch(() => undefined);
+      const named = await tried(page.getByLabel('Section name').fill('Refund wording', { timeout: 10_000 }));
+      if (named) await page.keyboard.press('Enter');
+      const ownDrawn = named && (await write('Refund wording', 'Say refund, never reimbursement.'));
+      const storedSections = (await (await sectionsSaved.catch(() => null))?.json().catch(() => ({})))?.data?.brief?.sections ?? null;
+      const controls = { add: await addSection(page).count(), remove: await removes(page).count() };
+      check(
+        '28 a builder adds Tone and a section of his own, and both save with their kind and title',
+        toneDrawn && ownDrawn && JSON.stringify(storedSections) === JSON.stringify([{ kind: 'tone', name: 'Tone', text: 'Calm and plain.' }, { kind: 'custom', name: 'Refund wording', text: 'Say refund, never reimbursement.' }]) && controls.add === 1 && controls.remove >= 2,
+        { toneDrawn, named, ownDrawn, storedSections, controls },
+      );
+      const withSections = await promptShown(page);
+      const places = ['# Tone', '# How to answer', '# Refund wording', '# Hand off when', '# Never'].map((h) => withSections.split('\n').indexOf(h));
+      check('28 View prompt shows Tone before How to answer, his section after it, and Never last', places.every((at, i) => at >= 0 && (i === 0 || at > places[i - 1])) && withSections.endsWith(NEVER_RULE), { places, tail: withSections.slice(-120) });
+      await page.setViewportSize({ width: 390, height: 844 });
+      const narrow = { tone: await tried(sectionOf(page, 'Tone').waitFor({ timeout: 10_000 })), add: await addSection(page).isVisible().catch(() => false), wide: await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth) };
+      check('28 at 390 wide the added sections and Add section are drawn and the page does not scroll sideways', narrow.tone && narrow.add && narrow.wide <= 1, narrow);
+      await shootBothWidths(page, AREA, 'uc-757-agent-sections-admin', async () => {
+        await sectionOf(page, 'Tone').scrollIntoViewIfNeeded({ timeout: 2_000 }).catch(() => undefined);
+      });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await maya.setViewportSize({ width: 1440, height: 1000 });
+      await maya.goto(`${consoleUrl}/build/agents/${sectioned.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await maya.getByTestId('agent-brief').waitFor({ timeout: 120_000 });
+      await maya.getByTestId('read-only-notice').waitFor({ timeout: 60_000 }).catch(() => undefined);
+      const read = { tone: await sectionOf(maya, 'Tone').innerText({ timeout: 10_000 }).catch(() => ''), own: await sectionOf(maya, 'Refund wording').innerText({ timeout: 10_000 }).catch(() => ''), add: await addSection(maya).count(), remove: await removes(maya).count() };
+      check('28 a person who cannot edit reads the sections with no control to add or remove one', /Calm and plain\./.test(read.tone) && /Say refund/.test(read.own) && read.add === 0 && read.remove === 0, read);
+      await shootBothWidths(maya, AREA, 'uc-757-agent-sections-member', async () => {
+        await sectionOf(maya, 'Tone').scrollIntoViewIfNeeded({ timeout: 2_000 }).catch(() => undefined);
+      });
+      await maya.setViewportSize({ width: 1440, height: 1000 });
+
       // 23. Pages reached by the sidebar's links, not by loading their URL: a client navigation keeps the shell mounted,
       // and the walks saw update loops only that way, at both widths.
       const viaSidebar = async (p, href) => {
