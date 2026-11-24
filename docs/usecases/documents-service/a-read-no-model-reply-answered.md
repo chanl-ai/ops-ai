@@ -58,6 +58,11 @@ declined. The fake model answers what the fixtures expect, so this proves the ch
 
 ## Non-vacuous check
 
+On the first run the update was saved through `POST /v1/workflows/definitions`, which returns the version already
+stored for the same definition, so the old version stayed live: check 2 failed with approve answering 400
+`not_editable` and check 3 found no corrections. Publishing through the working copy made the new version and both
+passed.
+
 The refusal and the hold each have a unit test seen failing: `services/agents-service/tests/unit/test_review_document_read.py`
 (no `approveRefused` on the read, KeyError) and `services/documents-service/tests/test_typed_corrections.py` (with the
 hold edited out, a partly typed read sent its corrected event).
