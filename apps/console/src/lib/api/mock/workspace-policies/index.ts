@@ -2,7 +2,6 @@ import type { WorkspacePoliciesApi } from '../../workspace-policies-contract';
 import type { PolicyValue, WorkspacePolicy } from '@/lib/types/workspace-policies';
 
 const SEED: WorkspacePolicy[] = [
-  { key: 'requesterMayDecide', value: true, default: true, changedBy: 'approvals.manage', effect: 'The person who asked for a decision may also make it. Off (the two-person rule, an advanced setting): someone else has to decide, unless the person is an Admin of the team.' },
   { key: 'extractionFloor', value: 0.8, default: 0.8, changedBy: 'settings.manage', effect: 'The lowest confidence an Extract from file step may accept; no step can ask for less.' },
   { key: 'stepUp', value: false, default: false, changedBy: 'settings.manage', effect: 'Every approver confirms their sign-in again before deciding. Off: only operations that ask for it.' },
   { key: 'publishReview', value: {}, default: {}, changedBy: 'reviews.manage', effect: "Which of a team's publishes wait for review: always, major changes only (the default), or never." },
