@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 from pydantic import Field
 
 from ops_access import can
+from ops_agent_kernel.pii import masked
 from ops_engine.compiler import DEFAULT_OPTIONS
 from ops_engine.store import RunStore
 from ops_service_kit.errors import Unprocessable
@@ -30,7 +31,7 @@ from ops_service_kit.ids import new_id
 from ... import task_types as tt
 from ...store.engine import EngineTransactions
 from ...store.tenancy import current_team
-from .. import engine_reviews, service_events
+from .. import engine_reviews, hitl_facade, service_events
 from ..auth import Principal, caller_in, caller_of, started_by
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -152,10 +153,17 @@ def _action(review: engine_reviews.EngineReview, resume: engine_reviews.Decision
     return str(option or DEFAULT_OPTIONS.get(str(resume.get("decision")), resume.get("decision")))
 
 
+# What a decided task holds that a person wrote or approved: free text and the values sent on.
+_PERSONAL = ("decisionReason", "resume")
+
+
 @router.get("/{task_id}", response_model=Envelope[TaskState])
 async def get_task(rt: Rt, me: Me, task_id: str) -> JSONResponse:
-    """The task's status and, once decided, the action, reason, values and decider."""
+    """The task's status and, once decided, the action, reason, values and decider; the reason and values masked for a
+    person who may not decide it (`hitl_facade.sees_real_values`), as the task's own page shows them."""
     review = await engine_reviews.get(rt, task_id)
+    if not hitl_facade.sees_real_values(me, review):
+        review = cast(engine_reviews.EngineReview, {**review, **masked({k: review.get(k) for k in _PERSONAL})})
     resume: engine_reviews.Decision = review.get("resume") or {}
     decided = review.get("status") not in ("pending", "in_review")
     state = TaskState(

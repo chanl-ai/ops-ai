@@ -19,7 +19,7 @@ from typing import Any, NotRequired, TypedDict, cast
 from langgraph.types import Command
 
 from ops_access import can
-from ops_agent_kernel.pii import masked
+from ops_agent_kernel.pii import field_kind, masked
 from ops_agents.graphs.definition import WorkflowDefinition, option_declarations, option_name
 from ops_service_kit import narrow
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ValidationFailed
@@ -159,16 +159,22 @@ _TASK_KEEP = frozenset(
 )  # fmt: skip
 
 
-def as_seen_by(reader: Principal, review: Listed) -> Listed:
-    """A task as `reader` reads it. Whoever may decide it (`reviews.decide` in its deciding team, by `can()`: an
-    Approver's, a Builder's and an Admin's by default) sees its real values, which they check before they approve;
-    anyone else who may open it sees its personal data masked by the same rule as a run's page (`ops_pii.masked`).
-    A publish request holds a definition, not a customer's data, and is left; any other review that names no deciding
-    team (a decided thread's stored review) is masked, so a missing team never shows the real values."""
-    if publish_reviews.is_request_id(str(review.get("id") or "")):
-        return review
+def sees_real_values(reader: Principal, review: Listed) -> bool:
+    """Whether `reader` reads a task's real values: an API key or a service reads back the tasks its own calls started
+    and decided, so both do; a person does when they hold `reviews.decide` in the task's deciding team, by `can()` (an
+    Approver, a Builder and an Admin by default). A publish request holds a definition, not a customer's data, so every
+    reader does; any other task that names no deciding team (a decided thread's stored review) is masked for a person,
+    so a missing team never shows the real values."""
+    if caller_of(reader).kind != "person" or publish_reviews.is_request_id(str(review.get("id") or "")):
+        return True
     team = narrow.json_object(review.get("decidingTeam") or {}).get("id")
-    if isinstance(team, str) and team in review_teams(reader):
+    return isinstance(team, str) and team in review_teams(reader)
+
+
+def as_seen_by(reader: Principal, review: Listed) -> Listed:
+    """A task as `reader` reads it (`sees_real_values`): its real values, or its personal data masked by the same rule
+    as a run's page (`ops_pii.masked`), its ids, state and team kept so it still opens, links and sorts."""
+    if sees_real_values(reader, review):
         return review
     return cast(Listed, _for_reader(cast(JsonValue, review)))
 
@@ -176,7 +182,8 @@ def as_seen_by(reader: Principal, review: Listed) -> Listed:
 def _for_reader(value: JsonValue, key: str | None = None) -> JsonValue:
     if key in _TASK_KEEP:
         return value
-    if isinstance(value, dict) and not ("label" in value and "value" in value):
+    # A field named as personal data goes to ops_pii whole, which masks what the object holds as the field's value.
+    if isinstance(value, dict) and not ("label" in value and "value" in value) and not (key and field_kind(key)):
         return {k: _for_reader(v, k) for k, v in value.items()}
     if isinstance(value, list):
         return [_for_reader(v, key) for v in value]

@@ -15,13 +15,14 @@ from ops_contracts.skill_run import RunningSkill, SkillProgram, SkillRunState, S
 
 # The patterns and whole-text masking live in ops_pii, which services that are not agents use too (documents' examples);
 # they are re-exported here so every caller of ops_agent_kernel.pii is unchanged.
-from ops_pii import HOLD, StreamMasker, holds_placeholder, mask, masked
+from ops_pii import HOLD, StreamMasker, field_kind, holds_placeholder, mask, masked
 
 from .types import CitationRef, ToolCallRecord, TurnResult
 
 __all__ = [
     "HOLD",
     "StreamMasker",
+    "field_kind",
     "mask",
     "masked",
     "masked_call",

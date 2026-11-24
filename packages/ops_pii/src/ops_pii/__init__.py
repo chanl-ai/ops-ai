@@ -142,16 +142,45 @@ def masked(value: Any, key: str | None = None) -> Any:
     return value
 
 
+# Where an object under a personal data field holds that field's value: a field as a document read records it.
+_CELL_VALUES = ("value", "extractedValue")
+
+
 def _whole(value: Any, shown: str) -> Any:
     """A personal data field's value with each scalar in it replaced by `shown`; an object in it is masked by its own
-    field names, since a list of accounts holds names and balances too."""
+    field names, since a list of accounts holds names and balances too. An object holding the field's value under
+    `value` (a document read's field: its value, the value read, its confidence and the page quote) has that value
+    replaced, and wherever its text recurs in the object (the quote), since no pattern finds it there."""
     if value is None or isinstance(value, bool) or value == "":
         return value
     if isinstance(value, str | int | float):
         return shown
     if isinstance(value, list):
         return [_whole(v, shown) for v in cast(list[Any], value)]
-    return masked(value)
+    row = cast(dict[Any, Any], value)
+    if "value" not in row:
+        return masked(value)
+    real = {
+        str(row[k])
+        for k in _CELL_VALUES
+        if isinstance(row.get(k), str | int | float) and not isinstance(row.get(k), bool) and row.get(k) != ""
+    }
+    return {
+        k: _whole(v, shown) if k in _CELL_VALUES else _hidden(masked(v, str(k)), real, shown) for k, v in row.items()
+    }
+
+
+def _hidden(value: Any, real: set[str], shown: str) -> Any:
+    """`value` with every occurrence of the texts in `real` replaced by `shown`."""
+    if isinstance(value, str):
+        for text in sorted(real, key=len, reverse=True):
+            value = value.replace(text, shown)
+        return value
+    if isinstance(value, list):
+        return [_hidden(v, real, shown) for v in cast(list[Any], value)]
+    if isinstance(value, dict):
+        return {k: _hidden(v, real, shown) for k, v in cast(dict[Any, Any], value).items()}
+    return value
 
 
 # Everything `mask` writes in place of a pattern.
