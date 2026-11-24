@@ -140,6 +140,8 @@ class SourceFile(TypedDict):
     # The watch that found it, so a full listing removes only its own watch's files, and the listing's marker for it.
     watch_id: NotRequired[str]
     marker: NotRequired[str | None]
+    # When the source last changed it, as its listing said; kept on the version it writes.
+    changed_at: NotRequired[datetime | None]
 
 
 class HeldSource(NamedTuple):
@@ -314,6 +316,8 @@ file_versions = sa.Table(
     sa.Column("current", sa.Boolean, nullable=False),
     # The source's own version tag for this version (a SharePoint eTag), sent back so it can answer `unchanged`.
     sa.Column("source_tag", sa.String(200)),
+    # When the source changed the bytes this version holds (its modified time), as its listing said; null for uploads.
+    sa.Column("source_changed_at", sa.DateTime(timezone=True)),
     # Each version is scanned on its own: a new version stays unreadable until scanned while older ones still download.
     sa.Column("scan_status", sa.String(16), nullable=False),
     sa.Column("scan_at", sa.DateTime(timezone=True)),
@@ -450,6 +454,7 @@ class VersionOut(Out):
     current: bool
     team: str
     source_tag: str | None = None
+    source_changed_at: datetime | None = None
     scan_status: str = "pending"
     scan_at: datetime | None = None
 
@@ -484,6 +489,8 @@ class FileRow(Out):
     versions: list[VersionOut]
     references: list[ReferenceOut]
     hold: HoldRow | None
+    # The name of the watch that brought the file in; None for uploads and once the watch is deleted.
+    watch_name: str | None = None
 
 
 VIEWS = ("all", "quarantined", "legal_hold", "unreferenced", "expiring")
@@ -530,11 +537,18 @@ class FilesStore(Store):
         hold = sa.select(h.c.id, h.c.placed_by, h.c.placed_at, h.c.reason).where(
             h.c.tenant_id == tenant, h.c.file_id == file_id, h.c.released_at.is_(None), team_visible(h)
         )
+        watch_name = None
+        if found.watch_id is not None:
+            # file_watches is defined in .watches, which imports this module; looked up by name to keep one direction.
+            w = metadata.tables["file_watches"]
+            q = sa.select(w.c.name).where(w.c.tenant_id == tenant, w.c.id == found.watch_id, team_visible(w))
+            watch_name = (await c.execute(q)).scalar_one_or_none()
         return FileRow(
             file=found,
             versions=await rows(c, versions.order_by(v.c.version), VersionOut),
             references=await rows(c, references.order_by(r.c.added_at), ReferenceOut),
             hold=next(iter(await rows(c, hold.limit(1), HoldRow)), None),
+            watch_name=watch_name,
         )
 
     async def options(
@@ -856,6 +870,7 @@ class FilesStore(Store):
                 sa.insert(v).values(
                     file_id=file_id, version=number, tenant_id=tenant, team=team, digest=version["digest"],
                     size=version["size"], storage_key=version["storage_key"], source_tag=version["source_tag"],
+                    source_changed_at=found.get("changed_at"),
                     uploaded_by=new_file["uploaded_by"], uploaded_at=version["at"], current=True,
                     scan_status="pending",
                 )

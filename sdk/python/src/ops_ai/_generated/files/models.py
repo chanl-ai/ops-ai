@@ -148,6 +148,16 @@ class FileScan(TypedDict, closed=True):
     status: Literal["pending", "clean", "infected", "failed"]
 
 
+class FileSource(TypedDict, closed=True):
+    accessList: list[str] | None
+    accessReadAt: str | None
+    changedAt: str | None
+    path: str | None
+    removedAt: str | None
+    watchId: str | None
+    watchName: str | None
+
+
 class FileVersion(TypedDict, closed=True):
     current: bool
     digest: str
@@ -563,6 +573,7 @@ class FileDetail(TypedDict, closed=True):
     sensitivity: Literal["public", "internal", "confidential", "restricted"]
     sensitivitySuggested: bool
     size: int
+    source: FileSource | None
     storage: StorageLocation | None
     team: str
     uploadedAt: str

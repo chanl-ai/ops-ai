@@ -987,6 +987,7 @@ export interface components {
             sensitivitySuggested: boolean;
             /** Size */
             size: number;
+            source: components["schemas"]["FileSource"] | null;
             storage: components["schemas"]["StorageLocation"] | null;
             /** Team */
             team: string;
@@ -1110,6 +1111,29 @@ export interface components {
              * @enum {string}
              */
             status: "pending" | "clean" | "infected" | "failed";
+        };
+        /**
+         * FileSource
+         * @description Where a file from a watched folder came from: the watch (its name is None once the watch is deleted), its path
+         *     at the source, when the source last changed the version Files holds, when the source stopped listing it, and its
+         *     access list as last read. `access_list` None means the source never said; [] means it lists nobody. The list is
+         *     recorded, not applied (exception E57).
+         */
+        FileSource: {
+            /** Accesslist */
+            accessList: string[] | null;
+            /** Accessreadat */
+            accessReadAt: string | null;
+            /** Changedat */
+            changedAt: string | null;
+            /** Path */
+            path: string | null;
+            /** Removedat */
+            removedAt: string | null;
+            /** Watchid */
+            watchId: string | null;
+            /** Watchname */
+            watchName: string | null;
         };
         /** FileVersion */
         FileVersion: {

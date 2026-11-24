@@ -1075,6 +1075,16 @@
             "title": "Size",
             "type": "integer"
           },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FileSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "storage": {
             "anyOf": [
               {
@@ -1132,6 +1142,7 @@
           "storage",
           "data",
           "versions",
+          "source",
           "references",
           "deleteBlockedBy",
           "canEdit",
@@ -1469,6 +1480,106 @@
           "detail"
         ],
         "title": "FileScan",
+        "type": "object"
+      },
+      "FileSource": {
+        "additionalProperties": false,
+        "description": "Where a file from a watched folder came from: the watch (its name is None once the watch is deleted), its path\nat the source, when the source last changed the version Files holds, when the source stopped listing it, and its\naccess list as last read. `access_list` None means the source never said; [] means it lists nobody. The list is\nrecorded, not applied (exception E57).",
+        "properties": {
+          "accessList": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accesslist"
+          },
+          "accessReadAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accessreadat"
+          },
+          "changedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changedat"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "removedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removedat"
+          },
+          "watchId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watchid"
+          },
+          "watchName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watchname"
+          }
+        },
+        "required": [
+          "watchId",
+          "watchName",
+          "path",
+          "changedAt",
+          "removedAt",
+          "accessList",
+          "accessReadAt"
+        ],
+        "title": "FileSource",
         "type": "object"
       },
       "FileVersion": {

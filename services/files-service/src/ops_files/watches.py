@@ -125,6 +125,18 @@ def _bytes_of(item: Json) -> bytes:
     return base64.b64decode(content) if item.get("encoding") == "base64" else content.encode()
 
 
+def _changed_at(row: Json) -> datetime | None:
+    """The listing's modified time for the file; None when it gave none or one that does not read as a time."""
+    at = row.get("updated_at")
+    if not isinstance(at, str) or not at:
+        return None
+    try:
+        found = datetime.fromisoformat(at)
+    except ValueError:
+        return None
+    return found if found.tzinfo else found.replace(tzinfo=UTC)
+
+
 def _size_of(row: Json) -> int | None:
     size = row.get("size")
     return int(size) if isinstance(size, int | float) else None
@@ -217,6 +229,7 @@ class WatchChecks:
                     "access_read_at": now,
                     "watch_id": watch.id,
                     "marker": str(item.get("marker") or r.get("marker") or "") or None,
+                    "changed_at": _changed_at(r),
                 },
                 content,
                 actor=f"watch:{watch.id}",

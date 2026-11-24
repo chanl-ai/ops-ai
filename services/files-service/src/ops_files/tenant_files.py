@@ -34,6 +34,7 @@ from ops_files.models import (
     FileRetention,
     FileScan,
     FileSensitivity,
+    FileSource,
     FileVersion,
     LegalHold,
     ReadRequest,
@@ -384,6 +385,7 @@ class TenantFiles:
                 )
                 for v in row.versions
             ],
+            source=_source(row),
             references=references,
         )
 
@@ -398,7 +400,7 @@ class TenantFiles:
         out = detail.model_dump(
             mode="json",
             by_alias=True,
-            exclude={"versions", "references", "delete_blocked_by", "can_edit", "can_delete", "can_publish"},
+            exclude={"versions", "references", "source", "delete_blocked_by", "can_edit", "can_delete", "can_publish"},
         )
         return FileListRow.model_validate({**out, "referenceCount": f.reference_count})
 
@@ -990,6 +992,23 @@ class TenantFiles:
         done = await self._files.get(file_id)
         assert done is not None
         return self._detail(done, None)
+
+
+def _source(row: FileRow) -> FileSource | None:
+    """Where a watched folder's file came from; None for an upload."""
+    f = row.file
+    if f.source_scope != "source":
+        return None
+    current = next((v for v in row.versions if v.current), None)
+    return FileSource(
+        watch_id=f.watch_id,
+        watch_name=row.watch_name,
+        path=f.source_path,
+        changed_at=current.source_changed_at if current else None,
+        removed_at=f.removed_at,
+        access_list=f.access_list,
+        access_read_at=f.access_read_at,
+    )
 
 
 __all__ = [

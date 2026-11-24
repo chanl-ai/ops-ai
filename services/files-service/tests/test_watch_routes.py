@@ -24,6 +24,7 @@ from .test_api import (  # pyright: ignore[reportPrivateUsage]
     PDF,
     Client,
     _data,  # pyright: ignore[reportPrivateUsage]
+    _upload,  # pyright: ignore[reportPrivateUsage]
     client,  # noqa: F401  # pyright: ignore[reportUnusedImport]
 )
 
@@ -58,6 +59,7 @@ async def _brought_in(engine: AsyncEngine, tmp_path: Path, tenant: str, watch_id
                 "access_read_at": now,
                 "watch_id": watch_id,
                 "marker": "e1",
+                "changed_at": datetime(2026, 11, 24, 8, 52, tzinfo=UTC),
             },
             PDF,
             actor=f"watch:{watch_id}",
@@ -120,3 +122,40 @@ async def test_a_viewer_cannot_change_a_watch_and_another_team_cannot_reach_it(
         rows = (await c.execute(sa.select(service_outbox.c.name, service_outbox.c.payload))).all()
     audited = [p["action"] for n, p in rows if n == "audit.recorded" and p["targetId"] == watch_id]
     assert audited == ["files.watch.created", "files.watch.checked"], rows
+
+
+async def test_the_file_page_names_its_watched_folder_and_an_upload_names_none(
+    client: Client,  # noqa: F811
+    engine: AsyncEngine,
+    tenant: str,
+    tmp_path: Path,
+) -> None:
+    """A source file's detail says which watch brought it, where it sits, when the source changed it, and its access
+    list as read with "not known" (null) apart from nobody ([]); removed and deleted-watch states keep the entry."""
+    async with client() as builder:
+        watch_id = _data(await builder.post("/v1/watches", json=WATCH, headers=OPS))["id"]
+        file_id = await _brought_in(engine, tmp_path, tenant, watch_id)
+        source = _data(await builder.get(f"/v1/files/{file_id}", headers=OPS))["source"]
+        assert source == {
+            "watchId": watch_id,
+            "watchName": "Supplier invoices",
+            "path": "Invoices/a.pdf",
+            "changedAt": "2026-11-24T08:52:00Z",
+            "removedAt": None,
+            "accessList": None,
+            "accessReadAt": "2026-11-24T09:00:00Z",
+        }, source
+
+        uploaded = await _upload(builder)
+        done = _data(await builder.post(f"/v1/files/uploads/{uploaded['fileId']}/complete", headers=OPS))
+        assert _data(await builder.get(f"/v1/files/{done['file']['id']}", headers=OPS))["source"] is None
+
+        with isolation.scope(tenant, "team_ops"):
+            await FilesStore(engine).remove_sources([file_id], datetime(2026, 11, 24, 10, 40, tzinfo=UTC))
+        assert (await builder.delete(f"/v1/watches/{watch_id}", headers=OPS)).status_code == 204
+        after = _data(await builder.get(f"/v1/files/{file_id}", headers=OPS))["source"]
+        assert (after["watchId"], after["watchName"], after["removedAt"]) == (
+            watch_id,
+            None,
+            "2026-11-24T10:40:00Z",
+        ), after

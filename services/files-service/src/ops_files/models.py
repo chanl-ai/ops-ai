@@ -175,8 +175,25 @@ class FileRecord(Reply):
     data: FileData | None = None
 
 
+class FileSource(Out):
+    """Where a file from a watched folder came from: the watch (its name is None once the watch is deleted), its path
+    at the source, when the source last changed the version Files holds, when the source stopped listing it, and its
+    access list as last read. `access_list` None means the source never said; [] means it lists nobody. The list is
+    recorded, not applied (exception E57)."""
+
+    watch_id: str | None
+    watch_name: str | None
+    path: str | None
+    changed_at: datetime | None
+    removed_at: datetime | None
+    access_list: list[str] | None
+    access_read_at: datetime | None
+
+
 class FileDetail(FileRecord):
     versions: list[FileVersion] = Field(default_factory=list[FileVersion])
+    # Set for a file a watched folder brought in; None for an upload.
+    source: FileSource | None = None
     references: list[FileReference] = Field(default_factory=list[FileReference])
     # Why the file cannot be deleted now (references, a hold, retention); None when it can. Set on the detail route.
     delete_blocked_by: str | None = None
