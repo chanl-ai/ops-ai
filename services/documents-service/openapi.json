@@ -1522,6 +1522,16 @@
             ],
             "title": "Imagerefused"
           },
+          "incomplete": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReadIncomplete"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "needsReview": {
             "anyOf": [
               {
@@ -1550,7 +1560,8 @@
                   "ok",
                   "review",
                   "unreadable",
-                  "unknown"
+                  "unknown",
+                  "incomplete"
                 ],
                 "type": "string"
               },
@@ -1647,6 +1658,23 @@
               }
             ],
             "title": "Records"
+          },
+          "rereadIncomplete": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cut_off",
+                  "empty",
+                  "declined",
+                  "filtered"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rereadincomplete"
           },
           "rereadTokens": {
             "anyOf": [
@@ -2774,6 +2802,48 @@
           "samples"
         ],
         "title": "Purged",
+        "type": "object"
+      },
+      "ReadIncomplete": {
+        "additionalProperties": false,
+        "description": "A read no model reply answered: cut off at the output limit, empty of an answer, declined or filtered. A\ndeclined reply's first words are kept, masked when the team masks personal data.",
+        "properties": {
+          "reason": {
+            "enum": [
+              "cut_off",
+              "empty",
+              "declined",
+              "filtered"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          },
+          "tries": {
+            "title": "Tries",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reason",
+          "step",
+          "tries"
+        ],
+        "title": "ReadIncomplete",
         "type": "object"
       },
       "ReadingBlock": {

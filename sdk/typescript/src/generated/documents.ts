@@ -1180,10 +1180,11 @@ export interface components {
             imageCalls?: components["schemas"]["ImageCall"][] | null;
             /** Imagerefused */
             imageRefused?: string | null;
+            incomplete?: components["schemas"]["ReadIncomplete"] | null;
             /** Needsreview */
             needsReview?: (string | number)[] | null;
             /** Outcome */
-            outcome?: ("ok" | "review" | "unreadable" | "unknown") | null;
+            outcome?: ("ok" | "review" | "unreadable" | "unknown" | "incomplete") | null;
             /** Pages */
             pages?: number | {
                 [key: string]: components["schemas"]["JsonValue"];
@@ -1202,6 +1203,8 @@ export interface components {
             records?: {
                 [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
+            /** Rereadincomplete */
+            rereadIncomplete?: ("cut_off" | "empty" | "declined" | "filtered") | null;
             /** Rereadtokens */
             rereadTokens?: {
                 [key: string]: number;
@@ -1581,6 +1584,24 @@ export interface components {
             readings: number;
             /** Samples */
             samples: number;
+        };
+        /**
+         * ReadIncomplete
+         * @description A read no model reply answered: cut off at the output limit, empty of an answer, declined or filtered. A
+         *     declined reply's first words are kept, masked when the team masks personal data.
+         */
+        ReadIncomplete: {
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "cut_off" | "empty" | "declined" | "filtered";
+            /** Refusal */
+            refusal?: string | null;
+            /** Step */
+            step: string;
+            /** Tries */
+            tries: number;
         };
         /** ReadingBlock */
         ReadingBlock: {

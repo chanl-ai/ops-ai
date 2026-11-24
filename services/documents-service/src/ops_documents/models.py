@@ -99,6 +99,16 @@ class ExtractionCorrection(Out):
     corrected_at: datetime
 
 
+class ReadIncomplete(Out):
+    """A read no model reply answered: cut off at the output limit, empty of an answer, declined or filtered. A
+    declined reply's first words are kept, masked when the team masks personal data."""
+
+    reason: Literal["cut_off", "empty", "declined", "filtered"]
+    step: str
+    tries: int
+    refusal: str | None = None
+
+
 class ImageCall(Out):
     """A model call that carried page images: its step, the pages shown, how many images and the alias."""
 
@@ -114,7 +124,11 @@ class Extraction(Out):
     id: str
     file_id: str
     status: Literal["queued", "running", "done", "failed", "unreadable"]
-    outcome: Literal["ok", "review", "unreadable", "unknown"] | None = None
+    outcome: Literal["ok", "review", "unreadable", "unknown", "incomplete"] | None = None
+    # Why a read with outcome incomplete has no answer, the step whose reply ended it and how many asks were made.
+    incomplete: ReadIncomplete | None = None
+    # Why the one re-read of doubtful fields had no answer; the first values stand, under review.
+    reread_incomplete: Literal["cut_off", "empty", "declined", "filtered"] | None = None
     # Each field's answer: value, extractedValue, confidence, needsReview and its citation, as the engine scores it.
     fields: dict[str, JsonValue] | None = None
     records: list[dict[str, JsonValue]] | None = None

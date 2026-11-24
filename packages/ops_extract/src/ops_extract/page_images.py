@@ -37,9 +37,10 @@ class PageImage:
     png: bytes
 
     def part(self) -> Json:
-        """The OpenAI chat content part carrying the image, as models-service forwards it."""
+        """The OpenAI chat content part carrying the image, as models-service forwards it. High detail, so the
+        provider reads the page at the size it is drawn (MAX_SIDE is under high's 2,048) rather than choosing one."""
         url = "data:image/png;base64," + base64.b64encode(self.png).decode()
-        return {"type": "image_url", "image_url": {"url": url}}
+        return {"type": "image_url", "image_url": {"url": url, "detail": "high"}}
 
 
 def render(data: bytes, mime: str, pages: Iterable[int]) -> dict[int, Image.Image]:
