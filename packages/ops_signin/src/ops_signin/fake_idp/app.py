@@ -6,7 +6,9 @@ and present the answer to a service configured for another.
 The person "logs in" by the `user` query parameter on the authorize or SSO URL (the email; `login_hint` when absent),
 which stands in for the provider's own login form. Each provider remembers when a person last logged in: a request
 without `prompt=login` (OIDC) or `ForceAuthn` (SAML) reuses that time, as a real provider's session cookie would, and
-`stale=1` makes it ignore a forced login too, so a test can show the service refusing an old authentication.
+`stale=1` makes it ignore a forced login too, so a test can show the service refusing an old authentication. On OIDC,
+`subject=` names another account at the provider with the same email, and `verified=0` leaves out `email_verified`, as
+providers that never vouch for an address do.
 """
 
 from __future__ import annotations
@@ -57,6 +59,8 @@ class _Grant(TypedDict):
     email: str
     auth_time: int
     groups: list[str]
+    subject: str
+    verified: bool
 
 
 @dataclass
@@ -218,6 +222,8 @@ def create_app(base_url: str, dns_records: FakeDns | None = None) -> FastAPI:
             "email": email,
             "auth_time": i.login_time(email, forced=forced, stale=q.get("stale") == "1"),
             "groups": [g for g in q.get("groups", "").split(",") if g],
+            "subject": q.get("subject") or subject_of(email),
+            "verified": q.get("verified") != "0",
         }
         target = str(q.get("redirect_uri"))
         sep = "&" if "?" in target else "?"
@@ -240,12 +246,11 @@ def create_app(base_url: str, dns_records: FakeDns | None = None) -> FastAPI:
         ):
             raise HTTPException(400, "invalid_grant")
         now = int(time.time())
-        claims = {
+        claims: dict[str, Any] = {
             "iss": f"{base}/oidc/{name}",
             "aud": client_id,
-            "sub": subject_of(grant["email"]),
+            "sub": grant["subject"],
             "email": grant["email"],
-            "email_verified": True,
             "name": grant["email"].split("@")[0].replace(".", " ").title(),
             "nonce": grant["nonce"],
             "iat": now,
@@ -253,6 +258,8 @@ def create_app(base_url: str, dns_records: FakeDns | None = None) -> FastAPI:
             "auth_time": grant["auth_time"],
             "groups": grant["groups"],
         }
+        if grant["verified"]:
+            claims["email_verified"] = True
         id_token = jwt.encode(claims, i.key_pem(), algorithm="RS256", headers={"kid": i.kid})
         return {"access_token": secrets.token_urlsafe(16), "token_type": "Bearer", "id_token": id_token}
 

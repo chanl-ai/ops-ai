@@ -18,6 +18,9 @@ class VerifiedIdentity:
     # The groups the provider says the person is in, from the claim or attribute the caller names: () when the
     # provider sent none; None when the caller names no claim, or the list is unknown (Entra's overage claim).
     groups: tuple[str, ...] | None = None
+    # True only when the provider said it checked the email (OIDC `email_verified: true`). SAML carries no such flag,
+    # and many OIDC providers leave the claim out, so an email may only find a person it was proven to belong to.
+    email_verified: bool = False
 
 
 class SignInRefused(Exception):

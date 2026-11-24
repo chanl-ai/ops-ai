@@ -11,12 +11,13 @@ import re
 from urllib.parse import urlencode
 
 import httpx
+import pytest
 import sqlalchemy as sa
 
 from ops_access import CHAT_USER
 from ops_platform.keys import dev_signer
 from ops_platform.store.signin import SignInStore
-from ops_platform.store.tables import audit_entries, members, signin_flows, users
+from ops_platform.store.tables import audit_entries, members, signin_flows, signin_identities, users
 from ops_policy import Ed25519Verifier, verify
 from ops_service_kit.ids import new_id, now_iso
 
@@ -30,6 +31,19 @@ def _claims(token: str, audience: str = "platform") -> dict[str, object]:
 async def _people(rig: SignInRig, email: str) -> int:
     async with rig.engine.connect() as c:
         q = sa.select(sa.func.count()).select_from(users).where(users.c.email == email, users.c.tenant_id == rig.tenant)
+        return int((await c.execute(q)).scalar_one())
+
+
+async def _links(rig: SignInRig, user_id: str) -> int:
+    async with rig.engine.connect() as c:
+        q = sa.select(sa.func.count()).select_from(signin_identities).where(signin_identities.c.user_id == user_id)
+        return int((await c.execute(q)).scalar_one())
+
+
+async def _audited(rig: SignInRig, user_id: str, action: str) -> int:
+    async with rig.engine.connect() as c:
+        q = sa.select(sa.func.count()).select_from(audit_entries)
+        q = q.where(audit_entries.c.target_id == user_id, audit_entries.c.action == action)
         return int((await c.execute(q)).scalar_one())
 
 
@@ -104,7 +118,8 @@ async def test_two_first_sign_ins_racing_in_the_store_resolve_to_one_new_person_
             q = sa.select(audit_entries.c.action, audit_entries.c.target_kind).where(
                 sa.or_(audit_entries.c.target_id == person, audit_entries.c.target_id.in_(held))
             )
-            assert sorted((str(r[0]), str(r[1])) for r in (await c.execute(q)).all()) == [("member.jit", "member")]
+            seen = sorted((str(r[0]), str(r[1])) for r in (await c.execute(q)).all())
+            assert seen == [("member.jit", "member"), ("signin.link", "user")]
         assert await _people(signin, email) == 1
 
 
@@ -116,13 +131,83 @@ async def test_an_email_outside_the_providers_domains_makes_nobody(signin: SignI
     assert await _people(signin, f"ceo@other.{signin.zone}") == 0
 
 
-async def test_a_provider_with_no_first_sign_in_team_signs_in_only_people_it_knows(signin: SignInRig) -> None:
-    await signin.oidc(f"nojit.{signin.zone}", jit=False)
-    unknown = await signin.sign_in_sso(f"stranger@nojit.{signin.zone}")
-    assert unknown.query == {"error": "no_access"}
-    await signin.person(f"member@nojit.{signin.zone}", role="builder")
-    known = await signin.sign_in_sso(f"member@nojit.{signin.zone}")
-    assert known.completed is not None and known.completed.status_code == 200
+@pytest.mark.parametrize("kind", ["oidc", "saml"])
+async def test_a_first_sign_in_never_links_an_existing_person_by_email(signin: SignInRig, kind: str) -> None:
+    # The provider names a member's address (OIDC without email_verified, SAML with no flag at all): the member's
+    # account is not opened, and nobody is linked; they link from their own session or an invite.
+    domain = f"take{kind}.{signin.zone}"
+    await (signin.oidc(domain, jit=False) if kind == "oidc" else signin.saml(domain))
+    if kind == "oidc":  # with no first-sign-in team, someone it does not know is not made either
+        assert (await signin.sign_in_sso(f"stranger@{domain}")).query == {"error": "no_access"}
+    person = await signin.person(f"member@{domain}", role="builder")
+    r = await signin.sign_in_sso(f"member@{domain}", at_idp={"verified": "0"} if kind == "oidc" else None)
+    assert r.query == {"error": "link_required"} and r.completed is None
+    assert await _links(signin, person) == 0
+
+
+async def test_a_person_links_a_provider_from_their_own_session_once(signin: SignInRig) -> None:
+    domain = f"link.{signin.zone}"
+    email = f"ana@{domain}"
+    person = await signin.person(email, role="builder")
+    await signin.person(f"bob@{domain}", role="builder")
+    auth, step_up = await signin.stepped_up(email)
+    bob, _ = await signin.stepped_up(f"bob@{domain}")
+    await signin.oidc(domain, jit=False)
+
+    async def link(
+        subject: str, *, user: str = email, finish: dict[str, str] = auth
+    ) -> httpx.Response | dict[str, str]:
+        start = await signin.public.post("/v1/auth/sso/link/start", json={"stepUp": step_up}, headers=auth)
+        assert start.status_code == 200, start.text
+        data = start.json()["data"]
+        query = dict(httpx.URL(await signin.answer(data["redirectUrl"], user=user, at_idp={"subject": subject})).params)
+        if "code" not in query:
+            return query
+        body = {"code": query["code"], "flowKey": data["flowKey"]}
+        return await signin.public.post("/v1/auth/sso/link/complete", json=body, headers=finish)
+
+    no_step_up = await signin.public.post("/v1/auth/sso/link/start", json={"stepUp": "x" * 40}, headers=auth)
+    assert no_step_up.status_code == 401 and no_step_up.json()["error"]["code"] == "step_up_required"
+    # The provider answers as another account; then another session tries to finish this person's round trip.
+    assert (await link("mallory", user=f"mallory@{domain}")) == {"error": "sign_in_refused", "link": "1"}
+    other = await link("first-account", finish=bob)
+    assert isinstance(other, httpx.Response) and other.status_code == 401, other
+    assert await _links(signin, person) == 0
+    done = await link("first-account")
+    assert isinstance(done, httpx.Response) and done.status_code == 200, done
+    back = await signin.sign_in_sso(email, at_idp={"subject": "first-account"})
+    assert back.completed is not None and _claims(back.completed.json()["data"]["token"])["sub"] == person
+    # A second account at the same provider never becomes another way into the same person.
+    second = await link("second-account")
+    assert isinstance(second, httpx.Response) and second.status_code == 409, second
+    assert second.json()["error"]["code"] == "already_linked"
+    assert await _links(signin, person) == 1 and await _audited(signin, person, "signin.link") == 1
+
+
+@pytest.mark.parametrize("kind", ["oidc", "saml"])
+async def test_an_invite_links_only_who_it_was_made_for(signin: SignInRig, kind: str) -> None:
+    domain = f"inv{kind}.{signin.zone}"
+    await (signin.oidc(domain, jit=False) if kind == "oidc" else signin.saml(domain))
+    h = {**signin.admin, "X-Team-Id": signin.ops_team}
+    # A new person: the invite's role, once the provider vouches for the invited email.
+    new = f"new@{domain}"
+    made = await signin.public.post("/v1/settings/members/invite", headers=h, json={"emails": [new], "role": "viewer"})
+    token = made.json()["data"]["invites"][0]["token"]
+    if kind == "oidc":
+        unsaid = await signin.sign_in_sso(new, invite=token, at_idp={"verified": "0"})
+        assert unsaid.query == {"error": "no_access"}, unsaid.query
+    # Another address holding the link is not the invitee: SAML makes them a first-sign-in member of their own.
+    wrong = await signin.sign_in_sso(f"other@{domain}", invite=token)
+    assert wrong.completed is None or kind == "saml"
+    joined = await signin.sign_in_sso(new, invite=token)
+    assert joined.completed is not None, joined.location
+    assert _claims(joined.completed.json()["data"]["token"])["roles"][signin.ops_team] == "viewer"  # type: ignore[index]
+    # An existing viewer's admin invite never opens their account or raises their role.
+    viewer = await signin.person(f"vic@{domain}", role="viewer")
+    body = {"emails": [f"vic@{domain}"], "role": "admin"}
+    raised = (await signin.public.post("/v1/settings/members/invite", headers=h, json=body)).json()["data"]
+    r = await signin.sign_in_sso(f"vic@{domain}", invite=raised["invites"][0]["token"])
+    assert r.query == {"error": "link_required"} and await _links(signin, viewer) == 0
 
 
 async def test_the_handoff_works_once_and_only_for_the_browser_that_started(signin: SignInRig) -> None:

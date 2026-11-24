@@ -308,6 +308,12 @@ class MemberOut(Out):
     user_id: str | None = None
     # Roles the person holds in every team (`*`), by name: where access beyond their team role comes from.
     workspace_roles: list[str] = Field(default_factory=list[str])
+    # Active, but with no provider link and no password in a workspace that signs in only through a provider: they
+    # cannot sign in until a new invite (`/v1/settings/members/reinvite`) links them.
+    needs_invite: bool = False
+    # Would need an invite, but manages access or is on the break-glass list: a link invite never opens their
+    # account, so they link from their own session after a password reset.
+    links_own_session: bool = False
 
 
 class InviteIn(In):
@@ -366,6 +372,24 @@ class InviteLink(Out):
 
 class InviteBulkOut(BulkOut):
     invites: list[InviteLink]
+
+
+class Mailed(Out):
+    member_id: str
+    email: str
+
+
+class ReinviteBulkOut(BulkOut):
+    """Who a link invite was mailed to; the link itself goes only to their mailbox."""
+
+    mailed: list[Mailed]
+
+
+class ReinviteIn(In):
+    # Omitted: every member of the team who needs a new invite.
+    ids: list[Annotated[str, StringConstraints(pattern=MEMBER_ID)]] | None = Field(
+        default=None, min_length=1, max_length=100
+    )
 
 
 class InvitePreview(Out):
@@ -648,11 +672,15 @@ class SsoStartIn(In):
     email: str | None = Field(default=None, min_length=3, max_length=320, pattern=EMAIL)
     provider: str | None = Field(default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9_-]+$")
     next: str | None = Field(default=None, pattern=NEXT_PATH)
+    # The invite link's token, when the person signs in from their invite: the sign-in may then link them.
+    invite: str | None = Field(default=None, pattern=r"^inv_[A-Za-z0-9_-]{8,64}$")
 
     @model_validator(mode="after")
     def _one_of(self) -> SsoStartIn:
         if (self.email is None) == (self.provider is None):
             raise ValueError("give either email or provider")
+        if self.invite is not None and self.email is None:
+            raise ValueError("an invite signs in with its email")
         return self
 
 
@@ -663,6 +691,30 @@ class StepUpSsoStartIn(In):
 class SsoStarted(Out):
     redirect_url: str
     flow_key: str
+
+
+class SsoLink(Out):
+    """A provider the signed-in person can sign in with, and whether their account there is linked."""
+
+    provider_id: str
+    kind: str
+    label: str
+    linked: bool
+    linked_at: str | None
+
+
+class SsoLinkStartIn(In):
+    """The step-up token this session took in the last minutes (`/v1/auth/step-up` or its SSO form)."""
+
+    step_up: str = Field(min_length=20, max_length=4000)
+    next: str | None = Field(default=None, pattern=NEXT_PATH)
+
+
+class SsoLinked(Out):
+    """The provider the session's person can now sign in with."""
+
+    provider_id: str
+    kind: str
 
 
 class SsoCompleteIn(In):

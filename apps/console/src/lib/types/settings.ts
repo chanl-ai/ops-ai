@@ -64,6 +64,9 @@ export type MemberFilters = { role?: string[]; status?: string[]; teamId?: strin
 /** An invite's result: per email, done or skipped with why, and each new invite's link token, shown once. */
 export type InviteResult = Reply<'members_invite_members'>;
 
+/** A new link invite to each member who cannot sign in: `mailed` names who it went to; the link itself is never returned. */
+export type ReinviteResult = Reply<'members_reinvite_members'>;
+
 export type InviteInput = Narrow<Body<'members_invite_members'>, { role: MemberRole }> & {
   /** Platform scope only: the team to invite into. Ignored inside a team, which always invites into itself. */
   teamId?: string;

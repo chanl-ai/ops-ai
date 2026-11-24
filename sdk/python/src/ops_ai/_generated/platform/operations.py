@@ -213,12 +213,48 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "auth_sso_link_complete": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/auth/sso/link/complete",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "auth_sso_link_start": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/auth/sso/link/start",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "auth_sso_links": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/auth/sso/links",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "auth_sso_start": {
         "body": "json",
         "headers": [],
         "method": "POST",
         "path": "/v1/auth/sso/start",
         "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "auth_sso_unlink": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/auth/sso/links/{provider_id}",
+        "pathParams": ["provider_id"],
         "query": [],
         "stream": False,
     },
@@ -348,11 +384,29 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["search", "cursor", "limit", "ids"],
         "stream": False,
     },
+    "members_reinvite_members": {
+        "body": "json",
+        "headers": ["x-acting-for"],
+        "method": "POST",
+        "path": "/v1/settings/members/reinvite",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "members_remove_members": {
         "body": "json",
         "headers": [],
         "method": "POST",
         "path": "/v1/settings/members/delete",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "members_unlink_members": {
+        "body": "json",
+        "headers": ["x-acting-for"],
+        "method": "POST",
+        "path": "/v1/settings/members/unlink",
         "pathParams": [],
         "query": [],
         "stream": False,
@@ -1008,6 +1062,22 @@ class Operations:
         "Sso Complete"
         return self._t.call(SERVICE, OPERATIONS["auth_sso_complete"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def auth_sso_link_complete(self, body: SsoCompleteIn) -> SsoLinked:
+        "Sso Link Complete"
+        return self._t.call(SERVICE, OPERATIONS["auth_sso_link_complete"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def auth_sso_link_start(self, body: SsoLinkStartIn) -> SsoStarted:
+        "Sso Link Start"
+        return self._t.call(SERVICE, OPERATIONS["auth_sso_link_start"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def auth_sso_links(self) -> list[SsoLink]:
+        "Sso Links"
+        return self._t.call(SERVICE, OPERATIONS["auth_sso_links"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def auth_sso_unlink(self, provider_id: str) -> Any:
+        "Sso Unlink"
+        return self._t.call(SERVICE, OPERATIONS["auth_sso_unlink"], {"provider_id": provider_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def auth_sso_start(self, body: SsoStartIn) -> SsoStarted:
         "Sso Start"
         return self._t.call(SERVICE, OPERATIONS["auth_sso_start"], {}, {}, {}, body)  # type: ignore[no-any-return]
@@ -1287,9 +1357,19 @@ class Operations:
             None,
         )  # type: ignore[no-any-return]
 
+    def members_reinvite_members(self, body: ReinviteIn, *, x_acting_for: str | None = None) -> ReinviteBulkOut:
+        "Reinvite Members"
+        return self._t.call(
+            SERVICE, OPERATIONS["members_reinvite_members"], {}, {}, {"x-acting-for": x_acting_for}, body
+        )  # type: ignore[no-any-return]
+
     def members_change_roles(self, body: RoleIn, *, x_acting_for: str | None = None) -> BulkOut:
         "Change Roles"
         return self._t.call(SERVICE, OPERATIONS["members_change_roles"], {}, {}, {"x-acting-for": x_acting_for}, body)  # type: ignore[no-any-return]
+
+    def members_unlink_members(self, body: DeleteIn, *, x_acting_for: str | None = None) -> BulkOut:
+        "Unlink Members"
+        return self._t.call(SERVICE, OPERATIONS["members_unlink_members"], {}, {}, {"x-acting-for": x_acting_for}, body)  # type: ignore[no-any-return]
 
     def sign_in_providers_list_break_glass(self) -> list[BreakGlassOut]:
         "List Break Glass"
@@ -1648,6 +1728,22 @@ class AsyncOperations:
         "Sso Complete"
         return await self._t.call(SERVICE, OPERATIONS["auth_sso_complete"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def auth_sso_link_complete(self, body: SsoCompleteIn) -> SsoLinked:
+        "Sso Link Complete"
+        return await self._t.call(SERVICE, OPERATIONS["auth_sso_link_complete"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def auth_sso_link_start(self, body: SsoLinkStartIn) -> SsoStarted:
+        "Sso Link Start"
+        return await self._t.call(SERVICE, OPERATIONS["auth_sso_link_start"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def auth_sso_links(self) -> list[SsoLink]:
+        "Sso Links"
+        return await self._t.call(SERVICE, OPERATIONS["auth_sso_links"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def auth_sso_unlink(self, provider_id: str) -> Any:
+        "Sso Unlink"
+        return await self._t.call(SERVICE, OPERATIONS["auth_sso_unlink"], {"provider_id": provider_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     async def auth_sso_start(self, body: SsoStartIn) -> SsoStarted:
         "Sso Start"
         return await self._t.call(SERVICE, OPERATIONS["auth_sso_start"], {}, {}, {}, body)  # type: ignore[no-any-return]
@@ -1931,10 +2027,22 @@ class AsyncOperations:
             None,
         )  # type: ignore[no-any-return]
 
+    async def members_reinvite_members(self, body: ReinviteIn, *, x_acting_for: str | None = None) -> ReinviteBulkOut:
+        "Reinvite Members"
+        return await self._t.call(
+            SERVICE, OPERATIONS["members_reinvite_members"], {}, {}, {"x-acting-for": x_acting_for}, body
+        )  # type: ignore[no-any-return]
+
     async def members_change_roles(self, body: RoleIn, *, x_acting_for: str | None = None) -> BulkOut:
         "Change Roles"
         return await self._t.call(
             SERVICE, OPERATIONS["members_change_roles"], {}, {}, {"x-acting-for": x_acting_for}, body
+        )  # type: ignore[no-any-return]
+
+    async def members_unlink_members(self, body: DeleteIn, *, x_acting_for: str | None = None) -> BulkOut:
+        "Unlink Members"
+        return await self._t.call(
+            SERVICE, OPERATIONS["members_unlink_members"], {}, {}, {"x-acting-for": x_acting_for}, body
         )  # type: ignore[no-any-return]
 
     async def sign_in_providers_list_break_glass(self) -> list[BreakGlassOut]:

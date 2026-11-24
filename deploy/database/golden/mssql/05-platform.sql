@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- platform-service, stamped at 20261122_2022_list_sort_indexes
+-- platform-service, stamped at 20261123_2330_identity_per_user
 CREATE TABLE tenants (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -443,6 +443,7 @@ CREATE TABLE signin_identities (
 	last_used_at VARCHAR(40) NOT NULL, 
 	CONSTRAINT signin_identities_pkey PRIMARY KEY (id), 
 	CONSTRAINT uq_signin_identities_subject UNIQUE (tenant_id, provider_id, subject), 
+	CONSTRAINT uq_signin_identities_person UNIQUE (tenant_id, provider_id, user_id), 
 	CONSTRAINT fk_signin_identities_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
 	CONSTRAINT fk_signin_identities_user FOREIGN KEY(tenant_id, user_id) REFERENCES users (tenant_id, id), 
 	CONSTRAINT signin_identities_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
@@ -469,6 +470,8 @@ CREATE TABLE signin_flows (
 	answered_at VARCHAR(40) NULL, 
 	used_at VARCHAR(40) NULL, 
 	test_result NVARCHAR(max) NULL, 
+	subject VARCHAR(255) NULL, 
+	invite_hash VARCHAR(64) NULL, 
 	CONSTRAINT signin_flows_pkey PRIMARY KEY (id), 
 	CONSTRAINT fk_signin_flows_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
 	CONSTRAINT signin_flows_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id), 
@@ -760,5 +763,5 @@ CREATE TABLE alembic_version_platform (
     CONSTRAINT alembic_version_platform_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_platform (version_num) VALUES ('20261122_2022_list_sort_indexes');
+INSERT INTO alembic_version_platform (version_num) VALUES ('20261123_2330_identity_per_user');
 GO

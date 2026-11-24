@@ -175,6 +175,7 @@ class OidcClient:
             name=str(claims.get("name") or email),
             auth_time=auth_time if isinstance(auth_time, int) else None,
             groups=groups,
+            email_verified=claims.get("email_verified") is True,
         )
 
     def _groups(self, claims: IdClaims) -> tuple[str, ...] | None:

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-23",
+  "title": "New invites for members who cannot sign in",
+  "description": "When your workspace signs in only through a company provider, the members list marks anyone who has no linked sign-in and no password. An admin can send them a new invite; signing in from it links their company account and keeps their membership as it was.",
+  "tag": "improved"
+}

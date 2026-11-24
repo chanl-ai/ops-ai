@@ -71,7 +71,7 @@ export interface AuthProvider {
   signInOptions(email: string): Promise<SignInOptions>;
   /** Where to send the browser to sign in with the workspace IdP for this email or domain; the IdP's answer comes
    * back to /sso/callback with `next` carried through. */
-  startSso(input: { email?: string; domain?: string; next?: string }): Promise<{ redirectUrl: string }>;
+  startSso(input: { email?: string; domain?: string; next?: string; invite?: string }): Promise<{ redirectUrl: string }>;
   /** Finishes SSO with the code the IdP sent back to /sso/callback. */
   completeSso(code: string): Promise<SignInResult>;
   /** Sends a reset email. `previewUrl` is set only by the mock, which has no mailbox, so the demo can follow the link. */
@@ -94,6 +94,14 @@ export interface AuthProvider {
   startSsoStepUp(input: { returnTo: string }): Promise<{ redirectUrl: string }>;
   /** Finishes an IdP step-up from the callback and keeps the token for takeStepUp. */
   completeSsoStepUp(code: string): Promise<StepUp>;
+  /** The company providers the signed-in person can sign in with, and whether each is linked to them yet. */
+  ssoLinks(): Promise<SsoLink[]>;
+  /** Links the person's account at their company's provider, from their own session and a fresh step-up (the provider asks for credentials again): where to send the browser; the provider returns to /sso/callback?link=1. */
+  startSsoLink(input: { returnTo: string; stepUp: string }): Promise<{ redirectUrl: string }>;
+  /** Removes the person's own link at a provider; any session that link opened ends, which may be this one. */
+  unlinkSso(providerId: string): Promise<void>;
+  /** Finishes the link from the callback. Rejects with status 409 when that account is linked already. */
+  completeSsoLink(code: string): Promise<void>;
   /** The step-up an IdP round trip left, cleared on read so a reload does not reuse it unseen; null when none or expired. */
   takeStepUp(): StepUp | null;
   signOut(): Promise<void>;
@@ -116,6 +124,14 @@ export class AuthError extends Error {
     this.code = code;
     this.status = status;
   }
+}
+
+export interface SsoLink {
+  providerId: string;
+  kind: string;
+  label: string;
+  linked: boolean;
+  linkedAt: string | null;
 }
 
 export const isExpired = (s: Session) => new Date(s.expiresAt).getTime() <= Date.now();
