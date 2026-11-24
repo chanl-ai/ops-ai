@@ -246,7 +246,7 @@ def create_app(base_url: str, dns_records: FakeDns | None = None) -> FastAPI:
         ):
             raise HTTPException(400, "invalid_grant")
         now = int(time.time())
-        claims: dict[str, Any] = {
+        claims = {
             "iss": f"{base}/oidc/{name}",
             "aud": client_id,
             "sub": grant["subject"],
@@ -257,9 +257,8 @@ def create_app(base_url: str, dns_records: FakeDns | None = None) -> FastAPI:
             "exp": now + 300,
             "auth_time": grant["auth_time"],
             "groups": grant["groups"],
+            **({"email_verified": True} if grant["verified"] else {}),
         }
-        if grant["verified"]:
-            claims["email_verified"] = True
         id_token = jwt.encode(claims, i.key_pem(), algorithm="RS256", headers={"kid": i.kid})
         return {"access_token": secrets.token_urlsafe(16), "token_type": "Bearer", "id_token": id_token}
 
