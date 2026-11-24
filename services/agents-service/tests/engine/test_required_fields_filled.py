@@ -5,8 +5,11 @@ records approved as zero records. The step names no task type, so the rule holds
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -14,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from ops_agents.api import engine_reviews
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
+from ops_engine.definition import parse
 from ops_engine.store import RunStore
 from ops_service_kit import narrow
 from ops_service_kit.errors import ValidationFailed
@@ -21,6 +25,7 @@ from ops_service_kit.http import Json
 from tests.engine.review_flows import flow, paused
 from tests.engine.test_worker import M, drain
 
+EVENT_SEED = Path(__file__).resolve().parents[2] / "seed" / "event_workflows.json"
 SCHEMA = [
     {"key": "invoice", "label": "Invoice number", "type": "text", "required": True},
     {"key": "total", "label": "Total", "type": "money", "required": True},
@@ -96,3 +101,43 @@ async def test_a_several_records_read_with_none_read_can_only_be_rejected(engine
     assert refused.value.code == "nothing_read", refused.value
     await drain(w)
     assert await _outcome(engine, tenant, run_id) == "rejected"
+
+
+class NotRead:
+    """documents-service answering the shipped Extract's read with no answer, files-service keeping its saves."""
+
+    def __init__(self) -> None:
+        self.saved: list[Json] = []
+
+    async def extract(self, run_id: str, file_id: str, request: Json, *, key: str) -> Json:
+        typed: Json = {"documentType": {"id": "freight_invoice", "version": 1, "name": "Freight invoice"}}
+        answer: Json = {"id": "ext_88213", "status": "done", "outcome": "incomplete"}
+        return answer | dict[str, Any](ONE) | typed
+
+    async def set_data(self, run_id: str, file_id: str, data: Json) -> Json:
+        self.saved.append(data)
+        return {"data": data}
+
+
+# The check step declares no editable value, so correction() refuses typed fields ("This review has nothing to
+# correct."). Declaring `$.nodes.read.out.fields` turns this green, but needs the console to send that shape
+# (use-review-decider.tsx sends a records list) and a save that carries the typed values to the read.
+@pytest.mark.xfail(strict=True, reason="system_extract takes no typed fields yet", raises=ValidationFailed)
+async def test_the_shipped_extract_waits_for_typed_required_fields_and_takes_them(engine: AsyncEngine) -> None:
+    """system_extract, as Extract starts it: a read with no answer waits at its check with nothing on the file, an
+    empty approve is refused, and an approve sending the fields the step declares as editable is taken."""
+    seeded = next(w for w in json.loads(EVENT_SEED.read_text()) if w["id"] == "system_extract")
+    docs = NotRead()
+    tenant, run_id, rt, w = await paused(
+        engine, parse({**seeded, "id": f"sx_{uuid4().hex[:6]}"}), ports={"documents": docs, "file_data": docs}
+    )
+    assert docs.saved == [], "a read with no answer puts nothing on the file while it waits"
+    typed: Json = {"invoice": {"value": "NWF-88213"}, "total": {"value": "1,940.00"}, "po": {"value": None}}
+    with tenant_scope(tenant):
+        with pytest.raises(ValidationFailed) as empty:
+            await engine_reviews.decide(rt, M, run_id, decision="approve", reason=None)
+        await engine_reviews.decide(rt, M, run_id, decision="approve", reason=None, inputs={"edited": typed})
+    assert empty.value.code == "required_fields_empty", empty.value
+    await drain(w)
+    assert await _outcome(engine, tenant, run_id) == "saved"
+    assert [d["fieldsToCheck"] for d in docs.saved] == [0], docs.saved
