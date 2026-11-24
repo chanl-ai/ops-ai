@@ -30,20 +30,8 @@ export default function InvitePage() {
   // Set once Join succeeds: the invitation then reads as accepted, which is this person joining, not a used link.
   const [joined, setJoined] = React.useState(false);
 
-  // The provider's round trip carries the invitation, which is what links the invited person there; accepting here
-  // first would make them someone the provider's email cannot open.
-  const continueWithSso = async (email: string) => {
-    setError(undefined);
-    try {
-      const { redirectUrl } = await sso.mutateAsync({ email, invite: token });
-      window.location.assign(redirectUrl);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
   const onSubmit = async (input: { name: string; password?: string }) => {
     setError(undefined);
-    if (invite.data?.sso) return continueWithSso(invite.data.email);
     try {
       const res = await accept.mutateAsync(input);
       setJoined(true);
@@ -97,17 +85,6 @@ export default function InvitePage() {
             description={`${i.invitedBy} invited you. You are signed in as ${i.email}.${error ? ` ${error}` : ''}`}
             action={{ label: accept.isPending ? 'Joining…' : `Join ${i.team}`, onClick: () => void onSubmit({ name: session?.user.name ?? i.email }), disabled: accept.isPending }}
             testId="invite-join"
-          />
-        );
-      // An SSO-only workspace has no password to sign in with first: the provider's round trip carries this invitation.
-      if (i.sso && !signedInAs)
-        return (
-          <EmptyState
-            icon={LogIn}
-            title={`Continue with ${i.ssoProviderLabel ?? 'SSO'} to join ${i.team}`}
-            description={`${i.invitedBy} invited ${i.email}. ${i.email.split('@')[1]} signs in through your company, so this invitation links your account there.${error ? ` ${error}` : ''}`}
-            action={{ label: sso.isPending ? 'Opening…' : `Continue with ${i.ssoProviderLabel ?? 'SSO'}`, onClick: () => void continueWithSso(i.email), disabled: sso.isPending }}
-            testId="invite-sso"
           />
         );
       const login = `/login?email=${encodeURIComponent(i.email)}&next=${encodeURIComponent(`/invite/${token}`)}`;

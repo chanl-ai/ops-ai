@@ -10,6 +10,7 @@ import { PLATFORM_PORT, ROOT, SIGNIN_SECRET, check, chromium, evidenceDir, finis
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const zone = `${randomBytes(4).toString('hex')}.harborpine.test`;
 const TELLER = `new.teller@${zone}`;
+const CLERK = `existing.clerk@${zone}`;
 const SHOTS = evidenceDir('161');
 
 async function call(method, path, body, token, team) {
@@ -72,6 +73,44 @@ await withUiStack(
       check('the teller lands signed in as a chat user on team_ops through OIDC', home && stored?.principal?.email === TELLER && stored?.principal?.authMethod === 'oidc' && stored?.principal?.roles?.team_ops === 'chat_user', stored?.principal ?? page.url());
       check('no page errors', errors.length === 0, errors);
       await page.screenshot({ path: join(SHOTS, 'uc-161-signed-in.png') });
+
+      // An existing person is never opened by the provider's email: the sign-in ends on a plain message, and they link
+      // the provider from their own session on My security, after which the provider signs them in.
+      const clerkInvite = await call('POST', '/v1/settings/members/invite', { emails: [CLERK], role: 'chat_user' }, priya, 'team_ops');
+      const clerkAccepted = await call('POST', `/v1/invites/${clerkInvite.body?.data?.invites?.[0]?.token}/accept`, { name: 'Existing Clerk', password: 'northfield-demo-clerk-1' });
+      check('an existing clerk with a password account is made through an invitation', clerkInvite.status === 200 && clerkAccepted.status === 200, { invite: clerkInvite.status, accept: clerkAccepted.status });
+      for (const [width, name] of [[1280, 'desktop'], [390, 'mobile']]) {
+        const ctx = await browser.newContext({ viewport: { width, height: 860 } });
+        const p = await ctx.newPage();
+        const problems = [];
+        p.on('pageerror', (e) => problems.push(e.message));
+        await p.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await p.getByLabel('Work email').fill(CLERK);
+        await p.getByTestId('login-sso-notice').waitFor({ timeout: 30_000 });
+        await p.getByTestId('login-submit').click();
+        await p.getByTestId('sso-link-required').waitFor({ timeout: 60_000 });
+        const said = (await p.getByTestId('sso-link-required').innerText()).toLowerCase();
+        check(`${name}: an existing email ends on a plain message, not a generic error`, said.includes('already has an account') && said.includes('my security') && said.includes('new invite'), said);
+        check(`${name}: no horizontal overflow on the message`, await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+        await p.screenshot({ path: join(SHOTS, `uc-161-link-required-${name}.png`) });
+
+        // The clerk signs in the usual way (their session injected from the API), then links from My security.
+        const who = (await call('POST', '/v1/auth/sign-in', { email: CLERK, password: 'northfield-demo-clerk-1' })).body?.data;
+        await p.evaluate((issued) => localStorage.setItem('ops-platform-session', JSON.stringify({ ...issued, issuedAt: new Date().toISOString() })), who);
+        await p.goto(`${consoleUrl}/settings/account/security`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await p.getByTestId('sso-links').waitFor({ timeout: 60_000 });
+        check(`${name}: My security offers Link for the unlinked provider`, (await p.getByTestId('link-sso').count()) === 1, await p.getByTestId('sso-links').innerText());
+        await p.screenshot({ path: join(SHOTS, `uc-161-security-unlinked-${name}.png`) });
+        if (name === 'desktop') {
+          await p.getByTestId('link-sso').click();
+          await p.waitForURL((u) => u.pathname === '/settings/account/security', { timeout: 120_000 });
+          await p.getByText('Linked', { exact: true }).first().waitFor({ timeout: 60_000 });
+          check('after the round trip My security shows the provider linked, with no Link button', (await p.getByTestId('link-sso').count()) === 0);
+          await p.screenshot({ path: join(SHOTS, 'uc-161-security-linked-desktop.png') });
+        }
+        check(`${name}: no page errors`, problems.length === 0, problems);
+        await ctx.close();
+      }
     } finally {
       await browser.close();
     }

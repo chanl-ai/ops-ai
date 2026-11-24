@@ -99,7 +99,7 @@ export function createSettingsMock({ log, me }: { log: AuditLog; me: string }): 
             if (allowed.length && !allowed.some((d) => e.endsWith(`@${d}`))) return `Not an allowed domain in Sign-in settings (${allowed.join(', ')})`;
             if (members.some((x) => x.email === e && x.teamId === t.id)) return `Already in ${t.name}`;
             const name = e.split('@')[0].split('.').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
-            const invited = { id: id('mem'), name, email: e, role: input.role, teamId: t.id, team: t.name, status: 'invited' as const, invitedAt: new Date().toISOString() };
+            const invited = { id: id('mem'), name, email: e, role: input.role, teamId: t.id, team: t.name, status: 'invited' as const, needsInvite: false, invitedAt: new Date().toISOString() };
             const token = linkFor(invited);
             links.push({ email: e, memberId: invited.id, token });
             members.unshift({ ...invited, inviteToken: token });

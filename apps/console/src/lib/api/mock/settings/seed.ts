@@ -42,6 +42,7 @@ export function seedMembers(teams: Team[]): Member[] {
         teamId: t.id,
         team: t.name,
         status: invited ? 'invited' : 'active',
+        needsInvite: false,
         lastActiveAt: invited ? undefined : minsAgo(Math.floor(r() * 9 * D) + 5),
         invitedAt: invited ? minsAgo(2 * D + i * 60) : undefined,
       });
