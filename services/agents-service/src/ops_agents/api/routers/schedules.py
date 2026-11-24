@@ -3,8 +3,10 @@
 A schedule is saved outside the workflow's versions (store/schedules.py), so a save applies at once to whatever version
 is live, with no publish. Saving or clearing one needs the right to pause the workflow and the right an email trigger
 asks to go live (`deployments.create`): both put a workflow to work with no person in it. A workflow no team owns
-cannot carry one, since its runs would have no team. Each schedule is read and written through its workflow's rights;
-the schedules table is tenant-scoped with the team as a plain column, because shared workflows have no team.
+cannot carry one, since its runs would have no team. Reading one needs the right to view the team's workflows; clearing
+one needs the save's rights and nothing else, so a schedule whose step is gone can still be cleared. The floor is
+checked at each save only: raising it leaves saved schedules running, and each is refused at its next save. The
+schedules table is tenant-scoped with the team as a plain column, because shared workflows have no team.
 
 The words and the next runs come from the server, so the panel, the lists and the CLI say the same thing."""
 
@@ -33,7 +35,7 @@ from ..envelope import ok
 from ..schedule_clock import required_beyond_due
 from ..schedule_view import ScheduleView, next_runs, schedule_view
 from ..schemas import Out  # pyright: ignore[reportPrivateImportUsage]
-from .engine import REGISTRY, Me, Rt, definitions
+from .engine import REGISTRY, Me, Reader, Rt, definitions
 
 log = get_logger("ops_agents.api.routers.schedules")
 router = APIRouter(prefix="/v1/schedules", dependencies=[Depends(principal)])
@@ -105,43 +107,55 @@ async def preview_schedule(rt: Rt, me: Me, body: RuleIn) -> JSONResponse:
     return ok(preview(checked(rt, body.rule, now), now))
 
 
-async def _workflow(rt: Runtime, me: Any, workflow_id: str, step: str, *, writing: bool) -> Any:
-    """The workflow's current row, after the rights a schedule needs; 404 when the caller sees no such workflow or
-    the step is not a schedulable trigger of its live or working version."""
-    store = definitions(rt)
-    row = await store.row(workflow_id, team=current_team())
+async def _rights(rt: Runtime, me: Any, workflow_id: str) -> Any:
+    """The workflow's current row after the rights saving or clearing a schedule needs; 404 when the caller sees no
+    such workflow."""
+    row = await definitions(rt).row(workflow_id, team=current_team())
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id}")
-    if writing:
-        engine_lifecycle.require_rights(me, row, "pause")
-        if not row.team_id:
-            raise Unprocessable(
-                "A scheduled run needs a team, and this workflow belongs to none.",
-                code="schedule_needs_team",
-                details={"field": "team"},
-            )
+    engine_lifecycle.require_rights(me, row, "pause")
+    if row.team_id:
         can(caller_of(me), "deployments", "create", team=row.team_id, what="a schedule on this workflow")
-    # The live version, the latest saved one and the editor's working copy: a schedule applies to whichever goes live.
-    live = await store.live(workflow_id, team=current_team())
-    working = await store.working_copy(workflow_id, team=current_team())
-    versions = [v.definition for v in (live, row, working) if v]
-    steps = [n for d in versions for n in cast(list[Json], d.get("nodes") or []) if n.get("id") == step]
-    if not steps or not all(schedulable(n) for n in steps):
-        raise NotFound(f"Schedule trigger {step} on {workflow_id}")
-    for d in versions if writing else []:
-        if field := required_beyond_due(d, step):
-            raise schedule_input_refused(field)
     return row
 
 
+async def _saveable(rt: Runtime, row: Any, step: str) -> None:
+    """What a save needs beyond the rights: a team, and a schedulable trigger `step` in the live version, the latest
+    saved one and the editor's working copy, none of them requiring an input the clock cannot fill."""
+    if not row.team_id:
+        raise Unprocessable(
+            "A scheduled run needs a team, and this workflow belongs to none.",
+            code="schedule_needs_team",
+            details={"field": "team"},
+        )
+    store, wid = definitions(rt), row.workflow_id
+    # A schedule applies to whichever version goes live.
+    live = await store.live(wid, team=current_team())
+    working = await store.working_copy(wid, team=current_team())
+    versions = [v.definition for v in (live, row, working) if v]
+    steps = [n for d in versions for n in cast(list[Json], d.get("nodes") or []) if n.get("id") == step]
+    if not steps or not all(schedulable(n) for n in steps):
+        raise NotFound(f"Schedule trigger {step} on {wid}")
+    for d in versions:
+        if field := required_beyond_due(d, step):
+            raise schedule_input_refused(field)
+
+
+async def serving_definition(rt: Runtime, workflow_id: str) -> Json | None:
+    served = await definitions(rt).serving(workflow_id, team=current_team())
+    return served.definition if served else None
+
+
 @workflow_router.get("/definitions/{workflow_id}/triggers/{step}/schedule", response_model=Envelope[ScheduleView])
-async def get_schedule(rt: Rt, me: Me, workflow_id: str, step: str) -> JSONResponse:
-    """The schedule saved on the trigger step, in words, with its next runs and last outcome; 404 when none is saved."""
-    await _workflow(rt, me, workflow_id, step, writing=False)
+async def get_schedule(rt: Rt, me: Reader, workflow_id: str, step: str) -> JSONResponse:
+    """The schedule saved on the trigger step, in words, with its next runs, last outcome and why it is idle when it
+    is. 403 without the right to view the team's workflows; 404 when none is saved."""
+    if await definitions(rt).row(workflow_id, team=current_team()) is None:
+        raise NotFound(f"Workflow definition {workflow_id}")
     row = await WorkflowSchedules(rt.db).get(workflow_id, step)
     if row is None:
         raise NotFound(f"No schedule on {step} of {workflow_id}")
-    return ok(schedule_view(row, datetime.now(UTC)))
+    return ok(schedule_view(row, datetime.now(UTC), await serving_definition(rt, workflow_id)))
 
 
 @workflow_router.put("/definitions/{workflow_id}/triggers/{step}/schedule", response_model=Envelope[ScheduleView])
@@ -150,7 +164,9 @@ async def save_schedule(rt: Rt, me: Me, _: Tx, workflow_id: str, step: str, body
     403 without the rights to pause the workflow and put it on a channel; 422 naming the field for a bad rule, a rule
     under the shortest interval, an input schema that needs more than dueAt, or a workflow with no team."""
     now = datetime.now(UTC)
-    wf = await _workflow(rt, me, workflow_id, step, writing=True)
+    wf = await _rights(rt, me, workflow_id)
+    await _saveable(rt, wf, step)
+    # The floor is checked here, at each save: a schedule saved before the floor was raised keeps running until then.
     rule = checked(rt, body.rule, now)
     store = WorkflowSchedules(rt.db)
     before = await store.save(workflow_id, step, wf.team_id, rule, me.sub)
@@ -164,13 +180,15 @@ async def save_schedule(rt: Rt, me: Me, _: Tx, workflow_id: str, step: str, body
     )
     row = await store.get(workflow_id, step)
     assert row is not None
-    return ok(schedule_view(row, now))
+    return ok(schedule_view(row, now, await serving_definition(rt, workflow_id)))
 
 
 @workflow_router.delete("/definitions/{workflow_id}/triggers/{step}/schedule", status_code=204, response_model=None)
 async def clear_schedule(rt: Rt, me: Me, _: Tx, workflow_id: str, step: str) -> Response:
-    """Clears the schedule: nothing more ticks. 404 when none was saved."""
-    await _workflow(rt, me, workflow_id, step, writing=True)
+    """Clears the schedule: nothing more ticks. Needs the same rights as a save and nothing else, so a schedule whose
+    step a newer version dropped, or whose newest version needs an input, can still be cleared. 404 when none was
+    saved."""
+    await _rights(rt, me, workflow_id)
     store = WorkflowSchedules(rt.db)
     before = await store.get(workflow_id, step)
     if before is None or not await store.clear(workflow_id, step):

@@ -1808,6 +1808,7 @@ class SavedCaseContext(TypedDict, closed=True):
 class ScheduleView(TypedDict, closed=True):
     changedAt: str
     changedBy: str
+    idle: NotRequired[str | None]
     lastOutcome: NotRequired[str | None]
     lastSlotAt: NotRequired[str | None]
     nextRuns: list[str]
