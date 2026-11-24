@@ -7,6 +7,7 @@ import { FileSearch, SearchX } from 'lucide-react';
 
 import { ExtractDialog } from '@/components/files/extract-dialog';
 import { FileDownloadButton } from '@/components/files/file-actions';
+import { FileSource } from '@/components/files/file-source';
 import { fileIcon } from '@/components/files/file-meta';
 import { ReadAs } from '@/components/files/read-as';
 import { PageLayout } from '@/components/page-layout';
@@ -114,6 +115,7 @@ export function FilePage({ children }: { children: (ctx: FilePageContext) => Rea
           </AlertDescription>
         </Alert>
       )}
+      <FileSource file={f} />
       {children({ file: f, extractions: rows, latest, openExtract: () => setExtracting(true), canExtract, canCorrect })}
       <ExtractDialog open={extracting} onOpenChange={setExtracting} fileId={f.id} fileName={f.name} onDone={(run) => router.push(`${base}/fields?${new URLSearchParams({ run: run.runId, ...(run.status === 'waiting' ? { waiting: '1' } : run.status === 'reading' ? { reading: '1' } : {}) })}`)} onFullText={(pages) => router.push(`${base}/text${pages ? `?pages=${pages}` : ''}`)} />
     </PageLayout>

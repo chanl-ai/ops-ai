@@ -47,6 +47,7 @@ export function SourceScopeStep({
   valid,
   preview,
   storedNote,
+  onNames,
 }: {
   idPrefix: string;
   kind: SourceKindOption;
@@ -57,11 +58,12 @@ export function SourceScopeStep({
   valid: boolean;
   preview: UseQueryResult<SourceKindPreview>;
   storedNote?: string;
+  onNames?: (input: string, names: Record<string, string>) => void;
 }) {
   const inputs = kind.type === 'tool' ? (kind.inputs ?? {}) : {};
   return (
     <>
-      <SourceValuesForm idPrefix={idPrefix} inputs={inputs} values={values} onChange={onChange} errors={errors} scopeSource={kind.pickers && kind.plugin && kind.source ? { plugin: kind.plugin, source: kind.source } : undefined} />
+      <SourceValuesForm idPrefix={idPrefix} inputs={inputs} values={values} onChange={onChange} errors={errors} onNames={onNames} scopeSource={kind.pickers && kind.plugin && kind.source ? { plugin: kind.plugin, source: kind.source } : undefined} />
       {kind.previews && <PreviewPanel paused={!valid} query={preview} storedNote={storedNote} />}
     </>
   );

@@ -34,10 +34,11 @@ function AppName({ plugin }: { plugin: string }) {
   return <>{card.data?.name ?? plugin.split('.').pop()}</>;
 }
 
-/** The folders a watch was set up with, as the picked counts per list (the service keeps ids, not names). */
-function scopeSummary(values: Watch['values']) {
-  const parts = Object.entries(values).flatMap(([k, v]) => (Array.isArray(v) && v.length ? [`${k.replace(/_/g, ' ')}: ${v.length}`] : []));
-  return parts.join(' · ') || 'Whole source';
+/** The folders a watch was set up with, by the names the picker showed: the first two and how many more. */
+function scopeSummary(folders: Watch['folders']) {
+  if (!folders.length) return 'Whole source';
+  const shown = folders.slice(0, 2).map((f) => f.name).join(', ');
+  return folders.length > 2 ? `${shown} and ${folders.length - 2} more` : shown;
 }
 
 function LastCheck({ w }: { w: Watch }) {
@@ -86,11 +87,20 @@ function columns(onCheck: ((w: Watch) => void) | undefined, onChange: (w: Watch)
         <div className="flex min-w-0 max-w-96 flex-col" data-testid={`watch-row-${row.original.id}`}>
           <span className="truncate font-medium">{row.original.name}</span>
           <span className="truncate text-xs text-muted-foreground">
-            <AppName plugin={row.original.plugin} /> · {scopeSummary(row.original.values)}
+            <AppName plugin={row.original.plugin} /> · {scopeSummary(row.original.folders)}
           </span>
         </div>
       ),
       enableHiding: false,
+    },
+    {
+      id: 'files',
+      header: 'In Files',
+      cell: ({ row }) => (
+        <span className="text-sm tabular-nums" data-testid={`watch-files-${row.original.id}`}>
+          {plural(row.original.filesInFiles, 'file')}
+        </span>
+      ),
     },
     { id: 'lastCheck', header: 'Last check', cell: ({ row }) => <LastCheck w={row.original} /> },
     { id: 'failures', header: 'Needs attention', cell: ({ row }) => <Failures w={row.original} /> },
@@ -108,7 +118,7 @@ function columns(onCheck: ((w: Watch) => void) | undefined, onChange: (w: Watch)
             actions={[
               { label: 'Check now', icon: RefreshCw, onClick: (r) => onCheck(r.original), disabledReason: row.original.checking ? 'A check of this folder is running' : undefined },
               { label: 'Change folders', icon: Pencil, onClick: (r) => onChange(r.original) },
-              { label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (r) => onDelete(r.original) },
+              { label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (r) => onDelete(r.original), disabledReason: row.original.inUse ? 'A workflow’s Files changed trigger uses this folder' : undefined },
             ]}
           />
         </StopRowClick>

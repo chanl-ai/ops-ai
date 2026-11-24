@@ -219,7 +219,9 @@ function useWatchWrite<A, R>(fn: (a: A) => Promise<R>) {
 
 export const useCreateWatch = () => useWatchWrite((body: WatchInput) => sdk((ops) => ops.raw.files.watches_create_watch({ body })));
 export const useChangeWatch = () =>
-  useWatchWrite(({ id, name, values }: { id: string; name?: string; values?: WatchInput['values'] }) => sdk((ops) => ops.raw.files.watches_change_watch({ path: { watch_id: id }, body: { name, values } })));
+  useWatchWrite(({ id, name, values, names }: { id: string; name?: string; values?: WatchInput['values']; names?: WatchInput['names'] }) =>
+    sdk((ops) => ops.raw.files.watches_change_watch({ path: { watch_id: id }, body: { name, values, names } })),
+  );
 /** Check now; a check already running answers 409 `already_checking`, which the caller words. */
 export const useCheckWatch = () => useWatchWrite((id: string) => sdk((ops) => ops.raw.files.watches_check_watch({ path: { watch_id: id } })));
 export const useDeleteWatch = () => useWatchWrite((id: string) => sdk((ops) => ops.raw.files.watches_delete_watch({ path: { watch_id: id } })));

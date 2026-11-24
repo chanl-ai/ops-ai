@@ -66,6 +66,7 @@ export function SourceValuesForm({
   only,
   disabled,
   scopeSource,
+  onNames,
 }: {
   idPrefix: string;
   inputs: Record<string, SourceInputField>;
@@ -76,6 +77,8 @@ export function SourceValuesForm({
   disabled?: boolean;
   /** The plugin source whose scopes tool fills inputs that declare a `picker`; without it they are typed. */
   scopeSource?: { plugin: string; source: string };
+  /** Told, per picker input, the name shown for each picked id (Files keeps them to list a watch's folders). */
+  onNames?: (input: string, names: Record<string, string>) => void;
 }) {
   const set = (name: string, v: unknown) => onChange({ ...values, [name]: v });
   const names = Object.keys(inputs).filter((n) => !only || only.includes(n));
@@ -105,7 +108,7 @@ export function SourceValuesForm({
           const parents = names.filter((n) => n !== name && inputs[n].picker).flatMap((n) => (Array.isArray(values[n]) ? (values[n] as unknown[]).map(String) : []));
           return (
             <FormField key={name} id={id} label={label(name)} hint={hint} error={error} optional={f.required === false}>
-              <ScopePicker id={id} plugin={scopeSource.plugin} source={scopeSource.source} kind={f.picker} parents={parents} value={Array.isArray(v) ? v.map(String) : []} onChange={(x) => set(name, x)} disabled={disabled} />
+              <ScopePicker id={id} plugin={scopeSource.plugin} source={scopeSource.source} kind={f.picker} parents={parents} value={Array.isArray(v) ? v.map(String) : []} onChange={(x) => set(name, x)} onNames={onNames && ((n) => onNames(name, n))} disabled={disabled} />
             </FormField>
           );
         }

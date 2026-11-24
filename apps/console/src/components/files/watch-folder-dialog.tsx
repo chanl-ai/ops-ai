@@ -25,13 +25,21 @@ import type { SourceKindOption } from '@/lib/types/knowledge';
 
 const STEPS = ['Source', 'What to include', 'Review'] as const;
 
-/**
- * The app sources whose items are files. Knowledge lists every source an app offers; a watch copies each item's bytes
- * into Files, so only the ones that hold files are offered (an app that adds another, such as S3, names it here).
- */
-const FILE_SOURCES = ['files'];
-const watchable = (k: SourceKindOption) => k.type === 'tool' && !k.site && !!k.pickers && !!k.source && FILE_SOURCES.includes(k.source);
+/** The app sources whose items are files, as their plugin's manifest marks them; a watch copies each item's bytes. */
+const watchable = (k: SourceKindOption) => k.type === 'tool' && !!k.files && !!k.pickers && !!k.source;
 const kindKey = (k: SourceKindOption) => `${k.plugin}/${k.source}`;
+
+/** A watch's named folders as the dialog keeps them: per input, each id's name. */
+function namesOf(folders: Watch['folders']) {
+  const out: Record<string, Record<string, string>> = {};
+  for (const f of folders) out[f.input] = { ...out[f.input], [f.id]: f.name };
+  return out;
+}
+
+/** Picked ids as the picker named them; a value no picker named stays as it is. */
+function named(v: unknown, labels?: Record<string, string>) {
+  return labels && Array.isArray(v) ? v.map((x) => labels[String(x)] ?? x) : v;
+}
 
 /** A value as one line of the Review: lists joined, switches as on or off, nothing as a dash. */
 function shown(v: unknown) {
@@ -54,6 +62,8 @@ export function WatchFolderDialog({ open, onOpenChange, watch }: { open: boolean
   const [key, setKey] = React.useState<string | null>(null);
   const [name, setName] = React.useState('');
   const [values, setValues] = React.useState<Record<string, unknown>>({});
+  // What the picker called each picked place, per input, so the list names the folders instead of counting ids.
+  const [names, setNames] = React.useState<Record<string, Record<string, string>>>({});
   const [attempted, setAttempted] = React.useState(false);
   const [error, setError] = React.useState<string>();
   const [confirmClose, setConfirmClose] = React.useState(false);
@@ -76,6 +86,7 @@ export function WatchFolderDialog({ open, onOpenChange, watch }: { open: boolean
     setStep(watch ? 2 : 1);
     setName(watch?.name ?? '');
     setValues((watch?.values as Record<string, unknown> | undefined) ?? {});
+    setNames(namesOf(watch?.folders ?? []));
     setKey(null);
     setAttempted(false);
     setError(undefined);
@@ -121,10 +132,10 @@ export function WatchFolderDialog({ open, onOpenChange, watch }: { open: boolean
     setError(undefined);
     try {
       if (watch) {
-        await change.mutateAsync({ id: watch.id, name: name.trim(), values: values as never });
+        await change.mutateAsync({ id: watch.id, name: name.trim(), values: values as never, names });
         toast.success(`Changed ${name.trim()}`, { description: 'New folders are listed whole on the next check.' });
       } else {
-        const made = await create.mutateAsync({ name: name.trim(), plugin: kind.plugin!, source: kind.source!, values: values as never });
+        const made = await create.mutateAsync({ name: name.trim(), plugin: kind.plugin!, source: kind.source!, connectionId: kind.connectionId ?? undefined, values: values as never, names });
         toast.success(`Watching ${made.name}`, {
           description: 'Nothing is copied until the first check.',
           action: { label: 'Check now', onClick: () => void check.mutateAsync(made.id).catch((e: Error) => toast.error(e.message)) },
@@ -235,7 +246,7 @@ export function WatchFolderDialog({ open, onOpenChange, watch }: { open: boolean
         )}
 
         {step === 2 && kind && (
-          <SourceScopeStep idPrefix="wf" kind={kind} values={values} onChange={setValues} errors={shownErrors} valid={valid} preview={preview} storedNote="Nothing is copied until a check runs." />
+          <SourceScopeStep idPrefix="wf" kind={kind} values={values} onChange={setValues} errors={shownErrors} valid={valid} preview={preview} storedNote="Nothing is copied until a check runs." onNames={(input, got) => setNames((n) => ({ ...n, [input]: { ...n[input], ...got } }))} />
         )}
 
         {step === 3 && kind && (
@@ -246,7 +257,7 @@ export function WatchFolderDialog({ open, onOpenChange, watch }: { open: boolean
             <Section title="What to include" actions={<EditLink onClick={() => setStep(2)} />}>
               <KeyValues
                 rows={[
-                  ...Object.keys(inputs).map((n): [string, React.ReactNode] => [n.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()), shown(values[n])]),
+                  ...Object.keys(inputs).map((n): [string, React.ReactNode] => [n.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()), shown(named(values[n], names[n]))]),
                   ['First check', preview.data ? `${count(preview.data.found)} files found, ${count(preview.data.willFetch)} will be brought in` : 'Not previewed'],
                 ]}
               />
