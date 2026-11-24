@@ -9,6 +9,7 @@
 // | status line | A first paragraph that starts "Status:" |
 // | roadmap word | planned, upcoming, partial; allowed only on the Feature status page |
 // | release or test word | staging, merged, branch and release wording, how something was tested; changelog pages may name releases |
+// | filler word | simply, just, easy, easily, obviously, of course |
 // | internal term | lease, journal, store layer, fencing, outbox |
 // | internal name | A service, package or environment variable name, outside the Reference tab |
 // | glossary name | A name the glossary's Not column lists |
@@ -60,6 +61,7 @@ const WORD_RULES = [
     re: /\b(?:staging|(?:un)?merged|release (?:branch|candidate|train)|(?:feature|develop|main) branch|on develop|(?:this|next|current|later|future) release|tested (?:on|against|with|in|by)|was tested|verified (?:on|against|by)|proven by|use[- ]case (?:run|test)s?|unit tests?|end-to-end tests?|smoke tests?)\b|\bCI\b/g,
     except: (p) => CHANGELOG_PAGES.includes(p.page),
   },
+  { kind: 'filler word', re: /\b(?:simply|just|easy|easily|obviously|of course)\b/gi },
   { kind: 'internal term', re: /\b(?:leases?|leased|journal(?:s|ed)?|store layer|fenc(?:e|ed|ing)|outbox)\b/gi, code: true },
   { kind: 'internal name', re: /\bops_[a-z][a-z_]*\b|\bOPS_[A-Z0-9_]+\b/g, code: true, except: (p) => p.tab === 'Reference' },
 ];
@@ -183,6 +185,7 @@ const PLANTS = {
   'status line': 'Status: current.',
   'roadmap word': 'Exports are planned.',
   'release or test word': 'This runs on staging today.',
+  'filler word': 'You can simply press Save.',
   'internal term': 'Another worker takes the lease.',
   'internal name': 'Set `OPS_MODELS_URL` on agents-service first.',
   'glossary name': 'Turn the connector on.',

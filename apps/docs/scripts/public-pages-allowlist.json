@@ -116,8 +116,7 @@
     "status line": 1
   },
   "guide/integrations/authentication.md": {
-    "long table cell": 8,
-    "menu path": 2
+    "long table cell": 8
   },
   "guide/integrations/build-a-plugin.md": {
     "long table cell": 4,
@@ -185,7 +184,8 @@
     "release or test word": 8,
     "repository path": 1,
     "roadmap word": 2,
-    "status line": 1
+    "status line": 1,
+    "filler word": 1
   },
   "guide/examples/workflows.md": {
     "long table cell": 3,
@@ -277,7 +277,8 @@
     "menu path": 1,
     "repository path": 18,
     "roadmap word": 1,
-    "status line": 1
+    "status line": 1,
+    "filler word": 1
   },
   "sdk/python.md": {
     "glossary name": 1,

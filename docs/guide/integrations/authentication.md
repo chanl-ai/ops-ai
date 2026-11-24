@@ -13,7 +13,7 @@ use your own OAuth app instead of Ops AI's.
 
 <!-- site: steps -->
 1. **Turn the App on** in **Data Gateway › Apps** (a team admin). Saving the App's settings never starts a sign-in.
-2. **Press Connect**: **Connect the team account**, or **Connect my account** on the App's page or on **Apps › Mine**.
+2. **Press Connect**: **Connect the team account**, or **Connect my account** on the App's page or on **My apps**.
 3. **Allow access** on the app's own sign-in page. It lists what Ops AI asks for, in the App's words.
 4. **Check the result.** The App reads **Connected** once the test after sign-in passes, and the account's row shows
    who signed in.
@@ -27,8 +27,8 @@ opsai apps mine                            # your own sign-ins, one row per acco
 
 | Kind | Who signs in | Use it for |
 |---|---|---|
-| Sign in at the app (authorization code) | A person, on the app's page | Apps where calls act as a user: Salesforce, GitHub, SharePoint |
-| App-to-app (client credentials) | Nobody; Ops AI asks the app for a token with the OAuth app's client ID and secret | Service APIs with no user, such as a payments or core-banking API |
+| Sign in with an account (authorization code) | A person, on the app's page | Apps where calls act as a user: Salesforce, GitHub, SharePoint |
+| Client ID and secret (client credentials) | Nobody; Ops AI asks the app for a token with the OAuth app's client ID and secret | Service APIs with no user, such as a payments or core-banking API |
 
 Ops AI fetches and renews tokens itself. A token never reaches an agent, a model or a workflow step, and is removed
 from anything an app answers.
@@ -43,8 +43,8 @@ When a team admin turns an App on, they pick whose account calls use. An App lis
 | Each person's own | That person's account; without one, the run waits for them to connect | Refused: there is no person to act as |
 | Each person's, with the team's as backup | That person's account | The team account |
 
-When a run waits for a person, **Human Tasks** shows **Connect your <App> account to continue**. Once they connect, the
-run goes on by itself.
+When a run waits for a person, **Human Tasks** shows it with **Connect my account**. Once they connect, the run goes
+on by itself. A team admin can press **Run as the team account** instead, where the App has one.
 
 One team's account never serves another team, and one person's token never serves anyone else.
 
@@ -67,7 +67,7 @@ certificate](#sign-in-with-a-certificate).
 
 | What happened | What people see | What to do |
 |---|---|---|
-| The token expired or was revoked | The account reads **Expired** with **Reconnect** | Press **Reconnect**; a waiting run goes on after the new sign-in |
+| The token expired or was revoked | The account reads **Expired** | Press **Sign in**; a waiting run goes on after the new sign-in |
 | The client secret is wrong | Calls fail to get a token and the account asks to be connected again | A team admin replaces the secret on the auth config, then reconnects |
 | The person refused access | Access was not given | Press **Connect** again |
 
@@ -82,7 +82,7 @@ never holds it.
 <!-- site: steps -->
 1. **Turn the App on** in **Data Gateway › Apps**, or press **Add custom app** for an API the catalog does not list.
 2. **Enter the key** in the App's Connect window. The window asks only for the fields its kind needs (below).
-3. **Press Test connection.** A wrong key fails here, naming the app's own refusal (401), before any agent uses it.
+3. **Save.** Ops AI tests the key before it calls the App working, so a wrong key fails here, before any agent uses it.
 
 Expected: the App reads **Connected**. The key is never shown again; a later change sends only the part being
 replaced.
@@ -104,7 +104,7 @@ serves every Tool that calls the App and is changed in one place.
 On an App where each person signs in, the team gives the address and how the key is sent, and each person gives their
 own key:
 
-- From the chat card that asks for it, or from **Apps › Mine**.
+- From the chat card that asks for it, or from **My apps**.
 - The key is sealed in that person's own account row and never answered back.
 - A call acting for someone with no key yet asks them for it in place. A call nobody started (a schedule) is refused,
   since there is no person to act as.
@@ -115,7 +115,7 @@ own key:
 | Option | What it does | Default |
 |---|---|---|
 | Client certificate | Adds a TLS client certificate to every call, for APIs that also require mutual TLS | None. See [Sign in with a certificate](#sign-in-with-a-certificate) |
-| Sandbox account | A second account with a test key; test runs use it and live runs never do | None |
+| Test account | A second account with a test key; test runs use it and live runs never do | None |
 
 ### Key and password limits
 
@@ -164,6 +164,6 @@ The signing pair and the TLS pair are kept apart, so a signing key is never offe
 ## Next
 
 <!-- site: cards -->
-- [Apps](../apps.md): accounts, sandbox accounts and auth configs in the console.
+- [Apps](../apps.md): accounts, test accounts and auth configs in the console.
 - [Build your first tool](../build-your-first-tool.md): a REST Tool on an App with a Bearer key.
 - [SharePoint and OneDrive](sharepoint.md): an Entra app that can use a certificate.
