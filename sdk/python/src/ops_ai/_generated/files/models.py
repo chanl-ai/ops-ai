@@ -191,7 +191,6 @@ class LastCheck(TypedDict, closed=True):
     code: NotRequired[str]
     failed: NotRequired[int]
     failures: NotRequired[list[FailedFile]]
-    refusedSince: NotRequired[str | None]
     removed: NotRequired[int]
     status: str
     stopped: NotRequired[str]

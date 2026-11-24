@@ -1207,8 +1207,6 @@ export interface components {
             failed: number;
             /** Failures */
             failures?: components["schemas"]["FailedFile"][];
-            /** Refusedsince */
-            refusedSince?: string | null;
             /**
              * Removed
              * @default 0

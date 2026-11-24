@@ -119,8 +119,6 @@ class LastCheck(Out):
     # fetch_failed, continues, list_failed, lease_lost; empty on a success. The console words its alert from it.
     code: str = ""
     failures: list[FailedFile] = Field(default_factory=list[FailedFile])
-    # While checks keep being refused: when the first of them ended; null otherwise. One outage, however many checks.
-    refused_since: str | None = None
 
 
 class Folder(Out):

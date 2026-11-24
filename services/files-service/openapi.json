@@ -1729,17 +1729,6 @@
             "title": "Failures",
             "type": "array"
           },
-          "refusedSince": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Refusedsince"
-          },
           "removed": {
             "default": 0,
             "title": "Removed",
