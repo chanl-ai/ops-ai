@@ -45,7 +45,7 @@ Expected: after you authorize, the test passes; it reads the signed-in GitHub us
 | Read and comment on issues in your repositories (repo) | The three tools |
 | Know which account signed in (read:user) | To show who each account is |
 
-To use your own OAuth app, see [Bring your own OAuth app](sign-in-oauth.md#bring-your-own-oauth-app). Its
+To use your own OAuth app, see [Bring your own OAuth app](authentication.md#bring-your-own-oauth-app). Its
 authorization callback URL is the Callback URL Ops AI shows on the App's **Auth configs** tab.
 
 ## If sign-in fails
@@ -69,4 +69,4 @@ authorization callback URL is the Callback URL Ops AI shows on the App's **Auth 
 <!-- site: cards -->
 - [Connect an app and use it in an agent](../use-cases/connect-an-app.md): give an agent the app's tools and use it in
   chat.
-- [Sign in with OAuth](sign-in-oauth.md): team and personal sign-in, and your own OAuth app.
+- [Sign in with OAuth](authentication.md#sign-in-with-oauth): team and personal sign-in, and your own OAuth app.

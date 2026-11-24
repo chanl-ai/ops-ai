@@ -11,12 +11,12 @@ in @AGENTS.md before writing Next.js code. How to run it: [README.md](README.md)
 
 | Path | Holds |
 |---|---|
-| `src/lib/nav.mjs` | `SITE`: the five tabs (Docs, Deploy and operate, Security, Reference, Contributing), their groups and entries. A page under `docs/` that `SITE` does not place fails the build. Internals go only in Contributing |
+| `src/lib/nav.mjs` | `SITE`: the five tabs (Docs, Deploy and operate, Security, Reference, Contributing), their groups and entries. The site publishes only the pages `SITE` names; every other file under `docs/` stays in the repository |
 | `src/lib/remark-ops-ai.mjs`, `src/components/` | The markdown conventions mapped onto components: status badges, summary cards, steps, callouts, mermaid, box diagrams, figures, file links |
 | `src/lib/repo.mjs` | Reading the repository: the repo root, the docs index, file links to GitHub |
 | `src/app/` | The catch-all page route, search, and `files/[...path]` for linked repository files |
-| `scripts/check-links.mjs` | Every link resolves and every page sits in a tab |
-| `scripts/check-public-pages.mjs`, `scripts/public-pages-allowlist.json` | Pages in the Docs, Security and Reference tabs name no repository path, `file:line`, local port or make target in code; the allowlist of older pages may only shrink |
+| `scripts/check-links.mjs` | Every link on a published page resolves, and every page `SITE` names exists |
+| `scripts/check-public-pages.mjs`, `scripts/public-pages-allowlist.json` | The reader-page rules for the Docs, Security and Reference tabs (the list is in the script's header); `--self-test` proves each rule fires; the allowlist of older pages may only shrink |
 | `scripts/export-diagrams.mjs` | `docs/diagrams/<name>.yaml` exported to its SVG; `--check` fails on a stale SVG |
 | `vercel.json` | Static hosting under `/docs` ([docs/deploy/docs-site.md](../../docs/deploy/docs-site.md)) |
 
@@ -38,7 +38,7 @@ Nothing in `make verify` runs this app; `pnpm build` is its gate. A change to a 
 The markdown conventions the site understands (status line, badges, `<!-- site: cards -->`, `<!-- site: steps -->`,
 alerts, mermaid, diagrams, figures, file links) are listed once in
 [docs/README.md, "How the docs site shows a page"](../../docs/README.md#how-the-docs-site-shows-a-page). A new page is
-listed in `docs/README.md` and placed in `SITE`; the page's opening paragraph stays free of paths and code spans
+listed in `docs/README.md` and, when it is for the site, placed in `SITE`; the page's opening paragraph stays free of paths and code spans
 (`CONTRIBUTING.md`, writing rules).
 
 ## Engineering standards

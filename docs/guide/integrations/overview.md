@@ -1,4 +1,4 @@
-# Integrations
+# Integration catalog
 
 Status: current.
 
@@ -29,9 +29,9 @@ tool](../build-your-first-tool.md) on it, or [build a plugin](build-a-plugin.md)
 
 | Kind | Use it when | Page |
 |---|---|---|
-| OAuth: sign in at the app, or app-to-app | The app has its own sign-in page, or a service API issues tokens to an app | [Sign in with OAuth](sign-in-oauth.md) |
-| API key, username and password, or bearer token | The API takes a static secret | [Sign in with a key or password](sign-in-keys.md) |
-| A certificate: signed assertion, signed service account, or mutual TLS | Your policy forbids shared secrets, or the API requires mTLS | [Sign in with a certificate](sign-in-certificates.md) |
+| OAuth: sign in at the app, or app-to-app | The app has its own sign-in page, or a service API issues tokens to an app | [Sign in with OAuth](authentication.md#sign-in-with-oauth) |
+| API key, username and password, or bearer token | The API takes a static secret | [Sign in with a key or password](authentication.md#sign-in-with-a-key-or-password) |
+| A certificate: signed assertion, signed service account, or mutual TLS | Your policy forbids shared secrets, or the API requires mTLS | [Sign in with a certificate](authentication.md#sign-in-with-a-certificate) |
 
 ## What holds for every App
 

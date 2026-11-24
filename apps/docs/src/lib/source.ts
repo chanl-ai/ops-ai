@@ -46,7 +46,7 @@ export const source = loader({
     files: [
       ...docsSource.files,
       ...apiSources.flatMap((s) => s.files),
-      ...navMetas(services.map((s) => `services/${s}/api`)),
+      ...navMetas(repoIndex().order, services.map((s) => `services/${s}/api`)),
     ],
   } as typeof docsSource,
   plugins: [openapiPlugin()],

@@ -6,6 +6,12 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 
+import { publicPages } from '../apps/docs/src/lib/nav.mjs';
+
+// Reader pages (the docs site's Docs, Security and Reference tabs) carry no Status line: apps/docs/scripts/check-public-pages.mjs
+// refuses one there, so the rule below applies to every other page.
+const READER_PAGES = new Set(publicPages().map((p) => `docs/${p.page}`));
+
 // media holds the README's screenshots and clips (docs/usecases/lib/capture_demo.mjs writes them); diagrams holds the
 // architecture diagrams' data files and their exported SVGs (apps/docs draws them).
 const DOC_FOLDERS = ['background', 'architecture', 'design', 'console', 'services', 'packages', 'deploy', 'guide', 'plan', 'artifacts', 'usecases', 'media', 'diagrams', 'sdk', 'security', 'reference'];
@@ -55,7 +61,7 @@ for (const file of files) {
     if (name !== 'README.md' && !KEBAB.test(name)) fail(file, 'file name is not a kebab-case topic (no number, date or sequence prefix)');
     if (isMd) {
       const head = readFileSync(file, 'utf8').split('\n').slice(0, 15).join('\n');
-      if (!/^Status:/m.test(head)) fail(file, 'no "Status:" line near the top');
+      if (!READER_PAGES.has(file) && !/^Status:/m.test(head)) fail(file, 'no "Status:" line near the top');
       const rel = file.slice('docs/'.length);
       if (file !== 'docs/README.md' && !docsIndex.includes(rel)) fail(file, 'not listed in docs/README.md');
     }

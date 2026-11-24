@@ -94,7 +94,7 @@ Kubernetes is in [Install and turn on a plugin](../plugins-install.md).
 
 | Part | What it says |
 |---|---|
-| Connection | The sign-in kinds it accepts, whose account calls use (team, person, or both), and a health check path. See [Sign in with a key or password](sign-in-keys.md), [OAuth](sign-in-oauth.md) and [a certificate](sign-in-certificates.md) |
+| Connection | The sign-in kinds it accepts, whose account calls use (team, person, or both), and a health check path. See [Sign in with a key or password](authentication.md#sign-in-with-a-key-or-password), [OAuth](authentication.md#sign-in-with-oauth) and [a certificate](authentication.md#sign-in-with-a-certificate) |
 | Settings | Values a team fills in, such as an API address; a setting can be fixed for every team by the install |
 | Egress | The hosts the plugin's calls may reach. No other host is reachable, and private and metadata addresses stay refused |
 | Tools | Each tool's inputs, whether it reads or writes, and its request. Paging and shaping the answer are data too |

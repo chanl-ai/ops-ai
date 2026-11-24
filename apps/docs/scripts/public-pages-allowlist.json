@@ -1,5 +1,306 @@
 {
-  "guide/install-cli.md": 4,
-  "guide/plugins.md": 28,
-  "guide/quickstart.md": 1
+  "welcome.md": {
+    "long table cell": 5,
+    "status line": 1
+  },
+  "guide/quickstart.md": {
+    "internal name": 1,
+    "long table cell": 1,
+    "menu path": 1,
+    "repository path": 1,
+    "status line": 1
+  },
+  "guide/overview.md": {
+    "internal term": 2,
+    "long table cell": 12,
+    "release or test word": 1,
+    "status line": 1
+  },
+  "guide/examples/coming-from-other-frameworks.md": {
+    "release or test word": 2,
+    "repository link": 1,
+    "roadmap word": 44,
+    "status line": 1
+  },
+  "guide/agents.md": {
+    "long table cell": 5,
+    "menu path": 1,
+    "roadmap word": 6,
+    "status line": 1
+  },
+  "guide/workflows.md": {
+    "long table cell": 3,
+    "menu path": 1,
+    "roadmap word": 3,
+    "status line": 1
+  },
+  "guide/human-tasks.md": {
+    "long table cell": 3,
+    "menu path": 7,
+    "roadmap word": 4,
+    "status line": 1
+  },
+  "guide/cases.md": {
+    "long table cell": 1,
+    "roadmap word": 2,
+    "status line": 1
+  },
+  "guide/knowledge.md": {
+    "long table cell": 3,
+    "roadmap word": 4,
+    "status line": 1
+  },
+  "guide/apps.md": {
+    "long table cell": 1,
+    "menu path": 4,
+    "roadmap word": 4,
+    "status line": 1
+  },
+  "guide/ops-assistant.md": {
+    "glossary name": 1,
+    "long table cell": 1,
+    "menu path": 1,
+    "roadmap word": 4,
+    "status line": 1
+  },
+  "guide/teams-and-access.md": {
+    "long table cell": 2,
+    "menu path": 4,
+    "roadmap word": 4,
+    "status line": 1
+  },
+  "guide/use-cases/card-disputes.md": {
+    "repository link": 1,
+    "status line": 1
+  },
+  "guide/use-cases/answer-from-documents.md": {
+    "status line": 1
+  },
+  "guide/use-cases/approve-a-write.md": {
+    "status line": 1
+  },
+  "guide/use-cases/connect-an-app.md": {
+    "long table cell": 1,
+    "status line": 1
+  },
+  "guide/build-your-first-tool.md": {
+    "status line": 1
+  },
+  "console/embedding-the-chat.md": {
+    "long table cell": 6,
+    "roadmap word": 1,
+    "status line": 1
+  },
+  "guide/integrations/overview.md": {
+    "long table cell": 1,
+    "status line": 1
+  },
+  "guide/integrations/salesforce.md": {
+    "long table cell": 1,
+    "status line": 1
+  },
+  "guide/integrations/github.md": {
+    "long table cell": 2,
+    "status line": 1
+  },
+  "guide/integrations/sharepoint.md": {
+    "long table cell": 2,
+    "status line": 1
+  },
+  "guide/integrations/confluence.md": {
+    "long table cell": 1,
+    "status line": 1
+  },
+  "guide/integrations/website.md": {
+    "menu path": 1,
+    "status line": 1
+  },
+  "guide/integrations/authentication.md": {
+    "long table cell": 8
+  },
+  "guide/integrations/build-a-plugin.md": {
+    "long table cell": 4,
+    "roadmap word": 1,
+    "status line": 1
+  },
+  "guide/how-work-flows.md": {
+    "internal term": 2,
+    "long table cell": 10,
+    "status line": 1
+  },
+  "guide/apps-setup.md": {
+    "glossary name": 1,
+    "internal name": 1,
+    "long table cell": 15,
+    "menu path": 8,
+    "status line": 1
+  },
+  "guide/models.md": {
+    "internal name": 3,
+    "long table cell": 9,
+    "roadmap word": 5,
+    "status line": 1
+  },
+  "guide/security-and-governance.md": {
+    "internal name": 6,
+    "internal term": 1,
+    "long table cell": 36,
+    "menu path": 2,
+    "repository link": 2,
+    "roadmap word": 8,
+    "status line": 1
+  },
+  "guide/use-cases/chat-and-human-tasks.md": {
+    "status line": 1
+  },
+  "guide/build-with-ops-ai.md": {
+    "long table cell": 1,
+    "release or test word": 1,
+    "repository link": 7,
+    "roadmap word": 10,
+    "status line": 1
+  },
+  "guide/examples/README.md": {
+    "long table cell": 3,
+    "release or test word": 1,
+    "roadmap word": 2,
+    "status line": 1
+  },
+  "guide/examples/agents.md": {
+    "long table cell": 5,
+    "release or test word": 4,
+    "roadmap word": 12,
+    "status line": 1
+  },
+  "guide/examples/skills.md": {
+    "long table cell": 3,
+    "release or test word": 3,
+    "roadmap word": 11,
+    "status line": 1
+  },
+  "guide/examples/step-by-step-skills.md": {
+    "internal name": 2,
+    "long table cell": 24,
+    "release or test word": 8,
+    "repository path": 1,
+    "roadmap word": 2,
+    "status line": 1,
+    "filler word": 1
+  },
+  "guide/examples/workflows.md": {
+    "long table cell": 3,
+    "repository link": 1,
+    "roadmap word": 4,
+    "status line": 1
+  },
+  "security/README.md": {
+    "release or test word": 2,
+    "roadmap word": 1,
+    "status line": 1
+  },
+  "security/tenancy-and-isolation.md": {
+    "long table cell": 7,
+    "menu path": 1,
+    "roadmap word": 2,
+    "status line": 1
+  },
+  "security/identity-and-sign-in.md": {
+    "long table cell": 4,
+    "menu path": 3,
+    "roadmap word": 3,
+    "status line": 1
+  },
+  "security/access-approvals-and-audit.md": {
+    "internal term": 1,
+    "long table cell": 6,
+    "menu path": 1,
+    "roadmap word": 3,
+    "status line": 1
+  },
+  "security/data-handling-and-masking.md": {
+    "internal term": 1,
+    "long table cell": 8,
+    "menu path": 1,
+    "roadmap word": 3,
+    "status line": 1
+  },
+  "security/model-calls.md": {
+    "long table cell": 3,
+    "roadmap word": 2,
+    "status line": 1
+  },
+  "security/egress-and-connections.md": {
+    "long table cell": 2,
+    "menu path": 2,
+    "roadmap word": 1,
+    "status line": 1
+  },
+  "reference/README.md": {
+    "release or test word": 2,
+    "roadmap word": 1,
+    "status line": 1
+  },
+  "reference/http-api.md": {
+    "long table cell": 6,
+    "menu path": 1,
+    "status line": 1
+  },
+  "reference/cli.md": {
+    "long table cell": 2,
+    "release or test word": 1,
+    "roadmap word": 2,
+    "status line": 1
+  },
+  "reference/mcp.md": {
+    "long table cell": 6,
+    "menu path": 2,
+    "roadmap word": 3,
+    "status line": 1
+  },
+  "guide/install-cli.md": {
+    "release or test word": 1,
+    "repository path": 4,
+    "roadmap word": 1,
+    "status line": 1
+  },
+  "guide/whats-built-today.md": {
+    "internal term": 2,
+    "long table cell": 24,
+    "release or test word": 1,
+    "repository link": 1,
+    "status line": 1
+  },
+  "guide/plugins.md": {
+    "glossary name": 1,
+    "long table cell": 44,
+    "make target": 10,
+    "menu path": 1,
+    "repository path": 18,
+    "roadmap word": 1,
+    "status line": 1,
+    "filler word": 1
+  },
+  "sdk/python.md": {
+    "glossary name": 1,
+    "long table cell": 7,
+    "menu path": 1,
+    "roadmap word": 1,
+    "status line": 1
+  },
+  "sdk/typescript.md": {
+    "glossary name": 1,
+    "menu path": 1,
+    "roadmap word": 1,
+    "status line": 1
+  },
+  "sdk/upgrading.md": {
+    "status line": 1
+  },
+  "guide/whats-new.md": {
+    "status line": 1
+  },
+  "sdk/changelog.md": {
+    "long table cell": 12,
+    "status line": 1
+  }
 }
