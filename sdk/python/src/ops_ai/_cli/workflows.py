@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -119,6 +120,20 @@ def main(argv: list[str]) -> int:
     fork.add_argument("--from", dest="from_node", required=True)
     retry = sub.add_parser("retry", help="retry a stuck run")
     retry.add_argument("run_id")
+    sched = sub.add_parser("schedule", help="a trigger's saved schedule: show, set, clear, kinds, preview")
+    sched.add_argument("action", choices=("show", "set", "clear", "kinds", "preview"))
+    sched.add_argument("id", nargs="?", help="the workflow (show, set, clear)")
+    sched.add_argument("--step", help="the trigger step's id (show, set, clear)")
+    sched.add_argument("--kind", help="the rule kind (opsai workflows schedule kinds)")
+    sched.add_argument(
+        "--set",
+        dest="fields",
+        action="append",
+        default=[],
+        metavar="FIELD=VALUE",
+        help="a field of the kind; VALUE is JSON or text",
+    )
+    sched.add_argument("--rule", help="the whole rule as JSON or @file, instead of --kind and --set")
     decide = sub.add_parser("decide", help="decide a human task")
     decide.add_argument("task_id")
     decide.add_argument("choice")
@@ -218,6 +233,8 @@ def _dispatch(ns: argparse.Namespace) -> int:
         return 2
     if ns.verb == "retry":
         return emit(ns, ops.runs.retry(ns.run_id))
+    if ns.verb == "schedule":
+        return _schedule(ns, wf.schedules)
     if ns.verb == "decide":
         return emit(ns, ops.tasks.decide(ns.task_id, ns.choice, **(payload(ns.fields) or {})))
     return 2
@@ -285,3 +302,49 @@ def _trace_text(traced: dict[str, Any]) -> str:
     for step in traced.get("steps") or []:
         lines.append(f"{step.get('nodeId')} {step.get('status')} {step.get('port') or ''}".strip())
     return "\n".join(lines)
+
+
+def _rule_fields(ns: argparse.Namespace) -> dict[str, Any]:
+    """The kind and its own fields from `--rule` or `--kind` with `--set`; each VALUE is read as JSON, else text."""
+    if ns.rule:
+        rule = payload(ns.rule)
+        if not isinstance(rule, dict) or "kind" not in rule:
+            raise ValueError("--rule is an object with a kind")
+        return rule
+    if not ns.kind:
+        raise ValueError("name the rule's kind with --kind, or give the whole rule with --rule")
+    fields: dict[str, Any] = {"kind": ns.kind}
+    for pair in ns.fields:
+        name, sep, raw = pair.partition("=")
+        if not sep or not name:
+            raise ValueError(f"--set takes FIELD=VALUE, not {pair}")
+        try:
+            fields[name] = json.loads(raw)
+        except ValueError:
+            fields[name] = raw
+    return fields
+
+
+def _schedule(ns: argparse.Namespace, schedules: Any) -> int:
+    if ns.action == "kinds":
+        return table(ns, schedules.kinds(), "name", "label")
+    if ns.action == "preview":
+        shown = schedules.preview(**_rule_fields(ns))
+        runs = "\n".join(f"  {t}" for t in shown["nextRuns"])
+        return emit(ns, shown, text=f"{shown['words']}\nNext runs:\n{runs}")
+    if not ns.id or not ns.step:
+        raise ValueError("name the workflow and its trigger step: schedule <action> <workflow> --step <step>")
+    if ns.action == "show":
+        got = schedules.show(ns.id, ns.step)
+        return emit(ns, got, text=_schedule_text(got))
+    if ns.action == "clear":
+        schedules.clear(ns.id, ns.step)
+        return emit(ns, {"cleared": True}, text=f"{ns.id} {ns.step}: schedule cleared")
+    saved = schedules.save(ns.id, ns.step, **_rule_fields(ns))
+    return emit(ns, saved, text=_schedule_text(saved))
+
+
+def _schedule_text(view: dict[str, Any]) -> str:
+    runs = ", ".join(view.get("nextRuns") or []) or "none"
+    last = view.get("lastOutcome") or "not run yet"
+    return f"{view['words']}\nNext runs: {runs}\nLast: {last}; changed by {view['changedBy']} at {view['changedAt']}"
