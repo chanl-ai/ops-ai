@@ -158,12 +158,17 @@ EVENT_OWNERS: dict[str, tuple[str, ...]] = {
     "tools": ("tool_access.", "tool_module.", "module_review.", "app_account.", "tool.module.", "tool.team_state."),
     # watch.checked: a watched folder's check ended; the Files changed trigger reads its events after it.
     "files": ("file.", "watch."),
-    "documents": ("extraction.",),
+    "documents": ("extraction.", "reading."),
     "kb": ("kb.", "knowledge."),
     # The task API records a posted task as its own event, so the task runs as the api_task workflow.
     "agents": ("task.",),
 }
 
+
+# Events that only wake parked steps, never start a workflow and are not kept: a reading's end, which a Full text step
+# waits on as reading.finished. reading.failed also wakes a step parked on reading.finished, which then reads the
+# failed reading and takes its error port.
+WAKES_ONLY = {"reading.finished": "", "reading.failed": "reading.finished"}
 
 REMINDER = "task.reminder"
 
@@ -290,6 +295,19 @@ async def _deliver(
     actor: str | None,
     payload: Json,
 ) -> DeliveredEvent:
+    if name in WAKES_ONLY:
+        # Every reading of the workspace ends with one of these; only a step parked on it hears it, so it is not kept.
+        woke = await wake_parked(db, name=name, key=key, team_id=team_id, payload=payload)
+        if (ends := WAKES_ONLY[name]) and key.startswith(f"{name}:"):
+            # A failed end wakes the step parked on reading.finished: the key differs only by the event's name.
+            also = f"{ends}:{key.removeprefix(f'{name}:')}"
+            woke += await wake_parked(db, name=ends, key=also, team_id=team_id, payload=payload)
+        now = now_iso()
+        return DeliveredEvent(
+            id="", tenant_id=current_tenant(), team_id=team_id, name=name, event_key=key, source=source, actor=actor,
+            payload=payload, status="resumed" if woke else "unhandled", run_ids=[], attempts=0, recorded_at=now,
+            updated_at=now, woke=woke,
+        )  # fmt: skip
     events = ServiceEvents(db)
     jobs = BackgroundJobs(db)
     event = await events.record(name=name, key=key, team_id=team_id, source=source, actor=actor, payload=payload)

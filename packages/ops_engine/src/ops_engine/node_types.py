@@ -1439,7 +1439,10 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             ("read", _f("What to read", "select", "Fields you name, the full text, or fields the model proposes")),
             ("hint", _f("What is it?", "text", "For proposed fields: a few words, e.g. a supplier invoice")),
             ("proposePages", _f("Propose from the first pages", "number", "5 if empty")),
-            ("maxPages", _f("Pages to read", "number", "Every page if empty")),
+            (
+                "maxPages",
+                _f("Pages to read", "number", "Every page if empty; Full text reads the whole file, then keeps these"),
+            ),
             (
                 "maxTokens",
                 _f(
@@ -1803,6 +1806,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="action",
         label="Save typed values",
+        summary="Saves the values a person typed in a Human Task onto the document read they checked.",
+        how=(
+            "The values are saved as typed by the person who decided the task, each in its field's form. Values that "
+            "did not change are skipped, so running it again saves nothing more, and a task with nothing typed saves "
+            "nothing."
+        ),
         description=(
             "Saves what a person typed in a Human Task over an Extract from file read on its extraction, recorded as "
             "the person who decided the task, with the read checked. Each value is put in its field's type's form, "

@@ -82,11 +82,12 @@ event nobody handles is recorded `unhandled`.
 | `watch.checked` | files-service, once per finished check of a watched folder (key: the check), with its outcome and last event number | The Files changed trigger (increment B); until then `unhandled` | built (emitter) |
 | `extraction.corrected` | documents-service | `extraction_corrected_save`: save the corrected read on its file, so the files list's Read as and to-check count follow it; sent only for the file's newest read | built |
 | `extraction.read` | documents-service, when a read of a document type ends with fields | `extraction_read_save`: save what the file was read as, so a read by any workflow, agent or API call shows in Files | built |
+| `reading.finished`, `reading.failed` | documents-service, when a file's shared reading ends, keyed by `ops_contracts.readings.event_key` | none, and not kept: each only wakes an Extract from file step parked on its Full text read (`reading.failed` wakes a step parked on `reading.finished` with the same key), which reads the reading as it is with GET, so a failed one takes the error port with its code and is not read again; kb-service hears them too | built |
 | `task.requested` | agents-service itself, from `POST /v1/tasks` (`api/routers/tasks.py:41`), with a new key per post | `api_task`: a Human Review step on the posted task type; the task id is the run id | built |
 
 A service reports only the events this catalogue gives it (`EVENT_OWNERS` in agents-service `api/service_events.py`:
 tools-service `tool_access.`, `tool_module.` and `module_review.`; files-service `file.` and `watch.`; documents-service
-`extraction.`; agents-service `task.`; 403 `event_not_owned` otherwise), for the team its token names (403
+`extraction.` and `reading.`; agents-service `task.`; 403 `event_not_owned` otherwise), for the team its token names (403
 `team_mismatch`).
 
 Subsystems compose through workflows, not through each other (rulebook `service-boundaries.md`). Documents reads

@@ -26,6 +26,7 @@ import httpx
 import regex
 
 from ops_access import team_off, team_on
+from ops_contracts import readings as readings_contract
 from ops_contracts.field_values import FIELD_TYPES, normalise
 from ops_documents.errors import IdempotencyConflictError, InvalidRequestError, StateError
 from ops_documents.files import Files, Who
@@ -112,8 +113,6 @@ REFUSALS = {
 }
 READS = ("fields", "propose")
 PROPOSE_PAGES = 5
-# Page text per model token, the estimate a read's token ceiling counts in.
-CHARS_PER_TOKEN = 4
 
 
 @dataclass
@@ -1506,28 +1505,17 @@ class Extractor:
 
 
 def _limited(pages: Pages, request: Json) -> tuple[Pages, Json]:
-    """The pages a read may send: the first `maxPages`, then as many as fit under `maxTokens`. What it says about them:
-    `readPages` when a limit applied, and `partial` when the token ceiling left pages unread."""
-    keep = sorted(pages.texts)
-    said: Json = {}
-    if request.get("maxPages"):
-        keep = [n for n in keep if n <= _whole(request["maxPages"], "maxPages")]
-    if request.get("maxTokens"):
-        budget, used = _whole(request["maxTokens"], "maxTokens") * CHARS_PER_TOKEN, 0
-        fits: list[int] = []
-        for n in keep:
-            used += len(pages.texts[n])
-            if used > budget:
-                break
-            fits.append(n)
-        said["partial"] = len(fits) < len(keep)
-        keep = fits
-    if not said and len(keep) == len(pages.texts):
+    """The pages a read may send: the first `maxPages`, then as many as fit under `maxTokens` (ops_contracts.readings,
+    which a workflow's Full text trims with too). `readPages` when a limit applied, `partial` when the token ceiling
+    left pages unread."""
+    max_pages = _whole(request["maxPages"], "maxPages") if request.get("maxPages") else None
+    max_tokens = _whole(request["maxTokens"], "maxTokens") if request.get("maxTokens") else None
+    keep, said = readings_contract.within(list(pages.texts.items()), max_pages, max_tokens)
+    if not said:
         return pages, {}
-    said["readPages"] = len(keep)
     texts = {n: pages.texts[n] for n in keep}
     confidence = {n: c for n, c in pages.confidence.items() if n in texts}
-    return replace(pages, texts=texts, ocr={n for n in pages.ocr if n in texts}, confidence=confidence), said
+    return replace(pages, texts=texts, ocr={n for n in pages.ocr if n in texts}, confidence=confidence), dict(said)
 
 
 def default_extractor(files: Files, engine: Any, settings: Settings, *, readings: Readings | None = None) -> Extractor:

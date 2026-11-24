@@ -568,6 +568,8 @@ class Worker:
             await self.runs.settle_parents(run.id, run.created_by)
             due = {"title": payload.get("title"), "event": payload.get("event"), "timeoutSeconds": seconds}
             await self._event(run, generation, "waiting_external", node, due)
+            if isinstance(asked := payload.get("reading"), dict):
+                await self._reading_ended(run, waiting, cast(Json, asked))
         else:
             await self.runs.update(run.id, generation=generation, status="waiting", waiting=waiting)
             await self.runs.settle_parents(run.id, run.created_by)
@@ -596,6 +598,29 @@ class Worker:
                 {"resume": resume, "interruptId": interrupt.id},
                 after_seconds=float(cast("str | int | float", hours)) * 3600,
             )
+
+    async def _reading_ended(self, run: RunRow, waiting: Json, asked: Json) -> None:
+        """A reading that ended between the step's ask and its park posted its event before the wait was written, so
+        nothing woke: read it once more now the wait exists, and wake the step if it has ended. An event that wakes it
+        as well finds the pause already left, and is dropped."""
+        documents = self.host.ports.documents
+        if documents is None:
+            return
+        try:
+            now = await documents.reading(run.id, str(asked.get("fileId")), ocr=str(asked.get("ocr")), ask=False)
+        except Exception as e:  # the event or the time limit still wakes the step
+            log.warning("engine_reading_recheck_failed", run=run.id, error=type(e).__name__)
+            return
+        if now.get("status") not in ("done", "failed"):
+            return
+        node, iteration, interrupt_id = waiting["node"], waiting["iteration"], waiting["interruptId"]
+        await self.queue.enqueue(
+            run.id,
+            "resume",
+            f"reading:{run.id}:{node}:{iteration}:{interrupt_id}",
+            {"resume": {"event": {"status": now.get("status")}}, "interruptId": interrupt_id}
+            | {"node": node, "iteration": iteration},
+        )
 
     async def _next_reminder(self, run: RunRow, payload: Json, interrupt_id: str, n: int) -> None:
         """Queues reminder `n` of a waiting review, keyed by it, so a pause found again queues none twice."""

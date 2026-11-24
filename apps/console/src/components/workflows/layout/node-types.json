@@ -1437,7 +1437,7 @@
           "widget": "switch"
         },
         "maxPages": {
-          "help": "Every page if empty",
+          "help": "Every page if empty; Full text reads the whole file, then keeps these",
           "label": "Pages to read",
           "widget": "number"
         },
@@ -2732,6 +2732,94 @@
       "order": [
         "expression",
         "as"
+      ]
+    },
+    "version": 1
+  },
+  {
+    "description": "Saves what a person typed in a Human Task over an Extract from file read on its extraction, recorded as the person who decided the task, with the read checked. Each value is put in its field's type's form, and values that did not change are skipped, so a repeat saves nothing more. The file follows the extraction. Nothing typed saves nothing.",
+    "effects": "write",
+    "executor": "documents.correct",
+    "extraOutputs": [],
+    "fails": "It goes on by the Error path, so the steps you join to it decide what happens next.",
+    "group": "action",
+    "how": "The values are saved as typed by the person who decided the task, each in its field's form. Values that did not change are skipped, so running it again saves nothing more, and a task with nothing typed saves nothing.",
+    "id": "ops.documents.correct",
+    "inputs": [
+      {
+        "connection": "main",
+        "label": "In",
+        "name": "in"
+      }
+    ],
+    "label": "Save typed values",
+    "limit": "",
+    "optionalOutputs": [],
+    "outputs": [
+      {
+        "connection": "main",
+        "label": "Ok",
+        "name": "ok"
+      },
+      {
+        "connection": "main",
+        "label": "Error",
+        "name": "error"
+      }
+    ],
+    "outputsFrom": null,
+    "outputsUnless": [],
+    "parameters": {
+      "properties": {
+        "by": {
+          "description": "Who decided the task, such as $.nodes.check.out.by"
+        },
+        "edited": {
+          "description": "The Human Task's corrected read, such as $.nodes.check.out.edited"
+        },
+        "read": {
+          "description": "The Extract from file step's output: A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in braces are filled in: `Levy notice: {$.input.record.name}`"
+        }
+      },
+      "required": [
+        "read",
+        "edited",
+        "by"
+      ],
+      "type": "object"
+    },
+    "retry": {
+      "attempts": 3,
+      "backoffSeconds": [
+        1.0,
+        30.0
+      ]
+    },
+    "summary": "Saves the values a person typed in a Human Task onto the document read they checked.",
+    "timeoutSeconds": 30.0,
+    "tries": "",
+    "ui": {
+      "fields": {
+        "by": {
+          "help": "Who decided the task, such as $.nodes.check.out.by",
+          "label": "Typed by",
+          "widget": "mapping"
+        },
+        "edited": {
+          "help": "The Human Task's corrected read, such as $.nodes.check.out.edited",
+          "label": "Typed values",
+          "widget": "mapping"
+        },
+        "read": {
+          "help": "The Extract from file step's output, such as $.nodes.read.out",
+          "label": "Read",
+          "widget": "mapping"
+        }
+      },
+      "order": [
+        "read",
+        "edited",
+        "by"
       ]
     },
     "version": 1

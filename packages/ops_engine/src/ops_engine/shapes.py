@@ -181,14 +181,15 @@ async def _extract(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
     read = opened(("extractionId",), props={"fields": opened(props=fields)})
     kind = node.parameters.get("read")
     if kind == "text":
-        # The full text and each page's text and tables: no fields.
-        read = closed(("extractionId", "fileId", "text", "pages"), ("readPages", "partial"))
+        # The file's shared reading: the full text and each page's text and tables, no fields and no extraction.
+        read = closed(("fileId", "text", "pages"), ("readPages", "partial"))
     elif kind == "propose":
         # The keys of a proposed read are known only when the run reads the file, so `fields` stays open.
         read = opened(("extractionId", "proposal"), props={"fields": opened(), "proposal": opened()})
     others = {
         "error": closed(("error", "code"), ("details",)),
-        "timeout": closed(("waitedFor", "key", "seconds", "extractionId")),
+        # A full-text read waits on the file's reading, any other read on its extraction.
+        "timeout": closed(("waitedFor", "key", "seconds", "fileId" if kind == "text" else "extractionId")),
     }
     return {p: others.get(p, read) for p in t.output_ports(node.parameters)}
 
