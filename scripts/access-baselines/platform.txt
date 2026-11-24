@@ -8,3 +8,4 @@ services/platform-service/src/ops_platform/store/roles.py role-constant OWNER.id
 services/platform-service/src/ops_platform/store/identity.py role-constant OWNER.id 1  # keep: Owner is the one-person workspace marker
 services/platform-service/src/ops_platform/store/lifecycle.py role-constant OWNER.id 1  # keep: Owner is the one-person workspace marker
 services/platform-service/src/ops_platform/store/tables.py role-constant OWNER.id 3  # keep: the one-Owner unique index on each database
+services/platform-service/src/ops_platform/api/app.py route-undecided route 43  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)

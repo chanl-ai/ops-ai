@@ -1,2 +1,7 @@
 # pilot lane: role-name compares, owner compares and policy reads outside policy() in this lane's code today
 # (scripts/check_access_exceptions.py). `path kind key count`. A kind's total may only fall; the lane takes it to zero.
+services/documents-service/src/ops_documents/app.py route-undecided route 2  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/documents-service/src/ops_documents/templates.py route-undecided route 5  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/files-service/src/ops_files/app.py route-undecided route 2  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/models-service/src/ops_models/app.py route-undecided route 17  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/runner-service/src/ops_runner/app.py route-undecided route 2  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)

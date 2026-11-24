@@ -35,6 +35,10 @@ way and compares them with `access-exceptions-allowlist.txt`, where each line na
   role-constant   a compare against a role id constant (`ADMIN`, `ADMIN.id`, `ADMIN_ROLE`) outside catalogue.py, in
                   Python or a SQLAlchemy expression (`c.role_id == ADMIN.id`). Counted in the lane's baseline file,
                   each row classified keep or convert in its comment.
+  route-undecided  a FastAPI route (`@app.get(...)`, `@router.post(...)`) whose body and Depends call none of `can`,
+                  `may`, `reader_of` or a `require_*` helper, directly or one hop into a function of the same service
+                  that does (platform-service's `require_admin`). A public, own-record or service-only route stays
+                  in the lane's baseline file with its reason. Counted in the lane's baseline file.
   conflict        a 409 by its error code. Most say a record is in the wrong state, but one can refuse by who made a
                   record (a seeded one, a system one). Each code is classified once: `* conflict <code> 0 state` for a
                   state conflict, or a path line with a register row for one that decides access.
@@ -96,7 +100,7 @@ PILOT_SERVICES = ("documents", "files", "models", "runner")
 # Kinds counted in a lane's file. A role-name compare is on the allowlist as well, with its register row.
 BASELINED = (
     "role-name", "owner-compare", "policy-read", "role-constant", "policy-on-caller", "caller-roles-read",
-    "policy-kind",
+    "policy-kind", "route-undecided",
 )  # fmt: skip
 # Kinds with a ceiling of zero: no allowlist line and no baseline row lets one through.
 NEVER = ("flag", "role-set", "policy-unknown")
@@ -403,6 +407,7 @@ def _python(path: Path) -> list[Finding]:
             found.append(Finding(rel, n, "policy-on-caller", "policies", line.strip()))
         found.extend(_unknown_policies(rel, n, code, line))
     found.extend(_caller_roles(rel, tree, lines))
+    found.extend(_undecided_routes(rel, tree, lines))
     return found
 
 
@@ -504,9 +509,89 @@ def _policies() -> list[Finding]:
     return out
 
 
+ROUTE_VERBS = ("get", "post", "put", "patch", "delete")
+# The calls that decide access: can() and its wrappers.
+DECIDES = re.compile(r"^(can|may|reader_of|require_\w+)$")
+# Per service source root, the functions whose own body calls a decider: a route calling one is decided one hop away.
+DECIDING: dict[str, set[str]] = {}
+
+
+def _service(rel: str) -> str:
+    return "/".join(rel.split("/", 3)[:3])
+
+
+def _called(fn: ast.AST) -> set[str]:
+    """Every function name `fn` calls, and every name it hands to Depends()."""
+    out: set[str] = set()
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Call):
+            name = _name(node)
+            out.add(name)
+            if name == "Depends" and node.args:
+                arg = node.args[0]
+                out.add(arg.attr if isinstance(arg, ast.Attribute) else arg.id if isinstance(arg, ast.Name) else "")
+    return out
+
+
+def _deciding(trees: dict[str, ast.AST]) -> dict[str, set[str]]:
+    """Per service, the functions that call a decider, then the annotation aliases (`Reader = Annotated[Principal,
+    Depends(read_agents)]`) that depend on one, so a route typed `_: Reader` is decided."""
+    out: dict[str, set[str]] = {}
+    services = [(rel, tree) for rel, tree in trees.items() if rel.startswith("services/")]
+    for rel, tree in services:
+        for fn in ast.walk(tree):
+            if isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef) and any(DECIDES.match(c) for c in _called(fn)):
+                out.setdefault(_service(rel), set()).add(fn.name)
+    for rel, tree in services:
+        held = out.setdefault(_service(rel), set())
+        for node in ast.walk(tree):
+            target, value = (
+                (node.targets[0], node.value) if isinstance(node, ast.Assign) and len(node.targets) == 1
+                else (node.target, node.value) if isinstance(node, ast.AnnAssign) and node.value is not None
+                else (node.name, node.value) if isinstance(node, ast.TypeAlias)
+                else (None, None)
+            )  # fmt: skip
+            if isinstance(target, ast.Name) and value is not None:
+                names = _called(value)
+                if "Depends" in names and any(DECIDES.match(c) or c in held for c in names):
+                    held.add(target.id)
+    return out
+
+
+def _is_route(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    return any(
+        isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.func.attr in ROUTE_VERBS
+        for d in fn.decorator_list
+    )
+
+
+def _undecided_routes(rel: str, tree: ast.AST, lines: list[str]) -> list[Finding]:
+    """A route that never reaches can(): nothing in its body or Depends decides, directly or one hop away."""
+    if not rel.startswith("services/"):
+        return []
+    deciding = DECIDING.get(_service(rel), set())
+    out: list[Finding] = []
+    for fn in ast.walk(tree):
+        if isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef) and _is_route(fn):
+            args = [*fn.args.posonlyargs, *fn.args.args, *fn.args.kwonlyargs]
+            typed = {
+                n.id
+                for a in args
+                if a.annotation is not None
+                for n in ast.walk(a.annotation)
+                if isinstance(n, ast.Name)
+            }
+            called = _called(fn) | typed
+            if not any(DECIDES.match(c) or c in deciding for c in called):
+                out.append(Finding(rel, fn.lineno, "route-undecided", "route", lines[fn.lineno - 1].strip()))
+    return out
+
+
 def findings() -> list[Finding]:
     TYPED.clear()
     TYPED.update(_typed([ast.parse(p.read_text()) for p in _python_files()]))
+    DECIDING.clear()
+    DECIDING.update(_deciding({p.relative_to(ROOT).as_posix(): ast.parse(p.read_text()) for p in _python_files()}))
     DECLARED.clear()
     DECLARED.update(_declared())
     return [
@@ -871,6 +956,13 @@ PLANTS = (
         "async def route(me: Principal, team):\n    if not can(me, 'agents', 'view', team=team):\n        return None\n"
         "    return me.access.get(team)\n",
         "caller-roles-read access",
+    ),
+    (
+        "route-undecided",
+        "services/kb-service/src/k/r.py",
+        "def allowed(me):\n    return require_cell(me)\n\n\n@router.get('/v1/x')\nasync def x(me=Depends(allowed)):\n"
+        "    return 1\n\n\n@router.post('/v1/y')\nasync def y(me):\n    return me\n",
+        "route-undecided route",
     ),
     (
         "role-constant",
