@@ -81,6 +81,9 @@ def test_each_kind_of_personal_data_is_masked(text: str, shown: str) -> None:
         "The account number is required before the card id can be checked.",
         '{"accountId": null, "cardNumber": true}',
         "1 of 12 items, total 1100",
+        # A heading or a sentence naming an account or a card alone, then a word that is not its value.
+        "| Customer | Account | Balance |",
+        "Here is the account: it has three holds.",
     ],
 )
 def test_amounts_dates_case_numbers_and_ids_are_not_masked(text: str) -> None:

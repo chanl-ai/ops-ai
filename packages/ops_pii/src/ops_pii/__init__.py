@@ -154,7 +154,11 @@ def _keyed_values(text: str) -> str:
     out: list[str] = []
     pos = 0
     while (m := _KEYED.search(text, pos)) is not None:
-        if field_kind(m.group(2) if m.group(2) is not None else m.group(4)) is None:
+        key = m.group(2) if m.group(2) is not None else m.group(4)
+        loose = (m.group(8) is not None and not re.search(r"\d", m.group(8))) or "|" in m.group(5) or "\t" in m.group(5)
+        # A word with no digit, or a table cell or a tab after the name, is its value only when the name says it is an
+        # identifier (accountId: ABCDEFG); after a name alone it is prose or a heading ("the account: it has").
+        if field_kind(key) is None or (loose and not any(w in _ID_WORDS for w in _words(key))):
             out.append(text[pos : m.end(5)])
             pos = m.end(5)
             continue
@@ -235,7 +239,7 @@ def _walk(
 ) -> Any:
     shown = field_kind(key) if key else None
     if shown is not None:
-        return _whole(value, shown, key or "", text)
+        return _whole(value, shown, key or "", text, hidden)
     if isinstance(value, str):
         return text(value)
     if isinstance(value, list | tuple | set | frozenset):
@@ -258,11 +262,24 @@ def _walk(
     return value
 
 
+class _Hidden:
+    """What `hidden` shows in place of a field inside a personal data field's object, kept apart from its masking."""
+
+    def __init__(self, shown: Any) -> None:
+        self.shown = shown
+
+
 # Where an object under a personal data field holds that field's value: a field as a document read records it.
 _CELL_VALUES = ("value", "extractedValue")
 
 
-def _whole(value: Any, shown: str, key: str, text: Callable[[str], str] = mask) -> Any:
+def _whole(
+    value: Any,
+    shown: str,
+    key: str,
+    text: Callable[[str], str] = mask,
+    hidden: Callable[[str, Any], Any] | None = None,
+) -> Any:
     """A personal data field's value with each scalar in it replaced by `shown`. An object in it keeps what is not an
     identifier (a list of accounts holds names and balances too): a field named by identifier words alone (account.id,
     ssn.last4) is masked as the field, and under a plural name (accountIds) every field is. An object holding the
@@ -274,14 +291,18 @@ def _whole(value: Any, shown: str, key: str, text: Callable[[str], str] = mask) 
     if isinstance(value, str | int | float):
         return shown
     if isinstance(value, list | tuple | set | frozenset):
-        return [_whole(v, shown, key, text) for v in cast(list[Any], value)]
+        return [_whole(v, shown, key, text, hidden) for v in cast(list[Any], value)]
     row = cast(dict[Any, Any], value)
+    if hidden is not None:
+        row = {k: v if (instead := hidden(str(k), v)) is None else _Hidden(instead) for k, v in row.items()}
     if "value" not in row:
         every = bool(_PLURAL & set(_words(key)))
         return {
-            k: _whole(v, shown, key, text)
+            k: v.shown
+            if isinstance(v, _Hidden)
+            else _whole(v, shown, key, text, hidden)
             if every or all(w in _ID_WORDS for w in _words(str(k)))
-            else _walk(v, str(k), frozenset(), text, None)
+            else _walk(v, str(k), frozenset(), text, hidden)
             for k, v in row.items()
         }
     real = {
@@ -290,9 +311,11 @@ def _whole(value: Any, shown: str, key: str, text: Callable[[str], str] = mask) 
         if isinstance(row.get(k), str | int | float) and not isinstance(row.get(k), bool) and row.get(k) != ""
     }
     return {
-        k: _whole(v, shown, key, text)
+        k: v.shown
+        if isinstance(v, _Hidden)
+        else _whole(v, shown, key, text, hidden)
         if k in _CELL_VALUES
-        else _quoted(_walk(v, str(k), frozenset(), text, None), real, shown)
+        else _quoted(_walk(v, str(k), frozenset(), text, hidden), real, shown)
         for k, v in row.items()
     }
 

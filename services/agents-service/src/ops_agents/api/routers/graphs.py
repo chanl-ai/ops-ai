@@ -305,8 +305,9 @@ async def thread_state(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
             interrupt = await hitl_facade.interrupt_view(rt, row, pending[0])
     # What the paused step holds is a task's data: real only to who may decide it, as its task page shows it.
     team, asker = row.get("team_id"), hitl_facade.asker_of(pending[0].get("payload")) if pending else None
-    values = hitl_facade.as_seen_in(me, team, values, asker=asker)
-    interrupt = hitl_facade.as_seen_in(me, team, interrupt, asker=asker)
+    # Masked once encoded: a checkpoint can hold values that are not JSON, which the walk passes through as they are.
+    shown_values = hitl_facade.as_seen_in(me, team, jsonable_encoder(await _worded_failure(rt, values)), asker=asker)
+    interrupt = hitl_facade.as_seen_in(me, team, jsonable_encoder(interrupt), asker=asker)
     return ok(
         {
             "threadId": thread_id,
@@ -314,7 +315,7 @@ async def thread_state(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
             "version": row["version"],
             "digest": row["digest"],
             "status": row["status"],
-            "values": jsonable_encoder(await _worded_failure(rt, values)),
+            "values": shown_values,
             "next": list(snap.next),
             "interrupt": interrupt,
             "sla": sla,
