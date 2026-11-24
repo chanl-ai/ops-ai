@@ -9,7 +9,9 @@ in `ops_sources.contract`."""
 
 from .contract import (
     AT_ONCE,
+    INPUT_TYPES,
     RECONNECT,
+    TEAM_SIGN_IN,
     Answer,
     Declared,
     FoundPlace,
@@ -18,6 +20,8 @@ from .contract import (
     access_list,
     listing_of,
     places_of,
+    refusal_of,
+    source_values,
 )
 from .fetching import GONE_TWICE, Fetched, Fetcher, OnItem, Pacer
 from .listing import FULL_EVERY, MAX_PAGES, OVERLAP, STALE_CURSOR, Listing, read_changes
@@ -29,10 +33,12 @@ __all__ = [
     "AT_ONCE",
     "FULL_EVERY",
     "GONE_TWICE",
+    "INPUT_TYPES",
     "MAX_PAGES",
     "OVERLAP",
     "RECONNECT",
     "STALE_CURSOR",
+    "TEAM_SIGN_IN",
     "Answer",
     "Declared",
     "Fetched",
@@ -53,4 +59,6 @@ __all__ = [
     "listing_of",
     "places_of",
     "read_changes",
+    "refusal_of",
+    "source_values",
 ]

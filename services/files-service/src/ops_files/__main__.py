@@ -131,7 +131,8 @@ def main() -> None:
     )
     # A watched folder's check reads the source through tools-service with the team's sign-in, as knowledge does.
     tools = ServiceClient.for_settings(settings, service="files", audience="tools", scopes=["tools:view", "tools:run"])
-    checks = WatchChecks(files, ToolReader(tools, key_prefix="files"))
+    reader = ToolReader(tools, key_prefix="files")
+    checks = WatchChecks(files, reader)
     background: list[Callable[[], Coroutine[Any, Any, None]]] = [
         lambda: keep_purging(files),
         lambda: keep_checking(checks),
@@ -143,6 +144,7 @@ def main() -> None:
         auth=Auth.from_settings(settings, audience="files"),
         settings=files.settings,
         background=background,
+        reader=reader,
     )
     uvicorn.run(app, host=settings.bind_host, port=settings.files_port, log_config=None, access_log=False)
 

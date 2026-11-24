@@ -27,6 +27,7 @@ from ops_service_kit.testing import Seeded, SeedTeam, StatementBudget, budget_ch
 from ops_storage.local import LocalObjectStore
 
 from .test_api import CONFIG, OPS, PDF, sign_in
+from .test_watch_routes import Declaring
 
 BUDGETS = Path(__file__).parents[1] / "budgets.toml"
 
@@ -49,7 +50,7 @@ async def app(database_url: str, tenant: str, tmp_path: Path) -> AsyncIterator[F
     )
     files = TenantFiles(default, FilesStore(engine), CONFIG, scanning="off", settings=storage)  # pyright: ignore[reportArgumentType]
     auth = Auth.for_dev(Settings(), audience="files", name="sam", email="sam@harborpine.example", tenant_id=tenant)
-    built = create_files_app(files, engine=engine, auth=auth, settings=storage)
+    built = create_files_app(files, engine=engine, auth=auth, settings=storage, reader=Declaring())
     # An admin of team_ops for the files routes, and the Security admin storage settings need.
     sign_in(built, tenant, "admin", "sam@harborpine.example")
 

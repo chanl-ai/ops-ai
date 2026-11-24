@@ -22,6 +22,7 @@ from typing import TypedDict
 
 from pydantic import BaseModel, ConfigDict
 
+from ops_service_kit.errors import ValidationFailed
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.narrow import json_list, json_object
 
@@ -104,6 +105,56 @@ class Declared(BaseModel):
     @property
     def tools(self) -> SourceTools:
         return SourceTools.of(self.model_dump())
+
+
+# Sign-ins a source with no person behind it (a sync, a watched folder's check) may read through.
+TEAM_SIGN_IN = ("team",)
+
+INPUT_TYPES: dict[str, type | tuple[type, ...]] = {
+    "string": str,
+    "integer": int,
+    "number": (int, float),
+    "boolean": bool,
+    "array": list,
+    "object": dict,
+}
+
+
+def refusal_of(found: Declared) -> tuple[str, str] | None:
+    """Why a source declared for the team cannot be read by a service on its own, as (code, message), or None when
+    it can. Knowledge's create and Add source list, and Files' watch create, ask this, so a source is offered exactly
+    when it is accepted."""
+    if not found.needsConnection:
+        return None
+    if not found.connectionId:
+        return "connection_missing", f"{found.title} needs the team's connection; sign in first."
+    if found.signIn not in TEAM_SIGN_IN:
+        return (
+            "sign_in_not_team",
+            f"This connection signs in each person. Reading {found.title} on a schedule needs a team sign-in.",
+        )
+    return None
+
+
+def source_values(declared: Declared, given: JsonValue) -> dict[str, JsonValue]:
+    """A source's own settings checked against the inputs its plugin declares: a required one present, each of its
+    declared type, and nothing undeclared."""
+    inputs = declared.inputs
+    values = given if isinstance(given, dict) else {}
+    if unknown := sorted(set(values) - set(inputs)):
+        raise ValidationFailed(f"{declared.title} takes no {', '.join(unknown)}.", code="invalid_source_values")
+    for name, declared_input in inputs.items():
+        if values.get(name) in (None, "", []):
+            if declared_input.get("required", True):
+                raise ValidationFailed(f"{declared.title} needs {name}.", code="invalid_source_values")
+            continue
+        expected = INPUT_TYPES.get(str(declared_input.get("type") or "string"), str)
+        if not isinstance(values[name], expected):
+            raise ValidationFailed(
+                f"{name} is a {declared_input.get('type') or 'string'} for {declared.title}.",
+                code="invalid_source_values",
+            )
+    return values
 
 
 class SourceError(TypedDict, total=False):

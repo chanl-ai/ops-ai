@@ -37,6 +37,8 @@ from ops_sources import (
     ToolReader,
     access_list,
     read_changes,
+    refusal_of,
+    source_values,
 )
 from ops_store import documents
 
@@ -52,8 +54,7 @@ if TYPE_CHECKING:
 
 # The listing, its pacing and gone-twice live in ops_sources; kb-service reads them through its knowledge state.
 # MAX_PAGES and FULL_EVERY are named here and read at each sync, so a test can shorten them for this service.
-__all__ = ["FULL_EVERY", "MAX_PAGES", "Answer", "Declared", "ToolReader"]
-TEAM_SIGN_IN = ("team",)
+__all__ = ["FULL_EVERY", "MAX_PAGES", "Answer", "Declared", "ToolReader", "refusal_of", "source_values"]
 
 
 class Host(BaseModel):
@@ -149,21 +150,6 @@ async def declared_sources(reader: ToolReader, tenant_id: str, team_id: str) -> 
     return [Declared.model_validate(d) for d in await reader.declared(tenant_id, team_id)]
 
 
-def refusal_of(found: Declared) -> tuple[str, str] | None:
-    """Why a source declared for the team cannot be made, as (code, message), or None when it can. Create and the
-    Add source list both ask this, so a source is offered exactly when create accepts it."""
-    if not found.needsConnection:
-        return None
-    if not found.connectionId:
-        return "connection_missing", f"{found.title} needs the team's connection; sign in first."
-    if found.signIn not in TEAM_SIGN_IN:
-        return (
-            "sign_in_not_team",
-            "This connection signs in each person. A knowledge source needs a team sign-in.",
-        )
-    return None
-
-
 async def declared_source(reader: ToolReader | None, who: Who, plugin: str, name: str) -> Declared:
     """The plugin's knowledge source as tools-service declares it for the team: refused unless the plugin is on,
     names the source, and its connection signs in with the team's account, since a sync has no person behind it."""
@@ -228,37 +214,6 @@ async def waiting_hosts(reader: ToolReader, who: Who, cfg: dict[str, JsonValue])
             refused[0].reason or f"{refused[0].host} is not an allowed address.", code="egress_host_refused"
         )
     return [{"host": h.host, "runKey": h.runKey} for h in answers if h.state == "waiting"]
-
-
-INPUT_TYPES: dict[str, type | tuple[type, ...]] = {
-    "string": str,
-    "integer": int,
-    "number": (int, float),
-    "boolean": bool,
-    "array": list,
-    "object": dict,
-}
-
-
-def source_values(declared: Declared, given: JsonValue) -> dict[str, JsonValue]:
-    """A source's own settings checked against the inputs its plugin declares: a required one present, each of its
-    declared type, and nothing undeclared."""
-    inputs = declared.inputs
-    values = given if isinstance(given, dict) else {}
-    if unknown := sorted(set(values) - set(inputs)):
-        raise ValidationFailed(f"{declared.title} takes no {', '.join(unknown)}.", code="invalid_source_values")
-    for name, declared_input in inputs.items():
-        if values.get(name) in (None, "", []):
-            if declared_input.get("required", True):
-                raise ValidationFailed(f"{declared.title} needs {name}.", code="invalid_source_values")
-            continue
-        expected = INPUT_TYPES.get(str(declared_input.get("type") or "string"), str)
-        if not isinstance(values[name], expected):
-            raise ValidationFailed(
-                f"{name} is a {declared_input.get('type') or 'string'} for {declared.title}.",
-                code="invalid_source_values",
-            )
-    return values
 
 
 def _as_given(value: JsonValue) -> str | None:

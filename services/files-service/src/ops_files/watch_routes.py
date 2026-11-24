@@ -26,10 +26,11 @@ from ops_files.store.watches import Audit, EventRow
 from ops_files.tenant_files import Who
 from ops_identity import CurrentPrincipal
 from ops_identity.fastapi import Tx
-from ops_service_kit.errors import Conflict, Forbidden, NotFound
+from ops_service_kit.errors import Conflict, Forbidden, NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, In, ListResult, Option, OptionsPage, Out, ok, options_window
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListQuery
+from ops_sources import Declared, Reader, refusal_of, source_values
 
 # A watch's settings as the source's picker saved them (site, libraries, folders); kept small, as a knowledge
 # source's are.
@@ -58,7 +59,8 @@ class WatchIn(In):
     name: str = Field(min_length=1, max_length=200)
     plugin: str = Field(min_length=1, max_length=120)
     source: str = Field(min_length=1, max_length=120)
-    # The app connection the source reads through, as Add source's kinds name it; part of each file's identity.
+    # The app connection the source reads through, as Add source's kinds name it; part of each file's identity. The
+    # watch takes the team's connection for the app; one given must be it, and left out it is filled in.
     connection_id: str | None = Field(default=None, max_length=64)
     values: dict[str, JsonValue] = Field(max_length=VALUES_MAX)
     names: PickedNames = Field(default_factory=dict, max_length=VALUES_MAX)
@@ -191,9 +193,33 @@ def _folders(values: dict[str, JsonValue]) -> JsonValue:
     return {k: v for k, v in values.items() if isinstance(v, str | list)}
 
 
-def watches_router(store: WatchesStore, *, clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> APIRouter:
-    """Mounted by `create_files_app`, which imports this module when it builds the app (this one reads its `who`)."""
+def watches_router(
+    store: WatchesStore, *, reader: Reader | None, clock: Callable[[], datetime] = lambda: datetime.now(UTC)
+) -> APIRouter:
+    """Mounted by `create_files_app`, which imports this module when it builds the app (this one reads its `who`).
+    `reader` reads the sources the team's apps declare, which a watch's plugin, source and folders are checked
+    against, as a knowledge source's are."""
     router = APIRouter(prefix="/v1/watches", tags=["watches"])
+
+    async def declared(who: Who, plugin: str, source: str) -> Declared:
+        """The plugin's folder source as tools-service declares it for the team: refused unless the plugin is on,
+        names a source Files can watch, and its connection signs in with the team's account, since a check has no
+        person behind it."""
+        if reader is None:
+            raise ValidationFailed("Files reads no apps here, so a folder cannot be watched.", code="tools_unavailable")
+        rows = await reader.declared(who.tenant_id, who.team)
+        found = next(
+            (Declared.model_validate(d) for d in rows if (d.get("plugin"), d.get("source")) == (plugin, source)), None
+        )
+        if found is None or not found.files:
+            raise ValidationFailed(
+                f"{plugin} offers no folders for Files to watch in this team; turn it on first.",
+                code="source_not_offered",
+            )
+        if (refusal := refusal_of(found)) is not None:
+            raise ValidationFailed(refusal[1], code=refusal[0])
+        return found
+
     # Read routes are open to services holding files:view, for the team their token names.
     view_scope = service_scope("view")
 
@@ -232,7 +258,13 @@ def watches_router(store: WatchesStore, *, clock: Callable[[], datetime] = lambd
 
     @router.post("", status_code=201, response_model=Envelope[WatchView])
     async def create_watch(body: WatchIn, who: Manager) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """Watches an app's folders; nothing is copied until the first check (Check now, or a trigger's schedule)."""
+        """Watches an app's folders; nothing is copied until the first check (Check now, or a trigger's schedule). The
+        plugin, source and folders are checked against what the team's apps declare, and the watch reads through the
+        team's connection for that app."""
+        found = await declared(who, body.plugin, body.source)
+        values = source_values(found, body.values)
+        if body.connection_id and body.connection_id != found.connectionId:
+            raise ValidationFailed(f"That is not the team's {found.title} connection.", code="connection_mismatch")
         at = clock()
         audit: Audit = {
             "actor": who.actor,
@@ -248,9 +280,9 @@ def watches_router(store: WatchesStore, *, clock: Callable[[], datetime] = lambd
                 "name": body.name,
                 "plugin": body.plugin,
                 "source": body.source,
-                "connection_id": body.connection_id,
-                "values": body.values,
-                "value_names": _kept(body.names, body.values),
+                "connection_id": found.connectionId,
+                "values": values,
+                "value_names": _kept(body.names, values),
                 "created_by": who.actor,
                 "created_at": at,
             },
@@ -267,6 +299,8 @@ def watches_router(store: WatchesStore, *, clock: Callable[[], datetime] = lambd
     async def change_watch(watch_id: str, body: WatchChange, who: Manager) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Renames the watch or changes its folders; new folders are listed whole on the next check."""
         before = await found(watch_id)
+        if body.values is not None:
+            source_values(await declared(who, before.plugin, before.source), body.values)
         at = clock()
         audit: Audit = {
             "actor": who.actor,

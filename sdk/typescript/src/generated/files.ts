@@ -474,7 +474,9 @@ export interface paths {
         put?: never;
         /**
          * Create Watch
-         * @description Watches an app's folders; nothing is copied until the first check (Check now, or a trigger's schedule).
+         * @description Watches an app's folders; nothing is copied until the first check (Check now, or a trigger's schedule). The
+         *     plugin, source and folders are checked against what the team's apps declare, and the watch reads through the
+         *     team's connection for that app.
          */
         post: operations["watches_create_watch"];
         delete?: never;

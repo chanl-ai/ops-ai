@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import ClassVar
 
 import sqlalchemy as sa
 
@@ -20,6 +21,8 @@ from ops_files.store import AsyncEngine, FilesStore, SourceFile, WatchesStore
 from ops_files.store.files import service_outbox
 from ops_files.tenant_files import TenantFiles
 from ops_identity import dev_service_signer, mint_service_token
+from ops_service_kit.http import JsonValue
+from ops_sources import Answer
 from ops_storage.local import LocalObjectStore
 from ops_store import isolation
 
@@ -39,8 +42,36 @@ WATCH = {
     "plugin": "sharepoint",
     "source": "files",
     "connectionId": "con_1",
-    "values": {"site": "Finance", "libraries": ["Invoices"]},
+    "values": {"sites": ["Finance"], "libraries": ["Invoices"]},
 }
+
+
+class Declaring:
+    """tools-service's declared sources for the team: SharePoint's folder source on the team's connection."""
+
+    rows: ClassVar[list[dict[str, JsonValue]]] = [
+        {
+            "plugin": "sharepoint",
+            "source": "files",
+            "title": "SharePoint and OneDrive",
+            "connectionId": "con_1",
+            "connectionStatus": "healthy",
+            "signIn": "team",
+            "files": True,
+            "inputs": {
+                "sites": {"type": "array", "required": False},
+                "libraries": {"type": "array", "required": False},
+            },
+        }
+    ]
+
+    async def declared(self, tenant_id: str, team_id: str) -> list[dict[str, JsonValue]]:
+        return self.rows
+
+    async def call(
+        self, tenant_id: str, team_id: str, tool: str | None, args: dict[str, JsonValue], *, act: str
+    ) -> Answer:
+        raise AssertionError("a route never calls a tool")
 
 
 async def _brought_in(engine: AsyncEngine, tmp_path: Path, tenant: str, watch_id: str) -> str:
@@ -84,7 +115,7 @@ async def test_a_viewer_cannot_change_a_watch_and_another_team_cannot_reach_it(
     tenant: str,
     tmp_path: Path,
 ) -> None:
-    async with client() as builder, client(role="viewer") as viewer:
+    async with client(reader=Declaring()) as builder, client(role="viewer", reader=Declaring()) as viewer:
         made = await builder.post("/v1/watches", json=WATCH, headers=OPS)
         assert made.status_code == 201, made.text
         watch_id = _data(made)["id"]
@@ -137,7 +168,7 @@ async def test_the_file_page_names_its_watched_folder_and_an_upload_names_none(
 ) -> None:
     """A source file's detail says which watch brought it, where it sits, when the source changed it, and its access
     list as read with "not known" (null) apart from nobody ([]); removed and deleted-watch states keep the entry."""
-    async with client() as builder:
+    async with client(reader=Declaring()) as builder:
         watch_id = _data(await builder.post("/v1/watches", json=WATCH, headers=OPS))["id"]
         file_id = await _brought_in(engine, tmp_path, tenant, watch_id)
         source = _data(await builder.get(f"/v1/files/{file_id}", headers=OPS))["source"]
@@ -175,7 +206,7 @@ async def test_the_list_names_a_watchs_folders_counts_its_files_and_keeps_its_co
     """The Watched folders row shows folder names (not "libraries: 1"), how many of its files are in Files, and the
     connection it was made with; a name for a folder no longer picked is dropped when the folders change."""
     names = {"libraries": {"Invoices": "Supplier invoices", "Elsewhere": "Not picked"}}
-    async with client() as builder:
+    async with client(reader=Declaring()) as builder:
         made = _data(await builder.post("/v1/watches", json={**WATCH, "names": names}, headers=OPS))
         await _brought_in(engine, tmp_path, tenant, made["id"])
         [row] = _data(await builder.get("/v1/watches", headers=OPS))["data"]
@@ -184,8 +215,23 @@ async def test_the_list_names_a_watchs_folders_counts_its_files_and_keeps_its_co
         ], row["folders"]
         assert (row["filesInFiles"], row["inUse"], row["connectionId"]) == (1, False, "con_1"), row
         # A watch saved with no names (the SDK and CLI) lists no named folders; the console counts its ids instead.
-        bare = _data(await builder.post("/v1/watches", json={**WATCH, "name": "No names"}, headers=OPS))
-        assert bare["folders"] == [], bare
+        # Saved with no connection, it reads through the team's.
+        bare_in = {k: v for k, v in WATCH.items() if k != "connectionId"}
+        bare = _data(await builder.post("/v1/watches", json={**bare_in, "name": "No names"}, headers=OPS))
+        assert (bare["folders"], bare["connectionId"]) == ([], "con_1"), bare
+        # Settings the source does not declare, an app the team has not turned on, and another connection are refused.
+        refused = [
+            await builder.post("/v1/watches", json={**WATCH, "values": {"site": "Finance"}}, headers=OPS),
+            await builder.post("/v1/watches", json={**WATCH, "plugin": "box"}, headers=OPS),
+            await builder.post("/v1/watches", json={**WATCH, "connectionId": "con_other"}, headers=OPS),
+            await builder.patch(f"/v1/watches/{made['id']}", json={"values": {"libraries": "Invoices"}}, headers=OPS),
+        ]
+        assert [(r.status_code, r.json()["error"]["code"]) for r in refused] == [
+            (400, "invalid_source_values"),
+            (400, "source_not_offered"),
+            (400, "connection_mismatch"),
+            (400, "invalid_source_values"),
+        ], [r.text for r in refused]
         changed = await builder.patch(
             f"/v1/watches/{made['id']}", json={"values": {"libraries": ["Invoices", "Archive"]}}, headers=OPS
         )
@@ -215,7 +261,7 @@ async def test_each_version_of_a_watched_file_is_scanned_read_held_and_deleted_o
     )
     scanner = {"Authorization": f"Bearer {token}"}
     paid = PDF + b"% paid"
-    async with client(scanning="hook", admin=True) as admin:
+    async with client(scanning="hook", admin=True, reader=Declaring()) as admin:
         watch_id = _data(await admin.post("/v1/watches", json=WATCH, headers=OPS))["id"]
         with isolation.scope(tenant, "team_ops"):
             file_id, _ = await files.put_source(tenant, "team_ops", _found(watch_id, "k1", "Invoices/a.pdf"), PDF,
