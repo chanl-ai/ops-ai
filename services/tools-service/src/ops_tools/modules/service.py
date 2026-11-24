@@ -560,7 +560,7 @@ def _can(
 ) -> None:
     """`ops_access.can` for a tools-service caller: the grid decides, in the team the request acts in, or in the
     Security team for the actions held there. A caller with no principal (the seed) acts as the system. `requested_by`
-    is refused only while the tenant's requesterMayDecide policy is off."""
+    is refused unless the caller holds Approvals decide in that team."""
     if who.principal is None:
         return
     Access().can(who.principal, area, action, what=what, code=code, protection=protection, requested_by=requested_by)

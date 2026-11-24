@@ -17,8 +17,8 @@ from ops_service_kit.narrow import json_object
 
 from ..store.modules import Module, ModuleColumns, Operation
 
-# The area a per-team requesterMayDecide names for a tool access request or write approval: every decision here is a
-# review, as `can()` asks it (`BY_AREA_TAKES`).
+# The area platform-service's access check is asked about for a tool access request or write approval: every decision
+# here is a review, as `can()` asks it (`BY_AREA_TAKES`).
 REVIEWS = "reviews"
 
 Mode = Literal["always", "major", "never"]
