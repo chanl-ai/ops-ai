@@ -48,7 +48,7 @@ class Every:
         unit = str(raw.get("unit") or "hours")
         if unit not in UNITS:
             raise InvalidSchedule(f"An interval is in {', '.join(UNITS)}, not {unit}.", field="unit")
-        every_raw = raw.get("every") or 1
+        every_raw = 1 if raw.get("every") is None else raw.get("every")
         if not isinstance(every_raw, int | str) or not str(every_raw).isdigit():
             raise InvalidSchedule(f"{every_raw} is not a whole number.", field="every")
         every, most = int(every_raw), UNITS[unit][1]

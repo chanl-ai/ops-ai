@@ -218,12 +218,17 @@ owns no thread and arms no timer. Paused and archived workflows are not live, so
 
 A rule kind answers four things and nothing else reads a rule's fields: `check` (the rule as stored, or the field
 that is wrong), `last_slot`, `next_slots` and `words`. The clock, the routes, the preview, the floor and the live
-places ask the registry only these.
+places ask the registry only these. A schedule's first sighting (new, changed, resumed or restored) is read from its
+row, not from one machine's memory: the rule differs from the one stored beside the slot, or `seen_at` is empty, which
+each pass makes it while the workflow is not live or lacks the step. A tick that fails or whose lease is held writes
+nothing, so its slot stays open for the next pass.
 
-1. Write a class with those members and a `schema` (JSON Schema of its fields, with `kind` as a `const` of its name)
-   under `packages/ops_store/src/ops_store/schedule/kinds/`; see `every.py`.
+1. Write a class with those members, a `schema` (JSON Schema of its fields, with `kind` as a `const` of its name) and
+   an `interval_field` (the field a refusal under the floor names, such as `every`), under
+   `packages/ops_store/src/ops_store/schedule/kinds/`; see `every.py`.
 2. Add it to `default_kinds()` in `packages/ops_store/src/ops_store/schedule/__init__.py`. Registering refuses a
-   duplicate name or a schema that does not name its kind.
+   duplicate name or a schema that does not name its kind. A plugin or a test registers into `KINDS`, the install's
+   one registry, which the clock, the routes and every view read, so the worker's clock knows the kind too.
 3. Nothing else changes: `GET /v1/schedules/kinds` lists it, the save and preview routes accept it, the floor applies
    to it, and the SDKs pass its fields through. `services/agents-service/tests/engine/test_schedule_kind_plugin.py`
    shows a kind registered from a test and run through the real clock.
