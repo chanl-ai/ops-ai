@@ -192,9 +192,9 @@ function SampleRows({ step }: { step: SampleStep }) {
   return <KeyValues rows={step.fields.map((f) => [f.label, f.sample === null ? <span className="text-muted-foreground">No value</span> : <span className="break-words">{f.sample}</span>])} />;
 }
 
-function SampleSkeleton() {
+function SampleSkeleton({ testId }: { testId: string }) {
   return (
-    <div className="flex flex-col gap-2" data-testid="step-receives-loading">
+    <div className="flex flex-col gap-2" data-testid={testId}>
       <Skeleton className="h-4 w-1/2" />
       <Skeleton className="h-4 w-2/3" />
       <Skeleton className="h-4 w-1/3" />
@@ -206,7 +206,7 @@ function SampleSkeleton() {
 function WhatItReceives({ sample }: { sample: ReturnType<typeof useStepSample> }) {
   const data = sample.data;
   let body: React.ReactNode;
-  if (sample.isLoading) body = <SampleSkeleton />;
+  if (sample.isLoading) body = <SampleSkeleton testId="step-receives-loading" />;
   else if (sample.isError) body = <QueryError what="what this step receives" error={sample.error} onRetry={() => void sample.refetch()} retrying={sample.isFetching} testId="step-receives-error" />;
   else if (data && !data.saved) body = <p className="text-sm text-muted-foreground">{SAVE_FIRST}</p>;
   else if (data && data.steps.length === 0) body = <p className="text-sm text-muted-foreground">This is the first step. Nothing runs before it.</p>;
@@ -256,7 +256,7 @@ function WhatItGives({ given, loading, unsaved }: { given: SampleStep | null; lo
   return (
     <div data-testid="step-what-it-gives">
       <Section title="What it gives" description="What later steps can pick from this step.">
-        {loading ? <SampleSkeleton /> : unsaved || !given ? <p className="text-sm text-muted-foreground">{SAVE_FIRST}</p> : <SampleRows step={given} />}
+        {loading ? <SampleSkeleton testId="step-gives-loading" /> : unsaved || !given ? <p className="text-sm text-muted-foreground">{SAVE_FIRST}</p> : <SampleRows step={given} />}
       </Section>
     </div>
   );
