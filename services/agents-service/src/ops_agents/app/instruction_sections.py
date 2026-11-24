@@ -177,7 +177,8 @@ def default_list() -> SectionList:
                 hint=hint,
                 kind=h.kind,
                 order=n,
-                required=h.kind == "fixed",
+                # Only the purpose must be written; the other fields of the brief may stay empty.
+                required=h.id == "purpose",
                 drives=DRIVERS.get(h.id, "eval-tag" if h.kind == "menu" else "none"),
                 group=group,
                 example=example,
