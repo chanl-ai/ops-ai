@@ -327,3 +327,39 @@ async def test_the_roles_list_the_holders_and_the_live_check_read_a_built_in_rol
     assert counts["builder"] == 1 and "builder" not in decides and ben.user_id not in held and not live
     _, _, held, live = await readers(("knowledge", "view"))
     assert ben.user_id in held and live, held
+
+
+async def test_a_copy_of_admin_leaves_approve_own_requests_out(platform: Platform) -> None:
+    """Approvals · decide is "approve own requests"; a copy never carries it, so a role gains it only by a tick."""
+    _, ah = await _admin(platform)
+    copied = await platform.public.post("/v1/roles", headers=ah, json={"name": "Admin too", "copyOf": "admin"})
+    assert copied.status_code == 201, copied.text
+    data = copied.json()["data"]
+    assert ("approvals", "decide") not in {(p["area"], p["action"]) for p in data["permissions"]}
+    assert "approvals.decide" in data["leftOut"]
+
+
+async def test_ticking_approve_own_requests_on_a_role_writes_its_own_audit_action(platform: Platform) -> None:
+    owner, ah = await _admin(platform)
+    made = await platform.public.post("/v1/roles", headers=ah, json={"name": "Loan officer", "permissions": CASE_DESK})
+    rid = made.json()["data"]["id"]
+    ticked = [*CASE_DESK, {"area": "approvals", "action": "decide", "scope": "all"}]
+    put = await platform.public.put(f"/v1/roles/{rid}/permissions", headers=ah, json={"permissions": ticked})
+    assert put.status_code == 200, put.text
+    mine = next(iter(owner.teams))
+    audit = (await platform.public.get("/v1/audit", headers={**ah, "X-Team-Id": mine})).json()["data"]["data"]
+    actions = [e.get("platformAction") or e.get("action") for e in audit if e.get("targetId") == rid]
+    assert "role.edit" in actions and "role.self_approval" in actions, audit[:4]
+
+
+async def test_a_role_created_holding_approve_own_requests_writes_its_own_audit_action(platform: Platform) -> None:
+    owner, ah = await _admin(platform)
+    ticked = [*CASE_DESK, {"area": "approvals", "action": "decide", "scope": "all"}]
+    made = await platform.public.post("/v1/roles", headers=ah, json={"name": "Loan approver", "permissions": ticked})
+    assert made.status_code == 201, made.text
+    rid = made.json()["data"]["id"]
+    mine = next(iter(owner.teams))
+    audit = (await platform.public.get("/v1/audit", headers={**ah, "X-Team-Id": mine})).json()["data"]["data"]
+    mine_rows = [e for e in audit if e.get("targetId") == rid]
+    actions = [e.get("platformAction") or e.get("action") for e in mine_rows]
+    assert "role.create" in actions and "role.self_approval" in actions, mine_rows

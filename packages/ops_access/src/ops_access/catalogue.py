@@ -229,6 +229,10 @@ SEEDED_ROLES = (ADMIN, BUILDER, REVIEWER, VIEWER, CHAT_USER)
 # hide what the seed still grants. Reset still puts any of them back to its seed.
 FIXED_ROLES = frozenset({ADMIN.id, SECURITY_ADMIN.id, OWNER.id})
 
+# "Approve own requests": a person holding this cell in the deciding team may decide a request they asked for. Admin
+# holds it; any other role only where someone ticked it, never by copying a role or through a sign-in group.
+SELF_APPROVAL: tuple[str, str] = ("approvals", "decide")
+
 # Cells a group's assignment never carries, so editing a group at the identity provider never makes anyone an admin:
 # changing who may do what (every `access` action but reading it, which every member holds), the workspace itself, and
 # what every team may reach (the Security team's actions, and the team's secrets beyond reading the list).

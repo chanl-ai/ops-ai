@@ -48,6 +48,18 @@ class Policy:
     note: str = ""
     # An "hours" policy's largest value; None takes the general limit of a year.
     maximum: int | None = None
+    # What the value decides (DECIDES): whether a step waits for a review or an approval ("waits"), how a person proves
+    # who they are ("sign_in"), whether a feature is on ("on_off"), or a number a step may not pass ("limit"). It never
+    # decides who may act: that is a cell of the roles matrix. "who" marks the settings that still do, until each moves
+    # onto a cell; scripts/check_access_exceptions.py counts them and refuses a new one.
+    decides: str = ""
+
+    def __post_init__(self) -> None:
+        if self.decides not in DECIDES:
+            raise ValueError(f"policy {self.key} declares decides={self.decides!r}; one of {', '.join(DECIDES)}")
+
+
+DECIDES = ("waits", "sign_in", "on_off", "limit", "who")
 
 
 KINDS = (
@@ -71,18 +83,17 @@ DEFAULT_PUBLISH_MODE = "major"
 POLICIES: tuple[Policy, ...] = (
     Policy(
         "requesterMayDecide",
-        # On by default: the person who asked may decide, as the team's roles allow. A team that wants a second person
-        # turns the two-person rule on, which stores false for the team. A team that stored nothing reads this default,
-        # so every existing team without a saved value takes it. An Admin of the team decides their own request
-        # whatever the value (`can`).
-        True,
-        "The person who asked for a decision may also make it. Off (the two-person rule, an advanced setting): someone "
-        "else has to decide, unless the person is an Admin of the team.",
+        # Retired in 1.2.0: who decides their own request is the Approvals · decide cell (`can`), and nothing reads
+        # this value. It stays declared, off, so an older service reads Admin only and an older console's save gets
+        # 409 policy_retired; the stored values (false since the reset revision) go in a later release.
+        False,
+        "Retired: whoever holds Approvals · decide in the roles matrix may approve their own requests.",
         kind="by_area",
         changed_by=APPROVALS,
         per_team=True,
         held_in="team",
         title="Requester may decide",
+        decides="who",
     ),
     Policy(
         "approvalsFloor",
@@ -92,6 +103,7 @@ POLICIES: tuple[Policy, ...] = (
         "an agent's change to an app always waits for the person or a reviewer.",
         kind="floor_rules",
         title="Approval floor",
+        decides="who",
     ),
     Policy(
         "extractionFloor",
@@ -101,6 +113,7 @@ POLICIES: tuple[Policy, ...] = (
         "The lowest confidence an Extract from file step may accept; no step can ask for less.",
         kind="floor",
         title="Extraction confidence floor",
+        decides="limit",
     ),
     Policy(
         "extractionRetries",
@@ -116,6 +129,7 @@ POLICIES: tuple[Policy, ...] = (
             ("2", "Two more tries", "The read is asked up to twice more, unchanged; each try is billed."),
         ),
         note="A read of several records, a declined reply and a filtered reply are never asked again.",
+        decides="limit",
     ),
     Policy(
         "extractionNoAnswer",
@@ -129,12 +143,14 @@ POLICIES: tuple[Policy, ...] = (
             ("fail", "Fail the step", "The read fails with its reason and the workflow takes its error path."),
         ),
         note="Nothing from a cut-off, empty, declined or filtered reply is ever saved as a value.",
+        decides="waits",
     ),
     Policy(
         "stepUp",
         False,
         "Every approver confirms their sign-in again before deciding. Off: only operations that ask for it.",
         title="Step-up on every approval",
+        decides="sign_in",
     ),
     Policy(
         "publishReview",
@@ -146,6 +162,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Publish reviews",
+        decides="waits",
     ),
     Policy(
         "skillPublishStrict",
@@ -157,6 +174,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Strict skill publishing",
+        decides="waits",
     ),
     Policy(
         "evalsRequired",
@@ -168,6 +186,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Require passing evals to publish",
+        decides="waits",
     ),
     Policy(
         "companySignInRequired",
@@ -176,6 +195,7 @@ POLICIES: tuple[Policy, ...] = (
         "People on the workspace's verified company domains sign in only through the company's provider; named "
         "break-glass Security admins keep a password. Off: passwords follow the sign-in providers.",
         title="Company sign-in required",
+        decides="sign_in",
     ),
     Policy(
         "chatThreadsOwnerOnly",
@@ -183,6 +203,7 @@ POLICIES: tuple[Policy, ...] = (
         True,
         "Each chat thread is read only by the person who started it. Off: the team's admins read them too.",
         title="Private chat threads",
+        decides="who",
     ),
     Policy(
         "memoryRetentionDays",
@@ -192,6 +213,7 @@ POLICIES: tuple[Policy, ...] = (
         # Any team admin sets it, not only the security team.
         changed_by=("chat", "manage"),
         title="Memory retention",
+        decides="limit",
     ),
     Policy(
         "reviewSlaHours",
@@ -201,6 +223,7 @@ POLICIES: tuple[Policy, ...] = (
         # A team admin sets how fast reviews are expected (reviews.manage), not only the security team.
         changed_by=("reviews", "manage"),
         title="Review deadline",
+        decides="limit",
     ),
     Policy(
         "appChanges",
@@ -215,6 +238,7 @@ POLICIES: tuple[Policy, ...] = (
         held_in="team",
         live=True,
         title="Ask before an agent changes anything in an app",
+        decides="waits",
     ),
     Policy(
         "appChangesByApp",
@@ -227,6 +251,7 @@ POLICIES: tuple[Policy, ...] = (
         held_in="team",
         live=True,
         title="Approval by app",
+        decides="waits",
     ),
     Policy(
         "toolWritesNeedApproval",
@@ -238,6 +263,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Approve every tool write",
+        decides="waits",
     ),
     Policy(
         "appWritesNeedApproval",
@@ -251,6 +277,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Approve writes of these apps",
+        decides="waits",
     ),
     Policy(
         "appsChangeWithoutAsking",
@@ -264,6 +291,7 @@ POLICIES: tuple[Policy, ...] = (
         held_in="team",
         live=True,
         title="Apps that change without asking",
+        decides="waits",
     ),
     Policy(
         "aiSteps",
@@ -275,6 +303,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="AI steps in workflows",
+        decides="on_off",
     ),
     Policy(
         "taskAssist",
@@ -285,6 +314,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Task assist",
+        decides="on_off",
     ),
     Policy(
         "checkBeforeSend",
@@ -295,6 +325,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Check before sending",
+        decides="waits",
     ),
     Policy(
         "pageImages",
@@ -305,6 +336,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Page images to the model",
+        decides="on_off",
     ),
     Policy(
         "aiStepsMaskPersonalData",
@@ -317,6 +349,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Mask personal data in AI steps",
+        decides="on_off",
     ),
     Policy(
         "egressNewHosts",
@@ -343,6 +376,7 @@ POLICIES: tuple[Policy, ...] = (
         ),
         note="Private, loopback, link-local and cloud metadata addresses are never reached unless Security lists a "
         "private range, and only https is called.",
+        decides="waits",
     ),
     Policy(
         "mcpConnectionHours",
@@ -351,12 +385,14 @@ POLICIES: tuple[Policy, ...] = (
         kind="hours",
         title="Assistant connection length",
         maximum=30 * 24,
+        decides="sign_in",
     ),
     Policy(
         "securityTeamAddsSecrets",
         False,
         "Only the security team adds secrets. Off: builders add and use their own team's secrets.",
         title="Only Security adds secrets",
+        decides="who",
     ),
 )
 
@@ -453,7 +489,7 @@ def check_value(key: str, value: Any) -> Any:
         "makersAsk}",
         "app_changes_by_app": "an object of app id to {answer (none, person or reviewer), reviewerRole}",
         "by_area": f"true or false, or {{{', '.join(BY_AREA_TAKES)}: true or false}}",
-        "floor_rules": "an object with requesterMayDecide (false) and appChanges (person or reviewer)",
+        "floor_rules": "an object with appChanges (person or reviewer)",
     }
     raise ValueError(f"{key} takes {takes[policy.kind]}")
 
@@ -506,9 +542,9 @@ ANSWERS = ("none", "person", "reviewer")
 BY_AREA_TAKES = ("reviews",)
 
 # What the Security team may lock under every team's approval rules (`approvalsFloor`), each with the values it takes:
-# requesterMayDecide false (nobody decides their own request, in any team or area); appChanges the least answer an
-# agent's change to an app waits for (the person, or a reviewer), at the team, app and tool level alike.
-FLOOR_RULES: dict[str, tuple[Any, ...]] = {"requesterMayDecide": (False,), "appChanges": ("person", "reviewer")}
+# appChanges, the least answer an agent's change to an app waits for (the person, or a reviewer), at the team, app and
+# tool level alike. Who approves their own requests is the Approvals · decide cell, never a floor.
+FLOOR_RULES: dict[str, tuple[Any, ...]] = {"appChanges": ("person", "reviewer")}
 
 
 def requester_may_decide(value: object, team: str | None, area: str, floor: object = None) -> bool:
@@ -533,12 +569,9 @@ def requester_may_decide(value: object, team: str | None, area: str, floor: obje
 
 def below_floor(key: str, value: object, floor: object) -> str | None:
     """Why one team's value of an approval rule is looser than the Security team's floor, or None when it is not.
-    `value` is the team's part as `check_value` keeps it: requesterMayDecide true or {area: bool}; appChanges {ask,
-    answer}; appChangesByApp {app or tool: {answer}}."""
+    `value` is the team's part as `check_value` keeps it: appChanges {ask, answer}; appChangesByApp {app or tool:
+    {answer}}."""
     rules = json_object(floor)
-    if key == "requesterMayDecide" and rules.get("requesterMayDecide") is False:
-        on = value is True or True in json_object(value).values()
-        return "The Security team does not let whoever asked decide their own request." if on else None
     least = rules.get("appChanges")
     if least not in ("person", "reviewer"):
         return None

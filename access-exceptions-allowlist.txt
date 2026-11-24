@@ -29,6 +29,7 @@ services/models-service/src/ops_models/app.py refusal sensitivity_not_cleared 1 
 services/platform-service/src/ops_platform/auth.py refusal workspace_closed 1 E44  # keep platform: the workspace's state, closed to everyone
 services/tools-service/src/ops_tools/modules/service.py refusal plugin_module 1 E45  # keep tools: a plugin's module is changed by its plugin
 services/platform-service/src/ops_platform/teams.py refusal domain_not_allowed 1 E18  # keep platform: the workspace's allowed email domains, a setting
+services/platform-service/src/ops_platform/policies.py conflict policy_retired 1 E57  # keep platform: an older console saving the retired switch is told where it went
 services/platform-service/src/ops_platform/policies.py conflict approval_floor 1 E55  # keep platform: a team's approval rule stays at or above the Security team's floor
 services/platform-service/src/ops_platform/roles.py conflict privileged_for_group 1 E56  # keep platform: a privileged role goes to people only, never to a group
 services/platform-service/src/ops_platform/workspace_lifecycle.py conflict last_admin 1 E43  # keep platform: a team keeps one active admin
@@ -64,11 +65,13 @@ packages/ops_access/src/ops_access/policies.py policy-default checkBeforeSend={}
 packages/ops_access/src/ops_access/policies.py policy-default companySignInRequired=false 1 open  # keep platform: an open default, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default egressNewHosts="ask_security" 1 E48  # keep platform: holds something back by decision, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default extractionFloor=0.8 1 open  # keep platform: an open default, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default extractionNoAnswer="review" 1 open  # keep platform: an open default, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default extractionRetries="1" 1 open  # keep platform: an open default, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default memoryRetentionDays=null 1 open  # keep platform: an open default, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default mcpConnectionHours=8 1 open  # keep platform: an open default, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default pageImages={} 1 E03  # keep platform: holds something back by decision, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default publishReview={} 1 E01  # keep platform: holds something back by decision, read through policy()
-packages/ops_access/src/ops_access/policies.py policy-default requesterMayDecide=true 1 open  # keep platform: an open default, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default requesterMayDecide=false 1 E57  # keep platform: retired, declared off for an older service
 packages/ops_access/src/ops_access/policies.py policy-default reviewSlaHours=8 1 open  # keep platform: an open default, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default securityTeamAddsSecrets=false 1 open  # keep platform: an open default, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default skillPublishStrict={} 1 open  # keep platform: an open default, read through policy()

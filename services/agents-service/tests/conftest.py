@@ -40,6 +40,9 @@ from ops_agents.graphs.models import Facts, Grade
 from ops_agents.store.base import metadata
 from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 from ops_engine.store import metadata as engine_metadata
+from ops_identity import Auth, Identity
+from ops_identity.testing import TEST_TOKEN_TTL_S
+from ops_policy import Ed25519Signer, mint
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack, refusal, use_worker_database
@@ -323,11 +326,47 @@ class FakeGraphModels:
         return [m.groupdict() for m in block.finditer(text)]
 
 
-@pytest.fixture
-def requester_may_decide(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A workspace that turned requesterMayDecide on, for a test whose subject is not the four-eyes rule: the dev
-    caller carries it through OPS_DEV_POLICIES, read by every Settings built after this fixture."""
-    monkeypatch.setenv("OPS_DEV_POLICIES", '{"requesterMayDecide": true}')
+SIGN_IN = Ed25519Signer.generate("agents-tests-sign-in")
+
+
+async def _sign_in_keys() -> dict[str, Any]:
+    return {"keys": [SIGN_IN.public_jwk()]}
+
+
+async def _no_api_key(_key: str) -> dict[str, Any] | None:
+    return None
+
+
+def with_sign_in(settings: Settings) -> Auth:
+    """platform-service's sign-in beside the dev caller: a bearer from `signed_in` is a person holding only the role it
+    names; a request without one is the dev caller, which holds every cell (Approvals decide among them)."""
+    dev = Auth.for_dev(settings, audience="agents", name=settings.dev_user_name, email=settings.dev_user_email)
+    identity = Identity(
+        audience="agents",
+        jwks=_sign_in_keys,
+        introspect=_no_api_key,
+        key_cache_s=0,
+        dev_user=dev.identity.dev_user,
+        services=dev.services,
+    )
+    return Auth(identity, dev.services)
+
+
+def signed_in(email: str, role: str = "approver", team: str = "team_ops") -> dict[str, str]:
+    """A person's session in `team` with one membership role: an approver (Reviewer) decides the team's reviews but not
+    their own requests, which only Approvals decide (Admin by default) lets them."""
+    claims = {
+        "sub": f"usr_{email.split('@', maxsplit=1)[0]}",
+        "email": email,
+        "name": email,
+        "kind": "person",
+        "security_team": "team_security",
+        "aud": ["agents"],
+        "tenant_id": LOCAL_TENANT,
+        "team_ids": [team],
+        "roles": {team: role},
+    }
+    return {"Authorization": f"Bearer {mint(claims, SIGN_IN, ttl_s=TEST_TOKEN_TTL_S)}", "X-Team-Id": team}
 
 
 @pytest.fixture(autouse=True)

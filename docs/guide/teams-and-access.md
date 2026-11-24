@@ -44,6 +44,9 @@ opsai people invite a.osei@example.com --role viewer
 | Chat user | Chat with the team's published agents and read only their own chats. Given on a first single sign-on |
 | Security admin | Egress, any team's secrets, storage settings and security reviews of tool modules. Held by admins of the Security team |
 
+From 1.2.0 only an Admin may approve their own request. To let another role's holders approve their own, tick
+**Approve own requests** on that role in Govern › Access › Roles. Each tick and untick is in the audit log.
+
 A workflow's schedule follows the same cells: anyone who may view the workflow reads it; saving or clearing it needs the right to edit the workflow and to add deployments in its team, and resuming a paused workflow needs the right to edit it. A Viewer or Chat user sees the schedule and no button ([Schedule a workflow or an agent](schedule-a-workflow.md)).
 
 ## Options

@@ -1,3 +1,14 @@
 # agents lane: role-name compares, owner compares and policy reads outside policy() in this lane's code today
 # (scripts/check_access_exceptions.py). `path kind key count`. A kind's total may only fall; the lane takes it to zero.
 services/agents-service/src/ops_agents/api/chat_threads.py owner-compare owner 2
+services/agents-service/src/ops_agents/api/auth.py caller-roles-read roles 1  # convert: the typed role refusal reads its roles from can()'s answer (agents lane)
+services/agents-service/src/ops_agents/api/routers/background.py route-undecided route 1  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/agents-service/src/ops_agents/api/routers/cases.py route-undecided route 2  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/agents-service/src/ops_agents/api/routers/engine.py route-undecided route 1  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/agents-service/src/ops_agents/api/routers/forms.py route-undecided route 2  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/agents-service/src/ops_agents/api/routers/graph_list.py route-undecided route 1  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/agents-service/src/ops_agents/api/routers/health.py route-undecided route 1  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/agents-service/src/ops_agents/api/routers/publish_requests.py route-undecided route 1  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/agents-service/src/ops_agents/api/routers/run_resume.py route-undecided route 1  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/agents-service/src/ops_agents/api/routers/service_events.py route-undecided route 1  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/agents-service/src/ops_agents/api/routers/widget.py route-undecided route 5  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)

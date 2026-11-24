@@ -62,7 +62,7 @@ class ApprovalPolicy(TypedDict):
 def approval_policy(module: Module, op: Operation) -> ApprovalPolicy:
     """How a write to `op` is approved, as the gateway, OPA and the review service read it: `approvers` distinct people
     from `approverTeam`, and whether approving asks for a step-up (`stepUp`): set on the operation, or implied by two
-    approvers. Whether the person who asked may approve is the tenant's `requesterMayDecide` policy."""
+    approvers. Whether the person who asked may approve is the Approvals decide cell in the deciding team."""
     approvers = int(op.get("approvers") or 1)
     return {
         "approvers": approvers,

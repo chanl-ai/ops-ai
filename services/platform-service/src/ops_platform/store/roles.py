@@ -21,6 +21,7 @@ from ops_access import (
     BUILTIN_IDS,
     BUILTIN_ROLES,
     OWNER,
+    SELF_APPROVAL,
     Access,
     Assignment,
     Grant,
@@ -57,6 +58,29 @@ from .tables import (
 from .tenancy import TenantDb
 
 MEMBERSHIP = "membership"
+
+_SELF_APPROVAL_KEY = ".".join(SELF_APPROVAL)
+
+
+async def _audit_self_approval(
+    c: AsyncConnection, tenant_id: str, role_id: str, *, before: str | None, after: str | None, by: str, request_id: str
+) -> None:
+    """Its own action, so a risk officer filters the log for who may approve their own requests (L14)."""
+    await record(
+        c,
+        tenant_id=tenant_id,
+        team_id=None,
+        actor=by,
+        action="role.self_approval",
+        target_kind="role",
+        target_id=role_id,
+        request_id=request_id,
+        detail={
+            "changed": [_SELF_APPROVAL_KEY],
+            "before": {_SELF_APPROVAL_KEY: before},
+            "after": {_SELF_APPROVAL_KEY: after},
+        },
+    )
 
 
 class RoleNameTakenError(Exception):
@@ -338,6 +362,16 @@ class RoleStore(TenantDb):
                     "after": {k: after.get(tuple(k.split(".", 1))) for k in changed},  # type: ignore[arg-type]
                 },
             )
+            if _SELF_APPROVAL_KEY in changed:
+                await _audit_self_approval(
+                    c,
+                    tenant_id,
+                    role_id,
+                    before=before.get(SELF_APPROVAL),
+                    after=after.get(SELF_APPROVAL),
+                    by=by,
+                    request_id=request_id,
+                )
         return True
 
     async def grids(self, tenant_id: str, role_ids: list[str]) -> dict[str, list[Grant]]:
@@ -380,6 +414,9 @@ class RoleStore(TenantDb):
                 request_id=request_id,
                 detail={"name": name, "cells": len(grants)},
             )
+            held = {(a, x): sc for a, x, sc in grants}.get(SELF_APPROVAL)
+            if held is not None:
+                await _audit_self_approval(c, tenant_id, role_id, before=None, after=held, by=by, request_id=request_id)
         return role_id
 
     async def rename(

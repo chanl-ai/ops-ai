@@ -1,8 +1,8 @@
 // uc-730 a first-time admin decides what happens when an agent changes an app with one switch, ui layer.
 // Platform sign-in as Wanjiru Kamau, admin of every team, whose team has saved no approval setting. Govern › Approvals
-// shows one switch, off, and asks who answers only once it is on; the old approval rows and "Requester may decide" are no
-// longer on Policies. "People can approve their own requests" shows only while a reviewer answers, and Advanced holds the
-// "Test accounts never ask" checkbox, which is on until a team saves it off.
+// shows the team switch, off, and asks who answers only once it is on; the old approval rows and "Requester may decide"
+// are no longer on Policies. A reviewer role, once saved, survives a reload. Advanced holds the "Test accounts never ask"
+// checkbox, which is on until a team saves it off, and points to the Roles page for who may approve their own requests.
 import { PLATFORM_PORT, TOOLS_PORT, approveToolReview, check, chromium, finish, consoleSignIn, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -16,7 +16,7 @@ const json = async (r) => {
 };
 
 const SWITCH = /Ask before an agent changes anything in an app/i;
-const OWN = /People can approve their own requests/i;
+const MAKERS = /Writes an app or template marks/i;
 const TEST_ACCOUNTS = /Test accounts never ask/i;
 const TEST_RUNS = /Test runs on live accounts ask first/i;
 
@@ -35,16 +35,16 @@ await withUiStack(async (consoleUrl, stack) => {
     const page = await consoleSignIn(browser, consoleUrl, 'w.kamau@harborpine.example', 'northfield-demo', errors);
     page.setDefaultTimeout(30_000);
 
-    await step('1 Approvals shows one switch, off, and no question about who answers', async () => {
+    await step('1 Approvals shows the team switch, off, and no question about who answers', async () => {
       await page.goto(`${consoleUrl}/settings/approvals`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const switches = page.getByRole('switch');
       await switches.first().waitFor();
       const names = await switches.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') || e.textContent || ''));
       const only = page.getByRole('switch', { name: SWITCH });
-      check('1 exactly one switch, the team switch', (await switches.count()) === 1 && (await only.count()) === 1, names);
+      const makers = page.getByRole('switch', { name: MAKERS });
+      check('1 the team switch and the makers switch, no other', (await switches.count()) === 2 && (await only.count()) === 1 && (await makers.count()) === 1, names);
       check('1 it is off', (await only.getAttribute('aria-checked')) === 'false');
       check('1 the choice of who answers is not shown while it is off', (await page.getByText(/Ask a reviewer/i).count()) === 0);
-      check('1 self-approval is not shown while it is off', (await page.getByRole('checkbox', { name: OWN }).count()) === 0);
     });
 
     await step('2 Turning it on asks who answers, with the person chosen', async () => {
@@ -52,11 +52,9 @@ await withUiStack(async (consoleUrl, stack) => {
       await page.getByText(/Ask a reviewer/i).first().waitFor();
       const person = page.getByRole('radio', { name: /Ask the person/i });
       check('2 Ask the person is chosen first', (await person.isChecked()) === true);
-      check('2 self-approval is not shown while the person answers', (await page.getByRole('checkbox', { name: OWN }).count()) === 0);
+      check('2 no reviewer role is asked while the person answers', (await page.getByRole('combobox', { name: 'Reviewer role' }).count()) === 0);
       await page.getByRole('radio', { name: /Ask a reviewer/i }).click();
-      const own = page.getByRole('checkbox', { name: OWN });
-      await own.waitFor();
-      check('2 self-approval shows once a reviewer answers, off', (await own.getAttribute('aria-checked')) === 'false');
+      await page.getByRole('combobox', { name: 'Reviewer role' }).waitFor();
     });
 
     await step('3 Advanced holds Test accounts never ask, on until a team saves it off', async () => {
@@ -64,6 +62,10 @@ await withUiStack(async (consoleUrl, stack) => {
       const box = page.getByRole('checkbox', { name: TEST_ACCOUNTS });
       await box.waitFor();
       check('3 it is on by default', (await box.getAttribute('aria-checked')) === 'true');
+      const own = page.getByTestId('approvals-own-requests');
+      check('3 who approves their own requests points to the Roles page', (await own.getByRole('link', { name: 'Roles' }).getAttribute('href')) === '/govern/access/roles');
+      check('3 the text names the Approvals · Decide cell', /Approvals · Decide/.test(await own.innerText()) && !/Reviews row/.test(await own.innerText()));
+      check('3 there is no two-person switch', (await page.getByTestId('approvals-two-person-switch').count()) === 0);
       await box.click();
       await page.getByTestId('setting-approvals-test-accounts').getByRole('button', { name: 'Save' }).click();
       await page.getByText(/Saved/).first().waitFor();
@@ -111,7 +113,7 @@ await withUiStack(async (consoleUrl, stack) => {
       check('4 the approval rows moved to Approvals', old === 0, old);
     });
 
-    // Runs before step 5: that step lets approvers approve their own requests, which would skip the card.
+    // Runs before step 5: that step saves the switch on with a reviewer answering, which changes how the card is held.
     await step('7 A test run of a write on a live account shows the approval card; no refuses it, yes runs it', async () => {
       // A published Operations module with one write, on the fake bank, and no account of its own: a live account.
       const S = await as('s.adeyemi@harborpine.example', 'team_security');
@@ -161,19 +163,20 @@ await withUiStack(async (consoleUrl, stack) => {
       check('7 Allow sends the write to the app', answer.data?.decision === 'allow' && answer.data?.stubbed === false && answer.data?.reachedHost === stack.bank.host && answer.data?.request?.method === 'POST', answer.data);
     });
 
-    await step('5 A saved self-approval choice survives a reload', async () => {
+    await step('5 A saved reviewer role survives a reload', async () => {
       await page.goto(`${consoleUrl}/settings/approvals`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByRole('switch', { name: SWITCH }).click();
       await page.getByRole('radio', { name: /Ask a reviewer/i }).click();
       await page.getByRole('combobox', { name: 'Reviewer role' }).click();
-      await page.getByRole('option').first().click();
-      await page.getByRole('checkbox', { name: OWN }).click();
+      const option = page.getByRole('option').first();
+      const chosen = ((await option.textContent()) ?? '').trim();
+      await option.click();
       await page.getByTestId('setting-approvals-team').getByRole('button', { name: 'Save' }).click();
       await page.getByText(/Saved: Ask before/).first().waitFor();
       await page.reload({ waitUntil: 'domcontentloaded' });
-      const own = page.getByRole('checkbox', { name: OWN });
-      await own.waitFor();
-      check('5 self-approval is still on after a reload', (await own.getAttribute('aria-checked')) === 'true');
+      const role = page.getByRole('combobox', { name: 'Reviewer role' });
+      await role.waitFor();
+      check('5 the reviewer role is still chosen after a reload', ((await role.textContent()) ?? '').trim() === chosen, chosen);
     });
 
         await step('6 A member reads who can change a setting, with the right article', async () => {

@@ -13,9 +13,9 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, NotRequired, TypedDict, cast
 
-from ops_access import Access, policy, requester_may_decide
+from ops_access import Access
 from ops_agent_kernel.ports import ToolOutcome
-from ops_identity import ActingForPerson, Principal, principal_of
+from ops_identity import ActingForPerson, Principal
 from ops_policy import input_hash
 from ops_service_kit.errors import ApiError, Forbidden
 from ops_service_kit.http import Json, JsonValue
@@ -27,7 +27,7 @@ from .environments import TEST
 from .executor import ConsoleRan, ConsoleRefused, Executor, Trial, invalid_fields
 from .limits import amount_refusal
 from .modules.directory import Sees
-from .modules.policy import WriteApprovals, asker_refusal
+from .modules.policy import OwnRequests, WriteApprovals
 from .modules.review_events import SYSTEM_TOOLS
 from .opa import OpaClient
 from .registry import Resolved, ToolRegistry
@@ -284,11 +284,11 @@ class GatewayCalls:
         clock: Callable[[], float] = time.time,
         approvals: WriteApprovals | None = None,
         approver: Callable[[Principal], bool] | None = None,
-        requester_may_decide: Callable[[str, str | None], Awaitable[bool]] | None = None,
+        own_requests: OwnRequests | None = None,
     ) -> None:
         self.registry = registry
-        # The tenant's requesterMayDecide, read live at each call; without it the policy's default (off) holds.
-        self.requester_may_decide = requester_may_decide
+        # Whether a write's asker may approve it themselves, read live from platform-service at each call.
+        self.own_requests = own_requests or OwnRequests(None)
         self.log = log
         self.opa = opa
         self.executor = executor
@@ -367,32 +367,16 @@ class GatewayCalls:
             ran["replayOf"] = out.replay_of
         return ran
 
-    async def _with_live_policy(self, caller: Principal, team: str | None) -> Principal:
-        """`caller` carrying `team`'s requesterMayDecide as read at this call, in place of the token's copy. `team` is
-        the team the call asks in: a caller with no team of its own would otherwise read the workspace's value where
-        the team turned it off."""
-        if self.requester_may_decide is None:
-            return caller
-        may_decide = await self.requester_may_decide(caller.tenant_id, team)
-        return caller.model_copy(update={"policies": {**caller.policies, "requesterMayDecide": may_decide}})
-
     async def _asker_refusal(self, tenant_id: str, req: CallRequest) -> Forbidden | None:
-        """`can`'s own_request refusal when the call's approval names the person it acts for and the tenant's
-        requesterMayDecide, read now, does not let an asker decide; the token alone cannot say, since the policy may
-        have changed after it was minted."""
+        """403 `own_request` when the call's approval names the person it acts for and they may not decide their own
+        request in their team now; the token alone cannot say, since the cell may have been unticked after it was
+        minted."""
         if req.acting_for is None:
             return None
-        # With no live reader (dev sign-in) the asker's own token decides, as `can` reads it everywhere else.
-        asker = principal_of(req.acting_for, tenant_id)
-        may_decide = (
-            await self.requester_may_decide(tenant_id, req.acting_for.team_id)
-            if self.requester_may_decide is not None
-            else requester_may_decide(
-                policy(asker, "requesterMayDecide"), req.acting_for.team_id, "reviews", policy(asker, "approvalsFloor")
-            )
-        )
         approvers = _approvers(req.approval_token)
-        return asker_refusal(ACCESS, req.acting_for, tenant_id, approvers, may_decide=may_decide)
+        return await self.own_requests.refusal(
+            tenant_id, req.acting_for.team_id, req.acting_for.email, approvers, what="this write"
+        )
 
     async def call(
         self,
@@ -588,17 +572,14 @@ class GatewayCalls:
             confirmed_by_asker = answer["answer"] == "person"
         # When approval is on, roles decide: a person holding the approver role in the team is not
         # asked, and the log names them as the write's approver; anyone else needs an approval token.
-        # requesterMayDecide is read now: the token's copy dates from when it was minted and may since be off.
-        self_approved = bool(
-            needs
-            and req.approval_token is None
-            and self.approver
-            and self.approver(
-                await self._with_live_policy(
-                    caller, caller.team_id or (req.acting_for.team_id if req.acting_for else None) or row["team_id"]
-                )
+        # The token says whether the caller holds the cells; Approvals decide is confirmed now, since the token's copy
+        # dates from when it was minted and the cell may since be unticked.
+        self_approved = bool(needs and req.approval_token is None and self.approver and self.approver(caller))
+        if self_approved:
+            team = caller.team_id or (req.acting_for.team_id if req.acting_for else None) or row["team_id"]
+            self_approved = (
+                await self.own_requests.refusal(caller.tenant_id, team, caller.email, [caller.email]) is None
             )
-        )
         if (
             needs
             and confirmed_by_asker
@@ -642,6 +623,14 @@ class GatewayCalls:
             error = {"code": "gateway_refused", "message": "; ".join(decision.reasons)}
             await self.log.record(**row, outcome="refused", latency_ms=elapsed(), error=error)
             return Refused(call_id, 403, "gateway_refused", decision.reasons)
+        if access in WRITES and req.acting_for is not None:
+            ran = await self.own_requests.run_refusal(caller.tenant_id, req.acting_for)
+            if ran is not None:
+                row.update(decision="deny", reasons=[ran.message])
+                await self.log.record(
+                    **row, outcome="refused", latency_ms=elapsed(), error={"code": ran.code, "message": ran.message}
+                )
+                return Refused(call_id, ran.status, ran.code, [ran.message])
         asked_again = needs and not confirmed_by_asker and req.approval_token
         if asked_again and (own := await self._asker_refusal(caller.tenant_id, req)) is not None:
             # The token was valid when minted, but the person the call acts for approved it themselves and today's

@@ -32,7 +32,8 @@ Make every write in your team wait for a person, then approve one.
 - Writes run at once until a team turns approvals on. Reads never wait.
 - The approval is bound to the exact input the reviewer saw. If one character changes after approval, the approval no
   longer counts and the write is refused. An approval is good for 15 minutes.
-- By default the person who asked does not decide their own request.
+- The person who asked does not decide their own request, unless they are an Admin or hold a role with **Approve own
+  requests** ticked.
 - A decision is recorded with who made it, when and why, then the paused run resumes from where it stopped. Deciding the
   same task twice resumes it once.
 - A waiting run uses no worker. It can wait a minute or a week.
@@ -66,7 +67,7 @@ approve it; until then a task from an older version can only be rejected, and Ex
 | Per app | Settings › Approvals | A different answer for the apps you pick | The team setting |
 | Per tool | The tool's page, **Access and approval** | A different answer for one tool; the most specific level wins | The app's setting |
 | Who answers | Each level above | Don't ask, ask the person in the chat, or ask a reviewer with a role you choose | Don't ask |
-| People can approve their own requests | Settings › Approvals | The person who asked may also decide | Off |
+| Who may approve their own requests | Govern › Access › Roles, the **Approve own requests** row | The holders of a ticked role may decide a request they asked for | Admin only |
 | Test runs on live accounts ask first | Settings › Approvals | A test run that has no sandbox account asks before each write | On |
 | Step-up | Govern › Policies, or a tool's approval policy | The approver signs in again (within five minutes) before the decision counts | Off |
 | Two approvers | A tool's approval policy | Two different people must approve; the same person twice is refused. Use it for anything that moves money | Off |

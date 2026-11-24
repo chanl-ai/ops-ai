@@ -1127,7 +1127,7 @@ export interface components {
          * @description Where a file from a watched folder came from: the watch (its name is None once the watch is deleted), its path
          *     at the source, when the source last changed the version Files holds, when the source stopped listing it, and its
          *     access list as last read. `access_list` None means the source never said; [] means it lists nobody. The list is
-         *     recorded, not applied (exception E57).
+         *     recorded, not applied (exception E58).
          */
         FileSource: {
             /** Accesslist */

@@ -46,7 +46,7 @@ Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 
 # Where tools-service puts the app for the person (its card's appGroup): an app an admin acts on first is listed with
 # no tools, and one that is gone is not listed.
-ADMIN = "needs_admin"
+NEEDS_ADMIN = "needs_admin"
 PERSON = ("person", "person_or_team")
 
 
@@ -124,7 +124,7 @@ async def _by_app(rt: Runtime, me: Principal, team: str, agent_id: str, held: li
             continue
         modules = set(cast(list[str], card.get("moduleIds") or []))
         tools = [t for t in held if module_of.get(t) in modules]
-        if group == ADMIN:
+        if group == NEEDS_ADMIN:
             out.append(HeldApp(card, []))
         elif tools:
             out.append(HeldApp(card, tools))
@@ -149,7 +149,7 @@ async def _with_accounts(
     out: list[HeldApp] = []
     for a in apps:
         listed: list[Json] = []
-        if a.card["appGroup"] != ADMIN and a.card.get("kind") == "plugin":
+        if a.card["appGroup"] != NEEDS_ADMIN and a.card.get("kind") == "plugin":
             try:
                 listed = await rt.app_states.accounts(me.email or None, team, str(a.card["id"]))
             except ToolsUnavailable:
@@ -170,7 +170,7 @@ def _view(thread_id: str, apps: list[HeldApp], off: set[str]) -> Json:
                 "app_state": a.card["appState"],
                 "app_state_reason": a.card.get("appStateReason"),
                 "app_group": a.card["appGroup"],
-                "on": a.card["appGroup"] != ADMIN and not set(a.tools) <= off,
+                "on": a.card["appGroup"] != NEEDS_ADMIN and not set(a.tools) <= off,
                 "personal": a.card.get("signIn") in PERSON,
                 "tools": a.tools,
                 "account": a.account,
@@ -233,7 +233,7 @@ async def set_connectors(rt: Rt, me: Me, thread_id: str, body: ConnectorsIn) -> 
     on. 422 naming the app for one this chat does not hold."""
     row, agent, limits = await _thread(rt, me, thread_id)
     apps = await _by_app(rt, me, str(row.team_id), agent.id, list(limits.switchable_tool_ids))
-    held = {str(a.card["id"]): a for a in apps if a.card["appGroup"] != ADMIN}
+    held = {str(a.card["id"]): a for a in apps if a.card["appGroup"] != NEEDS_ADMIN}
     if unknown := [a for a in body.off if a not in held]:
         raise Unprocessable(
             f"This chat has no connector {unknown[0]} to turn off.",

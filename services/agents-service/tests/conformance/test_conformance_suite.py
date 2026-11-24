@@ -333,7 +333,7 @@ async def wire_waiting(a: Adapter) -> str:
 
 
 # Neither approver started the run: the run acts for the dev caller, and the gateway refuses an approval the person a
-# call acts for gave themselves while requesterMayDecide is off, its default.
+# call acts for gave themselves unless they hold Approvals decide.
 FIRST = "kim@harborpine.example"
 SECOND = "lee@harborpine.example"
 

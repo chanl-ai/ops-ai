@@ -16,8 +16,9 @@ class AcceptIn(TypedDict, closed=True):
 class AccessCheckIn(TypedDict, closed=True):
     action: str
     area: str
+    email: NotRequired[str | None]
     owner: NotRequired[str | None]
-    personId: str
+    personId: NotRequired[str | None]
     requestedBy: NotRequired[str | None]
 
 

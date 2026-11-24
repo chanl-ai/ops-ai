@@ -3,12 +3,16 @@ card). Their yes is a flag on the run; without it, or for any answer but "ask th
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import AsyncIterator
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from .test_calls import Gateway, gateway  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from ops_tools.modules.policy import OwnRequests
+
+from .test_apply_tool_access import Platform
+from .test_calls import Gateway, serve_gateway
 from .test_test_run_writes import BASE, HOLD, _on_accounts, approver  # pyright: ignore[reportPrivateUsage]
 from .test_write_approval_gateway import TeamAsksReviewer
 
@@ -19,15 +23,19 @@ async def _team_saved_nothing(self: Any, tenant_id: str, team_id: str | None) ->
 
 @pytest.fixture(autouse=True)
 def nobody_approves_their_own(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The workspace default: an approver does not approve their own write, so only the person's yes can let it run;
-    the team has saved nothing, so the test-run rule alone asks the person."""
-    monkeypatch.setenv("OPS_DEV_POLICIES", '{"requesterMayDecide": false}')
+    """The team has saved nothing, so the test-run rule alone asks the person."""
     monkeypatch.setattr(TeamAsksReviewer, "levels", _team_saved_nothing)
 
 
 @pytest.fixture
-async def g(gateway: Gateway) -> Gateway:  # noqa: F811
-    return gateway
+async def g(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]
+) -> AsyncIterator[Gateway]:
+    """The person who pressed Run does not hold Approvals decide, as platform-service's access check answers, so only
+    their yes can let the write run."""
+    own = OwnRequests(cast(Any, Platform(set())))
+    async with serve_gateway(engine, seed, tenant, catalog_tools, own_requests=own) as gw:
+        yield gw
 
 
 async def _run(g: Gateway, **extra: Any) -> dict[str, Any]:

@@ -526,6 +526,9 @@ class Settings(BaseSettings):
             # files:edit: a Save data on file step records what was read on the file.
             # files:check: a Files changed trigger asks its watched folder's check on the workflow's schedule.
             "agents": [
+                # access:view: platform-service's access check, asked when a workflow step approving a write is
+                # reached, whether the run's starter holds Approvals · decide in its team now.
+                "access:view",
                 "files:view",
                 "files:create",
                 "files:edit",
@@ -579,6 +582,9 @@ class Settings(BaseSettings):
                 "workflows:create",
                 "guardrails:create",
                 "workflows:run",
+                # access:view: platform-service's access check, asked when a request is decided whether its asker
+                # holds Approvals decide there now (modules/policy.py `OwnRequests`).
+                "access:view",
             ],
             # events:emit: it reports a deleted file as a service event, which purges what was derived from it, and a
             # watched folder's finished check. tools:view, tools:run: a watched folder's check reads the source

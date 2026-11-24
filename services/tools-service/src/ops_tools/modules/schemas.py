@@ -189,7 +189,7 @@ class ModuleOperation(Out):
     waits: bool | None = None
     amount_max: float | None = None
     # The write approval policy: distinct approvers (1 or 2) and the team they come from. Whether the person who asked
-    # may approve is the tenant's requesterMayDecide policy, not a per-operation setting.
+    # may approve is the Approvals decide cell in the deciding team, not a per-operation setting.
     approvers: int
     # None on a plugin's module, which no team owns: the run's own team approves.
     approver_team: str | None

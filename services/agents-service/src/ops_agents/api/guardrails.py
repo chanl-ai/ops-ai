@@ -188,7 +188,7 @@ async def decide(  # noqa: PLR0917 - the route passes each part of the decision
     reason: str | None,
 ) -> None:
     """A guardrail publish is decided by a reviewer or admin of the guardrail's team, and not by who asked or
-    saved the version while requesterMayDecide is off, as an agent's is."""
+    saved the version unless they hold Approvals decide in that team, as an agent's is."""
     from .publish_reviews import require_not_asker, require_publish_reviewer  # noqa: PLC0415 - imports this module
 
     reg = agent_registry(rt)

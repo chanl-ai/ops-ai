@@ -9,10 +9,14 @@ from typing import Any
 
 from httpx import AsyncClient
 
+from ..conftest import signed_in
 from .test_agent_registry import _app  # pyright: ignore[reportPrivateUsage]
 
 LEE = {"X-Dev-User": "lee@harborpine.example"}
 KIM = {"X-Dev-User": "kim@harborpine.example"}
+# The dev user and Lee signed in as Reviewers: they decide the team's reviews but not their own requests.
+ASKER_SIGNED_IN = signed_in("j.richardson@harborpine.example")
+LEE_SIGNED_IN = signed_in("lee@harborpine.example")
 
 
 def _ok(r: Any, status: int = 200) -> Any:
@@ -26,18 +30,16 @@ async def _decide(c: AsyncClient, rid: str, decision: str, reason: str | None = 
 
 
 async def test_an_agent_publish_waits_for_a_second_person(tmp_path: Path) -> None:
-    async with _app(
-        str(tmp_path / "db.sqlite"), registry_auto_approve=False, dev_policies={"requesterMayDecide": False}
-    ) as c:
+    async with _app(str(tmp_path / "db.sqlite"), registry_auto_approve=False) as c:
         # Lee saves the version, the dev user asks to publish it, and Kim is the only one left who may decide.
         new = {"name": "Checker", "role": "Checks"}
         agent = _ok(await c.post("/v1/agents", json=new, headers=LEE), 201)
         review = _ok(await c.post(f"/v1/agents/{agent['id']}/publish-requests", json={"version": 1, "note": "go"}), 201)
         assert review["status"] == "pending"
 
-        own = await c.post(f"/v1/publish-requests/{review['id']}/decision", json={"decision": "approved"})
+        own = await _decide(c, review["id"], "approved", **ASKER_SIGNED_IN)
         assert (own.status_code, own.json()["error"]["code"]) == (403, "own_request"), own.text
-        author = await _decide(c, review["id"], "approved")
+        author = await _decide(c, review["id"], "approved", **LEE_SIGNED_IN)
         assert (author.status_code, author.json()["error"]["code"]) == (403, "own_request"), author.text
         assert agent["id"] not in {a["id"] for a in _ok(await c.get("/chat/agents"))}
 
@@ -75,9 +77,7 @@ async def test_a_rejected_workflow_publish_needs_a_reason_and_publishes_nothing(
 async def test_reviews_list_and_decide_publish_requests_under_the_publish_rules(tmp_path: Path) -> None:
     # The console's Reviews page reads one list; a publish request is a row there and is decided from there, held to
     # the same rules as its own decide route.
-    async with _app(
-        str(tmp_path / "db.sqlite"), registry_auto_approve=False, dev_policies={"requesterMayDecide": False}
-    ) as c:
+    async with _app(str(tmp_path / "db.sqlite"), registry_auto_approve=False) as c:
         new = {"name": "Checker", "role": "Checks"}
         agent = _ok(await c.post("/v1/agents", json=new, headers=LEE), 201)
         rid = _ok(await c.post(f"/v1/agents/{agent['id']}/publish-requests", json={"version": 1, "note": "go"}), 201)[
@@ -90,8 +90,8 @@ async def test_reviews_list_and_decide_publish_requests_under_the_publish_rules(
         assert listed["viewCounts"]["open"] >= 1 and listed["facets"]["kind"].get("agent_publish") == 1
         assert _ok(await c.get(f"/reviews/{rid}"))["id"] == rid
 
-        own = await c.post(f"/reviews/{rid}/decision", json={"decision": "approved"})
-        assert own.status_code == 403, own.text
+        own = await c.post(f"/reviews/{rid}/decision", json={"decision": "approved"}, headers=ASKER_SIGNED_IN)
+        assert (own.status_code, own.json()["error"]["code"]) == (403, "own_request"), own.text
         no_reason = await c.post(f"/reviews/{rid}/decision", json={"decision": "returned"}, headers=KIM)
         assert no_reason.status_code == 400 and no_reason.json()["error"]["code"] == "reason_required"
         decided = _ok(await c.post(f"/reviews/{rid}/decision", json={"decision": "approved"}, headers=KIM))

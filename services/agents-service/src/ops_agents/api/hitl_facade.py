@@ -1289,12 +1289,12 @@ async def check_thread_decider(
     rt: Runtime, approver: Principal, row: Json, payload: ThreadPayload | Json, calls: Sequence[object]
 ) -> None:
     """Who may decide a paused thread step: a reviewer or admin of the thread's team, whatever the writes it decides
-    (`calls`) are, and not who asked for it while requesterMayDecide is off."""
+    (`calls`) are, and not who asked for it unless they hold Approvals decide in the thread's team."""
     del calls
     team = str(row["team_id"])
     if payload.get("ask_first"):
-        # "Ask the person" is a confirmation: the asker alone answers it, whatever roles they hold and whatever
-        # requesterMayDecide says. Nobody else may answer for them.
+        # "Ask the person" is a confirmation: the asker alone answers it, whatever roles they hold and whether or not
+        # they hold Approvals decide. Nobody else may answer for them.
         require_asker(approver, requester_of(row, payload), what="this")
         return
     require_reviews_decide(review_teams(approver), team, "this review")

@@ -33,7 +33,7 @@ class ToolsUnavailable(ApiError):
 class WritePolicy:
     """How a write to a tool is approved (docs/architecture/tool-lifecycle.md, "Write approval"): `approvers` distinct
     people of the run's team (an approving team tools-service still names is ignored). Whether the person who
-    asked may be one is the tenant's requesterMayDecide policy, not the tool's."""
+    asked may be one is the Approvals decide cell in the run's team, not the tool's."""
 
     access: str
     approvers: int

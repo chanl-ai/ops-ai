@@ -4,8 +4,8 @@
 - an app set to ask a reviewer (appChangesByApp) holds its writes for a token;
 - an app set to don't ask runs its write where the team asks a reviewer, and a team policy that cannot be read refuses
   the write (approval_rules_unavailable);
-- a person who decides the team's reviews approves their own write only while requesterMayDecide is on (off by
-  default), and one who does not is never let through (an imported write starts waiting, test_import).
+- a person approves their own write only while they hold Approvals decide in the team (Admin only by default), and
+  one who does not is never let through (an imported write starts waiting, test_import).
 
 Decided by the real Rego in OPA, on a seeded tenant's registry.
 """
@@ -13,16 +13,21 @@ Decided by the real Rego in OPA, on a seeded tenant's registry.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping, Sequence
+from datetime import UTC, datetime
 from typing import Any, cast
 
+import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_access import Access, EffectiveAnswer
-from ops_identity import Principal
+from ops_identity import Principal, dev_service_signer, mint_service_token
+from ops_policy import mint
 from ops_tools.modules.policy import WriteApprovals, approves_own_writes
+from ops_tools.modules.seed import load
 from ops_tools.store.modules import ModuleStore
 
+from .conftest import build_app, opa_client
 from .test_write_approval_gateway import Call, _gateway, reasons  # pyright: ignore[reportPrivateUsage]
 
 CASE = {"subject": "Card stopped working abroad"}
@@ -136,7 +141,7 @@ async def test_a_workflows_write_is_asked_as_a_workflow_and_goes_to_a_reviewer_w
     assert team.asked == [("workflow", "reviewer")], team.asked
 
 
-def _person(role: str, policies: dict[str, Any] | None = None) -> Principal:
+def _person(role: str) -> Principal:
     return Principal(
         kind="person",
         sub="usr_x",
@@ -148,18 +153,53 @@ def _person(role: str, policies: dict[str, Any] | None = None) -> Principal:
         roles={"team_ops": role},
         scopes=[],
         auth_method="session",
-        policies=policies or {},
     )
 
 
-def test_only_a_person_who_decides_the_teams_reviews_approves_their_own_write() -> None:
+def test_only_a_person_holding_approvals_decide_approves_their_own_write() -> None:
     access = Access(security_team="team_security")
-    loose = {"requesterMayDecide": True}
-    assert approves_own_writes(access, _person("admin", loose)) and approves_own_writes(
-        access, _person("approver", loose)
+    assert approves_own_writes(access, _person("admin")), "an Admin holds Approvals decide by default"
+    # A Reviewer decides the team's reviews but not their own request: someone else decides a reviewer's write.
+    assert not approves_own_writes(access, _person("reviewer"))
+    assert not approves_own_writes(access, _person("viewer")), "a viewer is asked like anyone else"
+
+
+class OneTeamAsks(WriteApprovals):
+    """Only `team` asks a reviewer; any other team, or none, asks nobody. Records the teams the gateway read."""
+
+    def __init__(self, team: str) -> None:
+        super().__init__(cast(Any, None))
+        self.team = team
+        self.read: list[str | None] = []
+
+    async def levels(self, tenant_id: str, team_id: str | None) -> tuple[Any, dict[str, Any]]:
+        self.read.append(team_id)
+        return (ASKS_REVIEWER if team_id == self.team else {}), {}
+
+
+async def test_the_approval_rules_are_read_for_the_asking_team(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]
+) -> None:
+    """agents-service's token for a run names the run's team, and the person the run acts for must ask from that same
+    team (or the token is refused). The rules are read for that team, never for the app's team or for none, which here
+    would let the write run unapproved."""
+    asking = "team_lending"
+    service = mint_service_token(
+        dev_service_signer(), service="agents", audience="tools", tenant_id=tenant, team_id=asking
     )
-    assert not approves_own_writes(access, _person("viewer", loose)), "a viewer is asked like anyone else"
-    # The two-person rule on: someone else decides a reviewer's write; an Admin of the team still approves her own.
-    strict = {"requesterMayDecide": False}
-    assert not approves_own_writes(access, _person("approver", strict))
-    assert approves_own_writes(access, _person("admin", strict))
+    claims = {
+        "sub": "usr_dana", "email": "dana@bank.test", "name": "Dana", "tenant_id": tenant, "team_id": asking,
+        "kind": "acting_for", "act": {"sub": "service:agents"}, "aud": "tools",
+    }  # fmt: skip
+    headers = {"Authorization": f"Bearer {service}", "X-Acting-For": mint(claims, dev_service_signer(), ttl_s=600)}
+    rules = OneTeamAsks(asking)
+    await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
+    async with opa_client() as opa:
+        app = build_app(engine, seed, tenant, opa=opa, write_approvals=rules)
+        async with (
+            app.router.lifespan_context(app),
+            httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tools") as client,
+        ):
+            body = {"tool": "open_case", "input": CASE, "key": "asking-team-1", "runContext": {"act": "test"}}
+            r = await client.post("/v1/calls", json=body, headers=headers)
+    assert (r.status_code, reasons(r)) == (403, ["write needs an approval token"]), (r.text, rules.read)

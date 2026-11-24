@@ -1626,10 +1626,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                     "description": "Hours a person has to decide; the workspace's review deadline when empty",
                 },
                 # People who may not decide this review whatever their role, such as whoever saved the version it
-                # approves. Only ever adds refusals; the run's starter is refused separately by policy.
+                # approves. Only ever adds refusals; the run's starter is refused separately unless they hold
+                # Approvals decide in the deciding team.
                 "notDecidedBy": {"description": "Emails who may not decide it: " + _MAPPING},
                 # Who asked for the decision when the run's starter is not them (an event a service reported for a
-                # person): refused as the starter is, only while the tenant's requesterMayDecide is off.
+                # person): refused as the starter is, unless they hold Approvals decide in the deciding team.
                 "requestedBy": {"description": "Emails who asked for it: " + _MAPPING},
                 # A reminder while the review still waits: a task.reminder service event every N hours, which a
                 # system workflow the team configures may act on; the review keeps waiting.

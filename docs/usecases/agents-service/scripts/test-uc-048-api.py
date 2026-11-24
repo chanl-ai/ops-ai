@@ -5,13 +5,8 @@ and the scripted model; the operations call the fake bank on https, so "the call
 from __future__ import annotations
 
 import json
-import os
 import time
 from typing import Any
-
-# Roles decide approvals and the dev identity may decide, so chat would approve its own write. This use case
-# proves the card, so it runs a workspace where a requester may not decide their own request.
-os.environ["OPS_DEV_POLICIES"] = '{"requesterMayDecide": false}'
 
 from fake_bank_https import HOST, fake_bank
 from usecase_harness import (

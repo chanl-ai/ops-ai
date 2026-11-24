@@ -86,7 +86,7 @@ async def open_for(rt: Runtime, svc: Caller, input_body: Json) -> PublishRequest
     service holding `tools:publish`, which only tools-service's scope cap allows (Settings.service_scopes), and only a
     tool module of the team its token is scoped to. Who asked is the body's `requestedBy`, recorded as the requester
     Human Tasks shows; the service that opened it is the body's `openedBy`. They count as the asker, so
-    requesterMayDecide applies to them."""
+    they decide it only while they hold Approvals decide in the module's team."""
     named = input_body.get("teamId")
     if not svc.team_id or (named and named != svc.team_id):
         raise Forbidden("A review is opened for the team the token is scoped to.", code="team_forbidden")

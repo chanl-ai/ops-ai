@@ -19,26 +19,28 @@ from ops_agents.store.base import metadata
 from ops_agents.store.events import thread_events
 from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.settings import Settings
-from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, step_up
+from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, signed_in, step_up, with_sign_in
 
 ASKER = "dana@harborpine.example"
 
 
-def app_for(**settings: Any) -> Any:
+def app_for(**fields: Any) -> Any:
+    settings = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, **fields)
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     app = create_app(
-        Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, **settings),
+        settings,
         model=scripted_model(),
         engine=engine,
         checkpointer=InMemorySaver(),
         graph_models=FakeGraphModels(),
         knowledge=fixture_knowledge(),
+        auth=with_sign_in(settings),
     )
     return app, engine
 
 
-async def client_for(**settings: Any) -> AsyncIterator[AsyncClient]:
-    app, engine = app_for(**settings)
+async def client_for(**fields: Any) -> AsyncIterator[AsyncClient]:
+    app, engine = app_for(**fields)
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
         await c.run_sync(engine_metadata.create_all)
@@ -52,14 +54,7 @@ async def client_for(**settings: Any) -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
-    # A workspace that turned requesterMayDecide on; `strict` is the default.
-    async for c in client_for(dev_policies={"requesterMayDecide": True}):
-        yield c
-
-
-@pytest.fixture
-async def strict() -> AsyncIterator[AsyncClient]:
-    async for c in client_for(dev_policies={"requesterMayDecide": False}):
+    async for c in client_for():
         yield c
 
 
@@ -104,11 +99,10 @@ async def test_a_gated_call_logs_the_whole_call_and_who_asked(client: AsyncClien
     assert waiting["payload"]["requested_by"] == ASKER
 
 
-async def test_the_asker_decides_their_chat_request_only_while_policy_allows(
-    client: AsyncClient, strict: AsyncClient
-) -> None:
-    for c, expected in ((strict, 403), (client, 200)):
-        tid = await agent_run(c, "Place a 24-hour hold on wire W-88213")
-        body = {"decision": "approved", "stepUpToken": await step_up(c, ASKER)}
-        res = await c.post(f"/reviews/{tid}/decision", json=body, headers={"X-Dev-User": ASKER})
+async def test_the_asker_decides_their_chat_request_only_while_they_hold_approvals_decide(client: AsyncClient) -> None:
+    # Signed in as a Reviewer the asker lacks the cell; as the dev caller she holds every cell.
+    for who, expected in ((signed_in(ASKER), 403), ({"X-Dev-User": ASKER}, 200)):
+        tid = await agent_run(client, "Place a 24-hour hold on wire W-88213")
+        body = {"decision": "approved", "stepUpToken": await step_up(client, ASKER)}
+        res = await client.post(f"/reviews/{tid}/decision", json=body, headers=who)
         assert res.status_code == expected, res.text

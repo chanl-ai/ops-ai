@@ -8,7 +8,7 @@ Status: current. Id: `uc-002`. Service: `agents-service`. Layers: api, ui.
 |---|---|
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
 | Free use-case ports | agents :8790, tools :8791, console :3018 |
-| A requester may decide | The workspace policy `requesterMayDecide` is off by default and the asker then sees no Approve; the ui script turns it on through platform-service as the workspace admin (the api script sets it with `OPS_DEV_POLICIES`) |
+| A requester may decide | Whether the asker decides their own request is the Approvals · decide cell of their role. The ui script has the workspace admin tick it on the Builder role (the api script's dev caller holds every cell) |
 
 The script starts its own services on the scripted model; no model key is needed.
 

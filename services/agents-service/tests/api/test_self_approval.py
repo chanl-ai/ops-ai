@@ -1,6 +1,5 @@
-"""The person who asked a chat agent decides its action unless the tenant switched requesterMayDecide off, by
-failure mode: the asker refused while the policy is open, the asker deciding once it is off, and a namesake taken for
-the asker."""
+"""The person who asked a chat agent decides its action only while they hold Approvals decide, by failure mode: the
+asker who holds it refused, the asker without it deciding, and a namesake taken for the asker."""
 
 from __future__ import annotations
 
@@ -16,17 +15,26 @@ from ops_agents.api.app import create_app
 from ops_agents.store.base import metadata
 from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.settings import Settings
-from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events, step_up
+from tests.conftest import (
+    SEED,
+    FakeGraphModels,
+    fixture_knowledge,
+    scripted_model,
+    signed_in,
+    sse_events,
+    step_up,
+    with_sign_in,
+)
 
 DANA, LEE = "dana@harborpine.example", "lee@harborpine.example"
 
 
-async def client(**policies: bool) -> AsyncIterator[AsyncClient]:
+async def client() -> AsyncIterator[AsyncClient]:
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
         await c.run_sync(engine_metadata.create_all)
-    settings = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies=policies)
+    settings = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED)
     app = create_app(
         settings,
         model=scripted_model(),
@@ -34,6 +42,7 @@ async def client(**policies: bool) -> AsyncIterator[AsyncClient]:
         checkpointer=InMemorySaver(),
         graph_models=FakeGraphModels(),
         knowledge=fixture_knowledge(),
+        auth=with_sign_in(settings),
     )
     async with (
         app.router.lifespan_context(app),
@@ -44,14 +53,14 @@ async def client(**policies: bool) -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture
 async def strict() -> AsyncIterator[AsyncClient]:
-    async for c in client(requesterMayDecide=False):
+    async for c in client():
         yield c
 
 
 @pytest.fixture
 async def open_() -> AsyncIterator[AsyncClient]:
-    # A workspace that turned requesterMayDecide on; off is the default.
-    async for c in client(requesterMayDecide=True):
+    # The dev caller holds every cell, Approvals decide among them.
+    async for c in client():
         yield c
 
 
@@ -76,8 +85,8 @@ async def test_while_the_policy_is_open_the_person_who_asked_approves(open_: Asy
     assert own.status_code == 200, own.text
 
 
-async def test_the_person_who_asked_cannot_approve(strict: AsyncClient) -> None:
-    as_dana = {"X-Dev-User": DANA}
+async def test_the_person_who_asked_cannot_approve_without_approvals_decide(strict: AsyncClient) -> None:
+    as_dana = signed_in(DANA)
     res = await strict.post("/chat/threads", json={"agentId": "ag_fraud", "kbIds": ["kb_people"]}, headers=as_dana)
     thread = res.json()["data"]
     sent = await strict.post(

@@ -38,7 +38,7 @@ async def test_a_grant_saved_while_an_older_publish_waits_is_what_goes_live(tmp_
     """A publish request opened earlier (a seed change, a colleague's) waits for version N; the builder grants a tool,
     saves N+1 and asks to publish it. Approving must put N+1 live, or chat runs N without the tool."""
     tools = Tools({"local": [op("lookup_account"), op("list_cases"), op("read_file")]})
-    async with _app(tmp_path, registry_auto_approve=False, dev_policies={"requesterMayDecide": False}) as (c, app):
+    async with _app(tmp_path, registry_auto_approve=False) as (c, app):
         client = httpx.AsyncClient(transport=httpx.MockTransport(tools.handler), base_url="http://tools")
         service = ServiceClient(client, dev_service_signer(), "agents", "tools", tenant=current_tenant)
         app.state.runtime.tool_directory = ToolsOperations(service, ttl_s=30, clock=Clock())

@@ -1,7 +1,7 @@
 """A workflow step approving a write is decided as the starter's own when they may approve it, on PostgreSQL with the
-real worker, by failure mode: a run started by an approver still waits for a person; a
-run started by someone who may not approve skips the person; and a write two people approve, or one that asks for a
-step-up, skips them."""
+real worker, by failure mode: a run started by an approver still waits for a person; a run started by someone who may
+not approve skips the person; the flag a run stored at its start decides the step, so a cell unticked since still
+self-approves; and a write two people approve, or one that asks for a step-up, skips them."""
 
 from __future__ import annotations
 
@@ -74,6 +74,17 @@ class _Gateway:
         return {"name": tool, "access": "write", "approval": self.approval}
 
 
+class _Access:
+    """platform-service's access check: whether the starter holds Approvals · decide in the run's team now."""
+
+    def __init__(self, holds: bool) -> None:
+        self.holds = holds
+
+    async def post(self, path: str, json: Any = None, *, tenant: str, team: str | None = None) -> Any:
+        assert path == "/v1/access/check" and json["email"] == json["requestedBy"], (path, json)
+        return {"allowed": self.holds, "refusedBy": None if self.holds else {"code": "own_request"}}
+
+
 @pytest.fixture
 async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
     e = create_async_engine(database_url)
@@ -81,9 +92,10 @@ async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
     await e.dispose()
 
 
-def _worker(engine: AsyncEngine, tools: CountingTools, approval: dict[str, Any]) -> Worker:
+def _worker(engine: AsyncEngine, tools: CountingTools, approval: dict[str, Any], holds: bool) -> Worker:
     owner = f"test-{uuid4().hex[:6]}"
-    starters = StarterApprovals(engine, _Gateway(approval))  # pyright: ignore[reportArgumentType]
+    access = _Access(holds)
+    starters = StarterApprovals(engine, _Gateway(approval), access=access)  # pyright: ignore[reportArgumentType]
     host = WorkerHost(
         tx=EngineTransactions(engine),
         registry=default_registry(),
@@ -98,8 +110,11 @@ def _worker(engine: AsyncEngine, tools: CountingTools, approval: dict[str, Any])
     return Worker(host)
 
 
-async def _run(engine: AsyncEngine, *, approver: bool, approval: dict[str, Any]) -> tuple[dict[str, Any], int, str]:
-    """Starts a run as an approver or not, drains the worker; the run, how many tool calls went out, its tenant."""
+async def _run(
+    engine: AsyncEngine, *, approver: bool, approval: dict[str, Any], holds: bool | None = None
+) -> tuple[dict[str, Any], int, str]:
+    """Starts a run as an approver or not (the flag stored at its start), drains the worker with the live check
+    answering `holds` (the flag's value unless given); the run, how many tool calls went out, its tenant."""
     tenant, tx, tools = f"t-{uuid4().hex[:8]}", EngineTransactions(engine), CountingTools()
     with tenant_scope(tenant):
         version, _ = await DefinitionStore(tx).publish(
@@ -121,7 +136,7 @@ async def _run(engine: AsyncEngine, *, approver: bool, approval: dict[str, Any])
                 "started_by_approver": approver,
             },
         )
-    await drain(_worker(engine, tools, approval))
+    await drain(_worker(engine, tools, approval, approver if holds is None else holds))
     with tenant_scope(tenant):
         run = await RunStore(tx).get(run_id) or {}
     return run, len(tools.calls), tenant
@@ -137,6 +152,13 @@ async def test_an_approvers_run_writes_without_waiting_and_the_approval_is_their
 
 async def test_a_run_started_by_someone_who_may_not_approve_waits(engine: AsyncEngine) -> None:
     run, sent, _ = await _run(engine, approver=False, approval={"approvers": 1})
+    assert (run["status"], run["waiting"]["node"], sent) == ("waiting", "review", 0), run
+
+
+async def test_a_cell_unticked_after_the_run_started_leaves_its_step_waiting(engine: AsyncEngine) -> None:
+    """The flag stored at the run's start says the starter approves; the live check says they no longer hold
+    Approvals · decide, so the step waits for someone else (L12)."""
+    run, sent, _ = await _run(engine, approver=True, holds=False, approval={"approvers": 1})
     assert (run["status"], run["waiting"]["node"], sent) == ("waiting", "review", 0), run
 
 

@@ -1,23 +1,27 @@
 """An approval the person who asked gave themselves, checked again when the write is sent, by failure mode: the
-asker approved while requesterMayDecide let them (or while the write needed no reviewer), the policy changed before the
-call, and the gateway still ran the write on that token. The gateway reads today's policy at the call, so the token
-counts only while the asker may still decide, or is an Admin of the team. Rig: test_calls' gateway and fake bank; the
-person is acting-for."""
+asker approved while they held Approvals decide (or while the write needed no reviewer), the cell was unticked before
+the call, and the gateway still ran the write on that token. The gateway asks platform-service's access check at the
+call, so the token counts only while the asker holds the cell now, whatever roles their acting-for token claims. Rig:
+test_calls' gateway and fake bank with a fake access check; the person is acting-for."""
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import AsyncIterator
+from typing import Any, cast
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import dev_service_signer, mint_service_token
 from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_policy import mint as mint_claims
 from ops_service_kit.ids import input_hash
+from ops_tools.modules.policy import OwnRequests
 from ops_tools.tokens import Binding, mint
 
 from .conftest import REVIEW_KEY
-from .test_calls import Gateway, gateway
+from .test_apply_tool_access import Platform
+from .test_calls import Gateway, gateway, serve_gateway
 from .test_write_approval_gateway import TeamAsksReviewer
 
 __all__ = ["gateway"]  # the fixture, used by name
@@ -62,40 +66,44 @@ async def send(g: Gateway, approver: str, **held: Any) -> Any:
     return await g.client.post("/v1/calls", json=body, headers=acting_for_asker(g.tenant, **held))
 
 
-@pytest.mark.usefixtures("two_person_rule_on")
-async def test_the_askers_own_approval_is_refused_once_the_policy_no_longer_lets_them_decide(gateway: Gateway) -> None:
-    # The token was minted while the asker could decide; at the call the team's two-person rule is on.
-    refused = await send(gateway, ASKER)
+@pytest.fixture
+def holders() -> set[str]:
+    """Who holds Approvals decide in the module's team, as platform-service's access check answers now."""
+    return set()
+
+
+@pytest.fixture
+async def checked(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]], holders: set[str]
+) -> AsyncIterator[Gateway]:
+    own = OwnRequests(cast(Any, Platform(holders)))
+    async with serve_gateway(engine, seed, tenant, catalog_tools, own_requests=own) as g:
+        yield g
+
+
+async def test_the_askers_own_approval_is_refused_once_they_no_longer_hold_the_cell(checked: Gateway) -> None:
+    # The token was minted while the asker could decide; at the call they no longer hold Approvals decide.
+    refused = await send(checked, ASKER)
     assert refused.status_code == 403, refused.text
     assert refused.json()["error"]["code"] == "own_request", refused.text
-    assert not gateway.received, "the write never reached the system"
+    assert not checked.received, "the write never reached the system"
 
 
-async def test_another_persons_approval_still_runs_the_write(gateway: Gateway) -> None:
-    ran = await send(gateway, "m.okafor@bank.test")
+async def test_another_persons_approval_still_runs_the_write(checked: Gateway) -> None:
+    ran = await send(checked, "m.okafor@bank.test")
     assert ran.status_code == 200, ran.text
 
 
-@pytest.mark.usefixtures("requester_may_decide_on")
-async def test_the_askers_own_approval_runs_while_the_policy_lets_them_decide(gateway: Gateway) -> None:
-    ran = await send(gateway, ASKER)
+async def test_the_askers_own_approval_runs_while_they_hold_the_cell(checked: Gateway, holders: set[str]) -> None:
+    holders.add(ASKER)
+    ran = await send(checked, ASKER)
     assert ran.status_code == 200, ran.text
 
 
-@pytest.mark.usefixtures("two_person_rule_on")
-async def test_an_admins_own_approval_runs_while_the_two_person_rule_is_on(gateway: Gateway) -> None:
-    ran = await send(gateway, ASKER, access={"team_platform": ["admin"]})
-    assert ran.status_code == 200, ran.text
-
-
-@pytest.fixture
-def two_person_rule_on(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPS_DEV_POLICIES", '{"requesterMayDecide": false}')
-
-
-@pytest.fixture
-def requester_may_decide_on(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPS_DEV_POLICIES", '{"requesterMayDecide": true}')
+async def test_an_acting_for_token_claiming_admin_does_not_decide_without_the_cell(checked: Gateway) -> None:
+    refused = await send(checked, ASKER, access={"team_platform": ["admin"]})
+    assert refused.status_code == 403, refused.text
+    assert refused.json()["error"]["code"] == "own_request", refused.text
 
 
 @pytest.fixture

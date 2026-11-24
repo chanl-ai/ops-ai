@@ -24,7 +24,7 @@ from ops_service_kit.ids import new_id, now_iso
 from .conftest import DEMO_PASSWORD, SignInRig, seed_tx
 
 DEFAULTS: dict[str, Any] = {
-    "requesterMayDecide": True,
+    "requesterMayDecide": False,
     # No floor under the teams' approval rules until the Security team sets one.
     "approvalsFloor": {},
     "extractionFloor": 0.8,
@@ -245,37 +245,17 @@ async def test_a_team_admin_sets_their_own_teams_publish_reviews_and_no_other_te
     assert live.json()["data"]["value"][team_a] == {"agents": "always"}, live.text
 
 
-async def test_a_team_admin_sets_their_teams_approval_rules_and_the_security_teams_floor_stops_a_looser_one(
-    signin: SignInRig,
-) -> None:
-    """D5: the team's approval rules are `approvals.manage` in the team, which its admin holds and a builder does not;
-    the Security team's floor (approvalsFloor) refuses a team's looser value and leaves a stricter one. Until every
-    caller passes the record's own area, the only area a team may turn on alone is reviews."""
-    team, ana = await _team_admin(signin, "ana")
-    _, bo = await _team_admin(signin, "bo", role="builder")
-    for unread in ({"agents": True}, {}):
-        r = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": unread}, headers=ana)
-        assert (r.status_code, r.json()["error"]["code"]) == (400, "policy_value"), r.text
-    on = {"value": {"reviews": True}}
-    put = await signin.public.put("/v1/policies/requesterMayDecide", json=on, headers=ana)
-    assert put.status_code == 200 and put.json()["data"]["value"] == {team: {"reviews": True}}, put.text
-    assert put.json()["data"]["changedBy"] == "approvals.manage"
-    refused = await signin.public.put("/v1/policies/requesterMayDecide", json=on, headers=bo)
-    assert refused.status_code == 403, refused.text
-    floor = {"value": {"requesterMayDecide": False}}
-    assert (await signin.public.put("/v1/policies/approvalsFloor", json=floor, headers=ana)).status_code == 403
-    sec = await signin.security_admin_only(f"sec.floor@{signin.zone}")
-    # 0 equals False but every reader tests `is False`, so a 0 floor would save and lock nothing.
-    zero = await signin.public.put(
-        "/v1/policies/approvalsFloor", json={"value": {"requesterMayDecide": 0}}, headers=sec
-    )
-    assert (zero.status_code, zero.json()["error"]["code"]) == (400, "policy_value"), zero.text
-    put = await signin.public.put("/v1/policies/approvalsFloor", json=floor, headers=sec)
-    assert put.status_code == 200, put.text
-    looser = await signin.public.put("/v1/policies/requesterMayDecide", json=on, headers=ana)
-    assert (looser.status_code, looser.json()["error"]["code"]) == (409, "approval_floor"), looser.text
-    stricter = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": False}, headers=ana)
-    assert stricter.status_code == 200, stricter.text
+async def test_an_old_console_saving_the_two_person_switch_is_told_it_moved_to_the_matrix(signin: SignInRig) -> None:
+    """Approve own requests is the Approvals · decide cell from 1.2.0; an older console that still saves
+    requesterMayDecide gets a typed refusal naming the matrix row, never a 500 or a value nothing reads."""
+    _, ana = await _team_admin(signin, "ana")
+    r = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": {"reviews": True}}, headers=ana)
+    assert (r.status_code, r.json()["error"]["code"]) == (409, "policy_retired"), r.text
+    assert "Approvals" in r.json()["error"]["message"]
+    # Someone who may not change approval rules is refused for that first, so the retired key tells them nothing.
+    _, vic = await _team_admin(signin, "vic", role="viewer")
+    r = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": {"reviews": True}}, headers=vic)
+    assert r.status_code == 403, r.text
 
 
 async def test_only_the_security_team_lets_a_team_send_page_images(signin: SignInRig) -> None:

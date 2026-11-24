@@ -68,6 +68,15 @@ class Policies:
         policy = BY_KEY.get(landing)
         area, action = policy.changed_by if policy else ("settings", "manage")
         await self.members.require_admin(actor, area, action, in_team=bool(policy and policy.held_in == "team"))
+        if key == "requesterMayDecide":
+            # Checked after the cell, so only someone who may change approval rules learns where it went.
+            # Approve own requests is the Approvals · decide cell from 1.2.0; the stored value stays, false, for a
+            # rolled-back service to read, and an older console that saves it is told where the setting went.
+            raise Conflict(
+                "Who may approve their own requests is now the Approvals · decide row of the roles matrix.",
+                code="policy_retired",
+                details={"area": "approvals", "action": "decide"},
+            )
         if policy and policy.maximum and type(value) is int and value > policy.maximum:
             raise Unprocessable(f"{policy.title} is at most {policy.maximum} hours.", code="policy_value")
         await self._check_reviewer_roles(actor, key, value)

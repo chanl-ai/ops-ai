@@ -210,29 +210,31 @@ def test_an_annotated_line_needs_the_trailer_and_annotating_a_line_already_there
     assert [p.split("`")[1] for p in c.commit_problems()] == ["a.py refusal x 2 E01", "b.py refusal y 1 E01"]
 
 
+@pytest.mark.parametrize(
+    ("kind", "key"),
+    [("owner-compare", "owner"), ("role-constant", "ADMIN.id"), ("policy-on-caller", "policies")],
+)
 def test_a_lane_baseline_may_only_fall(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], kind: str, key: str
 ) -> None:
-    """An owner compare has no allowlist line, so its lane's file is its only ceiling: code beyond it fails, and a raise
-    is reported to the history check, not to this one."""
+    """An owner compare, a role-id compare and a policy written onto a caller have no allowlist line, so the lane's
+    file is their only ceiling: code beyond it fails, and a raise is reported to the history check, not to this one."""
     c = checker()
     site = "services/tools-service/src/ops_tools/a.py"
-    row = f"{site} owner-compare owner 1\n"
+    row = f"{site} {kind} {key} 1\n"
     (tmp_path / "allow.txt").write_text("")
     (tmp_path / "page.md").write_text(REGISTER)
     monkeypatch.setattr(c, "ALLOWLIST", tmp_path / "allow.txt")
     monkeypatch.setattr(c, "REGISTER_PAGE", tmp_path / "page.md")
     monkeypatch.setattr(c, "committed", lambda: None)
-    monkeypatch.setattr(c, "findings", lambda: [c.Finding(site, 3, "owner-compare", "owner", "x.owner == me.sub")])
+    monkeypatch.setattr(c, "findings", lambda: [c.Finding(site, 3, kind, key, "x")])
     _lanes(c, tmp_path, monkeypatch, tools=row)
     assert c.main([]) == 0, capsys.readouterr().out
-    assert [r.split(";")[0] for r in c._rises("tools.txt", "", row)] == [
-        "rose  tools.txt owner-compare rose from 0 to 1"
-    ]
+    assert [r.split(";")[0] for r in c._rises("tools.txt", "", row)] == [f"rose  tools.txt {kind} rose from 0 to 1"]
     assert c._rises("tools.txt", row, row) == []
     _lanes(c, tmp_path, monkeypatch)
     assert c.main([]) == 1
-    assert f"new   {site}:3  owner-compare owner" in capsys.readouterr().out
+    assert f"new   {site}:3  {kind} {key}" in capsys.readouterr().out
 
 
 def test_the_self_test_plants_each_shape_and_each_turns_the_checker_red() -> None:
@@ -243,7 +245,11 @@ def test_the_self_test_plants_each_shape_and_each_turns_the_checker_red() -> Non
         check=False,
     )
     assert run.returncode == 0, run.stdout + run.stderr
-    for planted in ("flag", "role-set", "owner-compare", "policy-read", "role-name", "no decision", "outcome"):
+    planted_kinds = ("flag", "role-set", "owner-compare", "policy-read", "role-name", "no decision", "outcome")
+    # A policy with no declared kind or read under a name no policy declares, a policy written onto a caller, a read
+    # of a caller's roles after can(), and a role-id compare in Python or a SQLAlchemy expression.
+    planted_kinds += ("policy-kind", "policy-unknown", "policy-on-caller", "caller-roles-read", "role-constant")
+    for planted in planted_kinds:
         assert f"red   {planted}" in run.stdout, run.stdout
 
 

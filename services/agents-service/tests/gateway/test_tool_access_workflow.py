@@ -15,6 +15,7 @@ from ops_agents.activities.tool_directory import OperationRef
 from ops_engine.worker import Worker
 from ops_identity import dev_service_signer, mint_service_token
 
+from ..conftest import signed_in
 from .conftest import Gateway
 from .test_engine_reviewed_write import (  # noqa: F401
     REVIEWER,  # pyright: ignore[reportUnusedImport]
@@ -93,8 +94,10 @@ async def test_the_request_waits_in_human_tasks_and_an_approval_grants_it(
     assert facts[0]["label"] == "Used by", facts
     assert task["actions"][1]["consequence"] == "Nothing changes, and your reason is kept with the request."
     assert review["evidence"] == [], review["evidence"]
-    own = await client.post(f"/reviews/{run_id}/decision", json={"decision": "approve"}, headers=STARTER | TEAM)
-    assert own.status_code == 403, "the person who asked does not decide it"
+    # The asker signed in as a Reviewer, without Approvals decide, does not decide it.
+    mine = signed_in(STARTER["X-Dev-User"])
+    own = await client.post(f"/reviews/{run_id}/decision", json={"decision": "approve"}, headers=mine)
+    assert (own.status_code, own.json()["error"]["code"]) == (403, "own_request"), own.text
     ok = await client.post(f"/reviews/{run_id}/decision", json={"decision": "approve"}, headers=REVIEWER | TEAM)
     assert ok.status_code == 200, ok.text
     done = await finish(worker, client, run_id)
@@ -171,13 +174,12 @@ async def test_a_team_workflow_built_like_the_handler_grants_nothing(
     assert done["outcome"] == "not_applied" and gateway.decisions.applied == [], done
 
 
-async def test_the_asker_named_in_the_request_does_not_decide_it_while_the_policy_is_off(
+async def test_the_asker_named_in_the_request_does_not_decide_it_without_approvals_decide(
     stack: tuple[httpx.AsyncClient, Worker],  # noqa: F811
     gateway: Gateway,
 ) -> None:
     # The step names whoever asked (requestedBy) even when the event names no actor, so the run's creator is the event;
-    # they are refused under the tenant's requesterMayDecide, off in this stack, as a run's starter is, not whatever
-    # the policy.
+    # signed in without Approvals decide they are refused, as a run's starter is.
     client, worker = stack
     key = f"apr_{uuid4().hex[:10]}"
     body = {
@@ -189,6 +191,7 @@ async def test_the_asker_named_in_the_request_does_not_decide_it_while_the_polic
     r = await client.post("/v1/events", json=body, headers=tools_service())
     [run_id] = r.json()["data"]["runIds"]
     assert (await finish(worker, client, run_id))["status"] == "waiting"
-    own = await client.post(f"/reviews/{run_id}/decision", json={"decision": "approve"}, headers=STARTER | TEAM)
+    mine = signed_in(STARTER["X-Dev-User"])
+    own = await client.post(f"/reviews/{run_id}/decision", json={"decision": "approve"}, headers=mine)
     assert (own.status_code, own.json()["error"]["code"]) == (403, "own_request"), own.text
     assert gateway.decisions.applied == []

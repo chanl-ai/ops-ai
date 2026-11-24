@@ -39,7 +39,7 @@ from ops_engine.ports import (
     outside_call,
 )
 from ops_engine.store import DefinitionStore, RunStore
-from ops_identity import ServiceCallError
+from ops_identity import ServiceCallError, ServiceClient, own_request_answer
 from ops_policy import input_hash
 from ops_policy.approval import Binding, mint_approval
 from ops_service_kit.http import Json, JsonList
@@ -227,20 +227,40 @@ class GatewayExpressions:
 
 
 class StarterApprovals:
-    """A review step approving one write, decided as the run starter's own when they may approve it: the run recorded at
-    its start that they hold reviews.decide under the four-eyes policy. Only
-    a write one person approves without a step-up qualifies, the operation's policy and the workspace's stepUp read
-    live; anything unread leaves the step waiting for a person. The approval is recorded as the starter's, so the
-    tool node mints its token from it as from any decision."""
+    """A review step approving one write, decided as the run starter's own when they may approve it now: platform-
+    service's access check (`access:view`) answers whether they hold Approvals · decide in the run's team, read live at
+    the step, not the flag the run stored at its start (L12), and the write's send asks again (L11), so a cell unticked
+    while the run waits counts at both. A check that cannot be made leaves the step waiting. Only a write one person
+    approves without a step-up qualifies, the operation's policy and the workspace's stepUp read live; anything unread
+    leaves the step waiting for a person. The approval is recorded as the starter's, so the tool node mints its token
+    from it as from any decision."""
 
-    def __init__(self, db: AsyncEngine, gateway: GatewayClient | None, policies: PolicySource | None = None) -> None:
+    def __init__(
+        self,
+        db: AsyncEngine,
+        gateway: GatewayClient | None,
+        policies: PolicySource | None = None,
+        access: ServiceClient | None = None,
+    ) -> None:
         self.db = db
         self.gateway = gateway
         self.policies = policies
+        self.access = access
+
+    async def _approves_own(self, tenant_id: str, team_id: str, starter: str) -> bool:
+        if self.access is None or "@" not in starter:
+            return False
+        with outside_call():
+            out = await own_request_answer(self.access, tenant=tenant_id, team=team_id, email=starter)
+        return out is not None and out.get("allowed") is True
 
     async def decision(self, run_id: str, node_id: str, payload: Json) -> Json | None:
         run = await RunStore(EngineTransactions(self.db)).row(run_id)
-        if run is None or not run.started_by_approver or self.gateway is None:
+        if (
+            run is None
+            or self.gateway is None
+            or not await self._approves_own(run.tenant_id, run.team_id, run.created_by)
+        ):
             return None
         call = dict(cast(Json, payload["call"]))
         tool = str(call["tool"])

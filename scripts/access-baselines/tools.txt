@@ -1,5 +1,10 @@
 # tools lane: role-name compares, owner compares and policy reads outside policy() in this lane's code today
 # (scripts/check_access_exceptions.py). `path kind key count`. A kind's total may only fall; the lane takes it to zero.
 services/tools-service/src/ops_tools/connections/service.py owner-compare owner 2
-services/tools-service/src/ops_tools/modules/policy.py policy-read policies 1
 services/tools-service/src/ops_tools/modules/routes.py role-name service-sub 1
+services/tools-service/src/ops_tools/app.py route-undecided route 6  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/tools-service/src/ops_tools/apps.py route-undecided route 19  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/tools-service/src/ops_tools/connections/routes.py route-undecided route 15  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/tools-service/src/ops_tools/expression_routes.py route-undecided route 1  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/tools-service/src/ops_tools/modules/routes.py route-undecided route 22  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)
+services/tools-service/src/ops_tools/plugins/routes.py route-undecided route 5  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)

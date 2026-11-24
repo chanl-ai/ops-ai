@@ -3,7 +3,9 @@
 Two migrations that follow the same revision (a second 0120 from two branches merged one after the other) both pass
 their own pull request, and Alembic then refuses `upgrade head` at the deploy. This check reads each chain's
 `revision` and `down_revision` and fails while any chain has two heads, naming both, so the pull request goes red
-instead. A merge revision's tuple `down_revision` closes the heads it names.
+instead. A merge revision's tuple `down_revision` closes the heads it names. It also fails on a revision id longer
+than 32 characters, the width of `alembic_version.version_num`: such a revision runs its changes, then fails writing
+its own id.
 
   python3 scripts/check_migration_heads.py [<versions_dir> ...]
 
@@ -17,6 +19,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# alembic_version.version_num is VARCHAR(32) on both databases.
+REVISION_WIDTH = 32
 
 
 def _value(node: ast.expr) -> list[str] | None:
@@ -64,6 +68,12 @@ def main(argv: list[str]) -> int:
     for versions in folders:
         found = heads(versions)
         shown = versions.relative_to(ROOT) if versions.is_relative_to(ROOT) else versions
+        for rev, _ in (m for p in sorted(versions.glob("*.py")) if (m := read(p)) is not None):
+            if len(rev) > REVISION_WIDTH:
+                failed = True
+                print(
+                    f"check-migration-heads: {shown}: revision {rev} is {len(rev)} characters; at most {REVISION_WIDTH}"
+                )
         if len(found) > 1:
             failed = True
             print(f"check-migration-heads: {shown}: {len(found)} heads: {', '.join(found)}")

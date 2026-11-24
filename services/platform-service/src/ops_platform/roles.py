@@ -10,7 +10,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import NotRequired, TypedDict
 
-from ops_access import ACTIONS, ANY_TEAM, AREAS, BUILTIN_GRIDS, SECURITY_TEAM_ACTIONS, Grant, Granted, effective
+from ops_access import (
+    ACTIONS,
+    ANY_TEAM,
+    AREAS,
+    BUILTIN_GRIDS,
+    SECURITY_TEAM_ACTIONS,
+    SELF_APPROVAL,
+    Grant,
+    Granted,
+    effective,
+)
 from ops_access.catalogue import ADMIN, FIXED_ROLES
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Json
@@ -28,6 +38,13 @@ from .store.roles import (
     RoleStore,
     UnknownGroupError,
 )
+
+# Approvals · decide (SELF_APPROVAL) is "approve own requests": a role holds it only where someone ticked it, so a copy
+# leaves it out and the new role gains it only with its own audited tick.
+
+
+def _not_copied(area: str, action: str) -> bool:
+    return custom_role_refuses(area, action) or (area, action) == SELF_APPROVAL
 
 
 class Cell(TypedDict):
@@ -186,16 +203,16 @@ class Roles:
         by: str,
         request_id: str,
     ) -> RoleView:
-        """A custom role: from `cells`, or a copy of `copy_of`'s cells less those a custom role may not hold (named in
-        `leftOut`), or empty. 409 `name_taken` for a name another role has."""
+        """A custom role: from `cells`, or a copy of `copy_of`'s cells less those a custom role may not hold and less
+        "approve own requests" (both named in `leftOut`), or empty. 409 `name_taken` for a name another role has."""
         left_out: list[str] = []
         if copy_of is not None:
             source = await self.store.role_by_id(tenant_id, copy_of)
             if source is None:
                 raise NotFound("No role with that id to copy.")
             grants: list[Grant] = list(source.grants)
-            left_out = sorted(f"{a}.{x}" for a, x, _ in grants if custom_role_refuses(a, x))
-            grants = [g for g in grants if not custom_role_refuses(g[0], g[1])]
+            left_out = sorted(f"{a}.{x}" for a, x, _ in grants if _not_copied(a, x))
+            grants = [g for g in grants if not _not_copied(g[0], g[1])]
         else:
             grants = list(cells or [])
             _checked(grants)

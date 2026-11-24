@@ -1,2 +1,3 @@
 # kb lane: role-name compares, owner compares and policy reads outside policy() in this lane's code today
 # (scripts/check_access_exceptions.py). `path kind key count`. A kind's total may only fall; the lane takes it to zero.
+services/kb-service/src/ops_kb/app.py route-undecided route 14  # measured: each route is named public, own-record or service-only with its reason, or calls can() (three roles, A4)

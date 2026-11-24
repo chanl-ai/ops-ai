@@ -11,12 +11,34 @@ import os
 from contextlib import ExitStack
 from typing import Any
 
-# The team's two-person rule on (requesterMayDecide off; the default is on), so the run's starter does not decide its
-# own write. The dev identity carries the policy as a platform token would.
-os.environ["OPS_DEV_POLICIES"] = '{"requesterMayDecide": false}'
-
 import httpx
-from usecase_harness import AGENTS_PORT, TEAM, TOOLS_PORT, agents, check, data, engine_worker, finish, tools, until
+from usecase_harness import (
+    AGENTS_PORT,
+    PLATFORM_INTERNAL_PORT,
+    PLATFORM_PORT,
+    TOOLS_PORT,
+    agents,
+    bearer,
+    check,
+    data,
+    engine_worker,
+    finish,
+    platform,
+    signed_in,
+    tools,
+    until,
+)
+
+# Platform sign-in, so each person carries their roles: a dev header caller holds every cell and would decide (and start
+# runs that skip the wait for) its own write. James is a Builder, whose role lacks Approvals · decide; Priya is the team's
+# Admin, whose role has it.
+AUTH = {
+    "OPS_AUTH_MODE": "platform",
+    "OPS_PLATFORM_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
+    "OPS_PLATFORM_INTERNAL_PORT": str(PLATFORM_INTERNAL_PORT),
+}
+JAMES, PRIYA = "j.richardson@harborpine.example", "p.shah@harborpine.example"
+TEAM: dict[str, str] = {}
 
 DEFINITION = """
 schemaVersion: 2
@@ -85,8 +107,11 @@ def case_of(api: httpx.Client, run_id: str) -> dict[str, Any]:
 
 
 with ExitStack() as stack:
-    stack.enter_context(tools({"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}))
-    api = stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}"))
+    people, _internal = stack.enter_context(platform())
+    TEAM.update(bearer(signed_in(people, JAMES), "team_ops"))
+    priya = bearer(signed_in(people, PRIYA), "team_ops")
+    stack.enter_context(tools({"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}", "OPS_PLATFORM_URL": AUTH["OPS_PLATFORM_URL"]}))
+    api = stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}", env=AUTH))
     created = api.post("/v1/workflows/definitions", json={"yaml": DEFINITION}, headers=TEAM)
     live = api.post("/v1/workflows/definitions/uc251_fee_dispute/publish-requests", json={}, headers=TEAM)
     check(
@@ -94,7 +119,7 @@ with ExitStack() as stack:
         created.status_code == 201 and data(live)["status"] == "approved",
         created.text[:300],
     )
-    stack.enter_context(engine_worker("uc251", {"OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}"}))
+    stack.enter_context(engine_worker("uc251", {"OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}"} | AUTH))
 
     started = api.post(
         "/v1/runs", json={"workflowId": "uc251_fee_dispute", "input": DISPUTE, "runKey": "uc251-a"}, headers=TEAM
@@ -131,11 +156,10 @@ with ExitStack() as stack:
     )
 
     review_id = tasks[0]["taskId"] if tasks else run_id
-    # The run's starter does not decide its own run's write (the two-person rule, pinned on above); Lee does.
+    # James, who started the run, has no Approvals · decide in his role, so he does not decide its write; Priya does.
     own = api.post(f"/reviews/{review_id}/decision", json={"decision": "approved", "reason": "uc-251"}, headers=TEAM)
     check("3a the person who started the run cannot approve its write (403)", own.status_code == 403, own.text[:200])
-    lee = {**TEAM, "X-Dev-User": "lee@harborpine.example"}
-    decided = api.post(f"/reviews/{review_id}/decision", json={"decision": "approved", "reason": "uc-251"}, headers=lee)
+    decided = api.post(f"/reviews/{review_id}/decision", json={"decision": "approved", "reason": "uc-251"}, headers=priya)
     after = until(lambda: (c := case_of(api, run_id)) and not c.get("waiting") and c) or {}
     done = [a for a in after.get("actions") or [] if a["taskId"] == review_id]
     # The case tells its story as a feed of lines; the full list of one kind is the activity route below.

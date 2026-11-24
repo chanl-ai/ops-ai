@@ -120,9 +120,10 @@ engine_runs = sa.Table(
     # What carried a person's request when it was not the person: `event:<service>/<event>`. created_by stays
     # the person's email, so every rule on who started a run reads them.
     sa.Column("started_via", sa.String(200)),
-    # Whether the person who started the run may approve its writes themselves: reviews.decide in the run's team under
-    # the requesterMayDecide policy, read from their roles at the start (agents migration 0095). A run's step
-    # approving a write is then decided as theirs; false for a run no person started.
+    # Whether the person who started the run held Approvals decide in its team at the start (agents migration 0095): a
+    # step approving a write is then recorded as theirs instead of waiting, and the send still asks whether they hold
+    # the cell now. False for a run no person started, and on every run unfinished at agents migration
+    # 20261124_1200_stale_starter; dropped in 1.3.0.
     sa.Column("started_by_approver", sa.Boolean, nullable=False, server_default=sa.false()),
     sa.Column("created_at", sa.String(32), nullable=False, info=LISTED),
     sa.Column("updated_at", sa.String(32), nullable=False),

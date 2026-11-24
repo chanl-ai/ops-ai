@@ -111,7 +111,7 @@ async def reimport(
     if hold is None:
         raise SystemExit(f"{HOLD} is not in the module or the document; nothing to approve")
     # One approver from the team and a step-up although one person approves: a hold on funds. Whether the asker may
-    # approve is the tenant's requesterMayDecide policy.
+    # approve is the Approvals · decide cell of their role.
     wanted = {
         "approvers": 1,
         "approverTeam": hold_team,

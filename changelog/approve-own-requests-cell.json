@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-23",
+  "title": "Only Admin holds the approve own requests cell",
+  "description": "The Approvals decide cell, soon read as approve own requests, was cleared from every role but Admin with an audit entry per role. A new role copied from another leaves it out until someone ticks it.",
+  "tag": "improved"
+}

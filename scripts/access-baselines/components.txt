@@ -1,2 +1,7 @@
 # components lane: role-name compares, owner compares and policy reads outside policy() in this lane's code today
 # (scripts/check_access_exceptions.py). `path kind key count`. A kind's total may only fall; the lane takes it to zero.
+packages/ops_access/src/ops_access/check.py role-constant ADMIN_ROLE 1  # convert: any-team review onto access.manage in every team (I6)
+packages/ops_access/src/ops_access/policies.py policy-kind requesterMayDecide 1  # convert: approvals.decide (three roles, I3)
+packages/ops_access/src/ops_access/policies.py policy-kind approvalsFloor 1  # convert: its self-approval part goes; the app-change part waits (three roles, I3)
+packages/ops_access/src/ops_access/policies.py policy-kind chatThreadsOwnerOnly 1  # convert: chat.view on all records (three roles, I6)
+packages/ops_access/src/ops_access/policies.py policy-kind securityTeamAddsSecrets 1  # convert: where the secrets cells are held (three roles, I6)

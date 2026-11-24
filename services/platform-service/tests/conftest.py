@@ -85,6 +85,8 @@ BOTH_DATABASES = frozenset(
         "test_boundary.py",
         "test_cors.py",
         "test_custom_roles.py",
+        "test_self_approval_migration.py",
+        "test_self_approval_reset_migration.py",
         "test_dev_sign_in.py",
         "test_flags.py",
         "test_identity_seam.py",

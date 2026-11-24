@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { ChevronDown } from 'lucide-react';
@@ -25,12 +26,10 @@ import { TOOL_KEY, usePolicyEditor, useSetWorkspacePolicy, useWorkspacePolicies 
 import { usePoliciesAreSample } from '@/hooks/use-preview';
 import { useTeam } from '@/hooks/use-team';
 import { ApiError } from '@/lib/api/contract';
-import { requesterMayDecideOf } from '@/lib/approval-rules';
 
 // The answer that asks someone other than the asker (an answer, not a role name).
 const BY_REVIEWER = 'reviewer';
 const SWITCH = 'Ask before an agent changes anything in an app';
-const TWO_PERSON = 'Two-person rule';
 const TEST_ACCOUNTS = 'Test accounts never ask';
 const TEST_RUNS = 'Test runs on live accounts ask first';
 const MAKERS = 'Writes an app or template marks “ask first” wait for approval';
@@ -38,7 +37,7 @@ const MAKERS = 'Writes an app or template marks “ask first” wait for approva
 const REVIEWER_ROLES = rolesWhere('role-reviewer-options', [], { canDecideReviews: ['true'] });
 
 const teamSchema = z
-  .object({ ask: z.boolean(), answer: z.enum(['person', 'reviewer']), reviewerRole: z.string().nullable(), twoPersonRule: z.boolean(), testAccountsNeverAsk: z.boolean(), testRunsAsk: z.boolean(), makersAsk: z.boolean() })
+  .object({ ask: z.boolean(), answer: z.enum(['person', 'reviewer']), reviewerRole: z.string().nullable(), testAccountsNeverAsk: z.boolean(), testRunsAsk: z.boolean(), makersAsk: z.boolean() })
   .refine((v) => !v.ask || v.answer !== BY_REVIEWER || !!v.reviewerRole, { message: 'Choose the role that reviews.', path: ['reviewerRole'] });
 type TeamForm = z.infer<typeof teamSchema>;
 
@@ -68,13 +67,12 @@ export default function ApprovalsPage() {
   const changes = policies.data?.find((p) => p.key === 'appChanges');
   const byApp = policies.data?.find((p) => p.key === 'appChangesByApp');
   const saved = ofTeam(changes?.value, teamId);
-  const mayDecide = requesterMayDecideOf(policies.data?.find((p) => p.key === 'requesterMayDecide')?.value, teamId);
   const savedAll = React.useMemo(() => ofTeam(byApp?.value, teamId) as Record<string, Entry>, [byApp?.value, teamId]);
   // A key starting `tool:` is one tool's answer, set on that tool's own page; it is kept as it is when apps are saved.
   const savedByApp = React.useMemo(() => Object.fromEntries(Object.entries(savedAll).filter(([k]) => !k.startsWith(TOOL_KEY))), [savedAll]);
   const savedTools = React.useMemo(() => Object.fromEntries(Object.entries(savedAll).filter(([k]) => k.startsWith(TOOL_KEY))), [savedAll]);
-  // The team's approval rules (appChanges, appChangesByApp, requesterMayDecide as the two-person rule) are changed under approvals.manage in
-  // the acting team, so a custom role holding it unlocks the page without settings.manage.
+  // The team's approval rules (appChanges, appChangesByApp) are changed under approvals.manage in the acting team, so a
+  // custom role holding it unlocks the page without settings.manage.
   const mayRead = useCan('access', 'view');
   const locked = useCan('approvals', 'manage') !== true || sample;
 
@@ -84,8 +82,6 @@ export default function ApprovalsPage() {
       ask: saved.ask === true,
       answer: saved.answer === BY_REVIEWER ? BY_REVIEWER : 'person',
       reviewerRole: (saved.reviewerRole as string | null) ?? null,
-      // The two-person rule on is requesterMayDecide off; an Admin of the team decides their own request either way.
-      twoPersonRule: !mayDecide,
       testAccountsNeverAsk: saved.testAccountsNeverAsk !== false,
       testRunsAsk: saved.testRunsAsk !== false,
       // Unset means a maker's ask-first holds; a new workspace stores false for the whole workspace.
@@ -110,15 +106,6 @@ export default function ApprovalsPage() {
       toast.error('Couldn’t save the approval setting', { description: (e as Error).message });
     }
   });
-  // Per team: the save replaces this team's part only.
-  const saveTwoPerson = async () => {
-    try {
-      await set.mutateAsync({ key: 'requesterMayDecide', teamId, value: !form.getValues('twoPersonRule') });
-      toast.success(`Saved: ${TWO_PERSON}`, { description: 'New requests follow it. Open ones keep the rule they were made under.' });
-    } catch (e) {
-      toast.error(`Couldn’t save: ${TWO_PERSON}`, { description: (e as Error).message });
-    }
-  };
   // Saves the checkbox alone, on top of what the team saved, so a half-edited switch above is not stored with it.
   const saveTestAccounts = async () => {
     try {
@@ -179,7 +166,7 @@ export default function ApprovalsPage() {
             requiredRole="admin"
             onSave={saveTeam}
             saving={set.isPending}
-            dirty={Object.keys(form.formState.dirtyFields).some((k) => k !== 'testAccountsNeverAsk' && k !== 'testRunsAsk' && k !== 'makersAsk' && k !== 'twoPersonRule')}
+            dirty={Object.keys(form.formState.dirtyFields).some((k) => k !== 'testAccountsNeverAsk' && k !== 'testRunsAsk' && k !== 'makersAsk')}
           >
             <div className="flex flex-col gap-4">
               <Controller
@@ -252,28 +239,13 @@ export default function ApprovalsPage() {
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-2 flex flex-col gap-4">
-              <SettingCard
-                id="approvals-two-person"
-                title={TWO_PERSON}
-                description="On: whoever asked for a decision cannot make it, so someone else in the team approves. Admins of the team still decide their own requests. Off: people approve their own requests where their role lets them."
-                help="Default: off · Changed by a team admin"
-                locked={locked}
-                requiredRole="admin"
-                onSave={saveTwoPerson}
-                saving={set.isPending}
-                dirty={form.formState.dirtyFields.twoPersonRule === true}
-              >
-                <Controller
-                  control={form.control}
-                  name="twoPersonRule"
-                  render={({ field }) => (
-                    <label className="flex items-center gap-3 text-sm">
-                      <Switch checked={field.value} onCheckedChange={field.onChange} disabled={locked} aria-label={TWO_PERSON} data-testid="approvals-two-person-switch" />
-                      {field.value ? 'On: someone else decides' : 'Off: people may decide their own requests'}
-                    </label>
-                  )}
-                />
-              </SettingCard>
+              <p className="text-sm text-muted-foreground" data-testid="approvals-own-requests">
+                Who may approve their own requests is set on the{' '}
+                <Link href="/govern/access/roles" className="underline underline-offset-4">
+                  Roles
+                </Link>{' '}
+                page: a role with Approvals · Decide ticked may. Admin has it by default; everyone else needs someone else to approve.
+              </p>
               <SettingCard
                 id="approvals-test-accounts"
                 title={TEST_ACCOUNTS}

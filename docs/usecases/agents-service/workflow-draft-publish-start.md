@@ -22,9 +22,8 @@ The script starts its own agents service on the scripted model; no model key is 
 | 4 | `POST …/validate` with the real graph | No failing check |
 | 5 | `POST …/test` with a sample email | Completes at `held`, one review approved, no thread kept |
 | 6 | `POST …/publish-requests` | 201; a `publish_request` review, pending |
-| 6a | `POST /v1/publish-requests/{id}/decision` approved, by the requester | 403 |
-| 6b | The same, rejected with a reason by a second person; then a new thread | Rejected; 400 `not_published` |
-| 6c | A second request, approved by the second person | Approved, with a 64-character digest |
+| 6a | `POST /v1/publish-requests/{id}/decision` rejected with a reason by a second person; then a new thread | Rejected; 400 `not_published` |
+| 6b | A second request, approved by the second person | Approved, with a 64-character digest |
 | 7 | `GET /v1/graphs` | Lists the workflow id |
 | 8 | `POST /v1/threads {graph: <id>}`, then run it with the email | Pinned to v1; stops at `review` |
 | 9 | `GET …/runs` | The run, `waiting_review` |
@@ -44,7 +43,7 @@ The current engine's publish through review is proved in the console by uc-092.
 
 ## Non-vacuous check
 
-`the requester cannot approve it (403)` pairs with the second person's approval: removing the requester check fails
-the decide test in `test_publish_requests.py`. `an unknown agent fails validation and publish (422)` pairs with the passing validation and publish of the same graph
+The requester here is the dev header caller, which holds every cell, Approvals · decide included, so this layer does
+not prove that an asker is refused; uc-092's sdk layer does, with James's real roles (403). `an unknown agent fails validation and publish (422)` pairs with the passing validation and publish of the same graph
 with a real agent, so the pass is the agent pin's doing. Starting threads on the latest version instead of the
 pointer fails the registry test that moves the pointer back to v1.

@@ -22,6 +22,23 @@ way and compares them with `access-exceptions-allowlist.txt`, where each line na
                   a store. Those in the code today are counted in the lane's baseline file, which may only fall.
   policy-read     a policy's value read some other way than `ops_access.policies.policy(p, key)`: a token's
                   `.policies.get(`, or `BY_KEY[key].default` written at the call. Counted in the lane's baseline file.
+  policy-kind     a policy declared with `decides="who"`: a setting that lets or stops a person, which belongs on the
+                  roles matrix. Every Policy declares `decides=` one of waits, sign_in, on_off or limit; `who` is
+                  counted in the components baseline until its card moves it onto a cell.
+  policy-unknown  a Policy with no `decides=` or another value, and a `policy(p, "<key>")` call or a
+                  `/v1/policies/<key>` fetch naming a key no Policy declares. None is allowed and no line can list one.
+  policy-on-caller  a policy written onto a caller (`model_copy(update={"policies": ...})`, `who.policies[...] = `),
+                  which makes the caller decide by a value the token never held. Counted in the lane's baseline file.
+  caller-roles-read  a read of a caller's `.roles`, `.access` or `.grids` (a parameter typed Principal) or a call to
+                  `roles_in`, outside packages/ops_access, including after a can() in the same function. Counted in
+                  the lane's baseline file.
+  role-constant   a compare against a role id constant (`ADMIN`, `ADMIN.id`, `ADMIN_ROLE`) outside catalogue.py, in
+                  Python or a SQLAlchemy expression (`c.role_id == ADMIN.id`). Counted in the lane's baseline file,
+                  each row classified keep or convert in its comment.
+  route-undecided  a FastAPI route (`@app.get(...)`, `@router.post(...)`) whose body and Depends call none of `can`,
+                  `may`, `reader_of` or a `require_*` helper, directly or one hop into a function of the same service
+                  that does (platform-service's `require_admin`). A public, own-record or service-only route stays
+                  in the lane's baseline file with its reason. Counted in the lane's baseline file.
   conflict        a 409 by its error code. Most say a record is in the wrong state, but one can refuse by who made a
                   record (a seeded one, a system one). Each code is classified once: `* conflict <code> 0 state` for a
                   state conflict, or a path line with a register row for one that decides access.
@@ -37,7 +54,8 @@ lower the count or delete the line when an exception goes. Each row must be a ro
 holds no lines), `open` for a policy default or `state` for a conflict. A line on a row whose status reads "no
 decision" fails: the decision is written on the register first.
 
-Role-name compares, owner compares and policy reads are also counted per lane in
+Role-name compares, owner compares, policy reads, role-id compares, policies written onto a caller, reads of a caller's
+roles and policies that decide who are also counted per lane in
 `scripts/access-baselines/<lane>.txt` (`path kind key count`); a lane's total of a kind may only fall, against the
 committed file and in every commit (`--commits`), and the lane takes its file to zero.
 
@@ -80,9 +98,14 @@ BASELINES = ROOT / "scripts/access-baselines"
 LANES = ("components", "pilot", "platform", "kb", "tools", "agents", "console")
 PILOT_SERVICES = ("documents", "files", "models", "runner")
 # Kinds counted in a lane's file. A role-name compare is on the allowlist as well, with its register row.
-BASELINED = ("role-name", "owner-compare", "policy-read")
+BASELINED = (
+    "role-name", "owner-compare", "policy-read", "role-constant", "policy-on-caller", "caller-roles-read",
+    "policy-kind", "route-undecided",
+)  # fmt: skip
 # Kinds with a ceiling of zero: no allowlist line and no baseline row lets one through.
-NEVER = ("flag", "role-set")
+NEVER = ("flag", "role-set", "policy-unknown")
+# What a policy may decide (Policy.decides). `who` is the temporary value of a setting that lets or stops a person.
+POLICY_DECIDES = ("waits", "sign_in", "on_off", "limit")
 OUTCOMES = ("keep", "convert", "delete")
 # The commit that began the list with the exceptions already in the code; lines added after it need the trailer.
 LIST_BEGAN = "67f10685"
@@ -147,6 +170,21 @@ OWNER_COMPARE = [
 # The one reader of a policy's value is `policy(p, key)` in this file.
 # A policy map copied to a name (`held = p.policies`) is read later as `held.get(...)`, with no `.policies` on
 # that line.
+# A role id constant of the catalogue, compared on either side (`role_id == ADMIN.id`, `ADMIN_ROLE in held`).
+_ROLE_CONST = r"\b(?:ADMIN|BUILDER|REVIEWER|VIEWER|SECURITY_ADMIN|CHAT_USER|OWNER)(?:\.id)?\b(?!\.\w)|\b[A-Z]+_ROLE\b"
+ROLE_CONSTANT = [
+    re.compile(rf"(?:==|!=|\bin|\bnot in)\s*({_ROLE_CONST})"),
+    re.compile(rf"({_ROLE_CONST})\s*(?:==|!=|\bin\b|\bnot in\b)"),
+]
+CATALOGUE = "packages/ops_access/src/ops_access/catalogue.py"
+# A policy written onto a caller: the copy's `policies` replaced, or a key assigned into a caller's map.
+POLICY_ON_CALLER = re.compile(
+    r"model_copy\(\s*update\s*=\s*\{[^}]*[\"']policies[\"']\s*:"
+    r"|\b(?:me|p|who|actor|principal|caller|person|held|session|user)\.policies(?:\[[^\]]*\])?\s*=(?!=)"
+)
+POLICY_CALL = re.compile(r"\bpolicy\(\s*[\w.]+\s*,\s*[\"'](\w+)[\"']")
+POLICY_FETCH = re.compile(r"/v1/policies/([A-Za-z]\w*)")
+CALLER_CELLS = ("roles", "access", "grids")
 POLICY_READ = re.compile(
     r"\.policies\.get\(|\.policies\[|=\s*[\w.]+\.policies\b(?![\w.(\[])|\bBY_KEY\[[^\]]+\]\.default\b"
 )
@@ -361,7 +399,63 @@ def _python(path: Path) -> list[Finding]:
             if rx.search(code) and not rel.startswith("packages/ops_access/src/ops_access/__init__"):
                 found.append(Finding(rel, n, "lock", key, line.strip()))
         found.extend(_shapes(rel, n, code, line, flag=PY_FLAG, role_set=PY_ROLE_SET))
+        if rel != CATALOGUE:
+            # One finding per constant compared, whichever side of the operator it sits on.
+            spans = {m.span(1): m.group(1) for rx in ROLE_CONSTANT for m in rx.finditer(code)}
+            found.extend(Finding(rel, n, "role-constant", name, line.strip()) for name in spans.values())
+        if POLICY_ON_CALLER.search(code):
+            found.append(Finding(rel, n, "policy-on-caller", "policies", line.strip()))
+        found.extend(_unknown_policies(rel, n, code, line))
+    found.extend(_caller_roles(rel, tree, lines))
+    found.extend(_undecided_routes(rel, tree, lines))
     return found
+
+
+def _declared() -> set[str]:
+    """The keys every Policy in policies.py declares."""
+    tree = ast.parse(POLICIES.read_text())
+    return {
+        str(node.args[0].value)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and _name(node) == "Policy"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+    }
+
+
+DECLARED: set[str] = set()
+
+
+def _unknown_policies(rel: str, n: int, code: str, line: str) -> list[Finding]:
+    """A policy read or fetched under a name no Policy declares: a typo reads the default forever."""
+    keys = [m.group(1) for rx in (POLICY_CALL, POLICY_FETCH) for m in rx.finditer(code)]
+    return [Finding(rel, n, "policy-unknown", k, line.strip()) for k in keys if k not in DECLARED]
+
+
+def _caller_roles(rel: str, tree: ast.AST, lines: list[str]) -> list[Finding]:
+    """A caller's roles or cells read outside ops_access: a parameter typed Principal (or CurrentPrincipal) whose
+    `.roles`, `.access` or `.grids` is read, and any call to `roles_in`. A decision taken that way skips can()."""
+    if rel.startswith(ACCESS_HOME):
+        return []
+    out: list[Finding] = []
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        args = [*fn.args.posonlyargs, *fn.args.args, *fn.args.kwonlyargs]
+        callers = {a.arg for a in args if a.annotation is not None and "Principal" in ast.unparse(a.annotation)}
+        for node in ast.walk(fn):
+            if (
+                isinstance(node, ast.Attribute)
+                and node.attr in CALLER_CELLS
+                and isinstance(node.value, ast.Name)
+                and node.value.id in callers
+            ):
+                out.append(Finding(rel, node.lineno, "caller-roles-read", node.attr, lines[node.lineno - 1].strip()))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and _name(node) == "roles_in":
+            out.append(Finding(rel, node.lineno, "caller-roles-read", "roles_in", lines[node.lineno - 1].strip()))
+    return list(dict.fromkeys(out))
 
 
 def _shapes(
@@ -393,6 +487,7 @@ def _console(path: Path) -> list[Finding]:
             if not NOT_A_ROLE.search(m.group(1).split(".")[-1].rstrip("?")):
                 found.append(Finding(rel, n, "role-name", m.group(2), line.strip()))
         found.extend(_shapes(rel, n, code, line, flag=TS_FLAG, role_set=TS_ROLE_SET))
+        found.extend(_unknown_policies(rel, n, code, line))
     return found
 
 
@@ -404,12 +499,101 @@ def _policies() -> list[Finding]:
             key, default = ast.literal_eval(node.args[0]), ast.literal_eval(node.args[1])
             value = json.dumps(default, separators=(",", ":"), sort_keys=True)
             out.append(Finding(rel, node.lineno, "policy-default", f"{key}={value}", f"{key} defaults to {value}"))
+            decides = next((kw.value for kw in node.keywords if kw.arg == "decides"), None)
+            said = decides.value if isinstance(decides, ast.Constant) else None
+            if said == "who":
+                out.append(Finding(rel, node.lineno, "policy-kind", key, f"{key} decides who"))
+            elif said not in POLICY_DECIDES:
+                text = f"{key} declares decides={said!r}; one of {', '.join(POLICY_DECIDES)}"
+                out.append(Finding(rel, node.lineno, "policy-unknown", key, text))
+    return out
+
+
+ROUTE_VERBS = ("get", "post", "put", "patch", "delete")
+# The calls that decide access: can() and its wrappers.
+DECIDES = re.compile(r"^(can|may|reader_of|require_\w+)$")
+# Per service source root, the functions whose own body calls a decider: a route calling one is decided one hop away.
+DECIDING: dict[str, set[str]] = {}
+
+
+def _service(rel: str) -> str:
+    return "/".join(rel.split("/", 3)[:3])
+
+
+def _called(fn: ast.AST) -> set[str]:
+    """Every function name `fn` calls, and every name it hands to Depends()."""
+    out: set[str] = set()
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Call):
+            name = _name(node)
+            out.add(name)
+            if name == "Depends" and node.args:
+                arg = node.args[0]
+                out.add(arg.attr if isinstance(arg, ast.Attribute) else arg.id if isinstance(arg, ast.Name) else "")
+    return out
+
+
+def _deciding(trees: dict[str, ast.AST]) -> dict[str, set[str]]:
+    """Per service, the functions that call a decider, then the annotation aliases (`Reader = Annotated[Principal,
+    Depends(read_agents)]`) that depend on one, so a route typed `_: Reader` is decided."""
+    out: dict[str, set[str]] = {}
+    services = [(rel, tree) for rel, tree in trees.items() if rel.startswith("services/")]
+    for rel, tree in services:
+        for fn in ast.walk(tree):
+            if isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef) and any(DECIDES.match(c) for c in _called(fn)):
+                out.setdefault(_service(rel), set()).add(fn.name)
+    for rel, tree in services:
+        held = out.setdefault(_service(rel), set())
+        for node in ast.walk(tree):
+            target, value = (
+                (node.targets[0], node.value) if isinstance(node, ast.Assign) and len(node.targets) == 1
+                else (node.target, node.value) if isinstance(node, ast.AnnAssign) and node.value is not None
+                else (node.name, node.value) if isinstance(node, ast.TypeAlias)
+                else (None, None)
+            )  # fmt: skip
+            if isinstance(target, ast.Name) and value is not None:
+                names = _called(value)
+                if "Depends" in names and any(DECIDES.match(c) or c in held for c in names):
+                    held.add(target.id)
+    return out
+
+
+def _is_route(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    return any(
+        isinstance(d, ast.Call) and isinstance(d.func, ast.Attribute) and d.func.attr in ROUTE_VERBS
+        for d in fn.decorator_list
+    )
+
+
+def _undecided_routes(rel: str, tree: ast.AST, lines: list[str]) -> list[Finding]:
+    """A route that never reaches can(): nothing in its body or Depends decides, directly or one hop away."""
+    if not rel.startswith("services/"):
+        return []
+    deciding = DECIDING.get(_service(rel), set())
+    out: list[Finding] = []
+    for fn in ast.walk(tree):
+        if isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef) and _is_route(fn):
+            args = [*fn.args.posonlyargs, *fn.args.args, *fn.args.kwonlyargs]
+            typed = {
+                n.id
+                for a in args
+                if a.annotation is not None
+                for n in ast.walk(a.annotation)
+                if isinstance(n, ast.Name)
+            }
+            called = _called(fn) | typed
+            if not any(DECIDES.match(c) or c in deciding for c in called):
+                out.append(Finding(rel, fn.lineno, "route-undecided", "route", lines[fn.lineno - 1].strip()))
     return out
 
 
 def findings() -> list[Finding]:
     TYPED.clear()
     TYPED.update(_typed([ast.parse(p.read_text()) for p in _python_files()]))
+    DECIDING.clear()
+    DECIDING.update(_deciding({p.relative_to(ROOT).as_posix(): ast.parse(p.read_text()) for p in _python_files()}))
+    DECLARED.clear()
+    DECLARED.update(_declared())
     return [
         *(f for p in _python_files() for f in _python(p)),
         *(f for p in _console_files() for f in _console(p)),
@@ -735,8 +919,65 @@ PLANTS = (
         'def f(m):\n    return m.role == "admin"\n',
         "role-name admin",
     ),
+    (
+        "policy-kind",
+        "packages/ops_access/src/ops_access/policies.py",
+        'POLICIES = (Policy("stepUp", False, "x", decides="sign_in"), Policy("mayDecide", True, "x", decides="who"))\n',
+        "policy-kind mayDecide",
+    ),
+    (
+        "policy-unknown",
+        "packages/ops_access/src/ops_access/policies.py",
+        'POLICIES = (Policy("stepUp", False, "x"),)\n',
+        "policy-unknown stepUp",
+    ),
+    (
+        "policy-unknown",
+        "services/tools-service/src/t/c.py",
+        'def f(p):\n    return policy(p, "stepUpp")\n',
+        "policy-unknown stepUpp",
+    ),
+    (
+        "policy-on-caller",
+        "services/tools-service/src/t/d.py",
+        'def f(caller, ok):\n    return caller.model_copy(update={"policies": {**caller.policies, "x": ok}})\n',
+        "policy-on-caller policies",
+    ),
+    (
+        "caller-roles-read",
+        "services/agents-service/src/a/b.py",
+        "async def route(me: Principal, team):\n    if not can(me, 'agents', 'view', team=team):\n        return None\n"
+        "    if 'admin' in roles_in(me, team):\n        return 1\n    return me.access.get(team)\n",
+        "caller-roles-read roles_in",
+    ),
+    (
+        "caller-roles-read",
+        "services/agents-service/src/a/b.py",
+        "async def route(me: Principal, team):\n    if not can(me, 'agents', 'view', team=team):\n        return None\n"
+        "    return me.access.get(team)\n",
+        "caller-roles-read access",
+    ),
+    (
+        "route-undecided",
+        "services/kb-service/src/k/r.py",
+        "def allowed(me):\n    return require_cell(me)\n\n\n@router.get('/v1/x')\nasync def x(me=Depends(allowed)):\n"
+        "    return 1\n\n\n@router.post('/v1/y')\nasync def y(me):\n    return me\n",
+        "route-undecided route",
+    ),
+    (
+        "role-constant",
+        "services/platform-service/src/p/d.py",
+        "def f(role_id):\n    return role_id == ADMIN.id\n",
+        "role-constant ADMIN.id",
+    ),
+    (
+        "role-constant",
+        "services/platform-service/src/p/store/e.py",
+        "def f(t):\n    return select(t).where(t.c.role_id == ADMIN.id)\n",
+        "role-constant ADMIN.id",
+    ),
 )
-_CLEAN_POLICIES = 'POLICIES = (Policy("stepUp", False, "x"),)\n'
+_CLEAN_POLICIES = 'POLICIES = (Policy("stepUp", False, "x", decides="sign_in"),)\n'
 _CLEAN_REGISTER = "## Exceptions register\n\n| Row | Exception | Status |\n|---|---|---|\n| E01 | x | {status} |\n"
 _CLEAN_ALLOW = (
     "packages/ops_access/src/ops_access/policies.py policy-default stepUp=false 1 open  # keep platform: open\n"
@@ -797,6 +1038,8 @@ def self_test() -> int:
             planted = write(rel, text)
             expect(f"{kind} in {rel}", says)
             planted.unlink()
+            if planted == POLICIES:
+                write(rel, _CLEAN_POLICIES)
         clean(status="**no decision**")
         expect("no decision on a register row", "E01 has no decision")
         clean(note="")
