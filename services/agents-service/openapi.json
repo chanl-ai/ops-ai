@@ -7072,6 +7072,23 @@
             ],
             "title": "Floor"
           },
+          "notRead": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cut_off",
+                  "empty",
+                  "declined",
+                  "filtered"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notread"
+          },
           "records": {
             "items": {
               "$ref": "#/components/schemas/ReadRecord"

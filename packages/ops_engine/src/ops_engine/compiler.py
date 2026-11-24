@@ -842,9 +842,10 @@ async def ai_extract(call: NodeCall) -> Outcome:
         )
     if status == "failed":
         error = cast(Json, answer.get("error") or {})
-        if error.get("code") == "schema_error":
+        # Held on its key by documents-service: raising would retry the step against the same failure.
+        if error.get("code") in ("schema_error", "reply_incomplete"):
             return Outcome(
-                "error", {"error": error.get("message"), "code": "schema_error", "details": error.get("details")}
+                "error", {"error": error.get("message"), "code": error.get("code"), "details": error.get("details")}
             )
         raise OutsideAnswerError(f"the extraction failed ({error.get('code')}): {error.get('message')}")
     # The extraction's id stays on the output: the run page links the read to it, and its model call is logged under it.
@@ -856,6 +857,9 @@ async def ai_extract(call: NodeCall) -> Outcome:
     if status == "done" and answer.get("outcome") == "unknown":
         # No kind of the team's fits, or the model is unsure: review, with no fields, so a person decides what the
         # file is; `classification` on the output says why.
+        return Outcome("review", out)
+    if status == "done" and answer.get("outcome") == "incomplete":
+        # No reply answered: every field is not read and `incomplete` says why, so a person types the values.
         return Outcome("review", out)
     if status != "done" or answer.get("outcome") not in ("ok", "review"):
         # A state this step does not know is raised, never turned into a port it does not have.

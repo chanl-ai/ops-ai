@@ -1196,6 +1196,9 @@ class DocumentRead(Out):
     corrected: list[dict[str, JsonValue]] | None
     # The sources a Combine facts step weighed against this read, in order; empty for a read of one source.
     sources: list[str] = Field(default_factory=list[str])
+    # Why no model reply answered the read (cut_off, empty, declined or filtered): every field is not read and a
+    # person types the required ones. None for a read that was answered.
+    not_read: Literal["cut_off", "empty", "declined", "filtered"] | None = None
 
 
 class ReplyCase(Out):

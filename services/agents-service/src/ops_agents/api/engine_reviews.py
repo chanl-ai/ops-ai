@@ -241,6 +241,8 @@ class ReadView(TypedDict):
     sources: list[str]
     editable: bool
     corrected: list[Json] | None
+    # Why no model reply answered the read (cut_off, empty, declined, filtered); None for a read that was answered.
+    notRead: str | None
 
 
 class ReplyCase(TypedDict):
@@ -616,6 +618,7 @@ def read_view(read: Json, file_name: str | None, edited: JsonValue) -> ReadView:
         "corrected": [dict(cast(Json, an_object(r, "a corrected record").get("values") or {})) for r in edited]
         if isinstance(edited, list)
         else None,
+        "notRead": str(json_object(read.get("incomplete")).get("reason") or "") or None,
     }
 
 
@@ -680,12 +683,30 @@ async def reply_preview(rt: Runtime, team: str, draft: object, call: ProposedCal
     }
 
 
+# A not-read read's reason as its task line says it.
+NOT_READ_SAID = {
+    "cut_off": "the reply was cut off",
+    "empty": "the reply held no answer",
+    "declined": "the model declined",
+    "filtered": "the provider's filter stopped the reply",
+}
+
+
+def _plural(n: int, one: str) -> str:
+    return f"{n} {one}{'s' if n != 1 else ''}"
+
+
 def _read_line(read: ReadView) -> tuple[str, str]:
-    """The row's customer and proposal for a document read: who it names and what a person is asked to check."""
+    """The row's customer and proposal for a document read: who it names and what a person is asked to check, or for
+    a read no reply answered, why and how many required fields there are to type."""
+    of = f" from {read['fileName']}" if read["fileName"] else ""
+    if why := read["notRead"]:
+        required = sum(1 for f in read["schema"] if f["required"]) * max(1, len(read["records"]))
+        said = NOT_READ_SAID.get(why, "no reply answered")
+        return "", f"Nothing read{of}: {said}; {_plural(required, 'required field')} to type"
     names = [str(r["values"].get("name")) for r in read["records"] if r["values"].get("name")]
     doubtful = sum(1 for r in read["records"] for f in r["fields"].values() if f["needsReview"])
     count = len(read["records"])
-    of = f" from {read['fileName']}" if read["fileName"] else ""
     check = f"; {doubtful} field{'s' if doubtful != 1 else ''} to check" if doubtful else ""
     return ", ".join(names), f"Read {count} record{'s' if count != 1 else ''}{of}{check}"
 
@@ -1261,11 +1282,13 @@ async def decide(
         confirmed = rest.pop("confirmed", None)
         action = await _typed_action(rt, run, paused, str(resume.get("option") or DEFAULT_DECISIONS[decision]))
         if action.get("requires"):
-            _check_requirement(str(action["requires"]), paused, confirmed)
+            _check_requirement(str(action["requires"]), paused, confirmed, edited)
             resume["confirmed"] = confirmed
         if call is None and rest:
             # A typed action's own inputs (a Reject's assignee) travel to the workflow with the decision.
             resume["inputs"] = _action_inputs(action, rest)
+    if resume.get("decision") == "approved":
+        _required_fields_filled(paused, None, edited)
     # An approval is checked against the call it sends; a rejection against every write the step holds.
     await _check_decider(rt, approver, run, [call] if call is not None else held_calls(json_object(paused)))
     resume["reason"] = reason
@@ -1401,25 +1424,61 @@ def _key_fields_left(paused: ReviewPayload, confirmed: JsonValue) -> int:
     return left
 
 
-def _key_fields_confirmed(paused: ReviewPayload, confirmed: JsonValue) -> None:
+def _key_fields_confirmed(paused: ReviewPayload, confirmed: JsonValue, edited: JsonValue | Nothing) -> None:
     if left := _key_fields_left(paused, confirmed):
         what = "1 key field" if left == 1 else f"{left} key fields"
         raise ValidationFailed(f"Confirm {what} before approving.", code="key_fields_unconfirmed")
 
 
+def _blank(value: JsonValue) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def _typed(value: JsonValue) -> JsonValue:
+    """A corrected field's value: a field object's `value`, or the value itself."""
+    return cast(Json, value).get("value") if isinstance(value, dict) else value
+
+
+def _required_fields_filled(paused: ReviewPayload, confirmed: JsonValue, edited: JsonValue | Nothing) -> None:
+    """A read no model reply answered is approved only once every required field has a value, typed by the person
+    (`inputs.edited`) over what was read; optional fields may stay empty. A several-records read with no records has
+    nothing to approve. A read that was answered passes: its empty fields are the model's answer."""
+    read = document_read(paused.get("draft"), paused, None)
+    if read is None or not read["notRead"]:
+        return
+    if not read["records"]:
+        raise ValidationFailed(
+            "Nothing was read from this file, so this task can only be rejected.", code="nothing_read"
+        )
+    required = [f["key"] for f in read["schema"] if f["required"]]
+    rows: list[Json] = [r["values"] for r in read["records"]]
+    if isinstance(edited, list):
+        rows = [json_object(json_object(r).get("values")) for r in edited]
+    elif isinstance(edited, dict):
+        rows = [{k: _typed(v) for k, v in edited.items()}]
+    if left := sum(_blank(row.get(k)) for row in rows for k in required):
+        what = _plural(left, "required field")
+        raise ValidationFailed(f"Type {what} before approving.", code="required_fields_empty")
+
+
 # What a task type's action can wait for (its `requires`), checked on the decision as the console blocks the button,
-# so a call that skips the console cannot approve values nobody checked.
-REQUIREMENTS: dict[str, Callable[[ReviewPayload, JsonValue], None]] = {"key_fields_confirmed": _key_fields_confirmed}
+# so a call that skips the console cannot approve values nobody checked. required_fields_filled also holds every
+# approve of a read with no answer, whatever its type names.
+Requirement = Callable[[ReviewPayload, JsonValue, JsonValue | Nothing], None]
+REQUIREMENTS: dict[str, Requirement] = {
+    "key_fields_confirmed": _key_fields_confirmed,
+    "required_fields_filled": _required_fields_filled,
+}
 
 
-def _check_requirement(name: str, paused: ReviewPayload, confirmed: JsonValue) -> None:
+def _check_requirement(name: str, paused: ReviewPayload, confirmed: JsonValue, edited: JsonValue | Nothing) -> None:
     check = REQUIREMENTS.get(name)
     if check is None:
         # A type naming a rule this service cannot check is refused rather than approved unchecked.
         raise ValidationFailed(
             f"This action waits for {name}, which cannot be checked here.", code="unknown_requirement"
         )
-    check(paused, confirmed)
+    check(paused, confirmed, edited)
 
 
 async def run_as_team_account(rt: Runtime, me: Principal, review_id: str) -> EngineReview:

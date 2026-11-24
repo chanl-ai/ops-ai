@@ -258,3 +258,19 @@ async def test_a_review_with_no_read_and_no_reply_has_neither() -> None:
     review: Any = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": payload}}, case_id="", titles=TITLES)
     assert ("read" in review, "reply" in review) == (False, False)
     assert review["customer"] == "Marcus Bell"
+
+
+async def test_a_read_with_no_answer_names_its_reason_and_counts_required_fields_to_type() -> None:
+    """A not-read read said "Read 1 record; 2 fields to check", as though the model had found values to check."""
+    empty = {"value": None, "extractedValue": None, "confidence": 0.0, "needsReview": True, "notRead": "declined"}
+    read: dict[str, Any] = {
+        "fileId": "file_claim",
+        "incomplete": {"reason": "declined", "step": "extract", "tries": 1},
+        "schema": READ["schema"],
+        "fields": {"name": empty, "address": empty},
+        "needsReview": ["name", "address"],
+    }
+    payload: dict[str, Any] = {**CHECK, "draft": {"document": "claim_form.pdf", "read": read}, "editable": None}
+    review: Any = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": payload}}, case_id="", titles=TITLES)
+    assert review["read"]["notRead"] == "declined", review["read"]
+    assert review["proposal"] == "Nothing read from claim_form.pdf: the model declined; 1 required field to type"
