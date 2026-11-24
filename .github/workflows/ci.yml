@@ -159,9 +159,17 @@ jobs:
           # Only the checks run the chat loader in a browser; installing one took most of a test shard's time.
           browser: ${{ matrix.service == 'agents-service' && !startsWith(matrix.part, 'test') }}
           infra: "true"
+      - name: S3 test store
+        # The S3 plugin's tests run against it and skip without it. A service container takes no command, and
+        # SeaweedFS needs one, so make starts it.
+        if: matrix.service == 'tools-service'
+        run: make -s s3-test-store
       - env:
           SERVICE: ${{ matrix.service }}
           PART: ${{ matrix.part }}
+          OPS_TEST_S3_URL: ${{ matrix.service == 'tools-service' && 'http://127.0.0.1:19000' || '' }}
+          OPS_TEST_S3_KEY: opsai-test
+          OPS_TEST_S3_SECRET: opsai-test-secret
         run: |
           case "$PART" in
             verify|checks) make -C "services/$SERVICE" "$PART" ;;
@@ -191,7 +199,16 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           infra: "true"
-      - run: |
+      - name: S3 test store
+        # The S3 plugin's tests run against it and skip without it. A service container takes no command, and
+        # SeaweedFS needs one, so make starts it.
+        if: matrix.package == 'ops_plugin_sdk'
+        run: make -s s3-test-store
+      - env:
+          OPS_TEST_S3_URL: ${{ matrix.package == 'ops_plugin_sdk' && 'http://127.0.0.1:19000' || '' }}
+          OPS_TEST_S3_KEY: opsai-test
+          OPS_TEST_S3_SECRET: opsai-test-secret
+        run: |
           uv run python scripts/test_db.py "$OPS_TEST_DATABASE_URL"
           cd packages/${{ matrix.package }} && OPS_DATABASE_URL=$OPS_TEST_DATABASE_URL uv run pytest -q
 
@@ -252,8 +269,16 @@ jobs:
         with:
           node: ${{ matrix.part == 'checks' || matrix.part == 'sdk' || matrix.part == 'scripts' }}
           infra: "true"
+      - name: S3 test store
+        # The S3 plugin's tests run against it and skip without it. A service container takes no command, and
+        # SeaweedFS needs one, so make starts it.
+        if: startsWith(matrix.part, 'pool-')
+        run: make -s s3-test-store
       - env:
           PART: ${{ matrix.part }}
+          OPS_TEST_S3_URL: ${{ startsWith(matrix.part, 'pool-') && 'http://127.0.0.1:19000' || '' }}
+          OPS_TEST_S3_KEY: opsai-test
+          OPS_TEST_S3_SECRET: opsai-test-secret
         run: |
           case "$PART" in
             pool-*) make python-pool VERIFY_POOL="$PART" ;;

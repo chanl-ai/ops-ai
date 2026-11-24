@@ -36,7 +36,8 @@ from ops_tools.store.plugin_bindings import PluginBindings
 from .test_plugins import AllowAll
 
 URL, KEY, SECRET = (os.environ.get(n, "") for n in ("OPS_TEST_S3_URL", "OPS_TEST_S3_KEY", "OPS_TEST_S3_SECRET"))
-pytestmark = pytest.mark.skipif(not URL, reason="no S3-compatible store named in OPS_TEST_S3_URL")
+# CI starts the store and sets the variables, so a run there that would skip fails instead.
+pytestmark = pytest.mark.skipif(not URL and not os.environ.get("CI"), reason="no S3 store named in OPS_TEST_S3_URL")
 PLUGINS = Path(__file__).resolve().parents[3] / "builtin-plugins"
 sys.path.insert(0, str(PLUGINS))
 S3 = Plugin.beside(str(PLUGINS / "ops_plugin_s3/__init__.py"))
@@ -65,7 +66,8 @@ def bucket() -> Iterator[str]:
     s3: Any = boto3.client(  # pyright: ignore[reportUnknownMemberType]
         "s3", endpoint_url=URL, aws_access_key_id=KEY, aws_secret_access_key=SECRET, region_name="us-east-1"
     )
-    name = f"c967-{uuid.uuid4().hex[:10]}"
+    assert URL, "CI names an S3 store in OPS_TEST_S3_URL (make s3-test-store); these tests do not skip there"
+    name = f"s3test-{uuid.uuid4().hex[:10]}"
     s3.create_bucket(Bucket=name)
     for n in range(3):
         s3.put_object(Bucket=name, Key=f"Invoices/inv-{n}.txt", Body=f"invoice {n}".encode())

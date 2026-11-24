@@ -28,7 +28,8 @@ from ops_plugin_sdk.testing import Fake, call, knowledge_contract
 
 URL, KEY, SECRET = (os.environ.get(n, "") for n in ("OPS_TEST_S3_URL", "OPS_TEST_S3_KEY", "OPS_TEST_S3_SECRET"))
 REGION = "us-east-1"
-pytestmark = pytest.mark.skipif(not URL, reason="no S3-compatible store named in OPS_TEST_S3_URL")
+# CI starts the store and sets the variables, so a run there that would skip fails instead.
+pytestmark = pytest.mark.skipif(not URL and not os.environ.get("CI"), reason="no S3 store named in OPS_TEST_S3_URL")
 PLUGINS = Path(__file__).resolve().parents[3] / "builtin-plugins"
 sys.path.insert(0, str(PLUGINS))
 
@@ -57,7 +58,8 @@ def store(secret: str = SECRET) -> httpx.Client:
 
 @pytest.fixture
 def bucket() -> Iterator[str]:
-    name = f"c967-{uuid.uuid4().hex[:10]}"
+    assert URL, "CI names an S3 store in OPS_TEST_S3_URL (make s3-test-store); these tests do not skip there"
+    name = f"s3test-{uuid.uuid4().hex[:10]}"
     with store() as s:
         assert s.put(f"{URL}/{name}").status_code == 200
         yield name
