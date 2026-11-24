@@ -81,7 +81,9 @@ async def test_a_bad_rule_or_a_field_the_clock_cannot_fill_is_refused_naming_it(
     assert (await client.get(url(needs_day), headers=JAMES)).status_code == 404
 
 
-async def test_kinds_preview_and_save_agree_and_a_save_needs_no_publish(client: AsyncClient) -> None:
+async def test_kinds_preview_save_and_view_agree_and_a_version_the_schedule_cannot_fill_is_refused(
+    client: AsyncClient,
+) -> None:
     kinds = (await client.get("/v1/schedules/kinds", headers=JAMES)).json()["data"]
     every = next(k for k in kinds if k["name"] == "every")
     assert every["schema"]["properties"]["kind"] == {"const": "every"}
@@ -100,9 +102,7 @@ async def test_kinds_preview_and_save_agree_and_a_save_needs_no_publish(client: 
     assert (await client.delete(url(wid), headers=JAMES)).status_code == 204
     assert (await client.get(url(wid), headers=JAMES)).status_code == 404
 
-
-async def test_publishing_a_version_the_saved_schedule_cannot_fill_is_refused(client: AsyncClient) -> None:
-    wid = await saved(client)
+    wid = await saved(client)  # a second workflow, saved with the default rule
     put = await client.put(url(wid), json={"rule": {"kind": "every", "every": 15, "unit": "minutes"}}, headers=JAMES)
     assert put.status_code == 200, put.text
     shown = (await client.get(f"/v1/workflows/definitions/{wid}", headers=JAMES)).json()["data"]
