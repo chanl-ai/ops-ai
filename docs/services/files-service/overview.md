@@ -167,7 +167,7 @@ The typed contract is in the API reference tab; this table adds the rule each ro
 | A tenant-wide platform admin role for legal holds | not built: holds need an admin of the file's team |
 | Checksum header on uploads to Object Lock buckets | not built: real S3 requires one per PUT; moto does not, so it is untested |
 | New versions of a file | a watched folder's file only: a check writes version 2 and later, and `?version=` reads an earlier one; an upload still holds version 1 only |
-| Watched folders | routes and the check are built; the SDK, CLI and screens follow (design: folder batch extraction, increment A). A delete is not yet refused while a workflow uses the watch: nothing can use one until the Files changed trigger (increment B) |
+| Watched folders | routes, the check, the SDK and CLI, the Watched folders tab and dialog, and the file page's Source section are built; the use case that drives them end to end is not yet written (design: folder batch extraction, increment A). A delete is not yet refused while a workflow uses the watch: nothing can use one until the Files changed trigger (increment B) |
 | Asynchronous scanning | not built: the scanner runs inline in `complete_upload` when configured; `record_scan` is the hook for an engine that reports later |
 | Previews and evidence export from `files.ts` | not built |
 | Azure immutability and legal hold against a real account | partial: Azurite does not implement them, so `AzureBlobObjectStore.set_retention`, `set_legal_hold` and the version-by-version delete have not run |

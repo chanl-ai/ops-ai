@@ -2,7 +2,7 @@
 
 A watch keeps its picked sites and libraries as the source's ids, which is what each call is sent, so the Watched
 folders list could say only "libraries: 1". The names the picker showed are kept beside them, per input and id. Null
-for watches made before; they show the ids until their folders are changed.
+for watches made before and for watches saved without names (the SDK and CLI); the list counts their picked ids.
 
 Revision ID: 20261124_1210_watch_value_names
 Revises: 20261124_1200_source_changed_at

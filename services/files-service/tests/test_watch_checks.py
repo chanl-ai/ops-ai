@@ -141,6 +141,10 @@ async def test_both_pages_of_changes_arrive(engine: AsyncEngine, tmp_path: Path,
     assert (outcome.status, outcome.brought) == ("success", 2)
     assert [(e.number, e.kind) for e in events] == [(1, "new"), (2, "new")]
     assert set(await _entries(engine, tenant, watch_id)) == {"drv!a", "drv!b"}
+    with isolation.scope(tenant, TEAM):
+        row = await FilesStore(engine).get(str(events[0].file_id))
+    # The listing's modified time is the version's change at the source, which the file page shows.
+    assert row is not None and row.versions[0].source_changed_at == datetime(2026, 11, 24, 8, 0, tzinfo=UTC)
 
 
 async def test_a_file_deleted_at_the_source_is_marked_removed_and_kept(

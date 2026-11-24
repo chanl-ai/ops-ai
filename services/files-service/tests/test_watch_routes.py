@@ -178,6 +178,9 @@ async def test_the_list_names_a_watchs_folders_counts_its_files_and_keeps_its_co
             {"input": "libraries", "id": "Invoices", "name": "Supplier invoices"},
         ], row["folders"]
         assert (row["filesInFiles"], row["inUse"], row["connectionId"]) == (1, False, "con_1"), row
+        # A watch saved with no names (the SDK and CLI) lists no named folders; the console counts its ids instead.
+        bare = _data(await builder.post("/v1/watches", json={**WATCH, "name": "No names"}, headers=OPS))
+        assert bare["folders"] == [], bare
         changed = await builder.patch(
             f"/v1/watches/{made['id']}", json={"values": {"libraries": ["Invoices", "Archive"]}}, headers=OPS
         )

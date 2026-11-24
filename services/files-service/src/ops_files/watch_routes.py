@@ -105,7 +105,8 @@ class WatchView(Out):
     source: str
     connection_id: str | None
     values: dict[str, JsonValue]
-    # The picked places by name, in the order picked; inputs with no picker (path patterns) are not listed.
+    # The picked places by name, for the inputs the picker named; inputs with no picker (path patterns) are not
+    # listed, and a watch saved without names (the SDK and CLI) has none, so a screen counts `values` instead.
     folders: list[Folder]
     # The watch's files in Files now (entries not removed at the source).
     files_in_files: int
