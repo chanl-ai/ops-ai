@@ -19248,6 +19248,17 @@
             "title": "Ownerteam",
             "type": "string"
           },
+          "ownerTeamName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownerteamname"
+          },
           "parts": {
             "items": {
               "$ref": "#/components/schemas/SkillPartSummary"
@@ -19660,8 +19671,15 @@
             "type": "string"
           },
           "ownerTeam": {
-            "title": "Ownerteam",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownerteam"
           },
           "parts": {
             "items": {
@@ -19751,8 +19769,7 @@
         },
         "required": [
           "name",
-          "instructions",
-          "ownerTeam"
+          "instructions"
         ],
         "title": "SkillCreateInput",
         "type": "object"
@@ -19861,6 +19878,17 @@
           "ownerTeam": {
             "title": "Ownerteam",
             "type": "string"
+          },
+          "ownerTeamName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownerteamname"
           },
           "parts": {
             "items": {
@@ -20343,6 +20371,13 @@
           "pagination": {
             "$ref": "#/components/schemas/Pagination"
           },
+          "teamNames": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Teamnames",
+            "type": "object"
+          },
           "viewCounts": {
             "additionalProperties": {
               "type": "integer"
@@ -20404,6 +20439,13 @@
             "title": "Limits",
             "type": "object"
           },
+          "ownerTeams": {
+            "items": {
+              "$ref": "#/components/schemas/TeamChoice"
+            },
+            "title": "Ownerteams",
+            "type": "array"
+          },
           "teams": {
             "items": {
               "type": "string"
@@ -20421,6 +20463,7 @@
         },
         "required": [
           "teams",
+          "ownerTeams",
           "tools",
           "knowledgeBases",
           "limits"
@@ -20791,6 +20834,17 @@
           "ownerTeam": {
             "title": "Ownerteam",
             "type": "string"
+          },
+          "ownerTeamName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownerteamname"
           },
           "requestedBy": {
             "title": "Requestedby",
@@ -23457,6 +23511,32 @@
           "message"
         ],
         "title": "TaskWarning",
+        "type": "object"
+      },
+      "TeamChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "TeamChoice",
         "type": "object"
       },
       "TeamUsage": {
@@ -54722,7 +54802,7 @@
     },
     "/v1/skills": {
       "get": {
-        "description": "One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when\nor slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,\nwhich is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,\n`ownerTeam`, `origin` and `loading` filter by facet; `knowledgeBases` keeps skills naming any base given. The view\ncounts and facets cover every skill the search leaves, before the view and the facet filters; the page, its counts\nand its facets are read in SQL (`store/skill_list.py`).\n\nEvery view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.\nWith `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing\na tool or knowledge base the agent lacks as `locked`, naming them in `needs`.",
+        "description": "One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when\nor slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,\nwhich is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,\n`ownerTeam`, `origin` and `loading` filter by facet; `knowledgeBases` keeps skills naming any base given. The view\ncounts and facets cover every skill the search leaves, before the view and the facet filters; the page, its counts\nand its facets are read in SQL (`store/skill_list.py`).\n\nEvery view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.\nWith `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing\na tool or knowledge base the agent lacks as `locked`, naming them in `needs`. Each row's `ownerTeamName` and the\nfilter's `teamNames` are asked of platform-service once the transaction has closed.",
         "operationId": "agents_list_skills",
         "parameters": [
           {
@@ -55687,7 +55767,7 @@
         "x-ops-public": "sdk"
       },
       "get": {
-        "description": "The skill with its instructions and every version: skills: view in the skill's team (403 `forbidden`), the same\nright render asks for, so a person who may only chat never reads a skill's text.",
+        "description": "The skill with its instructions and every version: skills: view in the skill's team (403 `forbidden`), the same\nright render asks for, so a person who may only chat never reads a skill's text. The owner team's name is asked\nof platform-service once the transaction has closed.",
         "operationId": "agents_get_skill",
         "parameters": [
           {

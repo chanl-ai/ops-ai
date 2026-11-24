@@ -5,7 +5,7 @@ The Security team decides security reviews, so one that cannot be read refuses t
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Iterable
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import cast
@@ -111,3 +111,16 @@ async def deciding_team(rt: Runtime, team_id: str | None) -> dict[str, str | Non
         return None
     names = cast(PlatformTeamNames | None, getattr(rt, "team_names", None))
     return {"id": team_id, "name": await names.name(team_id) if names is not None else None}
+
+
+async def team_names(rt: Runtime, team_ids: Iterable[str]) -> dict[str, str]:
+    """The name of each team of `team_ids` that platform-service names, by id, for a list that shows teams; a team it
+    cannot name is left out and the console shows the id. Ask it with no transaction open."""
+    names = cast(PlatformTeamNames | None, getattr(rt, "team_names", None))
+    if names is None:
+        return {}
+    found: dict[str, str] = {}
+    for team_id in sorted({t for t in team_ids if t}):
+        if (name := await names.name(team_id)) is not None:
+            found[team_id] = name
+    return found

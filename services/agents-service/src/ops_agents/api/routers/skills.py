@@ -58,6 +58,7 @@ from ..skills import (
     review_record,
     skills,
 )
+from ..team_names import team_name, team_names
 from .agents import changeable as agent_changeable
 from .tool_catalog import directory_tools, known_tools
 
@@ -106,7 +107,9 @@ class SkillCreateInput(In):
     use_when: str = ""
     loading: Literal["on_match", "always"] = "on_match"
     instructions: str
-    owner_team: str
+    # The id of the team that owns the skill, one the caller may create skills in (`GET /v1/skills/options`
+    # `ownerTeams`); the team the request acts in when left out.
+    owner_team: str | None = None
     tool_ids: list[str] = Field(default_factory=list[str])
     knowledge_bases: list[str] = Field(default_factory=list[str])
     guardrails: list[str] = Field(default_factory=list[str])
@@ -179,7 +182,6 @@ async def list_skills(
     *,
     rt: Rt,
     caller: Annotated[Principal, Depends(reader_of("skills"))],
-    _: Tx,
     q: ListQuery,
     view: View = "all",
     usable_by: Annotated[Literal["agent"] | None, Query(alias="usableBy")] = None,
@@ -199,28 +201,34 @@ async def list_skills(
 
     Every view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.
     With `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing
-    a tool or knowledge base the agent lacks as `locked`, naming them in `needs`."""
+    a tool or knowledge base the agent lacks as `locked`, naming them in `needs`. Each row's `ownerTeamName` and the
+    filter's `teamNames` are asked of platform-service once the transaction has closed."""
     # Read from `q.filters`; declared so the document and the SDKs name them.
     del status, owner_team, origin, loading, knowledge_bases
     spec: Json | None = None
     offered = None
-    if agent_id is not None:
-        agents = agent_registry(rt)
-        agent_row = await agents.row(agent_id)
-        held = (await agents.version(agent_id, agent_row.version)).spec
-        spec = held
-        menu = str(held.get("skillMenu") or "team")
-        # A chat's skills are its team's: the team the request acts in, else the agent's own.
-        team = caller.team_id or str(agent_row.team_id or "")
-        offered = offered_by(agent_id, team=team, menu=menu)
-    listed, counts = await skills_page(rt.db, q, view=view, offered=offered)
-    body: dict[str, Any] = {**listed, "data": [list_row(r) for r in listed["data"]]}
-    if spec is not None:
-        contents = await menu_versions(rt.db, [x["id"] for x in body["data"]])
-        for x in body["data"]:
-            needs = missing_for(content_of(contents.get(x["id"], {})), cast(AgentSpec, spec))
-            x["locked"], x["needs"] = bool(needs), needs
-    return ok({**body, "viewCounts": counts})
+    async with isolation.request_transaction():
+        if agent_id is not None:
+            agents = agent_registry(rt)
+            agent_row = await agents.row(agent_id)
+            held = (await agents.version(agent_id, agent_row.version)).spec
+            spec = held
+            menu = str(held.get("skillMenu") or "team")
+            # A chat's skills are its team's: the team the request acts in, else the agent's own.
+            team = caller.team_id or str(agent_row.team_id or "")
+            offered = offered_by(agent_id, team=team, menu=menu)
+        listed, counts = await skills_page(rt.db, q, view=view, offered=offered)
+        body: dict[str, Any] = {**listed, "data": [list_row(r) for r in listed["data"]]}
+        if spec is not None:
+            contents = await menu_versions(rt.db, [x["id"] for x in body["data"]])
+            for x in body["data"]:
+                needs = missing_for(content_of(contents.get(x["id"], {})), cast(AgentSpec, spec))
+                x["locked"], x["needs"] = bool(needs), needs
+    counted = cast(dict[str, dict[str, int]], body.get("facets") or {}).get("ownerTeam", {})
+    names = await team_names(rt, [*counted, *(x["ownerTeam"] for x in body["data"])])
+    for x in body["data"]:
+        x["ownerTeamName"] = names.get(x["ownerTeam"])
+    return ok({**body, "viewCounts": counts, "teamNames": names})
 
 
 @router.get("/v1/skills/options", response_model=Envelope[SkillOptions])
@@ -236,20 +244,23 @@ async def skill_options(rt: Rt, me: Annotated[Principal, Depends(reader_of("skil
         ]
         specs = await newest_specs(rt.db)
     teams = sorted(teams_holding(me, "skills", "create"))
+    names = await team_names(rt, teams)
     held = [k for s in specs for k in cast(JsonList, s.get("collections") or [])]
     kbs = sorted({str(k) for k in held})
-    return ok({"teams": teams, "tools": tools, "knowledgeBases": kbs, "limits": LIMITS})
+    owner_teams = [{"id": t, "name": names.get(t)} for t in teams]
+    return ok({"teams": teams, "ownerTeams": owner_teams, "tools": tools, "knowledgeBases": kbs, "limits": LIMITS})
 
 
 @router.get("/v1/skills/{skill_id}", response_model=Envelope[SkillDetail])
-async def get_skill(
-    rt: Rt, skill_id: str, caller: Annotated[Principal, Depends(caller_in("skills"))], _: Tx
-) -> JSONResponse:
+async def get_skill(rt: Rt, skill_id: str, caller: Annotated[Principal, Depends(caller_in("skills"))]) -> JSONResponse:
     """The skill with its instructions and every version: skills: view in the skill's team (403 `forbidden`), the same
-    right render asks for, so a person who may only chat never reads a skill's text."""
-    row = await skills(rt).row(skill_id)
-    can(caller_of(caller), "skills", "view", team=row.team_id, what=row.slug, code="forbidden")
-    return ok(await detail(rt, skill_id))
+    right render asks for, so a person who may only chat never reads a skill's text. The owner team's name is asked
+    of platform-service once the transaction has closed."""
+    async with isolation.request_transaction():
+        row = await skills(rt).row(skill_id)
+        can(caller_of(caller), "skills", "view", team=row.team_id, what=row.slug, code="forbidden")
+        found = await detail(rt, skill_id)
+    return ok({**found, "ownerTeamName": (await team_name(rt, found["ownerTeam"]))["teamName"]})
 
 
 @router.post("/v1/skills/{skill_id}/text", response_model=Envelope[SkillTextReading])
@@ -340,10 +351,16 @@ async def create_skill(rt: Rt, me: Me, body: SkillCreateInput) -> JSONResponse:
     """The tools the body names are checked against tools-service's directory before the transaction opens. With
     `requestReview` the publish request follows the commit, as `POST .../publish-requests` does."""
     require_builder(me, area="skills", team_id=me.team_id, action="create", what="a skill")
+    owner = body.owner_team or me.team_id or ""
+    if owner not in teams_holding(me, "skills", "create"):
+        raise ValidationFailed(
+            "Choose an owner team you may create skills in; GET /v1/skills/options lists them.",
+            code="unknown_owner_team",
+        )
     content = await check_content(rt, body.model_dump(by_alias=True), team_id=me.team_id or "")
     async with isolation.request_transaction():
         sid = await skills(rt).create(
-            content, owner_team=body.owner_team, team_id=me.team_id or "", origin=body.origin, by=me.email
+            content, owner_team=owner, team_id=me.team_id or "", origin=body.origin, by=me.email
         )
         if not body.request_review:
             return ok(await detail(rt, sid), 201)

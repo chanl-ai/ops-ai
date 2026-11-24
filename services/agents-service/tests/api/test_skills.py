@@ -21,7 +21,6 @@ HARDSHIP: dict[str, Any] = {
     "name": "Hardship request triage",
     "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship.",
     "instructions": "Steps: confirm the customer, record the reason, offer the hardship form.",
-    "ownerTeam": "Retail",
     "toolIds": ["lookup_customer"],
     "knowledgeBases": ["kb_support"],
     "guardrails": ["Never promise a payment deferral before the hardship team approves it"],

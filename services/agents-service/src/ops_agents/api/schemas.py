@@ -666,7 +666,9 @@ class SkillPublishInfo(Out):
 
     skill_id: str
     skill_name: str
+    # The owning team's id, and its name as platform-service names it (None when it cannot be read).
     owner_team: str
+    owner_team_name: str | None = None
     from_version: int | None
     to_version: int
     edit_class: str
@@ -1676,7 +1678,9 @@ class Skill(Out):
     slug: str
     use_when: str
     loading: Literal["on_match", "always"]
+    # The owning team's id; its name is filled on the list and detail reads (None when it cannot be read).
     owner_team: str
+    owner_team_name: str | None = None
     status: Literal["draft", "in_review", "published", "deprecated"]
     version: int
     published_version: int | None
@@ -1950,6 +1954,8 @@ class SkillRendered(Out):
 
 class SkillList(ListResult[Skill]):
     view_counts: dict[str, int]
+    # The name of each owner team `facets.ownerTeam` counts, by its id, so the Owner team filter reads names.
+    team_names: dict[str, str] = Field(default_factory=dict[str, str])
 
 
 class AgentSkillPin(Out):
@@ -1985,8 +1991,17 @@ class AgentSkills(Out):
     limits: dict[str, int]
 
 
+class TeamChoice(Out):
+    id: str
+    # None when platform-service cannot name the team; the console shows the id.
+    name: str | None
+
+
 class SkillOptions(Out):
+    # The ids of `owner_teams`, kept for callers that read the earlier shape.
     teams: list[str]
+    # The teams the caller may create skills in, each with its name: what New skill's Owner team offers.
+    owner_teams: list[TeamChoice]
     tools: list[SkillToolRef]
     knowledge_bases: list[str]
     limits: dict[str, int]

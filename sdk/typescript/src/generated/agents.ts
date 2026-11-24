@@ -2373,7 +2373,8 @@ export interface paths {
          *
          *     Every view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.
          *     With `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing
-         *     a tool or knowledge base the agent lacks as `locked`, naming them in `needs`.
+         *     a tool or knowledge base the agent lacks as `locked`, naming them in `needs`. Each row's `ownerTeamName` and the
+         *     filter's `teamNames` are asked of platform-service once the transaction has closed.
          */
         get: operations["agents_list_skills"];
         put?: never;
@@ -2421,7 +2422,8 @@ export interface paths {
         /**
          * Get Skill
          * @description The skill with its instructions and every version: skills: view in the skill's team (403 `forbidden`), the same
-         *     right render asks for, so a person who may only chat never reads a skill's text.
+         *     right render asks for, so a person who may only chat never reads a skill's text. The owner team's name is asked
+         *     of platform-service once the transaction has closed.
          */
         get: operations["agents_get_skill"];
         put?: never;
@@ -10477,6 +10479,8 @@ export interface components {
             origin: "blank" | "generated" | "imported" | "duplicated";
             /** Ownerteam */
             ownerTeam: string;
+            /** Ownerteamname */
+            ownerTeamName?: string | null;
             /** Parts */
             parts?: components["schemas"]["SkillPartSummary"][];
             /** Pendingreviewid */
@@ -10617,7 +10621,7 @@ export interface components {
              */
             origin: "blank" | "generated" | "imported" | "duplicated";
             /** Ownerteam */
-            ownerTeam: string;
+            ownerTeam?: string | null;
             /** Parts */
             parts?: components["schemas"]["SkillPartInput"][];
             /**
@@ -10689,6 +10693,8 @@ export interface components {
             origin: "blank" | "generated" | "imported" | "duplicated";
             /** Ownerteam */
             ownerTeam: string;
+            /** Ownerteamname */
+            ownerTeamName?: string | null;
             /** Parts */
             parts?: components["schemas"]["SkillPartSummary"][];
             pendingReview?: components["schemas"]["SkillPendingReview"] | null;
@@ -10832,6 +10838,10 @@ export interface components {
                 };
             };
             pagination: components["schemas"]["Pagination"];
+            /** Teamnames */
+            teamNames?: {
+                [key: string]: string;
+            };
             /** Viewcounts */
             viewCounts: {
                 [key: string]: number;
@@ -10856,6 +10866,8 @@ export interface components {
             limits: {
                 [key: string]: number;
             };
+            /** Ownerteams */
+            ownerTeams: components["schemas"]["TeamChoice"][];
             /** Teams */
             teams: string[];
             /** Tools */
@@ -10996,6 +11008,8 @@ export interface components {
             note: string;
             /** Ownerteam */
             ownerTeam: string;
+            /** Ownerteamname */
+            ownerTeamName?: string | null;
             /** Requestedby */
             requestedBy: string;
             /** Skillid */
@@ -11866,6 +11880,13 @@ export interface components {
              * @enum {string}
              */
             severity: "warning" | "error";
+        };
+        /** TeamChoice */
+        TeamChoice: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string | null;
         };
         /** TeamUsage */
         TeamUsage: {

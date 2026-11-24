@@ -2198,6 +2198,11 @@ class TaskWarning(TypedDict, closed=True):
     severity: Literal["warning", "error"]
 
 
+class TeamChoice(TypedDict, closed=True):
+    id: str
+    name: str | None
+
+
 class TeamUsage(TypedDict, closed=True):
     liveWorkflows: list[str]
     runsInProgress: int
@@ -3814,6 +3819,7 @@ class Skill(TypedDict, closed=True):
     needs: NotRequired[list[str] | None]
     origin: Literal["blank", "generated", "imported", "duplicated"]
     ownerTeam: str
+    ownerTeamName: NotRequired[str | None]
     parts: NotRequired[list[SkillPartSummary]]
     pendingReviewId: NotRequired[str | None]
     publishedVersion: int | None
@@ -3840,12 +3846,14 @@ class SkillList(TypedDict, closed=True):
     data: list[Skill]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
+    teamNames: NotRequired[dict[str, str]]
     viewCounts: dict[str, int]
 
 
 class SkillOptions(TypedDict, closed=True):
     knowledgeBases: list[str]
     limits: dict[str, int]
+    ownerTeams: list[TeamChoice]
     teams: list[str]
     tools: list[SkillToolRef]
 
@@ -3871,6 +3879,7 @@ class SkillPublishInfo(TypedDict, closed=True):
     kbsAdded: list[str]
     note: str
     ownerTeam: str
+    ownerTeamName: NotRequired[str | None]
     requestedBy: str
     skillId: str
     skillName: str
@@ -4663,7 +4672,7 @@ class SkillCreateInput(TypedDict, closed=True):
     name: str
     notWhen: NotRequired[str]
     origin: NotRequired[Literal["blank", "generated", "imported", "duplicated"]]
-    ownerTeam: str
+    ownerTeam: NotRequired[str | None]
     parts: NotRequired[list[SkillPartInput]]
     refusal: NotRequired[str]
     requestReview: NotRequired[bool]
@@ -4885,6 +4894,7 @@ class SkillDetail(TypedDict, closed=True):
     needs: NotRequired[list[str] | None]
     origin: Literal["blank", "generated", "imported", "duplicated"]
     ownerTeam: str
+    ownerTeamName: NotRequired[str | None]
     parts: NotRequired[list[SkillPartSummary]]
     pendingReview: NotRequired[SkillPendingReview | None]
     pendingReviewId: NotRequired[str | None]

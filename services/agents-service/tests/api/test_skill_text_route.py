@@ -25,7 +25,6 @@ SKILL: dict[str, Any] = {
     "name": "Customer lookup",
     "useWhen": "The person asks about their account.",
     "instructions": "Be brief.",
-    "ownerTeam": "Retail",
 }
 
 
