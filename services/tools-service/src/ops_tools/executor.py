@@ -602,7 +602,7 @@ class HttpExecutor(_Secrets):
 
     async def _send(self, module: Module, req: HttpRequest, prepared: Prepared | None, limit_ms: int) -> httpx.Response:
         params, headers = _with_auth(req, prepared)
-        return await self.client.request(
+        asked_for = self.client.build_request(
             req.method,
             req.url,
             params=cast(Query | None, params or None),
@@ -615,6 +615,12 @@ class HttpExecutor(_Secrets):
                 module["tenant_id"], prepared.certificate if prepared else None, module["egress_hosts"]
             ),
         )
+        if prepared is not None and prepared.signer is not None:
+            # Signed last, over the request exactly as it leaves: a header or query added after would void it.
+            asked_for.headers.update(
+                prepared.signer(asked_for.method, str(asked_for.url), dict(asked_for.headers), asked_for.content)
+            )
+        return await self.client.send(asked_for)
 
 
 class McpExecutor(_Secrets):

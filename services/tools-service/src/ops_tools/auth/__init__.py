@@ -33,6 +33,7 @@ from ..store.connections import ENDED_BY_ADMIN, SHARED, Account, AuditEvent, Con
 from ..store.modules import Module, ModuleRef
 from .assertion import SigningError, read_certificate
 from .kinds import Kind, kind_of, origin
+from .sigv4 import Signer, signer_for
 from .tokens import AuthFailed, ClientProof, Tokens, scope_list
 
 # Why a call is refused CONNECTION_NOT_LINKED: never connected, a scope missing, an operation that needs a person
@@ -80,6 +81,9 @@ class Prepared:
     credential: str | None = None
     # The person whose own row signed the call, so a refusal marks theirs alone; None for the team's.
     person: str | None = None
+    # A kind that signs each request (aws_sigv4): the executor calls it once the method, address, headers and body
+    # are final, and adds the headers it answers.
+    signer: Signer | None = None
 
 
 @dataclass(frozen=True)
@@ -115,6 +119,17 @@ async def _basic(i: StrategyInput, p: Prepared) -> None:
     p.headers["Authorization"] = f"Basic {encoded}"
     # An upstream that repeats the header shows the encoded pair, not the password.
     p.values.append(encoded)
+
+
+async def _aws_sigv4(i: StrategyInput, p: Prepared) -> None:
+    secret = i.secrets["secretAccessKey"]
+    p.signer = signer_for(
+        key=str(i.settings.get("accessKeyId") or ""),
+        secret=secret,
+        region=str(i.settings.get("region") or "us-east-1"),
+        service=str(i.settings.get("service") or "s3"),
+    )
+    p.values.append(secret)
 
 
 async def _bearer(i: StrategyInput, p: Prepared) -> None:
@@ -165,6 +180,7 @@ STRATEGIES: dict[str, Strategy] = {
     "api_key": _api_key,
     "basic": _basic,
     "bearer": _bearer,
+    "aws_sigv4": _aws_sigv4,
     "oauth2_client_credentials": _token_strategy("client_credentials"),
     # Only a person starts this sign-in; the gateway refreshes it and never starts one.
     "oauth2_auth_code": _token_strategy("none"),

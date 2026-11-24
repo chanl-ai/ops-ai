@@ -152,6 +152,20 @@ KINDS: tuple[Kind, ...] = (
         person_fields=("username", "password"),
     ),
     Kind(
+        "aws_sigv4",
+        "Access key (AWS signature)",
+        (
+            Field("accessKeyId", "Access key ID", required=True),
+            Field("secretAccessKey", "Secret access key", secret=True, required=True),
+            Field(
+                "region", "Region", required=True, default="us-east-1", help="Where the bucket is, such as eu-west-2."
+            ),
+            Field(
+                "service", "Service", default="s3", advanced=True, help="The AWS service signed for; s3 for buckets."
+            ),
+        ),
+    ),
+    Kind(
         "bearer",
         "Bearer token",
         (

@@ -186,6 +186,11 @@ class PluginExecutor:
                 timeout=DEADLINE_S,
                 extensions=for_tenant(tenant, prepared.certificate if prepared else None, allowed),
             )
+            if prepared is not None and prepared.signer is not None:
+                # Signed last, over the request exactly as it leaves: a header or query added after would void it.
+                asked_for.headers.update(
+                    prepared.signer(asked_for.method, str(asked_for.url), dict(asked_for.headers), asked_for.content)
+                )
             r = await client.send(asked_for, stream=True)
             try:
                 if r.status_code == 401:

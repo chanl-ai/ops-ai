@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "Read files from Amazon S3 buckets",
+  "description": "Connect an Amazon S3 account, or any store that answers the S3 API, with an access key, and pick buckets or folders as a source of files. Each request is signed with the key, a wrong secret is refused in plain words, and a file whose version did not change is never fetched again.",
+  "tag": "new"
+}
