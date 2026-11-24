@@ -40,6 +40,7 @@ LISTS = [
     ("/v1/runs", lambda c: c.runs.list(workflow_id="wf", status=["failed"])),
     ("/v1/workflows/definitions", lambda c: c.workflows.list(status=["live"])),
     ("/v1/workflows/wf/forms", lambda c: c.workflows.forms("wf", search="x")),
+    ("/v1/workflows/wf/batches", lambda c: c.workflows.batches("wf", sort_order="asc")),
 ]
 
 

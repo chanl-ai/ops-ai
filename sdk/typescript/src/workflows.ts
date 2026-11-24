@@ -60,6 +60,16 @@ export class Workflows {
     return this.raw.agents.batches_start_batch({ path: { workflow_id: workflowId }, body: body as never });
   }
 
+  /** The workflow's batches, uploads and checks of a watched folder, newest first, every page (`sortOrder`). */
+  batches(workflowId: string, query: Record<string, unknown> = {}) {
+    return eachPage((page) => this.raw.agents.batches_list_batches({ path: { workflow_id: workflowId }, query: page }), query);
+  }
+
+  /** One batch with its counts and every row, failed first. */
+  getBatch(batchId: string) {
+    return this.raw.agents.batches_batch_page({ path: { batch_id: batchId } });
+  }
+
   async types(group?: string) {
     const found = (await this.raw.agents.workflows_node_types()) as Record<string, any>[];
     return group ? found.filter((t) => t.group === group) : found;

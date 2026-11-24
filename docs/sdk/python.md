@@ -54,6 +54,7 @@ print(run["status"], run.get("outcome"))
 |---|---|
 | `agents`, `cases`, `connections`, `knowledge` | `list(**filters)`, `get(id)`, `create(body)` |
 | `workflows`, `files` | `list(**filters)`, `get(id)` |
+| `workflows` batches | `batches(workflow_id, sort_order=)` walks a workflow's batches (spreadsheet rows or a watched folder's checks), newest first; `get_batch(id)` is one batch's counts and rows, failed first. `opsai workflows batches <workflow>` and `opsai batches get <batch> --json` do the same from the shell |
 | `threads` | `list`, `get` (the thread's state), `create` |
 | `teams` | `list` |
 | `runs` | `list`, `get`, `start`, `wait`, `stream`, `cancel` |

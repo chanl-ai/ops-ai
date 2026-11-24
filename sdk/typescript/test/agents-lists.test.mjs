@@ -26,6 +26,7 @@ const lists = [
   ['/v1/runs', (c) => c.runs.list({ workflowId: 'wf', status: ['failed'] })],
   ['/v1/workflows/definitions', (c) => c.workflows.list({ status: ['live'] })],
   ['/v1/workflows/wf/forms', (c) => c.workflows.forms('wf', { search: 'x' })],
+  ['/v1/workflows/wf/batches', (c) => c.workflows.batches('wf', { sortOrder: 'asc' })],
 ];
 
 for (const [path, call] of lists) {
