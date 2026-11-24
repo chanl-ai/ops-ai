@@ -113,6 +113,20 @@ async def test_a_read_failed_by_the_no_answer_policy_stays_the_answer_for_its_ke
     assert (first["status"], first["error"]["code"]) == ("failed", "reply_incomplete"), first
     assert (again["id"], again["status"]) == (first["id"], "failed"), again
     assert models.steps == ["extract", "extract:retry"], "a parked step's wake on the same key calls no model"
+    # A detected read held the same way is not classified again on its key.
+    kind = {"typeId": "invoice_notice", "confidence": 0.95, "reason": "The page says Invoice."}
+    detecting = Replies(whole(kind), cut(), cut())
+    d = make(detecting.service(), Floor())
+    d.extractor.no_answer = FailAfter()
+    async with d.client as c:
+        made = await c.post("/v1/document-types", json=TYPE, headers=OPS)
+        assert made.status_code in (201, 409), made.text
+        fid = await d.stored(NOTICE)
+        first = await _read(c, fid, "batch-7:NWF-88215", detect=True)
+        again = await _read(c, fid, "batch-7:NWF-88215", detect=True)
+    assert (first["status"], first["error"]["code"]) == ("failed", "reply_incomplete"), first
+    assert (again["id"], again["status"]) == (first["id"], "failed"), again
+    assert detecting.steps == ["classify", "extract", "extract:retry"], detecting.steps
 
 
 async def test_a_reply_cut_off_once_is_asked_again_unchanged_with_an_output_limit(make: Make) -> None:

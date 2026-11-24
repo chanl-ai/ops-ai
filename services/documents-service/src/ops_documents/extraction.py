@@ -636,8 +636,9 @@ class Extractor:
         if body.get("detect") and not body.get("documentTypeId") and not body.get("fields"):
             if idempotency_key is not None:
                 held = await self.store.held(_key_hash(who, idempotency_key))
-                if held is not None and held.status != "failed":
-                    # A retried step reads the first answer; it never pays for a second classification.
+                if held is not None and (held.status != "failed" or held.error_code in HELD_FAILURES):
+                    # A retried step reads the first answer, a failure the key holds included; it never pays for a
+                    # second classification.
                     return (200 if held.status not in ("queued", "running") else 202), answer_of(held)
             file = await self.files.readable(who, file_id)
             found = await self.classify(who, file, ocr=bool(body.get("ocr")))
