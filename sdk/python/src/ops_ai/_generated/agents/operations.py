@@ -736,6 +736,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "batches_waiting_groups": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/workflows/{workflow_id}/batches/waiting",
+        "pathParams": ["workflow_id"],
+        "query": [],
+        "stream": False,
+    },
     "cases_add_event": {
         "body": "json",
         "headers": [],
@@ -3668,6 +3677,10 @@ class Operations:
         "Start Batch"
         return self._t.call(SERVICE, OPERATIONS["batches_start_batch"], {"workflow_id": workflow_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def batches_waiting_groups(self, workflow_id: str) -> WaitingGroups:
+        "Waiting Groups"
+        return self._t.call(SERVICE, OPERATIONS["batches_waiting_groups"], {"workflow_id": workflow_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def workflows_save_draft(self, workflow_id: str, body: GraphBody) -> WorkflowDraft:
         "Save Draft"
         return self._t.call(SERVICE, OPERATIONS["workflows_save_draft"], {"workflow_id": workflow_id}, {}, {}, body)  # type: ignore[no-any-return]
@@ -5466,6 +5479,12 @@ class AsyncOperations:
         "Start Batch"
         return await self._t.call(
             SERVICE, OPERATIONS["batches_start_batch"], {"workflow_id": workflow_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    async def batches_waiting_groups(self, workflow_id: str) -> WaitingGroups:
+        "Waiting Groups"
+        return await self._t.call(
+            SERVICE, OPERATIONS["batches_waiting_groups"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def workflows_save_draft(self, workflow_id: str, body: GraphBody) -> WorkflowDraft:

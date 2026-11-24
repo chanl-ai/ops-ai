@@ -29,6 +29,7 @@ from ops_service_kit.listing import ListQuery
 
 from ...store.batches import MAX_ROWS, Batches, BatchOut, BatchRowOut
 from ...store.tenancy import current_team, current_tenant
+from ...store.waiting_files import WaitingFiles
 from ..auth import ACCESS, Principal, caller_of, principal, reader_of, started_by
 from ..deps import Runtime, runtime
 from ..engine_runs import checked_input
@@ -106,6 +107,10 @@ class BatchView(Out):
     not_retryable: int
     may_retry: bool
     stopped: Stopped | None = None
+    # The group the check's files were split into (Group by), its named parts, and the part past 500 rows.
+    group_name: str | None = None
+    group_parts: Json | None = None
+    part: int = 1
     rows: list[BatchRow]
 
 
@@ -123,6 +128,20 @@ class BatchLine(Out):
     running: int
     pending: int
     stopped: Stopped | None = None
+    group_name: str | None = None
+    part: int = 1
+
+
+class WaitingGroupLine(Out):
+    """A group whose Ready when has not passed: its name, how many files it holds, and since when."""
+
+    name: str
+    held: int
+    since: str
+
+
+class WaitingGroups(Out):
+    data: list[WaitingGroupLine]
 
 
 class Retried(Out):
@@ -236,10 +255,21 @@ async def list_batches(rt: Rt, _: Reader, __: Tx, workflow_id: str, q: ListQuery
             "waiting": int(b["waiting"]), "failed": int(b["failed"]), "removed": int(b["removed"]),
             "running": int(b["running"]), "pending": int(b["pending"]),
             "stopped": {"reason": b["stopped_reason"], "at": b["stopped_at"]} if b["stopped_at"] else None,
+            "groupName": b["group_name"], "part": b["part"],
         }
         for b in page["data"]
     ]  # fmt: skip
     return ok({**page, "data": lines})
+
+
+@router.get("/v1/workflows/{workflow_id}/batches/waiting", response_model=Envelope[WaitingGroups])
+async def waiting_groups(rt: Rt, _: Reader, __: Tx, workflow_id: str) -> JSONResponse:
+    """The workflow's groups still waiting for their Ready when, oldest first, at most 200. 404 for a workflow the
+    team does not hold."""
+    if await definitions(rt).row(workflow_id, team=current_team()) is None:
+        raise NotFound(f"Workflow {workflow_id}")
+    groups = await WaitingFiles(rt.db).held(workflow_id)
+    return ok({"data": [{"name": g.group_name, "held": g.held, "since": g.since} for g in groups]})
 
 
 @router.get("/v1/batches/{batch_id}", response_model=Envelope[BatchView])
@@ -269,6 +299,9 @@ async def batch_page(rt: Rt, me: Reader, _: Tx, batch_id: str) -> JSONResponse:
         "notRetryable": failed - retryable,
         "mayRetry": ACCESS.may(caller_of(me), "workflows", "decide", team=batch.team_id),
         "stopped": {"reason": batch.stopped_reason, "at": batch.stopped_at} if batch.stopped_at else None,
+        "groupName": batch.group_name,
+        "groupParts": batch.group_parts,
+        "part": batch.part,
         "rows": [
             {
                 "row": r.row, "attempt": r.attempt, "status": _status(r), "failureCode": r.failure_code,
@@ -305,7 +338,7 @@ async def batch_results(rt: Rt, me: Reader, _: Tx, batch_id: str) -> Response:
     out = io.StringIO()
     writer = csv.writer(out)
     if found.origin == "check":
-        writer.writerows(check_csv(await Batches(rt.db).rows(batch_id)))
+        writer.writerows(check_csv(await Batches(rt.db).rows(batch_id), found.group_name))
         return _csv(out.getvalue(), batch_id)
     writer.writerow(["row", "input", "status", "outcome", "runId", "error", "output"])
 
@@ -351,16 +384,18 @@ def field_columns(rows: list[BatchRowOut]) -> list[str]:
     return list(seen)
 
 
-def check_csv(rows: list[BatchRowOut]) -> list[list[str]]:
+def check_csv(rows: list[BatchRowOut], group: str | None = None) -> list[list[str]]:
     """A check's results: one line per file with its place, version and status, the reason a file did not run, and
-    one column per field the runs returned."""
+    one column per field the runs returned. A grouped batch's lines start with its group's name, so a CSV of several
+    groups' batches joined together still says which batch each line came from."""
     fields = field_columns(rows)
-    lines = [CHECK_COLUMNS + fields]
+    lines = [(["group"] if group else []) + CHECK_COLUMNS + fields]
     for r in sorted(rows, key=lambda x: x.row):
         given = r.input
         returned: Any = r.output
         output = cast(Json, returned) if isinstance(returned, dict) else {}
         place = [given.get("name"), given.get("path"), given.get("version"), given.get("previousVersion")]
         why = r.reason or r.error
-        lines.append([cell(v) for v in (*place, _status(r), why)] + [cell(output.get(f)) for f in fields])
+        lead = [cell(group)] if group else []
+        lines.append(lead + [cell(v) for v in (*place, _status(r), why)] + [cell(output.get(f)) for f in fields])
     return lines

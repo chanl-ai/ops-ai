@@ -81,6 +81,17 @@ def test_a_batch_csv_comes_back_as_its_text() -> None:
     assert client(handler).workflows.batch_csv("b1") == body
 
 
+def test_waiting_groups_come_back_as_their_list() -> None:
+    """The waiting route answers {data: [...]} inside the envelope; the client hands back the groups themselves."""
+    groups = [{"name": "Batch002", "held": 2, "since": "2026-12-02T09:00:00Z"}]
+
+    def handler(r: httpx.Request) -> httpx.Response:
+        assert r.url.path.endswith("/v1/workflows/wf/batches/waiting")
+        return httpx.Response(200, json={"success": True, "data": {"data": groups}})
+
+    assert client(handler).workflows.waiting_groups("wf") == groups
+
+
 def test_an_inbox_refused_to_a_teammate_raises_not_found() -> None:
     def handler(_: httpx.Request) -> httpx.Response:
         error = {"code": "not_found", "message": "No such thread", "status": 404}

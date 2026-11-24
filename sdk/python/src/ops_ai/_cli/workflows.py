@@ -11,7 +11,7 @@ from typing import Any
 from ops_ai._io import definition_in, dump_definition, load_definition
 from ops_ai._workflows import PLANNED, WorkflowCheck
 
-from .common import client, emit, parser, payload, refuse, table
+from .common import _field, client, emit, parser, payload, refuse, short, table  # pyright: ignore[reportPrivateUsage]
 
 STARTER = """schemaVersion: 2
 id: {id}
@@ -191,8 +191,12 @@ def _dispatch(ns: argparse.Namespace) -> int:
     if ns.verb == "forms":
         return table(ns, wf.forms(ns.id, search=ns.search), "id", "title", "slug", "paused")
     if ns.verb == "batches":
-        rows = wf.batches(ns.id)
-        return table(ns, rows, "id", "origin", "label", "total", "finished", "failed", "pending", "createdAt")
+        rows = list(wf.batches(ns.id))
+        waiting = list(wf.waiting_groups(ns.id))
+        cols = ("id", "origin", "label", "groupName", "part", "total", "finished", "failed", "pending", "createdAt")
+        lines = ["  ".join(short(_field(r, c), 80) for c in cols) for r in rows] or ["(none)"]
+        lines += [f"waiting  {g.get('name')}  {g.get('held')} files since {g.get('since')}" for g in waiting]
+        return emit(ns, {"batches": rows, "waiting": waiting}, text="\n".join(lines))
     if ns.verb == "batch-start":
         mode = "live" if ns.live else "test"
         return emit(ns, wf.start_batch(ns.id, ns.file_id, mode=mode, dry_run=ns.dry_run or None))
