@@ -41,6 +41,29 @@ The same agent opens under **Build › Agents** in the console, where its **Test
 | Guardrails | Topics it must refuse, checked on the question and on the answer; the reply names the guardrail | built for blocked topics. Other kinds planned |
 | Budget | The most model calls and tool calls in one turn; the reply says when it stopped | built |
 
+## Write the instructions as a brief
+
+The agent page writes the prompt from headings, so each kind of instruction has one place. Job, How to answer,
+Hand off when, Examples and Never are always there. How to answer holds what an answer includes and how it is
+formatted; tone goes in its own section.
+
+**Add section** opens a menu of seven more headings: Personality, Tone, Environment, Context, Tool use, Error handling
+and Escalation wording. Each can be added once, and a section you do not fill in is left out of the prompt.
+**Add custom section** asks for a name first and adds a heading of your own, up to five. A custom name cannot repeat
+a heading the brief already has or another custom name, and it is marked prompt text only: nothing else reads it.
+People who can only view an agent see the sections and no Add section or Remove controls.
+
+**View prompt** shows what the model receives, in this order: Who you are, Goal, Personality, Tone, Environment,
+Context, How to answer, Tool use, Error handling, your own sections in the order you keep them, Hand off when,
+Escalation wording, Examples, and Never last. Escalation wording sits straight after Hand off when so the moment and
+the words stay together, and Context sits straight after Environment. An agent saved before sections reads and runs
+exactly as it did.
+
+Sources for the headings (what each gave us):
+- ElevenLabs, https://elevenlabs.io/docs/agents-platform/best-practices/prompting-guide: separate Personality, Environment, Tone, Goal, Tools, Error handling and Escalation sections; tone kept in one place.
+- Vapi, https://docs.vapi.ai/prompting-guide: identity, response guidelines, context and examples that include an error case.
+- OpenAI, https://developers.openai.com/api/docs/guides/prompt-engineering: identity, instructions, examples and context under markdown headers.
+
 ## Lifecycle
 
 | Step | Command | What it does |
