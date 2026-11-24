@@ -1405,6 +1405,33 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "schedules_preview_schedule": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/schedules/preview",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "schedules_schedule_kinds": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/schedules/kinds",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "schedules_schedule_zones": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/schedules/zones",
+        "pathParams": [],
+        "query": ["search", "cursor", "limit"],
+        "stream": False,
+    },
     "templates_list_templates": {
         "body": None,
         "headers": [],
@@ -1576,6 +1603,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "workflows_clear_schedule": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule",
+        "pathParams": ["workflow_id", "step"],
+        "query": [],
+        "stream": False,
+    },
     "workflows_create_definition": {
         "body": "json",
         "headers": [],
@@ -1672,6 +1708,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/runs/{run_id}",
         "pathParams": ["run_id"],
+        "query": [],
+        "stream": False,
+    },
+    "workflows_get_schedule": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule",
+        "pathParams": ["workflow_id", "step"],
         "query": [],
         "stream": False,
     },
@@ -1917,6 +1962,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "PUT",
         "path": "/v1/workflows/{workflow_id}/draft",
         "pathParams": ["workflow_id"],
+        "query": [],
+        "stream": False,
+    },
+    "workflows_save_schedule": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule",
+        "pathParams": ["workflow_id", "step"],
         "query": [],
         "stream": False,
     },
@@ -3042,6 +3096,27 @@ class Operations:
             SERVICE, OPERATIONS["workflows_resume_step"], {"run_id": run_id, "step": step}, {}, {}, body
         )  # type: ignore[no-any-return]
 
+    def schedules_schedule_kinds(self) -> list[KindView]:
+        "Schedule Kinds"
+        return self._t.call(SERVICE, OPERATIONS["schedules_schedule_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def schedules_preview_schedule(self, body: PreviewIn) -> PreviewView:
+        "Preview Schedule"
+        return self._t.call(SERVICE, OPERATIONS["schedules_preview_schedule"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def schedules_schedule_zones(
+        self, *, search: str | None = None, cursor: str | None = None, limit: int | None = None
+    ) -> OptionsPage:
+        "Schedule Zones"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["schedules_schedule_zones"],
+            {},
+            {"search": search, "cursor": cursor, "limit": limit},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def agents_list_skills(
         self,
         *,
@@ -3557,6 +3632,24 @@ class Operations:
         "Definition Sample"
         return self._t.call(
             SERVICE, OPERATIONS["workflows_definition_sample"], {"workflow_id": workflow_id}, {"step": step}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def workflows_get_schedule(self, workflow_id: str, step: str) -> ScheduleView:
+        "Get Schedule"
+        return self._t.call(
+            SERVICE, OPERATIONS["workflows_get_schedule"], {"workflow_id": workflow_id, "step": step}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def workflows_save_schedule(self, workflow_id: str, step: str, body: RuleIn) -> ScheduleView:
+        "Save Schedule"
+        return self._t.call(
+            SERVICE, OPERATIONS["workflows_save_schedule"], {"workflow_id": workflow_id, "step": step}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    def workflows_clear_schedule(self, workflow_id: str, step: str) -> Any:
+        "Clear Schedule"
+        return self._t.call(
+            SERVICE, OPERATIONS["workflows_clear_schedule"], {"workflow_id": workflow_id, "step": step}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     def workflows_definition_shapes(self, workflow_id: str, version: int) -> DefinitionShapes:
@@ -4775,6 +4868,27 @@ class AsyncOperations:
             SERVICE, OPERATIONS["workflows_resume_step"], {"run_id": run_id, "step": step}, {}, {}, body
         )  # type: ignore[no-any-return]
 
+    async def schedules_schedule_kinds(self) -> list[KindView]:
+        "Schedule Kinds"
+        return await self._t.call(SERVICE, OPERATIONS["schedules_schedule_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def schedules_preview_schedule(self, body: PreviewIn) -> PreviewView:
+        "Preview Schedule"
+        return await self._t.call(SERVICE, OPERATIONS["schedules_preview_schedule"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def schedules_schedule_zones(
+        self, *, search: str | None = None, cursor: str | None = None, limit: int | None = None
+    ) -> OptionsPage:
+        "Schedule Zones"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["schedules_schedule_zones"],
+            {},
+            {"search": search, "cursor": cursor, "limit": limit},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     async def agents_list_skills(
         self,
         *,
@@ -5302,6 +5416,24 @@ class AsyncOperations:
         "Definition Sample"
         return await self._t.call(
             SERVICE, OPERATIONS["workflows_definition_sample"], {"workflow_id": workflow_id}, {"step": step}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def workflows_get_schedule(self, workflow_id: str, step: str) -> ScheduleView:
+        "Get Schedule"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_get_schedule"], {"workflow_id": workflow_id, "step": step}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def workflows_save_schedule(self, workflow_id: str, step: str, body: RuleIn) -> ScheduleView:
+        "Save Schedule"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_save_schedule"], {"workflow_id": workflow_id, "step": step}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    async def workflows_clear_schedule(self, workflow_id: str, step: str) -> Any:
+        "Clear Schedule"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_clear_schedule"], {"workflow_id": workflow_id, "step": step}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def workflows_definition_shapes(self, workflow_id: str, version: int) -> DefinitionShapes:
