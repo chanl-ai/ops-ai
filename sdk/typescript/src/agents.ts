@@ -75,6 +75,21 @@ export class Agents {
     return this.raw.agents.agents_add_reference({ path: { agent_id: id }, body: { kind, id: refId } as never });
   }
 
+  /** The workspace's instruction section list: the stored one, or the default. Any signed-in person reads it. */
+  instructionSections() {
+    return this.raw.agents.agents_get_instruction_sections({});
+  }
+
+  /** Replaces the list (needs settings.manage). The server holds up to 8 presets per section and 40 sections. */
+  setInstructionSections(listing: unknown) {
+    return this.raw.agents.agents_put_instruction_sections({ body: listing as never });
+  }
+
+  /** Brings the default list back and returns it (needs settings.manage). */
+  resetInstructionSections() {
+    return this.raw.agents.agents_reset_instruction_sections({});
+  }
+
   /** What stops the agent's newest draft from being published, each problem with the field it is in. */
   async publishCheck(id: string, version?: number) {
     version ??= (await this.get(id)).version;

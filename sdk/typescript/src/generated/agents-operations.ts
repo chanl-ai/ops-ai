@@ -244,6 +244,15 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_get_instruction_sections": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agent-instruction-sections",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "agents_get_skill": {
     "body": null,
     "headers": [],
@@ -464,6 +473,15 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_put_instruction_sections": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/agent-instruction-sections",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "agents_read_skill_text": {
     "body": "json",
     "headers": [],
@@ -557,6 +575,15 @@ export const agentsOperations = {
     "pathParams": [
       "widget_id"
     ],
+    "query": [],
+    "stream": false
+  },
+  "agents_reset_instruction_sections": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/agent-instruction-sections",
+    "pathParams": [],
     "query": [],
     "stream": false
   },

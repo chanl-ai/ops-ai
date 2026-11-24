@@ -166,6 +166,18 @@ class Agents:
         pin = version if version is not None else self.get(id).get("version")
         return self._raw.agents.agents_publish_check(id, version=pin)
 
+    def instruction_sections(self) -> dict[str, Any]:
+        """The workspace's instruction section list: the stored one, or the default. Any signed-in person reads it."""
+        return self._raw.agents.agents_get_instruction_sections()  # type: ignore[no-any-return]
+
+    def set_instruction_sections(self, listing: dict[str, Any]) -> dict[str, Any]:
+        """Replaces the list (needs settings.manage). The server holds up to 8 presets per section and 40 sections."""
+        return self._raw.agents.agents_put_instruction_sections(listing)  # type: ignore[no-any-return]
+
+    def reset_instruction_sections(self) -> dict[str, Any]:
+        """Brings the default list back and returns it (needs settings.manage)."""
+        return self._raw.agents.agents_reset_instruction_sections()  # type: ignore[no-any-return]
+
     def pause(self, id: str) -> Any:
         return self._raw.agents.agents_set_paused(id, {"paused": True})
 
@@ -339,6 +351,18 @@ class AsyncAgents:
     async def publish_check(self, id: str, *, version: int | None = None) -> Any:
         pin = version if version is not None else (await self.get(id)).get("version")
         return await self._raw.agents.agents_publish_check(id, version=pin)
+
+    async def instruction_sections(self) -> dict[str, Any]:
+        """The workspace's instruction section list: the stored one, or the default. Any signed-in person reads it."""
+        return await self._raw.agents.agents_get_instruction_sections()  # type: ignore[no-any-return]
+
+    async def set_instruction_sections(self, listing: dict[str, Any]) -> dict[str, Any]:
+        """Replaces the list (needs settings.manage). The server holds up to 8 presets per section and 40 sections."""
+        return await self._raw.agents.agents_put_instruction_sections(listing)  # type: ignore[no-any-return]
+
+    async def reset_instruction_sections(self) -> dict[str, Any]:
+        """Brings the default list back and returns it (needs settings.manage)."""
+        return await self._raw.agents.agents_reset_instruction_sections()  # type: ignore[no-any-return]
 
     async def pause(self, id: str) -> Any:
         return await self._raw.agents.agents_set_paused(id, {"paused": True})

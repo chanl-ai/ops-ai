@@ -199,6 +199,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "agents_get_instruction_sections": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agent-instruction-sections",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "agents_get_skill": {
         "body": None,
         "headers": [],
@@ -367,6 +376,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["version"],
         "stream": False,
     },
+    "agents_put_instruction_sections": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/agent-instruction-sections",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "agents_read_skill_text": {
         "body": "json",
         "headers": [],
@@ -436,6 +454,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "POST",
         "path": "/v1/widgets/{widget_id}/publish-requests",
         "pathParams": ["widget_id"],
+        "query": [],
+        "stream": False,
+    },
+    "agents_reset_instruction_sections": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/agent-instruction-sections",
+        "pathParams": [],
         "query": [],
         "stream": False,
     },
@@ -2164,6 +2191,18 @@ class Operations:
             None,
         )  # type: ignore[no-any-return]
 
+    def agents_get_instruction_sections(self) -> SectionList:
+        "Get Instruction Sections"
+        return self._t.call(SERVICE, OPERATIONS["agents_get_instruction_sections"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def agents_put_instruction_sections(self, body: SectionListIn) -> SectionList:
+        "Put Instruction Sections"
+        return self._t.call(SERVICE, OPERATIONS["agents_put_instruction_sections"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def agents_reset_instruction_sections(self) -> SectionList:
+        "Reset Instruction Sections"
+        return self._t.call(SERVICE, OPERATIONS["agents_reset_instruction_sections"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
     def agents_list_agents(
         self,
         *,
@@ -3889,6 +3928,18 @@ class AsyncOperations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    async def agents_get_instruction_sections(self) -> SectionList:
+        "Get Instruction Sections"
+        return await self._t.call(SERVICE, OPERATIONS["agents_get_instruction_sections"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def agents_put_instruction_sections(self, body: SectionListIn) -> SectionList:
+        "Put Instruction Sections"
+        return await self._t.call(SERVICE, OPERATIONS["agents_put_instruction_sections"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def agents_reset_instruction_sections(self) -> SectionList:
+        "Reset Instruction Sections"
+        return await self._t.call(SERVICE, OPERATIONS["agents_reset_instruction_sections"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def agents_list_agents(
         self,
