@@ -11,6 +11,7 @@ import { CaseFields } from '@/components/cases/case-fields';
 import { PageLayout } from '@/components/page-layout';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FieldRow } from '@/components/shared/field-row';
+import { labelOf, PlainValue } from '@/components/shared/readable-value';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
@@ -310,9 +311,15 @@ export default function CasePage() {
           {fields.length ? (
             <Section title={`About this ${c.caseType?.name.toLowerCase() ?? 'case'}`} bodyClassName="px-4 py-1" id="case-about">
               <div data-testid="case-typed-fields">
-                {fields.map((f) => (
-                  <FieldRow key={f.key} label={f.label} value={f.display} wrap href={f.fileId ? `/data/files/${encodeURIComponent(f.fileId)}` : undefined} testId={`case-field-${f.key}`} />
-                ))}
+                {fields.map((f) =>
+                  f.declared ? (
+                    <FieldRow key={f.key} label={f.label} value={f.display} wrap href={f.fileId ? `/data/files/${encodeURIComponent(f.fileId)}` : undefined} testId={`case-field-${f.key}`} />
+                  ) : (
+                    // A value no case type declares comes as text; it reads as the rail's plain fields do (grouped
+                    // numbers, dates, a file id as a link to the file).
+                    <FieldRow key={f.key} label={labelOf(f.key)} value={<PlainValue value={f.raw} />} wrap testId={`case-field-${f.key}`} />
+                  ),
+                )}
               </div>
             </Section>
           ) : (
