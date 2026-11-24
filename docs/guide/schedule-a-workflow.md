@@ -7,8 +7,8 @@ set it on the workflow's Schedule trigger, and it takes effect when you save, wi
 
 ## Set a schedule on a workflow
 
-1. Open the workflow and open its Schedule trigger. Under How it starts, the Schedule panel shows the saved schedule, or
-   an empty form for a new one.
+1. Open the workflow and open its Schedule trigger. The sheet's Schedule section (marked Not part of a version) shows the
+   saved schedule, or an empty form for a new one.
 2. Set Every (a number and minutes, hours or days) and, if you want, Starting at.
 3. Untick the days it should not run, or set Between two times to narrow it. Left alone it runs every day, day and night.
 4. Pick the Time zone. The search opens on your own zone.
@@ -26,7 +26,7 @@ not know. A scheduled run carries only the time it was due, so the trigger's inp
 |---|---|
 | Saved. Not running yet | The workflow has no live version. The schedule starts at its next time once one is published. |
 | Paused: no scheduled runs | The workflow is paused. Pause in the header stops the whole workflow, not only the schedule. Resume waits for the next time on the schedule. |
-| Last scheduled run | When the last time came and what happened: it ran, ran late, was skipped because the run before it was still going, or was missed because the clock was down. A skipped or refused run gives its reason, and a ran run links to the run. |
+| Last scheduled run | When the last time came and what happened, in one of six words: ran, ran late, skipped (the run before it was still going), refused (the run could not start), missed (the clock was down) or seen (the clock noted the schedule at that time and started nothing). A reason follows the word when there is one, and a run that started links to it with Open the run. |
 | A saved schedule is not running (above the canvas) | A newer version removed the Schedule trigger, so there is no step to run. The notice says why and offers Clear schedule. |
 
 Clear schedule asks first. Scheduled runs stop; runs already started carry on, and the workflow is not paused.
