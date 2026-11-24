@@ -92,7 +92,10 @@ export function StepSheet({ node, type, workflowId, steps, checks, order, readOn
       onOpenChange={(o) => !o && onClose()}
       modal={false}
       // Starts at the canvas's top edge (--step-sheet-top, set by the editor) so Save version and Test run stay in view.
-      widthClass="sm:max-w-xl sm:top-[var(--step-sheet-top,0px)] sm:h-[calc(100dvh-var(--step-sheet-top,0px))]"
+      // It sits inside the console panel (8px in from the window's right and bottom edge, rounded like it), and keeps the
+      // page's 16px margin on a phone. The canvas pads 16px, so the sheet does too.
+      widthClass="sm:max-w-xl sm:right-2 sm:top-[var(--step-sheet-top,0px)] sm:h-[calc(100dvh-var(--step-sheet-top,0px)-0.5rem)] sm:rounded-br-xl max-sm:right-4 max-sm:w-[calc(100%-2rem)]"
+      padX="px-4"
       testId="step-sheet"
       scrollKey={node?.id}
       title={node ? node.name || type?.label || 'Step' : ''}

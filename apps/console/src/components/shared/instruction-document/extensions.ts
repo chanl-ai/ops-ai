@@ -47,7 +47,7 @@ const Field = Node.create({
   content: 'paragraph+',
   isolating: true,
   defining: true,
-  addAttributes: () => ({ ...attr('key'), ...attr('label'), ...attr('placeholder') }),
+  addAttributes: () => ({ ...attr('key'), ...attr('label'), ...attr('placeholder'), ...attr('optional') }),
   renderHTML: () => ['section', 0],
   addNodeView: () => ReactNodeViewRenderer(BlockView),
 });

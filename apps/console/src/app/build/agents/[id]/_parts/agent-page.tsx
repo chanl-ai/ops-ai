@@ -289,6 +289,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
       <PageLayout
         icon={Bot}
         backHref="/build/agents"
+        recordName={agent.name}
         title={editable ? <EditableTitle value={draft.name} onChange={(v) => set('name', v)} label="Agent name" error={errors.name} /> : draft.name}
         description={agent.role}
         badge={
@@ -430,7 +431,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               <RecentRunsCard runs={runs.data} loading={runs.isPending} />
             </div>
           ) : tab === 'limits' ? (
-            <div className="flex max-w-3xl flex-col gap-4" data-testid="agent-limits">
+            <div className="flex flex-col gap-4" data-testid="agent-limits">
               <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
                 <WidgetsSection draft={draft} set={set} toolIds={agent.toolIds} />
               </BuilderFieldset>
@@ -497,14 +498,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                   </AlertDescription>
                 </Alert>
               )}
-              {/* What opens something to read (the model button, the uses link, Model and limits) stays outside the read-only fieldsets: a disabled fieldset disables every button in it. */}
-              <div className="flex flex-wrap items-center gap-2" data-testid="agent-slim-row">
-                <fieldset disabled={!editable} className="flex min-w-0 max-w-full items-center gap-2 border-0 p-0" data-testid="agent-model-button">
-                  <label htmlFor="ag-model" className="text-sm text-muted-foreground">Model</label>
-                  <ModelSelect id="ag-model" value={draft.model} onValueChange={(v) => set('model', v)} aliases={modelAliases.data ?? []} className="w-auto max-w-full" />
-                </fieldset>
-              </div>
-              {/* No read-only fieldset here: the editor takes readOnly, and View prompt in its footer stays usable. */}
+              {/* No read-only fieldset here: the editor takes readOnly, and View prompt in its header stays usable. */}
               {briefEdit !== null && agent.brief === null && (
                 <Alert data-testid="agent-brief-notice">
                   <Info />
@@ -520,9 +514,26 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 brief={brief}
                 onBrief={setBriefEdit}
                 cardHeader={
-                  <Button variant="ghost" size="sm" onClick={() => setDraftOpen(true)} title="Propose a brief from a description of the job" data-testid="agent-brief-draft">
-                    <Sparkles className="size-3.5" /> Draft
-                  </Button>
+                  // One row: the model on the left, what the agent uses as quiet text, the actions on the right. What opens
+                  // something to read (View prompt, the uses links) stays outside the read-only fieldset.
+                  <>
+                    <fieldset disabled={!editable} className="flex min-w-0 max-w-full items-center gap-2 border-0 p-0" data-testid="agent-model-button">
+                      <label htmlFor="ag-model" className="text-sm text-muted-foreground">Model</label>
+                      <ModelSelect id="ag-model" value={draft.model} onValueChange={(v) => set('model', v)} aliases={modelAliases.data ?? []} className="w-auto max-w-full" />
+                    </fieldset>
+                    <span data-testid="agent-brief-footer" className="min-w-0 max-sm:order-last max-sm:basis-full">
+                      <AgentUsesLink uses={agent.uses} />
+                    </span>
+                    <div className="ml-auto flex items-center gap-1">
+                      {editable && mode === 'full' && <MoveIntoBrief onChoose={() => setModeAsked('brief')} disabled={dirty || update.isPending} />}
+                      {editable && mode !== 'full' && (
+                        <Button variant="ghost" size="sm" onClick={() => setDraftOpen(true)} title="Propose a brief from a description of the job" data-testid="agent-brief-draft">
+                          <Sparkles className="size-3.5" /> Draft
+                        </Button>
+                      )}
+                      <ViewPromptDialog agentId={agent.id} version={agent.version} name={agent.name} />
+                    </div>
+                  </>
                 }
                 mode={mode}
                 instructions={draft.instructions}
@@ -534,15 +545,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 toolbar={assist.toolbar}
                 footer={assist.footer}
                 textareaRef={assist.textareaRef}
-                cardFooter={
-                  <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2" data-testid="agent-brief-footer">
-                    <AgentUsesLink uses={agent.uses} />
-                    <div className="flex items-center gap-1">
-                      {editable && mode === 'full' && <MoveIntoBrief onChoose={() => setModeAsked('brief')} disabled={dirty || update.isPending} />}
-                      <ViewPromptDialog agentId={agent.id} version={agent.version} name={agent.name} />
-                    </div>
-                  </div>
-                }
               />
               <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
               {mode === 'full' && <AgentJobField draft={draft} set={set} error={errors.role} />}

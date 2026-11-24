@@ -315,6 +315,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-769 | console | My apps is a page of its own, the same for an admin and a member | ui | `console/my-apps-page.md` |
 | uc-770 | tools-service | Admins see people's app sign-ins and end one | ui | `tools-service/admins-see-people-s-app-sign.md` |
 | uc-771 | agents-service | A builder takes a new skill to its first publish in under ten minutes | ui | `agents-service/a-builder-takes-a-new-skill.md` |
+| uc-781 | console | Record editors and list pages share one header, one tab strip and one section style | ui | `console/editor-page-layout.md` |
 | uc-772 | kb-service | Search a long document's pieces on the server | api | `kb-service/search-a-long-document-s-pieces.md` |
 | uc-779 | files-service | A watched folder brings files in | api, ui | `files-service/a-watched-folder-brings-files-in.md` |
 | uc-780 | console | A long list or text in a table cell stays inside its column | ui | `console/long-values-in-tables.md` |

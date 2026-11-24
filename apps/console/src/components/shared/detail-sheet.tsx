@@ -52,6 +52,8 @@ export interface DetailSheetProps {
 
   /** Width class override (default: sm:max-w-2xl) */
   widthClass?: string;
+  /** Side padding of the header, body and footer (default px-6); a sheet drawn over a canvas matches the canvas's px-4. */
+  padX?: string;
 
   /** Scrollable body content */
   children: ReactNode;
@@ -78,6 +80,7 @@ export function DetailSheet({
   navigation,
   footerActions,
   widthClass = 'sm:max-w-2xl',
+  padX = 'px-6',
   children,
   testId,
   scrollKey,
@@ -118,13 +121,14 @@ export function DetailSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange} modal={modal}>
       <SheetContent
-        className={`w-full ${widthClass} p-0 flex flex-col h-full bg-background`}
+        // The close button's top matches the title line (header py-4, 24px title).
+        className={`w-full ${widthClass} p-0 flex flex-col h-full bg-background [&>button]:top-5`}
         onOpenAutoFocus={(e) => e.preventDefault()}
         onInteractOutside={modal ? undefined : (e) => e.preventDefault()}
         data-testid={testId}
       >
         {/* ── Sticky Header ── */}
-        <SheetHeader className="px-6 py-4 border-b bg-background shrink-0 pr-12">
+        <SheetHeader className={`${padX} py-4 border-b bg-background shrink-0 pr-12`}>
           <SheetTitle className="text-left" data-testid="detail-sheet-title">
             {title}
           </SheetTitle>
@@ -135,10 +139,10 @@ export function DetailSheet({
         </SheetHeader>
 
         {/* ── Scrollable Body ── */}
-        <div ref={bodyRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4">{children}</div>
+        <div ref={bodyRef} className={`flex-1 min-h-0 overflow-y-auto ${padX} py-4`}>{children}</div>
 
         {/* ── Sticky Footer ── */}
-        <SheetFooter className="px-6 py-3 border-t bg-background shrink-0 flex-row flex-wrap items-center justify-between gap-2">
+        <SheetFooter className={`${padX} py-3 border-t bg-background shrink-0 flex-row flex-wrap items-center justify-between gap-2`}>
           <div className="flex flex-wrap items-center gap-2">{footerActions}</div>
 
           {navigation && (

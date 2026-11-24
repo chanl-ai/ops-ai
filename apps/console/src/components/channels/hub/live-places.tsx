@@ -8,10 +8,10 @@ import { Activity, CalendarClock, Route } from 'lucide-react';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { EmptyState } from '@/components/shared/empty-state';
 import { QueryError } from '@/components/shared/query-states';
+import { Section } from '@/components/shared/surface';
 import { StatusDot } from '@/components/shared/setting/status-dot';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScheduleAgentDialog } from './schedule-agent-dialog';
@@ -130,28 +130,30 @@ export function LivePlacesPanel({ kind, id, name, between }: { kind: 'agent' | '
   const latest = q.data.latestVersion;
   return (
     <div className="flex flex-col gap-4">
-      <Card className="gap-3" data-testid="versions-live">
-        <CardHeader>
-          <CardTitle>Where it&rsquo;s live</CardTitle>
-          <CardDescription>Published v{latest}. A place follows the latest published version or pins one; publishing never moves a pinned one.</CardDescription>
-          {(readsActivity || (kind === 'agent' && mayCreate && mayEdit && mayDeploy)) && (
-            <CardAction className="flex flex-wrap gap-2">
+      <Section
+        title="Versions live"
+        description={`Published v${latest}. A place follows the latest published version or pins one; publishing never moves a pinned one.`}
+        actions={
+          (readsActivity || (kind === 'agent' && mayCreate && mayEdit && mayDeploy)) && (
+            <div className="flex flex-wrap gap-2">
               {kind === 'agent' && mayCreate && mayEdit && mayDeploy && (
                 <Button variant="outline" size="sm" onClick={() => setScheduling(true)} aria-label="Run on a schedule" data-testid="run-on-schedule">
                   <CalendarClock className="size-4" /> Schedule
                 </Button>
               )}
               {readsActivity && (
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/govern/activity?${new URLSearchParams([...sources.map((s) => ['source', s] as [string, string]), ['name', name]])}`}>
-                  <Activity className="size-4" /> View activity{count.data != null ? ` · ${count.data.toLocaleString('en-CA')}` : ''}
-                </Link>
-              </Button>
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/govern/activity?${new URLSearchParams([...sources.map((s) => ['source', s] as [string, string]), ['name', name]])}`}>
+                    <Activity className="size-4" /> View activity{count.data != null ? ` · ${count.data.toLocaleString('en-CA')}` : ''}
+                  </Link>
+                </Button>
               )}
-            </CardAction>
-          )}
-        </CardHeader>
-        <CardContent>
+            </div>
+          )
+        }
+        className="gap-0"
+      >
+        <div data-testid="versions-live">
           {q.data.versions.length ? (
             <ItemGroup className="gap-2">
               {[...q.data.versions]
@@ -170,8 +172,8 @@ export function LivePlacesPanel({ kind, id, name, between }: { kind: 'agent' | '
           ) : (
             <EmptyState icon={Route} title="Not live anywhere yet" description={`Put the ${kind} on a channel, in a workflow, or on a schedule.`} testId="live-empty" />
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
       {between}
       {rows.length > 0 && (
         <DataTableWithViews

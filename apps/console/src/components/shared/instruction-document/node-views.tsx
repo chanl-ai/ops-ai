@@ -4,12 +4,14 @@ import * as React from 'react';
 import { NodeViewContent, NodeViewWrapper, useEditorState, type ReactNodeViewProps } from '@tiptap/react';
 import { Ban, Braces, Lock, LockOpen, Play, Plus, Search, TriangleAlert, X, type LucideIcon } from 'lucide-react';
 
+import { Selection } from '@tiptap/pm/state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { PublishBlocker, Ref, RefKind, ReferenceItem } from '@/lib/types/references';
 
+import { cn } from '@/lib/utils';
 import { KIND_ICON } from '@/components/shared/reference-kinds';
 
 import { type IfNot, chipFor, refToken, refsInNode, runsIndex } from './document-model';
@@ -88,19 +90,53 @@ function WarningLine({ message }: { message: string }) {
   );
 }
 
-/** A locked heading with the text or the list under it. */
-export function BlockView({ node }: ReactNodeViewProps) {
-  const { missing, invalid, warnings } = React.useContext(DocumentContext);
+/**
+ * A locked heading with the text or the list under it. An optional section with nothing in it is one line, its heading
+ * and an Add link, until the person adds to it (or the cursor is in it); read-only, the line says None.
+ */
+export function BlockView({ node, editor, getPos }: ReactNodeViewProps) {
+  const { missing, invalid, warnings, readOnly } = React.useContext(DocumentContext);
   const key = node.attrs.key as string;
   const error = invalid.find((i) => i.field === key);
   const errorId = `${React.useId()}-error`;
+  const optional = !!node.attrs.optional;
+  const empty = node.textContent.trim() === '';
+  const [asked, setAsked] = React.useState(false);
+  const inside = useEditorState({
+    editor,
+    selector: (ctx) => {
+      const at = getPos();
+      const from = ctx.editor.state.selection.from;
+      return typeof at === 'number' && from > at && from < at + node.nodeSize;
+    },
+  });
+  const collapsed = optional && empty && !asked && !inside && !error;
+  const open = () => {
+    setAsked(true);
+    requestAnimationFrame(() => {
+      const at = getPos();
+      if (typeof at !== 'number') return;
+      const { state, view } = editor;
+      view.dispatch(state.tr.setSelection(Selection.near(state.doc.resolve(at + 1))));
+      view.focus();
+    });
+  };
+  const label = node.attrs.label as string;
   return (
-    <NodeViewWrapper as="section" role="group" aria-label={node.attrs.label} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined} data-field={key} className="flex flex-col gap-2">
-      {/* A heading reads as a label of the card, not a field: a full-width muted band across the editor's padding. */}
-      <div contentEditable={false} className="-mx-4 bg-muted px-4 py-1.5 text-sm font-medium text-muted-foreground select-none">
-        {node.attrs.label}
+    <NodeViewWrapper as="section" role="group" aria-label={label} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined} data-field={key} data-collapsed={collapsed ? 'yes' : undefined} className="flex flex-col gap-2">
+      {/* A plain heading, the size and weight of every other section heading on the page. */}
+      <div contentEditable={false} className="flex items-center gap-2 select-none">
+        <div role="heading" aria-level={2} className="text-sm font-semibold">
+          {label}
+          {collapsed && !label.includes('·') && <span className="font-normal text-muted-foreground"> · optional</span>}
+        </div>
+        {collapsed && (readOnly ? <span className="text-sm text-muted-foreground">None</span> : (
+          <Button type="button" variant="link" size="sm" onClick={open} data-testid={`brief-add-${key}`}>
+            <Plus /> Add
+          </Button>
+        ))}
       </div>
-      <NodeViewContent className={error ? 'rounded-sm ring-2 ring-destructive/40' : undefined} />
+      <NodeViewContent className={cn(collapsed && 'hidden', error && 'rounded-sm ring-2 ring-destructive/40')} />
       {error && (
         <p id={errorId} contentEditable={false} className="text-xs text-destructive-text">
           {error.message}

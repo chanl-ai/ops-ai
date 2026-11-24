@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { FileText } from 'lucide-react';
 
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { QueryError } from '@/components/shared/query-states';
@@ -18,7 +19,7 @@ export function ViewPromptDialog({ agentId, version, name }: { agentId: string; 
   return (
     <>
       <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(true)} data-testid="agent-view-prompt">
-        View prompt
+        <FileText className="size-3.5" /> View prompt
       </Button>
       <DialogShell
         open={open}

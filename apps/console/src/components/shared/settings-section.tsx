@@ -70,7 +70,7 @@ export function SettingsSection({
       {/* Header */}
       <div className="mb-3">
         <div className="flex items-center gap-2">
-          <h4 className="text-sm font-medium">{title}</h4>
+          <h2 className="text-sm font-semibold">{title}</h2>
           {helpText && (
             <TooltipProvider>
               <Tooltip>
