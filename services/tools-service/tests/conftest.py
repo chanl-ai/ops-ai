@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import httpx
@@ -47,7 +47,7 @@ from ops_tools.egress_routes import egress_router
 from ops_tools.mcp_links import mcp_links_router
 from ops_tools.mock_routes import mocks_router
 from ops_tools.modules.directory import Directory
-from ops_tools.modules.policy import WriteApprovals
+from ops_tools.modules.policy import OwnRequests, WriteApprovals
 from ops_tools.modules.routes import executions_router, modules_router
 from ops_tools.modules.seed import catalog_titles, load
 from ops_tools.modules.service import ModuleService
@@ -366,6 +366,15 @@ async def grant(engine: AsyncEngine, tenant: str, module_id: str, approval_id: s
     await store.put(m, expected_revision=m["revision"])
 
 
+class EveryoneDecides:
+    """platform-service's access check for the dev caller, who holds every cell (register E09) and so Approvals
+    decide: an asker deciding their own request is allowed. A test about refusal passes its own `own_requests`."""
+
+    async def post(self, path: str, json: Any = None, *, tenant: str, team: str | None = None) -> Any:
+        assert path == "/v1/access/check", path
+        return {"allowed": True, "refusedBy": None}
+
+
 def nothing_saved() -> WriteApprovals:
     """The approval settings of a team that saved none, as platform-service answers them: every write without its own
     answer runs. Without a reader the rules cannot be read and the gateway refuses every write."""
@@ -493,7 +502,7 @@ def build_app(
         directory=directory if mcp else None,
         flags=flags if flags is not None else Flags(frozenset({"mcp_gateway"}) if mcp else frozenset()),
         modules=service,
-        own_requests=own_requests,
+        own_requests=own_requests if own_requests is not None else OwnRequests(cast(Any, EveryoneDecides())),
     )
 
 

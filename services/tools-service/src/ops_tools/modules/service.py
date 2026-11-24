@@ -2770,12 +2770,8 @@ class ModuleService:
         # Separation of duties at the moment of the decision: the asker decides their own request only while they
         # hold Approvals decide in the deciding team, as platform-service answers now (never a token's copy).
         if asker and asker.casefold() in {str(d).casefold() for d in (*deciders, by or "")}:
-            refused = (
-                await self.own_requests.refusal(
-                    tenant_id, a.get("decider_team") or team_id, asker, (*deciders, by), what="this access"
-                )
-                if self.own_requests is not None
-                else Forbidden("You asked for this access, so someone else has to decide it.", code="own_request")
+            refused = await (self.own_requests or OwnRequests(None)).refusal(
+                tenant_id, a.get("decider_team") or team_id, asker, (*deciders, by), what="this access"
             )
             if refused is not None:
                 raise refused

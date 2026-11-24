@@ -68,3 +68,11 @@ async def test_a_token_minted_while_self_approval_was_on_no_longer_self_approves
     out = await _real(g, "live")  # the person's own live write, with nobody else approving
     assert out["decision"] != "allow", f"self-approved on a stale token: {out}"
     assert not [r for r in g.received if r["path"] == "/v1/holds"], "the write reached the bank unapproved"
+
+
+async def test_with_no_platform_service_an_asker_never_decides_their_own_request() -> None:
+    """No platform client means the cell cannot be asked, so the gateway refuses as the module service does: a check
+    that cannot be made never lets someone approve their own request."""
+    refused = await OwnRequests(None).refusal("tenant_a", "team_a", "ana@example.com", ["ana@example.com"])
+    assert refused is not None and refused.code == "own_request", refused
+    assert await OwnRequests(None).refusal("tenant_a", "team_a", "ana@example.com", ["ben@example.com"]) is None

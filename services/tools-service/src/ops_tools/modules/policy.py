@@ -210,7 +210,7 @@ class OwnRequests:
         """Whether a request's asker may decide it themselves, asked of platform-service's access check
         (POST /v1/access/check, this service's `access:view` token for the tenant and the deciding team) when the
         decision is made: the asker holds Approvals decide there now, whatever a token minted earlier says. With no
-        platform-service (dev sign-in) every caller is the dev caller, which holds every cell (register E09)."""
+        platform-service the cell cannot be asked, so the asker is refused, as with a failed read."""
         self.platform = platform
 
     async def refusal(
@@ -222,10 +222,8 @@ class OwnRequests:
         request."""
         if not asker or asker.casefold() not in {str(d).casefold() for d in deciders if d}:
             return None
-        if self.platform is None:
-            return None
         fallback = Forbidden(f"You asked for {what}, so someone else has to decide it.", code="own_request")
-        if team_id is None:
+        if self.platform is None or team_id is None:
             return fallback
         body = {"email": asker, "area": REVIEWS, "action": "decide", "requestedBy": asker}
         try:
