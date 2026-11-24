@@ -244,13 +244,13 @@ async def require_publish_reviewer(rt: Runtime, req: PublishRequestRow, approver
 
 async def require_publish_decider(rt: Runtime, req: PublishRequestRow, approver: Principal) -> None:
     """Who decides a publish: a reviewer or admin of the owning team, and not who asked for it or saved the version
-    while requesterMayDecide is off."""
+    unless they hold Approvals decide in the owning team."""
     await require_publish_reviewer(rt, req, review_teams(approver))
     await require_not_asker(rt, req, approver)
 
 
 async def require_not_asker(rt: Runtime, req: PublishRequestRow, approver: Principal) -> None:
-    """Who asked for the publish or saved the version does not decide it while requesterMayDecide is off."""
+    """Who asked for the publish or saved the version does not decide it unless they hold Approvals decide."""
     # A saver named as anything but a string is refused rather than read as nobody.
     named = req.body.get("savedBy") if req.kind in SAVED_KINDS else None
     saved = None if named is None else narrow.required(req.body, "savedBy", str)

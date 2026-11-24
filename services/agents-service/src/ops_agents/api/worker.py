@@ -26,6 +26,7 @@ from ops_engine.ports import EnginePorts, Faults
 from ops_engine.store import DefinitionStore, RunRow, RunStore
 from ops_engine.worker import Worker, WorkerHost
 from ops_files_client import FilesClient
+from ops_identity import ServiceClient
 from ops_service_kit.logging import configure_logging, get_logger
 from ops_service_kit.settings import Settings, require_keys
 from ops_store import background, isolation
@@ -162,10 +163,21 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
                 httpx.AsyncClient(base_url=settings.platform_url, timeout=10)
             )
             review_sla = PlatformReviewSla(service_client(settings, platform_http, "platform"))
+            # Whether a run's starter holds Approvals · decide now, asked when a step approving their write is reached.
+            access: ServiceClient | None = None
+            try:
+                access = ServiceClient.for_settings(
+                    settings, platform_http, service="agents", audience="platform", scopes=["access:view"]
+                )
+            except ValueError:
+                log.warning("no service signing key; a starter's write waits for a person")
+            starters.access = access
             if agents is not None:
                 # Task assist writes a typed task's help as its step pauses, where the team turned it on.
                 policies = PlatformPolicies(service_client(settings, platform_http, "platform"))
-                ports.reviews = assisted_reviews(stack, db, agents, policies, StarterApprovals(db, gateway, policies))
+                ports.reviews = assisted_reviews(
+                    stack, db, agents, policies, StarterApprovals(db, gateway, policies, access)
+                )
                 # AI steps run only where the run's team allows them, masked unless it turned that off.
                 agents.rules = RunTeamRules(db, policies)
         # The chat runtime, as the API builds it: a reply whose process died is continued here (chat_turns.py).
