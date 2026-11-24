@@ -63,7 +63,7 @@ const noSideScroll = (page) => page.evaluate(() => document.documentElement.scro
 
 await withUiStack(
   async (consoleUrl, stack) => {
-    const H = await as(JAMES);
+    let H = await as(JAMES);
     const A = `uc512_${TAG}`;
     const B = `uc512_norun_${TAG}`;
     const a = await saveAndPublish(H, refund(A));
@@ -132,7 +132,8 @@ await withUiStack(
       const chip = await output.getByTestId('field-chip').innerText().catch(() => '');
       check('9 the picker says Nothing matches for a miss and puts Fields → Amount as a chip with its sample', none && chip.includes('Fields → Amount') && chip.includes('42'), { none, chip });
 
-      // 10. The picked path is saved, published and read by the next run.
+      // 10. The picked path is saved, published and read by the next run. A slow machine can outlast the first token.
+      H = await as(JAMES);
       const view = await until(async () => {
         const v = (await (await fetch(`${agents}/v1/workflows/definitions/${A}`, { headers: H })).json()).data;
         const done = v?.workingCopy?.definition?.nodes?.find((n) => n.id === 'done');
