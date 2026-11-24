@@ -231,6 +231,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "auth_sso_links": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/auth/sso/links",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "auth_sso_start": {
         "body": "json",
         "headers": [],
@@ -364,6 +373,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/settings/members/options",
         "pathParams": [],
         "query": ["search", "cursor", "limit", "ids"],
+        "stream": False,
+    },
+    "members_reinvite_members": {
+        "body": "json",
+        "headers": ["x-acting-for"],
+        "method": "POST",
+        "path": "/v1/settings/members/reinvite",
+        "pathParams": [],
+        "query": [],
         "stream": False,
     },
     "members_remove_members": {
@@ -1034,6 +1052,10 @@ class Operations:
         "Sso Link Start"
         return self._t.call(SERVICE, OPERATIONS["auth_sso_link_start"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def auth_sso_links(self) -> list[SsoLink]:
+        "Sso Links"
+        return self._t.call(SERVICE, OPERATIONS["auth_sso_links"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
     def auth_sso_start(self, body: SsoStartIn) -> SsoStarted:
         "Sso Start"
         return self._t.call(SERVICE, OPERATIONS["auth_sso_start"], {}, {}, {}, body)  # type: ignore[no-any-return]
@@ -1311,6 +1333,12 @@ class Operations:
             {"search": search, "cursor": cursor, "limit": limit, "ids": ids},
             {},
             None,
+        )  # type: ignore[no-any-return]
+
+    def members_reinvite_members(self, body: ReinviteIn, *, x_acting_for: str | None = None) -> InviteBulkOut:
+        "Reinvite Members"
+        return self._t.call(
+            SERVICE, OPERATIONS["members_reinvite_members"], {}, {}, {"x-acting-for": x_acting_for}, body
         )  # type: ignore[no-any-return]
 
     def members_change_roles(self, body: RoleIn, *, x_acting_for: str | None = None) -> BulkOut:
@@ -1682,6 +1710,10 @@ class AsyncOperations:
         "Sso Link Start"
         return await self._t.call(SERVICE, OPERATIONS["auth_sso_link_start"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def auth_sso_links(self) -> list[SsoLink]:
+        "Sso Links"
+        return await self._t.call(SERVICE, OPERATIONS["auth_sso_links"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
     async def auth_sso_start(self, body: SsoStartIn) -> SsoStarted:
         "Sso Start"
         return await self._t.call(SERVICE, OPERATIONS["auth_sso_start"], {}, {}, {}, body)  # type: ignore[no-any-return]
@@ -1963,6 +1995,12 @@ class AsyncOperations:
             {"search": search, "cursor": cursor, "limit": limit, "ids": ids},
             {},
             None,
+        )  # type: ignore[no-any-return]
+
+    async def members_reinvite_members(self, body: ReinviteIn, *, x_acting_for: str | None = None) -> InviteBulkOut:
+        "Reinvite Members"
+        return await self._t.call(
+            SERVICE, OPERATIONS["members_reinvite_members"], {}, {}, {"x-acting-for": x_acting_for}, body
         )  # type: ignore[no-any-return]
 
     async def members_change_roles(self, body: RoleIn, *, x_acting_for: str | None = None) -> BulkOut:

@@ -532,6 +532,20 @@ class Sso:
             p, purpose=LINK, login_hint=user.email, next_path=next_path, session_id=ref.id, user_id=user.id
         )
 
+    async def links(self, token: str) -> list[Json]:
+        """The providers the session person can link: the one their email's domain names in their own workspace, when
+        it is an enabled SSO provider, with whether they have linked it. Reads only."""
+        ref, _ = await self.auth.session_of(token)
+        user = await self.identity.user(ref.tenant_id, ref.user_id)
+        if user is None:
+            raise _refused()
+        try:
+            p = await self._provider_for(user.email, ref.tenant_id)
+        except ValidationFailed:
+            return []
+        at = await self.store.linked_at(ref.tenant_id, p.id, user.id)
+        return [{"providerId": p.id, "kind": p.kind, "label": p.label, "linked": at is not None, "linkedAt": at}]
+
     async def link_complete(self, token: str, *, code: str, flow_key: str, request_id: str) -> Provider:
         """Links the subject the provider answered with to the session's person: only the session that started the
         link, from the browser that started it, so an answer from someone else's round trip links nobody."""

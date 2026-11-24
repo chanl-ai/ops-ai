@@ -243,6 +243,15 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "auth_sso_links": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/auth/sso/links",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "auth_sso_start": {
     "body": "json",
     "headers": [],
@@ -401,6 +410,17 @@ export const platformOperations = {
       "limit",
       "ids"
     ],
+    "stream": false
+  },
+  "members_reinvite_members": {
+    "body": "json",
+    "headers": [
+      "x-acting-for"
+    ],
+    "method": "POST",
+    "path": "/v1/settings/members/reinvite",
+    "pathParams": [],
+    "query": [],
     "stream": false
   },
   "members_remove_members": {

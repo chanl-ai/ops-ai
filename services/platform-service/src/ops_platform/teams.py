@@ -90,6 +90,25 @@ class Members:
         done = _bulk(bulk)
         return {"updated": done["updated"], "skipped": done["skipped"], "invites": invites}
 
+    async def reinvite(self, actor: Actor, ids: list[str] | None) -> InvitedView:
+        """A new invite for each active member who has no provider link and no password in a workspace that signs in
+        only through a provider; the member stays active, and an SSO sign-in from the invite links their person.
+        Same right and token handling as `invite`."""
+        await self.require_admin(actor, "access", "create")
+        now = datetime.now(UTC)
+        wanted = ids if ids is not None else await self.store.affected(actor.tenant_id, actor.team_id)
+        tokens = {m: f"inv_{secrets.token_urlsafe(24)}" for m in wanted}
+        bulk, made = await self.store.reinvite(
+            actor,
+            ids,
+            tokens={m: _hash(t) for m, t in tokens.items()},
+            expires_at=_iso(now + INVITE_TTL),
+            at=_iso(now),
+        )
+        done = _bulk(bulk)
+        invites = [{**m, "token": tokens[m["memberId"]]} for m in made]
+        return {"updated": done["updated"], "skipped": done["skipped"], "invites": invites}
+
     async def set_role(self, actor: Actor, ids: list[str], role: str) -> BulkView:
         await self.require_admin(actor, "access", "edit")
         return _bulk(await self.store.set_role(actor, ids, role, at=_iso(datetime.now(UTC))))
@@ -151,6 +170,7 @@ class Members:
 
 
 def state_of(invite: Invite, now: str) -> str:
-    if invite.status == "active":
+    # An active member with an expiry has a pending new invite (`TeamStore.reinvite`); without one it was accepted.
+    if invite.status == "active" and not invite.expires_at:
         return "accepted"
     return "expired" if invite.expires_at <= now else "pending"

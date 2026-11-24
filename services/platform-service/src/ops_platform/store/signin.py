@@ -887,6 +887,14 @@ class SignInStore(TenantDb):
         async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(q)).scalar()
 
+    async def linked_at(self, tenant_id: str, provider_id: str, user_id: str) -> str | None:
+        """When the person's link to this provider was made; None when they have none."""
+        q = sa.select(signin_identities.c.created_at).where(
+            signin_identities.c.provider_id == provider_id, signin_identities.c.user_id == user_id
+        )
+        async with self.tenant_tx(tenant_id) as c:
+            return (await c.execute(q)).scalar()
+
     async def resolve(
         self,
         p: Provider,
@@ -1027,10 +1035,36 @@ class SignInStore(TenantDb):
         done = await c.execute(
             members.update()
             .where(members.c.id == member_id, members.c.status == "invited")
-            .values(status="active", user_id=user_id, updated_at=at)
+            .values(status="active", user_id=user_id, invite_expires_at=None, updated_at=at)
         )
         if done.rowcount != 1:
-            raise LinkRequired
+            # A new invite to a member who is active already and cannot sign in (`TeamStore.reinvite`): it is
+            # consumed for that same person only, the expiry still set, so a used or someone else's invite links
+            # nobody. Their membership and roles stand as they are.
+            again = await c.execute(
+                members.update()
+                .where(
+                    members.c.id == member_id,
+                    members.c.status == "active",
+                    members.c.user_id == user_id,
+                    members.c.invite_expires_at > at,
+                )
+                .values(invite_expires_at=None, updated_at=at)
+            )
+            if again.rowcount != 1:
+                raise LinkRequired
+            await record(
+                c,
+                tenant_id=p.tenant_id,
+                team_id=team_id,
+                actor=user_id,
+                action="member.reinvite_accept",
+                target_kind="member",
+                target_id=member_id,
+                request_id=request_id,
+                detail={"email": email, "provider": p.id},
+            )
+            return
         await mirror_membership(
             c,
             tenant_id=p.tenant_id,
@@ -1224,7 +1258,8 @@ async def _invite(c: AsyncConnection, invite_hash: str, email: str, at: str) -> 
             .join(tenants, tenants.c.id == members.c.tenant_id)
             .where(
                 members.c.invite_token_hash == invite_hash,
-                members.c.status == "invited",
+                # An active member's row is pending only while `reinvite` has set its expiry; accepting nulls it.
+                members.c.status.in_(("invited", "active")),
                 members.c.invite_expires_at > at,
             )
         )

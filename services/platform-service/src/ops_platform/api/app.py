@@ -132,6 +132,7 @@ from .schemas import (
     ProviderIn,
     ProviderOut,
     Refresh,
+    ReinviteIn,
     ResetIn,
     RoleCellsIn,
     RoleCreatedOut,
@@ -151,6 +152,7 @@ from .schemas import (
     SignInTestOut,
     SignInTestStartOut,
     SsoCompleteIn,
+    SsoLink,
     SsoLinked,
     SsoStarted,
     SsoStartIn,
@@ -503,6 +505,12 @@ def create_public_app(
         started = await sso.link_start(token, next_path=body.next)
         return ok({"redirectUrl": started.redirect_url, "flowKey": started.flow_key})
 
+    @app.get("/v1/auth/sso/links", tags=["auth"], response_model=Envelope[list[SsoLink]], responses=ERRORS)
+    async def sso_links(token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """The company providers the signed-in person can link and whether they have; empty when their email's
+        domain names none in their workspace."""
+        return ok(await sso.links(token))
+
     @app.post("/v1/auth/sso/link/complete", tags=["auth"], response_model=Envelope[SsoLinked], responses=ERRORS)
     async def sso_link_complete(  # pyright: ignore[reportUnusedFunction]
         body: SsoCompleteIn, token: Annotated[str, Depends(_bearer)]
@@ -708,6 +716,14 @@ def create_public_app(
     @app.post("/v1/settings/members/invite", tags=["members"], response_model=Envelope[InviteBulkOut], responses=ERRORS)
     async def invite_members(_: Tx, body: InviteIn, actor: Annotated[Actor, Depends(acting_as_person)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(await people.invite(actor, body.emails, body.role))
+
+    @app.post(
+        "/v1/settings/members/reinvite", tags=["members"], response_model=Envelope[InviteBulkOut], responses=ERRORS
+    )
+    async def reinvite_members(_: Tx, body: ReinviteIn, actor: Annotated[Actor, Depends(acting_as_person)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """A new invite for each member who `needsInvite`, every such member of the team when `ids` is omitted; the
+        member stays active, others are skipped `not_affected`. Signing in through the provider from it links them."""
+        return ok(await people.reinvite(actor, body.ids))
 
     async def users_of(actor: Actor, member_ids: list[str]) -> list[str]:
         rows = await team_store.members(actor.tenant_id, actor.team_id, roles=[], statuses=[])

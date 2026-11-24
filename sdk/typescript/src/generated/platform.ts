@@ -462,6 +462,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/sso/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sso Links
+         * @description The company providers the signed-in person can link and whether they have; empty when their email's
+         *     domain names none in their workspace.
+         */
+        get: operations["auth_sso_links"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/sso/start": {
         parameters: {
             query?: never;
@@ -1081,6 +1102,27 @@ export interface paths {
         get: operations["members_member_options"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/settings/members/reinvite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reinvite Members
+         * @description A new invite for each member who `needsInvite`, every such member of the team when `ids` is omitted; the
+         *     member stays active, others are skipped `not_affected`. Signing in through the provider from it links them.
+         */
+        post: operations["members_reinvite_members"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2532,6 +2574,16 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[list[SsoLink]] */
+        Envelope_list_SsoLink__: {
+            /** Data */
+            data: components["schemas"]["SsoLink"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[list[TeamName]] */
         Envelope_list_TeamName__: {
             /** Data */
@@ -2985,6 +3037,11 @@ export interface components {
             invitedAt?: string | null;
             /** Name */
             name: string;
+            /**
+             * Needsinvite
+             * @default false
+             */
+            needsInvite: boolean;
             /** Role */
             role: string;
             /**
@@ -3276,6 +3333,11 @@ export interface components {
         Refresh: {
             /** Refreshtoken */
             refreshToken: string;
+        };
+        /** ReinviteIn */
+        ReinviteIn: {
+            /** Ids */
+            ids?: string[] | null;
         };
         /** ResetIn */
         ResetIn: {
@@ -3591,6 +3653,22 @@ export interface components {
             code: string;
             /** Flowkey */
             flowKey: string;
+        };
+        /**
+         * SsoLink
+         * @description A provider the signed-in person can sign in with, and whether their account there is linked.
+         */
+        SsoLink: {
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Linked */
+            linked: boolean;
+            /** Linkedat */
+            linkedAt: string | null;
+            /** Providerid */
+            providerId: string;
         };
         /**
          * SsoLinked
@@ -6087,6 +6165,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_SsoStarted_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    auth_sso_links: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_SsoLink__"];
                 };
             };
             /** @description Invalid request */
@@ -9778,6 +9957,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_OptionsPage_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    members_reinvite_members: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-acting-for"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReinviteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_InviteBulkOut_"];
                 };
             };
             /** @description Invalid request */

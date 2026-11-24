@@ -32,11 +32,49 @@ from .audit import record, record_grants_ending
 from .key_events import change_keys
 from .lookups import INVITE, lookup
 from .roles import mirror_membership, team_admins
-from .tables import api_keys, audit_entries, members, platform_outbox, sessions, teams, users
+from .tables import (
+    api_keys,
+    audit_entries,
+    members,
+    password_credentials,
+    platform_outbox,
+    sessions,
+    signin_identities,
+    signin_providers,
+    teams,
+    users,
+)
 from .tenancy import INVITE_LOOKUP, TenantDb
 from .workspace import security_team_in
 
 ADMIN = "admin"
+
+
+def _needs_invite() -> sa.ColumnElement[int]:
+    """1 for an active member whose person has no provider link and no password, in a workspace that signs in only
+    through a provider (an enabled provider and no enabled password row, the inverse of `signin._password_on`): they
+    cannot sign in until a new invite links them. 1/0 rather than a boolean so SQL Server can select it."""
+    enabled = sa.select(signin_providers.c.id).where(
+        signin_providers.c.tenant_id == members.c.tenant_id, signin_providers.c.enabled == sa.true()
+    )
+    return sa.case(
+        (
+            sa.and_(
+                members.c.status == "active",
+                members.c.user_id.is_not(None),
+                ~sa.exists(sa.select(signin_identities.c.id).where(signin_identities.c.user_id == members.c.user_id)),
+                ~sa.exists(
+                    sa.select(password_credentials.c.user_id).where(password_credentials.c.user_id == members.c.user_id)
+                ),
+                sa.exists(enabled),
+                ~sa.exists(enabled.where(signin_providers.c.kind == "password")),
+            ),
+            1,
+        ),
+        else_=0,
+    )
+
+
 # Reported when a member is removed from a team (relay.py): tools-service deletes their own accounts on its apps.
 MEMBER_REMOVED = "member.removed"
 
@@ -105,6 +143,7 @@ class MemberRow(Out):
     status: str
     created_at: str
     user_id: str | None
+    needs_invite: bool = False
 
 
 class PersonOption(Out):
@@ -244,6 +283,7 @@ class TeamStore(TenantDb):
                 members.c.status,
                 members.c.created_at,
                 members.c.user_id,
+                _needs_invite().label("needs_invite"),
             )
             .join(teams, teams.c.id == members.c.team_id)
             .outerjoin(users, users.c.id == members.c.user_id)
@@ -272,6 +312,7 @@ class TeamStore(TenantDb):
                 members.c.status,
                 members.c.created_at,
                 members.c.user_id,
+                _needs_invite().label("needs_invite"),
             )
             # members first: list_page pages by the first table's key.
             .select_from(
@@ -362,6 +403,45 @@ class TeamStore(TenantDb):
                 bulk.updated.append(member_id)
                 made.append({"memberId": member_id, "email": email})
         return bulk, made
+
+    async def reinvite(
+        self, actor: Actor, ids: list[str] | None, *, tokens: Mapping[str, str], expires_at: str, at: str
+    ) -> tuple[Bulk, list[dict[str, str]]]:
+        """A fresh invite on each active member who cannot sign in (`_needs_invite`), the member staying active: its
+        token hash and expiry, which an SSO sign-in from that invite consumes to link their person. `ids` None means
+        every such member of the team; `tokens` maps each member id the caller may need to a token hash, from
+        `affected` read first. Others are skipped `not_affected`, unknown ids `not_found`."""
+        bulk, made = Bulk(), list[dict[str, str]]()
+        async with self.tenant_tx(actor.tenant_id) as c:
+            q = sa.select(members.c.id, members.c.email, _needs_invite()).where(
+                members.c.team_id == actor.team_id, members.c.status != "removed"
+            )
+            if ids is not None:
+                q = q.where(members.c.id.in_(ids))
+            found = {str(r[0]): (str(r[1]), bool(r[2])) for r in (await c.execute(q)).all()}
+            for member_id in ids if ids is not None else [i for i, (_, need) in found.items() if need]:
+                if member_id not in found:
+                    bulk.skip(member_id, "not_found")
+                    continue
+                email, need = found[member_id]
+                if not need or member_id not in tokens:
+                    bulk.skip(member_id, "not_affected")
+                    continue
+                await c.execute(
+                    members.update()
+                    .where(members.c.id == member_id, members.c.status == "active")
+                    .values(invite_token_hash=tokens[member_id], invite_expires_at=expires_at, updated_at=at)
+                )
+                await _audit(c, actor, "member.reinvite", member_id, {"email": email})
+                bulk.updated.append(member_id)
+                made.append({"memberId": member_id, "email": email})
+        return bulk, made
+
+    async def affected(self, tenant_id: str, team_id: str) -> list[str]:
+        """The ids of the team's members `_needs_invite` names, so the caller makes one token for each."""
+        q = sa.select(members.c.id).where(members.c.team_id == team_id, _needs_invite() == 1)
+        async with self.tenant_tx(tenant_id) as c:
+            return [str(r[0]) for r in (await c.execute(q)).all()]
 
     async def set_role(self, actor: Actor, ids: list[str], role: str, *, at: str) -> Bulk:
         bulk = Bulk()
@@ -488,7 +568,9 @@ class TeamStore(TenantDb):
             done = await c.execute(
                 members.update()
                 .where(members.c.id == invite.member_id, members.c.status == "invited")
-                .values(status="active", user_id=user_id, updated_at=at)
+                # An active row keeps its token hash, so a used link still reads as accepted; a null expiry is what
+                # says no invite is pending on it (`reinvite` sets one again).
+                .values(status="active", user_id=user_id, invite_expires_at=None, updated_at=at)
             )
             if done.rowcount != 1:
                 raise _AlreadyDone  # rolls back the user it may have created

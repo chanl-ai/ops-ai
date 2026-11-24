@@ -325,6 +325,7 @@ class MemberOut(TypedDict, closed=True):
     id: str
     invitedAt: NotRequired[str | None]
     name: str
+    needsInvite: NotRequired[bool]
     role: str
     status: Literal["active", "invited"]
     team: str
@@ -451,6 +452,10 @@ Domain: TypeAlias = str
 
 class Refresh(TypedDict, closed=True):
     refreshToken: str
+
+
+class ReinviteIn(TypedDict, closed=True):
+    ids: NotRequired[list[Id] | None]
 
 
 class ResetIn(TypedDict, closed=True):
@@ -623,6 +628,14 @@ class Skip(TypedDict, closed=True):
 class SsoCompleteIn(TypedDict, closed=True):
     code: str
     flowKey: str
+
+
+class SsoLink(TypedDict, closed=True):
+    kind: str
+    label: str
+    linked: bool
+    linkedAt: str | None
+    providerId: str
 
 
 class SsoLinked(TypedDict, closed=True):
@@ -999,6 +1012,11 @@ class EnvelopeListPolicyOut(TypedDict, closed=True):
 
 class EnvelopeListSignInSecretOut(TypedDict, closed=True):
     data: list[SignInSecretOut]
+    success: Literal[True]
+
+
+class EnvelopeListSsoLink(TypedDict, closed=True):
+    data: list[SsoLink]
     success: Literal[True]
 
 

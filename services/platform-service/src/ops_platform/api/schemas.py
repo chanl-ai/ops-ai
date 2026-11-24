@@ -308,6 +308,9 @@ class MemberOut(Out):
     user_id: str | None = None
     # Roles the person holds in every team (`*`), by name: where access beyond their team role comes from.
     workspace_roles: list[str] = Field(default_factory=list[str])
+    # Active, but with no provider link and no password in a workspace that signs in only through a provider: they
+    # cannot sign in until a new invite (`/v1/settings/members/reinvite`) links them.
+    needs_invite: bool = False
 
 
 class InviteIn(In):
@@ -366,6 +369,13 @@ class InviteLink(Out):
 
 class InviteBulkOut(BulkOut):
     invites: list[InviteLink]
+
+
+class ReinviteIn(In):
+    # Omitted: every member of the team who needs a new invite.
+    ids: list[Annotated[str, StringConstraints(pattern=MEMBER_ID)]] | None = Field(
+        default=None, min_length=1, max_length=100
+    )
 
 
 class InvitePreview(Out):
@@ -667,6 +677,16 @@ class StepUpSsoStartIn(In):
 class SsoStarted(Out):
     redirect_url: str
     flow_key: str
+
+
+class SsoLink(Out):
+    """A provider the signed-in person can sign in with, and whether their account there is linked."""
+
+    provider_id: str
+    kind: str
+    label: str
+    linked: bool
+    linked_at: str | None
 
 
 class SsoLinked(Out):
