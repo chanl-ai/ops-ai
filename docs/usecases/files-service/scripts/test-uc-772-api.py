@@ -165,24 +165,24 @@ with ExitStack() as stack:
             time.sleep(0.5)
         return {}
 
-    # A file listed under the limit whose bytes at fetch are over it fails as the 30 MB one does: one failed event
-    # with the size code and the same reason, and a second check says nothing new about it.
+    # A 20 MB file is under the 25 MB limit and is brought in; the 30 MB file stays one failed event, too large with
+    # the limit as its reason, and a second check says nothing new about either.
     add_midsize(systems)
     first = checked()
     second = checked()
     events = (body(fs.get(f"/v1/watches/{wid}/events", headers=ravi)) or {}).get("data", [])
     failed = {str(e.get("path")).rsplit("/", 1)[-1]: e for e in events if e["kind"] == "failed"}
-    mid = [e for e in events if e["kind"] == "failed" and MIDSIZE_NAME in str(e.get("path"))]
-    big = failed.get(OVERSIZE_NAME, {})
+    mid = [e for e in events if MIDSIZE_NAME in str(e.get("path"))]
+    big = [e for e in events if e["kind"] == "failed" and OVERSIZE_NAME in str(e.get("path"))]
     check(
-        "9 a file listed at 20 MB and over 25 MB at fetch is one failed event, too large with a size reason, as the 30 MB file is; a second check adds none",
-        len(mid) == 1
-        and mid[0].get("code") == "too_large"
-        and mid[0].get("reason") == "Larger than 25 MB"
+        "9 a 20 MB file is brought in; the 30 MB file is one failed event, too large, Larger than 25 MB; a second check adds none",
+        [e["kind"] for e in mid] == ["new"]
         and mid[0].get("size") == MIDSIZE_BYTES
-        and big.get("code") == "too_large"
-        and big.get("reason") == "Larger than 25 MB"
-        and (first.get("lastCheck") or {}).get("failures", [{}])[0].get("code") == "too_large"
+        and len(big) == 1
+        and big[0].get("code") == "too_large"
+        and big[0].get("reason") == "Larger than 25 MB"
+        and (first.get("lastCheck") or {}).get("brought") == 1
+        and len(events) == len({e["number"] for e in events})
         and bool(second.get("lastCheckAt")),
         {"failed": list(failed.values()), "first": first.get("lastCheck"), "second": second.get("lastCheck")},
     )

@@ -46,7 +46,7 @@ reason. The other files in the check still arrive.
 | Larger than 25 MB | A watched folder takes files up to 25 MB | Split the file or make it smaller in the app, or upload it to Files directly with **Upload** on **All files**. A file that is made smaller is tried again on the next check |
 | Could not be fetched | The app did not hand over that one file | The next checks try it again, up to three times. If it still fails, change the file in the app or upload it directly |
 
-A file larger than the limit is listed once with its size. It is listed again only if its size changes.
+A file larger than the limit is listed once with its size. It is listed again only if the file changes.
 
 A check that stopped part way says **Partial** and why, for example that the app slowed the check down or that the
 folder is long. The next check carries on from there.

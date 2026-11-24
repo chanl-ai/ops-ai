@@ -77,11 +77,9 @@ PLUGINS_REPO = Path(os.environ.get("OPS_PLUGINS_REPO") or _main_checkout().paren
 # records it as one failed file with its size. Its bytes stay small; only the size Graph reports is large.
 OVERSIZE_NAME = "scanned-contracts-2026.zip"
 OVERSIZE_BYTES = 31_457_280
-# Listed at 20 MB, under the listing's 25 MB limit, while its bytes at fetch are over the gateway's 25 MB answer (a
-# file that grew between the listing and the fetch).
+# Under the 25 MB limit, with real bytes of that size, so a check brings it in.
 MIDSIZE_NAME = "site-survey-photos.zip"
 MIDSIZE_BYTES = 20_971_520
-MIDSIZE_FETCHED = 27_262_976
 
 
 def plugin_path(name: str) -> Path:
@@ -324,12 +322,10 @@ def add_oversize(systems: Systems) -> str:
 
 
 def add_midsize(systems: Systems) -> str:
-    """Puts MIDSIZE_NAME in the Policies Library's Policies folder, listed at MIDSIZE_BYTES with MIDSIZE_FETCHED bytes
-    to fetch; answers its id."""
+    """Puts MIDSIZE_NAME, MIDSIZE_BYTES of real bytes, in the Policies Library's Policies folder; answers its id."""
     g = systems.graph_ids
-    body = b"PK\x03\x04" + bytes(MIDSIZE_FETCHED - 4)
+    body = b"PK\x03\x04" + bytes(MIDSIZE_BYTES - 4)
     systems.graph.add(g.LIB_POLICIES, "p10", MIDSIZE_NAME, "Policies", body, "application/zip")
-    systems.graph.drives[g.LIB_POLICIES]["p10"].size = MIDSIZE_BYTES
     return "p10"
 
 

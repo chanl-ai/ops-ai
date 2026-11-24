@@ -62,7 +62,7 @@ Steps 1-7 are the api script (`test-uc-772-api.py`); steps 11-20 the ui script (
 | 5 | The check ends | 3 brought in, 1 failed: `scanned-contracts-2026.zip`, 31457280 bytes; 3 files in Files |
 | 6 | Ravi reads the watch's events | Three `new` events and one `failed` event with its size |
 | 7 | Ravi opens `leave.md` | Its source names the watch and its path in the library |
-| 9 | `site-survey-photos.zip` arrives, listed at 20 MB with 26 MB to fetch; James presses Check now, then again | One `failed` event for it, `code` `too_large`, reason "Larger than 25 MB", 20971520 bytes, the same as the 30 MB file's event; the second check adds no event |
+| 9 | A 20 MB `site-survey-photos.zip` arrives; James presses Check now, then again | It is brought in (one `new` event, 20971520 bytes); the 30 MB file is still one `failed` event, `code` `too_large`, reason "Larger than 25 MB"; the second check adds no event |
 | 11 | Before SharePoint is on for the team, James opens Watch a folder | "No connection can list files", one link to Apps (`/data/connectors`), Next disabled reading "connect an app first", as the design's no-connection state draws it |
 | 12 | The team connects SharePoint (API) | The sign-in completes |
 | 13 | James names the watch, picks Human Resources and Policies Library, reaches the review and saves | The review names both folders and says everyone on the team can read the files; 201 |
