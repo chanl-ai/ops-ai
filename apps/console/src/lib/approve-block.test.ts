@@ -6,7 +6,7 @@ import { test } from 'node:test';
 
 import type { DocumentRead } from './types/domain.ts';
 
-import { approveBlock } from './approve-block.ts';
+import { approveBlock, portHolds } from './approve-block.ts';
 
 const notRead = { value: null, extractedValue: null, confidence: 0, needsReview: true, citation: null };
 const read = (over: Partial<DocumentRead> = {}): DocumentRead => ({
@@ -39,4 +39,12 @@ test('Approve waits for every required field of a read with no answer, and an op
 
 test('an answered read with an empty required field is the model’s answer and holds nothing', () => {
   assert.equal(approveBlock(read({ notRead: null }), {}, {}), undefined);
+});
+
+test('a third port waits only on a task that can only be rejected, never on key fields it does not require', () => {
+  const keyed = read({ notRead: null, schema: [{ key: 'invoice', label: 'Invoice number', type: 'text', required: true, keyField: true }] });
+  const ports = [{ port: 'approve' }, { port: 'return' }, { port: 'reject' }];
+  assert.deepEqual(portHolds(keyed, {}, {}, ports), { approve: 'confirm 1 key field first', return: undefined });
+  const refused = read({ editable: false, approveRefused: { code: 'not_editable', message: 'x' } });
+  assert.deepEqual(portHolds(refused, {}, {}, ports), { approve: 'only Reject is possible', return: 'only Reject is possible' });
 });

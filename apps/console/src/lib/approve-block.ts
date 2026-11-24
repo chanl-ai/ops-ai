@@ -38,3 +38,22 @@ export function approveBlock(read: DocumentRead | null | undefined, confirmed: R
   if (left) return `type ${left === 1 ? '1 required field' : `${left} required fields`} first`;
   return keyFieldsBlock(read, confirmed);
 }
+
+/** The button label of a task that can only be rejected; the server's full words are shown above the document. */
+export const ONLY_REJECT = 'only Reject is possible';
+
+/**
+ * What holds each of a typed task's ports, as the server refuses them (engine_reviews.decide): a task that can only be
+ * rejected holds every port but reject; required fields and key fields hold approve, and key fields any port whose
+ * action requires them. Reject is never held.
+ */
+export function portHolds(read: DocumentRead | null | undefined, confirmed: ReadConfirmed, edits: ReadEdits, ports: { port: string; requires?: string | null }[]): Record<string, string | undefined> {
+  const held: Record<string, string | undefined> = {};
+  for (const { port, requires } of ports) {
+    if (port === 'reject') continue;
+    if (read?.approveRefused) held[port] = ONLY_REJECT;
+    else if (port === 'approve') held[port] = approveBlock(read, confirmed, edits);
+    else held[port] = requires === 'key_fields_confirmed' ? keyFieldsBlock(read, confirmed) : undefined;
+  }
+  return held;
+}

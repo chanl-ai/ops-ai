@@ -6,7 +6,7 @@ import Link from 'next/link';
 
 import { EvalSteps } from '@/components/agents/eval-problems';
 import { isOpen } from '@/components/reviews/review-columns';
-import { approveBlock, type ReadEdits } from '@/lib/approve-block';
+import { approveBlock, ONLY_REJECT, portHolds, type ReadEdits } from '@/lib/approve-block';
 import type { ReadChecks } from '@/components/reviews/document-read';
 import { ModelValidationDecisionForm } from '@/components/reviews/model-validation';
 import { OptionDecisionForm } from '@/components/reviews/option-decision-form';
@@ -88,7 +88,7 @@ export function TaskDecision({
     return <>{children({ choice: <ModelValidationDecisionForm review={review} currentUser={me} owners={owners} pending={pendingDecision} onDecide={onDecide} />, decide: null })}</>;
   // The read's own refusal is said in full above the document; the button names the outcome.
   const read = view?.read ?? review.read;
-  const held = read?.approveRefused ? 'only Reject is possible' : approveBlock(read, checks.confirmed, edits);
+  const held = read?.approveRefused ? ONLY_REJECT : approveBlock(read, checks.confirmed, edits);
   const actions = view?.actions;
   if (actions?.length)
     return (
@@ -96,8 +96,7 @@ export function TaskDecision({
       <OptionDecisionForm
         reviewId={review.id}
         options={actions.map((a) => ({ name: a.port, label: a.label, consequence: a.consequence, inputs: a.inputs, reason: a.reason, tone: a.tone, stepUp: a.port === 'approve' ? review.stepUp : undefined }))}
-        // The server refuses every port but reject while the read holds approve (decide), so each is held here too.
-        blocked={Object.fromEntries(actions.filter((a) => a.port !== 'reject').map((a) => [a.port, held]))}
+        blocked={portHolds(read, checks.confirmed, edits, actions)}
         suggested={actions.find((a) => a.name === view?.suggested)?.port}
         pending={pendingOption}
         onDecide={onOption}

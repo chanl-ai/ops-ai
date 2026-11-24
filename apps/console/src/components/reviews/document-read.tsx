@@ -375,12 +375,12 @@ export function DocumentReadSection({
   );
 }
 
-/** A reason's words, as the task line says them (engine_reviews.NOT_READ_SAID). */
+/** Why nothing was read, by the read's reason, in the design's words (extraction-incomplete-replies, option A). */
 const NOT_READ_SAID: Record<string, string> = {
-  cut_off: 'The reply was cut off',
-  empty: 'The reply held no answer',
-  declined: 'The model declined',
-  filtered: "The provider's filter stopped the reply",
+  cut_off: 'The model’s reply stopped at its length limit, so no field was saved.',
+  empty: 'The model’s reply held no answer, so no field was saved.',
+  declined: 'The model answered that it would not help with this content, so nothing was read and no retry was made.',
+  filtered: 'The provider’s filter stopped the reply, so no field was saved.',
 };
 
 /**
@@ -390,14 +390,14 @@ const NOT_READ_SAID: Record<string, string> = {
 function NotReadAlert({ read, open }: { read: DocumentRead; open: boolean }) {
   const admin = useCanInWorkspace('reviews', 'decide');
   const refused = read.approveRefused;
-  const said = NOT_READ_SAID[read.notRead ?? ''] ?? 'No reply answered';
+  const title = !read.records.length ? 'No records were read' : read.notRead === 'declined' ? 'The model declined to read this file' : 'Nothing was read from this file';
   return (
     <Alert variant={refused ? 'destructive' : 'default'} data-testid="read-not-read">
-      <AlertTitle>Nothing was read from this file</AlertTitle>
+      <AlertTitle>{title}</AlertTitle>
       <AlertDescription>
         <p data-testid="read-not-read-reason">
-          {said}.{' '}
-          {refused ? refused.message : open && read.editable ? 'Type the required fields, then approve.' : ''}
+          {NOT_READ_SAID[read.notRead ?? ''] ?? 'No reply answered, so no field was saved.'}{' '}
+          {refused ? refused.message : open && read.editable ? 'Type the required values from the document, or reject the task.' : ''}
         </p>
         {refused?.code === 'not_editable' && admin && (
           <Link href="/govern/reviews" className="text-primary underline-offset-4 hover:underline" data-testid="read-not-editable-reviews">
