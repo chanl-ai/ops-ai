@@ -10,7 +10,8 @@ Status: current. Id: `uc-265`. Service: `agents-service`. Layers: api, ui.
 | S2 | After a reload the stored reply is masked the same way | ui | 2 | 2 |
 | S3 | He turns Redact personal data off on the agent's page and publishes; asked again, the reply is as the model wrote it | ui | 4 | 4 |
 | S4 | The same through the API, with a workflow Agent step's output masked | api | 1-4 | 3 |
-| S5 | Values named as personal data by their field (ssnLast4, an account id, a number-typed account number) are masked in a chat tool result and on a run's page | api | 5-7 | 5, 6 |
+| S5 | Values named as personal data by their field (ssnLast4, an account id, a number-typed account number) are masked in a chat tool result | api | 5 | 5 |
+| S6 | The same values are masked on a run's page and in its events | api | 6-7 | 6 |
 
 With an agent's redact personal data setting on (the default), what its turns show and return has SSNs and their last
 four, card and account numbers, emails and phone numbers masked, and every value under a field named as an SSN,
