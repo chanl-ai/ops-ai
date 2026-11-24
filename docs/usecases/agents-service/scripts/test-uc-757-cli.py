@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from apps_walk import ops_cli
-from brief_steps import brief, confirm_skill, freeze_skill
+from brief_steps import SECTION_HEADINGS, SECTIONS, brief, confirm_skill, freeze_skill, headings, sections_brief
 from main_chains import bank_stack, publish_bank_module
 from usecase_harness import check, finish
 
@@ -73,5 +73,23 @@ with bank_stack() as s:
         and asked.get("status") in ("pending", "approved")
         and live["uses"]["skills"] == 2,
         (live_skill.get("publishedVersion"), agent.get("promptMode"), before, after, asked.get("status"), live.get("uses")),
+    )
+
+    # 27. The same sections from a file: `apply` takes the brief's `sections`, and `export` prints them with the
+    # prompt's start written in order (the never rules follow it on every turn, so they are not in the export).
+    desk_file = written(
+        "sections", {"name": f"Sections desk cli {RUN}", "role": "Freezes accounts", "brief": sections_brief(SECTIONS)}
+    )
+    code, desk = ops_cli("builder", "agents", "apply", desk_file)
+    stored: dict[str, Any] = {}
+    if code == 0 and isinstance(desk, dict):
+        stored = answer(ops_cli("builder", "agents", "export", str(desk["id"])))
+    replied = (stored.get("brief") or {}).get("sections")
+    check(
+        "27 opsai applies a brief with Tone and a custom section, and export prints both with the prompt in order",
+        code == 0
+        and replied == [{**SECTIONS[0]}, {"kind": "tone", "name": "Tone", "text": "Calm and plain."}]
+        and headings(str(stored.get("instructions", ""))) == SECTION_HEADINGS[:-1],
+        (code, desk if code else replied, headings(str(stored.get("instructions", "")))),
     )
 finish()
