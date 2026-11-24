@@ -1,6 +1,6 @@
 # Durability, failure and audit
 
-Status: current, checked against the code on 2026-11-18. Designed and not built: an append-only journal with identity fields per step, journal retention and signed export. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md).
+Status: current, checked against the code on 2026-11-23. Designed and not built: an append-only journal with identity fields per step, journal retention and signed export. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md).
 
 LangGraph saves state between nodes. Keeping a run alive for days, with one owner at a time and no duplicated side
 effect, is our code, all in the same PostgreSQL. Fencing and timers are decided in
@@ -126,6 +126,39 @@ gateway after the token's TTL. The agents service renews the token from the reco
 |---|---|---|
 | Renew from recorded approvals (chosen) | No second review for an approval already given; covers retries and crash recovery; nothing changes at the gateway | The approval, not the token, now bounds the window: an approval can act up to 24 h after it was given |
 | Raise a fresh review on `token_expired` | The reviewer sees the call again | Asks again for every late resume, including after a crash the reviewer had nothing to do with; a run stalls until someone decides twice |
+
+## Redrive and dead letters
+
+A Failed or Stuck run goes again with `POST /v1/runs/{id}/redrive`, or many at once with `POST /v1/runs/bulk`
+(workflow, kind, code, time; at most 500 per call), both through `RunStore.redrive`
+(`packages/ops_engine/src/ops_engine/store/runs.py`). Whoever may cancel the run may redrive it.
+
+```mermaid
+flowchart LR
+  F[Failed run] -->|Redrive| S[Set aside the failed step's<br/>recorded failing attempt]
+  S --> Q[Queued on its pinned version]
+  Q --> W[Worker starts the graph over]
+  W --> R{Step recorded?}
+  R -->|yes| Ret[Return the record, run nothing]
+  R -->|no| A[Next attempt under the next key]
+  R -->|write, no port| Rec[Reconcile by its key first]
+```
+
+| Part | Rule |
+|---|---|
+| Version | The run row keeps its version and digest; a later publish is never read |
+| Checkpoints | A failed run's checkpoints are gone, so the graph starts over and every recorded step returns its record. A Stuck run keeps its checkpoints and continues from the last one, as Retry does |
+| The failed step | Every recorded port is returned on a re-run, the error and refused ports included, so in the redrive's own transaction the failing attempt of the step the run's failure names (latest iteration) is marked `redriven`. It stays on the run as history; the step takes its next attempt, and its total duration counts from that attempt. A run failed before its failure record existed is set aside only when it ended at a failure End, at its last failing step |
+| Unknown writes | An attempt with no port (a write whose outcome is unknown) is not set aside: the wrapper reconciles it by its key before any second send |
+| Events | The route records `redriven` with who did it on the run's events |
+
+Test: `services/agents-service/tests/engine/test_redrive.py`; kill test uc-763.
+
+An event between services (`ops_store/outbox.py`) is retried with a jittered backoff of up to 60 s. After
+`MAX_ATTEMPTS` (15, about ten minutes) its `next_at` is cleared and it is a dead letter: never due again, kept by the
+hourly prune with its last error. `Relay.redrive(event_ids)` sends dead letters again from now with their attempts
+counted from zero; no route or screen calls it yet. Delivered events are kept for `KEEP_S` (a week). Test:
+`packages/ops_store/tests/test_outbox.py`.
 
 ## The journal
 
