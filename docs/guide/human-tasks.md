@@ -53,6 +53,11 @@ Five types come with Ops AI; a builder copies one to make a specialised type, an
 | Acknowledgement | A person confirms they have seen something |
 | Data entry | A form a person fills in before the run goes on |
 
+A document check is also what a person gets when the model's reply to a read was cut off, empty or declined. Nothing from
+that reply is saved: the task says why, lists the required fields still to type, and keeps Approve held until each has a
+value. An update to the shipped Extract a file workflow that takes typed values waits in Govern › Reviews for an admin to
+approve it; until then a task from an older version can only be rejected, and Extract again reads the file with the new one.
+
 ## Options
 
 | Setting | Where | What it does | Default |
