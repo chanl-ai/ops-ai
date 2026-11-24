@@ -3,8 +3,9 @@ docs/usecases/agents-service/a-schedule-starts-a-run-once.md.
 
 A builder saves and publishes a workflow whose trigger is Schedule. A real worker runs it. A tick that is due starts
 one run with the tick's values; the same tick key again starts no second run; another key starts another; a tick set
-for an hour from now stays queued while the due ones finish; a tick missing a required value is refused. No model call
-is made."""
+for an hour from now stays queued while the due ones finish; a tick missing a required value is refused. Then the
+clock: a second workflow with a saved schedule, every minute, gets one run from the worker's own schedule clock at its
+next slot, keyed by the slot and started by the schedule, and one run per slot only. No model call is made."""
 
 from __future__ import annotations
 
@@ -41,6 +42,29 @@ connections:
 """
 
 
+CLOCKED = "ucwf1_every_minute"
+CLOCKED_YAML = f"""
+schemaVersion: 2
+id: {CLOCKED}
+name: Every minute (uc-workflows-1)
+nodes:
+  - id: start
+    type: ops.trigger.schedule
+    typeVersion: 1
+    name: Due
+    parameters: {{}}
+  - id: done
+    type: ops.flow.end
+    typeVersion: 1
+    name: Ticked
+    parameters: {{outcome: ticked, output: {{dueAt: "$.input.dueAt"}}}}
+connections:
+  - {{from: {{node: start, port: payload}}, to: {{node: done, port: in}}}}
+"""
+# Every minute is under the install's default floor of 5; this run's install lowers it so the clock is seen in a minute.
+FLOOR = {"OPS_SCHEDULE_FLOOR_MINUTES": "1"}
+
+
 def tick(api: httpx.Client, key: str, day: str | None, after_seconds: float = 0) -> httpx.Response:
     body: dict[str, Any] = {"workflowId": WID, "input": {} if day is None else {"day": day}, "runKey": key}
     if after_seconds:
@@ -63,7 +87,7 @@ def ended(api: httpx.Client, run_id: str) -> dict[str, Any]:
 
 with ExitStack() as stack:
     stack.enter_context(tools({"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}))
-    api = stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}"))
+    api = stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}", env=FLOOR))
     saved = api.post("/v1/workflows/definitions", json={"yaml": YAML}, headers=TEAM)
     live = api.post(f"/v1/workflows/definitions/{WID}/publish-requests", json={}, headers=TEAM)
     check(
@@ -71,7 +95,23 @@ with ExitStack() as stack:
         saved.status_code == 201 and (data(live) or {}).get("status") == "approved",
         f"{saved.status_code} {live.status_code} {live.text[-200:]}",
     )
-    stack.enter_context(engine_worker("ucwf1", {"OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}"}))
+    clocked = api.post("/v1/workflows/definitions", json={"yaml": CLOCKED_YAML}, headers=TEAM)
+    clocked_live = api.post(f"/v1/workflows/definitions/{CLOCKED}/publish-requests", json={}, headers=TEAM)
+    every_minute = {"kind": "every", "every": 1, "unit": "minutes", "tz": "UTC"}
+    schedule_url = f"/v1/workflows/definitions/{CLOCKED}/triggers/start/schedule"
+    saved_schedule = api.put(schedule_url, json={"rule": every_minute}, headers=TEAM)
+    check(
+        "8 a schedule saved on a live workflow applies at once, in words, with its next runs",
+        clocked.status_code == 201
+        and (data(clocked_live) or {}).get("status") == "approved"
+        and saved_schedule.status_code == 200
+        and (data(saved_schedule) or {}).get("words", "").startswith("Every minute")
+        and len((data(saved_schedule) or {}).get("nextRuns") or []) == 3,
+        f"{clocked.status_code} {clocked_live.status_code} {saved_schedule.status_code} {saved_schedule.text[:300]}",
+    )
+    stack.enter_context(
+        engine_worker("ucwf1", {"OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}", **FLOOR})
+    )
 
     first = tick(api, "morning-2026-11-10", "monday")
     first_body = data(first) or {}
@@ -139,6 +179,30 @@ with ExitStack() as stack:
         [status_of.get(r) for r in (first_body.get("runId"), next_body.get("runId"), later_body.get("runId"))]
         == ["succeeded", "succeeded", "queued"],
         status_of,
+    )
+
+    def clock_runs() -> list[dict[str, Any]]:
+        got = data(api.get("/v1/runs", params={"workflowId": CLOCKED, "pageSize": 100}, headers=TEAM)) or {}
+        return list(got.get("data") or [])
+
+    # The clock's first pass sees the schedule and starts nothing; the pass a minute later starts the slot's run.
+    first_clocked = until(clock_runs, timeout=150) or []
+    started = ended(api, str(first_clocked[0]["id"])) if first_clocked else {}
+    check(
+        "9 the worker's schedule clock starts one run at the next slot, started by the schedule, with the slot",
+        len(first_clocked) == 1
+        and started.get("status") == "succeeded"
+        and started.get("createdBy") == f"trigger:schedule:{CLOCKED}"
+        and str((started.get("input") or {}).get("dueAt", "")).endswith(":00Z"),
+        {k: started.get(k) for k in ("status", "createdBy", "input")} or first_clocked,
+    )
+    shown = data(api.get(schedule_url, headers=TEAM)) or {}
+    check(
+        "10 the schedule shows the slot it ran as its last, with that run's due time",
+        shown.get("lastOutcome") in ("ran", "late")
+        and shown.get("lastSlotAt") is not None
+        and shown.get("lastSlotAt") >= str((started.get("input") or {}).get("dueAt")),
+        {"last": (shown.get("lastSlotAt"), shown.get("lastOutcome")), "dueAt": (started.get("input") or {}).get("dueAt")},
     )
 
 finish()

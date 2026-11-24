@@ -1,10 +1,11 @@
-# A Schedule trigger starts one run per tick key
+# A Schedule trigger starts one run per tick key, and a saved schedule starts one run per slot
 
-Status: api fails at step 6 (Schedule input schema not checked on POST /v1/runs); sdk passes. Id: `uc-workflows-1`. Service: `agents-service`. Layers: api, sdk.
+Status: see the acceptance layers below. Id: `uc-workflows-1`. Service: `agents-service`. Layers: api, sdk, cli.
 
-A morning report workflow starts on a Schedule trigger. The platform clock sends a tick with a key (the day) and its
-values. A tick that is due starts one run; the same key again starts none; a tick due in an hour waits in the queue;
-a tick missing a value the trigger requires starts nothing.
+A morning report workflow starts on a Schedule trigger. A caller sends a tick with a key (the day) and its values. A
+tick that is due starts one run; the same key again starts none; a tick due in an hour waits in the queue; a tick
+missing a value the trigger requires starts nothing. A second workflow has a schedule saved on its trigger: the
+worker's schedule clock starts one run at each slot, keyed by the slot and started by the schedule, with no caller.
 
 ## Stories
 
@@ -16,13 +17,17 @@ a tick missing a value the trigger requires starts nothing.
 | S4 | A tick due in an hour is held until then | api | 4 | 4 |
 | S5 | Fire now without the day is refused | api | 5 | 5 |
 | S6 | A tick without its day is refused | api | 6 | 6 |
+| S7 | A schedule saved on a live workflow applies at once and the clock starts one run at its next slot | api | 8-10 | 9 |
+| S8 | The SDK previews, saves and shows a rule in the API's words, and a rule under the floor is refused | sdk | 11 | 11 |
+| S9 | `opsai workflows schedule` previews, saves, shows and clears, and exits non-zero under the floor | cli | 12 | 12 |
 
 ## Preconditions
 
 | Needs | How |
 |---|---|
 | PostgreSQL | `make db-up` |
-| The run | `make usecase-test UC=uc-workflows-1 LAYER=api` |
+| The run | `make usecase-test UC=uc-workflows-1 LAYER=api` (also `sdk`, `cli`) |
+| A one-minute floor | The api layer sets `OPS_SCHEDULE_FLOOR_MINUTES=1` on agents-service and the worker, so the clock is seen within two minutes |
 
 The stack is agents-service with a workflow worker on a database the run owns, removed when the run ends. The workflow
 has no tool or model step. The run makes only the workflow it needs.
@@ -39,16 +44,25 @@ has no tool or model step. The run makes only the workflow it needs.
 | 5 | Fire now (`POST /v1/runs/start`) with no day | 422 naming `day` |
 | 6 | Send a tick (`POST /v1/runs`) with no day | 422 naming `day`, no run |
 | 7 | List the workflow's runs | Steps 1, 3 and 4 are `succeeded`, `succeeded`, `queued` |
+| 8 | Before the worker starts, save and publish a second workflow and save "every 1 minute, UTC" on its trigger | 200, words "Every minute from 00:00, UTC", three next runs |
+| 9 | Wait for the worker's schedule clock (its first pass sees the schedule, the next starts the slot) | One run, `succeeded`, created by `trigger:schedule:<workflow>`, input `dueAt` on the minute |
+| 10 | Read the schedule | Last outcome `ran` (or `late`), last slot at or after that run's `dueAt` |
+| 11 | sdk: preview, save and show "every 15 minutes from 07:00, Europe/London"; save every 2 minutes | One set of words and next runs; the second save raises naming `every` |
+| 12 | cli: `opsai workflows schedule preview`, `save`, `show`, a save under the floor, `clear`, `show` | Exit 0 with the server's words; non-zero naming `every`; exit 0; non-zero after clear |
 
 ## Acceptance layers
 
 | Layer | Script | State |
 |---|---|---|
-| api | `agents-service/scripts/test-uc-workflows-1-api.py` | steps 0 to 5 and 7 pass; step 6 fails on main |
-| sdk | `agents-service/scripts/test-uc-workflows-1-sdk.py` | passing: `OpsAI.workflows.schedule`, steps 1 to 4 |
+| api | `agents-service/scripts/test-uc-workflows-1-api.py` | steps 0 to 10, with the clock |
+| sdk | `agents-service/scripts/test-uc-workflows-1-sdk.py` | steps 1 to 4 (`OpsAI.workflows.schedule`) and 11 (`OpsAI.workflows.schedules`) |
+| cli | `agents-service/scripts/test-uc-workflows-1-cli.py` | step 12 |
 | ui | none | The schedule trigger has no screen of its own; Start run on a schedule workflow is covered by the start-by-hand use cases |
 
 ## Non-vacuous check
 
 `2 the same tick key again starts no second run`: with the unique run key removed from the start row, step 2 answers
-202 with a new run id and fails. `4`: with the due time ignored, the run finishes and the status is not `queued`.
+202 with a new run id and fails. `4`: with the due time ignored, the run finishes and the status is not `queued`. `9` depends on the line in
+`api/worker.py` that starts the clock; with it removed, `tests/engine/test_schedule_clock_db.py` fails with no clock
+heartbeat (this page's step was not run with it removed). With the missed threshold at half the interval alone, step 9
+failed with outcome `missed`, which is how that defect was found.
