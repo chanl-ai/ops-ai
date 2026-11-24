@@ -59,6 +59,7 @@ Settings has its own sidebar, which opens from **Governance › Settings**.
 
 | Name | What it is | In the console | Not |
 |---|---|---|---|
+| Settings | The settings of the workspace and of each team | Governance › Settings | |
 | Model provider | A key your AI models sign in with | Settings › Workspace › Model providers | |
 | Storage | Where files are kept, with upload limits and retention | Settings › Workspace › Storage | |
 | Usage and cost | Tokens, model cost and tool calls | Settings › Workspace › Usage and cost | |
