@@ -397,18 +397,23 @@ await withUiStack(
       await shootBothWidths(maya, AREA, 'uc-757-skill-member', async () => {});
 
       // 28. An agent whose brief was saved before sections opens as it was: no added section, and View prompt reads
-      // what the service writes. James then adds Tone from the Add section menu and a section of his own (the menu's
-      // last item), and View prompt shows both in their places with Never last. Maya, who cannot edit, reads the
-      // sections with no control to add or remove one.
+      // what the service writes. James then adds Tone from the Add section menu and a section of his own,
+      // and View prompt shows both in their places with Never last. Maya, who cannot edit, reads the
+      // sections with no control to add or remove one. What the page is asked for beyond the design's words: each added
+      // section is a group named by its title, as the fixed fields are; Add custom section is a button in the brief or
+      // an item of the Add section menu; its name field is labelled Section name and Enter confirms it; each remove
+      // control's name starts with Remove.
       const tried = (p) => p.then(() => true, () => false);
       const MENU = ['Personality', 'Tone', 'Environment', 'Context', 'Tool use', 'Error handling', 'Escalation wording'];
       const briefOf = (p) => p.getByTestId('agent-brief');
       const sectionOf = (p, name) => briefOf(p).getByRole('group', { name, exact: true });
       const addSection = (p) => briefOf(p).getByRole('button', { name: 'Add section' });
-      const removes = (p) => briefOf(p).getByRole('button', { name: /^Remove / });
+      const removes = (p) => briefOf(p).getByRole('button', { name: /^Remove\b/ });
       const promptShown = async (p) => {
         await p.getByTestId('agent-view-prompt').click({ timeout: 10_000 }).catch(() => undefined);
-        const text = await p.getByTestId('agent-prompt-text').innerText({ timeout: 15_000 }).catch(() => '');
+        // The dialog draws a skeleton until the prompt is read.
+        await p.getByTestId('agent-prompt-text').filter({ hasText: '# Who you are' }).waitFor({ timeout: 15_000 }).catch(() => undefined);
+        const text = await p.getByTestId('agent-prompt-text').innerText({ timeout: 5_000 }).catch(() => '');
         await p.keyboard.press('Escape');
         return text.trim();
       };
@@ -436,8 +441,14 @@ await withUiStack(
       await addSection(page).click({ timeout: 10_000 }).catch(() => undefined);
       await page.getByRole('menuitem', { name: 'Tone', exact: true }).click({ timeout: 10_000 }).catch(() => undefined);
       const toneDrawn = await write('Tone', 'Calm and plain.');
-      await addSection(page).click({ timeout: 10_000 }).catch(() => undefined);
-      await page.getByRole('menuitem', { name: 'Add custom section' }).click({ timeout: 10_000 }).catch(() => undefined);
+      // The brief is read-only while a save is in flight.
+      if (toneDrawn) await page.locator('[data-testid="save-state"][data-state="saved"]').waitFor({ timeout: 30_000 }).catch(() => undefined);
+      const ownButton = briefOf(page).getByRole('button', { name: 'Add custom section' });
+      if (await ownButton.count()) await ownButton.click({ timeout: 10_000 }).catch(() => undefined);
+      else {
+        await addSection(page).click({ timeout: 10_000 }).catch(() => undefined);
+        await page.getByRole('menuitem', { name: 'Add custom section' }).click({ timeout: 10_000 }).catch(() => undefined);
+      }
       const named = await tried(page.getByLabel('Section name').fill('Refund wording', { timeout: 10_000 }));
       if (named) await page.keyboard.press('Enter');
       const ownDrawn = named && (await write('Refund wording', 'Say refund, never reimbursement.'));
@@ -445,7 +456,7 @@ await withUiStack(
       const controls = { add: await addSection(page).count(), remove: await removes(page).count() };
       check(
         '28 a builder adds Tone and a section of his own, and both save with their kind and title',
-        toneDrawn && ownDrawn && JSON.stringify(storedSections) === JSON.stringify([{ kind: 'tone', name: 'Tone', text: 'Calm and plain.' }, { kind: 'custom', name: 'Refund wording', text: 'Say refund, never reimbursement.' }]) && controls.add === 1 && controls.remove >= 2,
+        toneDrawn && ownDrawn && (storedSections ?? []).map((x) => [x.kind, x.name, x.text].join('|')).join(';') === 'tone|Tone|Calm and plain.;custom|Refund wording|Say refund, never reimbursement.' && controls.add === 1 && controls.remove >= 2,
         { toneDrawn, named, ownDrawn, storedSections, controls },
       );
       const withSections = await promptShown(page);
