@@ -1,8 +1,9 @@
-"""The schedule clock, by failure mode: it starts no run, too few, or in the wrong team; a new schedule runs at once; a
-paused workflow ticks or Resume runs at once; an overlapping tick starts a second run, or a stuck run blocks for good;
-an outage replays every missed slot; the clock keeps an old rule, ticks an archived workflow or forgets a restored one;
-one refused schedule stops or floods the pass. Each pass is driven at a chosen minute, through the real store, lease
-and run start, on an in-memory database."""
+"""The schedule clock, by failure mode: it starts no run, too few, or in the wrong team; a new schedule runs at once, or
+a rule whose first slot is ahead never runs; a paused workflow ticks or Resume runs at once; the clock keeps an old
+rule, ticks an archived workflow or forgets a restored one; an overlapping tick starts a second run, or a stuck run
+blocks for good; an outage replays every missed slot, or one past half the interval runs; one refused or failing
+schedule stops or floods the pass, or a failed or held tick loses its slot. Each pass is driven at a chosen minute,
+through the real store, lease and run start, on an in-memory database."""
 
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from ops_agents.api.schedule_clock import ScheduleClock
+from ops_agents.api.schedule_clock import KEY, SCHEDULE_TRIGGER, ScheduleClock, Tick, WorkflowStart, lease_key
 from ops_agents.store.base import metadata
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.leases import Leases
@@ -43,8 +44,9 @@ def at(hhmm: str, day: str = "2026-11-23") -> datetime:
 class Env:
     db: AsyncEngine
 
-    def clock(self, owner: str = "worker:a") -> ScheduleClock:
-        return ScheduleClock(self.db, Leases(self.db, owner=owner, ttl=30))
+    def clock(self, owner: str = "worker:a", handler: Any = None) -> ScheduleClock:
+        handlers = {SCHEDULE_TRIGGER: handler} if handler else None
+        return ScheduleClock(self.db, Leases(self.db, owner=owner, ttl=30), handlers=handlers)
 
     async def publish(self, wid: str = "held_wires", *, team: str | None = TEAM, schema: Any = None) -> None:
         params: dict[str, Any] = {"inputSchema": schema} if schema else {}
@@ -133,18 +135,24 @@ async def test_every_15_minutes_starts_four_runs_an_hour_in_the_workflows_team(e
     assert mine == []
 
 
-async def test_a_new_schedule_waits_for_its_next_slot(env: Env) -> None:
+async def test_a_new_schedule_waits_for_its_next_slot_and_runs_a_first_slot_ahead(env: Env) -> None:
     await env.publish()
+    await env.publish("evening")
     await env.save(HOURLY, at("10:07"))
+    # Saved at 10:07 with no slot yet: its first slot is 18:00 today.
+    await env.save({"kind": "every", "every": 1, "unit": "days", "start": "18:00"}, at("10:07"), wid="evening")
     clock = env.clock()
     await clock.pass_once(at("10:08"))
     await clock.pass_once(at("10:59"))
-    assert await env.runs() == []
+    assert await env.runs() == [] and await env.runs("evening") == []
     await clock.pass_once(at("11:00"))
     assert len(await env.runs()) == 1
+    await clock.pass_once(at("17:59"))
+    await clock.pass_once(at("18:00"))
+    assert [r["run_key"] for r in await env.runs("evening")] == ["schedule:evening:2026-11-23T18:00Z"]
 
 
-async def test_a_paused_workflow_sends_nothing_and_resume_waits_for_the_next_slot(env: Env) -> None:
+async def test_pause_rule_change_archive_and_restore_each_wait_for_the_next_slot(env: Env) -> None:
     await env.publish()
     await env.save(EVERY_15, at("09:50"))
     clock = env.clock()
@@ -154,13 +162,26 @@ async def test_a_paused_workflow_sends_nothing_and_resume_waits_for_the_next_slo
     with tenant_scope(TENANT):
         await store.set_paused("held_wires", True)
     await env.minutes(clock, "10:01", "10:16")
-    assert len(await env.runs()) == 1
+    assert len(await env.runs()) == 1, "a paused workflow does not tick"
     with tenant_scope(TENANT):
         await store.set_paused("held_wires", False)
     await env.minutes(clock, "10:18", "10:29")
     assert len(await env.runs()) == 1, "Resume does not run the slot it missed"
-    await clock.pass_once(at("10:30"))
+    await env.minutes(clock, "10:30", "10:36")
     assert len(await env.runs()) == 2
+    await env.save(HOURLY, at("10:37"))
+    await env.minutes(clock, "10:38", "11:00")
+    assert [r["run_key"][-6:] for r in await env.runs()] == ["10:00Z", "10:30Z", "11:00Z"], "the saved rule wins"
+    with tenant_scope(TENANT):
+        await store.set_archived("held_wires", True, by="b", now="n")
+    await env.minutes(clock, "11:58", "12:01")
+    assert len(await env.runs()) == 3, "an archived workflow does not tick"
+    with tenant_scope(TENANT):
+        await store.set_archived("held_wires", False, by="b", now="n")
+    await env.minutes(clock, "12:10", "12:11")
+    assert len(await env.runs()) == 3, "a restore waits for the next slot"
+    await clock.pass_once(at("13:00"))
+    assert len(await env.runs()) == 4
 
 
 async def test_a_running_run_skips_the_tick_and_a_stuck_one_does_not(env: Env) -> None:
@@ -180,7 +201,7 @@ async def test_a_running_run_skips_the_tick_and_a_stuck_one_does_not(env: Env) -
     assert len(await env.runs()) == 2
 
 
-async def test_after_an_outage_one_catch_up_run_starts_marked_late(env: Env) -> None:
+async def test_after_an_outage_one_catch_up_run_starts_marked_late_and_an_older_slot_is_missed(env: Env) -> None:
     await env.publish()
     await env.save(EVERY_15, at("06:50"))
     await env.minutes(env.clock(), "06:59", "07:00")
@@ -190,39 +211,47 @@ async def test_after_an_outage_one_catch_up_run_starts_marked_late(env: Env) -> 
     assert [r["input"]["dueAt"] for r in runs] == ["2026-11-23T07:00:00Z", "2026-11-23T10:00:00Z"]
     [late] = await env.events()
     assert late["outcome"] == "late" and late["run_id"] == runs[1]["id"]
+    await env.finish_all()
+    await env.clock().pass_once(at("10:38"))  # down again: 10:30 is 8 minutes old, past half of 15
+    assert len(await env.runs()) == 2
+    assert [e["outcome"] for e in await env.events()] == ["missed", "late"]
+    await env.clock().pass_once(at("10:45"))
+    assert len(await env.runs()) == 3, "the slot after a missed one runs"
 
 
-async def test_the_clock_follows_the_saved_rule_and_archive_and_restore(env: Env) -> None:
-    await env.publish()
-    await env.save(EVERY_15, at("09:50"))
-    clock = env.clock()
-    await env.minutes(clock, "09:59", "10:06")
-    await env.save(HOURLY, at("10:07"))
-    await env.minutes(clock, "10:08", "11:00")
-    assert [r["run_key"][-6:] for r in await env.runs()] == ["10:00Z", "11:00Z"]
-    store = DefinitionStore(EngineTransactions(env.db))
-    with tenant_scope(TENANT):
-        await store.set_archived("held_wires", True, by="b", now="n")
-    await env.minutes(clock, "11:58", "12:01")
-    assert len(await env.runs()) == 2, "an archived workflow does not tick"
-    with tenant_scope(TENANT):
-        await store.set_archived("held_wires", False, by="b", now="n")
-    await env.minutes(clock, "12:10", "12:11")
-    assert len(await env.runs()) == 2, "a restore waits for the next slot"
-    await clock.pass_once(at("13:00"))
-    assert len(await env.runs()) == 3
+class Explodes(WorkflowStart):
+    """The workflow start, failing with an error no refusal names for the workflows in `failing`."""
+
+    def __init__(self, env: Env, failing: set[str]) -> None:
+        super().__init__(RunStore(EngineTransactions(env.db)))
+        self.failing = failing
+
+    async def tick(self, tick: Tick) -> str | None:
+        if tick.schedule.workflow_id in self.failing:
+            raise RuntimeError("the database went away")
+        return await super().tick(tick)
 
 
-async def test_a_refused_schedule_does_not_stop_the_next_and_is_not_retried(env: Env) -> None:
-    await env.publish("needs_day", schema={"type": "object", "required": ["day"], "properties": {"day": {}}})
+async def test_a_refused_failing_or_held_schedule_does_not_stop_the_next_and_keeps_its_slot(env: Env) -> None:
+    # Sorted before the healthy one, so each failure happens first in the pass.
+    await env.publish("a_needs_day", schema={"type": "object", "required": ["day"], "properties": {"day": {}}})
+    await env.publish("b_fails")
+    await env.publish("c_held")
     await env.publish("held_wires")
-    await env.save(EVERY_15, at("09:50"), wid="needs_day")
-    await env.save(EVERY_15, at("09:50"))
-    clock = env.clock()
+    for wid in ("a_needs_day", "b_fails", "c_held", "held_wires"):
+        await env.save(EVERY_15, at("09:50"), wid=wid)
+    handler = Explodes(env, {"b_fails"})
+    clock = env.clock(handler=handler)
     await clock.pass_once(at("09:59"))
+    other = Leases(env.db, owner="worker:b", ttl=30)
+    await other.acquire(lease_key(TENANT, "c_held", "start"), KEY)
     await clock.pass_once(at("10:00"))
+    assert len(await env.runs()) == 1 and await env.runs("b_fails") == [] and await env.runs("c_held") == []
+    await other.release(lease_key(TENANT, "c_held", "start"), KEY)
+    handler.failing.clear()
     await clock.pass_once(at("10:01"))
-    assert len(await env.runs()) == 1
+    assert [len(await env.runs(w)) for w in ("b_fails", "c_held")] == [1, 1], "a failed or held tick keeps its slot"
+    assert await env.runs("a_needs_day") == []
     with tenant_scope(TENANT):
-        refused, _ = await TriggerEvents(env.db).page("needs_day", team_id=TEAM, page=1, page_size=50)
-    assert [e["outcome"] for e in refused] == ["refused"]
+        refused, _ = await TriggerEvents(env.db).page("a_needs_day", team_id=TEAM, page=1, page_size=50)
+    assert [e["outcome"] for e in refused] == ["refused"], "a refusal is recorded once and not tried again"

@@ -67,6 +67,8 @@ SYSTEM_READS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "engine_steps": (("SELECT",), ()),
     # The retention sweep lists the tenants holding memories; it never reads what an agent remembers.
     "agent_memories": (("SELECT",), ("tenant_id",)),
+    # The schedule clock lists the tenants holding a schedule (agents 20261123_2000); it reads no rule there.
+    "workflow_schedules": (("SELECT",), ("tenant_id",)),
     # Every background process writes its heartbeat; the Background page reads every team's jobs.
     "background_heartbeats": (("SELECT", "INSERT", "UPDATE", "DELETE"), ()),
     "background_jobs": (("SELECT",), ()),

@@ -7,11 +7,12 @@ nothing.
 One slot gives at most one run and one outcome: a lease per schedule around "busy? start, record", a slot write that
 names the slot it read, and the run key `schedule:{workflow}:{slot in UTC to the minute}`.
 
-A schedule first seen live (new, changed, resumed or restored) records its current slot and starts nothing, so it
-first runs at its next slot. "First seen" means the rule differs from the one its last slot was counted against, or
-the row was not seen at this clock's previous pass. A clock that has just started has no previous pass, so after an
-outage it starts one catch-up run, marked late, when the latest slot is within half the interval; an older slot is
-recorded as missed.
+A schedule's first sighting (new, changed, resumed or restored) records its current slot, or with no slot yet the rule
+it saw, and starts nothing, so it first runs at its next slot. It is read from the row, never from one machine's
+memory: the rule differs from the one stored beside the slot, or `seen_at` is empty, which each pass makes it while
+the workflow is not live or its live version lacks the step. A tick that fails, or whose lease another machine holds,
+writes nothing, so its slot stays open and the next pass tries it again. After an outage the clock starts one catch-up
+run, marked late, when the latest slot is within half the interval; an older slot is recorded as missed.
 
 The clock knows no rule's fields (the registry answers) and no target's work (the handler answers). Scheduled runs act
 for no person: each is started by `trigger:schedule:{workflow}`."""
@@ -31,7 +32,7 @@ from ops_service_kit.errors import ApiError
 from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 from ops_store import background, isolation
-from ops_store.schedule import ScheduleKinds, default_kinds
+from ops_store.schedule import KINDS, ScheduleKinds
 
 from ..store.engine import EngineTransactions
 from ..store.leases import LeaseHeldError, Leases
@@ -70,6 +71,11 @@ def required_beyond_due(definition: Json, step: str) -> str | None:
 
 def iso(t: datetime) -> str:
     return t.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def lease_key(tenant: str, workflow_id: str, step: str) -> str:
+    """One schedule's lease, under the poll lease prefix the sweeper leaves alone."""
+    return POLL_LEASE_PREFIX + "s" + hashlib.sha256(f"{tenant}:{workflow_id}:{step}".encode()).hexdigest()[:31]
 
 
 def digest(rule: Mapping[str, Any]) -> str:
@@ -133,6 +139,12 @@ class WorkflowStart:
         return run.id
 
 
+def first_sighting(s: ScheduleRow) -> bool:
+    """The rule differs from the one the last slot was counted against, or the clock has not seen it live since it
+    was saved or last idle. A null last slot alone is not one: a rule whose first slot was ahead when it was seen."""
+    return s.rule_digest != digest(s.rule) or s.seen_at is None
+
+
 class ScheduleClock:
     def __init__(
         self,
@@ -142,16 +154,15 @@ class ScheduleClock:
         kinds: ScheduleKinds | None = None,
         handlers: Mapping[str, TargetHandler] | None = None,
     ) -> None:
-        """`kinds` are the rule kinds the clock reads rules with; `handlers` maps a trigger node type to its target.
-        Both default to the built-ins; a test adds its own beside them."""
+        """`kinds` are the rule kinds the clock reads rules with, the install's one registry unless a test passes its
+        own; `handlers` maps a trigger node type to its target, the workflow start unless a test adds its own."""
         self.db = db
         self.leases = leases
-        self.kinds = kinds or default_kinds()
+        self.kinds = kinds or KINDS
         runs = RunStore(EngineTransactions(db))
         self.handlers: Mapping[str, TargetHandler] = handlers or {SCHEDULE_TRIGGER: WorkflowStart(runs)}
         self.schedules = WorkflowSchedules(db)
         self.events = TriggerEvents(db)
-        self.last_pass: datetime | None = None
         self._forgot: dict[str, datetime] = {}
 
     async def pass_once(self, now: datetime | None = None) -> int:
@@ -161,17 +172,23 @@ class ScheduleClock:
         for row in await DefinitionStore(EngineTransactions(self.db)).live_everywhere():
             live.setdefault(row.tenant_id, {})[row.workflow_id] = row
         started = 0
-        for tenant, workflows in live.items():
+        tenants = sorted(set(live) | set(await self.schedules.tenants()))
+        for tenant in tenants:
+            workflows = live.get(tenant, {})
             with isolation.tenant_wide(SCHEDULE_CLOCK, tenant_id=tenant):
                 for s in await self.schedules.everything():
                     definition = workflows.get(s.workflow_id)
-                    if definition is None or (handler := self._handler(definition, s.trigger_step)) is None:
-                        continue  # not live, or the live version no longer has the step: idle
+                    handler = self._handler(definition, s.trigger_step) if definition is not None else None
                     try:
+                        if handler is None:
+                            # Not live, or the live version lacks the step: idle, and seen afresh when it is back.
+                            if s.seen_at is not None:
+                                await self.schedules.idle(s.workflow_id, s.trigger_step)
+                            continue
+                        assert definition is not None
                         started += await self._one(s, definition, handler, now)
                     except Exception as e:
                         log.exception("schedule_tick_failed", workflow=s.workflow_id, error=type(e).__name__)
-        self.last_pass = now
         return started
 
     def _handler(self, definition: DefinitionRow, step: str) -> TargetHandler | None:
@@ -183,44 +200,43 @@ class ScheduleClock:
 
     async def _one(self, s: ScheduleRow, definition: DefinitionRow, handler: TargetHandler, now: datetime) -> int:
         slot = self.kinds.last_slot(s.rule, now)
-        at = iso(now)
-        if slot is None:
-            return 0
-        lease = (
-            POLL_LEASE_PREFIX
-            + "s"
-            + hashlib.sha256(f"{definition.tenant_id}:{s.workflow_id}:{s.trigger_step}".encode()).hexdigest()[:31]
-        )
+        if slot is None and not first_sighting(s):
+            return 0  # no slot yet, and already seen: nothing to do until the first one
+        lease = lease_key(definition.tenant_id, s.workflow_id, s.trigger_step)
         try:
             await self.leases.acquire(lease, KEY)
         except LeaseHeldError:
-            return 0  # another machine has this schedule this minute
+            return 0  # another machine has this schedule this minute; the slot stays open
         try:
             # Read again under the lease: the row read before it may be another machine's outcome behind.
             fresh = await self.schedules.get(s.workflow_id, s.trigger_step)
             if fresh is None:
                 return 0
-            return await self._tick(fresh, definition, handler, slot=slot, now=now, at=at)
+            return await self._tick(fresh, definition, handler, slot=slot, now=now)
         finally:
             await self.leases.release(lease, KEY)
 
     async def _tick(
-        self,
-        s: ScheduleRow,
-        definition: DefinitionRow,
-        handler: TargetHandler,
-        *,
-        slot: datetime,
-        now: datetime,
-        at: str,
+        self, s: ScheduleRow, definition: DefinitionRow, handler: TargetHandler, *, slot: datetime | None, now: datetime
     ) -> int:
-        rule_digest = digest(s.rule)
+        rule_digest, at = digest(s.rule), iso(now)
         key = (s.workflow_id, s.trigger_step)
-        first_sight = (
-            s.rule_digest != rule_digest
-            or s.last_slot_at is None
-            or (self.last_pass is not None and (s.seen_at is None or s.seen_at < iso(self.last_pass)))
-        )
+        if first_sighting(s):
+            if slot is None:
+                await self.schedules.sighted(*key, expected=s.last_slot_at, digest=rule_digest, at=at)
+            else:
+                await self.schedules.record_slot(
+                    *key,
+                    expected=s.last_slot_at,
+                    slot=iso(slot),
+                    outcome="seen",
+                    digest=rule_digest,
+                    run_id=s.last_run_id,
+                    at=at,
+                )
+            return 0
+        if slot is None or (s.last_slot_at is not None and iso(slot) <= s.last_slot_at):
+            return 0
 
         async def record(outcome: str, run_id: str | None = None) -> bool:
             # A slot that started nothing keeps the last run's id: that run is what the next tick asks about.
@@ -231,15 +247,9 @@ class ScheduleClock:
                 outcome=outcome,
                 digest=rule_digest,
                 run_id=run_id or s.last_run_id,
-                at=at,
+                at=s.seen_at,
             )
 
-        if first_sight:
-            await record("seen")
-            return 0
-        if s.last_slot_at is not None and iso(slot) <= s.last_slot_at:
-            await self.schedules.seen(*key, at)
-            return 0
         await self._forget_old(s, now)
         tick = Tick(s, definition, slot)
         upcoming = self.kinds.next_slots(s.rule, slot, 1)
