@@ -41,6 +41,13 @@ A setting that takes a value from the run, such as the output of an End step or 
 If nothing matches, the list says "Nothing matches." If the step a chip reads from was deleted, the chip says "Missing
 step".
 
+## Choose what a step does in an app
+
+A Call a tool step has an **Operation** list of what your team's apps can do, such as inviting people or opening a case.
+Each entry reads as a name with one sentence beside it, and agents and workflows are not in it: they have their own
+steps. If a saved step names an operation the list does not offer, it shows the name in words and says it is not offered
+here. Pick another one to replace it.
+
 ## Choose a step in a list
 
 Some settings ask for another step, for example the review a payment waits for. The list shows steps by their names, and

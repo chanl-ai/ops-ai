@@ -157,7 +157,9 @@ await withUiStack(
     const MISTYPED = {
       'ops.ai.classify': { categories: [{ name: 'otherwise' }, { name: 'billing' }] },
       'ops.data.match': { item: '$.input.amount', candidates: '$.input.amount', all: [{ left: '$.input.amount', op: 'equals', right: 'amount' }] },
-      'ops.ai.extract': { file: '$.input.amount', fields: [{ key: 'Bad Key', type: 'text' }] },
+      'ops.ai.extract': { file: '$.input.amount', read: '$.input.read', fields: [{ key: 'Bad Key', type: 'text' }] },
+      // A tool the saved copy names that the list does not offer (a platform tool a system workflow uses).
+      'ops.action.tool': { operation: 'apply_tool_access' },
       'ops.flow.if': { conditions: [{ left: 1, op: 'big' }] },
     };
     const every = refund(E);
@@ -357,8 +359,10 @@ await withUiStack(
           await box.scrollIntoViewIfNeeded().catch(() => undefined);
           // Read before opening: an open list hides the rest of the page from the accessibility tree.
           const field = (await box.getAttribute('data-field')) ?? '';
-          // The app picker reads tools-service, which this stack starts only with its gateway; its list cannot load here.
-          if ((await box.getAttribute('aria-label')) === 'App') continue;
+          // What the control shows before it opens is read like any option: a saved value reads in words too.
+          const selected = ((await box.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+          const shownWords = codeIn(selected, LIST_WORDS);
+          if (shownWords.length) seen.push({ type: t.id, hits: shownWords.map((w) => `selected value of ${field || k}: ${w}`).slice(0, 3) });
           await box.click();
           const list = page.getByRole('listbox');
           await list.waitFor({ timeout: 10_000 }).catch(() => undefined);
@@ -367,13 +371,13 @@ await withUiStack(
           const opened = await list.isVisible().catch(() => false);
           const options = (await list.getByRole('option').allInnerTexts().catch(() => [])).map((o) => o.replace(/\s+/g, ' ').trim());
           if (!opened || options.length === 0) seen.push({ type: t.id, hits: [`a list did not open or came back empty: ${field || k}`] });
-          if (field.endsWith('-operation') === false) {
-            const words = codeIn(options.join(' | '), LIST_WORDS);
-            if (words.length) seen.push({ type: t.id, hits: words.slice(0, 3) });
-          }
+          const words = codeIn(options.join(' | '), LIST_WORDS);
+          if (words.length) seen.push({ type: t.id, hits: words.slice(0, 3).map((w) => `option of ${field || k}: ${w}`) });
+          // Two entries a person cannot tell apart are no choice.
+          const twins = options.filter((o, n) => options.indexOf(o) !== n);
+          if (twins.length) seen.push({ type: t.id, hits: [`identical options in ${field || k}: ${[...new Set(twins)].slice(0, 3).join(' | ')}`] });
           lists[`${t.id}:${field.split('-').pop() || k}`] = options;
-          // Tool operations are the names a team gave its tools: data, not a step's own words.
-          if (!field.endsWith('-operation')) found.push(options.join(' | '));
+          found.push(options.join(' | '));
           await page.keyboard.press('Escape');
           await list.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => undefined);
         }
@@ -482,6 +486,7 @@ await withUiStack(
       await worker.stop();
     }
   },
-  { platform: true },
+  // tools-service with the gateway serves the Call a tool operations and the app picker the sheet lists.
+  { platform: true, tools: { gateway: true } },
 );
 finish();

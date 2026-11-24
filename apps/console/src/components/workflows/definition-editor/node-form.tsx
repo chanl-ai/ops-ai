@@ -13,7 +13,7 @@ import { useEngineOptions } from '@/hooks/engine-queries';
 import { AccountSelect } from '@/components/connections/account-select';
 import { JsonInput } from '@/components/shared/json-input';
 
-import { FieldChip, FieldPicker, FieldSourceContext } from './field-picker';
+import { chipFor, FieldChip, FieldPicker, FieldSourceContext } from './field-picker';
 
 import type { EngineOption, NodeForm, NodeFormField, OptionSource } from '@/lib/types/engine';
 
@@ -36,6 +36,11 @@ export interface StepRefs {
 }
 
 const NONE = '__none__';
+/** A saved name or id in words: `apply_tool_access` reads "Apply tool access". */
+const spoken = (id: string) => {
+  const words = id.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim().toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
 
 /**
  * A field's choices with the words to show for each: JSON Schema's `oneOf` of `{ const, title }` names each option,
@@ -139,7 +144,9 @@ function FieldControl({ id, spec, schema, value, steps, onChange, testId }: { id
 function EnumSelect({ id, schema, value, onChange, testId }: { id: string; schema: Schema; value: unknown; onChange: (v: unknown) => void; testId?: string }) {
   // A saved value the choices do not list (a path) stays shown as itself.
   const listed = schemaChoices(schema);
-  const options = typeof value === 'string' && value && !listed.some((o) => o.value === value) ? [...listed, { value, label: value }] : listed;
+  const source = React.useContext(FieldSourceContext);
+  // A saved value the choices do not list is a field an earlier step gives (shown as "Step → Field") or a name in words.
+  const options = typeof value === 'string' && value && !listed.some((o) => o.value === value) ? [...listed, { value, label: value.startsWith('$.') ? chipFor(value, source).label : spoken(value) }] : listed;
   const defaultLabel = listed.find((o) => o.value === String(schema.default))?.label;
   const fallback = schema.default !== undefined ? `Default (${defaultLabel ?? String(schema.default)})` : 'Not set';
   return (
@@ -167,7 +174,7 @@ function SourceSelect({ id, source, stepType, value, steps, onChange }: { id: st
   const options: EngineOption[] = source === 'steps' ? fitting.map((s) => ({ value: s.id, label: s.label, description: s.typeLabel })) : (remote.data ?? []);
   const current = typeof value === 'string' ? value : '';
   // A saved value the list no longer offers stays visible, so opening the form never changes a setting.
-  const shown = current && !options.some((o) => o.value === current) ? [...options, { value: current, label: current, description: 'Not in the list' }] : options;
+  const shown = current && !options.some((o) => o.value === current) ? [...options, { value: current, label: spoken(current), description: 'Not offered here' }] : options;
   return (
     <Select value={current || NONE} onValueChange={(v) => onChange(v === NONE ? undefined : v)}>
       <SelectTrigger id={id} className="w-full" data-field={id} aria-busy={remote.isFetching || undefined}>

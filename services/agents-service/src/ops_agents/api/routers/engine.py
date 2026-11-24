@@ -1193,9 +1193,15 @@ MAILBOX_KINDS = {"gmail": "Gmail", "imap": "IMAP", "graph": "Microsoft 365", "de
 OptionSource: TypeAlias = Literal["agents", "tools", "workflows", "mailboxes"]  # noqa: UP040
 
 
+def _first_sentence(text: str) -> str:
+    """The first sentence of a description: what a list shows beside a choice."""
+    head = text.strip().split(". ", 1)[0]
+    return head if head.endswith(".") or not head else f"{head}."
+
+
 def _spoken(slug: str) -> str:
     """An agent's slug as a name a builder reads: `branch-concierge` is "Branch concierge"."""
-    words = slug.replace("-", " ").replace("_", " ").strip()
+    words = slug.replace("-", " ").replace("_", " ").strip().lower()
     return words[:1].upper() + words[1:]
 
 
@@ -1227,9 +1233,15 @@ async def option_sources(rt: Rt, me: Me, source: OptionSource) -> JSONResponse:
             for a in agents
         ]
     elif source == "tools":
-        tools = [t for t in await known_tools(rt) if not str(t["id"]).startswith("workflow:")]
+        # Registry operations only: a workflow or an agent is started by its own step, not called as a tool.
+        tools = [t for t in await known_tools(rt) if not str(t["id"]).startswith(("workflow:", "agent:"))]
         options = [
-            {"value": t["id"], "label": t["name"], "description": str(t.get("description") or "")} for t in tools
+            {
+                "value": t["id"],
+                "label": str(t.get("title") or _spoken(str(t["name"]))),
+                "description": _first_sentence(str(t.get("description") or "")),
+            }
+            for t in tools
         ]
     else:
         live = [d for d in await definitions(rt).summaries(team=current_team()) if d.current_stage == "live"]
