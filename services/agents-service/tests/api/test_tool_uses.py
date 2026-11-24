@@ -8,9 +8,11 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
 from httpx import AsyncClient
 
 from ops_agents.api.agent_registry import SEED_TEAM
+from ops_agents.api.routers import tool_uses as tool_uses_routes
 from ops_identity import dev_service_signer, mint_service_token
 from tests.api.test_engine_definitions import basic
 
@@ -97,12 +99,30 @@ def _files_service(team: str | None) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def test_files_service_asks_which_workflows_use_a_watch_and_a_person_is_refused(client: AsyncClient) -> None:
-    """Files refuses Stop watching unless this answers. A workflow naming a watch is listed once the Files changed
-    step type exists (it waits on the schedule clock); until then every watch answers no workflow."""
+async def test_files_service_is_told_a_workflow_uses_a_watch_draft_then_live_and_a_person_is_refused(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Files refuses Stop watching on this answer, so a workflow whose trigger names the watch, draft or live, must be
+    named to the service's token. The Files changed step type waits on the schedule clock, so the Request trigger
+    stands in for it here."""
+    monkeypatch.setattr(tool_uses_routes, "FILES_TRIGGER", "ops.trigger.request")
+    d = basic()
+    d["nodes"][0]["parameters"] = {"watch": "wat_invoices"}
+    made = await client.post("/v1/workflows/definitions", json={"definition": d}, headers={"X-Team-Id": SEED_TEAM})
+    assert made.status_code in (200, 201), made.text
     params = {"watchIds": ["wat_invoices", "wat_unused"]}
-    r = await client.get("/v1/watch-uses", params=params, headers=_files_service(SEED_TEAM))
+
+    async def asked() -> Any:
+        r = await client.get("/v1/watch-uses", params=params, headers=_files_service(SEED_TEAM))
+        assert r.status_code == 200, r.text
+        return r.json()["data"]
+
+    named = {"workflowId": "refund_check", "name": d["name"]}
+    assert await asked() == {"wat_invoices": [named | {"live": False}], "wat_unused": []}
+    live = await client.post(
+        "/v1/workflows/definitions/refund_check/publish-requests", json={}, headers={"X-Team-Id": SEED_TEAM}
+    )
+    assert live.status_code == 201, live.text
+    assert await asked() == {"wat_invoices": [named | {"live": True}], "wat_unused": []}
     person = await client.get("/v1/watch-uses", params=params, headers={"X-Team-Id": SEED_TEAM})
-    assert r.status_code == 200, r.text
-    assert r.json()["data"] == {"wat_invoices": [], "wat_unused": []}
     assert person.status_code == 403, person.text
