@@ -20,6 +20,7 @@ from brief_steps import (
     freeze_skill,
     headings,
     sections_brief,
+    warm_preset,
     with_compliance,
 )
 from main_chains import bank_stack, publish_bank_module
@@ -140,5 +141,9 @@ with bank_stack() as s:
         and bool(listing)
         and restored == listing,
         (refused, names, headings(noted_prompt), compliance_id(restored)),
+    )
+    check(
+        "30 the list the SDK reads offers a Warm preset on Tone, with an id, an icon and a sentence",
+        warm_preset(listing),
     )
 finish()

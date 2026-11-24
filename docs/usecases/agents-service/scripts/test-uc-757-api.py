@@ -24,6 +24,7 @@ from brief_steps import (
     headings,
     hold_skill,
     sections_brief,
+    warm_preset,
     with_compliance,
 )
 from main_chains import ACCOUNT, bank_stack, holds, publish_bank_module
@@ -146,6 +147,7 @@ with bank_stack() as s:
         changed.status_code == 200 and all(read_by.values()) and not_theirs == [403] * 4,
         (changed.status_code, changed.text[:200], read_by, not_theirs),
     )
+    check("29 the list first read offers a Warm preset on Tone, with an id, an icon and a sentence", warm_preset(listing))
     noted = data(s.api.post("/v1/agents", json={"name": f"Compliance desk {RUN}", "role": "Freezes accounts"}, headers=me))
     saved = save_agent(s.api, noted["id"], {"brief": sections_brief(compliance_sections(read_by["builder"]))}, headers=me)
     names = [(x.get("name"), x.get("text")) for x in ((data(saved) or {}).get("brief") or {}).get("sections") or []]

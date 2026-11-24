@@ -409,6 +409,8 @@ await withUiStack(
       const sectionOf = (p, name) => briefOf(p).getByRole('group', { name, exact: true });
       const addSection = (p) => briefOf(p).getByRole('button', { name: 'Add section' });
       const removes = (p) => briefOf(p).getByRole('button', { name: /^Remove\b/ });
+      // An item of the Add section menu: an option whose name starts with the section's label, its example after it.
+      const menuItem = (p, label) => p.getByRole('option', { name: new RegExp(`^${label}\\b`) }).or(p.getByRole('menuitem', { name: label, exact: true })).first();
       const promptShown = async (p) => {
         await p.getByTestId('agent-view-prompt').click({ timeout: 10_000 }).catch(() => undefined);
         // The dialog draws a skeleton until the prompt is read.
@@ -439,7 +441,7 @@ await withUiStack(
         return true;
       };
       await addSection(page).click({ timeout: 10_000 }).catch(() => undefined);
-      await page.getByRole('menuitem', { name: 'Tone', exact: true }).click({ timeout: 10_000 }).catch(() => undefined);
+      await menuItem(page, 'Tone').click({ timeout: 10_000 }).catch(() => undefined);
       const toneDrawn = await write('Tone', 'Calm and plain.');
       // The brief is read-only while a save is in flight.
       if (toneDrawn) await page.locator('[data-testid="save-state"][data-state="saved"]').waitFor({ timeout: 30_000 }).catch(() => undefined);
@@ -447,7 +449,7 @@ await withUiStack(
       if (await ownButton.count()) await ownButton.click({ timeout: 10_000 }).catch(() => undefined);
       else {
         await addSection(page).click({ timeout: 10_000 }).catch(() => undefined);
-        await page.getByRole('menuitem', { name: 'Add custom section' }).click({ timeout: 10_000 }).catch(() => undefined);
+        await menuItem(page, 'Add custom section').click({ timeout: 10_000 }).catch(() => undefined);
       }
       const named = await tried(page.getByLabel('Section name').fill('Refund wording', { timeout: 10_000 }));
       if (named) await page.keyboard.press('Enter');
@@ -541,7 +543,7 @@ await withUiStack(
         await sectionOf(page, 'How to answer').waitFor({ timeout: 60_000 }).catch(() => undefined);
         const notedSaved = armed(page.waitForResponse(async (r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${noted.id}` && r.ok() && ((await r.json().catch(() => ({}))).data?.brief?.sections ?? []).some((x) => x.name === 'Compliance notes' && x.text), { timeout: 30_000 }));
         await addSection(page).click({ timeout: 10_000 }).catch(() => undefined);
-        await page.getByRole('menuitem', { name: 'Compliance notes', exact: true }).click({ timeout: 10_000 }).catch(() => undefined);
+        await menuItem(page, 'Compliance notes').click({ timeout: 10_000 }).catch(() => undefined);
         const drawn = await write('Compliance notes', 'Say the call is recorded.');
         const stored = Boolean(await notedSaved.catch(() => null));
         const notedPrompt = await promptShown(page);
@@ -582,6 +584,62 @@ await withUiStack(
         // The later steps read the default list whatever this one did.
         await fetch(LIST, { method: 'DELETE', headers: P }).catch(() => undefined);
       }
+
+      // 33. Add section is a searchable menu in groups, and a preset is ordinary text. On an agent with no sections
+      // James opens Add section, reads the groups, searches, picks Tone and presses its Warm preset; he types into the
+      // sentence it wrote, and View prompt shows the result under Tone. What the page is asked for beyond the design's
+      // words: the menu's search field has a placeholder that starts with Search; each group is a group named by its
+      // heading holding options; an option's name starts with the section's label and its text holds the section's
+      // example line; a preset is a button or a radio named by its label inside the section's group.
+      const GROUPS = { 'Voice and style': ['Personality', 'Tone'], Context: ['Environment', 'Context'], Behaviour: ['Tool use', 'Error handling', 'Escalation wording'] };
+      const toneItem = ((await listNow()).sections ?? []).find((x) => x.id === 'tone') ?? {};
+      const warm = (toneItem.presets ?? []).find((x) => x.label === 'Warm') ?? {};
+      const preset = await made('/v1/agents', { name: `Preset desk ${RUN}`, role: 'Helps cardholders with disputes' });
+      await made(`/v1/agents/${preset.id}`, { brief: { purpose: 'Help cardholders dispute a charge.', howToAnswer: 'Keep answers short.', handOff: ['The cardholder asks for a person.'], never: [NEVER_RULE] }, ...(await agentBase(agents, J, preset.id)) }, 'PATCH');
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(`${consoleUrl}/build/agents/${preset.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await brief.waitFor({ timeout: 120_000 }).catch(() => undefined);
+      await sectionOf(page, 'How to answer').waitFor({ timeout: 60_000 }).catch(() => undefined);
+      await addSection(page).click({ timeout: 10_000 }).catch(() => undefined);
+      const search = page.getByPlaceholder(/^Search/);
+      const options = page.getByRole('listbox').getByRole('option');
+      const firstLines = async (loc) => (await loc.allInnerTexts().catch(() => [])).map((t) => t.trim().split('\n')[0].trim());
+      const menuDrawn = await tried(search.waitFor({ timeout: 10_000 }));
+      const grouped = {};
+      for (const name of Object.keys(GROUPS)) grouped[name] = await firstLines(page.getByRole('listbox').getByRole('group', { name, exact: true }).getByRole('option'));
+      const toneText = await menuItem(page, 'Tone').innerText({ timeout: 5_000 }).catch(() => '');
+      check(
+        '33 Add section opens a menu with a search field and the sections under Voice and style, Context and Behaviour, each with its example line',
+        menuDrawn && JSON.stringify(grouped) === JSON.stringify(GROUPS) && Boolean(toneItem.example) && toneText.includes(toneItem.example ?? '\u0000'),
+        { menuDrawn, grouped, example: toneItem.example ?? null, toneText },
+      );
+      await search.fill('tone', { timeout: 5_000 }).catch(() => undefined);
+      const found = await firstLines(options);
+      await search.fill('zzqxv', { timeout: 5_000 }).catch(() => undefined);
+      const none = menuDrawn ? await options.count() : -1;
+      await search.fill('', { timeout: 5_000 }).catch(() => undefined);
+      check('33 typing in the search field lists Tone first, and a word no section has lists none', found[0] === 'Tone' && found.length < 7 && none === 0, { found, none });
+
+      const MARK = '(first names)';
+      const toneOf = (body) => (body?.data?.brief?.sections ?? []).find((x) => x.kind === 'tone')?.text ?? '';
+      const presetSaved = armed(page.waitForResponse(async (r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${preset.id}` && r.ok() && toneOf(await r.json().catch(() => ({}))).includes(MARK), { timeout: 30_000 }));
+      await menuItem(page, 'Tone').click({ timeout: 10_000 }).catch(() => undefined);
+      const toneGroup = sectionOf(page, 'Tone');
+      const chip = toneGroup.getByRole('radio', { name: 'Warm', exact: true }).or(toneGroup.getByRole('button', { name: 'Warm', exact: true })).first();
+      const pressed = await tried(chip.click({ timeout: 10_000 }));
+      const filled = Boolean(warm.text) && (await tried(toneGroup.getByText(warm.text ?? '\u0000').first().waitFor({ timeout: 10_000 })));
+      // The brief is read-only while a save is in flight.
+      if (filled) await page.locator('[data-testid="save-state"][data-state="saved"]').waitFor({ timeout: 30_000 }).catch(() => undefined);
+      const typedInto = filled && (await write('Tone', MARK));
+      const storedTone = toneOf(await (await presetSaved.catch(() => null))?.json().catch(() => ({})));
+      await page.locator('[data-testid="save-state"][data-state="saved"]').waitFor({ timeout: 30_000 }).catch(() => undefined);
+      check(
+        '33 pressing Warm on Tone writes its sentence as text he types into, and the sentence with his words is what saves',
+        pressed && filled && typedInto && storedTone.includes(MARK) && storedTone.replace(MARK, '').trim() === (warm.text ?? '').trim(),
+        { pressed, filled, typedInto, warm: warm.text ?? null, storedTone },
+      );
+      const presetPrompt = storedTone ? await promptShown(page) : '';
+      check('33 View prompt shows the edited sentence under Tone', storedTone.length > 0 && presetPrompt.includes(`# Tone\n${storedTone}`), { tone: presetPrompt.split('# Tone')[1]?.slice(0, 200) ?? null });
 
       // 23. Pages reached by the sidebar's links, not by loading their URL: a client navigation keeps the shell mounted,
       // and the walks saw update loops only that way, at both widths.
