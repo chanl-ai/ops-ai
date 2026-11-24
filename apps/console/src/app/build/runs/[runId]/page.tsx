@@ -83,7 +83,7 @@ export default function EngineRunPage() {
   return (
     <PageLayout
       icon={Workflow}
-      title={definition.data?.name ?? run.workflowId}
+      title={run.workflowName ?? definition.data?.name ?? run.workflowId}
       description={`Version ${run.version} · started ${relativeTime(run.createdAt)}`}
       badge={<RunStatus status={run.status} testId="run-status" />}
       backHref="/build/runs"
@@ -200,8 +200,8 @@ export default function EngineRunPage() {
               <Section title="Result" description={run.outcomeText ?? run.result.outcome}>
                 <div data-testid="run-result" data-outcome={run.result.outcome}>
                   {/* The story below tells what the run did; the result's own fields stay behind Raw. An end with no
-                      output shows no value at all rather than "Nothing" above an empty Raw. */}
-                  {hasValue(run.result.output) && <ReadableValue value={run.result.output ?? null} testId="run-result-value" rawOnly={told} />}
+                      output says so rather than leaving the card empty. */}
+                  {hasValue(run.result.output) ? <ReadableValue value={run.result.output ?? null} testId="run-result-value" rawOnly={told} /> : <p className="text-sm text-muted-foreground" data-testid="run-result-empty">It ended without a value to show.</p>}
                 </div>
               </Section>
             )}
