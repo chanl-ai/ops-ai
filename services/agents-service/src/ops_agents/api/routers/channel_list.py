@@ -491,7 +491,6 @@ async def _steps(
     *,
     target: str,
     version: int | None,
-    teams: tuple[str, ...],
     now: datetime,
 ) -> list[PlaceReply]:
     """Each live workflow step that names `target`: it runs the published version, so it is never pinned. A step of a
@@ -503,7 +502,7 @@ async def _steps(
         for n in cast(list[Json], cast(Json, d.definition or {}).get("nodes") or [])
         if n.get("type") == node_type and cast(Json, n.get("parameters") or {}).get(param) == target
     ]
-    schedules = await _saved(rt, sorted({d.workflow_id for d, _ in found if d.team_id in teams}))
+    schedules = await _saved(rt, sorted({d.workflow_id for d, _ in found}))
     return [
         {
             "where": {
@@ -552,11 +551,9 @@ async def agent_live(rt: Rt, me: Me, agent_id: str) -> JSONResponse:
         if latest is NOT_FOUND:
             raise NotFound(f"Agent {agent_id}")
         serving = await ChannelList(rt.db).rows(teams, now=now, agent_id=agent_id, types=["chat"])
-        live = await ChannelList(rt.db).live_definitions()
+        live = await ChannelList(rt.db).live_definitions(teams)
     rows = [_place(r) for r in await replies(rt, me, serving, now)]
-    rows += await _steps(
-        rt, live, "ops.ai.agent", "agent", target=agent_id, version=cast(int | None, latest), teams=teams, now=now
-    )
+    rows += await _steps(rt, live, "ops.ai.agent", "agent", target=agent_id, version=cast(int | None, latest), now=now)
     return ok({"latestVersion": latest, "versions": _versions(rows, cast(int | None, latest)), "rows": rows})
 
 
@@ -565,18 +562,16 @@ async def workflow_live(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
     """Where the workflow serves: the email channels whose trigger it is, and the live steps that start it."""
     asked = _teams(me, "all")
     teams = tuple(t for t in asked if _may(me, "view", t))
-    live = await ChannelList(rt.db).live_definitions()
+    live = await ChannelList(rt.db).live_definitions(teams)
     mine = next((d for d in live if d.workflow_id == workflow_id), None)
-    if mine is None or mine.team_id not in teams:
+    if mine is None:
         raise NotFound(f"Live workflow {workflow_id}")
     latest = mine.version
     address = watched_address(mine.definition)
     now = datetime.now(UTC)
     watching = await ChannelList(rt.db).rows(teams, now=now, mailbox=(str(mine.team_id), address)) if address else []
     rows = [_place(r) for r in await replies(rt, me, watching, now)]
-    rows += await _steps(
-        rt, live, "ops.action.workflow", "workflow", target=workflow_id, version=latest, teams=teams, now=now
-    )
+    rows += await _steps(rt, live, "ops.action.workflow", "workflow", target=workflow_id, version=latest, now=now)
     return ok({"latestVersion": latest, "versions": _versions(rows, latest), "rows": rows})
 
 

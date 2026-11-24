@@ -87,6 +87,7 @@ a run holds the thread.
 | Channel or part | Needs |
 |---|---|
 | Schedule deployments | Not a deployment kind. A schedule is saved on a workflow's schedule trigger step and ticked by the schedule clock (see [Triggers and schedules](integrations.md#triggers-and-schedules)); an agent runs on one through a workflow with the agent as its step |
+| Live views | `GET /v1/agents/{id}/live` and `GET /v1/workflows/{id}/live` list workflow steps only for teams whose channels the caller may view; a workflow no team owns is not listed | 
 | Webhooks | Signed events in, and webhooks out for `waiting_review` and `finished` |
 | Sender authentication for mail | DKIM, DMARC and allowed sender domains |
 | Deployment environments and pointers | A deployment names a graph, not `@production` |
