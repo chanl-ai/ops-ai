@@ -12,6 +12,7 @@ Status: current. Id: `uc-512`. Service: `agents-service`. Layers: api, sdk, ui.
 | S4 | James picks a field by name and the next run's step receives the picked value | ui | 9-10 | 10 |
 | S5 | Every state of the sheet: loading, error with Retry while Settings stays usable, no run yet, first step, not installed, viewer, picker no match and loading, Fix, Missing step | ui | 11-19 | 17 |
 | S6 | An Email received trigger with a problem reads Problems, How it starts, Settings, in plain words at both widths | ui | 18 | 18 |
+| S7 | Every installed step type opened with every list open shows only plain words: step names, operators and hints, never a type id, path, port or schema word; problems name the step and Fix never lands on Name | ui | 20-22 | 20 |
 
 ## Preconditions
 
@@ -47,6 +48,10 @@ for sign-in (James builds, Ravi views, Lena only chats) and the console. No mode
 | 17 | Open a Call a tool step with no operation; Fix | The operation field is focused |
 | 18 | Open an Email received trigger whose daily cap is 0 | Problems, then How it starts, then Settings; no code words; no sideways scroll at 1440 or 390 |
 | 19 | Open a Done step whose output reads a step that is gone | The chip says Missing step |
+| 20 | Open one step of every installed type, open every list and the field picker on each, and press every Fix | No type id, `$.` path, port, schema or operator code word anywhere; no problem names a step by its id; no Fix lands on Name |
+| 21 | Open Human review's Approves, Call a tool's Approved by and an If condition's operator list | Approves lists only the tool step by its name, Approved by only the review, and the operators read in words (Equal to, At least) |
+| 22 | Open Human review and Classify | The review says it waits for a person, not that it gives up after seconds; Classify categories have no Authorises choice |
+| 16b | Ravi double-clicks a step | The canvas keeps its zoom |
 
 ## Notes
 

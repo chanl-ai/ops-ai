@@ -200,6 +200,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `guide/how-work-flows.md` | A chat turn with a tool approval, a workflow with a human task, and a court order notice emailed to a team mailbox |
 | `guide/build-with-ops-ai.md` | Developer landing: the example folders in order, how agents and workflows call each other, and the same operations on every surface |
 | `guide/workflows.md` | Author, validate, publish and test-run workflows from the Python SDK, TypeScript SDK and `opsai workflows` |
+| `guide/edit-a-workflow-step.md` | Open a workflow step in the console, read it in plain words, fix its problems and pick a field from an earlier step by name |
 | `guide/agents.md` | Author, publish and chat with agents from the SDK and `opsai agents` |
 | `guide/examples/README.md` | Examples for builders: who each page is for, how to connect, and how to read the examples |
 | `guide/examples/agents.md` | Agent examples per surface: create and publish, chat, knowledge, tools, test a draft, run modes, scoring with cases |

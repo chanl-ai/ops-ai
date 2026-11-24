@@ -70,6 +70,10 @@ const noSideScroll = (page) =>
   });
 // What reads as code to a builder: type ids, paths, Effects, the run call, an agent tool name and "input schema".
 const leaks = (t) => ['ops.', '$.', 'Effects:', 'POST /v1/runs', 'workflow__', 'input schema'].filter((w) => t.toLowerCase().includes(w.toLowerCase()));
+// Every kind of code word the sheet and its open lists must never show: type ids, paths, port words, schema words,
+// backticks, operator codes, snake_case and camelCase names, an `[object Object]` and the scan's own step ids.
+const CODE_WORDS = [/\bops\.[a-z]/i, /\$\./, /\bports?\b/i, /json schema/i, /\bschemas?\b/i, /`/, /\b(?:Eq|Ne|Gt|Gte|Lt|Lte)\b/, /\b[a-z]+_[a-z]+\b/, /\b[a-z]+[A-Z][a-zA-Z]+\b/, /\[object Object\]/, /\bzz\d\d\b/];
+const codeIn = (t) => CODE_WORDS.map((re) => re.exec(t)).filter(Boolean).map((m) => `${m[0]} in "${t.slice(Math.max(0, m.index - 40), m.index + 40)}"`);
 const atWidths = async (page, name) => {
   const wide = await noSideScroll(page);
   await shot(page, `${name}-1440.png`);
@@ -104,6 +108,19 @@ await withUiStack(
     copy.connections.push(wire('fields', 'out', 'lookup'), wire('fields', 'out', 'ghost'), wire('loose', 'out', 'done'));
     const put = await fetch(`${agents}/v1/workflows/definitions/${C}/working-copy`, { method: 'PUT', headers: H, body: JSON.stringify({ definition: copy, baseVersion: cv.saveBase.version, baseDigest: cv.saveBase.digest }) });
     if (!c.live) throw new Error('setup: C did not go live');
+    // E holds one step of every installed type, so the lists of every type can be opened. The tool step and the review
+    // carry names, the rest the type's own name.
+    const E = `uc512_all_${TAG}`;
+    const e = await saveAndPublish(H, refund(E));
+    const ev = (await (await fetch(`${agents}/v1/workflows/definitions/${E}`, { headers: H })).json()).data;
+    const installed = (await (await fetch(`${agents}/v1/workflows/node-types`, { headers: H })).json()).data;
+    const newest = [...new Map(installed.sort((x, y) => x.version - y.version).map((t) => [t.id, t])).values()].sort((x, y) => x.group.localeCompare(y.group) || x.id.localeCompare(y.id));
+    const NAMED = { 'ops.action.tool': 'Pay the refund', 'ops.flow.humanReview': 'Check the refund' };
+    const every = refund(E);
+    every.nodes = newest.map((t, i) => ({ ...node(`zz${String(i).padStart(2, '0')}`, t.id, NAMED[t.id]), typeVersion: t.version, position: { x: (i % 6) * 320, y: Math.floor(i / 6) * 200 } }));
+    every.connections = [];
+    const putAll = await fetch(`${agents}/v1/workflows/definitions/${E}/working-copy`, { method: 'PUT', headers: H, body: JSON.stringify({ definition: every, baseVersion: ev.saveBase.version, baseDigest: ev.saveBase.digest }) });
+    if (!e.live || !putAll.ok) throw new Error(`setup: E ${e.live} ${putAll.status}`);
     const worker = await stack.startWorker();
     const first = await settled(H, await start(H, A, { amount: 42, customer: 'alex.moreau@harborpine.example' }));
     if (!a.live || !b.live || first?.status !== 'succeeded') throw new Error(`setup: ${JSON.stringify({ a: a.asked?.status, b: b.asked?.status, run: first?.status })}`);
@@ -244,6 +261,97 @@ await withUiStack(
       await shot(page, 'chip-missing-step-1440.png');
       check('19 a value read from a step that is gone shows the Missing step chip', missingChip.includes('Missing step'), { missingChip });
 
+
+      // 20. Every installed step type, opened one after the other with every list open: no code word anywhere.
+      await openEditor(page, consoleUrl, E);
+      // Thirty-odd steps do not fit the canvas at a readable size, so each opens by a click event rather than a pointer.
+      await page.locator('[data-testid="definition-node"][data-node-id="zz00"]').dispatchEvent('click');
+      await page.getByTestId('step-sheet-body').waitFor({ timeout: 30_000 });
+      const seen = [];
+      const lists = {};
+      const badFix = [];
+      // A control a step lacks must not hold the scan for the default half minute.
+      page.setDefaultTimeout(4000);
+      for (let i = 0; i < newest.length; i += 1) {
+        const t = newest[i];
+        const sheet = page.getByTestId('step-sheet');
+        // Learn more, then one more row in every list the settings offer, then each list and the field picker.
+        await sheet.getByTestId('step-how-it-works-open').click().catch(() => undefined);
+        for (let round = 0; round < 2; round += 1) {
+          const adds = sheet.getByTestId('step-settings').getByRole('button', { name: /^Add/ });
+          // The count is taken once: a new row brings its own Add button, so reading it again never ends.
+          const before = await adds.count();
+          for (let k = 0; k < before; k += 1) await adds.nth(k).click().catch(() => undefined);
+        }
+        const found = [await sheetText(page)];
+        const names = await sheet.getByRole('combobox').count();
+        for (let k = 0; k < names; k += 1) {
+          const box = sheet.getByRole('combobox').nth(k);
+          await box.scrollIntoViewIfNeeded().catch(() => undefined);
+          // Read before opening: an open list hides the rest of the page from the accessibility tree.
+          const field = (await box.getAttribute('data-field')) ?? '';
+          await box.click();
+          const list = page.getByRole('listbox');
+          await list.waitFor({ timeout: 10_000 }).catch(() => undefined);
+          const options = (await list.getByRole('option').allInnerTexts().catch(() => [])).map((o) => o.replace(/\s+/g, ' ').trim());
+          lists[`${t.id}:${field.split('-').pop() || k}`] = options;
+          // Tool operations are the names a team gave its tools: data, not a step's own words.
+          if (!field.endsWith('-operation')) found.push(options.join(' | '));
+          await page.keyboard.press('Escape');
+          await list.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => undefined);
+        }
+        const opener = sheet.getByTestId('field-picker-open').first();
+        if (await opener.isVisible().catch(() => false)) {
+          await opener.click();
+          await page.getByTestId('field-picker').waitFor({ timeout: 10_000 }).catch(() => undefined);
+          found.push((await page.getByTestId('field-picker').innerText().catch(() => '')).replace(/\s+/g, ' '));
+          await opener.click();
+        }
+        const hits = codeIn(found.join(' || '));
+        if (hits.length) seen.push({ type: t.id, hits: hits.slice(0, 4) });
+        // Every Fix lands on a field of the step, never on Name.
+        const problemTexts = (await sheet.getByTestId('step-sheet-errors').locator('li').allInnerTexts().catch(() => [])).map((x) => x.replace(/\s+/g, ' '));
+        const codeInProblems = codeIn(problemTexts.join(' || '));
+        if (codeInProblems.length) seen.push({ type: t.id, problems: codeInProblems.slice(0, 3) });
+        for (let k = 0; k < problemTexts.length; k += 1) {
+          const fix = sheet.getByTestId('step-sheet-errors').locator('li').nth(k).getByTestId('step-problem-fix');
+          if (!(await fix.count())) continue;
+          await fix.click({ timeout: 5000 }).catch(() => undefined);
+          await page.waitForTimeout(300);
+          const at = await page.evaluate(() => document.activeElement?.id || '');
+          if (at === 'definition-node-name') badFix.push({ type: t.id, problem: problemTexts[k] });
+        }
+        // The next step opens by its own click: forty steps are not all on screen at a readable size.
+        if (i < newest.length - 1) await (page.locator(`[data-testid="definition-node"][data-node-id="zz${String(i + 1).padStart(2, '0')}"]`).dispatchEvent('click'));
+        await page.waitForTimeout(250);
+      }
+      page.setDefaultTimeout(30_000);
+      await shot(page, 'every-type-last-1440.png');
+      fs.writeFileSync(path.join(SHOTS, 'every-type-lists.json'), JSON.stringify({ lists, seen, badFix }, null, 2));
+      check(`20 every one of ${newest.length} step types opened with every list open shows no type id, path, port, schema, operator code or snake_case word`, seen.length === 0, seen.slice(0, 12));
+      check('20b the Fix of a problem never lands on Name, and no problem names a step by its id', badFix.length === 0, badFix.slice(0, 6));
+
+      // 21. The lists offer plain words and only what fits: Approves lists tool steps by name, Approved by lists
+      // reviews, the operator list reads in words.
+      const only = (key) => Object.entries(lists).find(([k]) => k === key)?.[1] ?? [];
+      const approves = only('ops.flow.humanReview:approves');
+      const approvedBy = only('ops.action.tool:approvedBy');
+      const operators = Object.entries(lists).filter(([k]) => k.startsWith('ops.flow.if:')).flatMap(([, v]) => v).join(' | ');
+      check('21 Approves offers only the tool step by its name, Approved by only the review, and an If condition offers its operators in words',
+        approves.length === 2 && approves[1].startsWith('Pay the refund') && approvedBy.length === 2 && approvedBy[1].startsWith('Check the refund') && /Equal to/.test(operators) && !/\bEq\b/.test(operators), { approves, approvedBy, operators });
+
+      // 22. Friction: the review says it waits, Classify categories carry no review wording.
+      const openFar = async (type) => {
+        await page.locator(`[data-testid="definition-node"][data-node-id="zz${String(newest.findIndex((t) => t.id === type)).padStart(2, '0')}"]`).dispatchEvent('click');
+        await page.waitForTimeout(500);
+      };
+      await openFar('ops.flow.humanReview');
+      const reviewText = await sheetText(page);
+      await openFar('ops.ai.classify');
+      const classifyText = await sheetText(page);
+      check('22 the review does not say it gives up after seconds or tries once, and Classify categories offer no Authorises choice',
+        !/Gives up after \d+ seconds/.test(reviewText) && !/It tries once/.test(reviewText) && !/Authorises/.test(classifyText), { review: reviewText.slice(reviewText.indexOf('When it fails'), reviewText.indexOf('When it fails') + 300), classify: /Authorises[^|]*/.exec(classifyText)?.[0] });
+
       // 16. Ravi, a viewer: no Delete, no picker, fields disabled.
       const viewer = await signIn(browser, consoleUrl, RAVI);
       await openEditor(viewer, consoleUrl, A);
@@ -252,6 +360,15 @@ await withUiStack(
       const pick = await viewer.getByTestId('field-picker-open').count();
       const disabled = !(await viewer.locator('#definition-node-name').isEditable());
       await shot(viewer, 'viewer-1440.png');
+      // Opening a step, even by a double click, must not zoom the canvas.
+      await viewer.waitForTimeout(900);
+      const frame = await viewer.evaluate(() => {
+        const sheet = document.querySelector('[data-testid="step-sheet"]')?.getBoundingClientRect();
+        const done = document.querySelector('[data-testid="definition-node"][data-node-id="done"]')?.getBoundingClientRect();
+        const first = document.querySelector('[data-testid="definition-node"]')?.getBoundingClientRect();
+        return { nodeWidth: Math.round(first?.width ?? 0), openedClear: !!done && !!sheet && done.left >= 0 };
+      });
+      check('16b a viewer opening a step by double click leaves the zoom as it was (a step is 288 px wide at full size)', frame.nodeWidth <= 300 && frame.openedClear, frame);
       await viewer.setViewportSize({ width: 390, height: 844 });
       await viewer.waitForTimeout(500);
       const viewerNarrow = await noSideScroll(viewer);

@@ -245,25 +245,14 @@ _CHECK_SUGGESTION = {
 }
 
 
-def _port_in(message: str) -> str | None:
-    """The port name an engine check already put in its message (`no out port maybe`, `Out port approve`)."""
-    for marker in ("out port ", "in port ", "Out port ", "port "):
-        if marker in message:
-            rest = message.split(marker, 1)[1]
-            return rest.split()[0].rstrip(".") if rest.split() else None
-    return None
-
-
 def enrich_check(check: Json) -> Json:
     """Adds path, port and suggestion from the check the engine already returned. Does not change its meaning."""
-    node, field, code, message = check.get("node"), check.get("field"), check.get("code"), check.get("message") or ""
+    node, field, code = check.get("node"), check.get("field"), check.get("code")
     path = f"nodes.{node}.parameters.{field}" if node and field else (f"nodes.{node}" if node else None)
     return {
         **check,
         "path": check.get("path") or path,
-        "port": check.get("port")
-        # The engine words every check's message as text.
-        or (_port_in(cast(str, message)) if code in {"unknown_port", "unconnected_port", "duplicate_port"} else None),
+        "port": check.get("port"),
         "suggestion": check.get("suggestion") or _CHECK_SUGGESTION.get(str(code or "")),
     }
 

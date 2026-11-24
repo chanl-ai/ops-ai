@@ -283,7 +283,7 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
   const opened = def.nodes.find((n) => n.id === sheetId) ?? null;
   const steps: StepRefs = React.useMemo(() => {
     if (!opened) return { all: [], earlier: [] };
-    const ref = (n: EngineNode): StepRef => ({ id: n.id, label: n.name || typeOf(n)?.label || n.id, type: n.type });
+    const ref = (n: EngineNode): StepRef => ({ id: n.id, label: n.name || typeOf(n)?.label || n.id, type: n.type, typeLabel: typeOf(n)?.label ?? 'Step' });
     const before = upstream(def, opened.id);
     const others = def.nodes.filter((n) => n.id !== opened.id);
     return { all: others.map(ref), earlier: others.filter((n) => before.has(n.id)).map(ref) };
@@ -435,6 +435,8 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
           setSelectedId(n.id);
           setSheetId(n.id);
         }}
+        // A second click on a step opens it too; the canvas must not zoom in on it as well.
+        zoomOnDoubleClick={false}
         onPaneClick={() => setSelectedId(null)}
         defaultEdgeOptions={{ type: 'routed', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } }}
         minZoom={MIN_ZOOM}

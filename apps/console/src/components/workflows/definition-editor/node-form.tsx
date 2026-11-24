@@ -24,6 +24,8 @@ export interface StepRef {
   id: string;
   label: string;
   type: string;
+  /** The step type's name in words ("Human review"), shown beside the step's own name. */
+  typeLabel: string;
 }
 
 /** The node's neighbours: `all` other steps (a review names the tool step it approves, which runs after it), and the
@@ -116,7 +118,7 @@ function FieldControl({ id, spec, schema, value, steps, onChange, testId }: { id
     case 'select':
       return <EnumSelect id={id} schema={schema} value={value} onChange={onChange} testId={testId} />;
     case 'source':
-      return <SourceSelect id={id} source={spec.source} value={value} steps={steps} onChange={onChange} />;
+      return <SourceSelect id={id} source={spec.source} stepType={spec.stepType} value={value} steps={steps} onChange={onChange} />;
     case 'mapping':
       return <MappingInput id={id} value={value} onChange={onChange} />;
     case 'mappings':
@@ -125,6 +127,8 @@ function FieldControl({ id, spec, schema, value, steps, onChange, testId }: { id
       return spec.item ? <ListInput id={id} item={spec.item} schema={schema.items ?? {}} value={asList(value)} steps={steps} onChange={(v) => onChange(v.length ? v : undefined)} /> : null;
     case 'options':
       return <OptionsInput id={id} value={asList(value)} steps={steps} onChange={(v) => onChange(v.length ? v : undefined)} />;
+    case 'categories':
+      return <CategoriesInput id={id} value={asList(value)} onChange={(v) => onChange(v.length ? v : undefined)} />;
     case 'json':
       return <JsonInput id={id} value={value} onChange={onChange} />;
     case 'account':
@@ -136,7 +140,8 @@ function EnumSelect({ id, schema, value, onChange, testId }: { id: string; schem
   // A saved value the choices do not list (a path) stays shown as itself.
   const listed = schemaChoices(schema);
   const options = typeof value === 'string' && value && !listed.some((o) => o.value === value) ? [...listed, { value, label: value }] : listed;
-  const fallback = schema.default !== undefined ? `Default (${String(schema.default)})` : 'Not set';
+  const defaultLabel = listed.find((o) => o.value === String(schema.default))?.label;
+  const fallback = schema.default !== undefined ? `Default (${defaultLabel ?? String(schema.default)})` : 'Not set';
   return (
     <Select value={typeof value === 'string' ? value : NONE} onValueChange={(v) => onChange(v === NONE ? undefined : v)}>
       <SelectTrigger id={id} className="w-full" data-field={id} data-testid={testId}>
@@ -155,9 +160,11 @@ function EnumSelect({ id, schema, value, onChange, testId }: { id: string; schem
 }
 
 /** A choice from a platform list (agents, tools, workflows) or from this workflow's own steps. */
-function SourceSelect({ id, source, value, steps, onChange }: { id: string; source?: OptionSource; value: unknown; steps: StepRefs; onChange: (v: unknown) => void }) {
+function SourceSelect({ id, source, stepType, value, steps, onChange }: { id: string; source?: OptionSource; stepType?: string; value: unknown; steps: StepRefs; onChange: (v: unknown) => void }) {
   const remote = useEngineOptions(source);
-  const options: EngineOption[] = source === 'steps' ? steps.all.map((s) => ({ value: s.id, label: s.label, description: s.type })) : (remote.data ?? []);
+  // A step list offers the steps that fit the setting, each by its own name with its kind beside it.
+  const fitting = steps.all.filter((s) => !stepType || s.type === stepType);
+  const options: EngineOption[] = source === 'steps' ? fitting.map((s) => ({ value: s.id, label: s.label, description: s.typeLabel })) : (remote.data ?? []);
   const current = typeof value === 'string' ? value : '';
   // A saved value the list no longer offers stays visible, so opening the form never changes a setting.
   const shown = current && !options.some((o) => o.value === current) ? [...options, { value: current, label: current, description: 'Not in the list' }] : options;
@@ -313,7 +320,7 @@ function OptionsInput({ id, value, steps, onChange }: { id: string; value: unkno
     <div className="flex flex-col gap-2" data-testid={`${id}-rows`}>
       {options.map((o, i) => (
         <div key={i} className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5 rounded-md border p-2">
-          <Input aria-label="Port name" className="font-mono" value={o.name} placeholder="e.g. approve" onChange={(e) => set(i, { name: e.target.value })} />
+          <Input aria-label="Name" className="font-mono" value={o.name} placeholder="e.g. approve" onChange={(e) => set(i, { name: e.target.value })} />
           <Input aria-label="Label" value={o.label ?? ''} placeholder="e.g. Approve" onChange={(e) => set(i, { label: e.target.value || undefined })} />
           <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${o.name || i + 1}`} onClick={() => onChange(options.filter((_, j) => j !== i).map(fromOption))}>
             <X />
@@ -338,6 +345,31 @@ function OptionsInput({ id, value, steps, onChange }: { id: string; value: unkno
       ))}
       <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => onChange([...options.map(fromOption), `option${options.length + 1}`])}>
         <Plus /> Add option
+      </Button>
+    </div>
+  );
+}
+
+type Category = { name: string; description?: string };
+const toCategory = (o: unknown): Category => (typeof o === 'string' ? { name: o } : { ...(asObject(o) as Category) });
+
+/** A classifier's categories: each is a way out with a name and a line saying what belongs in it. */
+function CategoriesInput({ id, value, onChange }: { id: string; value: unknown[]; onChange: (v: unknown[]) => void }) {
+  const rows = value.map(toCategory);
+  const set = (i: number, patch: Partial<Category>) => onChange(rows.map((c, j) => (j === i ? Object.fromEntries(Object.entries({ ...c, ...patch }).filter(([, v]) => v !== undefined && v !== '')) : c)));
+  return (
+    <div className="flex flex-col gap-2" data-testid={`${id}-rows`}>
+      {rows.map((c, i) => (
+        <div key={i} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-1.5 rounded-md border p-2">
+          <Input aria-label="Category name" value={c.name ?? ''} placeholder="e.g. Billing" onChange={(e) => set(i, { name: e.target.value })} />
+          <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${c.name || i + 1}`} onClick={() => onChange(rows.filter((_, j) => j !== i))}>
+            <X />
+          </Button>
+          <Input aria-label="What belongs in it" className="col-span-2" value={c.description ?? ''} placeholder="e.g. Invoices, charges and refunds" onChange={(e) => set(i, { description: e.target.value || undefined })} />
+        </div>
+      ))}
+      <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => onChange([...rows, { name: `category${rows.length + 1}` }])}>
+        <Plus /> Add category
       </Button>
     </div>
   );

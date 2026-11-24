@@ -48,10 +48,13 @@ export interface StepSheetProps {
 }
 
 /** Brings the field a problem names into view and focuses it. */
-function fixField(nodeId: string, field: string | null | undefined) {
-  const id = field ? `node-${nodeId}-${field}` : 'definition-node-name';
-  const el = document.getElementById(id) ?? document.querySelector<HTMLElement>(`[data-field="${id}"]`);
-  el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+function fixField(nodeId: string, field: string) {
+  const id = `node-${nodeId}-${field}`;
+  const holder = document.getElementById(id) ?? document.querySelector<HTMLElement>(`[data-field="${id}"], [data-mapping="${id}"], [data-testid="${id}-rows"]`);
+  // A list or a picked value has no control of its own with that id: its first control takes the focus.
+  const el = holder?.matches('input, textarea, select, button, [role="combobox"]') ? holder : (holder?.querySelector<HTMLElement>('input, textarea, button, [role="combobox"]') ?? holder);
+  // A setting the form does not show (found only under All settings) brings the Settings section into view instead.
+  (el ?? document.querySelector<HTMLElement>('[data-testid="step-settings"]'))?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   el?.focus({ preventScroll: true });
 }
 
@@ -141,8 +144,9 @@ export function StepSheet({ node, type, workflowId, steps, checks, order, readOn
                     {errors.map((c, i) => (
                       <li key={`${c.code}-${i}`} className="flex min-w-0 items-start justify-between gap-2">
                         <span className="min-w-0">{c.message}</span>
-                        {!locked && (
-                          <Button type="button" variant="outline" size="sm" onClick={() => fixField(node.id, c.field)} data-testid="step-problem-fix">
+                        {/* A problem about how steps connect names no setting here; it is fixed on the canvas. */}
+                        {!locked && c.field && (
+                          <Button type="button" variant="outline" size="sm" onClick={() => fixField(node.id, c.field as string)} data-testid="step-problem-fix">
                             Fix
                           </Button>
                         )}
@@ -236,18 +240,27 @@ function WhatItReceives({ sample }: { sample: ReturnType<typeof useStepSample> }
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
+/** How long a review waits, from its deadline and what happens past it. */
+function waitingWords(parameters: Record<string, unknown>): string {
+  const hours = typeof parameters.slaHours === 'number' ? parameters.slaHours : undefined;
+  const past = parameters.onTimeout === 'expire' ? 'then it expires and takes the Timeout way out' : 'then it shows as overdue and keeps waiting';
+  return hours ? `Until someone decides. After ${plural(hours, 'hour')}, ${past}.` : `Until someone decides. After your workspace's review deadline, ${past}.`;
+}
+
 /** Retries and the time limit in words, then what a failure does as the engine says it (its Error path or the run). */
 function WhenItFails({ type, parameters }: { type: EngineNodeType; parameters: Record<string, unknown> }) {
   const again = Math.max(0, (type.retry?.attempts ?? 1) - 1);
   const timeout = typeof parameters.timeoutSeconds === 'number' ? parameters.timeoutSeconds : type.timeoutSeconds;
+  // A step that asks a person waits as long as they take, so a try has no 30-second limit.
+  const person = type.group === 'human';
   return (
     <div data-testid="step-when-it-fails">
       <Section title="When it fails">
         <KeyValues
           rows={[
-            ['Tries again', again === 0 ? 'No. It tries once.' : `Up to ${plural(again, 'more time')}, waiting a little longer each time.`],
+            ['Tries again', person ? 'No. It waits for a person instead.' : again === 0 ? 'No. It tries once.' : `Up to ${plural(again, 'more time')}, waiting a little longer each time.`],
             ['If it still fails', type.fails || 'The run stops as Failed and your team sees it in Runs.'],
-            ['Gives up after', `${plural(Math.round(timeout), 'second')} for each try.`],
+            person ? ['Waits for a person', waitingWords(parameters)] : ['Gives up after', `${plural(Math.round(timeout), 'second')} for each try.`],
           ]}
         />
       </Section>
