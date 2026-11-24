@@ -14,7 +14,7 @@ from ops_store.listing import ListPage, list_page
 from ops_store.rows import one, rows
 from ops_store.team_scope import acting_team, team_visible
 
-from ..journal import FAILING_PORTS
+from ..journal import FAILING_PORTS, definitely_not_done, error_of
 from .clock import now_iso
 from .tables import engine_definitions, engine_runs, engine_steps, engine_waits, engine_work
 from .tx import Transactions
@@ -551,33 +551,40 @@ class RunStore:
         """Sets the failed step's recorded failing attempt aside, in the redrive's own transaction. Every recorded port
         is returned on a re-run (compiler.recorded), so without this a step that left by its error or refused port
         returns that record and the run walks to the same failure End without running it. A definite answer is marked
-        `redriven` and the step takes its next attempt. A write that left by its timeout port may have run, so it is
-        made a dangling write instead (status error, no port): the wrapper reconciles it by its key before any second
-        send. An attempt with no port is left as it is, for the same reason. The step is the one the run's failure
-        names, at its latest attempt; a failure that names no step (a run failed before the record existed) sets one
-        aside only when the run ended at a failure End, at its last failing step, as the worker's reason names it."""
+        `redriven` and the step takes its next attempt. A write is set aside only when its recorded error proves it did
+        nothing (journal.definitely_not_done); any other write (its timeout port, a 5xx, a plugin failure, an unknown
+        code) may have run, so it is made a dangling write instead (status error, no port): the wrapper reconciles it by
+        its key before any second send. An attempt with no port is left as it is, for the same reason. The step is the
+        one the run's failure names, at its latest iteration and attempt; a failure that names no step (a run failed
+        before the record existed) sets one aside only when the run ended at a failure End, at its last failing step,
+        as the worker's reason names it."""
         s = engine_steps
         mine = sa.and_(s.c.run_id == run.id, s.c.tenant_id == self.tx.tenant())
         failure = cast(dict[str, Any] | None, run.failure) or {}
         step = cast(dict[str, Any] | None, failure.get("step")) or {}
         if step.get("id"):
             named = sa.and_(mine, s.c.node_id == str(step["id"]))
+            latest = (s.c.iteration.desc(), s.c.attempt.desc())
         elif run.outcome is not None:
             named = sa.and_(mine, s.c.port.in_(FAILING_PORTS))
+            latest = (s.c.started_at.desc(), s.c.iteration.desc(), s.c.attempt.desc())
         else:
             return
-        last = (
-            await c.execute(
-                sa.select(s.c.node_id, s.c.iteration, s.c.attempt, s.c.port, s.c.effects, s.c.status)
-                .where(named)
-                .order_by(s.c.started_at.desc(), s.c.attempt.desc())
-                .limit(1)
-            )
-        ).first()
+        cols = (s.c.node_id, s.c.iteration, s.c.attempt, s.c.port, s.c.effects, s.c.status, s.c.output)
+        last = (await c.execute(sa.select(*cols).where(named).order_by(*latest).limit(1))).first()
         if last is None or last.port not in FAILING_PORTS or last.status not in ("ok", "error"):
             return
-        row = sa.and_(mine, s.c.node_id == last.node_id, s.c.iteration == last.iteration, s.c.attempt == last.attempt)
-        if last.effects == "write" and last.port == "timeout":
+        row = sa.and_(
+            mine,
+            s.c.node_id == last.node_id,
+            s.c.iteration == last.iteration,
+            s.c.attempt == last.attempt,
+            # Unchanged since it was read: a worker that recorded the step since keeps its record.
+            s.c.status == last.status,
+            s.c.port == last.port,
+        )
+        done = last.port == "refused" or (last.port == "error" and definitely_not_done(error_of(last.output)))
+        if last.effects == "write" and not done:
             await c.execute(s.update().where(row).values(status="error", port=None))
         else:
             await c.execute(s.update().where(row).values(status="redriven"))

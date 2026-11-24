@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 # running: an attempt under way, or one whose process died (dangling). waiting: a review paused for a person.
 # ok: recorded output, returned on any re-run. pinned: an output set before a test run. error: the attempt failed.
@@ -17,6 +17,73 @@ StepStatus = Literal["running", "waiting", "ok", "pinned", "error", "abandoned",
 # The ways a step leaves when it did not do its job: what a failure End names as the reason the run failed, and the
 # recorded attempts a Redrive sets aside.
 FAILING_PORTS = ("error", "refused", "unreadable", "timeout")
+
+# Gateway codes for a call that never reached the outside system (tools-service executor.py transport_failure), and
+# a 429 the system refused before acting: safe to send again.
+NEVER_SENT = frozenset({"CONNECT_FAILED", "CONNECT_TIMEOUT", "POOL_TIMEOUT", "TLS_FAILED", "RATE_LIMITED"})
+
+# Gateway refusals made before anything is sent: no address, account, sign-in, secret or egress for the call, or its
+# own input refused (tools-service executor.py, auth and plugins/executor.py). A write that ends this way did not run.
+REFUSED_BEFORE_SENDING = frozenset(
+    {
+        "CONNECTION_NOT_SET",
+        "CONNECTION_MISSING",
+        "CONNECTION_NOT_LINKED",
+        "CONNECTION_OUT_OF_SCOPE",
+        "CONNECTION_REVOKED",
+        "AUTH_FAILED",
+        "NOT_SIGNED_IN",
+        "SIGN_IN_NOT_FOUND",
+        "SECRET_MISSING",
+        "SECRET_UNAVAILABLE",
+        "EGRESS_DENIED",
+        "PLUGIN_DISABLED",
+        "INVALID_INPUT",
+    }
+)
+
+
+def never_sent(error: Any) -> bool:
+    return isinstance(error, dict) and cast(dict[str, Any], error).get("code") in NEVER_SENT
+
+
+def sent_and_unanswered(error: Any) -> bool:
+    """Whether a gateway error says the call may have reached the outside system and no answer came back that says
+    what it did: it timed out after connecting, broke off, or answered 5xx (tools-service executor.py
+    transport_failure and status_failure), or a plugin's request failed or the plugin itself raised, either of which
+    can happen after a request went out (plugins/executor.py). A write that ends this way may have happened."""
+    if not isinstance(error, dict):
+        return False
+    e = cast(dict[str, Any], error)
+    code, status = e.get("code"), e.get("status")
+    if code in ("UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "PLUGIN_FAILED"):
+        return True
+    return code == "UPSTREAM_ERROR" and (status is None or (isinstance(status, int) and status >= 500))
+
+
+def definitely_not_done(error: Any) -> bool:
+    """Whether a recorded gateway error proves the call did nothing: it never left (NEVER_SENT), the gateway refused it
+    before sending (REFUSED_BEFORE_SENDING, or its own side), or the system answered with a 4xx refusal. Anything else,
+    an unknown code included, may have run."""
+    if not isinstance(error, dict) or sent_and_unanswered(error):
+        return False
+    e = cast(dict[str, Any], error)
+    code, status = e.get("code"), e.get("status")
+    if never_sent(e) or code in REFUSED_BEFORE_SENDING or e.get("side") == "ours":
+        return True
+    return isinstance(status, int) and 400 <= status < 500 and status != 408
+
+
+def error_of(out: Any) -> Any:
+    """The gateway's error inside a step's output: the error port wraps the tool's own `{"error": ...}` once more."""
+    error: Any = cast(dict[str, Any], out).get("error") if isinstance(out, dict) else None
+    while isinstance(error, dict):
+        layer = cast(dict[str, Any], error)
+        inner: Any = layer.get("error")
+        if "code" in layer or not isinstance(inner, dict):
+            break
+        error = cast(Any, inner)
+    return cast(Any, error)
 
 
 @dataclass(frozen=True)

@@ -647,7 +647,10 @@ class Worker:
         unreadable, timeout) with its own error and how many attempts it took, then where the run ended. With no such
         step the End is the reason, and says so."""
         failing = [
-            s for s in await self.runs.step_rows(run.id) if s.port in FAILING_PORTS and s.node_type != "ops.flow.end"
+            s
+            for s in await self.runs.step_rows(run.id)
+            # An attempt a Redrive set aside belongs to an earlier pass; its tries are not this failure's.
+            if s.port in FAILING_PORTS and s.node_type != "ops.flow.end" and s.status != "redriven"
         ]
         if not failing:
             said = f"Ended at {end}, an end marked as a failure"

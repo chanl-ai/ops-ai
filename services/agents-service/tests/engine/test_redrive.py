@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
-from ops_engine.ports import ToolResult
+from ops_engine.ports import Access, ToolResult
 from ops_engine.store import DefinitionStore, RunStore
 from ops_engine.store.tables import engine_steps
 from ops_service_kit.ids import new_id
@@ -68,6 +68,7 @@ class UnsetTools(CountingTools):
 
     fixed = False
     outages = 0
+    outage = "UPSTREAM_TIMEOUT"
 
     async def call(
         self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
@@ -77,7 +78,7 @@ class UnsetTools(CountingTools):
         self.calls.append(key)
         if self.fixed:
             self.outages -= 1
-            error = {"code": "UPSTREAM_TIMEOUT", "message": "crm.test did not answer", "side": "upstream"}
+            error = {"code": self.outage, "message": "crm.test did not answer", "side": "upstream"}
             return ToolResult(False, {"error": error}, reason="the operation returned an error")
         error = {"code": "CONNECTION_NOT_SET", "message": "This tool's app names no address for this environment."}
         return ToolResult(False, {"error": error}, reason="This tool's app names no address for this environment.")
@@ -158,10 +159,77 @@ async def test_a_redriven_step_keeps_its_own_retries_however_old_the_failure(
     assert run["status"] == "waiting", run
 
 
+class UnsetWrites(UnsetTools):
+    """UnsetTools as a write, whose outages never reach the system."""
+
+    outage = "CONNECT_FAILED"
+
+    async def access(self, operation: str) -> Access:
+        return "write"
+
+
+async def test_a_redriven_write_keeps_its_own_attempts_and_its_reason_counts_only_them(
+    engine: AsyncEngine,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The set-aside attempt is not one of the redriven write's three: two outages that never reached the system are
+    # sent again, and the third try answers.
+    async def no_wait(_: float) -> None:
+        return None
+
+    monkeypatch.setattr("ops_engine.compiler.sleep", no_wait)
+    tenant, tools = f"t-{uuid4().hex[:8]}", UnsetWrites()
+    run_id = await failed_at_its_end(engine, tenant, tools)
+    # Redriven before the cause is fixed, it fails again on one try; the reason does not count the set-aside one.
+    run, _ = await redriven(engine, tenant, run_id, tools)
+    assert run["status"] == "failed" and "attempts" not in str(run["error"]), run["error"]
+    tools.fixed, tools.outages = True, 2
+    run, steps = await redriven(engine, tenant, run_id, tools)
+    lookup = [(s["attempt"], s["status"]) for s in steps if s["node_id"] == "lookup"]
+    assert lookup == [(1, "redriven"), (2, "redriven"), (3, "error"), (4, "error"), (5, "ok")], lookup
+    assert run["status"] == "waiting", run
+
+
 async def test_a_redrive_never_resends_a_write_that_left_by_its_timeout_port(engine: AsyncEngine) -> None:  # noqa: F811
     # A write the system did not answer in time may have run; the gateway's record under its key decides, here done.
     tenant, tools = f"t-{uuid4().hex[:8]}", AnsweredTools()
     run_id = await failed_at_its_end(engine, tenant, tools, on_timeout=True)
+    run, steps = await redriven(engine, tenant, run_id, tools)
+    assert [k for k in tools.calls if k.startswith(run_id)] == [f"{run_id}:lookup:1:1"], "the write was sent again"
+    assert run["status"] == "waiting", (run, [(s["attempt"], s["status"], s["port"]) for s in steps])
+
+
+class MayHaveRunTools(CountingTools):
+    """A write whose call reached the system and then failed in a way that does not say whether it acted, recorded
+    under `code`; the gateway's record under its key says it was done."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__()
+        self.code = code
+
+    async def access(self, operation: str) -> Access:
+        return "write"
+
+    async def call(
+        self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
+    ) -> ToolResult:
+        self.calls.append(key)
+        error = {"code": self.code, "message": f"ConnectionResetError calling {operation}"}
+        return ToolResult(False, {"error": error}, reason="the operation returned an error")
+
+    async def find(self, key: str, operation: str) -> ToolResult | None:
+        return ToolResult(True, {"id": "C-1"}) if key in self.calls else None
+
+
+@pytest.mark.parametrize("code", ["UPSTREAM_UNREACHABLE", "PLUGIN_FAILED", "ANSWER_UNREADABLE"])
+async def test_a_redrive_never_resends_a_write_whose_error_says_it_may_have_run(
+    engine: AsyncEngine,  # noqa: F811
+    code: str,
+) -> None:
+    # A plugin's request that broke off, a plugin that raised after sending, an answer that could not be read: the
+    # write may have run, so a redrive reads the gateway's record under its key (here done) instead of sending it.
+    tenant, tools = f"t-{uuid4().hex[:8]}", MayHaveRunTools(code)
+    run_id = await failed_at_its_end(engine, tenant, tools)
     run, steps = await redriven(engine, tenant, run_id, tools)
     assert [k for k in tools.calls if k.startswith(run_id)] == [f"{run_id}:lookup:1:1"], "the write was sent again"
     assert run["status"] == "waiting", (run, [(s["attempt"], s["status"], s["port"]) for s in steps])
