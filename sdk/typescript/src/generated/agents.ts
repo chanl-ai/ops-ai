@@ -9467,6 +9467,15 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** PreviewIn */
+        PreviewIn: {
+            /** After */
+            after?: string | null;
+            /** Rule */
+            rule: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+        };
         /** PreviewView */
         PreviewView: {
             /** Nextruns */
@@ -27433,7 +27442,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RuleIn"];
+                "application/json": components["schemas"]["PreviewIn"];
             };
         };
         responses: {

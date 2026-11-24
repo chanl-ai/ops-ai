@@ -81,6 +81,7 @@ class ScheduleKinds:
         """The rule as stored, or InvalidSchedule naming the field: the kind's own check, then the floor, which holds
         for every kind: no two slots in the coming week closer than `floor`."""
         kind = self.of(raw)
+        _known_fields(kind, raw)
         rule = kind.check(raw, now)
         slots = [s for s in kind.next_slots(rule, now, _FLOOR_SLOTS) if s <= now + _FLOOR_LOOKAHEAD]
         gaps = [b - a for a, b in pairwise(slots)]
@@ -98,6 +99,18 @@ class ScheduleKinds:
 
     def words(self, rule: Mapping[str, JsonValue]) -> str:
         return self.of(rule).words(rule)
+
+
+def _known_fields(kind: RuleKind, raw: Mapping[str, JsonValue]) -> None:
+    """A field the kind's schema does not list is refused by name: `at` for `time` would save as the
+    default."""
+    props = kind.schema.get("properties")
+    allowed = sorted(props) if isinstance(props, Mapping) else []
+    for field in raw:
+        if field not in allowed:
+            raise InvalidSchedule(
+                f"{field} is not a field of a {kind.name} schedule; its fields are {', '.join(allowed)}.", field
+            )
 
 
 def _span(gap: timedelta) -> str:
@@ -121,7 +134,9 @@ _SOURCE_KINDS = ScheduleKinds([Manual(), Hourly(), Daily(), Weekly()])
 
 def checked(schedule: Mapping[str, JsonValue]) -> Rule:
     """A knowledge source's schedule as stored, or InvalidSchedule naming its problem."""
-    return _SOURCE_KINDS.of(schedule).check(schedule, datetime.now(UTC))
+    kind = _SOURCE_KINDS.of(schedule)
+    _known_fields(kind, schedule)
+    return kind.check(schedule, datetime.now(UTC))
 
 
 def last_slot(schedule: Mapping[str, JsonValue], now: datetime) -> datetime | None:

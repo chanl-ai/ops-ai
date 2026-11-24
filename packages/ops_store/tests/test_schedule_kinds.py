@@ -90,6 +90,8 @@ def test_a_bad_rule_is_refused_naming_its_field_and_stored_kinds_still_load() ->
         ({"kind": "hourly", "every": 3}, "every"),
         ({"kind": "every", "every": 0, "unit": "hours"}, "every"),
         ({"kind": "every", "every": 1, "unit": "hours", "start": "7"}, "start"),
+        ({"kind": "daily", "at": "07:30"}, "at"),
+        ({"kind": "weekly", "day": "mon", "times": "07:30"}, "times"),
     ]
     for bad, field in cases:
         with pytest.raises(InvalidSchedule) as refused:

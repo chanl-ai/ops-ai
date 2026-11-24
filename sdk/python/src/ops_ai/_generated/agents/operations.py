@@ -3082,7 +3082,7 @@ class Operations:
         "Schedule Kinds"
         return self._t.call(SERVICE, OPERATIONS["schedules_schedule_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def schedules_preview_schedule(self, body: RuleIn) -> PreviewView:
+    def schedules_preview_schedule(self, body: PreviewIn) -> PreviewView:
         "Preview Schedule"
         return self._t.call(SERVICE, OPERATIONS["schedules_preview_schedule"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
@@ -4835,7 +4835,7 @@ class AsyncOperations:
         "Schedule Kinds"
         return await self._t.call(SERVICE, OPERATIONS["schedules_schedule_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def schedules_preview_schedule(self, body: RuleIn) -> PreviewView:
+    async def schedules_preview_schedule(self, body: PreviewIn) -> PreviewView:
         "Preview Schedule"
         return await self._t.call(SERVICE, OPERATIONS["schedules_preview_schedule"], {}, {}, {}, body)  # type: ignore[no-any-return]
 

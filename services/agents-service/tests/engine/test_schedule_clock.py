@@ -77,7 +77,9 @@ class Env:
     async def save(
         self, rule: dict[str, JsonValue], now: datetime, wid: str = "held_wires", floor: timedelta | None = None
     ) -> None:
-        stored = default_kinds().checked(rule | {"tz": "UTC"}, now, floor=floor or default_floor())
+        stored = default_kinds().checked(
+            rule | ({} if rule["kind"] == "hourly" else {"tz": "UTC"}), now, floor=floor or default_floor()
+        )
         with tenant_scope(TENANT):
             await WorkflowSchedules(self.db).save(wid, "start", TEAM, stored, "user_ana")
 
