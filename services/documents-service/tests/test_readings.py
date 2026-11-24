@@ -251,7 +251,8 @@ async def test_a_file_with_no_reader_fails_with_its_reason(make: Make) -> None:
     assert body["status"] == "failed" and body["error"]["code"] == "unsupported_format", body
 
 
-async def test_reading_events_go_to_kb_and_extraction_events_to_agents(engine: AsyncEngine) -> None:
+async def test_reading_events_go_to_kb_and_agents_and_extraction_events_to_agents(engine: AsyncEngine) -> None:
+    """kb-service indexes a file once its reading ends; agents-service wakes a Full text step parked on it."""
     sent: dict[str, list[str]] = {"agents": [], "kb": []}
 
     class Client:
@@ -264,7 +265,10 @@ async def test_reading_events_go_to_kb_and_extraction_events_to_agents(engine: A
     send = documents_relay(engine, {"agents": Client("agents"), "kb": Client("kb")}).send
     for name in ("reading.finished", "extraction.finished", "reading.failed"):
         await send({"tenantId": "t", "body": {"name": name, "teamId": "team_ops"}})
-    assert sent == {"agents": ["extraction.finished"], "kb": ["reading.finished", "reading.failed"]}, sent
+    assert sent == {
+        "agents": ["reading.finished", "extraction.finished", "reading.failed"],
+        "kb": ["reading.finished", "reading.failed"],
+    }, sent
 
 
 async def test_the_layout_is_drawn_from_the_reading(make: Make) -> None:

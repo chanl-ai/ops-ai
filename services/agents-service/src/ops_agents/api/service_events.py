@@ -148,12 +148,16 @@ EVENT_OWNERS: dict[str, tuple[str, ...]] = {
     # tool.module.* and tool.team_state.changed also keep this service's copy of the catalogue (store/tool_copies.py).
     "tools": ("tool_access.", "tool_module.", "module_review.", "app_account.", "tool.module.", "tool.team_state."),
     "files": ("file.",),
-    "documents": ("extraction.",),
+    "documents": ("extraction.", "reading."),
     "kb": ("kb.", "knowledge."),
     # The task API records a posted task as its own event, so the task runs as the api_task workflow.
     "agents": ("task.",),
 }
 
+
+# A step waits on a reading's end as reading.finished; documents-service reports a reading that could not be read as
+# reading.failed, so that wakes the step too, which then reads the failed reading and takes its error port.
+ALSO_WAKES = {"reading.failed": "reading.finished"}
 
 REMINDER = "task.reminder"
 
@@ -285,6 +289,12 @@ async def _deliver(
     event = await events.record(name=name, key=key, team_id=team_id, source=source, actor=actor, payload=payload)
     # A step parked on this event and key resumes before any listener starts: the run it belongs to is waiting.
     woken = await wake_parked(db, name=name, key=key, team_id=str(event.team_id), payload=cast(Json, event.payload))
+    if (ends := ALSO_WAKES.get(name)) and key.startswith(f"{name}:"):
+        # The same end reported under another name: the key differs only by that name.
+        also = f"{ends}:{key.removeprefix(f'{name}:')}"
+        woken += await wake_parked(
+            db, name=ends, key=also, team_id=str(event.team_id), payload=cast(Json, event.payload)
+        )
     # The stored event is what runs: a repeat with another payload or team cannot change what an earlier one meant.
     run_key = f"{name}:{key}"
     runs = RunStore(EngineTransactions(db))
