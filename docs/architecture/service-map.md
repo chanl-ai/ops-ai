@@ -97,7 +97,7 @@ heartbeat at most every 10 s and on every error; `test_background_registry.py` f
 
 | Process | Service | Heartbeat kept in | Jobs logged |
 |---|---|---|---|
-| Workflow worker, sweeper, timer poller, memory clean-up, mail listener, event workflows | agents-service | `background_heartbeats` (one row per process instance) | `background_jobs`, in the job's team (memory clean-up: none) |
+| Workflow worker, sweeper, timer poller, memory clean-up, mail listener, schedule clock, event workflows, and the audit hand-off (`agents_relay`, an outbox relay) | agents-service | `background_heartbeats` (one row per process instance) | `background_jobs`, in the job's team (memory clean-up: none) |
 | File hand-off, document hand-off, tool events (outbox relays), document reading | files, documents, tools | the process's memory | none: a failed hand-off shows as the heartbeat's last error and on its outbox row |
 
 Each service answers `GET /health/background` (states and counts, no record's data), which `make health` and the

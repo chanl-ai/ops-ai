@@ -14,7 +14,7 @@ from ops_store.schedule import KINDS
 
 from ..store.schedules import ScheduleRow
 from ..store.trigger_events import TriggerEvents
-from .schedule_clock import IdleCode, idle_state, iso
+from .schedule_clock import IdleCode, idle_state, iso, slot_key
 
 NEXT_RUNS = 3
 
@@ -62,22 +62,20 @@ def idle(row: ScheduleRow, serving: DefinitionRow | None, registry: TypeRegistry
     return idle_state(row.trigger_step, serving.definition, serving.stage, takes)
 
 
-def slot_key(row: ScheduleRow) -> str | None:
-    """The key the clock logs the row's last slot under (`api/schedule_clock.py` `_log`)."""
-    return f"schedule:{row.workflow_id}:{row.last_slot_at[:16]}Z" if row.last_slot_at else None
-
-
 def schedule_view(
     row: ScheduleRow,
     now: datetime,
     serving: DefinitionRow | None,
     registry: TypeRegistry,
-    reasons: dict[str, str] | None = None,
+    reasons: dict[tuple[str, str], str] | None = None,
 ) -> Json:
     """`serving` is the version that serves the workflow (live or paused), None when there is none; `reasons` are the
     clock's reasons by slot key, read for all of a workflow's schedules at once (`schedule_views`)."""
     state = idle(row, serving, registry)
-    key = slot_key(row)
+    reason = None
+    key = (row.trigger_step, slot_key(row.workflow_id, row.last_slot_at)) if row.last_slot_at else None
+    if key and row.last_outcome not in (None, "ran", "seen"):
+        reason = (reasons or {}).get(key)
     return ScheduleView(
         workflow_id=row.workflow_id,
         trigger_step=row.trigger_step,
@@ -91,7 +89,7 @@ def schedule_view(
         last_outcome=row.last_outcome,
         idle=state[1] if state else None,
         idle_code=state[0] if state else None,
-        last_outcome_reason=(reasons or {}).get(key or "") if row.last_outcome not in (None, "ran", "seen") else None,
+        last_outcome_reason=reason,
         last_run_id=row.last_run_id,
     ).model_dump(mode="json", by_alias=True)
 
@@ -100,6 +98,6 @@ async def schedule_views(
     db: Any, rows: list[ScheduleRow], now: datetime, serving: DefinitionRow | None, registry: TypeRegistry
 ) -> list[Json]:
     """The views of a workflow's schedules, with the clock's reasons read in one statement."""
-    keys = [k for r in rows if (k := slot_key(r))]
-    reasons = await TriggerEvents(db).schedule_reasons(rows[0].workflow_id, keys) if rows else {}
+    asked = [(r.trigger_step, slot_key(r.workflow_id, r.last_slot_at)) for r in rows if r.last_slot_at]
+    reasons = await TriggerEvents(db).schedule_reasons(rows[0].workflow_id, asked) if rows else {}
     return [schedule_view(r, now, serving, registry, reasons) for r in rows]

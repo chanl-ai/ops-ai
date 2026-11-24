@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 
 from apps_walk import AUTH, ops_cli
-from usecase_harness import agents, check, finish, platform
+from usecase_harness import agents, as_role, check, data, engine_worker, finish, platform, until
 
 WID = f"ucwf1_cli_{secrets.token_hex(3)}"
 DEFINITION = {
@@ -30,7 +30,7 @@ WORDS = "Every 15 minutes from 07:00, Europe/London"
 
 
 def main() -> None:
-    with platform(), agents(env=AUTH):
+    with platform() as (plat, _), agents(env=AUTH), engine_worker("ucwf1cli", AUTH):
         source = Path(tempfile.mkdtemp(prefix="ucwf1-cli-")) / "workflow.yaml"
         source.write_text(json.dumps(DEFINITION))
         applied, said = ops_cli("builder", "workflows", "apply", str(source), options_first=True)
@@ -66,12 +66,38 @@ def main() -> None:
             {"exit": u_code, "said": str(unknown)[:300]},
         )
 
+        hourly = ("--kind", "hourly", "--set", "every=1")
+        h_code, _ = ops_cli("builder", *sched, "save", WID, "--step", "start", *hourly, options_first=True)
+        check("12 a changed schedule saves", h_code == 0, h_code)
+
         c_code, _ = ops_cli("builder", *sched, "clear", WID, "--step", "start", options_first=True)
         gone_code, gone = ops_cli("builder", *sched, "show", WID, "--step", "start", options_first=True)
         check(
             "12 clear removes the schedule, and show then exits non-zero",
             c_code == 0 and gone_code != 0,
             {"clear": c_code, "show": gone_code, "said": str(gone)[:200]},
+        )
+
+        # The three changes are in the account's audit log, delivered by the worker's relay to platform-service.
+        admin = as_role(plat, "admin", "team_ops")
+
+        def audit_lines() -> list[str] | None:
+            page = data(plat.get("/v1/audit", params={"pageSize": 100}, headers=admin)) or {}
+            mine = [e for e in page.get("data") or [] if str(e.get("targetId")) == WID]
+            return [str(e["summary"]) for e in mine] if len(mine) >= 3 else None
+
+        lines = sorted(until(audit_lines, timeout=60) or [])
+        check(
+            "17 a save, a change and a clear each reach the audit log with the old and new schedule in words",
+            lines
+            == sorted(
+                [
+                    f"Set the schedule of CLI morning report {WID[-6:]} to {WORDS}",
+                    f"Changed the schedule of CLI morning report {WID[-6:]} from {WORDS} to Every hour",
+                    f"Cleared the schedule of CLI morning report {WID[-6:]}; it was Every hour",
+                ]
+            ),
+            lines,
         )
     finish()
 

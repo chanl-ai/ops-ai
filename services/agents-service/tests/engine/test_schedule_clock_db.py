@@ -11,7 +11,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
+import pytest
 from httpx import AsyncClient
+from pydantic import HttpUrl
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_agents.api.schedule_clock import SCHEDULE_TRIGGER, ScheduleClock, Tick, WorkflowStart, keep_schedules_ticking
@@ -19,13 +21,12 @@ from ops_agents.api.worker import serve
 from ops_agents.store.background import heartbeats
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.leases import Leases
-from ops_agents.store.outbox import outbox_relay
 from ops_agents.store.schedules import WorkflowSchedules
 from ops_agents.store.tenancy import tenant_scope
 from ops_agents.store.trigger_events import TriggerEvents
 from ops_engine.store import DefinitionStore, RunStore
-from ops_service_kit.settings import Settings
-from ops_store.outbox import run_relay
+from ops_service_kit.settings import Endpoint, Settings
+from ops_store.outbox import Relay
 from ops_store.schedule import default_kinds
 from ops_store.testing import loop_reports_failure
 from tests.conftest import SEED
@@ -103,8 +104,12 @@ async def test_two_machines_on_one_slot_give_one_run_and_one_outcome(database_ur
         await db.dispose()
 
 
-async def test_the_worker_starts_the_clock_and_a_failing_pass_shows_on_health(
-    client: AsyncClient, database_url: str
+async def broken(*_: Any, **__: Any) -> Any:
+    raise ConnectionError("platform-service refused the connection")
+
+
+async def test_the_worker_starts_the_clock_and_its_relay_and_a_failing_pass_shows_on_health(
+    client: AsyncClient, database_url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     engine, stop, running = create_async_engine(database_url), asyncio.Event(), list[asyncio.Task[None]]()
     down = create_async_engine("postgresql+asyncpg://nobody@127.0.0.1:9/none")
@@ -115,24 +120,24 @@ async def test_the_worker_starts_the_clock_and_a_failing_pass_shows_on_health(
 
     try:
         worker_stop = asyncio.Event()
-        worker = asyncio.create_task(serve(Settings(database_url=database_url, seed_dir=SEED), worker_stop))
+        settings = Settings(
+            database_url=database_url, seed_dir=SEED, platform_internal=Endpoint(url=HttpUrl("http://127.0.0.1:9"))
+        )
+        worker = asyncio.create_task(serve(settings, worker_stop))
         try:
             for _ in range(100):
-                if any(b.process == "schedule_clock" for b in await heartbeats(engine).read()):
+                started = {b.process for b in await heartbeats(engine).read()}
+                if {"schedule_clock", "agents_relay"} <= started:
                     break
                 await asyncio.sleep(0.1)
             else:
-                raise AssertionError("the worker never wrote the schedule clock's heartbeat")
+                raise AssertionError("the worker never wrote the heartbeats of the schedule clock and its relay")
+            # The relay is the worker's own: a pass that raises shows on Background under its key.
+            await loop_reports_failure(client, "agents_relay", lambda: monkeypatch.setattr(Relay, "once", broken))
         finally:
             worker_stop.set()
             await asyncio.wait_for(worker, 30)
         await loop_reports_failure(client, "schedule_clock", trip, within_s=10)
-
-        def trip_relay() -> None:
-            hand_off = run_relay(outbox_relay(down, {}), key="agents_relay", stop=stop, store=heartbeats(engine))
-            running.append(asyncio.create_task(hand_off))
-
-        await loop_reports_failure(client, "agents_relay", trip_relay, within_s=10)
     finally:
         stop.set()
         for task in running:

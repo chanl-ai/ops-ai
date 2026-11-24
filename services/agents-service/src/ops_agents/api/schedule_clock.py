@@ -75,6 +75,13 @@ def iso(t: datetime) -> str:
     return t.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def slot_key(workflow_id: str, slot: str | datetime) -> str:
+    """The key one slot of a workflow is known by: its run key and its row in the trigger's log. The slot is an instant
+    or its `iso` text, to the minute."""
+    text = iso(slot) if isinstance(slot, datetime) else slot
+    return f"schedule:{workflow_id}:{text[:16]}Z"
+
+
 def lease_key(tenant: str, workflow_id: str, step: str) -> str:
     """One schedule's lease, under the poll lease prefix the sweeper leaves alone."""
     return POLL_LEASE_PREFIX + "s" + hashlib.sha256(f"{tenant}:{workflow_id}:{step}".encode()).hexdigest()[:31]
@@ -134,7 +141,7 @@ class WorkflowStart:
             team_id=tick.definition.team_id,
             mode="live",
             input={"dueAt": iso(tick.slot)},
-            run_key=f"schedule:{wid}:{iso(tick.slot)[:16]}Z",
+            run_key=slot_key(wid, tick.slot),
             created_by=f"trigger:schedule:{wid}",
             started_via="schedule",
         )
@@ -346,7 +353,7 @@ class ScheduleClock:
                 team_id=tick.schedule.team_id,
                 workflow_id=tick.schedule.workflow_id,
                 source=f"{SCHEDULE_SOURCE}{tick.schedule.trigger_step}",
-                event_key=f"schedule:{tick.schedule.workflow_id}:{iso(tick.slot)[:16]}Z",
+                event_key=slot_key(tick.schedule.workflow_id, tick.slot),
                 sender="",
                 subject=self.kinds.words(tick.schedule.rule),
                 received_at=iso(tick.slot),

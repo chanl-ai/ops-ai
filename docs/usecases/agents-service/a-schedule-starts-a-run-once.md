@@ -22,6 +22,7 @@ worker's schedule clock starts one run at each slot, keyed by the slot and start
 | S9 | `opsai workflows schedule` previews, saves, shows and clears, and exits non-zero under the floor | cli | 12 | 12 |
 | S10 | A daily rule in a zone whose clocks change has one slot on each such day, at its local time | api | 13 | 13 |
 | S11 | A rule with a field its kind does not have is refused naming the field | api | 14 | 14 |
+| S12 | A schedule save, change and clear each reach the account's audit log with the old and new schedule in words | cli | 17 | 17 |
 
 ## Preconditions
 
@@ -53,6 +54,7 @@ has no tool or model step. The run makes only the workflow it needs.
 | 12 | cli: `opsai workflows schedule preview`, `save`, `show`, a save under the floor, `clear`, `show` | Exit 0 with the server's words; non-zero naming `every`; exit 0; non-zero after clear |
 | 13 | Preview a daily 01:30 rule in Europe/London from the days before the spring and autumn clock changes (`after`) | Next runs 28 Mar 01:30, 29 Mar 01:00 (the first minute after the gap), 30 Mar 00:30 UTC; 24 Oct 00:30, 25 Oct 00:30 (the first 01:30 only), 26 Oct 01:30 UTC |
 | 14 | Preview a daily rule written with `at` instead of `time` | 422 naming `at` |
+| 17 | cli, with platform-service and the worker's relay: save, change and clear a schedule, then read `GET /v1/audit` as an admin | Three entries for the workflow: "Set the schedule of…", "Changed the schedule of… from… to…", "Cleared the schedule of…; it was…" |
 
 ## Acceptance layers
 
