@@ -79,3 +79,22 @@ async def test_a_person_cannot_save_values_under_someone_elses_name(make: Make) 
         )
     assert (named.status_code, named.json()["error"]["code"]) == (403, "entered_by_service_only"), named.text
     assert unscoped.status_code == 403, unscoped.text
+
+
+async def test_one_field_typed_at_a_time_reaches_the_file_once_the_last_required_one_has_a_value(
+    make: Make, engine: AsyncEngine
+) -> None:
+    """Edit fields on a read with no answer: a partly typed read sent the corrected event, which puts the read on the
+    file, with the other required field still empty."""
+    s = make(Replies(cut(), cut()).service(), Floor())
+    o = service_outbox
+    corrected = sa.select(o).where(o.c.tenant_id == s.tenant, o.c.name == "extraction.corrected")
+    async with s.client as c:
+        read = await _not_read(c, await s.stored(NOTICE))
+        url = f"/v1/documents/extractions/{read['id']}/fields"
+        data(await c.patch(f"{url}/invoice", json={"value": "NWF-88213"}, headers=OPS))
+        partly = await tenant_outbox(engine, s.tenant, corrected)
+        data(await c.patch(f"{url}/amount", json={"value": 1940}, headers=OPS))
+        typed = await tenant_outbox(engine, s.tenant, corrected)
+    assert partly == [], "a read with a required field still empty stays off the file"
+    assert len(typed) == 1, typed
