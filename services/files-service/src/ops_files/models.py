@@ -188,6 +188,8 @@ class FileSource(Out):
     removed_at: datetime | None
     access_list: list[str] | None
     access_read_at: datetime | None
+    # The path it had before it moved or was renamed at the source, when that could be told; None otherwise.
+    was_path: str | None = None
 
 
 class FileDetail(FileRecord):

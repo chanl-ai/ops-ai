@@ -244,6 +244,7 @@ CREATE TABLE file_watch_events (
 	size BIGINT NULL, 
 	path VARCHAR(1024) NULL, 
 	at DATETIMEOFFSET NOT NULL, 
+	linked_file_id VARCHAR(64) NULL, 
 	CONSTRAINT file_watch_events_pkey PRIMARY KEY (tenant_id, watch_id, number)
 );
 GO

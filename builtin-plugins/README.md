@@ -13,6 +13,7 @@ sync step (`builtin_plugins_dir` in `packages/ops_service_kit/src/ops_service_ki
 | `ops_plugin_sharepoint` | opsai.sharepoint | SharePoint tools and knowledge source |
 | `ops_plugin_confluence` | opsai.confluence | Confluence tools and knowledge source |
 | `ops_plugin_web` | opsai.web | The website knowledge source |
+| `ops_plugin_s3` | opsai.s3 | Files in Amazon S3 buckets, or any store that answers the S3 API, read with a signed access key |
 
 Each was copied from github.com/chanl-ai/ops-ai-plugins at the commit `deploy/plugins.json` pinned, checked against its
 pinned sha256. All are Apache-2.0, as Ops AI is. Their tests stay in that repository.

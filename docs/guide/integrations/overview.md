@@ -14,6 +14,7 @@ team's agents, with every call going through the gateway.
 | [Salesforce](salesforce.md) | Cases, accounts and contacts to read and change; Knowledge articles; a case helper agent | OAuth, team or each person |
 | [GitHub](github.md) | Issues to read and comment on; an issue helper agent | OAuth, team or each person |
 | [SharePoint and OneDrive](sharepoint.md) | Files in document libraries, kept current in a knowledge base | OAuth, team |
+| [Amazon S3](s3.md) | Files in S3 buckets or any S3-compatible store, in a knowledge base or a watched folder | Access key, team |
 | [Confluence](confluence.md) | Pages of the spaces you pick, kept current in a knowledge base | Key or token, team |
 | [Website](website.md) | Pages of a website, kept current from its sitemaps and links | None |
 

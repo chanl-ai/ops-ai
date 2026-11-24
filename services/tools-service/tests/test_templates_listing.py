@@ -25,6 +25,7 @@ SHIPPED = {
     "opsai.confluence",
     "opsai.core",
     "opsai.github",
+    "opsai.s3",
     "opsai.salesforce",
     "opsai.sharepoint",
     "opsai.starters",

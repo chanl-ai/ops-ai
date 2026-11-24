@@ -194,6 +194,7 @@ async def test_the_file_page_names_its_watched_folder_and_an_upload_names_none(
             "removedAt": None,
             "accessList": None,
             "accessReadAt": "2026-11-24T09:00:00Z",
+            "wasPath": None,
         }, source
 
         uploaded = await _upload(builder)

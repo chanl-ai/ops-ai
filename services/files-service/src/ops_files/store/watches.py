@@ -79,6 +79,9 @@ file_watch_events = sa.Table(
     sa.Column("size", sa.BigInteger),
     sa.Column("path", sa.String(1024)),
     sa.Column("at", sa.DateTime(timezone=True), nullable=False),
+    # On a new event: the entry removed in the same check that held the same bytes, when exactly one removed entry
+    # and exactly one new one share them (a rename or move at the source); null otherwise.
+    sa.Column("linked_file_id", sa.String(64)),
     sa.Index("ix_file_watch_events_at", "at"),
     info={**TENANT_SCOPED, **team_owned("team")},
 )
@@ -193,6 +196,17 @@ class EventRow(Out):
     size: int | None
     path: str | None
     at: datetime
+    linked_file_id: str | None = None
+    # The linked entry's path in the source, read with the event.
+    linked_path: str | None = None
+
+
+async def link_new_events(c: AsyncConnection, watch_id: str, links: dict[str, str]) -> None:
+    """Sets `linked_file_id` on the new event of each new file in `links` ({new file id: removed file id})."""
+    e = file_watch_events
+    for new_id, old_id in links.items():
+        where = (e.c.tenant_id == isolation.tenant(), e.c.watch_id == watch_id, e.c.file_id == new_id)
+        await c.execute(sa.update(e).where(*where, e.c.kind == "new").values(linked_file_id=old_id))
 
 
 class WatchesStore(Store):
@@ -414,9 +428,11 @@ class WatchesStore(Store):
         return len(events)
 
     async def events(self, watch_id: str, *, after: int = 0, limit: int = 100) -> list[EventRow]:
-        e = file_watch_events
+        e, f = file_watch_events, files
+        linked = sa.and_(f.c.tenant_id == e.c.tenant_id, f.c.id == e.c.linked_file_id)
         q = (
-            sa.select(e)
+            sa.select(e, f.c.source_path.label("linked_path"))
+            .select_from(e.outerjoin(f, linked))
             .where(e.c.tenant_id == isolation.tenant(), e.c.watch_id == watch_id, e.c.number > after, team_visible(e))
             .order_by(e.c.number)
             .limit(limit)

@@ -45,4 +45,11 @@ jobs:
           node: "true"
           browser: "true"
           infra: "true"
+      - name: S3 test store
+        # The S3 plugin's tests run against it, and fail in CI without it.
+        run: make -s s3-test-store
       - run: make verify
+        env:
+          OPS_TEST_S3_URL: http://127.0.0.1:19000
+          OPS_TEST_S3_KEY: opsai-test
+          OPS_TEST_S3_SECRET: opsai-test-secret

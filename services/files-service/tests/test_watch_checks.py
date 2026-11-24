@@ -441,3 +441,32 @@ async def test_a_file_refused_for_size_at_either_limit_is_one_failed_event_with_
     assert [e.size for e in events][-1] == 22020096
     assert [f.get("code") for f in first.failures] == ["too_large", "too_large"]
     assert reader.fetched().count("drv!c") == 3
+
+
+async def test_a_rename_on_s3_links_one_removed_entry_and_two_copies_link_nothing(
+    engine: AsyncEngine, tmp_path: Path, tenant: str
+) -> None:
+    # S3 has no change feed: each check lists the folder whole, and a renamed key is a removed id and a new one.
+    def listing(*rows: dict[str, JsonValue]) -> dict[str | None, Any]:
+        return {None: {"items": list(rows), "next_cursor": None}}
+
+    reader = Recorded(listing(_row("a", "e1"), _row("c1", "e1"), _row("c2", "e1")), {})
+    reader.rows = [{**DECLARED, "changesTool": None, "listsWhole": True}]
+    reader.got = {"drv!a": _file("a", "e1", b"a"), "drv!c1": _file("c1", "e1", b"c"), "drv!c2": _file("c2", "e1", b"c")}
+    checks, watch_id = await _setup(engine, tmp_path, tenant, reader)
+    with isolation.scope(tenant, TEAM):
+        await checks.check(watch_id)
+        # a is renamed to a-renamed; both copies of c are gone and one comes back under a new key.
+        reader.pages = listing({**_row("a-renamed", "e1"), "folder": "Paid"}, _row("c3", "e1"))
+        reader.got |= {"drv!a-renamed": {**_file("a-renamed", "e1", b"a"), "folder": "Paid"}}
+        reader.got |= {"drv!c3": _file("c3", "e1", b"c")}
+        outcome = await checks.check(watch_id)
+        events = await WatchesStore(engine).events(watch_id, after=3)
+        held = await FilesStore(engine).held_sources(TEAM, watch_id)
+        renamed = await FilesStore(engine).get(held["drv!a-renamed"].file_id)
+        copy = await FilesStore(engine).get(held["drv!c3"].file_id)
+    assert renamed is not None and copy is not None
+    assert (renamed.was_path, copy.was_path) == ("Invoices/a.pdf", None)
+    assert (outcome.brought, outcome.removed) == (2, 3), outcome
+    new = {e.path: (e.linked_file_id, e.linked_path) for e in events if e.kind == "new"}
+    assert new == {"Paid/a-renamed.pdf": (held["drv!a"].file_id, "Invoices/a.pdf"), "Invoices/c3.pdf": (None, None)}

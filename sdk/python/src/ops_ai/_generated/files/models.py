@@ -159,6 +159,7 @@ class FileSource(TypedDict, closed=True):
     changedAt: str | None
     path: str | None
     removedAt: str | None
+    wasPath: NotRequired[str | None]
     watchId: str | None
     watchName: str | None
 
@@ -483,6 +484,8 @@ class WatchEventView(TypedDict, closed=True):
     code: NotRequired[str | None]
     fileId: str | None
     kind: str
+    linkedFileId: NotRequired[str | None]
+    linkedPath: NotRequired[str | None]
     number: int
     path: str | None
     reason: str | None

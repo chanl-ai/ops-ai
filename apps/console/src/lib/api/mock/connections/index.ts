@@ -9,6 +9,7 @@ const KINDS: AuthKind[] = [
   { id: 'basic', label: 'Username and password', signsIn: false, holdsToken: false, perPerson: true, personFields: ['username', 'password'], fields: [{ name: 'username', label: 'Username', secret: false }, { name: 'password', label: 'Password', secret: true }] },
   { id: 'oauth2_client_credentials', label: 'OAuth 2.0 client credentials', signsIn: true, holdsToken: true, perPerson: false },
   { id: 'oauth2_auth_code', label: 'OAuth 2.0 sign-in', signsIn: true, holdsToken: true, perPerson: true, personFields: [] },
+  { id: 'aws_sigv4', label: 'Access key (AWS signature)', signsIn: false, holdsToken: false, perPerson: false, fields: [{ name: 'accessKeyId', label: 'Access key ID', secret: false }, { name: 'secretAccessKey', label: 'Secret access key', secret: true }, { name: 'region', label: 'Region', secret: false }] },
 ];
 
 /** An account of one of the team's apps, as far as the mock's sign-ins need it. */

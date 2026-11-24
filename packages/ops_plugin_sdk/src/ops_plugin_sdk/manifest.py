@@ -21,6 +21,7 @@ SIGN_IN_KINDS = (
     "api_key",
     "basic",
     "bearer",
+    "aws_sigv4",
     "oauth2_client_credentials",
     "oauth2_auth_code",
     "oauth2_jwt_bearer",

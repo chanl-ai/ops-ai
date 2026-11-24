@@ -1577,6 +1577,17 @@
             ],
             "title": "Removedat"
           },
+          "wasPath": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waspath"
+          },
           "watchId": {
             "anyOf": [
               {
@@ -3106,6 +3117,28 @@
           "kind": {
             "title": "Kind",
             "type": "string"
+          },
+          "linkedFileId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linkedfileid"
+          },
+          "linkedPath": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linkedpath"
           },
           "number": {
             "title": "Number",
