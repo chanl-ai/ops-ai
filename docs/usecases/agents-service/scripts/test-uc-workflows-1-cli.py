@@ -42,7 +42,7 @@ def main() -> None:
         g_code, shown = ops_cli("builder", *sched, "show", WID, "--step", "start", options_first=True)
         ok = (p_code, s_code, g_code) == (0, 0, 0) and all(isinstance(x, dict) for x in (previewed, saved, shown))
         check(
-            "12a preview, save and show print the server's words and the same next runs",
+            "12 preview, save and show print the server's words and the same next runs",
             ok
             and previewed["words"] == saved["words"] == shown["words"] == WORDS  # type: ignore[index]
             and previewed["nextRuns"] == saved["nextRuns"],  # type: ignore[index]
@@ -52,7 +52,7 @@ def main() -> None:
         floor_args = ("--kind", "every", "--set", "every=2", "--set", "unit=minutes")
         f_code, refused = ops_cli("builder", *sched, "save", WID, "--step", "start", *floor_args, options_first=True)
         check(
-            "12b a rule under the floor exits non-zero and says why",
+            "12 a rule under the floor exits non-zero and says why",
             f_code != 0 and "shortest interval" in str(refused),
             {"exit": f_code, "said": str(refused)[:300]},
         )
@@ -60,7 +60,7 @@ def main() -> None:
         c_code, _ = ops_cli("builder", *sched, "clear", WID, "--step", "start", options_first=True)
         gone_code, gone = ops_cli("builder", *sched, "show", WID, "--step", "start", options_first=True)
         check(
-            "12c clear removes the schedule, and show then exits non-zero",
+            "12 clear removes the schedule, and show then exits non-zero",
             c_code == 0 and gone_code != 0,
             {"clear": c_code, "show": gone_code, "said": str(gone)[:200]},
         )
