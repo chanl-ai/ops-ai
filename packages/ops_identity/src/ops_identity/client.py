@@ -199,7 +199,26 @@ async def own_request_answer(platform: ServiceClient, *, tenant: str, team: str,
     deciding `team`) for the person with `email` deciding a request they asked for, read now rather than from a token
     minted earlier. The answer as sent (`allowed`, `refusedBy`), so each caller reads it its own way; None when the
     check could not be made, which every caller treats as not their own to decide."""
-    body = {"email": email, "area": "reviews", "action": "decide", "requestedBy": email}
+    return await cell_answer(
+        platform, tenant=tenant, team=team, email=email, cell=("reviews", "decide"), requested_by=email
+    )
+
+
+async def cell_answer(
+    platform: ServiceClient,
+    *,
+    tenant: str,
+    team: str,
+    email: str,
+    cell: tuple[str, str],
+    requested_by: str | None = None,
+) -> Json | None:
+    """platform-service's access check for the person with `email` holding `cell` (area, action) in `team` now,
+    rather than as a token minted earlier said; None when the check could not be made, which every caller treats as
+    a no."""
+    body: Json = {"email": email, "area": cell[0], "action": cell[1]}
+    if requested_by is not None:
+        body["requestedBy"] = requested_by
     try:
         return json_object(await platform.post("/v1/access/check", body, tenant=tenant, team=team))
     except (ServiceCallError, ServiceUnreachable):

@@ -10,7 +10,15 @@ from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 from ops_access import Access, EffectiveAnswer, effective_answer, publish_mode, team_on
-from ops_identity import Principal, ServiceCallError, ServiceClient, ServiceUnreachable, own_request_answer
+from ops_identity import (
+    ActingForPerson,
+    Principal,
+    ServiceCallError,
+    ServiceClient,
+    ServiceUnreachable,
+    cell_answer,
+    own_request_answer,
+)
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import Json
 from ops_service_kit.narrow import json_object
@@ -205,6 +213,10 @@ class CheckBeforeSend:
             return True
 
 
+# The cell a person needs to run one of the team's tools, a write among them (ops_access catalogue).
+RUN_WRITE: tuple[str, str] = ("tools", "run")
+
+
 class OwnRequests:
     def __init__(self, platform: ServiceClient | None) -> None:
         """Whether a request's asker may decide it themselves, asked of platform-service's access check
@@ -232,3 +244,24 @@ class OwnRequests:
         if refused.get("code") == "own_request":
             return Forbidden(str(refused.get("reason") or fallback.message), code="own_request")
         return None
+
+    async def run_refusal(self, tenant_id: str, person: ActingForPerson) -> Forbidden | None:
+        """403 when the person a write acts for no longer holds Tools · run in their team, read now from
+        platform-service's access check whatever the team's approval setting: the cell may have been unticked after
+        the run or chat started, and the acting-for token's copy dates from then. A check that cannot be made
+        refuses. With no platform-service (a dev stack) there is no live answer and the token's verification
+        stands."""
+        if self.platform is None:
+            return None
+        data = await cell_answer(
+            self.platform, tenant=tenant_id, team=person.team_id, email=person.email, cell=RUN_WRITE
+        )
+        if data is None:
+            return Forbidden(
+                "Whether you may run this write could not be checked, so it was not sent.", code="cell_unread"
+            )
+        if data.get("allowed") is True:
+            return None
+        refused = json_object(data.get("refusedBy"))
+        reason = str(refused.get("reason") or "You may no longer run tools in this team, so the write was not sent.")
+        return Forbidden(reason, code=str(refused.get("code") or "forbidden"))

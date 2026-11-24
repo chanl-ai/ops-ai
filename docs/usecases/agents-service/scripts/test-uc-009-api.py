@@ -123,6 +123,32 @@ connections:
 """
 
 
+# A fee waiver with no review of its write: a second look by someone else, then the send.
+UNREVIEWED = """
+schemaVersion: 2
+id: uc009_waiver_unreviewed
+name: Fee waiver (uc009_waiver_unreviewed)
+nodes:
+  - {id: start, type: ops.trigger.request, typeVersion: 1, name: Request}
+  - {id: hold, type: ops.flow.humanReview, typeVersion: 1, name: Second look, parameters: {title: Second look}}
+  - id: waive
+    type: ops.action.tool
+    typeVersion: 1
+    name: Waive the fee
+    parameters:
+      operation: waive_fee
+      input: {cardAccount: "$.input.cardAccount", feeId: "$.input.feeId", amount: "$.input.amount"}
+  - {id: done, type: ops.flow.end, typeVersion: 1, name: Waived, parameters: {outcome: waived}}
+  - {id: declined, type: ops.flow.end, typeVersion: 1, name: Declined, parameters: {outcome: declined}}
+  - {id: failed, type: ops.flow.end, typeVersion: 1, name: Could not finish, parameters: {outcome: failed, result: failed}}
+connections:
+  - {from: {node: start, port: payload}, to: {node: hold, port: in}}
+  - {from: {node: hold, port: approve}, to: {node: waive, port: in}}
+  - {from: {node: hold, port: reject}, to: {node: declined, port: in}}
+  - {from: {node: waive, port: ok}, to: {node: done, port: in}}
+  - {from: {node: waive, port: refused}, to: {node: failed, port: in}}
+  - {from: {node: waive, port: error}, to: {node: failed, port: in}}
+"""
 FEE: dict[str, Any] = {"cardAccount": "CARD-4471", "feeId": "FEE-3901", "amount": 35}
 
 
@@ -161,8 +187,12 @@ with ExitStack() as stack:
     check("4 Priya turns on asking a reviewer before the team's writes", asks.status_code == 200, asks.text[:200])
     james = bearer(signed_in(people, JAMES), "team_ops")
     priya = bearer(signed_in(people, PRIYA), "team_ops")
-    for wid, hold in (("uc009_waiver", False), ("uc009_waiver_held", True)):
-        created = api.post("/v1/workflows/definitions", json={"yaml": definition(wid, hold=hold)}, headers=priya)
+    for wid, yaml in (
+        ("uc009_waiver", definition("uc009_waiver", hold=False)),
+        ("uc009_waiver_held", definition("uc009_waiver_held", hold=True)),
+        ("uc009_waiver_unreviewed", UNREVIEWED),
+    ):
+        created = api.post("/v1/workflows/definitions", json={"yaml": yaml}, headers=priya)
         live = api.post(f"/v1/workflows/definitions/{wid}/publish-requests", json={}, headers=priya)
         check(
             f"4 the {wid} workflow saves and goes live",
@@ -248,6 +278,41 @@ with ExitStack() as stack:
         and waive.get("port") == "refused"
         and ("own_request" in said or "someone else has to decide" in said),
         {"untick": unticked.status_code, "hold": looked.text[:200], "status": ended.get("status"), "waive": waive},
+    )
+
+
+    # With asking off, a write carries no approval; the cell to run it is still read live where it is sent.
+    priya = bearer(signed_in(people, PRIYA), "team_ops")
+    off = people.put(
+        "/v1/policies/appChanges",
+        json={"value": {"ask": False, "answer": "none", "reviewerRole": None, "testAccountsNeverAsk": False}},
+        headers=priya,
+    )
+    james = bearer(signed_in(people, JAMES), "team_ops")
+    loose = start(api, "uc009_waiver_unreviewed", "uc009-unreviewed", james)
+    looking = until(lambda: (r := run_of(api, loose, james)).get("status") == "waiting" and step(r, "hold") and r) or {}
+    check(
+        "11 with asking off, James starts a run whose write has no review; it waits on the second look",
+        off.status_code == 200 and bool(step(looking, "hold")),
+        {"off": off.text[:200], "status": looking.get("status")},
+    )
+    wanjiru = bearer(signed_in(people, WANJIRU), "team_ops")
+    builder = data(people.get("/v1/roles/builder", headers=wanjiru)) or {}
+    kept = [
+        {"area": c["area"], "action": c["action"], "scope": c["scope"]}
+        for c in builder.get("permissions") or []
+        if (c["area"], c["action"]) != ("tools", "run")
+    ]
+    cut = people.put("/v1/roles/builder/permissions", json={"permissions": kept}, headers=wanjiru)
+    priya = bearer(signed_in(people, PRIYA), "team_ops")
+    hold_id = f"{loose}:hold:{step(looking, 'hold').get('iteration', 0)}"
+    looked = api.post(f"/reviews/{hold_id}/decision", json={"decision": "approved", "reason": "uc-009"}, headers=priya)
+    ended = settled(api, loose, priya, "succeeded", "failed")
+    waive = step(ended, "waive")
+    check(
+        "12 Tools · run is unticked on Builder while the run waits; the write's send is refused",
+        cut.status_code == 200 and looked.status_code == 200 and waive.get("port") == "refused",
+        {"cut": cut.text[:200], "hold": looked.status_code, "status": ended.get("status"), "waive": waive},
     )
 
 finish()

@@ -30,6 +30,8 @@ and again where tools-service sends the write.
 | 8 | As Wanjiru (workspace admin), make a Loan officer role with Approvals · view and decide, and give it to James in the team | 201 |
 | 9 | As James, start the second | His review is decided as his own; the run waits on the second look |
 | 10 | As Wanjiru, untick Approvals · decide on Loan officer; as Priya, approve the second look | The send is refused with `own_request` and the run ends failed |
+| 11 | As Priya, turn asking off; as James, start a third waiver whose write has no review, only a second look | The run waits on the second look |
+| 12 | As Wanjiru, untick Tools · run on Builder; as Priya, approve the second look | The send is refused: tools-service reads the person's Tools · run now, whatever the approval setting |
 
 ## Acceptance layers
 
@@ -44,4 +46,4 @@ In the console: uc-086's ui script, steps 9 and 10: the person whose chat drafte
 `James approving his own request is refused` paired with `Priya approving it succeeds`: the same request and the same
 kind of step-up pass for a different person, so the refusal is about who decides. Step 10 against step 7: the same
 write, approved as its starter's, is sent for an Admin and refused once the cell is unticked. Step 10 fails when
-tools-service's own-request check answers yes without asking (`OwnRequests.refusal` returning None).
+tools-service's own-request check answers yes without asking (`OwnRequests.refusal` returning None); step 12 fails when the send reads no cell live (`OwnRequests.run_refusal` returning None), and was red before it existed.

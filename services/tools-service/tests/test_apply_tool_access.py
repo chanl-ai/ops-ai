@@ -160,6 +160,9 @@ class Platform:
 
     async def post(self, path: str, json: Any = None, *, tenant: str, team: str | None = None) -> Any:
         assert path == "/v1/access/check", path
+        if (json["area"], json["action"]) != ("reviews", "decide"):
+            # The send's own check of Tools · run: everyone here holds it.
+            return {"allowed": True, "refusedBy": None}
         self.asked.append((tenant, team, json["email"]))
         if json["email"] in self.holders:
             return {"allowed": True, "refusedBy": None}

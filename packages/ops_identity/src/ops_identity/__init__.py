@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .acting_for import HEADER as ACTING_FOR_HEADER
 from .acting_for import ActingForPerson, ActingForTokens
-from .client import ServiceCallError, ServiceClient, ServiceUnreachable, own_request_answer, segment
+from .client import ServiceCallError, ServiceClient, ServiceUnreachable, cell_answer, own_request_answer, segment
 from .fastapi import (
     ActingPerson,
     Auth,
@@ -41,6 +41,7 @@ __all__ = [
     "ServiceCallError",
     "ServiceClient",
     "ServiceUnreachable",
+    "cell_answer",
     "current_caller",
     "current_principal",
     "current_service",

@@ -623,6 +623,14 @@ class GatewayCalls:
             error = {"code": "gateway_refused", "message": "; ".join(decision.reasons)}
             await self.log.record(**row, outcome="refused", latency_ms=elapsed(), error=error)
             return Refused(call_id, 403, "gateway_refused", decision.reasons)
+        if access in WRITES and req.acting_for is not None:
+            ran = await self.own_requests.run_refusal(caller.tenant_id, req.acting_for)
+            if ran is not None:
+                row.update(decision="deny", reasons=[ran.message])
+                await self.log.record(
+                    **row, outcome="refused", latency_ms=elapsed(), error={"code": ran.code, "message": ran.message}
+                )
+                return Refused(call_id, ran.status, ran.code, [ran.message])
         asked_again = needs and not confirmed_by_asker and req.approval_token
         if asked_again and (own := await self._asker_refusal(caller.tenant_id, req)) is not None:
             # The token was valid when minted, but the person the call acts for approved it themselves and today's
