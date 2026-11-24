@@ -72,7 +72,7 @@ async def test_a_full_text_read_is_the_shared_reading_trimmed_to_max_pages() -> 
     the file's one reading and keeps only the pages asked for, each with its text and tables."""
     files = Files({}, reading=_reading("done", 3))
     out = await ai_extract(call(files, fields=[], read="text", ocr=True, maxPages=2))
-    assert files.asked == [] and files.read == [("fil_1", "auto")], (files.asked, files.read)
+    assert files.asked == [] and files.read == [("fil_1", "auto", False)], (files.asked, files.read)
     assert out.port == "ok", out
     assert out.out == {
         "fileId": "fil_1",
@@ -110,11 +110,24 @@ async def test_a_reading_still_under_way_parks_on_reading_finished_and_reads_it_
     assert len(files.read) == 2 and files.asked == [], files.read
 
 
-async def test_a_failed_reading_takes_the_error_port_with_its_reason() -> None:
+async def test_a_reading_that_failed_before_the_step_is_asked_again_and_a_second_failure_takes_the_error_port() -> None:
     files = Files({}, reading=_reading("failed") | {"error": {"code": "too_many_tries", "message": "Gave up"}})
     out = await ai_extract(call(files, fields=[], read="text"))
-    assert files.read == [("fil_1", "off")], files.read
+    assert files.read == [("fil_1", "off", False), ("fil_1", "off", True)], files.read
     assert out.port == "error" and out.out == {"error": "Gave up", "code": "too_many_tries"}, out
+
+
+async def test_max_pages_cuts_first_then_max_tokens_keeps_what_fits_and_says_it_is_partial() -> None:
+    """Pages of 40 characters under maxTokens 25 (100 characters): with maxPages 3 the ceiling keeps pages 1 and 2 and
+    says partial; with maxPages 2 both pages fit, so it is not partial. Counting tokens before the page cut, or
+    ignoring the ceiling, says otherwise."""
+    reading = _reading("done", 4)
+    for p in reading["pages"]:
+        p["text"] = f"{p['number']}" * 40
+    out = await ai_extract(call(Files({}, reading=reading), fields=[], read="text", maxPages=3, maxTokens=25))
+    cut = await ai_extract(call(Files({}, reading=reading), fields=[], read="text", maxPages=2, maxTokens=25))
+    assert ([p["number"] for p in out.out["pages"]], out.out["partial"], out.out["readPages"]) == ([1, 2], True, 2)
+    assert ([p["number"] for p in cut.out["pages"]], cut.out["partial"], cut.out["readPages"]) == ([1, 2], False, 2)
 
 
 async def test_a_proposed_read_carries_the_hint_and_leaves_with_the_proposal() -> None:

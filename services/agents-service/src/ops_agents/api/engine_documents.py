@@ -30,12 +30,14 @@ class DocumentsExtractions:
         with outside_call():
             return await self.client.extract(current_tenant(), run.team_id, file_id, request, idempotency_key=key)
 
-    async def reading(self, run_id: str, file_id: str, *, ocr: str) -> Json:
-        """The file's shared reading as it is now; one still under way is never waited for here; the step parks on
-        reading.finished instead."""
+    async def reading(self, run_id: str, file_id: str, *, ocr: str, ask: bool) -> Json:
+        """The file's shared reading as it is now, asked for when `ask`; one still under way is never waited for here:
+        the step parks on reading.finished instead."""
         team = await _team(self.tx, run_id)
         with outside_call():
-            return await self.client.reading(current_tenant(), team, file_id, ocr=ocr)
+            if ask:
+                return await self.client.reading(current_tenant(), team, file_id, ocr=ocr)
+            return await self.client.reading_now(current_tenant(), team, file_id, ocr=ocr)
 
     async def purge(self, run_id: str, file_id: str) -> Json:
         team = await _team(self.tx, run_id)

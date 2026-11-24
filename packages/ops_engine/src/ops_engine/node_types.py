@@ -1230,7 +1230,10 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             ("read", _f("What to read", "select", "Fields you name, the full text, or fields the model proposes")),
             ("hint", _f("What is it?", "text", "For proposed fields: a few words, e.g. a supplier invoice")),
             ("proposePages", _f("Propose from the first pages", "number", "5 if empty")),
-            ("maxPages", _f("Pages to read", "number", "Every page if empty")),
+            (
+                "maxPages",
+                _f("Pages to read", "number", "Every page if empty; Full text reads the whole file, then keeps these"),
+            ),
             ("maxTokens", _f("Stop after (tokens)", "number", "Stops a long read early with what it read")),
             (
                 "detect",

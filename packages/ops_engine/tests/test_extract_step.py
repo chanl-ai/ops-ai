@@ -37,7 +37,7 @@ class Files:
         # The file's shared reading as documents-service answers POST /v1/documents/readings.
         self.reading_answer = reading or {}
         self.asked: list[tuple[str, dict[str, Any], str]] = []
-        self.read: list[tuple[str, str]] = []
+        self.read: list[tuple[str, str, bool]] = []
         self.saved: list[tuple[str, dict[str, Any]]] = []
 
     async def set_data(self, run_id: str, file_id: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -48,8 +48,8 @@ class Files:
         self.asked.append((file_id, request, key))
         return self.answer
 
-    async def reading(self, run_id: str, file_id: str, *, ocr: str) -> dict[str, Any]:
-        self.read.append((file_id, ocr))
+    async def reading(self, run_id: str, file_id: str, *, ocr: str, ask: bool) -> dict[str, Any]:
+        self.read.append((file_id, ocr, ask))
         return self.reading_answer
 
     async def purge(self, run_id: str, file_id: str) -> dict[str, Any]:
