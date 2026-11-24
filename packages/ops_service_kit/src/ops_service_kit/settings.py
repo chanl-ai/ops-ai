@@ -517,6 +517,9 @@ class Settings(BaseSettings):
             # documents:delete: the system workflow on the file-deleted trigger purges what was derived from the file.
             # files:edit: a Save data on file step records what was read on the file.
             "agents": [
+                # access:view: platform-service's access check, asked when a workflow step approving a write is
+                # reached, whether the run's starter holds Approvals · decide in its team now.
+                "access:view",
                 "files:view",
                 "files:create",
                 "files:edit",
