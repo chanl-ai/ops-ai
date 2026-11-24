@@ -400,7 +400,7 @@ async def test_a_file_refused_for_size_at_either_limit_is_one_failed_event_with_
     checks, watch_id = await _setup(engine, tmp_path, tenant, reader)
 
     def listing(c_size: int, c_etag: str) -> dict[str | None, Any]:
-        # b is over the listing's limit; c is under it but its answer is over the gateway's at fetch.
+        # b is over the listing's limit; c is listed under it, but its answer at fetch is over the gateway's.
         return {
             None: {
                 "items": [
@@ -428,8 +428,8 @@ async def test_a_file_refused_for_size_at_either_limit_is_one_failed_event_with_
         events = await WatchesStore(engine).events(watch_id, after=1)
     assert [(e.kind, e.path, e.code, e.reason) for e in events] == [
         ("failed", "b.pdf", "too_large", "Larger than 25 MB"),
-        ("failed", "c.pdf", "too_large", "Larger than 18 MB"),
-        ("failed", "c.pdf", "too_large", "Larger than 18 MB"),
+        ("failed", "c.pdf", "too_large", "Larger than 25 MB"),
+        ("failed", "c.pdf", "too_large", "Larger than 25 MB"),
     ]
     assert [e.size for e in events][-1] == 22020096
     assert [f.get("code") for f in first.failures] == ["too_large", "too_large"]

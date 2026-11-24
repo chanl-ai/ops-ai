@@ -47,9 +47,9 @@ CHUNK = 4
 LEASE_S = 300.0
 # Error codes a fetch answers for a file larger than the gateway carries.
 TOO_LARGE = {"TOO_LARGE", "RESPONSE_TOO_LARGE", "PAYLOAD_TOO_LARGE"}
-# The largest file a fetch brings in: tools-service refuses an answer over 25 MB (MAX_RESPONSE_BYTES), and a file's
-# bytes travel base64 encoded, a third larger, so a file over about 18 MB is refused at fetch.
-FETCH_LIMIT_MB = 18
+# The largest file a fetch brings in: tools-service refuses an app's answer over 25 MB (MAX_RESPONSE_BYTES). A file
+# the listing called smaller (its size changed, or the app gave none) is refused at fetch with the listing's words.
+FETCH_LIMIT_MB = 25
 
 
 def source_key(connection_id: str | None, source_id: str) -> str:
