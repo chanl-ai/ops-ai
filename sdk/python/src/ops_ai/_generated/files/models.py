@@ -347,9 +347,11 @@ class RetentionClassView(TypedDict, closed=True):
 
 class ScanResultIn(TypedDict, closed=True):
     detail: NotRequired[str | None]
+    digest: NotRequired[str | None]
     engine: str
     fileId: str
     status: Literal["clean", "infected", "failed"]
+    version: NotRequired[int | None]
 
 
 class Skipped(TypedDict, closed=True):

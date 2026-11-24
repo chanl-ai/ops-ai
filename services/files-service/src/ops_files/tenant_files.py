@@ -775,8 +775,9 @@ class TenantFiles:
         if (blocked := self.delete_blocked_by(row)) is not None:
             raise FileRetainedError(f"{file_id}: {blocked}")
         store, _ = await self._placement(row)
-        if await asyncio.to_thread(store.head, row.file.storage_key) is not None:
-            await asyncio.to_thread(store.delete, row.file.storage_key)
+        for key in _object_keys(row):
+            if await asyncio.to_thread(store.head, key) is not None:
+                await asyncio.to_thread(store.delete, key)
         payload: FileDeletedPayload = {
             "fileId": file_id,
             "digest": row.file.digest,
@@ -840,7 +841,8 @@ class TenantFiles:
                 skipped.append(Skipped(id=file_id, reason="already held" if hold else "not held"))
                 continue
             store, _ = await self._placement(row)
-            await asyncio.to_thread(store.set_legal_hold, row.file.storage_key, hold)
+            for key in _object_keys(row):
+                await asyncio.to_thread(store.set_legal_hold, key, hold)
             now = self._clock()
             if hold:
                 hold_id = f"hold_{uuid.uuid4().hex}"
@@ -876,7 +878,7 @@ class TenantFiles:
         new_file: NewUpload = {
             "id": file_id, "tenant_id": tenant, "team": team, "name": found["name"], "mime": proven.mime,
             "size": len(content), "purpose": SOURCE_PURPOSE, "status": "available", "scan_status": "pending",
-            "sensitivity": "internal", "sensitivity_suggested": True,
+            "sensitivity": _SENSITIVITY[SOURCE_PURPOSE], "sensitivity_suggested": True,
             "retention_class_id": self._config.default_retention_class, "immutable": False,
             "storage_backend": store.backend, "storage_container": store.container, "storage_key": key,
             "declared_size": len(content), "uploaded_by": actor, "uploaded_at": now, "version_count": 0,
@@ -902,13 +904,19 @@ class TenantFiles:
             status, engine, detail = result.status, result.engine, result.detail
         else:
             status, engine, detail = "pending", None, None
-        await self._scanned(entry, number, status, engine, detail)
+        await self._scanned(entry, number, status, engine, detail, newest=True)
         return entry, number
 
-    async def _scanned(self, file_id: str, version: int, status: str, engine: str | None, detail: str | None) -> None:
-        """One version's scan; the file's own status follows its newest version, which is what a download gets."""
+    async def _scanned(
+        self, file_id: str, version: int | None, status: str, engine: str | None, detail: str | None, *, newest: bool
+    ) -> None:
+        """One version's verdict, the only writer of a scan: it sets that version, and the file's own status only when
+        it is the newest version, which is what a download gets."""
         now = self._clock()
-        await self._files.set_version_scan(file_id, version, status, now)
+        if version is not None:
+            await self._files.set_version_scan(file_id, version, status, now)
+        if not newest:
+            return
         change: FileChange = {"scan_status": status, "scan_at": now}
         if engine is not None:
             change["scan_engine"] = engine
@@ -977,30 +985,36 @@ class TenantFiles:
             await self._files.update(file_id, {"delete_after": self._clock().date() + timedelta(days=retention.days)})
         return await self.get(who, file_id)
 
-    async def record_scan(self, tenant: str, file_id: str, result: ScanResult) -> FileDetail:
+    async def record_scan(
+        self, tenant: str, file_id: str, result: ScanResult, *, version: int | None = None, digest: str | None = None
+    ) -> FileDetail:
         """The scan-result hook for an asynchronous scanner (ClamAV loop, Defender, GuardDuty). The tenant comes from
-        the scanner's service token; the result is the only input."""
+        the scanner's service token; the result names the version it scanned, by number or digest, and sets only that
+        one. A file of one version may leave it out."""
         row = await self._files.get(file_id)
         if row is None:
             raise FileMissingError(file_id)
-        if row.versions:
-            # The hook scans the newest version, the one a download gets.
-            await self._files.set_version_scan(
-                file_id, max(v.version for v in row.versions), result.status, self._clock()
-            )
-        await self._files.update(
-            file_id,
-            {
-                "scan_status": result.status,
-                "scan_engine": result.engine,
-                "scan_at": self._clock(),
-                "scan_detail": result.detail,
-            },
-        )
-        await self._files.set_blocked(file_id, f"Quarantined: {result.detail}" if result.status == "infected" else None)
+        versions = row.versions
+        if version is not None or digest is not None:
+            picked = [v for v in versions if v.version == version or (digest is not None and v.digest == digest)]
+            if not picked:
+                raise FileMissingError(f"{file_id} has no version {version or digest}")
+            number: int | None = picked[0].version
+        elif len(versions) > 1:
+            raise InvalidUploadError(f"{file_id} has {len(versions)} versions; name the version the verdict is for")
+        else:
+            number = versions[0].version if versions else None
+        newest = max((v.version for v in versions), default=None)
+        await self._scanned(file_id, number, result.status, result.engine, result.detail, newest=number == newest)
         done = await self._files.get(file_id)
         assert done is not None
         return self._detail(done, None)
+
+
+def _object_keys(row: FileRow) -> list[str]:
+    """Every stored object of the file: its own and each version's (a watched file keeps one per version), so a delete
+    or a legal hold reaches every version's bytes."""
+    return list(dict.fromkeys([row.file.storage_key, *(v.storage_key for v in row.versions)]))
 
 
 def _source(row: FileRow) -> FileSource | None:

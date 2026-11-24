@@ -147,6 +147,10 @@ class ScanResultIn(In):
     status: Literal["clean", "infected", "failed"]
     engine: str = Field(min_length=1, max_length=64)
     detail: str | None = Field(default=None, max_length=500)
+    # Which version was scanned, by number or by the SHA-256 of its bytes; required once a file has more than one, so a
+    # late verdict on an older version never clears a newer one.
+    version: int | None = Field(default=None, ge=1)
+    digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
 def _status(e: FilesError | HoldRefusedError | ObjectLockedError) -> ApiError:
@@ -511,13 +515,18 @@ def create_files_app(
 
     @public.post("/scan-results", response_model=Envelope[FileDetail])
     async def scan_result(body: ScanResultIn, caller: CurrentService, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """A scanner's verdict on one file of the token's tenant; the file stays pending and unreadable until then. Only
+        """A scanner's verdict on one version of a file of the token's tenant; that version stays pending and unreadable
+        until then, and 400 when a file of several versions is not told which. Only
         a token holding `files:decide`, which Settings.service_scopes gives the scanner alone, records one."""
         if not caller.tenant_id:
             raise Forbidden("The service token names no tenant.", code="tenant_required")
         can(caller, "files", "decide", what="a file's scan verdict")
         detail = await files.record_scan(
-            caller.tenant_id, body.file_id, ScanResult(body.status, body.engine, body.detail)
+            caller.tenant_id,
+            body.file_id,
+            ScanResult(body.status, body.engine, body.detail),
+            version=body.version,
+            digest=body.digest,
         )
         return ok(detail.model_dump(mode="json", by_alias=True))
 

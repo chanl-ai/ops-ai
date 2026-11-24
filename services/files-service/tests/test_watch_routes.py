@@ -2,10 +2,13 @@
 # Copyright 2026 chanl-ai
 """The watched folders routes, by failure mode: a Viewer adds, changes, checks or deletes a watch (watches.manage is
 Admin's and Builder's), and another team reads, changes, checks or deletes a watch, its events or the files it brought
-in."""
+in; and a watched file's versions: a late verdict on an older version clears a newer one never scanned, an older
+version cannot be read while the newest waits, and a hold or a delete reaches only the newest version's bytes, or the
+bytes of another entry holding the same ones."""
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -13,9 +16,10 @@ import sqlalchemy as sa
 
 from ops_files.__main__ import RETENTION_CLASSES
 from ops_files.service import FilesConfig
-from ops_files.store import AsyncEngine, FilesStore, WatchesStore
+from ops_files.store import AsyncEngine, FilesStore, SourceFile, WatchesStore
 from ops_files.store.files import service_outbox
 from ops_files.tenant_files import TenantFiles
+from ops_identity import dev_service_signer, mint_service_token
 from ops_storage.local import LocalObjectStore
 from ops_store import isolation
 
@@ -29,6 +33,7 @@ from .test_api import (  # pyright: ignore[reportPrivateUsage]
 )
 
 CARDS = {"X-Team-Id": "team_cards"}
+NOW = datetime(2026, 11, 24, 9, 0, tzinfo=UTC)
 WATCH = {
     "name": "Supplier invoices",
     "plugin": "sharepoint",
@@ -188,3 +193,65 @@ async def test_the_list_names_a_watchs_folders_counts_its_files_and_keeps_its_co
             {"input": "libraries", "id": "Invoices", "name": "Supplier invoices"},
             {"input": "libraries", "id": "Archive", "name": "Archive"},
         ], _data(changed)
+
+
+def _found(watch_id: str, key: str, path: str) -> SourceFile:
+    return {"key_hash": key, "source_id": f"drv!{key}", "source_path": path, "name": path.rsplit("/", 1)[-1],
+            "mime": "application/pdf", "access_list": None, "access_read_at": NOW, "watch_id": watch_id,
+            "marker": "e1"}  # fmt: skip
+
+
+async def test_each_version_of_a_watched_file_is_scanned_read_held_and_deleted_on_its_own(
+    client: Client,  # noqa: F811
+    engine: AsyncEngine,
+    tenant: str,
+    tmp_path: Path,
+) -> None:
+    objects = LocalObjectStore(tmp_path / "objects", signing_key=b"k" * 32)
+    config = FilesConfig(retention_classes=RETENTION_CLASSES, default_retention_class="standard")
+    files = TenantFiles(objects, FilesStore(engine), config, scanning="hook")
+    token = mint_service_token(
+        dev_service_signer(), service="scanner", audience="files", tenant_id=tenant, scopes=["files:decide"]
+    )
+    scanner = {"Authorization": f"Bearer {token}"}
+    paid = PDF + b"% paid"
+    async with client(scanning="hook", admin=True) as admin:
+        watch_id = _data(await admin.post("/v1/watches", json=WATCH, headers=OPS))["id"]
+        with isolation.scope(tenant, "team_ops"):
+            file_id, _ = await files.put_source(tenant, "team_ops", _found(watch_id, "k1", "Invoices/a.pdf"), PDF,
+                                                actor="watch:w")  # fmt: skip
+        verdict = {"fileId": file_id, "status": "clean", "engine": "clamav", "version": 1}
+        assert (await admin.post("/v1/files/scan-results", json=verdict, headers=scanner)).status_code == 200
+        detail = _data(await admin.get(f"/v1/files/{file_id}", headers=OPS))
+        # A watched folder is often a finance or claims library, so its files start confidential.
+        assert detail["sensitivity"] == "confidential"
+        with isolation.scope(tenant, "team_ops"):
+            await files.put_source(tenant, "team_ops", _found(watch_id, "k1", "Invoices/a.pdf"), paid, actor="watch:w")
+            # Another folder holds the same bytes as version 2: its own entry, kept when the first is deleted.
+            other, _ = await files.put_source(tenant, "team_ops", _found(watch_id, "k2", "Archive/a.pdf"), paid,
+                                              actor="watch:w")  # fmt: skip
+        content = f"/v1/files/{file_id}/content"
+        assert (await admin.get(content, headers=OPS)).status_code == 423
+        assert (await admin.get(f"{content}?version=1", headers=OPS)).content == PDF
+        # The scanner's verdict on version 1 arrives again late: version 2 was never scanned, so it stays unreadable.
+        assert (await admin.post("/v1/files/scan-results", json=verdict, headers=scanner)).status_code == 200
+        assert (await admin.get(content, headers=OPS)).status_code == 423
+        unnamed = {"fileId": file_id, "status": "clean", "engine": "clamav"}
+        assert (await admin.post("/v1/files/scan-results", json=unnamed, headers=scanner)).status_code == 400
+        digest = hashlib.sha256(paid).hexdigest()
+        named = {**unnamed, "digest": digest}
+        assert (await admin.post("/v1/files/scan-results", json=named, headers=scanner)).status_code == 200
+        assert (await admin.get(content, headers=OPS)).content == paid
+        with isolation.scope(tenant, "team_ops"):
+            row = await FilesStore(engine).get(file_id)
+        assert row is not None
+        keys = [v.storage_key for v in row.versions]
+        hold = {"ids": [file_id], "hold": True, "reason": "Supplier dispute"}
+        assert _data(await admin.post("/v1/files/legal-hold", json=hold, headers=OPS))["updated"] == [file_id]
+        assert [bool((info := objects.head(k)) and info.legal_hold) for k in keys] == [True, True]
+        release = {**hold, "hold": False, "reason": "Settled"}
+        assert _data(await admin.post("/v1/files/legal-hold", json=release, headers=OPS))["updated"] == [file_id]
+        assert (await admin.delete(f"/v1/files/{file_id}", headers=OPS)).status_code == 204
+        assert [objects.head(k) for k in keys] == [None, None]
+        await admin.post("/v1/files/scan-results", json={**named, "fileId": other}, headers=scanner)
+        assert (await admin.get(f"/v1/files/{other}/content", headers=OPS)).content == paid

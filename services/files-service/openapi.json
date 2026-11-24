@@ -2359,6 +2359,18 @@
             ],
             "title": "Detail"
           },
+          "digest": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
           "engine": {
             "maxLength": 64,
             "minLength": 1,
@@ -2377,6 +2389,18 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
           }
         },
         "required": [
@@ -5078,7 +5102,7 @@
     },
     "/v1/files/scan-results": {
       "post": {
-        "description": "A scanner's verdict on one file of the token's tenant; the file stays pending and unreadable until then. Only\na token holding `files:decide`, which Settings.service_scopes gives the scanner alone, records one.",
+        "description": "A scanner's verdict on one version of a file of the token's tenant; that version stays pending and unreadable\nuntil then, and 400 when a file of several versions is not told which. Only\na token holding `files:decide`, which Settings.service_scopes gives the scanner alone, records one.",
         "operationId": "files_scan_result",
         "parameters": [
           {

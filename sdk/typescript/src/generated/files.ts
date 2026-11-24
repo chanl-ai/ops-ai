@@ -1413,6 +1413,8 @@ export interface components {
         ScanResultIn: {
             /** Detail */
             detail?: string | null;
+            /** Digest */
+            digest?: string | null;
             /** Engine */
             engine: string;
             /** Fileid */
@@ -1422,6 +1424,8 @@ export interface components {
              * @enum {string}
              */
             status: "clean" | "infected" | "failed";
+            /** Version */
+            version?: number | null;
         };
         /** Skipped */
         Skipped: {
