@@ -321,11 +321,13 @@ await withUiStack(
       await james.screenshot({ path: join(EDITOR_SHOTS, 'levy_case-tidied-1280.png') });
 
       // A run's canvas: laid out, lines clear of steps, no Tidy up and no dragging.
-      await fetch(`${agents}/v1/workflows/definitions/uc486_unplaced/publish-requests`, { method: 'POST', headers: H, body: '{}' });
+      // A test run: the seed's steps call tools the team has not added, which every publish refuses, and the canvas
+      // needs only a run.
       const started = await (
-        await fetch(`${agents}/v1/runs`, { method: 'POST', headers: H, body: JSON.stringify({ workflowId: 'uc486_unplaced', input: { record: { name: 'Ana Example' } } }) })
+        await fetch(`${agents}/v1/runs`, { method: 'POST', headers: H, body: JSON.stringify({ workflowId: 'uc486_unplaced', mode: 'test', input: { record: { name: 'Ana Example' } } }) })
       ).json();
       const runId = started.data?.runId ?? started.data?.id;
+      if (!runId) throw new Error(`no test run of uc486_unplaced started: ${JSON.stringify(started).slice(0, 300)}`);
       await james.goto(`${consoleUrl}/workflows/runs/${encodeURIComponent(runId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await james.locator('[data-testid=run-canvas] [data-testid=definition-node]').first().waitFor({ timeout: 120_000 });
       await james.waitForTimeout(SETTLE_MS);
