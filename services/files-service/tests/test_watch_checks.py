@@ -109,7 +109,8 @@ async def _setup(engine: AsyncEngine, tmp_path: Path, tenant: str, reader: Recor
                 "values": {"libraries": ["drv"]},
                 "created_by": "builder@harborpine.example",
                 "created_at": NOW,
-            }
+            },
+            audit={"actor": "builder@harborpine.example", "action": "files.watch.created", "summary": "", "detail": {}},
         )
     return WatchChecks(files, reader, clock=lambda: NOW), watch_id
 

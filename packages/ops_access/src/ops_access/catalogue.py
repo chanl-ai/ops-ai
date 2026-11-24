@@ -35,6 +35,10 @@ AREAS = (
     # parts, sign in) is the admins' by default.
     "connections",
     "files",
+    # The team's watched folders, which copy an app's folders into Files for every member (files-service
+    # /v1/watches). Only `manage` is checked: adding, changing, checking and deleting a watch, Admin's and Builder's by
+    # default. Reading a watch follows files.view, so no role is given watches.view.
+    "watches",
     # What documents-service reads from a file: document types, extractions, corrections. `run` extracts;
     # `edit` keeps types and corrects fields; `delete` purges what was derived from a deleted file (a workflow asks).
     "documents",
@@ -98,7 +102,8 @@ def _all(area: str, *actions: str) -> list[Grant]:
 _READS: list[Grant] = [
     (area, "view", "all")
     for area in AREAS
-    if area not in ("settings", "audit", "activity", "mcp", "webhooks", "usage", "chat", "memory", "workspace")
+    if area
+    not in ("settings", "audit", "activity", "mcp", "webhooks", "usage", "chat", "memory", "workspace", "watches")
 ]
 _DEFINITIONS = ("agents", "workflows", "skills", "guardrails", "widgets", "tools")
 # Decided by a reviewer or admin of the reviewing team; a module access approval by an approver or admin of the

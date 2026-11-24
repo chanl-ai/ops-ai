@@ -95,6 +95,10 @@ class _Gets:
         return answer
 
 
+# Failed files a check's outcome names on the watch's row; the rest are in its events.
+FAILURES_KEPT = 20
+
+
 @dataclass
 class CheckOutcome:
     status: str
@@ -102,6 +106,13 @@ class CheckOutcome:
     failed: int = 0
     removed: int = 0
     stopped: str = ""
+    # The first failed files ({path, size, reason}), so the Watched folders row says which file failed and why.
+    failures: list[dict[str, JsonValue]] = dataclasses.field(default_factory=list[dict[str, JsonValue]])
+
+    def fail(self, event: WatchEvent) -> None:
+        self.failed += 1
+        if len(self.failures) < FAILURES_KEPT:
+            self.failures.append({"path": event["path"], "size": event["size"], "reason": event["reason"]})
 
     def as_json(self) -> dict[str, JsonValue]:
         return cast(dict[str, JsonValue], dataclasses.asdict(self))
@@ -234,7 +245,7 @@ class WatchChecks:
                     now,
                 )
             )
-            outcome.failed += 1
+            outcome.fail(events[-1])
         gone_now: list[str] = []
         errors: list[SourceError] = []
         for start in range(0, len(listing.changed), CHUNK):
@@ -265,7 +276,7 @@ class WatchChecks:
                     now,
                 )
             )
-            outcome.failed += 1
+            outcome.fail(events[-1])
         removed = set(listing.removed_at_source) | set(gone_now)
         if listing.whole and listing.status == "success":
             # Only a listing read whole sees every file; one listed but refused (too large) is not removed.

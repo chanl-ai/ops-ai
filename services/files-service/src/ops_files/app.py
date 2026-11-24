@@ -549,6 +549,11 @@ def create_files_app(
         return ok(detail.model_dump(mode="json", by_alias=True))
 
     app.include_router(public)
+    # Imported here: the watches routes read this module's `who`, so they load once it has.
+    from ops_files.store import WatchesStore  # noqa: PLC0415
+    from ops_files.watch_routes import watches_router  # noqa: PLC0415
+
+    app.include_router(watches_router(WatchesStore(engine)), responses=errors)
     if settings is not None:
         app.include_router(_settings_router(settings))
     return app

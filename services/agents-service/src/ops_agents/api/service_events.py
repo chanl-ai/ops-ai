@@ -147,7 +147,8 @@ async def _follow_seed(rt: Runtime, store: DefinitionStore, d: WorkflowDefinitio
 EVENT_OWNERS: dict[str, tuple[str, ...]] = {
     # tool.module.* and tool.team_state.changed also keep this service's copy of the catalogue (store/tool_copies.py).
     "tools": ("tool_access.", "tool_module.", "module_review.", "app_account.", "tool.module.", "tool.team_state."),
-    "files": ("file.",),
+    # watch.checked: a watched folder's check ended; the Files changed trigger reads its events after it.
+    "files": ("file.", "watch."),
     "documents": ("extraction.",),
     "kb": ("kb.", "knowledge."),
     # The task API records a posted task as its own event, so the task runs as the api_task workflow.

@@ -29,8 +29,13 @@ from ops_service_kit.logging import configure_logging
 from ops_service_kit.settings import Settings, require_keys
 from ops_sources import ToolReader
 from ops_storage.local import LocalObjectStore
-from ops_store.outbox import relay, run_relay
+from ops_store.audit import AUDIT_EVENT, AUDIT_ROUTE, AUDIT_SCOPE
+from ops_store.outbox import Poster, relay, run_relay
 from ops_store.schema_version import require_current_schema
+
+# Where files_outbox's events go: an audit entry to platform-service's account audit log, every other event (a deleted
+# file, a read request, a finished check) to agents-service's /v1/events.
+RELAY_ROUTES = {AUDIT_EVENT: ("platform",), "*": ("agents",)}
 
 # The classes files.md 4.4 names for the purposes this slice serves; a retention settings page replaces this list.
 RETENTION_CLASSES = (
@@ -107,9 +112,22 @@ def main() -> None:
     # records the run it started on the request, which the console follows.
     agents = ServiceClient.for_settings(settings, service="files", audience="agents", scopes=["events:emit"])
     enrich = ReadRequestsStore(files.engine).record_run
-    targets = {"agents": agents}
+    targets: dict[str, Poster] = {"agents": agents}
+    # A change to a watched folder writes its audit entry to the outbox; platform-service's internal port keeps the
+    # account's one audit log. On a stack without platform-service the entries wait in the outbox.
+    if settings.platform is not None:
+        targets["platform"] = ServiceClient.for_settings(
+            settings, service="files", audience="platform", scopes=[AUDIT_SCOPE], endpoint="platform_internal"
+        )
     events = relay(
-        files.engine, service_outbox, routes={"*": ("agents",)}, targets=targets, role=SYSTEM_ROLE, enrich=enrich
+        files.engine,
+        service_outbox,
+        routes=RELAY_ROUTES,
+        targets=targets,
+        role=SYSTEM_ROLE,
+        enrich=enrich,
+        team_in_token=frozenset({"platform"}),
+        path_by_target={"platform": AUDIT_ROUTE},
     )
     # A watched folder's check reads the source through tools-service with the team's sign-in, as knowledge does.
     tools = ServiceClient.for_settings(settings, service="files", audience="tools", scopes=["tools:view", "tools:run"])
