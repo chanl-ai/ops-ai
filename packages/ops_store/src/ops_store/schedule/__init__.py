@@ -58,6 +58,13 @@ class ScheduleKinds:
             raise ValueError(f"The schedule kind {kind.name} has a schema that does not name it as its kind")
         self._kinds[kind.name] = kind
 
+    def unregister(self, name: str) -> None:
+        """Removes a kind a plugin or a test registered; the kinds of `default_kinds()` are removed the same way, so a
+        caller keeps to the ones it added."""
+        if name not in self._kinds:
+            raise UnknownKind(name, list(self._kinds))
+        del self._kinds[name]
+
     def get(self, name: str) -> RuleKind:
         found = self._kinds.get(name)
         if found is None:

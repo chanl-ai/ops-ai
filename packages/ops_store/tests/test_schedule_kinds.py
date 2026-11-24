@@ -20,7 +20,7 @@ def at(text: str) -> datetime:
     return datetime.fromisoformat(text).replace(tzinfo=UTC)
 
 
-def test_wall_times_keep_their_local_time_across_both_clock_changes() -> None:
+def test_wall_times_and_weekday_windows_land_on_the_right_instants() -> None:
     kinds = default_kinds()
     now = at("2026-03-01T00:00")
     morning = kinds.checked({"kind": "daily", "time": "07:30", "tz": "Europe/London"}, now, FLOOR)
@@ -53,9 +53,7 @@ def test_wall_times_keep_their_local_time_across_both_clock_changes() -> None:
     slots = next_slots(hourly, at("2026-03-28T23:30"), 4)
     assert [b - a for a, b in pairwise(slots)] == [timedelta(hours=1)] * 3
 
-
-def test_weekdays_between_set_hours_skip_the_weekend() -> None:
-    kinds = default_kinds()
+    # Weekdays between set hours skip the weekend.
     rule = kinds.checked(
         {
             "kind": "every",
