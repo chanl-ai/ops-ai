@@ -37,6 +37,7 @@ from .auth import (
     require_step_up,
     require_team_account_use,
     review_teams,
+    teams_holding,
     workspace_step_up,
 )
 from .deps import Runtime
@@ -1184,6 +1185,48 @@ def _record_keys(row: JsonValue) -> set[str] | None:
     return {str(k) for k in values} if isinstance(values, dict) else None
 
 
+def _read_correction(read: Json, edited: JsonValue) -> None:
+    """A correction of a whole read: as many records as were read (exactly one for a one-record read), each keeping its
+    `values` to the fields of the read's type."""
+    if not isinstance(edited, list) or any(_record_keys(r) is None for r in edited):
+        raise ValidationFailed("A correction lists the records, each with its values.")
+    count = 1 if "fields" in read and "records" not in read else len(entries(read.get("records")))
+    if len(edited) != count:
+        raise ValidationFailed(f"A correction lists the {_plural(count, 'record')} that were read.")
+    allowed = {str(f.get("key")) for f in (x for x in entries(read.get("schema")) if isinstance(x, dict))}
+    found: set[str] = set()
+    for row in edited:
+        found |= _record_keys(row) or set()
+    if unknown := sorted(found - allowed):
+        raise ValidationFailed(f"A correction names fields the read does not have: {', '.join(unknown)}.")
+
+
+NOT_EDITABLE = (
+    "This version of Extract a file cannot take typed values, so this task can only be rejected. Your admin needs to "
+    "approve the extraction update in Reviews; then read the file again."
+)
+
+
+def _refuse_not_editable(paused: ReviewPayload) -> None:
+    """An approve of a read no reply answered needs a step that takes typed values; on one that takes none (a version
+    of Extract a file from before it did) the task can only be rejected, and says why."""
+    if "editable" in paused:
+        return
+    read = document_read(paused.get("draft"), paused, None)
+    if read is not None and read["notRead"] and read["records"]:
+        raise ValidationFailed(NOT_EDITABLE, code="not_editable")
+
+
+def _require_documents_edit(approver: Principal, team: str) -> None:
+    """Typed values change a read, which is documents.edit in the run's team: reviews.decide alone changes none."""
+    if team not in teams_holding(approver, "documents", "edit"):
+        raise Forbidden(
+            f"Only someone who edits the documents of {team} changes the values of a read.",
+            code="role_required",
+            details={"teamId": team, "area": "documents", "action": "edit"},
+        )
+
+
 def correction(paused: ReviewPayload, inputs: Json | None) -> tuple[JsonValue | Nothing, Json | None]:
     """A reviewer's correction (`inputs.edited`) of the step's editable value, checked against it, and the inputs left
     for the option's call. A list of records keeps each record's `values` to the keys the read has; a dict keeps its own
@@ -1196,7 +1239,12 @@ def correction(paused: ReviewPayload, inputs: Json | None) -> tuple[JsonValue | 
     if not isinstance(editable, dict):
         raise ValidationFailed("This review has nothing to correct.")
     was = editable.get("value")
-    if isinstance(was, list):
+    if is_read(was):
+        # A whole read is corrected as the console shows it: the records list, one record for a one-record read.
+        read = cast(Json, was)
+        _read_correction(read, edited)
+        unknown = []
+    elif isinstance(was, list):
         allowed: set[str] = set()
         for row in was:
             allowed |= _record_keys(row) or set()
@@ -1261,8 +1309,13 @@ async def decide(
             "This run waits for an account: it goes on once its person connects theirs, or runs on the team account.",
             code="connect_wait",
         )
-    edited, inputs = correction(paused, inputs)
     options = _options(paused)
+    # Every option but reject approves, as below; a decision no option names is refused below.
+    if (decision != "reject") if options else DEFAULT_DECISIONS.get(decision) == "approve":
+        _refuse_not_editable(paused)
+    edited, inputs = correction(paused, inputs)
+    if not isinstance(edited, Nothing):
+        _require_documents_edit(approver, str(run["team_id"]))
     call: Json | None = None
     if options:
         if decision not in options:

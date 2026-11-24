@@ -14,13 +14,16 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from ops_access import BUILTIN_GRIDS, encode_grid
 from ops_agents.api import engine_reviews
+from ops_agents.api.auth import Principal
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
 from ops_engine.store import RunStore
+from ops_identity import Principal as Caller
 from ops_service_kit import narrow
-from ops_service_kit.errors import ValidationFailed
+from ops_service_kit.errors import Forbidden, ValidationFailed
 from ops_service_kit.http import Json
 from tests.engine.review_flows import flow, paused
 from tests.engine.test_worker import M, drain
@@ -101,6 +104,48 @@ async def test_a_several_records_read_with_none_read_can_only_be_rejected(engine
     assert refused.value.code == "nothing_read", refused.value
     await drain(w)
     assert await _outcome(engine, tenant, run_id) == "rejected"
+
+
+def _reviewer_without_documents_edit() -> Principal:
+    """A reviewer of team_a whose role an admin took documents.edit off: decides tasks, changes no read's values."""
+    grid = [g for g in BUILTIN_GRIDS["reviewer"] if (g[0], g[1]) != ("documents", "edit")]
+    identity = Caller(
+        kind="person",
+        sub="usr_ines",
+        email="ines@harborpine.example",
+        name="Ines",
+        tenant_id="local",
+        team_id="team_a",
+        team_ids=["team_a"],
+        roles={"team_a": "reviewer"},
+        scopes=[],
+        auth_method="session",
+        access={"team_a": ["reviewer"]},
+        grids={"reviewer": encode_grid(grid)},
+    )
+    return Principal(
+        name="Ines",
+        email=identity.email,
+        team_id="team_a",
+        tenant_id="local",
+        sub=identity.sub,
+        team_ids=("team_a",),
+        role="reviewer",
+        roles={"team_a": "reviewer"},
+        identity=identity,
+    )
+
+
+async def test_a_decider_without_documents_edit_changes_no_values_through_a_task(engine: AsyncEngine) -> None:
+    tenant, run_id, rt, _ = await paused(engine, _check(ONE))
+    typed: Json = {"invoice": {"value": "NWF-88213"}, "total": {"value": "1940"}}
+    ines = _reviewer_without_documents_edit()
+    with tenant_scope(tenant):
+        with pytest.raises(Forbidden) as refused:
+            await engine_reviews.decide(rt, ines, run_id, decision="approve", reason=None, inputs={"edited": typed})
+        run = await RunStore(EngineTransactions(engine)).get(run_id)
+    assert refused.value.code == "role_required", refused.value
+    assert (run or {}).get("status") == "waiting", run
 
 
 class NotRead:
