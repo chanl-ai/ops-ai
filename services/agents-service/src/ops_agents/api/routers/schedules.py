@@ -53,6 +53,11 @@ class RuleIn(In):
     rule: dict[str, JsonValue]
 
 
+class PreviewIn(RuleIn):
+    # The instant the next runs are counted from, now when left out: how a rule reads across a day the clocks change.
+    after: datetime | None = None
+
+
 class PreviewView(Out):
     rule: Json
     words: str
@@ -94,11 +99,11 @@ async def schedule_kinds(me: Me) -> JSONResponse:
 
 
 @router.post("/preview", response_model=Envelope[PreviewView])
-async def preview_schedule(rt: Rt, me: Me, body: RuleIn) -> JSONResponse:
+async def preview_schedule(rt: Rt, me: Me, body: PreviewIn) -> JSONResponse:
     """The rule as it would be saved, in words, with its next three runs. 422 naming the field for a rule a save would
     refuse, including one under the install's shortest interval."""
     now = datetime.now(UTC)
-    return ok(preview(checked(rt, body.rule, now), now))
+    return ok(preview(checked(rt, body.rule, now), body.after or now))
 
 
 async def _rights(rt: Runtime, me: Any, workflow_id: str) -> Any:

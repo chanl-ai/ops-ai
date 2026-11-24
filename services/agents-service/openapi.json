@@ -15861,6 +15861,35 @@
         "title": "PortView",
         "type": "object"
       },
+      "PreviewIn": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "rule": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Rule",
+            "type": "object"
+          }
+        },
+        "required": [
+          "rule"
+        ],
+        "title": "PreviewIn",
+        "type": "object"
+      },
       "PreviewView": {
         "additionalProperties": false,
         "properties": {
@@ -55443,7 +55472,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RuleIn"
+                "$ref": "#/components/schemas/PreviewIn"
               }
             }
           },

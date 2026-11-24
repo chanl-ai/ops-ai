@@ -1407,6 +1407,11 @@ class PortView(TypedDict, closed=True):
     name: str
 
 
+class PreviewIn(TypedDict, closed=True):
+    after: NotRequired[str | None]
+    rule: dict[str, JsonValue]
+
+
 class PreviewView(TypedDict, closed=True):
     nextRuns: list[str]
     rule: dict[str, JsonValue]
