@@ -48,6 +48,9 @@ class Listing:
     # Items whose marker moved, each with its marker set, to fetch (or to keep when the listing carried content).
     changed: list[Json] = field(default_factory=list[Json])
     removed_at_source: list[str] = field(default_factory=list[str])
+    # Items listed but not to be taken in, each as listed with its reason in `skipped` (refused by robots.txt, too
+    # large to fetch), so a reading service can record one as failed rather than as removed.
+    skipped: list[Json] = field(default_factory=list[Json])
     watermark: str | None = None
     # Seconds between two fetches: the source's own rate, or the slower pace its listing names.
     pace: float = 0.0
@@ -100,7 +103,7 @@ async def read_changes(
         )
         if not healthy:
             raise Conflict(
-                "The connection refused its sign-in. Reconnect it and run Test connection, then sync again.",
+                "The connection refused its sign-in. Reconnect it and run Test connection, then read again.",
                 code="needs_reconnect",
             )
         place.paused = None
@@ -181,7 +184,7 @@ async def read_changes(
             break
         rows = listing_of(page.output)
         if rows is None:
-            found.status, found.stopped = "failed", "The tool's answer is not a knowledge listing."
+            found.status, found.stopped = "failed", "The tool's answer is not a listing of changes."
             errors.append({"phase": "list", "errorClass": "contract", "message": found.stopped})
             break
         out = json_object(page.output)
@@ -207,6 +210,7 @@ async def read_changes(
                 # copy leaves search.
                 seen.discard(item_id)
                 counts["skipped"] += 1
+                found.skipped.append(r)
                 log.append(f"{r.get('title') or item_id}: {r['skipped']}")
                 continue
             ex = state.held(item_id)

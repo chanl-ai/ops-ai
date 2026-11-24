@@ -15,8 +15,11 @@ module names them for every reader and turns each answer into the shape the loop
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TypedDict
+
+from pydantic import BaseModel, ConfigDict
 
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.narrow import json_list, json_object
@@ -49,6 +52,56 @@ class SourceTools:
     fetch_at_once: int = AT_ONCE
     # The get tool takes the held version tag and answers `unchanged` when it still matches.
     get_takes_tag: bool = False
+
+    @classmethod
+    def of(cls, row: Mapping[str, object]) -> SourceTools:
+        """The tools named by a declared source, or by a reading service's stored copy of one (the same keys). A tool
+        the row names as null stays None, so the loop refuses to call it rather than call a tool named "None"."""
+
+        def tool(key: str) -> str | None:
+            named = row.get(key)
+            return str(named) if named else None
+
+        at_once = row.get("fetchAtOnce")
+        return cls(
+            list=tool("listTool"),
+            get=tool("getTool"),
+            changes=tool("changesTool"),
+            lists_whole=bool(row.get("listsWhole")),
+            # A string or float an older writer stored still reads.
+            fetch_at_once=int(at_once) if isinstance(at_once, int | float | str) and at_once else AT_ONCE,
+            get_takes_tag=bool(row.get("getTakesTag")),
+        )
+
+
+class Declared(BaseModel):
+    """A source as tools-service declares it for a team (`GET /v1/knowledge-sources`): the tools that list, fetch,
+    change-watch, pick and preview it, how its connection signs in, and the inputs its settings are checked against."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    plugin: str
+    source: str
+    title: str
+    needsConnection: bool = True  # noqa: N815 - the wire names follow
+    connectionId: str | None = None  # noqa: N815
+    connectionStatus: str | None = None  # noqa: N815
+    signIn: str | None = None  # noqa: N815
+    listTool: str | None = None  # noqa: N815
+    getTool: str | None = None  # noqa: N815
+    changesTool: str | None = None  # noqa: N815
+    scopesTool: str | None = None  # noqa: N815
+    previewTool: str | None = None  # noqa: N815
+    listsWhole: bool = False  # noqa: N815
+    fetchAtOnce: int | None = None  # noqa: N815
+    site: bool = False
+    getTakesTag: bool = False  # noqa: N815
+    schedule: dict[str, JsonValue] | None = None
+    inputs: dict[str, dict[str, JsonValue]] = {}
+
+    @property
+    def tools(self) -> SourceTools:
+        return SourceTools.of(self.model_dump())
 
 
 class SourceError(TypedDict, total=False):
@@ -103,6 +156,7 @@ def listing_of(output: JsonValue) -> list[Json] | None:
 
 
 def access_list(item: Json) -> list[str] | None:
-    """Who may see a fetched item at its source, or None when the source did not say (or said nobody listed)."""
-    allowed = json_list(item["allowed"]) if isinstance(item.get("allowed"), list) else None
-    return [str(a) for a in allowed or []] or None
+    """Who may see a fetched item at its source: None when the source did not say, [] when it listed nobody."""
+    if not isinstance(item.get("allowed"), list):
+        return None
+    return [str(a) for a in json_list(item["allowed"])]

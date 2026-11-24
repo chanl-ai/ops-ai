@@ -28,13 +28,14 @@ from ops_sources import (
     FULL_EVERY,
     MAX_PAGES,
     Answer,
+    Declared,
     Fetcher,
+    FoundPlace,
     Held,
     Place,
     SourceTools,
     ToolReader,
     access_list,
-    places_of,
     read_changes,
 )
 from ops_store import documents
@@ -51,34 +52,8 @@ if TYPE_CHECKING:
 
 # The listing, its pacing and gone-twice live in ops_sources; kb-service reads them through its knowledge state.
 # MAX_PAGES and FULL_EVERY are named here and read at each sync, so a test can shorten them for this service.
-__all__ = ["FULL_EVERY", "MAX_PAGES", "Answer", "ToolReader"]
+__all__ = ["FULL_EVERY", "MAX_PAGES", "Answer", "Declared", "ToolReader"]
 TEAM_SIGN_IN = ("team",)
-
-
-class Declared(BaseModel):
-    """A knowledge source as tools-service declares it for a team: the tools that list, fetch, change-watch, pick and
-    preview it, how its connection signs in, and the inputs its settings are checked against."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    plugin: str
-    source: str
-    title: str
-    needsConnection: bool = True  # noqa: N815 - the wire names follow
-    connectionId: str | None = None  # noqa: N815
-    connectionStatus: str | None = None  # noqa: N815
-    signIn: str | None = None  # noqa: N815
-    listTool: str | None = None  # noqa: N815
-    getTool: str | None = None  # noqa: N815
-    changesTool: str | None = None  # noqa: N815
-    scopesTool: str | None = None  # noqa: N815
-    previewTool: str | None = None  # noqa: N815
-    listsWhole: bool = False  # noqa: N815
-    fetchAtOnce: int | None = None  # noqa: N815
-    site: bool = False
-    getTakesTag: bool = False  # noqa: N815
-    schedule: dict[str, JsonValue] | None = None
-    inputs: dict[str, dict[str, JsonValue]] = {}
 
 
 class Host(BaseModel):
@@ -151,11 +126,6 @@ class _PreviewOut(BaseModel):
     capped: JsonValue = None
 
 
-class _ScopesOut(BaseModel):
-    scopes: list[JsonValue] = []
-    next_cursor: JsonValue = None
-
-
 def preview_of(output: JsonValue) -> SourcePreview:
     """What a plugin's preview tool answered, as the page the console shows."""
     out = _PreviewOut.model_validate(output or {})
@@ -168,10 +138,8 @@ def preview_of(output: JsonValue) -> SourcePreview:
     )
 
 
-def scopes_of(output: JsonValue) -> ScopesPage:
-    """What a plugin's scopes tool answered, as the page a picker shows."""
-    out = _ScopesOut.model_validate(output or {})
-    places, following = places_of({"scopes": out.scopes, "next_cursor": out.next_cursor})
+def scopes_of(places: list[FoundPlace], following: str | None) -> ScopesPage:
+    """The places a source's picker found, as the page the console shows."""
     scopes = [Scope(id=p.id, title=p.title, kind=p.kind, parent=p.parent, detail=p.detail) for p in places]
     return ScopesPage(scopes=scopes, next_cursor=following)
 
@@ -387,14 +355,7 @@ async def sync_tool_source(
     place = _place(cfg)
     known = {i.path: i for i in await service.store.items(tenant, source_ids=[source_id])}
     state = _KnowledgeState(service, tenant, source_id, cfg, known)
-    tools = SourceTools(
-        list=str(cfg["listTool"]) if "listTool" in cfg else None,
-        get=str(cfg["getTool"]) if "getTool" in cfg else None,
-        changes=cfg.get("changesTool"),
-        lists_whole=bool(cfg.get("listsWhole")),
-        fetch_at_once=int(cfg.get("fetchAtOnce") or AT_ONCE),
-        get_takes_tag=bool(cfg.get("getTakesTag")),
-    )
+    tools = SourceTools.of(cfg)
     counts = {"listed": 0, "unchanged": 0, "upserted": 0, "deleted": 0, "failed": 0, "skipped": 0}
     listing = await read_changes(
         reader,
@@ -580,7 +541,7 @@ async def _put(
         )
         extra["parent_id"] = parent_row.id if parent_row else None
     found = Stored(stored.file_id, name, stored.mime, stored.size, stored.digest, stored.deduplicated)
-    origin = Origin(item_id, str(item.get("title") or item_id), extra, allowed=access_list(item))
+    origin = Origin(item_id, str(item.get("title") or item_id), extra, allowed=access_list(item) or None)
     done = await service._read_file(who, s, ex, name=name, found=found, rebuild=False, origin=origin)  # pyright: ignore[reportPrivateUsage]
     # The row as written, so a later look at this item in the run (its attachments, gone or removed) reads it.
     known[item_id] = (await service.store.items(tenant, item_id=done.id))[0]

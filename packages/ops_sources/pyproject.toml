@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Reading a source through its connection's tools: changes since a saved place with every page read, and paced fetches, behind a state port"
 license = "Apache-2.0"
 requires-python = ">=3.12,<3.13"
-dependencies = ["ops-identity", "ops-service-kit"]
+dependencies = ["ops-identity", "ops-service-kit", "pydantic>=2.7"]
 
 [build-system]
 requires = ["hatchling>=1.25"]

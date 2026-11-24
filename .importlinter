@@ -292,6 +292,7 @@ source_modules =
     ops_policy
     ops_service_kit
     ops_signin
+    ops_sources
     ops_storage
     ops_store
     ops_tools

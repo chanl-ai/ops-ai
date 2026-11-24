@@ -11,6 +11,7 @@ from .contract import (
     AT_ONCE,
     RECONNECT,
     Answer,
+    Declared,
     FoundPlace,
     SourceError,
     SourceTools,
@@ -20,6 +21,7 @@ from .contract import (
 )
 from .fetching import GONE_TWICE, Fetched, Fetcher, OnItem, Pacer
 from .listing import FULL_EVERY, MAX_PAGES, OVERLAP, STALE_CURSOR, Listing, read_changes
+from .places import find_places
 from .reader import ToolReader
 from .state import Held, Place, Reader, SourceState
 
@@ -32,6 +34,7 @@ __all__ = [
     "RECONNECT",
     "STALE_CURSOR",
     "Answer",
+    "Declared",
     "Fetched",
     "Fetcher",
     "FoundPlace",
@@ -46,6 +49,7 @@ __all__ = [
     "SourceTools",
     "ToolReader",
     "access_list",
+    "find_places",
     "listing_of",
     "places_of",
     "read_changes",

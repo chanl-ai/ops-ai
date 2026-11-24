@@ -41,6 +41,7 @@ from ops_service_kit.logging import get_logger
 from ops_service_kit.names import slugify
 from ops_service_kit.narrow import json_list, json_object
 from ops_service_kit.settings import Settings
+from ops_sources import find_places
 from ops_store import documents, isolation
 from ops_store.listing import ListPage
 from ops_store.schedule import last_slot, next_run
@@ -1164,17 +1165,13 @@ class KnowledgeService:
         what `parent` holds). Refused for a kind of source that has no pickers."""
         who.require_builder(who.team_id, "pick what a source takes in", "create")
         found = await declared_source(self.tools, who, i.plugin, i.source)
-        tool = found.scopesTool
-        if not tool or self.tools is None:
+        if self.tools is None:
             raise ValidationFailed(f"{found.title} has nothing to pick.", code="scopes_unavailable")
-        given: dict[str, JsonValue] = {
-            k: v for k, v in (("query", i.query), ("parent", i.parent), ("cursor", i.cursor)) if v not in (None, "")
-        }
-        answer = await self.tools.call(who.tenant_id, str(who.team_id), tool, given, act="kb-scopes")
-        if not answer.ok:
-            raise ServiceUnavailable(f"The picker could not ask {found.title}: {answer.message or answer.code}",
-                                     code="scopes_failed")  # fmt: skip
-        return scopes_of(answer.output)
+        places, following = await find_places(
+            self.tools, who.tenant_id, str(who.team_id), found, query=i.query, parent=i.parent, cursor=i.cursor,
+            act="kb-scopes",
+        )  # fmt: skip
+        return scopes_of(places, following)
 
     async def remove_source(self, who: Who, source_id: str) -> None:
         await self._changeable_source(who, source_id, "delete")

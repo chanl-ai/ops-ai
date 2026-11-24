@@ -16,9 +16,9 @@ from .contract import Answer
 
 class ToolReader:
     """tools-service, as this service calls it: the sources a team can create, and one gateway call. `key_prefix`
-    names the calling service in each call's idempotency key (`kbcall_...` for knowledge)."""
+    names the calling service in each call's idempotency key."""
 
-    def __init__(self, tools: ServiceClient, *, key_prefix: str = "kbcall") -> None:
+    def __init__(self, tools: ServiceClient, *, key_prefix: str) -> None:
         self.tools = tools
         self.key_prefix = key_prefix
 

@@ -2273,12 +2273,14 @@ source = { editable = "packages/ops_sources" }
 dependencies = [
     { name = "ops-identity" },
     { name = "ops-service-kit" },
+    { name = "pydantic" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "ops-identity", editable = "packages/ops_identity" },
     { name = "ops-service-kit", editable = "packages/ops_service_kit" },
+    { name = "pydantic", specifier = ">=2.7" },
 ]
 
 [[package]]
