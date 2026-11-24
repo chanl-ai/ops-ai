@@ -74,10 +74,12 @@ class Env:
             )
             await store.go_live(wid, version)
 
-    async def save(self, rule: dict[str, JsonValue], now: datetime, wid: str = "held_wires", team: str = TEAM) -> None:
-        stored = default_kinds().checked(rule | {"tz": "UTC"}, now, floor=default_floor())
+    async def save(
+        self, rule: dict[str, JsonValue], now: datetime, wid: str = "held_wires", floor: timedelta | None = None
+    ) -> None:
+        stored = default_kinds().checked(rule | {"tz": "UTC"}, now, floor=floor or default_floor())
         with tenant_scope(TENANT):
-            await WorkflowSchedules(self.db).save(wid, "start", team, stored, "user_ana")
+            await WorkflowSchedules(self.db).save(wid, "start", TEAM, stored, "user_ana")
 
     async def runs(self, wid: str = "held_wires") -> list[dict[str, Any]]:
         with tenant_scope(TENANT):
@@ -217,6 +219,14 @@ async def test_after_an_outage_one_catch_up_run_starts_marked_late_and_an_older_
     assert [e["outcome"] for e in await env.events()] == ["missed", "late"]
     await env.clock().pass_once(at("10:45"))
     assert len(await env.runs()) == 3, "the slot after a missed one runs"
+
+    # A pass lands up to a minute after a slot; for a one-minute rule that is past half the interval, not an outage.
+    await env.publish("each_minute")
+    await env.save({"kind": "every", "every": 1, "unit": "minutes"}, at("10:50"), "each_minute", timedelta(minutes=1))
+    clock = env.clock()
+    await clock.pass_once(at("10:50:45"))
+    await clock.pass_once(at("10:51:45"))
+    assert [r["input"]["dueAt"] for r in await env.runs("each_minute")] == ["2026-11-23T10:51:00Z"]
 
 
 class Explodes(WorkflowStart):
