@@ -1,6 +1,6 @@
 {
   "date": "2026-11-24",
   "title": "A file too large for a watched folder is listed once",
-  "description": "A watched folder takes files up to 25 MB. A larger file is listed once under Failed files with its size and the limit, and listed again only if its size changes.",
+  "description": "A watched folder takes files up to 25 MB. A larger file is listed once under Failed files with its size and the limit, and listed again only if the file changes.",
   "tag": "improved"
 }

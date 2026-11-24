@@ -3,8 +3,8 @@
 A failed event carried only a sentence, so a reader of the events (the Files changed trigger) could not tell a file
 too large to bring in, which no retry fixes, from a fetch that may pass next time. `code` holds too_large or
 fetch_failed; null for every other kind and for events written before. A file refused for its size with no entry
-in Files was a failed event on every full listing; `refused_sizes` ({source id: size}, at most 500 keys, written by
-the check's lease holder) lets a check say it again only when the size changes.
+in Files was a failed event on every full listing; `refused_sizes` ({source id: "<size>:<version tag>"}, at most
+500 keys, written by the check's lease holder) lets a check say it again only for a new version.
 
 Revision ID: 20261125_0900_watch_event_codes
 Revises: 20261124_1210_watch_value_names
