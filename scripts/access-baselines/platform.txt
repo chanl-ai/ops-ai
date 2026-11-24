@@ -1,2 +1,10 @@
 # platform lane: role-name compares, owner compares and policy reads outside policy() in this lane's code today
 # (scripts/check_access_exceptions.py). `path kind key count`. A kind's total may only fall; the lane takes it to zero.
+services/platform-service/src/ops_platform/roles.py role-constant ADMIN.id 2  # keep: guards the fixed Admin grid on edit and reset, not a person
+services/platform-service/src/ops_platform/api/app.py role-constant ADMIN.id 2  # :748 keep, the fixed Admin grid; :701 convert, demotion onto the last-access-manager guard (three roles, I4)
+services/platform-service/src/ops_platform/store/roles.py role-constant ADMIN.id 2  # convert: :888 Owner pick and :915 team_admins onto holders of access.manage (three roles, I4)
+services/platform-service/src/ops_platform/store/members.py role-constant ADMIN 2  # convert: the last-admin guard onto holders of access.manage (three roles, I4)
+services/platform-service/src/ops_platform/store/roles.py role-constant OWNER.id 1  # keep: Owner is the one-person workspace marker (three roles, L3)
+services/platform-service/src/ops_platform/store/identity.py role-constant OWNER.id 1  # keep: Owner is the one-person workspace marker
+services/platform-service/src/ops_platform/store/lifecycle.py role-constant OWNER.id 1  # keep: Owner is the one-person workspace marker
+services/platform-service/src/ops_platform/store/tables.py role-constant OWNER.id 3  # keep: the one-Owner unique index on each database

@@ -336,6 +336,15 @@ The catalogue is `packages/ops_access/src/ops_access/policies.py`. Values are st
 `changed_by` cell. Every default is pinned in `access-exceptions-allowlist.txt`, so a new policy or a changed default
 fails the commit until it is classified.
 
+Every policy declares what its value decides (`Policy.decides`): whether a step waits for a review or an approval
+(`waits`), how a person proves who they are (`sign_in`), whether a feature is on (`on_off`), or a number a step may not
+pass (`limit`). A policy never decides who may act; that is a cell of the roles matrix. Four still do and are declared
+`who` until the three-roles change moves each onto a cell: `requesterMayDecide` and the self-approval part of `approvalsFloor`
+(onto `approvals.decide`), `chatThreadsOwnerOnly` (onto `chat.view` on all records) and `securityTeamAddsSecrets`
+(onto where the secrets cells are held). `scripts/check_access_exceptions.py` counts them in
+`scripts/access-baselines/components.txt` and fails on a new one, on a policy with no declared kind, and on a
+`policy(p, key)` call or `/v1/policies/<key>` fetch naming a key no policy declares.
+
 | Key | Default | Open? | What on means | Changed by | Per team |
 |---|---|---|---|---|---|
 | `requesterMayDecide` | on: the two-person rule off | yes | The person who asked for, saved or started a decision may take it, where their role holds the cell. Off (the two-person rule, under Approvals › Advanced): 403 `own_request`, except for an Admin of the team, who decides their own request whatever the value or the floor. A team that saved nothing (a new team, the sample team, every team before 2026-11-22 that never saved it) reads the default. A per-area part (`{reviews: true or false}`) is off for an area it does not name. Until agents-service and tools-service pass the record's own area, every caller asks about `reviews`, so a save takes only true, false or `{reviews: true or false}` (400 `policy_value` otherwise). Read by `requester_may_decide` (`packages/ops_access/src/ops_access/policies.py`) in `can()` | `approvals.manage` in the acting team, under `approvalsFloor` | yes, per area |
@@ -637,7 +646,7 @@ for reuse.
 | Check | Runs | Fails when |
 |---|---|---|
 | `scripts/roles_matrix.py --check` | `make python-verify` | The grid above differs from `ops_access` |
-| `scripts/check_access_exceptions.py` | Every commit (`scripts/verify-staged.sh`) and `make python-verify` | A 403, a role-name comparison, a system lock or a policy default appears that `access-exceptions-allowlist.txt` does not list against a register row, or a listed one is gone and its line was not lowered |
+| `scripts/check_access_exceptions.py` | Every commit (`scripts/verify-staged.sh`) and `make python-verify` | A 403, a role-name comparison, a system lock or a policy default appears that `access-exceptions-allowlist.txt` does not list against a register row, or a listed one is gone and its line was not lowered. Also, against the lane files in `scripts/access-baselines/` (which may only fall): a compare on a role id constant (`ADMIN.id`, `ADMIN_ROLE`, in Python or a SQLAlchemy expression), a policy written onto a caller, a read of a caller's `.roles`, `.access` or `.grids` or a `roles_in` call outside `ops_access`, and a policy declared `decides="who"`. A policy with no declared kind, or a policy read under an unknown name, always fails |
 | `scripts/tests/test_builtin_roles_match_checks.py` | `make python-verify` | A service's check answers a cell differently from the grid |
 | Access check | Each architecture review, and each question about access | A change, question or diff conflicts with this page, or asks something [Access rules](#access-rules) answers |
 

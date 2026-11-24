@@ -48,6 +48,18 @@ class Policy:
     note: str = ""
     # An "hours" policy's largest value; None takes the general limit of a year.
     maximum: int | None = None
+    # What the value decides (DECIDES): whether a step waits for a review or an approval ("waits"), how a person proves
+    # who they are ("sign_in"), whether a feature is on ("on_off"), or a number a step may not pass ("limit"). It never
+    # decides who may act: that is a cell of the roles matrix. "who" marks the settings that still do, until each moves
+    # onto a cell; scripts/check_access_exceptions.py counts them and refuses a new one.
+    decides: str = ""
+
+    def __post_init__(self) -> None:
+        if self.decides not in DECIDES:
+            raise ValueError(f"policy {self.key} declares decides={self.decides!r}; one of {', '.join(DECIDES)}")
+
+
+DECIDES = ("waits", "sign_in", "on_off", "limit", "who")
 
 
 KINDS = (
@@ -83,6 +95,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         held_in="team",
         title="Requester may decide",
+        decides="who",
     ),
     Policy(
         "approvalsFloor",
@@ -92,6 +105,7 @@ POLICIES: tuple[Policy, ...] = (
         "an agent's change to an app always waits for the person or a reviewer.",
         kind="floor_rules",
         title="Approval floor",
+        decides="who",
     ),
     Policy(
         "extractionFloor",
@@ -101,12 +115,14 @@ POLICIES: tuple[Policy, ...] = (
         "The lowest confidence an Extract from file step may accept; no step can ask for less.",
         kind="floor",
         title="Extraction confidence floor",
+        decides="limit",
     ),
     Policy(
         "stepUp",
         False,
         "Every approver confirms their sign-in again before deciding. Off: only operations that ask for it.",
         title="Step-up on every approval",
+        decides="sign_in",
     ),
     Policy(
         "publishReview",
@@ -118,6 +134,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Publish reviews",
+        decides="waits",
     ),
     Policy(
         "skillPublishStrict",
@@ -129,6 +146,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Strict skill publishing",
+        decides="waits",
     ),
     Policy(
         "evalsRequired",
@@ -140,6 +158,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Require passing evals to publish",
+        decides="waits",
     ),
     Policy(
         "companySignInRequired",
@@ -148,6 +167,7 @@ POLICIES: tuple[Policy, ...] = (
         "People on the workspace's verified company domains sign in only through the company's provider; named "
         "break-glass Security admins keep a password. Off: passwords follow the sign-in providers.",
         title="Company sign-in required",
+        decides="sign_in",
     ),
     Policy(
         "chatThreadsOwnerOnly",
@@ -155,6 +175,7 @@ POLICIES: tuple[Policy, ...] = (
         True,
         "Each chat thread is read only by the person who started it. Off: the team's admins read them too.",
         title="Private chat threads",
+        decides="who",
     ),
     Policy(
         "memoryRetentionDays",
@@ -164,6 +185,7 @@ POLICIES: tuple[Policy, ...] = (
         # Any team admin sets it, not only the security team.
         changed_by=("chat", "manage"),
         title="Memory retention",
+        decides="limit",
     ),
     Policy(
         "reviewSlaHours",
@@ -173,6 +195,7 @@ POLICIES: tuple[Policy, ...] = (
         # A team admin sets how fast reviews are expected (reviews.manage), not only the security team.
         changed_by=("reviews", "manage"),
         title="Review deadline",
+        decides="limit",
     ),
     Policy(
         "appChanges",
@@ -187,6 +210,7 @@ POLICIES: tuple[Policy, ...] = (
         held_in="team",
         live=True,
         title="Ask before an agent changes anything in an app",
+        decides="waits",
     ),
     Policy(
         "appChangesByApp",
@@ -199,6 +223,7 @@ POLICIES: tuple[Policy, ...] = (
         held_in="team",
         live=True,
         title="Approval by app",
+        decides="waits",
     ),
     Policy(
         "toolWritesNeedApproval",
@@ -210,6 +235,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Approve every tool write",
+        decides="waits",
     ),
     Policy(
         "appWritesNeedApproval",
@@ -223,6 +249,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Approve writes of these apps",
+        decides="waits",
     ),
     Policy(
         "appsChangeWithoutAsking",
@@ -236,6 +263,7 @@ POLICIES: tuple[Policy, ...] = (
         held_in="team",
         live=True,
         title="Apps that change without asking",
+        decides="waits",
     ),
     Policy(
         "aiSteps",
@@ -247,6 +275,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="AI steps in workflows",
+        decides="on_off",
     ),
     Policy(
         "taskAssist",
@@ -257,6 +286,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Task assist",
+        decides="on_off",
     ),
     Policy(
         "checkBeforeSend",
@@ -267,6 +297,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Check before sending",
+        decides="waits",
     ),
     Policy(
         "pageImages",
@@ -277,6 +308,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Page images to the model",
+        decides="on_off",
     ),
     Policy(
         "aiStepsMaskPersonalData",
@@ -289,6 +321,7 @@ POLICIES: tuple[Policy, ...] = (
         per_team=True,
         live=True,
         title="Mask personal data in AI steps",
+        decides="on_off",
     ),
     Policy(
         "egressNewHosts",
@@ -315,6 +348,7 @@ POLICIES: tuple[Policy, ...] = (
         ),
         note="Private, loopback, link-local and cloud metadata addresses are never reached unless Security lists a "
         "private range, and only https is called.",
+        decides="waits",
     ),
     Policy(
         "mcpConnectionHours",
@@ -323,12 +357,14 @@ POLICIES: tuple[Policy, ...] = (
         kind="hours",
         title="Assistant connection length",
         maximum=30 * 24,
+        decides="sign_in",
     ),
     Policy(
         "securityTeamAddsSecrets",
         False,
         "Only the security team adds secrets. Off: builders add and use their own team's secrets.",
         title="Only Security adds secrets",
+        decides="who",
     ),
 )
 

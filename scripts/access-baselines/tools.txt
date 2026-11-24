@@ -3,3 +3,5 @@
 services/tools-service/src/ops_tools/connections/service.py owner-compare owner 2
 services/tools-service/src/ops_tools/modules/policy.py policy-read policies 1
 services/tools-service/src/ops_tools/modules/routes.py role-name service-sub 1
+services/tools-service/src/ops_tools/gateway_calls.py policy-on-caller policies 1  # delete: the live cell read at send replaces it (three roles, I3)
+services/tools-service/src/ops_tools/modules/policy.py policy-on-caller policies 1  # delete: the live cell read replaces it (three roles, I3)
