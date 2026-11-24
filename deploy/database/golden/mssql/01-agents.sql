@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 20261123_2000_schedule_tenants
+-- agents-service, stamped at 20261124_1100_agents_outbox
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -920,6 +920,24 @@ CREATE TABLE model_call_records_unattributed (
 	CONSTRAINT model_call_records_unattributed_pkey PRIMARY KEY (id)
 );
 GO
+CREATE TABLE agents_outbox (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	name VARCHAR(120) NOT NULL, 
+	event_key VARCHAR(200) NOT NULL, 
+	actor VARCHAR(320) NULL, 
+	payload NVARCHAR(max) NOT NULL, 
+	created_at FLOAT NOT NULL, 
+	next_at FLOAT NULL, 
+	sent_at FLOAT NULL, 
+	attempts INTEGER NOT NULL, 
+	last_error VARCHAR(max) NULL, 
+	CONSTRAINT agents_outbox_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_agents_outbox_due ON agents_outbox (sent_at, next_at);
+GO
 CREATE TABLE review_assignments (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -1554,6 +1572,12 @@ CREATE SECURITY POLICY ops_security.model_call_records_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.model_call_records AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.agents_outbox_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.agents_outbox,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.agents_outbox AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.agents_outbox AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.review_assignments_tenant
     ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.review_assignments,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.review_assignments AFTER INSERT,
@@ -1693,5 +1717,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('20261123_2000_schedule_tenants');
+INSERT INTO alembic_version (version_num) VALUES ('20261124_1100_agents_outbox');
 GO

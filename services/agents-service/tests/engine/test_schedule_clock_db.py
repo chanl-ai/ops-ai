@@ -19,11 +19,13 @@ from ops_agents.api.worker import serve
 from ops_agents.store.background import heartbeats
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.leases import Leases
+from ops_agents.store.outbox import outbox_relay
 from ops_agents.store.schedules import WorkflowSchedules
 from ops_agents.store.tenancy import tenant_scope
 from ops_agents.store.trigger_events import TriggerEvents
 from ops_engine.store import DefinitionStore, RunStore
 from ops_service_kit.settings import Settings
+from ops_store.outbox import run_relay
 from ops_store.schedule import default_kinds
 from ops_store.testing import loop_reports_failure
 from tests.conftest import SEED
@@ -125,6 +127,12 @@ async def test_the_worker_starts_the_clock_and_a_failing_pass_shows_on_health(
             worker_stop.set()
             await asyncio.wait_for(worker, 30)
         await loop_reports_failure(client, "schedule_clock", trip, within_s=10)
+
+        def trip_relay() -> None:
+            hand_off = run_relay(outbox_relay(down, {}), key="agents_relay", stop=stop, store=heartbeats(engine))
+            running.append(asyncio.create_task(hand_off))
+
+        await loop_reports_failure(client, "agents_relay", trip_relay, within_s=10)
     finally:
         stop.set()
         for task in running:

@@ -11,6 +11,7 @@ as well."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, fields
 from typing import Any, ClassVar
 
@@ -21,9 +22,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee, isolation
+from ops_store.audit import record as record_audit
 from ops_store.schema import TENANT_SCOPED
 
 from .base import metadata
+from .outbox import agents_outbox
 from .tenancy import SCHEDULE_TENANTS, current_tenant, system_tx, tenant_tx
 
 Rule = dict[str, JsonValue]
@@ -167,6 +170,25 @@ class WorkflowSchedules:
         async with tenant_tx(self.engine) as c:
             await c.execute(t.update().where(self._key(workflow_id, trigger_step)).values(**values))
         return before.rule if before else None
+
+    async def audit(
+        self, *, team_id: str, actor: str, workflow_id: str, action: str, summary: str, detail: Mapping[str, JsonValue]
+    ) -> None:
+        """The change's entry for the account's audit log, written on the request's connection, so it commits with the
+        save or the clear or not at all."""
+        async with tenant_tx(self.engine) as c:
+            await record_audit(
+                c,
+                agents_outbox,
+                tenant_id=current_tenant(),
+                team_id=team_id,
+                actor=actor,
+                action=action,
+                target_kind="workflow",
+                target_id=workflow_id,
+                summary=summary,
+                detail=detail,
+            )
 
     async def clear(self, workflow_id: str, trigger_step: str) -> bool:
         async with tenant_tx(self.engine) as c:

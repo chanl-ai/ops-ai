@@ -26,10 +26,13 @@ from ops_engine.ports import EnginePorts, Faults
 from ops_engine.store import DefinitionStore, RunRow, RunStore
 from ops_engine.worker import Worker, WorkerHost
 from ops_files_client import FilesClient
+from ops_identity import ServiceClient
 from ops_service_kit.logging import configure_logging, get_logger
 from ops_service_kit.settings import Settings, require_keys
 from ops_store import background, isolation
+from ops_store.audit import AUDIT_SCOPE
 from ops_store.isolation import Isolation
+from ops_store.outbox import run_relay
 from ops_store.schema_version import require_current_schema
 
 from ..store.api_key_copies import RESYNC_KEY as KEY_RESYNC_KEY
@@ -40,6 +43,7 @@ from ..store.events import EventLog
 from ..store.graphs import GraphStore
 from ..store.leases import Leases
 from ..store.mailboxes import MailboxRow
+from ..store.outbox import outbox_relay
 from ..store.tenancy import ENGINE_PASS
 from ..store.tool_copies import RESYNC_KEY
 from .acting_for import CallPeople, acting_for_tokens
@@ -228,6 +232,20 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
         clock = ScheduleClock(db, Leases(db, owner=owner, ttl=settings.lease_ttl_seconds))
         ticking = asyncio.create_task(keep_schedules_ticking(clock, stop, heartbeats(db)))
         stack.push_async_callback(lambda: asyncio.wait_for(ticking, None))
+        # The audit entries of schedule saves and clears reach platform-service's audit log; with no internal endpoint
+        # they wait in the outbox, as kb-service's do.
+        audit_log = (
+            ServiceClient.for_settings(
+                settings, service="agents", audience="platform", scopes=[AUDIT_SCOPE], endpoint="platform_internal"
+            )
+            if settings.platform_internal is not None
+            else None
+        )
+        targets = {"platform": audit_log} if audit_log is not None else {}
+        handing = asyncio.create_task(
+            run_relay(outbox_relay(db, targets), key="agents_relay", stop=stop, store=heartbeats(db))
+        )
+        stack.push_async_callback(lambda: asyncio.wait_for(handing, None))
         listener = email_listener(settings, db, owner, stack)
         if listener is not None:
             listening = asyncio.create_task(keep_mail_listening(listener, stop, settings.email_poll_seconds))

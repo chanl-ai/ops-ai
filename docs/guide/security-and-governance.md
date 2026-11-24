@@ -120,6 +120,8 @@ Keep `OPS_SECRETS_KEY` with your backups: stored credentials cannot be read with
 
 ## Audit and evidence
 
+Saving or clearing a workflow's schedule is in the audit log with the old and new schedule in words.
+
 Every security-relevant change and every call to the outside is recorded: the audit log, the tool call log, the
 credential, allow-list, connection and storage audits, the run journal, each review decision and the model call log.
 Details and status are in [Data and database](data-and-database.md#the-audit-trail).
