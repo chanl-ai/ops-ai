@@ -9,7 +9,8 @@ decides what a fetched item becomes: knowledge keeps a snapshot and indexes it; 
 
 | Part | Where | What it does |
 |---|---|---|
-| The contract | `packages/ops_sources/src/ops_sources/contract.py` | Names the roles a source answers (find places, changes since a place, fetch a version, access list) over the plugin's knowledge-source tools, and reads each answer (`places_of`, `listing_of`, `access_list`) |
+| The contract | `packages/ops_sources/src/ops_sources/contract.py` | Names the roles a source answers (find places, changes since a place, fetch a version, access list) over the plugin's knowledge-source tools, and reads each answer (`places_of`, `listing_of`, `access_list`: None when the source did not say, `[]` when it listed nobody). `Declared` is a source as tools-service declares it; `SourceTools.of` maps a declared or stored row to its tools, keeping a null tool as None |
+| `find_places` | `places.py` | Asks the source's scopes tool for the places a person can pick, as the team's connection; the knowledge picker and Files' watched folders use it |
 | `ToolReader` | `reader.py` | tools-service as a reading service calls it: the sources a team can make, the hosts a source's values reach, and one gateway call (`POST /v1/calls`) |
 | The state port | `state.py` | `Place` (cursor, watermark, changes cursor, last full listing, what a long listing saw so far, tombstones, paused) and `SourceState` (what is held per item; save the place; keep a marker; count a gone answer) |
 | `read_changes` | `listing.py` | Every page of changes since the place, the place saved after each page; one restart when a saved page is refused; the page cap; a full listing first, weekly, or every run of a source that lists whole; a refused sign-in pauses the source |
@@ -19,7 +20,8 @@ decides what a fetched item becomes: knowledge keeps a snapshot and indexes it; 
 
 1. Read the place from where it keeps the source, and give the loop a `SourceState` over its own items.
 2. `read_changes(...)` lists what changed; `Listing.full` and `Listing.whole` say whether every item was seen, so
-   the service may remove what was not listed.
+   the service may remove what was not listed. `Listing.skipped` holds the items listed but not taken in, each with
+   its reason, so a service can record one (a file too large) as failed rather than removed.
 3. `Fetcher(...).fetch_changed(..., on_listed=..., on_fetched=...)` hands each new version to the service in
    listing order.
 4. `Listing.settle(place, status)` moves the place on after a finished run, then the service saves it.
@@ -34,3 +36,7 @@ the knowledge source's `config`, and the held items are the source's knowledge i
 | A reader with its own state loses its place between pages, or fetches a file whose marker did not move | `packages/ops_sources/tests/test_reading.py` |
 | A plugin breaks a role the loop reads it by (places, every page of changes, a version and its tag, the access list, a delete) | `ops_plugin_sdk.testing.knowledge_contract` (its own cases in `packages/ops_plugin_sdk/tests/test_knowledge_contract.py`), run by each plugin's own tests in the plugins repository (SharePoint, Confluence, Website) |
 | Knowledge syncs differently through the package | kb-service's sync suite: `tests/test_tool_sources.py`, `test_source_contract.py`, `test_connector_plugins.py`, `test_web_source.py`, `test_schedule_health.py` |
+
+`ops_plugin_sdk.testing` pages through a listing with its own `_list_all` rather than this package: it calls the
+plugin in process and in sync against the plugin's fake, and the plugin SDK ships to the plugins repository without
+the service packages this loop needs.
