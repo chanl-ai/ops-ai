@@ -1926,13 +1926,18 @@ class ConnectionService:
                 timeout=TEST_TIMEOUT_S,
                 extensions=for_tenant(tenant_id, prepared.certificate if prepared else None, hosts or ()),
             )
-        return await self.http.get(
+        asked = self.http.build_request(
+            "GET",
             url,
             params=(prepared.params or None) if prepared else None,
             headers=prepared.headers if prepared else None,
             timeout=TEST_TIMEOUT_S,
             extensions=for_tenant(tenant_id, prepared.certificate if prepared else None, hosts or ()),
         )
+        if prepared is not None and prepared.signer is not None:
+            # A kind that signs each request (aws_sigv4) signs the test as it signs a tool's call.
+            asked.headers.update(prepared.signer("GET", str(asked.url), dict(asked.headers), asked.content))
+        return await self.http.send(asked)
 
     async def pin_default(self, who: Caller, connection_id: str) -> AccountView:
         """Makes the caller's own sign-in on this account their default among the app's accounts: a call
