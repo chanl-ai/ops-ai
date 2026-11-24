@@ -36,7 +36,7 @@ with people_stack(agents_env={"OPS_REGISTRY_AUTO_APPROVE": "false"}) as (api, ag
     check("a viewer cannot decide the review (403)", r.status_code == 403, r.text[:200])
     r = api.post("/v1/settings/members/invite", json={"emails": ["x@harborpine.example"], "role": "viewer"}, headers=h)
     check("the builder cannot invite anyone (403)", r.status_code == 403, r.text[:200])
-    r = api.put("/v1/policies/requesterMayDecide", json={"value": False}, headers=h)
+    r = api.put("/v1/policies/stepUp", json={"value": True}, headers=h)
     check("the builder cannot change a policy (403)", r.status_code == 403, r.text[:200])
 
 finish()

@@ -9,17 +9,17 @@ Status: current. Id: `uc-009`. Service: `agents-service`. Layers: api.
 | PostgreSQL :5477 and OPA :8181 | `make db-up` |
 | Free use-case ports | agents :8790 |
 
-The script starts the agents service on the scripted model with `OPS_DEV_POLICIES='{"requesterMayDecide": false}'`,
-the dev stand-in for a workspace whose admin switched the policy off. The policy is open by default, so a
-workspace that never sets it lets the asker decide; a two-approver review still needs two different people.
+The script starts platform-service and the agents service on the scripted model, with platform sign-in so each person
+carries their roles. James is a Builder, whose role lacks Approvals · decide; Priya is the team's Admin, whose role
+has it. A person decides their own request only while a role they hold has that cell (Access › Roles).
 
 ## Steps and expected results
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | As Dana (`X-Dev-User`), ask the fraud agent to hold wire W-88213 | The reply pauses on an approval |
-| 2 | As Dana, step up and approve | 403, "someone else has to decide it" |
-| 3 | As Lee, step up and approve | 200, approved |
+| 1 | As James (platform sign-in), ask the fraud agent to hold wire W-88213 | The reply pauses on an approval |
+| 2 | As James, step up and approve | 403, "someone else has to decide it" |
+| 3 | As Priya, step up and approve | 200, approved |
 
 ## Acceptance layers
 

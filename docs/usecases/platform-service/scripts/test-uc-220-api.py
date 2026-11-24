@@ -16,7 +16,7 @@ with people_stack() as (api, _):
 
     r = api.put("/v1/settings/sign-in/providers/password", json=PASSWORD_PROVIDER, headers=sec)
     check("the Security team admin sets a sign-in provider (200)", r.status_code == 200, r.text[:200])
-    r = api.put("/v1/policies/requesterMayDecide", json={"value": False}, headers=sec)
+    r = api.put("/v1/policies/mcpConnectionHours", json={"value": 12}, headers=sec)
     check("the Security team admin changes a policy (200)", r.status_code == 200, r.text[:200])
 
     # An admin of team_ops only. Priya is a workspace admin with Security admin in every team, so she holds the right.

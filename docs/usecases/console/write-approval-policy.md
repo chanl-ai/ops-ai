@@ -14,7 +14,7 @@ Status: current. Id: `uc-059`. Service: `console`. Layers: ui.
 | # | Step | Expected |
 |---|---|---|
 | 1 | James adds a write operation to a draft module and opens it on the module page | the row has no "Two approvers"; the sheet names no approving team and has no team picker (a held write is decided by its run's team) |
-| 2 | He picks "Two different people" and stages the change | the PATCH carries `approvers: 2`; the operation comes back with it and per-call approval on; the sheet has no self-approval switch (the tenant's requesterMayDecide policy decides that) |
+| 2 | He picks "Two different people" and stages the change | the PATCH carries `approvers: 2`; the operation comes back with it and per-call approval on; the sheet has no self-approval switch (the Approvals · decide cell of the asker's role decides that) |
 | 3 | He closes the sheet | the row reads "Two approvers" |
 | 4 | A fresh read of the module | `approvers` 2, no `selfApproval` |
 

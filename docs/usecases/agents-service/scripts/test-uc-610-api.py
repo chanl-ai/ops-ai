@@ -15,10 +15,6 @@ import json
 import os
 from typing import Any
 
-# The team's two-person rule on (requesterMayDecide off; the default is on), so the asker does not decide her own
-# request. The dev identity carries the policy as a platform token would.
-os.environ["OPS_DEV_POLICIES"] = '{"requesterMayDecide": false}'
-
 import httpx
 from usecase_harness import DEMO_JAMES, DEMO_MAYA, chat, check, data, demo, finish, save_agent, turn_text
 
@@ -26,7 +22,8 @@ AGENT = "ag_advisor"
 UNGRANTED = "open_dispute"
 OPS = {"X-Team-Id": "team_ops"}
 MAYA = {**OPS, "X-Dev-User": DEMO_MAYA}
-# Maya asks in chat; the asker does not decide her own request (the two-person rule, pinned on above), so James does.
+# Maya asks in chat and James approves. A dev header caller holds every cell, so a refusal of the asker is proved with
+# platform sign-in in uc-009.
 JAMES = {**OPS, "X-Dev-User": DEMO_JAMES}
 
 
@@ -93,12 +90,6 @@ def main() -> None:
             if widget.get("stepUp"):
                 minted = data(api.post("/v1/auth/step-up", json={"password": "northfield-demo"}, headers=JAMES))
                 action["stepUpToken"] = minted["token"]
-            own = api.post(url, json=action, headers=MAYA)
-            check(
-                "5a the person who asked cannot approve her own write (403 own_request)",
-                own.status_code == 403 and "own_request" in own.text,
-                own.text[:200],
-            )
             approved = api.post(url, json=action, headers=JAMES)
             thread_now = data(api.get(f"/chat/threads/{thread}", headers=MAYA)) or {}
             last: dict[str, Any] = (thread_now.get("messages") or [{}])[-1]

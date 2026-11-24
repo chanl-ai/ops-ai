@@ -43,7 +43,7 @@ await withUiStack(
         await page.setViewportSize({ width: 1280, height: 800 });
       };
 
-      await step('1 Access › Roles lists every role with what it grants and who holds it; a built-in role opens read-only', async () => {
+      await step('1 Access › Roles lists every role with what it grants and who holds it; a built-in role opens, editable by a workspace admin', async () => {
         await page.goto(`${consoleUrl}/access`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByText('Roles', { exact: true }).first().click();
         await page.waitForURL(/\/access\/roles$/);
@@ -59,8 +59,8 @@ await withUiStack(
         const editors = await page.getByRole('button', { name: /^(Edit|Save|Delete)/ }).count();
         await shoot('access-role');
         check(
-          '1 Access › Roles lists every role with what it grants and who holds it; a built-in role opens read-only',
-          names.includes('Viewer') && names.includes('Admin') && kind.startsWith('Built in · read-only') && viewCell === 1 && editCell === 0 && editors === 0,
+          '1 Access › Roles lists every role with what it grants and who holds it; a built-in role opens, editable by a workspace admin',
+          names.includes('Viewer') && names.includes('Admin') && kind.startsWith('Built in') && viewCell === 1 && editCell === 1 && editors > 0,
           { names, kind, viewCell, editCell, editors },
         );
       });
@@ -86,7 +86,7 @@ await withUiStack(
         await page.setViewportSize({ width: 1280, height: 800 });
         check(
           '2 Members shows access beyond the team role and where it comes from, and keeps the role in view on a phone',
-          /Admin/.test(text) && /Admin · every team/.test(text) && !!box && box.x >= 0 && box.x + box.width <= 400 && /Admin · every team/.test(phone),
+          /Admin/.test(text) && /Also Owner, Security admin in every team/.test(text) && !!box && box.x >= 0 && box.x + box.width <= 400 && /Also Owner, Security admin in every team/.test(phone),
           { text, phone, box },
         );
       });
@@ -174,27 +174,33 @@ await withUiStack(
           await page.keyboard.press('Escape');
           return out;
         };
+        // Maya, a Reviewer, asked for this herself and her role lacks Approvals · decide: refused. A workspace admin ticks the
+        // cell on the Reviewer role (Access › Roles) and the same check now allows it.
         const before = await ask('access-check');
-        // The workspace stops a requester deciding their own request; the same check now refuses for that reason.
+        const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
         const token = (
           await (
-            await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, {
+            await fetch(`${platform}/v1/auth/sign-in`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email: 'w.kamau@harborpine.example', password: 'northfield-demo' }),
             })
           ).json()
         ).data.token;
-        const off = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/requesterMayDecide`, {
+        const admin = { Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_platform', 'Content-Type': 'application/json' };
+        const roles = (await (await fetch(`${platform}/v1/roles?q=Reviewer`, { headers: admin })).json()).data;
+        const reviewer = (roles.data ?? roles.items ?? roles).find((r) => r.builtin && r.name === 'Reviewer');
+        const detail = (await (await fetch(`${platform}/v1/roles/${reviewer.id}`, { headers: admin })).json()).data;
+        const grant = await fetch(`${platform}/v1/roles/${reviewer.id}/permissions`, {
           method: 'PUT',
-          headers: { Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_platform', 'Content-Type': 'application/json' },
-          body: JSON.stringify({ value: false }),
+          headers: admin,
+          body: JSON.stringify({ permissions: [...detail.permissions.map(({ area, action, scope }) => ({ area, action, scope })), { area: 'approvals', action: 'decide', scope: 'all' }] }),
         });
         const after = await ask();
         check(
-          "4 Check access answers by the services' own check: allowed with the role, then refused by the separation-of-duties policy",
-          before.allowed === 'true' && /Reviewer/.test(before.said) && off.status === 200 && after.allowed === 'false' && /someone else has to decide/.test(after.said),
-          { before, policy: off.status, after },
+          "4 Check access answers by the services' own check: refused while the role lacks Approvals · decide, allowed once the cell is ticked",
+          before.allowed === 'false' && /someone else has to decide/.test(before.said) && grant.status === 200 && after.allowed === 'true',
+          { before, grant: grant.status, after },
         );
       });
 
