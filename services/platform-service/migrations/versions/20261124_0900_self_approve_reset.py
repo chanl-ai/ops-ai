@@ -88,11 +88,11 @@ def reset(c: sa.Connection) -> None:
     at = now_iso()
     stored = {
         t: _json(v)
-        for t, v in c.execute(sa.text("SELECT tenant_id, value FROM policies WHERE key = :k"), {"k": KEY}).all()
+        for t, v in c.execute(sa.select(policies.c.tenant_id, policies.c.value).where(policies.c.key == KEY)).all()
     }
     floors = {
         t: _json(v)
-        for t, v in c.execute(sa.text("SELECT tenant_id, value FROM policies WHERE key = :k"), {"k": FLOOR}).all()
+        for t, v in c.execute(sa.select(policies.c.tenant_id, policies.c.value).where(policies.c.key == FLOOR)).all()
     }
     teams = {t for (t,) in c.execute(sa.text("SELECT id FROM teams")).all()}
     audit: list[dict[str, Any]] = []
@@ -152,7 +152,7 @@ def downgrade() -> None:
                     .values(value=detail["before"])
                 )
         current = c.execute(
-            sa.text("SELECT value FROM policies WHERE tenant_id = :t AND key = :k"), {"t": tenant, "k": KEY}
+            sa.select(policies.c.value).where(policies.c.tenant_id == tenant, policies.c.key == KEY)
         ).first()
         if current is None:
             continue
@@ -170,4 +170,4 @@ def downgrade() -> None:
                 policies.update().where(policies.c.tenant_id == tenant, policies.c.key == KEY).values(value=value)
             )
         else:
-            c.execute(sa.text("DELETE FROM policies WHERE tenant_id = :t AND key = :k"), {"t": tenant, "k": KEY})
+            c.execute(policies.delete().where(policies.c.tenant_id == tenant, policies.c.key == KEY))
