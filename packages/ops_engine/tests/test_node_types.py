@@ -92,3 +92,19 @@ def test_every_type_explains_itself_to_a_builder_in_plain_words() -> None:
             if found := _NOT_FOR_BUILDERS.search(text):
                 problems.append(f"{t.id}: {name} contains {found.group(0)!r}")
     assert not problems, "\n".join(problems)
+
+
+def test_what_a_failure_does_matches_the_worker() -> None:
+    """The sheet's When it fails reads `fails`: after its retries a step with an error port goes on by it (the
+    wrapper's `"error" in output_ports`); any other step's run waits as Stuck or stops as Failed, by the cause. A
+    `how` naming an Error path the type does not have would contradict it."""
+    problems: list[str] = []
+    for t in default_registry().all():
+        wired = "error" in t.output_ports() or any(p == "error" for _, _, p in t.optional_outputs)
+        fails = str(t.view().get("fails") or "")
+        always = "error" in t.output_ports()
+        if wired != ("Error path" in fails) or always == ("Stuck" in fails and "Failed" in fails):
+            problems.append(f"{t.id}: fails says {fails!r}")
+        if "Error path" in t.how and not wired:
+            problems.append(f"{t.id}: how names an Error path it does not have")
+    assert not problems, "\n".join(problems)

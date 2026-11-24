@@ -54,6 +54,8 @@ export interface EngineNodeType {
   summary?: string;
   /** A few plain sentences behind "How this step works". */
   how?: string;
+  /** What a failure does once the retries are used, in the engine's words: the Error path or a Failed run. */
+  fails?: string;
   inputs: EnginePort[];
   outputs: EnginePort[];
   /** A list parameter whose entries become the out ports (a review's options); `outputs` is its default. */

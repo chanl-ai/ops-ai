@@ -157,6 +157,8 @@ class NodeTypeView(Out):
     # Plain words for the step sheet: one sentence, then how it works, fails or waits and what it hands on.
     summary: str
     how: str
+    # What a failure does once the retries are used: goes on by the Error path, or stops the run as Failed.
+    fails: str
     inputs: list[PortView]
     outputs: list[PortView]
     # The list parameter whose entries become the out ports (a review's options); the declared outputs are its default.

@@ -14612,6 +14612,10 @@
             "title": "Extraoutputs",
             "type": "array"
           },
+          "fails": {
+            "title": "Fails",
+            "type": "string"
+          },
           "group": {
             "title": "Group",
             "type": "string"
@@ -14716,6 +14720,7 @@
           "description",
           "summary",
           "how",
+          "fails",
           "inputs",
           "outputs",
           "outputsFrom",
@@ -67958,7 +67963,7 @@
     },
     "/v1/workflows/definitions/{workflow_id}/sample": {
       "get": {
-        "description": "What `step` receives: each step that can finish before it, from the working copy when one is open, with each\nfield's name, path and the value the acting team's newest finished run gave it, so the sheet joins nothing. All\nsteps when `step` is left out. Only the acting team's runs feed it, through the runs list's own team rule and\n`visible_run`; values are masked when the team masks personal data for people. 403 unless the caller may view the\nteam's workflows. No request transaction: documents-service, tools-service and the masking policy are asked with\nnone open.",
+        "description": "What `step` receives: each step that can finish before it, from the working copy when one is open, with each\nfield's name, path and the value the acting team's newest finished run gave it, so the sheet joins nothing. All\nsteps when `step` is left out. Only the acting team's runs feed it, through the runs list's own team rule and\n`visible_run`; values are masked when the team masks personal data for people. 403 unless the caller may view the\nteam's workflows. One transaction for the run and its steps; documents-service, tools-service and the masking\npolicy are asked with none open.",
         "operationId": "workflows_definition_sample",
         "parameters": [
           {

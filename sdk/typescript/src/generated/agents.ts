@@ -3529,8 +3529,8 @@ export interface paths {
          *     field's name, path and the value the acting team's newest finished run gave it, so the sheet joins nothing. All
          *     steps when `step` is left out. Only the acting team's runs feed it, through the runs list's own team rule and
          *     `visible_run`; values are masked when the team masks personal data for people. 403 unless the caller may view the
-         *     team's workflows. No request transaction: documents-service, tools-service and the masking policy are asked with
-         *     none open.
+         *     team's workflows. One transaction for the run and its steps; documents-service, tools-service and the masking
+         *     policy are asked with none open.
          */
         get: operations["workflows_definition_sample"];
         put?: never;
@@ -9017,6 +9017,8 @@ export interface components {
             executor: string;
             /** Extraoutputs */
             extraOutputs?: string[];
+            /** Fails */
+            fails: string;
             /** Group */
             group: string;
             /** How */

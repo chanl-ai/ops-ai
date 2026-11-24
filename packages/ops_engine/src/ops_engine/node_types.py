@@ -173,6 +173,23 @@ class NodeType:
         dropped = {port for param, value, port in self.outputs_unless if _holds(parameters, param, value)}
         return [p for p in ports + [p for p in [*self.extra_outputs, *extra] if p not in ports] if p not in dropped]
 
+    def fails(self) -> str:
+        """What a failure does once the step's own retries are used, as the compiler's Wrapper and the worker do it: a
+        step with an error port goes on by it; otherwise a cause that can pass retries the run, then pauses it as
+        Stuck (MAX_PASSES), and any other cause fails the run."""
+        on_error = "It goes on by the Error path, so the steps you join to it decide what happens next."
+        stops = (
+            "If the cause can pass, such as an app not answering, the run is tried again later and then waits as "
+            "Stuck for your team to retry it. Otherwise the run stops as Failed."
+        )
+        if "error" in self.output_ports():
+            return on_error
+        if any(port == "error" for _, _, port in self.optional_outputs):
+            return (
+                f"When its settings give it an Error path, it goes on by it. Without one: {stops[0].lower()}{stops[1:]}"
+            )
+        return stops
+
     def view(self) -> Json:
         return {
             "id": self.id,
@@ -182,6 +199,7 @@ class NodeType:
             "description": self.description,
             "summary": self.summary,
             "how": self.how,
+            "fails": self.fails(),
             "inputs": [p.view() for p in self.inputs],
             "outputs": [p.view() for p in self.outputs],
             "outputsFrom": self.outputs_from,

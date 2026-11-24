@@ -111,7 +111,9 @@ Settings, When it fails, What it gives, Try step. A trigger type's own panel goe
 of `TRIGGER_PANELS` in `trigger-panels.tsx` (props `node`, `workflowId`, `readOnly`, `onChange(parameters)`); the sheet
 never names a trigger type. A panel that saves on its own keeps its own Save button and says so. A value from an earlier
 step is picked with the field picker (`field-picker.tsx`), which reads the sample route once per sheet; nothing types a
-path except All settings.
+path except All settings. When it fails prints the engine type's `fails` text (`NodeType.fails` in
+`packages/ops_engine/src/ops_engine/node_types.py`), so the sheet says what the runner does: the Error path when the
+type has one, otherwise Stuck for a cause that can pass and Failed for any other.
 
 ## Responsive
 

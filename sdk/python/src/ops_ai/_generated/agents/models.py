@@ -3648,6 +3648,7 @@ class NodeTypeView(TypedDict, closed=True):
     effects: str
     executor: str
     extraOutputs: NotRequired[list[str]]
+    fails: str
     group: str
     how: str
     id: str

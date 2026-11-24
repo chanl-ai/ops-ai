@@ -233,7 +233,7 @@ function WhatItReceives({ sample }: { sample: ReturnType<typeof useStepSample> }
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
-/** Retries and the time limit in words; the step has no error path to choose. */
+/** Retries and the time limit in words, then what a failure does as the engine says it (its Error path or the run). */
 function WhenItFails({ type, parameters }: { type: EngineNodeType; parameters: Record<string, unknown> }) {
   const again = Math.max(0, (type.retry?.attempts ?? 1) - 1);
   const timeout = typeof parameters.timeoutSeconds === 'number' ? parameters.timeoutSeconds : type.timeoutSeconds;
@@ -243,7 +243,7 @@ function WhenItFails({ type, parameters }: { type: EngineNodeType; parameters: R
         <KeyValues
           rows={[
             ['Tries again', again === 0 ? 'No. It tries once.' : `Up to ${plural(again, 'more time')}, waiting a little longer each time.`],
-            ['If it still fails', 'The run stops as Failed and your team sees it in Runs.'],
+            ['If it still fails', type.fails || 'The run stops as Failed and your team sees it in Runs.'],
             ['Gives up after', `${plural(Math.round(timeout), 'second')} for each try.`],
           ]}
         />
