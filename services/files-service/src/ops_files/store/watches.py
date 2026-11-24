@@ -56,7 +56,8 @@ file_watches = sa.Table(
     sa.Column("last_outcome", sa.JSON),
     # The number the next event takes; moved only by the lease holder, in the transaction that writes the events.
     sa.Column("next_event", sa.Integer, nullable=False, server_default="1"),
-    # {source id: size} of files refused for their size, so a check says one again only when its size changes.
+    # {source id: "<size>:<version tag>"} of files refused for their size, so a check says one again only for a new
+    # version.
     sa.Column("refused_sizes", sa.JSON),
     sa.Index("ix_file_watches_requested", "check_requested_at"),
     info={**TENANT_SCOPED, **team_owned("team")},
@@ -396,14 +397,15 @@ class WatchesStore(Store):
                 payload={"watchId": watch_id, "lastEvent": int(row[1]) - 1, "checkedAt": at.isoformat(), **outcome},
             )
 
-    async def refused_sizes(self, watch_id: str) -> dict[str, int]:
-        """{source id: size} of the watch's files refused for their size at the last check that saw them."""
+    async def refused_sizes(self, watch_id: str) -> dict[str, str]:
+        """{source id: "<size>:<version tag>"} of the watch's files refused for their size, as the last check that saw
+        them listed them."""
         async with self.tx() as c:
             found = (await c.execute(sa.select(file_watches.c.refused_sizes).where(*self._mine(watch_id)))).scalar()
         sizes = cast(dict[str, object], found or {})
-        return {k: v for k, v in sizes.items() if isinstance(v, int)}
+        return {k: v for k, v in sizes.items() if isinstance(v, str)}
 
-    async def save_refused_sizes(self, watch_id: str, *, owner: str, sizes: dict[str, int]) -> bool:
+    async def save_refused_sizes(self, watch_id: str, *, owner: str, sizes: dict[str, str]) -> bool:
         """Keeps at most REFUSED_KEPT of `sizes` as `owner`; false when it no longer holds the lease."""
         kept = dict(list(sizes.items())[:REFUSED_KEPT])
         w = file_watches

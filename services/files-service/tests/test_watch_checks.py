@@ -264,7 +264,8 @@ async def test_two_checks_at_once_run_one_and_a_check_that_lost_its_lease_stops(
         reader.got = {"drv!a": _file("a", "e3", b"a, refunded"), "drv!b": _file("b", "e1", b"b")}
 
         async def taken(_item: str) -> None:
-            async with engine.begin() as c:
+            # In the tenant's own transaction: SQL Server's row security hides every row from a bare connection.
+            async with WatchesStore(engine).tx() as c:
                 await c.execute(sa.update(file_watches).values(lease_owner="chk_other"))
 
         reader.on_get = taken
@@ -426,12 +427,17 @@ async def test_a_file_refused_for_size_at_either_limit_is_one_failed_event_with_
         reader.pages = listing(22020096, "e2")
         clock[0] = datetime(2026, 12, 18, 9, 0, tzinfo=UTC)
         await checks.check(watch_id)
+        # c is edited again at the same size, a new version at the source: it is fetched and said once more.
+        reader.pages = listing(22020096, "e3")
+        clock[0] = datetime(2026, 12, 26, 9, 0, tzinfo=UTC)
+        await checks.check(watch_id)
         events = await WatchesStore(engine).events(watch_id, after=1)
     assert [(e.kind, e.path, e.code, e.reason) for e in events] == [
         ("failed", "b.pdf", "too_large", "Larger than 25 MB"),
         ("failed", "c.pdf", "too_large", "Larger than 25 MB"),
         ("failed", "c.pdf", "too_large", "Larger than 25 MB"),
+        ("failed", "c.pdf", "too_large", "Larger than 25 MB"),
     ]
     assert [e.size for e in events][-1] == 22020096
     assert [f.get("code") for f in first.failures] == ["too_large", "too_large"]
-    assert reader.fetched().count("drv!c") == 2
+    assert reader.fetched().count("drv!c") == 3

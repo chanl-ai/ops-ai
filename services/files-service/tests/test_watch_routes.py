@@ -166,8 +166,10 @@ async def test_a_viewer_cannot_change_a_watch_and_another_team_cannot_reach_it(
         again = await builder.post(f"/v1/watches/{watch_id}/check", headers=OPS)
         assert (again.status_code, again.json()["error"]["code"]) == (409, "already_checking"), again.text
 
-    async with engine.connect() as c:
-        rows = (await c.execute(sa.select(service_outbox.c.name, service_outbox.c.payload))).all()
+    # Read in the team's own transaction: SQL Server's row security hides every row from a bare connection.
+    with isolation.scope(tenant, "team_ops"):
+        async with WatchesStore(engine).tx() as c:
+            rows = (await c.execute(sa.select(service_outbox.c.name, service_outbox.c.payload))).all()
     audited = [p["action"] for n, p in rows if n == "audit.recorded" and p["targetId"] == watch_id]
     assert audited == ["files.watch.created", "files.watch.checked"], rows
 

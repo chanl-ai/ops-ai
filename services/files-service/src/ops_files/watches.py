@@ -292,8 +292,8 @@ class WatchChecks:
 
         # Every file the listing refused is kept from removal; only a refusal for its size is a failed event, since a
         # file a folder's rule leaves out was never meant to come in.
-        # A file refused for its size is said once per size: listed again at the size it was refused at, it is
-        # neither a new event nor fetched again.
+        # A file refused for its size is said once per version: listed again at the size and version tag it was
+        # refused at, it is neither a new event nor fetched again; an edit at the same size is a new tag.
         skipped_ids: set[str] = set()
         for r in listing.skipped:
             skipped_ids.add(str(r["id"]))
@@ -305,10 +305,10 @@ class WatchChecks:
                 held.file_id if held else None, None, "failed", reason, _size_of(r), _title(r), now, code="too_large"
             )
             outcome.fail(event)
-            if _said(refused, str(r["id"]), _size_of(r)):
+            if _said(refused, str(r["id"]), _seen_as(r)):
                 failed.append(event)
         for r in listing.changed:
-            if (size := _size_of(r)) is not None and refused.get(str(r["id"])) == size:
+            if (seen := _seen_as(r)) is not None and refused.get(str(r["id"])) == seen:
                 skipped_ids.add(str(r["id"]))
         if skipped_ids & {str(r["id"]) for r in listing.changed}:
             listing = dataclasses.replace(
@@ -360,7 +360,7 @@ class WatchChecks:
                 outcome.fail(event)
                 # One failed event per version: a check that tries it again names it on the row, not as a new event.
                 if code == "too_large":
-                    if _said(refused, source_id, _size_of(r)):
+                    if _said(refused, source_id, _seen_as(r)):
                         failed.append(event)
                 elif source_id in done.failed_first:
                     failed.append(event)
@@ -436,11 +436,17 @@ def _listing_code(listing: Listing) -> str:
     return "list_failed" if listing.status != "success" else ""
 
 
-def _said(refused: dict[str, int], source_id: str, size: int | None) -> bool:
-    """True, remembering the size, when a size refusal of the file has not been said at this size."""
-    if size is not None and refused.get(source_id) == size:
+def _seen_as(r: Json) -> str | None:
+    """The file as a listing saw it, its size and version tag; None when the listing gave no size."""
+    size = _size_of(r)
+    return None if size is None else f"{size}:{r.get('marker') or ''}"
+
+
+def _said(refused: dict[str, str], source_id: str, seen: str | None) -> bool:
+    """True, remembering how it was seen, when a size refusal of this version of the file has not been said."""
+    if seen is not None and refused.get(source_id) == seen:
         return False
-    refused[source_id] = size if size is not None else -1
+    refused[source_id] = seen or ""
     return True
 
 
