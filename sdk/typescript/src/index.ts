@@ -3,7 +3,7 @@ export { type ArgsOf, type DataOf, NOUNS, OpsAI, Raw, Resource, TERMINAL, type W
 export { Agents } from './agents.js';
 export { actionBody, Chat, connectCard } from './chat.js';
 export { Templates } from './templates.js';
-export { Workflows, WorkflowCheck } from './workflows.js';
+export { Schedules, Workflows, WorkflowCheck } from './workflows.js';
 export {
   BadRequest, codeOf, Conflict, type ErrorKind, Forbidden, NotFound, OpsError, RateLimited, type RunFailure, RunFailed, ServerError,
   Unauthorized,
