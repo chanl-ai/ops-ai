@@ -51,17 +51,13 @@ async def test_a_policy_refusal_is_reported_as_the_policy_not_the_grid(signin: S
     team = await _team_of(signin, approver)
     h = await _headers(signin, await _admin_email(signin), team)
     asked = {"personId": approver, "area": "reviews", "action": "decide", "requestedBy": approver_email}
-    # Per team: turned on in the approver's team, by its workspace admin.
-    in_team = h
-    on = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": True}, headers=in_team)
-    assert on.status_code == 200, on.text
-    assert (await _check(signin, h, **asked))["allowed"] is True, (
-        "a workspace that turned it on lets a requester decide"
-    )
-    off = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": False}, headers=in_team)
-    assert off.status_code == 200, off.text
+    # Approve own requests is Approvals · decide, which only Admin holds; a saved requesterMayDecide is retired.
     refused = await _check(signin, h, **asked)
     assert (refused["allowed"], refused["refusedBy"]["code"]) == (False, "own_request"), refused
+    me = await signin.public.get("/v1/me", headers={"Authorization": signin.admin["Authorization"]})
+    admin_email = str(me.json()["data"]["user"]["email"])
+    own = {"personId": str(me.json()["data"]["user"]["id"]), "requestedBy": admin_email}
+    assert (await _check(signin, h, **{**asked, **own}))["allowed"] is True, "the admin holds the cell"
     # The admin reads a refusal about the person checked, not one addressed to the admin.
     assert refused["refusedBy"]["reason"].startswith(f"{approver_email} asked for this"), refused
     audit = await signin.public.get("/v1/audit?action=access.check", headers=h)

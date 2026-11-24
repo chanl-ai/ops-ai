@@ -5290,7 +5290,7 @@
       "memoryRetentionDays": null,
       "pageImages": {},
       "publishReview": {},
-      "requesterMayDecide": true,
+      "requesterMayDecide": false,
       "reviewSlaHours": 8,
       "securityTeamAddsSecrets": false,
       "skillPublishStrict": {},
@@ -10556,7 +10556,7 @@
         "extractionFloor": 0.8,
         "mcpConnectionHours": 8,
         "memoryRetentionDays": null,
-        "requesterMayDecide": true,
+        "requesterMayDecide": false,
         "reviewSlaHours": 8,
         "securityTeamAddsSecrets": false,
         "stepUp": false
@@ -10716,7 +10716,7 @@
           "extractionFloor": 0.8,
           "mcpConnectionHours": 8,
           "memoryRetentionDays": null,
-          "requesterMayDecide": true,
+          "requesterMayDecide": false,
           "reviewSlaHours": 8,
           "securityTeamAddsSecrets": false,
           "stepUp": false
@@ -12323,7 +12323,7 @@
       "extractionFloor": 0.8,
       "mcpConnectionHours": 8,
       "memoryRetentionDays": null,
-      "requesterMayDecide": true,
+      "requesterMayDecide": false,
       "reviewSlaHours": 8,
       "securityTeamAddsSecrets": false,
       "stepUp": false
@@ -12368,7 +12368,7 @@
         "extractionFloor": 0.8,
         "mcpConnectionHours": 8,
         "memoryRetentionDays": null,
-        "requesterMayDecide": true,
+        "requesterMayDecide": false,
         "reviewSlaHours": 8,
         "securityTeamAddsSecrets": false,
         "stepUp": false
@@ -12528,7 +12528,7 @@
           "extractionFloor": 0.8,
           "mcpConnectionHours": 8,
           "memoryRetentionDays": null,
-          "requesterMayDecide": true,
+          "requesterMayDecide": false,
           "reviewSlaHours": 8,
           "securityTeamAddsSecrets": false,
           "stepUp": false

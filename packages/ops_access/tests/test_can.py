@@ -107,13 +107,22 @@ async def test_the_requester_does_not_decide() -> None:
     refused("own_request", ACCESS.can, p, "reviews", "decide", team="team_a", not_by=[None, "a@bank.test"])
 
 
-async def test_a_reviewers_own_request_is_refused_only_while_the_teams_two_person_rule_is_on() -> None:
-    default = await person(access={"team_a": ["reviewer"]})
-    assert ACCESS.can(default, "reviews", "decide", team="team_a", requested_by=["a@bank.test"]) == "all"
-    strict = await person(access={"team_a": ["reviewer"]}, policies={"requesterMayDecide": False})
-    assert ACCESS.can(strict, "reviews", "decide", team="team_a", requested_by=["b@bank.test"]) == "all"
-    refused("own_request", ACCESS.can, strict, "reviews", "decide", team="team_a", requested_by=["a@bank.test"])
-    refused("own_request", ACCESS.can, strict, "reviews", "decide", team="team_a", requested_by=[None, "usr_1"])
+async def test_only_a_holder_of_approvals_decide_decides_their_own_request() -> None:
+    """Approve own requests is the Approvals · decide cell, held in the team that decides: a Reviewer decides others'
+    reviews and is refused their own, whatever the retired requesterMayDecide says; an Admin, or a custom role ticked
+    with the cell, decides their own; the role-less dev caller passes as it passes every role rule."""
+    asked = ["a@bank.test"]
+    reviewer = await person(access={"team_a": ["reviewer"]}, policies={"requesterMayDecide": True})
+    assert ACCESS.can(reviewer, "reviews", "decide", team="team_a", requested_by=["b@bank.test"]) == "all"
+    refused("own_request", ACCESS.can, reviewer, "reviews", "decide", team="team_a", requested_by=asked)
+    refused("own_request", ACCESS.can, reviewer, "reviews", "decide", team="team_a", requested_by=[None, "usr_1"])
+    builder = await person(access={"team_a": ["builder"]})
+    refused("own_request", ACCESS.can, builder, "agents", "decide", team="team_a", requested_by=asked)
+    officer = await person(
+        access={"team_a": ["loan_officer"]},
+        grids={"loan_officer": encode_grid((("workflows", "run", "all"), ("approvals", "decide", "all")))},
+    )
+    assert ACCESS.can(officer, "workflows", "run", team="team_a", requested_by=asked) == "all"
     dev = Principal(
         kind="person",
         sub="usr_dev",
@@ -125,38 +134,20 @@ async def test_a_reviewers_own_request_is_refused_only_while_the_teams_two_perso
         roles={},
         scopes=[],
         auth_method="dev",
-        policies={"requesterMayDecide": False},
     )
-    refused("own_request", ACCESS.can, dev, "reviews", "decide", requested_by=["dana@bank.test"])
+    assert ACCESS.can(dev, "reviews", "decide", requested_by=["dana@bank.test"]) == "all"
+    # Separation of duties still binds the dev caller: an earlier approver does not approve twice.
+    refused("own_request", ACCESS.can, dev, "reviews", "decide", not_by=["dana@bank.test"])
 
 
-async def test_a_team_that_saved_nothing_lets_the_requester_decide_and_the_floor_takes_it_back() -> None:
-    """A team with no saved part (a new team, the sample team) reads the default: the two-person rule off. A team that
-    turned it on keeps it; the Security team's floor (`approvalsFloor`) takes it back from everyone but an Admin."""
-    others_saved = {"requesterMayDecide": {"team_a": False}}
-    new_team = await person(
-        team="team_b", team_ids=["team_a", "team_b"], access={"team_b": ["reviewer"]}, policies=others_saved
-    )
-    asked = ["a@bank.test"]
-    assert ACCESS.can(new_team, "reviews", "decide", team="team_b", requested_by=asked) == "all"
-    turned_on = await person(access={"team_a": ["reviewer"]}, policies=others_saved)
-    refused("own_request", ACCESS.can, turned_on, "reviews", "decide", team="team_a", requested_by=asked)
-    floored = await person(access={"team_a": ["reviewer"]}, policies={"approvalsFloor": {"requesterMayDecide": False}})
-    refused("own_request", ACCESS.can, floored, "reviews", "decide", team="team_a", requested_by=asked)
-
-
-async def test_an_admin_decides_her_own_request_whatever_the_rule_but_not_one_she_already_approved() -> None:
-    strict = {"requesterMayDecide": False, "approvalsFloor": {"requesterMayDecide": False}}
-    admin = await person(access={"team_a": ["admin"]}, policies=strict)
+async def test_an_admin_decides_her_own_request_but_not_one_she_already_approved() -> None:
+    admin = await person(access={"team_a": ["admin"]}, policies={"approvalsFloor": {"requesterMayDecide": False}})
     assert ACCESS.can(admin, "agents", "decide", team="team_a", requested_by=["a@bank.test"]) == "all"
     # An earlier approver of a two-person decision still does not approve it twice.
     refused("own_request", ACCESS.can, admin, "agents", "decide", team="team_a", not_by=["a@bank.test"])
-    # An Admin of another team is not one here.
+    # An Admin of another team holds the cell there, not here.
     elsewhere = await person(
-        team="team_b",
-        team_ids=["team_a", "team_b"],
-        access={"team_a": ["admin"], "team_b": ["reviewer"]},
-        policies=strict,
+        team="team_b", team_ids=["team_a", "team_b"], access={"team_a": ["admin"], "team_b": ["reviewer"]}
     )
     refused("own_request", ACCESS.can, elsewhere, "reviews", "decide", team="team_b", requested_by=["a@bank.test"])
 
@@ -193,6 +184,13 @@ def test_an_api_key_starts_live_runs_and_cancels_its_own_only() -> None:
     refused("role_required", ACCESS.can, k, "workflows", "edit", team="team_a")
     refused("role_required", ACCESS.can, k, "reviews", "decide", team="team_a")
     refused("team_forbidden", ACCESS.can, k, "workflows", "run", team="team_b")
+
+
+def test_an_api_key_never_approves_its_own_write_whatever_roles_it_carries() -> None:
+    """A key holds no Approvals · decide cell, even one minted by an Admin whose access it carries."""
+    for k in (key(), key().model_copy(update={"access": {"team_a": ["admin"]}})):
+        assert ACCESS.can(k, "tools", "run", team="team_a", requested_by=["ana@bank.test"]) == "all"
+        refused("own_request", ACCESS.can, k, "tools", "run", team="team_a", requested_by=["ci@bank.test"])
 
 
 async def test_a_service_needs_the_scope_its_token_lists() -> None:

@@ -13,10 +13,9 @@ A person's action is held in the team the record belongs to, which must be the t
 `team_forbidden` naming it otherwise), except the Security team's actions (`SECURITY_TEAM_ACTIONS`), held in the
 Security team whatever team the request acts in. Scope `own` passes only for a record whose `owner` is the caller.
 `not_by` names people who may never take the action, such as an earlier approver of a two-person decision (403
-`own_request`); `requested_by` names who asked for it (or saved or started it), refused the same way only when the
-person is not an Admin of the team and the team turned the two-person rule on (`requesterMayDecide` false for the
-area, on by default) or the Security team's `approvalsFloor` locks it off. Both
-are separation of duties, not role rules, so they bind the dev header caller too. A token without the `access` claim
+`own_request`); `requested_by` names who asked for it (or saved or started it), refused the same way unless the
+person holds Approvals · decide in the deciding team (Admin only by default; a key never). `not_by` is separation of
+duties, not a role rule, so it binds the dev header caller too. A token without the `access` claim
 maps `roles` through the membership mapping, which the grid test proved equal.
 
 The grid for a role id comes from `Grids`, cached by (tenant, permission version): the version rises with every role,
@@ -45,7 +44,7 @@ from .catalogue import (
     builtin_roles_for,
     decode_grid,
 )
-from .policies import policy, requester_may_decide
+from .policies import policy
 
 BUILTIN_GRIDS: dict[str, tuple[Grant, ...]] = {r.id: r.grants for r in BUILTIN_ROLES}
 BUILTIN_NAMES = {r.id: r.name for r in BUILTIN_ROLES}
@@ -188,15 +187,19 @@ class Access:
         if p.kind == "service":
             return _service(p, area, action, team)
         deciding_in = team or p.team_id
-        # An Admin of the team decides their own request whatever the team's two-person rule or the floor say; `not_by`
-        # (an earlier approver of a two-person decision, a step's notDecidedBy) still binds them.
-        may_decide = (deciding_in is not None and ADMIN_ROLE in self.roles_in(p, deciding_in)) or requester_may_decide(
-            policy(p, "requesterMayDecide"), deciding_in, area, policy(p, "approvalsFloor")
+        # Approve own requests is the Approvals · decide cell in the team that decides (Admin only by default); the
+        # role-less dev caller holds it as it holds every cell, and an API key never does. `not_by` (an earlier
+        # approver of a two-person decision, a step's notDecidedBy) binds every holder.
+        dev = p.auth_method == "dev" and not p.roles and not p.access
+        may_decide = dev or (
+            p.kind != "api_key"
+            and deciding_in is not None
+            and self.scope(p, "approvals", "decide", deciding_in) is not None
         )
         refused = [*not_by, *(requested_by if not may_decide else ())]
         if any(n and n.lower() in (p.email.lower(), p.sub.lower()) for n in refused):
             raise Forbidden(f"{you} asked for {what}, so someone else has to decide it.", code="own_request")
-        if p.auth_method == "dev" and not p.roles and not p.access:
+        if dev:
             # The dev header caller holds no role, so it passes every role rule; on a record with an owner it acts on
             # its own only, as every service treated it before `can` (chat reads, rule and knowledge changes).
             if owner is not None and owner.strip().lower() != p.email.strip().lower():

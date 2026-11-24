@@ -49,7 +49,7 @@ async def test_saving_an_approval_answer_reports_it_to_agents_in_the_same_transa
     # Agents-service keeps each team's tool list, with every write's answer, for 30 s; it drops the list on this event.
     team, admin = signin.admin["X-Team-Id"], signin.admin
     assert (await put(signin, "appChanges", {"ask": True, "answer": "person"}, admin)).status_code == 200
-    assert (await put(signin, "requesterMayDecide", True, admin)).status_code == 200
+    assert (await put(signin, "stepUp", True, admin)).status_code == 200
     async with signin.engine.connect() as c:
         rows = (await c.execute(sa.select(platform_outbox).where(platform_outbox.c.tenant_id == signin.tenant))).all()
     assert [(r.name, r.team_id, r.payload) for r in rows] == [("policy.changed", team, {"key": "appChanges"})], rows

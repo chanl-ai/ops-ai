@@ -83,13 +83,11 @@ DEFAULT_PUBLISH_MODE = "major"
 POLICIES: tuple[Policy, ...] = (
     Policy(
         "requesterMayDecide",
-        # On by default: the person who asked may decide, as the team's roles allow. A team that wants a second person
-        # turns the two-person rule on, which stores false for the team. A team that stored nothing reads this default,
-        # so every existing team without a saved value takes it. An Admin of the team decides their own request
-        # whatever the value (`can`).
-        True,
-        "The person who asked for a decision may also make it. Off (the two-person rule, an advanced setting): someone "
-        "else has to decide, unless the person is an Admin of the team.",
+        # Retired in 1.2.0: who decides their own request is the Approvals · decide cell (`can`), and nothing reads
+        # this value. It stays declared, off, so an older service reads Admin only and an older console's save gets
+        # 409 policy_retired; the stored values (false since the reset revision) go in a later release.
+        False,
+        "Retired: whoever holds Approvals · decide in the roles matrix may approve their own requests.",
         kind="by_area",
         changed_by=APPROVALS,
         per_team=True,

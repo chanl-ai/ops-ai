@@ -60,6 +60,14 @@ class Policies:
         return self._rows(await self.store.values(tenant_id))
 
     async def set(self, actor: Actor, key: str, value: Any) -> PolicyView:
+        if key == "requesterMayDecide":
+            # Approve own requests is the Approvals · decide cell from 1.2.0; the stored value stays, false, for a
+            # rolled-back service to read, and an older console that saves it is told where the setting went.
+            raise Conflict(
+                "Who may approve their own requests is now the Approvals · decide row of the roles matrix.",
+                code="policy_retired",
+                details={"area": "approvals", "action": "decide"},
+            )
         # The cell the policy names: settings.manage in the security team for most, approvals.manage in the acting team
         # for a team's approval rule (`held_in`), chat.manage for memory retention.
         # An old key lands in appChanges / appChangesByApp (the store moves it), so the cell checked is that key's:
