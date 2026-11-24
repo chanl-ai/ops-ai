@@ -53,6 +53,7 @@ from ._words import (
     AsyncSecrets,
     AsyncTools,
     AsyncUsage,
+    AsyncWatches,
     Credentials,
     Egress,
     Me,
@@ -61,6 +62,7 @@ from ._words import (
     Secrets,
     Tools,
     Usage,
+    Watches,
 )
 from ._workflows import AsyncWorkflows, Workflows
 from .errors import OpsError, RunFailed
@@ -386,6 +388,10 @@ class AsyncTasks(AsyncResource):
 
 
 class Files(Resource):
+    def __init__(self, raw: Raw, noun: Noun) -> None:
+        super().__init__(raw, noun)
+        self.watches = Watches(raw)
+
     def upload(self, name: str, content: bytes, *, mime: str, purpose: str, transport: Transport) -> Any:
         """Uploads bytes the way the console does: a ticket, the bytes, then complete. The same bytes again answer
         the file already stored."""
@@ -401,6 +407,10 @@ class Files(Resource):
 
 
 class AsyncFiles(AsyncResource):
+    def __init__(self, raw: AsyncRaw, noun: Noun) -> None:
+        super().__init__(raw, noun)
+        self.watches = AsyncWatches(raw)
+
     async def upload(self, name: str, content: bytes, *, mime: str, purpose: str, transport: AsyncTransport) -> Any:
         meta, key = _upload_meta(name, content, mime, purpose)
         ticket = await self._raw.files.files_create_upload(meta, idempotency_key=key)

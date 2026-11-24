@@ -71,7 +71,7 @@ AREAS: dict[str, tuple[Area, str]] = {
     "runs": (runs_main, "workflow runs: list, start, show, events, cancel, retry"),
     "tasks": (tasks_main, "Human Tasks: list, types, show, decide, approve"),
     "cases": (cases_main, "cases: list, types, show, note"),
-    "files": (files_main, "files: list, show, upload, limits"),
+    "files": (files_main, "files: list, show, upload, limits, watch (watched folders)"),
     "documents": (documents_main, "document types and extractions"),
     "people": (people_main, "members, invites (printed unless --send), roles, me"),
     "models": (models_main, "model aliases, providers, keys, and a test turn (--confirm)"),
