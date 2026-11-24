@@ -459,7 +459,7 @@ def check_value(key: str, value: Any) -> Any:
         "makersAsk}",
         "app_changes_by_app": "an object of app id to {answer (none, person or reviewer), reviewerRole}",
         "by_area": f"true or false, or {{{', '.join(BY_AREA_TAKES)}: true or false}}",
-        "floor_rules": "an object with requesterMayDecide (false) and appChanges (person or reviewer)",
+        "floor_rules": "an object with appChanges (person or reviewer)",
     }
     raise ValueError(f"{key} takes {takes[policy.kind]}")
 
@@ -512,9 +512,9 @@ ANSWERS = ("none", "person", "reviewer")
 BY_AREA_TAKES = ("reviews",)
 
 # What the Security team may lock under every team's approval rules (`approvalsFloor`), each with the values it takes:
-# requesterMayDecide false (nobody decides their own request, in any team or area); appChanges the least answer an
-# agent's change to an app waits for (the person, or a reviewer), at the team, app and tool level alike.
-FLOOR_RULES: dict[str, tuple[Any, ...]] = {"requesterMayDecide": (False,), "appChanges": ("person", "reviewer")}
+# appChanges, the least answer an agent's change to an app waits for (the person, or a reviewer), at the team, app and
+# tool level alike. Who approves their own requests is the Approvals · decide cell, never a floor.
+FLOOR_RULES: dict[str, tuple[Any, ...]] = {"appChanges": ("person", "reviewer")}
 
 
 def requester_may_decide(value: object, team: str | None, area: str, floor: object = None) -> bool:
@@ -539,12 +539,9 @@ def requester_may_decide(value: object, team: str | None, area: str, floor: obje
 
 def below_floor(key: str, value: object, floor: object) -> str | None:
     """Why one team's value of an approval rule is looser than the Security team's floor, or None when it is not.
-    `value` is the team's part as `check_value` keeps it: requesterMayDecide true or {area: bool}; appChanges {ask,
-    answer}; appChangesByApp {app or tool: {answer}}."""
+    `value` is the team's part as `check_value` keeps it: appChanges {ask, answer}; appChangesByApp {app or tool:
+    {answer}}."""
     rules = json_object(floor)
-    if key == "requesterMayDecide" and rules.get("requesterMayDecide") is False:
-        on = value is True or True in json_object(value).values()
-        return "The Security team does not let whoever asked decide their own request." if on else None
     least = rules.get("appChanges")
     if least not in ("person", "reviewer"):
         return None

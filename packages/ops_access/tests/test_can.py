@@ -347,6 +347,15 @@ def test_a_publish_mode_is_read_per_team_and_defaults_to_major() -> None:
             check_value("publishReview", bad)
 
 
+def test_the_security_floor_locks_only_app_changes() -> None:
+    """Approve own requests is the Approvals · decide cell, so the floor no longer takes the retired
+    requesterMayDecide: a floor saving it is refused rather than kept as a value nothing reads."""
+    assert check_value("approvalsFloor", {"appChanges": "reviewer"}) == {"appChanges": "reviewer"}
+    for bad in ({"requesterMayDecide": False}, {"requesterMayDecide": False, "appChanges": "person"}):
+        with pytest.raises(ValueError, match="approvalsFloor"):
+            check_value("approvalsFloor", bad)
+
+
 async def test_a_builder_holds_every_cell_but_people_access_and_workspace_settings() -> None:
     """D59: builders do everything in their team except people and access and the workspace's settings, connections and
     secrets included, which they read and admins change."""
