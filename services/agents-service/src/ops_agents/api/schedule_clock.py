@@ -47,7 +47,7 @@ log = get_logger("ops_agents.api.schedule_clock")
 KEY = "schedule_clock"
 EVERY_S = 60.0
 SCHEDULE_TRIGGER = "ops.trigger.schedule"
-# A run started this long after its slot is marked late on the trigger list.
+# A run started this long after its slot is marked late on the trigger list; a slot is never missed sooner.
 LATE_AFTER = timedelta(seconds=90)
 # A run that blocks the next tick: one a worker has or will pick up. Waiting for a person and Stuck do not block, or
 # one stuck run would stop the schedule for good.
@@ -253,7 +253,9 @@ class ScheduleClock:
         await self._forget_old(s, now)
         tick = Tick(s, definition, slot)
         upcoming = self.kinds.next_slots(s.rule, slot, 1)
-        if upcoming and now - slot > (upcoming[0] - slot) / 2:
+        # Missed past half the interval, but never within LATE_AFTER: a pass lands up to EVERY_S after its slot, which
+        # for a one-minute rule is already past half, and that is a normal pass, not an outage.
+        if upcoming and now - slot > max((upcoming[0] - slot) / 2, LATE_AFTER):
             if await record("missed"):
                 await self._log(
                     tick, "missed", reason="The clock was down past half the interval, so this slot did not run."
