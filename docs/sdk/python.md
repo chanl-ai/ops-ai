@@ -121,7 +121,7 @@ step = "start"                                           # the Schedule trigger 
 ops.workflows.schedules.kinds()                          # each rule kind, its label and the JSON Schema of its fields
 ops.workflows.schedules.preview(kind="every", every=15, unit="minutes", tz="Europe/London")  # words and next runs
 ops.workflows.schedules.save("held_wires", step, kind="every", every=15, unit="minutes", start="07:00", tz="Europe/London")
-ops.workflows.schedules.show("held_wires", step)         # the rule, its words, next runs and last outcome
+ops.workflows.schedules.show("held_wires", step)         # the rule, its words, next runs, last outcome and its reason, the saver's name, last run id and idle code (changedByName, lastOutcomeReason, lastRunId, idleCode)
 ops.workflows.schedules.clear("held_wires", step)
 ```
 
