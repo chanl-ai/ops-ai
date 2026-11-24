@@ -19,6 +19,7 @@ from typing import Any, NotRequired, TypedDict, cast
 from langgraph.types import Command
 
 from ops_access import can
+from ops_agent_kernel.pii import masked
 from ops_agents.graphs.definition import WorkflowDefinition, option_declarations, option_name
 from ops_service_kit import narrow
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ValidationFailed
@@ -145,6 +146,39 @@ class ChatReview(TypedDict):
 Review = ChatReview | engine_reviews.EngineReview | ReviewView | Json
 # A review as the list reads it: also a run's review step as all_rows lists it, until expand builds it.
 Listed = Review | engine_reviews.EngineRow
+
+
+# What names a task and is nobody's personal data: its ids, state and timing, and the team and person it is with. They
+# stay as they are for every reader, so a masked task still opens, links and sorts.
+_TASK_KEEP = frozenset(
+    {
+        "id", "runId", "threadId", "reviewId", "workflowId", "workflowVersion", "agentSlug", "caseId", "origin",
+        "status", "kind", "risk", "policy", "decidingTeam", "assignee", "canDecide", "actionTool", "stepName",
+        "workflowName", "createdAt", "dueAt", "decidedAt", "slaMinutes", "href", "url",
+    }
+)  # fmt: skip
+
+
+def as_seen_by(reader: Principal, review: Listed) -> Listed:
+    """A task as `reader` reads it. Whoever may decide it (`reviews.decide` in its deciding team, by `can()`: an
+    Approver's, a Builder's and an Admin's by default) sees its real values, which they check before they approve;
+    anyone else who may open it sees its personal data masked by the same rule as a run's page (`ops_pii.masked`).
+    A review with no deciding team (a publish request) holds a definition, not a customer's data, and is left."""
+    team = narrow.json_object(review.get("decidingTeam") or {}).get("id")
+    if not isinstance(team, str) or team in review_teams(reader):
+        return review
+    return cast(Listed, _for_reader(cast(JsonValue, review)))
+
+
+def _for_reader(value: JsonValue, key: str | None = None) -> JsonValue:
+    if key in _TASK_KEEP:
+        return value
+    if isinstance(value, dict) and not ("label" in value and "value" in value):
+        return {k: _for_reader(v, k) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_for_reader(v, key) for v in value]
+    # A scalar, or a {label, value} row, which ops_pii masks by its label.
+    return cast(JsonValue, masked(value, key))
 
 
 class ReviewStats(TypedDict):

@@ -1,7 +1,10 @@
 """Masking personal data in what an agent's turn shows, by failure mode: an SSN, its last
 four, a card or account number, an email or a phone reaches a reply, a stored message, a step's output or a citation;
 a number streamed across two chunks shows its first half unmasked; an amount, a date or a case number is masked by
-mistake; the model stops seeing the real value, so a turn cannot chain on it; the setting off still masks."""
+mistake; the model stops seeing the real value, so a turn cannot chain on it; the setting off still masks; a value
+named as an SSN, account, card or tax id (ssnLast4 "4471", accountIds ["CHQ-1003"], a number-typed account) passes
+because no pattern finds it in the value alone; a field that only mentions an account or a card (a count, a name, chat's
+own cards) is masked by mistake."""
 
 from __future__ import annotations
 
@@ -19,6 +22,7 @@ from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.pii import StreamMasker, mask
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.types import AgentSettings, Passage, PromptFragment, ToolGrant, TurnRequest
+from ops_pii import masked
 
 READ = ToolGrant(
     "get_customer",
@@ -27,7 +31,15 @@ READ = ToolGrant(
     "read",
     {"type": "object", "properties": {"id": {"type": "string"}}},
 )
-RECORD = {"name": "Ann Lee", "ssn": "123-45-6789", "email": "ann.lee@example.com", "account": "4401235567"}
+RECORD = {
+    "name": "Ann Lee",
+    "ssn": "123-45-6789",
+    "email": "ann.lee@example.com",
+    "account": "4401235567",
+    # The fake bank's own field names: no pattern finds a last four or a lettered account id in the value alone.
+    "ssnLast4": "4471",
+    "accountIds": ["CHQ-1003", "BUS-7781"],
+}
 REPLY = "Ann Lee, SSN ending 6789, email ann.lee@example.com, phone (902) 555-0147, account 4401235567."
 
 
@@ -69,6 +81,73 @@ def test_each_kind_of_personal_data_is_masked(text: str, shown: str) -> None:
 )
 def test_amounts_dates_case_numbers_and_ids_are_not_masked(text: str) -> None:
     assert mask(text) == text
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "shown"),
+    [
+        ("ssnLast4", "4471", "[SSN]"),
+        ("ssn_last4", 4471, "[SSN]"),
+        ("SSN", 123456789, "[SSN]"),
+        ("accountId", "BUS-7781", "[account]"),
+        ("account_id", 77810042, "[account]"),
+        ("accountIds", ["CHQ-1003", 4410], ["[account]", "[account]"]),
+        ("accountNumber", 4401235567.0, "[account]"),
+        ("account_number", "4401235567", "[account]"),
+        ("cardLast4", "5521", "[card]"),
+        ("card_last4", 5521, "[card]"),
+        ("cardNumber", 4111111111111111, "[card]"),
+        ("taxId", "98-7654321", "[tax ID]"),
+        ("tax_id", 987654321, "[tax ID]"),
+        ("taxpayerIdLast4", "4321", "[tax ID]"),
+    ],
+)
+def test_a_value_is_masked_by_its_field_name_whatever_its_type(key: str, value: Any, shown: Any) -> None:
+    assert masked({"customer": {key: value}}) == {"customer": {key: shown}}
+    # A field drawn as a labelled row ({label, value}) is named by its label.
+    label = " ".join(key.replace("_", " ").split())
+    assert masked([{"label": label, "value": value}]) == [{"label": label, "value": shown}]
+
+
+@pytest.mark.parametrize(
+    ("text", "shown"),
+    [
+        ('{"ssnLast4": "4471", "name": "Ann"}', '{"ssnLast4": "[SSN]", "name": "Ann"}'),
+        ("{'accountId': 'BUS-7781', 'document': 'ID'}", "{'accountId': '[account]', 'document': 'ID'}"),
+        ('{"accountNumber": 4401, "card_last4": 5521}', '{"accountNumber": "[account]", "card_last4": "[card]"}'),
+        ("Account id BUS-7781; Document proof", "Account id [account]; Document proof"),
+        ('{"accountIds": ["CHQ-1003", "BUS-7781"]}', '{"accountIds": ["[account]", "[account]"]}'),
+        ("Tax ID 98-7654321 was filed", "Tax ID [tax ID] was filed"),
+    ],
+)
+def test_a_field_named_in_text_is_masked_by_its_name(text: str, shown: str) -> None:
+    assert mask(text) == shown
+    # Streamed after more than HOLD characters, the name and its value are released together wherever it is cut.
+    said = f"The bank returned this for the customer: {text} and nothing else was on file today."
+    for cut in range(1, len(said)):
+        stream = StreamMasker()
+        assert stream.push(said[:cut]) + stream.push(said[cut:]) + stream.flush() == mask(said), cut
+    assert mask(said) == f"The bank returned this for the customer: {shown} and nothing else was on file today."
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("accountName", "Acme Lending"),
+        ("account_holder", "Ann Lee"),
+        ("accountCount", 3),
+        ("accounts", 2),
+        ("tax", 13.0),
+        ("card_limit", 5000),
+        ("ssnVerified", True),
+        ("ssnLast4", None),
+        ("amount", 1250000),
+        ("cards", [{"type": "case", "id": "cas_0001"}]),
+    ],
+)
+def test_fields_that_name_no_identifier_are_kept(key: str, value: Any) -> None:
+    assert masked({key: value}) == {key: value}
+    assert mask(json.dumps({key: value})) == json.dumps({key: value})
 
 
 @pytest.mark.parametrize("cut", range(1, len(REPLY)))
@@ -133,7 +212,14 @@ async def test_what_a_turn_shows_is_masked_while_the_model_reads_the_real_values
     finished = events[-1]
     assert isinstance(finished, TurnFinished)
     assert streamed == mask(REPLY) == finished.result.text
-    assert output == {"name": "Ann Lee", "ssn": "[SSN]", "email": "[email]", "account": "[account]"}
+    assert output == {
+        "name": "Ann Lee",
+        "ssn": "[SSN]",
+        "email": "[email]",
+        "account": "[account]",
+        "ssnLast4": "[SSN]",
+        "accountIds": ["[account]", "[account]"],
+    }
     assert finished.result.tool_calls[0].output == output
     # The model was given the record as it is, so it can chain on the account id.
     assert any("123-45-6789" in s and "4401235567" in s for s in seen)

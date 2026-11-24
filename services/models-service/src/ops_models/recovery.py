@@ -40,7 +40,7 @@ REPLAYABLE = frozenset({"model_call_row_lost", "model_call_settle_unfinished_at_
 
 
 # What ops_pii.mask writes in place of personal data: an id holding one is not the id the call was made with.
-_MASKED = ("[email]", "[SSN]", "[card]", "[phone]", "[account]", "[redacted]")
+_MASKED = ("[email]", "[SSN]", "[card]", "[phone]", "[account]", "[tax ID]", "[redacted]")
 
 
 def masked(call: Charge) -> bool:

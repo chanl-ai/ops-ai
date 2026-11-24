@@ -10,13 +10,12 @@ whitespace, so a number arriving across two chunks is masked as one, and an emai
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, cast
 
 from ops_contracts.skill_run import RunningSkill, SkillProgram, SkillRunState, SubRun
 
 # The patterns and whole-text masking live in ops_pii, which services that are not agents use too (documents' examples);
 # they are re-exported here so every caller of ops_agent_kernel.pii is unchanged.
-from ops_pii import HOLD, StreamMasker, holds_placeholder, mask
+from ops_pii import HOLD, StreamMasker, holds_placeholder, mask, masked
 
 from .types import CitationRef, ToolCallRecord, TurnResult
 
@@ -31,17 +30,6 @@ __all__ = [
     "masked_run",
     "remarked",
 ]
-
-
-def masked(value: Any) -> Any:
-    """A JSON value with every string in it masked."""
-    if isinstance(value, str):
-        return mask(value)
-    if isinstance(value, list):
-        return [masked(v) for v in cast(list[Any], value)]
-    if isinstance(value, dict):
-        return {k: masked(v) for k, v in cast(dict[str, Any], value).items()}
-    return value
 
 
 def masked_call(rec: ToolCallRecord) -> ToolCallRecord:

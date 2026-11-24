@@ -636,8 +636,9 @@ def masked_story[T](value: T, key: str | None = None) -> T:
     if isinstance(value, dict):
         return cast(T, {k: masked_story(v, k) for k, v in cast(Json, value).items()})
     if isinstance(value, list):
-        return cast(T, [masked_story(v) for v in cast(JsonList, value)])
-    return cast(T, masked(value)) if isinstance(value, str) else value
+        return cast(T, [masked_story(v, key) for v in cast(JsonList, value)])
+    # A number is masked only under a field named as personal data (ssnLast4, accountId); a count or amount stays.
+    return cast(T, masked(value, key)) if isinstance(value, str | int | float) else value
 
 
 # Where an email came from and arrived (`shapes.EMAIL`): channel metadata, shown with masking on. What the email and
