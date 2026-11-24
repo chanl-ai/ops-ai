@@ -26,7 +26,7 @@ can read what they may and change none of it.
 | S1 | A brief with seven fields saves, makes a prompt with Never last, and a waiting version is never edited in place | api | 1-4 | 3 |
 | S2 | A developer does the same through the Python SDK | sdk | 5, 6 | 6 |
 | S3 | A developer does the same from a file with `opsai` | cli | 7, 8 | 8 |
-| S4 | The page reads as designed for a builder, a viewer and a member at 1440 and 390 | ui | 9-22 | 9-22 |
+| S4 | The page reads as designed for a builder, a viewer and a member at 1440 and 390 | ui | 9-22 | 20 |
 
 ## Steps and expected results
 
@@ -50,10 +50,10 @@ can read what they may and change none of it.
 | 16 | The header | Save state, Save, Test, Publish, menu in that order; no label over two words |
 | 17 | The page | Tools, Knowledge and Skills are sections on it |
 | 18 | James opens a skill | It opens on its instructions with an Insert menu and one Used by list |
-| 20 | James opens an agent whose publish waits | Withdraw is offered to him, and after it Edit and Send again |
+| 19 | Every page above at 390 and 1440 | No page scrolls sideways and none logs an error |
+| 20 | James opens an agent whose publish waits and presses Withdraw | The request goes through, the version is a draft again and the page shows no open review, and Send again is offered |
 | 21 | Ravi opens the same agent | He sees it is in review and no Withdraw |
 | 22 | Ravi opens a draft agent; Lena opens it too | Ravi sees the view only note with no Save and no Test; Lena is told she has no access |
-| all | Every page above at 390 | No sideways scroll and the same checks hold |
 
 ## Scripts
 
@@ -66,5 +66,7 @@ can read what they may and change none of it.
 
 ## Non-vacuous check
 
-Step 3 failed on the version list that did not name the waiting review (`reviewId` was null), and step 20 failed with it:
-the page offered no Withdraw. Both pass with the list naming the review. The other ui steps lock in what was built.
+Step 3 failed on the version list that did not name the waiting review (`reviewId` was null). Step 20 failed with the
+console posting the withdraw to `/publish-requests/...` without `/v1` (404): the version stayed `in_review` and the page
+kept its open review. Both pass with the list naming the review and the withdraw sent to `/v1/publish-requests/...`.
+The other ui steps lock in what was built.

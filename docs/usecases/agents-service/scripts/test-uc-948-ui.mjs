@@ -35,11 +35,14 @@ await withUiStack(
     };
     const draft = await mk('Draft desk');
     const live = await mk('Live desk');
-    const waiting = await mk('Waiting desk');
+    const waits = { 1440: await mk('Waiting desk wide'), 390: await mk('Waiting desk narrow') };
+    // One that stays in review for the viewer to read.
+    const kept = await mk('Waiting desk kept');
     const askFor = async (a) => call(J, `/v1/agents/${a.id}/publish-requests`, { version: (await call(J, `/v1/agents/${a.id}`, undefined, 'GET')).data.version });
     const liveRequest = (await askFor(live)).data;
     if (liveRequest?.status === 'pending') await call(M, `/v1/publish-requests/${liveRequest.id}/decision`, { decision: 'approved' });
-    await askFor(waiting);
+    await askFor(kept);
+    const requests = { 1440: (await askFor(waits[1440])).data, 390: (await askFor(waits[390])).data };
     const skill = (await call(J, '/v1/skills', { name: `Walk skill ${RUN}`, ownerTeam: 'team_ops', useWhen: 'The cardholder disputes a charge.', instructions: 'Say it.', steps: [{ do: 'Say hello.' }] })).data;
 
     const browser = await chromium.launch();
@@ -135,17 +138,27 @@ await withUiStack(
       const instructionsTab = james.getByRole('tab', { name: /^Instructions/ });
       note('18 a skill opens on its instructions with an Insert menu and a Uses list', (await instructionsTab.getAttribute('aria-selected').catch(() => null)) === 'true' && (await james.getByRole('button', { name: /^Insert/ }).count()) > 0 && (await james.getByRole('button', { name: /^Used by/ }).count()) > 0, '');
 
-      // A version waiting for review: its requester can take it back, edit it and send it again; a viewer only sees it.
+      // A version waiting for review: its requester can take it back, which leaves review, then send it again; a viewer only sees it.
+      const waiting = waits[width];
       await go(james, `/build/agents/${waiting.id}`, 'agent-publish-in-review');
       const withdraw = james.getByRole('button', { name: /^Withdraw/ });
       const offered = await withdraw.waitFor({ timeout: 8_000 }).then(() => true, () => false);
-      note('20 a waiting version offers Withdraw to its requester', offered, (await mainText(james)).slice(0, 200));
+      let left = false;
+      let again = 0;
+      let state = '';
       if (offered) {
+        const refused = [];
+        james.on('response', (r) => { if (r.url().includes('/withdraw') && r.status() >= 400) refused.push(`${r.status()} ${r.url()}`); });
         await withdraw.click();
-        const after = await james.getByRole('button', { name: /^(Send again|Edit)/ }).count();
-        note('20 a withdrawn version offers Edit and Send again', after >= 1, after);
+        await james.getByTestId('agent-locked-withdrawn').waitFor({ timeout: 10_000 }).catch(() => undefined);
+        // It left review: the request went through, the version is a draft again and the page shows no open review.
+        state = (await call(J, `/v1/agents/${waiting.id}/versions`, undefined, 'GET')).data?.find((v) => v.version === 1)?.state;
+        left = refused.length === 0 && state !== 'in_review' && (await james.getByTestId('agent-publish-in-review').count()) === 0 && (await james.getByTestId('agent-locked').count()) === 0;
+        again = await james.getByTestId('agent-locked-send-again').count();
+        if (refused.length) state = `${state} ${refused.join(' ')}`;
       }
-      await go(ravi, `/build/agents/${waiting.id}`, 'agent-brief');
+      note('20 a waiting version offers Withdraw, and withdrawing it takes it out of review and offers Send again', offered && left && again === 1, { offered, left, again, state, request: requests[width]?.id });
+      await go(ravi, `/build/agents/${kept.id}`, 'agent-brief');
       note('21 a viewer sees the waiting version and no Withdraw', (await ravi.getByRole('button', { name: /^Withdraw/ }).count()) === 0 && /In review/.test(await ravi.locator('body').innerText()), '');
 
       // The viewer reads the page and changes nothing; a member who only chats is refused the page.
@@ -156,8 +169,19 @@ await withUiStack(
       note('22 a member who only chats is told they have no access', /don’t have access here/.test(await lena.locator('main').innerText()), (await lena.locator('main').innerText()).slice(0, 120));
       for (const p of [james, ravi, lena]) await p.context().close();
     }
-    for (const f of fails) check(`${f.name} at ${f.width}`, false, f.detail);
-    check('9-22 the agent page reads as designed for a builder, a viewer and a member at 1440 and 390', fails.length === 0 && errors.length === 0, { fails: fails.map((f) => `${f.name} @${f.width}`), errors });
+    // One check per step of the doc, so each step shows as run: it passes when nothing under its number failed.
+    const TITLES = {
+      9: 'the brief reads as five bands', 10: 'there is no identity box', 11: 'each tab has its own address and Compare is its own page',
+      12: 'the channels are one list of seven places', 13: 'View prompt is read only with Never last', 14: 'the footer holds the uses link and View prompt',
+      15: 'the save state reads Unsaved then Saved after Cmd+S', 16: 'the header keeps one order and no label over two words', 17: 'tools, knowledge and skills are sections',
+      18: 'a skill opens on its instructions with an Insert menu and a Used by list', 19: 'no page scrolls sideways and none logs an error', 20: 'Withdraw takes a waiting version out of review and offers Send again',
+      21: 'a viewer sees a waiting version and no Withdraw', 22: 'a viewer reads the page and a member is refused it',
+    };
+    for (const [id, title] of Object.entries(TITLES)) {
+      const mine = fails.filter((f) => f.name.startsWith(`${id} `));
+      const quiet = Number(id) !== 19 || errors.length === 0;
+      check(`${id} ${title}, for a builder, a viewer and a member at 1440 and 390`, mine.length === 0 && quiet, { fails: mine, errors });
+    }
     await browser.close();
   },
   { platform: true, demo: true },
