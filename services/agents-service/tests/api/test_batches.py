@@ -353,3 +353,16 @@ async def test_a_grouped_batch_is_named_by_its_group_and_a_waiting_group_is_list
         ("Batch002", 2)
     ], waiting.text
     assert unknown.status_code == 404, unknown.text
+
+
+async def test_the_page_and_the_download_mask_personal_data_as_a_run_read_does(stack: Stack) -> None:  # noqa: F811
+    """A row's input and output are a run's data: the run page masks them while the team masks personal data (the
+    default), so the batch page and results.csv showed the emails the run page hides."""
+    c, _ = stack
+    rt, files = wired(c)
+    bid = (await batch(c, await ready(c, files, csv(2)))).json()["data"]["id"]
+    await tick(rt)
+    page = (await c.get(f"/v1/batches/{bid}", headers=BUILDER)).text
+    download = (await c.get(f"/v1/batches/{bid}/results.csv", headers=BUILDER)).text
+    for shown in (page, download):
+        assert "@example.com" not in shown and "[email]" in shown and "HM-23000" in shown, shown

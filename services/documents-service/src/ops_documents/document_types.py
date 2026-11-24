@@ -56,7 +56,7 @@ from ops_extract import boxes, rules, templates
 from ops_extract.checks import fold
 from ops_extract.shapes import FieldDefinition, Template
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
-from ops_pii import mask
+from ops_pii import masked as mask_json
 from ops_service_kit.http import Json, JsonList, JsonValue, PageJSON
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
@@ -790,14 +790,9 @@ class DocumentTypes:
 
 
 def masked(value: JsonValue) -> JsonValue:
-    """`value` with every string in it masked as the team masks personal data; numbers and the shape stay."""
-    if isinstance(value, str):
-        return mask(value)
-    if isinstance(value, list):
-        return [masked(v) for v in value]
-    if isinstance(value, dict):
-        return {k: masked(v) for k, v in value.items()}
-    return value
+    """`value` as the team masks personal data (`ops_pii.masked`): every string, and every value under a field named as
+    an SSN, account, card or tax id, a number included; the shape stays."""
+    return cast(JsonValue, mask_json(value))
 
 
 # A template is offered once this many checked reads share one layout, unless the type's

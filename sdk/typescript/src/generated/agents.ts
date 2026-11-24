@@ -884,7 +884,7 @@ export interface paths {
         };
         /**
          * Batch Page
-         * @description The batch's counts and every row, failed first: what its page shows.
+         * @description The batch's counts and every row, failed first: what its page shows. No request transaction (`_shown_rows`).
          */
         get: operations["batches_batch_page"];
         put?: never;
@@ -904,8 +904,8 @@ export interface paths {
         };
         /**
          * Batch Results
-         * @description Every row as the page shows it, one line each: row, input, status, outcome, run, error and output. Input and
-         *     output are JSON, so a value holding a comma or a quote reads back as it was.
+         * @description Every row as the page shows it, masked as the page masks it, one line each: row, input, status, outcome, run,
+         *     error and output. Input and output are JSON, so a value holding a comma or a quote reads back as it was.
          */
         get: operations["batches_batch_results"];
         put?: never;
@@ -2743,7 +2743,8 @@ export interface paths {
         };
         /**
          * Get Task
-         * @description The task's status and, once decided, the action, reason, values and decider.
+         * @description The task's status and, once decided, the action, reason, values and decider; the reason and values masked for a
+         *     person who may not decide it (`hitl_facade.sees_real_values`), as the task's own page shows them.
          */
         get: operations["reviews_get_task"];
         put?: never;
@@ -12291,7 +12292,7 @@ export interface components {
             /** Values */
             values: {
                 [key: string]: components["schemas"]["JsonValue"];
-            } | null;
+            } | components["schemas"]["JsonValue"][] | null;
         };
         /** TaskTypeDetail */
         TaskTypeDetail: {

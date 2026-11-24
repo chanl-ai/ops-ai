@@ -19,6 +19,7 @@ from typing import Any, NotRequired, TypedDict, cast
 from langgraph.types import Command
 
 from ops_access import can
+from ops_agent_kernel.pii import masked
 from ops_agents.graphs.definition import WorkflowDefinition, option_declarations, option_name
 from ops_service_kit import narrow
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ValidationFailed
@@ -145,6 +146,62 @@ class ChatReview(TypedDict):
 Review = ChatReview | engine_reviews.EngineReview | ReviewView | Json
 # A review as the list reads it: also a run's review step as all_rows lists it, until expand builds it.
 Listed = Review | engine_reviews.EngineRow
+
+
+# What names a task and is nobody's personal data: its ids, state and timing, and the team and person it is with. They
+# stay as they are for every reader, so a masked task still opens, links and sorts.
+_TASK_KEEP = frozenset(
+    {
+        "id", "runId", "threadId", "reviewId", "workflowId", "workflowVersion", "agentSlug", "caseId", "origin",
+        "status", "kind", "risk", "policy", "decidingTeam", "assignee", "canDecide", "actionTool", "stepName",
+        "workflowName", "createdAt", "dueAt", "decidedAt", "slaMinutes", "href", "url",
+    }
+)  # fmt: skip
+
+
+def sees_real_values(reader: Principal, review: Listed) -> bool:
+    """Whether `reader` reads a task's real values: an API key or a service reads back the tasks its own calls started
+    and decided, so both do; a person does when they hold `reviews.decide` in the task's deciding team, by `can()` (an
+    Approver, a Builder and an Admin by default). A publish request holds a definition, not a customer's data, so every
+    reader does; any other task that names no deciding team (a decided thread's stored review) is masked for a person,
+    so a missing team never shows the real values."""
+    if caller_of(reader).kind != "person" or publish_reviews.is_request_id(str(review.get("id") or "")):
+        return True
+    # Whoever may decide it now reads what they decide, as `can_decide` says: the asker of an "ask the person" step
+    # answers it alone, whatever roles they hold.
+    if review.get("canDecide") is True:
+        return True
+    team = narrow.json_object(review.get("decidingTeam") or {}).get("id")
+    return sees_real_values_in(reader, team if isinstance(team, str) else None)
+
+
+def sees_real_values_in(reader: Principal, team: str | None, *, asker: str | None = None) -> bool:
+    """`sees_real_values` for what a paused step holds where no task view is built (a thread's state, its events): an
+    API key or a service does, the asker of an "ask the person" step (`asker`) does, and a person who holds
+    `reviews.decide` in `team`."""
+    if caller_of(reader).kind != "person" or (asker is not None and reader.email == asker):
+        return True
+    return team is not None and team in review_teams(reader)
+
+
+def asker_of(payload: object) -> str | None:
+    """Who alone answers a paused step: the person who asked, when it asks them first (`check_thread_decider`)."""
+    step: Json = cast(Json, payload) if isinstance(payload, dict) else {}
+    return str(step.get("requested_by") or "") or None if step.get("ask_first") else None
+
+
+def as_seen_in[T](reader: Principal, team: str | None, value: T, *, asker: str | None = None) -> T:
+    """`value`, held by a step paused in `team`, as `reader` reads it (`sees_real_values_in`): as it is, or masked."""
+    return value if sees_real_values_in(reader, team, asker=asker) else cast(T, masked(value))
+
+
+def as_seen_by(reader: Principal, review: Listed) -> Listed:
+    """A task as `reader` reads it (`sees_real_values`): its real values, or its personal data masked by the same rule
+    as a run's page (`ops_pii.masked`), its ids, state and team kept at its top so it still opens, links and sorts; a
+    tool input's own id or status is masked like any other value."""
+    if sees_real_values(reader, review):
+        return review
+    return cast(Listed, masked(review, keep=_TASK_KEEP))
 
 
 class ReviewStats(TypedDict):

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "Account ids and SSN last fours are masked",
+  "description": "A value named as an SSN, an account, a card or a tax ID, such as an SSN's last four or an account id like BUS-7781, is now masked in chat, on a run's page, on a batch's page and in its results download, and in logs, numbers included. In Human Tasks, whoever may decide a task sees its real values to check them; anyone else who can open it sees them masked.",
+  "tag": "fix"
+}

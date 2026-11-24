@@ -630,15 +630,10 @@ def children_view(reads: ChildReads, people: NamedActors, *, scope: Any) -> tupl
 
 
 def masked_story[T](value: T, key: str | None = None) -> T:
-    """The story as people read it with masking on: every text but ids and enum words masked. The shape is kept: the
-    same keys and lists, each text masked in place."""
-    if key in _KEEP:
-        return value
-    if isinstance(value, dict):
-        return cast(T, {k: masked_story(v, k) for k, v in cast(Json, value).items()})
-    if isinstance(value, list):
-        return cast(T, [masked_story(v) for v in cast(JsonList, value)])
-    return cast(T, masked(value)) if isinstance(value, str) else value
+    """The story as people read it with masking on (`ops_pii.masked`): its own ids and enum words at its top kept, every
+    other text masked and a number masked only under a field named as personal data. The shape is kept: the same keys
+    and lists, each text masked in place."""
+    return cast(T, masked(value, key, keep=_KEEP))
 
 
 # Where an email came from and arrived (`shapes.EMAIL`): channel metadata, shown with masking on. What the email and

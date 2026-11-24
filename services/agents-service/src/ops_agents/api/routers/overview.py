@@ -105,12 +105,13 @@ async def overview(rt: Rt, me: Me) -> JSONResponse:
             overdue = [r for r in rows if hitl_facade.REVIEW_VIEWS["overdue"](r)]
             # A review with no SLA sorts last: nothing makes it urgent.
             urgent = sorted(open_rows, key=lambda r: (r.get("slaMinutes") is None, r.get("slaMinutes") or 0))[:URGENT]
-            urgent = await engine_reviews.expand(rt, urgent)
+            # As Human Tasks shows each one: real values only to who may decide it.
+            urgent = [hitl_facade.as_seen_by(me, r) for r in await engine_reviews.expand(rt, urgent)]
             names = {me.email, me.name}
             mine = sorted(
                 (r for r in open_rows if r.get("assignee") in names), key=lambda r: str(r.get("createdAt") or "")
             )
-            mine_listed = await engine_reviews.expand(rt, mine[:LISTED])
+            mine_listed = [hitl_facade.as_seen_by(me, r) for r in await engine_reviews.expand(rt, mine[:LISTED])]
             team = current_team()
             teams = [team] if team else teams_of(me)
             # The engine's runs, as the Runs page lists them: newest first, each named by its workflow version.

@@ -155,6 +155,23 @@ def test_nested_secrets_and_personal_data_are_removed_and_counts_kept(out: io.St
     assert line["input_tokens"] == 12
 
 
+def test_a_field_named_as_an_ssn_or_account_is_masked_whatever_its_value(out: io.StringIO) -> None:
+    """A last four or a lettered account id matches no pattern on its own; its field name says what it is."""
+    get_logger("ops_kit.test").info(
+        "kit.customer", customer={"ssnLast4": "4471", "accountIds": ["CHQ-1003", 4410]}, account_id="BUS-7781"
+    )
+    (line,) = lines(out)
+    assert line["customer"] == {"ssnLast4": "[SSN]", "accountIds": ["[account]", "[account]"]}
+    assert line["account_id"] == "[account]"
+
+
+def test_a_secret_under_a_personal_data_field_is_still_redacted(out: io.StringIO) -> None:
+    # Under a field named as personal data (account) the secret's own name was no longer looked at.
+    get_logger("ops_kit.test").info("kit.account", account={"id": "a1", "password": "hunter2", "token": SECRET})
+    (line,) = lines(out)
+    assert line["account"]["password"] == REDACTED and SECRET not in json.dumps(line), line
+
+
 def test_a_bearer_token_in_free_text_is_removed(out: io.StringIO) -> None:
     get_logger("ops_kit.test").info("kit.detail", detail=f"Authorization: {BEARER}")
     logging.getLogger("some.library").warning("Authorization: Bearer %s", SECRET)
