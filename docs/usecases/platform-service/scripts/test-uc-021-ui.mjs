@@ -1,6 +1,11 @@
 // uc-021 sign in, session, refresh, sign out, ui layer. Headless Chromium against a console signed in through
 // platform-service (dev seed: James Richardson, builder on team_ops), whose registry calls go to the agents service.
-import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { randomBytes } from 'node:crypto';
+
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { AGENTS_PORT, PLATFORM_PORT, SIGNIN_SECRET, check, chromium, expectSampleData, finish, proveDomains, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const EMAIL = 'j.richardson@harborpine.example';
@@ -8,7 +13,7 @@ const KEY = 'ops-platform-session';
 const stored = (page) => page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? 'null'), KEY);
 
 await withUiStack(
-  async (consoleUrl) => {
+  async (consoleUrl, stack) => {
     const browser = await chromium.launch();
     try {
       const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
@@ -151,12 +156,72 @@ await withUiStack(
         { invite: invited.success, accepted: accepted.status, twoItems, twoActive, teams: [...new Set(twoTeams)] },
       );
 
+      // A workspace that moves to company sign-in leaves two kinds of member who cannot sign in: a person with no
+      // password and no link, who gets a mailed link invite, and an admin in that state, who may not (an invite link
+      // never opens an admin's account) and links from their own session instead. The members list marks both, and
+      // Resend invites mails the first only, never showing a link.
+      const zone = `${randomBytes(4).toString('hex')}.harborpine.test`;
+      const json = { 'Content-Type': 'application/json' };
+      const call = async (method, path, body, token, team) => {
+        const r = await fetch(`${platform}${path}`, { method, headers: { ...json, ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(team ? { 'X-Team-Id': team } : {}) }, body: body ? JSON.stringify(body) : undefined });
+        return { status: r.status, body: await r.json().catch(() => null) };
+      };
+      const signedIn = async (email) => (await call('POST', '/v1/auth/sign-in', { email, password: 'northfield-demo' })).body?.data;
+      const priya = await signedIn('p.shah@harborpine.example');
+      let sam = (await signedIn('s.adeyemi@harborpine.example'))?.token;
+      const made = {};
+      for (const [who, role] of [['lost', 'builder'], ['boss', 'admin']]) {
+        const email = `${who}@${zone}`;
+        const inv = await call('POST', '/v1/settings/members/invite', { emails: [email], role }, priya.token, 'team_ops');
+        const acc = await call('POST', `/v1/invites/${inv.body?.data?.invites?.[0]?.token}/accept`, { name: `${who} person` });
+        made[who] = inv.status === 200 && acc.status === 200;
+      }
+      const samInvite = await call('POST', '/v1/settings/members/invite', { emails: ['s.adeyemi@harborpine.example'], role: 'admin' }, priya.token, 'team_ops');
+      const samAccepted = await call('POST', `/v1/invites/${samInvite.body?.data?.invites?.[0]?.token}/accept`, { name: 'Sam Adeyemi' }, sam);
+      sam = (await signedIn('s.adeyemi@harborpine.example'))?.token;
+      const oidc = await call('PUT', '/v1/settings/sign-in/providers/oidc-northfield', {
+        kind: 'oidc',
+        label: 'Harbor & Pine SSO',
+        domains: [zone],
+        oidc: { issuer: `${stack.idpUrl}/oidc/northfield`, clientId: 'ops-console', clientSecretRef: SIGNIN_SECRET },
+        jit: { team: 'team_ops', role: 'chat_user' },
+      }, sam, 'team_security');
+      if (oidc.status === 200) await proveDomains(oidc.body.data, { Authorization: `Bearer ${sam}`, 'X-Team-Id': 'team_security' });
+      const roster = await call('GET', '/v1/settings/members?pageSize=100', undefined, priya.token, 'team_ops');
+      const rows = roster.body?.data?.data ?? [];
+      const lost = rows.find((m) => m.email === `lost@${zone}`);
+      const boss = rows.find((m) => m.email === `boss@${zone}`);
+      check('the setup leaves one builder and one admin with no password or link, in a company-sign-in workspace', made.lost && made.boss && samAccepted.status === 200 && oidc.status === 200 && lost?.needsInvite === true && boss?.linksOwnSession === true, { made, sam: samAccepted.status, oidc: oidc.status, lost, boss });
+
+      expectSampleData('/settings/members');
+      const admin = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+      admin.on('pageerror', (e) => errors.push(e.message));
+      await admin.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await admin.evaluate(([k, issued]) => localStorage.setItem(k, JSON.stringify({ ...issued, issuedAt: new Date().toISOString() })), [KEY, priya]);
+      await admin.goto(`${consoleUrl}/settings/members`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await admin.getByTestId(`member-needs-invite-${lost?.id}`).waitFor({ timeout: 60_000 }).catch(() => undefined);
+      check('the members list marks the builder "Needs a new invite" and the admin "Link from your own session…"', (await admin.getByTestId(`member-needs-invite-${lost?.id}`).innerText().catch(() => '')).includes('Needs a new invite') && (await admin.getByTestId(`member-links-own-${boss?.id}`).innerText().catch(() => '')).includes('Link from your own session') && (await admin.getByTestId(`member-needs-invite-${boss?.id}`).count()) === 0);
+
+      await admin.getByTestId('reinvite-affected').click();
+      const reinvited = admin.waitForResponse((r) => r.url().endsWith('/v1/settings/members/reinvite'), { timeout: 30_000 });
+      await admin.getByRole('dialog').getByRole('button', { name: 'Send' }).click();
+      const reinvite = await (await reinvited).json().catch(() => null);
+      await admin.waitForTimeout(500);
+      const mailed = readdirSync(stack.mailDir).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(readFileSync(join(stack.mailDir, f), 'utf8')));
+      const toLost = mailed.filter((m) => (m.to ?? []).includes(`lost@${zone}`) && /\/invite\//.test(m.body ?? ''));
+      const toBoss = mailed.filter((m) => (m.to ?? []).includes(`boss@${zone}`));
+      check(
+        'Resend invites mails the builder’s own address only: no link in the answer or on the page, nothing to the admin',
+        reinvite?.data?.mailed?.some((m) => m.email === `lost@${zone}`) && reinvite?.data?.skipped?.some((s) => s.reason === 'links_own_session') && !JSON.stringify(reinvite).includes('/invite/') && toLost.length === 1 && toBoss.length === 0 && !(await admin.locator('body').innerText()).includes('/invite/'),
+        { reinvite: reinvite?.data, toLost: toLost.length, toBoss: toBoss.length },
+      );
+
       check('no page errors', errors.length === 0, errors);
     } finally {
       await browser.close();
     }
   },
-  { platform: true },
+  { platform: true, signIn: true },
 );
 
 finish();
