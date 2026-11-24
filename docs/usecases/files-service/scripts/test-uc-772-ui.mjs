@@ -6,6 +6,7 @@
 // (security) connect SharePoint through the API, as uc-678 proves at its own layers. The list's loading, empty and error
 // states are drawn by intercepting its one request. Every screen is shot at 1440 and 390 wide.
 import { spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { FILES_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, finish, shootBothWidths, withUiStack } from '@ops-ai/usecase-runner/harness';
@@ -106,6 +107,8 @@ try {
         await next.click();
         const sites = dialog.getByTestId('wf-sites-picker');
         const libraries = dialog.getByTestId('wf-libraries-picker');
+        const stepTwo = await dialog.innerText();
+        check('21 step 2 shows no developer text: no ids and no "page path"', !/page path|\bids?\b|_id\b/i.test(stepTwo), stepTwo.slice(0, 800));
         await sites.getByTestId('wf-sites-option').filter({ hasText: 'Human Resources' }).click({ timeout: 60_000 });
         await libraries.getByTestId('wf-libraries-option').filter({ hasText: 'Policies Library' }).click({ timeout: 60_000 });
         await libraries.getByText(/^1 picked/).waitFor({ timeout: 60_000 });
@@ -119,9 +122,13 @@ try {
         await dialog.getByTestId('watch-create').click();
         const created = await creating;
         const watch = created ? (await created.json()).data : {};
-        check('13 Watch folder saves the watch', created?.status() === 201 && !!watch.id, created ? await created.text() : 'no request');
+        check('13 Watch a folder saves the watch', created?.status() === 201 && !!watch.id, created ? await created.text() : 'no request');
         const row = page.locator('tr', { has: page.getByTestId(`watch-row-${watch.id}`) });
         await row.waitFor({ timeout: 60_000 });
+
+        const named = await row.getByText('SharePoint').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
+        const beforeCheck = await row.innerText();
+        check('22 before the first check the row names the app by its display name', named && /Not checked yet/.test(beforeCheck), beforeCheck);
 
         // S2: Check now from the row menu shows Checking…, then the time, the count and the failed file with its size.
         await row.getByRole('button', { name: 'Open menu' }).click();
@@ -139,6 +146,28 @@ try {
           running && /3 files brought in/.test(shown) && /3 files/.test(await page.getByTestId(`watch-files-${watch.id}`).innerText()) && shown.includes(fakes.info.oversize.name) && shown.includes(mb) && failedEvent?.size === fakes.info.oversize.size && /ago|just now|seconds?/i.test(shown),
           { running, shown, failedEvent },
         );
+        const failedText = await failedCell.innerText();
+        const headers = await page.locator('thead').innerText();
+        check(
+          '23 the failed file sits in the In Files cell with a next step and a help link, and there is no Needs attention column',
+          (await row.getByTestId(`watch-files-${watch.id}`).locator('xpath=..').getByTestId(`watch-failed-${watch.id}`).count()) === 1 && /Split it or make it smaller/.test(failedText) && (await failedCell.getByTestId(`watch-failed-help-${watch.id}`).count()) === 1 && !/Needs attention/.test(headers),
+          { failedText, headers },
+        );
+        const guideLink = await failedCell.getByTestId(`watch-failed-help-${watch.id}`).getAttribute('href');
+        const guideFile = await readFile(join(ROOT, 'docs/guide/watch-a-folder.md'), 'utf8');
+        const guideNav = await readFile(join(ROOT, 'apps/docs/src/lib/nav.mjs'), 'utf8');
+        const guideIndex = await readFile(join(ROOT, 'docs/guide/README.md'), 'utf8');
+        check(
+          '24 the guide page on watching a folder exists with a Failed files section, is linked from the guide index and the docs nav, and the failed file links to it',
+          /^## Failed files/m.test(guideFile) && guideIndex.includes('watch-a-folder.md') && guideNav.includes('guide/watch-a-folder.md') && /watch-a-folder\.md#failed-files$/.test(guideLink ?? ''),
+          { guideLink },
+        );
+        await page.setViewportSize({ width: 390, height: 900 });
+        const phoneRow = page.locator('tr', { has: page.getByTestId(`watch-row-${watch.id}`) });
+        const phoneText = await phoneRow.innerText();
+        const phoneScroll = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+        check('25 at 390 the row shows the last check and the failed file with no sideways scroll', /brought in/.test(phoneText) && phoneText.includes('failed') && !phoneScroll, { phoneText, phoneScroll });
+        await page.setViewportSize({ width: 1440, height: 1000 });
         await shoot(page, 'uc-772-watched-folders', async () => failedCell.waitFor(), wide);
 
         // The file page's Source section, for a file the check brought in.
@@ -150,7 +179,7 @@ try {
         check('15 a brought-in file\'s page names its watched folder and its path at the source', said.includes(NAME) && said.includes('Policies › leave.md'), said);
         await shoot(page, 'uc-772-file-source', async () => source.waitFor(), wide);
 
-        // S1: Ravi reads the list with no Watch folder and no row menu, and a direct call is refused.
+        // S1: Ravi reads the list with no Watch a folder and no row menu, and a direct call is refused.
         const ravi = await signIn(browser, consoleUrl, RAVI, problems, watching);
         await ravi.goto(watches, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const raviRow = ravi.locator('tr', { has: ravi.getByTestId(`watch-row-${watch.id}`) });
@@ -159,7 +188,7 @@ try {
         const add = await fetch(`${files}/v1/watches`, { method: 'POST', headers: R, body: JSON.stringify({ name: 'Ravi folder', plugin: watch.plugin, source: watch.source, connectionId: watch.connectionId, values: watch.values }) });
         const checkNow = await fetch(`${files}/v1/watches/${watch.id}/check`, { method: 'POST', headers: R });
         check(
-          '16 Ravi, a viewer, sees the watch with no Watch folder or Check now, and a direct add or check is 403',
+          '16 Ravi, a viewer, sees the watch with no Watch a folder or Check now, and a direct add or check is 403',
           (await ravi.getByTestId('watch-add').count()) === 0 && (await raviRow.getByRole('button', { name: 'Open menu' }).count()) === 0 && (await raviRow.innerText()).includes(fakes.info.oversize.name) && add.status === 403 && checkNow.status === 403,
           { add: add.status, check: checkNow.status, buttons: await ravi.getByTestId('watch-add').count() },
         );
@@ -212,7 +241,7 @@ try {
         await page.goto(watches, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const empty = page.getByText('No watched folders yet');
         await empty.waitFor({ timeout: 60_000 });
-        check('18 a team with no watches sees the empty state with Watch folder', await page.getByRole('button', { name: 'Watch folder' }).first().isVisible());
+        check('18 a team with no watches sees the empty state with Watch a folder', await page.getByRole('button', { name: 'Watch a folder' }).first().isVisible());
         await shoot(page, 'uc-772-empty', async () => empty.waitFor(), wide);
         await page.unroute((u) => isList(u.href));
 
@@ -239,9 +268,10 @@ try {
         await page.route((u) => isList(u.href), answered((w) => ({ ...w, checking: true })));
         await page.goto(watches, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const checking = page.getByTestId(`watch-checking-${watch.id}`);
+        const checkingShown = page.getByText('Checking…').locator('visible=true').first();
         await checking.waitFor({ timeout: 60_000 });
         check('19 a check in progress shows Checking on its row', await checking.isVisible());
-        await shoot(page, 'uc-772-checking', async () => checking.waitFor(), wide);
+        await shoot(page, 'uc-772-checking', async () => checkingShown.waitFor({ timeout: 30_000 }), wide);
         await page.unroute((u) => isList(u.href));
         const refusedAs = (code, stopped) => (w) => ({ ...w, checking: false, lastCheckAt: new Date().toISOString(), lastCheck: { ...w.lastCheck, status: 'refused', code, stopped } });
         await page.route((u) => isList(u.href), answered(refusedAs('needs_reconnect', 'The connection refused its sign-in.')));
@@ -267,8 +297,25 @@ try {
         const partialShown = await partial.waitFor({ timeout: 60_000 }).then(() => true, () => false);
         const partialText = partialShown ? await partial.innerText() : await row.innerText();
         check('19 a check that stopped partial says Partial with its reason and no green tick', partialShown && /Partial/.test(partialText) && /could not be fetched/.test(partialText) && (await partial.locator('.text-success').count()) === 0, partialText);
-        if (partialShown) await shoot(page, 'uc-772-partial', async () => partial.waitFor(), wide);
+        if (partialShown) await shoot(page, 'uc-772-partial', async () => page.getByText(/^Partial/).locator('visible=true').first().waitFor({ timeout: 30_000 }), wide);
         await page.unroute((u) => isList(u.href));
+
+        // Stop watching replaces Delete, and says what happens to the files.
+        await page.goto(watches, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        const stopRow = page.locator('tr', { has: page.getByTestId(`watch-row-${watch.id}`) });
+        await stopRow.waitFor({ timeout: 60_000 });
+        await stopRow.getByRole('button', { name: 'Open menu' }).click();
+        const hasDelete = await page.getByRole('menuitem', { name: 'Delete' }).count();
+        await page.getByRole('menuitem', { name: 'Stop watching' }).click();
+        const stopDialog = page.getByTestId('watch-stop-dialog');
+        await stopDialog.waitFor({ timeout: 30_000 });
+        const stopText = await stopDialog.innerText();
+        check('26 the row action is Stop watching, not Delete, and its dialog says the files stay in Files', hasDelete === 0 && /already in Files stay there/.test(stopText), { hasDelete, stopText });
+        await shoot(page, 'uc-772-stop-watching', async () => stopDialog.waitFor(), wide);
+        await stopDialog.getByTestId('watch-stop-confirm').click();
+        await stopRow.waitFor({ state: 'detached', timeout: 60_000 });
+        const kept = await fetch(`${files}/v1/files/${leave?.fileId}`, { headers: H });
+        check('26 after Stop watching the row is gone and a brought-in file is still in Files', kept.status === 200, kept.status);
 
         check('20 no sideways scroll at 1440 or 390 on any screen', wide.length === 0, wide);
         check('20 no page or console errors', problems.length === 0, problems);
