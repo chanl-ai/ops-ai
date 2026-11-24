@@ -1,8 +1,8 @@
 """The files of a group whose Ready when has not passed: held per workflow, one row per file version (its item key,
 as a batch row would carry it), until a check finds the group ready and takes them into the group's batch.
 
-Rows are kept 90 days at most: a group that never becomes ready is forgotten by the worker's sweep (`forget_before`),
-which reads every tenant's rows as the batch starter does."""
+Retention (90 days for a group that never becomes ready) is not enforced yet: the sweep that deletes old rows comes
+with the notifications sweep, which reads past row security and so joins the register in test_tenancy.py."""
 
 from __future__ import annotations
 
@@ -15,12 +15,10 @@ from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
 from ops_store.rows import rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
-from ops_store.team_scope import any_team, team_visible
+from ops_store.team_scope import team_visible
 
 from .base import metadata
 from .tenancy import RuntimeStore, current_tenant
-
-WAITING_SWEEP = "the worker forgets every tenant's waiting files past their retention"
 
 batch_waiting_files = sa.Table(
     "batch_waiting_files",
@@ -119,10 +117,3 @@ class WaitingFiles(RuntimeStore):
                 keys = [t.item_key for t in taken]
                 await c.execute(sa.delete(w).where(*mine, w.c.item_key.in_(keys)))
         return taken
-
-    async def forget_before(self, before: str) -> int:
-        """Deletes every tenant's waiting files held before `before`; the number deleted."""
-        w = batch_waiting_files
-        async with self.system_tx(WAITING_SWEEP) as c:
-            gone = await c.execute(sa.delete(w).where(any_team(w, WAITING_SWEEP), w.c.held_at < before))
-            return int(gone.rowcount or 0)
