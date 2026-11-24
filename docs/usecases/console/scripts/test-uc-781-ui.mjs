@@ -170,6 +170,53 @@ await withUiStack(
             check(`5 ${tag} one heading size and left edge, Limits full width, buttons on the heading row, View prompt at the edge`, sizes.size === 1 && lefts.size === 1 && !notes.length, { sizes: [...sizes], lefts: [...lefts], notes, info });
           });
 
+          // Rows of the header's actions: no action alone on its row (unless it spans the width), Saved beside Save.
+          const rowsOf = () =>
+            page.evaluate(() => {
+              const wrap = document.querySelector('[data-testid=page-actions]');
+              const flat = [...wrap.children].flatMap((c) => (getComputedStyle(c).display === 'contents' ? [...c.children] : [c])).filter((c) => c.getBoundingClientRect().width > 0);
+              const rows = [];
+              for (const el of flat) {
+                const r = el.getBoundingClientRect();
+                const row = rows.find((q) => r.top < q.bottom - 4 && q.top < r.bottom - 4);
+                if (row) (row.items.push(r), (row.bottom = Math.max(row.bottom, r.bottom)));
+                else rows.push({ top: r.top, bottom: r.bottom, items: [r] });
+              }
+              const w = wrap.getBoundingClientRect().width;
+              const lone = rows.length > 1 ? rows.filter((q) => q.items.length === 1 && q.items[0].width < w * 0.9).length : 0;
+              const save = document.querySelector('[data-testid=save-state]')?.getBoundingClientRect();
+              const btn = document.querySelector('[data-testid=agent-save], [data-testid=definition-save]')?.getBoundingClientRect();
+              const text = document.querySelector('[data-testid=save-state]');
+              const range = text && document.createRange();
+              if (range) range.selectNodeContents(text);
+              const textRight = range ? range.getBoundingClientRect().right : null;
+              return { rows: rows.map((q) => q.items.length), lone, gap: btn && textRight ? Math.round(btn.left - textRight) : null };
+            });
+          await step(`3b ${tag} actions wrap as one group and Saved sits beside Save`, async () => {
+            const bad = [];
+            for (const [name, path] of [['agent', agent], ['workflow', workflow]]) {
+              await open(path);
+              const r = await rowsOf();
+              if (r.lone) bad.push(`${name}: a lone action on its own row ${JSON.stringify(r.rows)}`);
+              if (builder && width >= 1024 && r.gap !== null && r.gap > 24) bad.push(`${name}: Saved is ${r.gap}px from Save`);
+            }
+            if (builder) {
+              // Paused: the Pause button reads Resume and the lifecycle chip says Paused.
+              await open(workflow);
+              await page.getByTestId('definition-pause').click();
+              await page.getByTestId('definition-pause-confirm').click();
+              await page.getByTestId('definition-pause-confirm').waitFor({ state: 'hidden' });
+              await page.getByTestId('definition-resume').waitFor();
+              const r = await rowsOf();
+              if (r.lone) bad.push(`workflow paused: a lone action ${JSON.stringify(r.rows)}`);
+              await page.getByTestId('definition-resume').click();
+              await page.getByTestId('definition-pause-confirm').click();
+              await page.getByTestId('definition-pause-confirm').waitFor({ state: 'hidden' });
+              await page.getByTestId('definition-pause').waitFor();
+            }
+            check(`3b ${tag} no action alone on its row, Saved beside Save`, !bad.length, bad);
+          });
+
           if (builder) {
             await step(`6 ${tag} the step sheet stays in the panel`, async () => {
               await open(workflow);

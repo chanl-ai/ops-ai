@@ -18,7 +18,8 @@ edge, one h1), one row for the save state and the actions, and one tab strip. Ag
 |---|---|---|
 | 1 | Open the agents list, an agent, an agent that does not exist, a workflow editor, Connectors, Skills and the model inventory at 1440 and 390 | Each has one h1, no sideways page scroll, and a title and description on one left edge with the icon level with the title |
 | 2 | Open the workflow editor | One tab strip: Canvas and Versions; the section's sibling pages are not a second strip |
-| 3 | Open an agent as the builder | The save state and Save share one row with the other actions (one row at 390); the last link of the breadcrumb is the agent's name |
+| 3 | Open an agent as the builder | The save state sits beside Save and shares one row with the other actions (one row at 390); the last link of the breadcrumb is the agent's name |
+| 3b | Open the workflow editor, live and paused, as the builder and as the viewer at 390 | The actions and the Version and Live chip wrap as one group: no action alone on its own row |
 | 4 | At 390 scroll the agent's tab strip | Every tab can be scrolled into view |
 | 5 | Walk the agent's Settings, Evals, Channels and Limits tabs | One section heading size; Limits fills the width; Run evals sits on the heading row; View prompt sits at the brief card's right edge |
 | 6 | Choose a step on the canvas | The step sheet lies inside the console panel at 1440 and keeps the page margin at 390, with its close button level with its title |

@@ -1,6 +1,6 @@
 import type React from 'react';
 import type { ReactNode } from 'react';
-import { createElement, isValidElement, useCallback, useEffect, useRef, useState } from 'react';
+import { createElement, isValidElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
@@ -72,6 +72,48 @@ interface PageLayoutProps {
   className?: string;
 }
 
+/**
+ * On a phone, actions that wrap leave a button alone on its row (Pause under Start run). When that would happen the row
+ * becomes two equal columns so the buttons wrap as one group; an odd last one spans the row. Measured, because how many
+ * actions there are depends on the page, the person and the record's state.
+ */
+function useGroupedActions(ref: React.RefObject<HTMLDivElement | null>) {
+  useLayoutEffect(() => {
+    const wrap = ref.current;
+    if (!wrap) return;
+    let busy = false;
+    const items = () => [...wrap.children].flatMap((c) => (getComputedStyle(c).display === 'contents' ? [...c.children] : [c])).filter((c): c is HTMLElement => c instanceof HTMLElement && c.getBoundingClientRect().width > 0);
+    const fit = () => {
+      if (busy) return;
+      busy = true;
+      wrap.removeAttribute('data-grouped');
+      items().forEach((i) => i.style.removeProperty('grid-column'));
+      if (window.innerWidth < 640) {
+        const els = items();
+        // Items share a row when their vertical ranges overlap (a tall item beside a short one is one row).
+        const rows: { top: number; bottom: number; n: number }[] = [];
+        for (const el of els) {
+          const r = el.getBoundingClientRect();
+          const row = rows.find((q) => r.top < q.bottom - 4 && q.top < r.bottom - 4);
+          if (row) (row.n++, (row.top = Math.min(row.top, r.top)), (row.bottom = Math.max(row.bottom, r.bottom)));
+          else rows.push({ top: r.top, bottom: r.bottom, n: 1 });
+        }
+        if (rows.length > 1 && rows.some((q) => q.n === 1)) {
+          wrap.setAttribute('data-grouped', 'yes');
+          if (els.length % 2 === 1) els[els.length - 1].style.gridColumn = '1 / -1';
+        }
+      }
+      busy = false;
+    };
+    fit();
+    const resized = new ResizeObserver(fit);
+    resized.observe(wrap);
+    const changed = new MutationObserver(fit);
+    changed.observe(wrap, { childList: true, subtree: true, characterData: true });
+    return () => (resized.disconnect(), changed.disconnect());
+  }, [ref]);
+}
+
 /** The page's tab row: scrolls sideways when the tabs outgrow it, and brings the current tab into view. */
 function TabStrip({ children }: { children: ReactNode }) {
   const row = useRef<HTMLDivElement>(null);
@@ -113,6 +155,8 @@ export function PageLayout({
   className,
 }: PageLayoutProps) {
   const { bulkState, ctxValue } = useBulkSelectionProvider();
+  const actionsRef = useRef<HTMLDivElement>(null);
+  useGroupedActions(actionsRef);
   // A record page (it has a way back) names its record in the breadcrumb.
   useSetRecordCrumb(backHref ? recordName ?? (typeof title === 'string' ? title : null) : null);
   const previewOfArea = usePreview();
@@ -316,7 +360,7 @@ export function PageLayout({
           {/* Actions area — bulk selection overrides normal actions; wraps to own row on narrow */}
           {/* One wrapper: the save state, Save, the page's actions and a bulk selection bar are its direct children
               (the inner wrapper is `contents`), so they wrap as one group and never leave a button alone. */}
-          <div className="flex w-full max-w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:justify-end" data-testid="page-actions">
+          <div ref={actionsRef} className="flex w-full max-w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:justify-end" data-testid="page-actions">
             <span ref={setSaveSlot} className="contents" data-testid="page-save-actions" />
             {renderActions()}
           </div>

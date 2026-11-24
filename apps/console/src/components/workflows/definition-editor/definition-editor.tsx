@@ -382,8 +382,9 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
       <RecordActions
         status={
           <>
-            {saveState}
             <ProblemsChip validation={validation} checking={checking} failed={validateError} nodeName={nodeName} onSelectNode={(id) => { selectNode(id); setSheetId(id); }} />
+            {/* Right beside Save. */}
+            {saveState}
           </>
         }
         save={readOnly ? undefined : save && { ...save, testId: 'definition-save' }}
