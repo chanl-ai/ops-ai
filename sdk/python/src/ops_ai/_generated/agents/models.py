@@ -301,31 +301,13 @@ class BriefDraftInput(TypedDict, closed=True):
 
 
 class BriefSection(TypedDict, closed=True):
-    kind: Literal[
-        "personality",
-        "tone",
-        "environment",
-        "context",
-        "tool_use",
-        "error_handling",
-        "escalation",
-        "custom",
-    ]
-    name: str
+    kind: str
+    name: NotRequired[str]
     text: NotRequired[str]
 
 
 class BriefSectionView(TypedDict, closed=True):
-    kind: Literal[
-        "personality",
-        "tone",
-        "environment",
-        "context",
-        "tool_use",
-        "error_handling",
-        "escalation",
-        "custom",
-    ]
+    kind: str
     name: NotRequired[str]
     text: NotRequired[str]
 
@@ -1416,6 +1398,44 @@ class PortView(TypedDict, closed=True):
     name: str
 
 
+class Preset(TypedDict, closed=True):
+    icon: Literal[
+        "smile",
+        "sun",
+        "scale",
+        "briefcase",
+        "zap",
+        "message",
+        "heart",
+        "shield",
+        "star",
+        "book",
+    ]
+    id: str
+    label: str
+    text: str
+
+
+class PresetIn(TypedDict, closed=True):
+    icon: NotRequired[
+        Literal[
+            "smile",
+            "sun",
+            "scale",
+            "briefcase",
+            "zap",
+            "message",
+            "heart",
+            "shield",
+            "star",
+            "book",
+        ]
+    ]
+    id: NotRequired[str]
+    label: str
+    text: str
+
+
 class PromptVariable(TypedDict, closed=True):
     example: str
     key: str
@@ -1781,6 +1801,44 @@ class SavedCaseCheck(TypedDict, closed=True):
 
 class SavedCaseContext(TypedDict, closed=True):
     collections: NotRequired[list[str]]
+
+
+class SectionItem(TypedDict, closed=True):
+    drives: NotRequired[Literal["none", "handoff", "never-last", "eval-tag"]]
+    example: NotRequired[str]
+    group: NotRequired[str]
+    hidden: NotRequired[bool]
+    hint: NotRequired[str]
+    id: str
+    kind: Literal["fixed", "menu", "custom"]
+    label: str
+    order: int
+    presets: NotRequired[list[Preset]]
+    required: NotRequired[bool]
+
+
+class SectionItemIn(TypedDict, closed=True):
+    drives: NotRequired[Literal["none", "handoff", "never-last", "eval-tag"]]
+    example: NotRequired[str]
+    group: NotRequired[str]
+    hidden: NotRequired[bool]
+    hint: NotRequired[str]
+    id: NotRequired[str]
+    kind: Literal["fixed", "menu", "custom"]
+    label: str
+    order: NotRequired[int]
+    presets: NotRequired[list[PresetIn]]
+    required: NotRequired[bool]
+
+
+class SectionList(TypedDict, closed=True):
+    customMax: NotRequired[int]
+    sections: list[SectionItem]
+
+
+class SectionListIn(TypedDict, closed=True):
+    customMax: NotRequired[int]
+    sections: list[SectionItemIn]
 
 
 class Serves(TypedDict, closed=True):
@@ -3279,6 +3337,11 @@ class EnvelopeRouted(TypedDict, closed=True):
 
 class EnvelopeRunStarted(TypedDict, closed=True):
     data: RunStarted
+    success: Literal[True]
+
+
+class EnvelopeSectionList(TypedDict, closed=True):
+    data: SectionList
     success: Literal[True]
 
 

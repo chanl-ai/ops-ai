@@ -286,6 +286,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent-instruction-sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Instruction Sections
+         * @description The workspace's list, or the default when it has saved none.
+         */
+        get: operations["agents_get_instruction_sections"];
+        /**
+         * Put Instruction Sections
+         * @description Replaces the list with the one sent (422 `validation_failed` naming `sections` when it breaks a rule). Agents
+         *     already saved keep the prompt they were saved with; the next save of each is written in the new order.
+         */
+        put: operations["agents_put_instruction_sections"];
+        post?: never;
+        /**
+         * Reset Instruction Sections
+         * @description Resets the list to the default and returns it; 200 when it already was.
+         */
+        delete: operations["agents_reset_instruction_sections"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents": {
         parameters: {
             query?: never;
@@ -4963,16 +4992,17 @@ export interface components {
         };
         /**
          * BriefSection
-         * @description A headed section a builder adds to the brief. A menu kind is written under its fixed title, whatever name is
-         *     sent; `kind` is the tag evals read. A custom section is prompt text only and drives nothing.
+         * @description A headed section a builder adds to the brief. `kind` is the id of a menu section in the workspace's list,
+         *     written under that section's label, and the tag evals read; a `custom` section is written under its own name, is
+         *     prompt text only and drives nothing. The save fills a menu section's name from the list.
          */
         BriefSection: {
+            /** Kind */
+            kind: string;
             /**
-             * Kind
-             * @enum {string}
+             * Name
+             * @default
              */
-            kind: "personality" | "tone" | "environment" | "context" | "tool_use" | "error_handling" | "escalation" | "custom";
-            /** Name */
             name: string;
             /**
              * Text
@@ -4982,14 +5012,12 @@ export interface components {
         };
         /**
          * BriefSectionView
-         * @description A section added to a brief, as replied: a menu kind carries its fixed title as `name`, whatever was stored.
+         * @description A section added to a brief, as replied: `kind` is the id of a menu section in the workspace's list (the tag
+         *     evals read) or `custom`; `name` is the heading it was saved under.
          */
         BriefSectionView: {
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "personality" | "tone" | "environment" | "context" | "tool_use" | "error_handling" | "escalation" | "custom";
+            /** Kind */
+            kind: string;
             /**
              * Name
              * @default
@@ -7062,6 +7090,15 @@ export interface components {
         /** Envelope[SavedCases] */
         Envelope_SavedCases_: {
             data: components["schemas"]["SavedCases"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[SectionList] */
+        Envelope_SectionList_: {
+            data: components["schemas"]["SectionList"];
             /**
              * Success
              * @constant
@@ -9402,6 +9439,41 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** Preset */
+        Preset: {
+            /**
+             * Icon
+             * @enum {string}
+             */
+            icon: "smile" | "sun" | "scale" | "briefcase" | "zap" | "message" | "heart" | "shield" | "star" | "book";
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * PresetIn
+         * @description A sentence the editor offers as a chip above a section's text; picking it writes the text into the section.
+         */
+        PresetIn: {
+            /**
+             * Icon
+             * @default smile
+             * @enum {string}
+             */
+            icon: "smile" | "sun" | "scale" | "briefcase" | "zap" | "message" | "heart" | "shield" | "star" | "book";
+            /**
+             * Id
+             * @default
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /** Text */
+            text: string;
+        };
         /**
          * PromptVariable
          * @description A `{key}` an agent's instructions may name, filled at run time from the turn's variables.
@@ -10465,6 +10537,138 @@ export interface components {
         SavedCases: {
             /** Cases */
             cases: components["schemas"]["SavedCase"][];
+        };
+        /**
+         * SectionItem
+         * @description One entry of the workspace's list, as stored and replied.
+         */
+        SectionItem: {
+            /**
+             * Drives
+             * @default none
+             * @enum {string}
+             */
+            drives: "none" | "handoff" | "never-last" | "eval-tag";
+            /**
+             * Example
+             * @default
+             */
+            example: string;
+            /**
+             * Group
+             * @default
+             */
+            group: string;
+            /**
+             * Hidden
+             * @default false
+             */
+            hidden: boolean;
+            /**
+             * Hint
+             * @default
+             */
+            hint: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "fixed" | "menu" | "custom";
+            /** Label */
+            label: string;
+            /** Order */
+            order: number;
+            /** Presets */
+            presets?: components["schemas"]["Preset"][];
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+        };
+        /**
+         * SectionItemIn
+         * @description One entry of the list as an admin sends it. An entry sent without `id` is new and given one from its label.
+         */
+        SectionItemIn: {
+            /**
+             * Drives
+             * @default none
+             * @enum {string}
+             */
+            drives: "none" | "handoff" | "never-last" | "eval-tag";
+            /**
+             * Example
+             * @default
+             */
+            example: string;
+            /**
+             * Group
+             * @default
+             */
+            group: string;
+            /**
+             * Hidden
+             * @default false
+             */
+            hidden: boolean;
+            /**
+             * Hint
+             * @default
+             */
+            hint: string;
+            /**
+             * Id
+             * @default
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "fixed" | "menu" | "custom";
+            /** Label */
+            label: string;
+            /**
+             * Order
+             * @default 0
+             */
+            order: number;
+            /** Presets */
+            presets?: components["schemas"]["PresetIn"][];
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+        };
+        /**
+         * SectionList
+         * @description The workspace's list in order, and how many sections of their own a builder may add to one agent.
+         */
+        SectionList: {
+            /**
+             * Custommax
+             * @default 5
+             */
+            customMax: number;
+            /** Sections */
+            sections: components["schemas"]["SectionItem"][];
+        };
+        /**
+         * SectionListIn
+         * @description The whole list, replacing the saved one.
+         */
+        SectionListIn: {
+            /**
+             * Custommax
+             * @default 5
+             */
+            customMax: number;
+            /** Sections */
+            sections: components["schemas"]["SectionItemIn"][];
         };
         /** Serves */
         Serves: {
@@ -14790,6 +14994,313 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ListResult_ActivityRow__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_get_instruction_sections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SectionList_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_put_instruction_sections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SectionListIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SectionList_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_reset_instruction_sections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SectionList_"];
                 };
             };
             /** @description Invalid request */
