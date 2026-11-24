@@ -301,9 +301,12 @@ async def retry_batch(rt: Rt, me: Me, batch_id: str) -> JSONResponse:
 async def batch_results(rt: Rt, me: Reader, _: Tx, batch_id: str) -> Response:
     """Every row as the page shows it, one line each: row, input, status, outcome, run, error and output. Input and
     output are JSON, so a value holding a comma or a quote reads back as it was."""
-    await _batch(rt, me, batch_id)
+    found = await _batch(rt, me, batch_id)
     out = io.StringIO()
     writer = csv.writer(out)
+    if found.origin == "check":
+        writer.writerows(check_csv(await Batches(rt.db).rows(batch_id)))
+        return _csv(out.getvalue(), batch_id)
     writer.writerow(["row", "input", "status", "outcome", "runId", "error", "output"])
 
     def as_json(value: Any) -> str:
@@ -314,7 +317,50 @@ async def batch_results(rt: Rt, me: Reader, _: Tx, batch_id: str) -> Response:
             [r.row, as_json(r.input), _status(r), r.outcome or "", r.run_id or "", r.error or "",
              as_json(r.output)]
         )  # fmt: skip
+    return _csv(out.getvalue(), batch_id)
+
+
+def _csv(text: str, batch_id: str) -> Response:
     name = f"results-{batch_id}.csv"
-    return Response(
-        out.getvalue(), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{name}"'}
-    )
+    return Response(text, media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+# A spreadsheet runs a cell starting with one of these as a formula.
+_FORMULA = ("=", "+", "-", "@")
+CHECK_COLUMNS = ["file", "path", "version", "previousVersion", "status", "reason"]
+
+
+def cell(value: Any) -> str:
+    """One CSV cell: a list or object as JSON, nothing as empty, and text a spreadsheet would run as a formula kept
+    as text by a leading apostrophe."""
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    text = str(value).lower() if isinstance(value, bool) else str(value)
+    return "'" + text if text.startswith(_FORMULA) else text
+
+
+def field_columns(rows: list[BatchRowOut]) -> list[str]:
+    """Every top-level key of the rows' run outputs, in the order first seen."""
+    seen: dict[str, None] = {}
+    for r in rows:
+        output: Any = r.output
+        if isinstance(output, dict):
+            seen.update(dict.fromkeys(str(k) for k in cast(Json, output)))
+    return list(seen)
+
+
+def check_csv(rows: list[BatchRowOut]) -> list[list[str]]:
+    """A check's results: one line per file with its place, version and status, the reason a file did not run, and
+    one column per field the runs returned."""
+    fields = field_columns(rows)
+    lines = [CHECK_COLUMNS + fields]
+    for r in sorted(rows, key=lambda x: x.row):
+        given = r.input
+        returned: Any = r.output
+        output = cast(Json, returned) if isinstance(returned, dict) else {}
+        place = [given.get("name"), given.get("path"), given.get("version"), given.get("previousVersion")]
+        why = r.reason or r.error
+        lines.append([cell(v) for v in (*place, _status(r), why)] + [cell(output.get(f)) for f in fields])
+    return lines

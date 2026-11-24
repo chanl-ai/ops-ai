@@ -277,3 +277,43 @@ async def test_retry_asks_workflows_decide_and_says_how_many_files_it_cannot_run
     assert retried.status_code == 202, retried.text
     assert retried.json()["data"] == {"retried": 0, "notRetryable": 2}
     assert await tick(rt) == 0, "a file that never ran is not started by a retry"
+
+
+async def test_a_check_csv_has_field_columns_failures_and_text_cells(stack: Stack) -> None:  # noqa: F811
+    """A check's CSV names each file and puts each output field in its own column. A value a spreadsheet would run
+    as a formula is written as text, and a list stays one cell."""
+    from ops_agents.store.check_batches import CheckBatch, CheckRow, write_check  # noqa: PLC0415
+
+    c, _ = stack
+    rt, files = wired(c)
+    await ready(c, files, csv(1))
+    read: dict[str, Any] = {
+        "claim_ref": "HM-1",
+        "name": "a.pdf",
+        "path": "/Invoices/a.pdf",
+        "version": 2,
+        "previousVersion": 1,
+    }
+    with tenant_scope(TENANT):
+        check = await write_check(
+            rt.db, binding_id=f"files:{WID}", watch_id="wat_inv", expected=None, to="3",
+            batch=CheckBatch(team_id="team_ops", workflow_id=WID, version=1, mode="live", watch_id="wat_inv",
+                             label="Invoices", checked_at="2026-12-02T09:00:00Z", created_by="trigger"),
+            rows=[CheckRow("f1:2", read, "pending"),
+                  CheckRow("f3:1", {"name": "c.zip", "path": "/Invoices/c.zip", "version": 1}, "failed", "too_large",
+                           "Larger than 25 MB")],
+        )  # fmt: skip
+    assert check is not None
+    assert await tick(rt) == 1
+    output = {"total": "=1+1", "lines": [1, 2], "note": 'net, "30"\nday'}
+    async with rt.db.begin() as conn:
+        await conn.execute(engine_runs.update().where(engine_runs.c.workflow_id == WID).values(output=output))
+    r = await c.get(f"/v1/batches/{check.id}/results.csv", headers=BUILDER)
+    assert r.status_code == 200, r.text
+    rows = list(DictReader(io.StringIO(r.text)))
+    assert list(rows[0]) == ["file", "path", "version", "previousVersion", "status", "reason", "total", "lines", "note"]
+    by_file = {x["file"]: x for x in rows}
+    a, failed = by_file["a.pdf"], by_file["c.zip"]
+    assert (a["path"], a["version"], a["previousVersion"]) == ("/Invoices/a.pdf", "2", "1")
+    assert (a["total"], json.loads(a["lines"]), a["note"]) == ("'=1+1", [1, 2], 'net, "30"\nday'), a
+    assert (failed["status"], failed["reason"], failed["total"]) == ("failed", "Larger than 25 MB", ""), failed
