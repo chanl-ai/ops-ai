@@ -42,8 +42,9 @@ class Rig:
 Handler = Callable[[httpx.Request], httpx.Response]
 
 
-async def _rig(models: Models, handle: Handler) -> AsyncIterator[Rig]:
-    """An OpenAI-compatible connection answered by `handle`, an alias on it and a model key."""
+async def provider_rig(models: Models, handle: Handler, *, images: bool = False) -> AsyncIterator[Rig]:
+    """An OpenAI-compatible connection answered by `handle`, an alias on it (cleared for images with `images`) and a
+    model key."""
     upstream = httpx.AsyncClient(transport=httpx.MockTransport(handle))
     app = create_models_app(models.engine, provider_secrets={"UPSTREAM_KEY": "sk-upstream"}, upstream=upstream)
     hooks = {"response": [response_checker(app)]}
@@ -52,7 +53,7 @@ async def _rig(models: Models, handle: Handler) -> AsyncIterator[Rig]:
         conn = {"name": f"up-{uuid4().hex[:8]}", "type": "openai-compatible", "baseUrl": "http://up/v1"}
         made = await client.post("/v1/models/providers", json={**conn, "keyRef": "UPSTREAM_KEY"}, headers=SERVICE)
         alias = f"bank-up-{uuid4().hex[:8]}"
-        version = {"name": alias, "providerId": made.json()["data"]["id"], "modelId": "gpt-up"}
+        version = {"name": alias, "providerId": made.json()["data"]["id"], "modelId": "gpt-up", "images": images}
         r = await client.post("/v1/models/aliases", json={**version, "clearedSensitivity": "internal"}, headers=SERVICE)
         assert r.status_code == 201, r.text
         on_app = Models(client, models.engine, app)
@@ -76,7 +77,7 @@ Logged = list[tuple[str, str]]
 
 async def _refusal(models: Models, handle: Handler, *, stream: bool = False) -> tuple[httpx.Response, Logged]:
     """The answer and the call log's (outcome, reason) rows: a failure is one error row whose reason is the code."""
-    async for rig in _rig(models, handle):
+    async for rig in provider_rig(models, handle):
         r = await rig.complete(stream=stream)
         return r, [(c["outcome"], c["reason"]) for c in await rig.models.calls(rig.key_id)]
     raise AssertionError("no rig")
@@ -157,7 +158,7 @@ async def test_a_stream_that_drops_part_way_is_logged_by_its_own_code(models: Mo
 
 async def test_a_provider_body_that_echoes_the_key_never_reaches_the_answer_or_the_log(models: Models) -> None:
     echoed = {"error": {"message": f"Incorrect API key provided: {LEAKED_KEY}", "code": "invalid_api_key"}}
-    async for rig in _rig(models, _answers(401, echoed)):
+    async for rig in provider_rig(models, _answers(401, echoed)):
         r = await rig.complete()
         assert LEAKED_KEY not in r.text and "sk-upstream" not in r.text
         rows = await rig.models.calls(rig.key_id)

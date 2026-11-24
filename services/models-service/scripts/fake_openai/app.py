@@ -15,6 +15,7 @@ the same as the scripted provider's.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from collections.abc import AsyncIterator
@@ -54,6 +55,9 @@ class Rule:
     # Several calls in one answer, each {"tool", "arguments"}, as a model makes independent reads in one step; the rule
     # applies when every one is offered.
     calls: list[dict[str, Any]] = field(default_factory=lambda: [])
+    # How the rule's reply ends, as a provider can end one: `length` cuts it at the output limit, `refusal` declines,
+    # `content_filter` is stopped by a filter, `late` answers after the models-service wait has run out.
+    finish: str | None = None
 
 
 @dataclass(frozen=True)
@@ -79,6 +83,7 @@ def load_script(folder: Path) -> Script:
             bool(r.get("force")),
             str(r["before"]) if r.get("before") else None,
             [dict(c) for c in cast(list[dict[str, Any]], r.get("tools") or [])],
+            str(r["finish"]) if r.get("finish") else None,
         )
         for r in listed
     ]
@@ -197,7 +202,41 @@ def _rule_for(script: Script, messages: list[dict[str, Any]], offered: set[str])
     return None
 
 
+REFUSED = "I'm sorry, but I can't help with that request."
+# Longer than models-service's 60-second wait for a provider.
+LATE_SECONDS = 65
+
+
+def _ended(done: Completion, finish: str) -> Completion:
+    """`done` as it reads when the reply ended by `finish` (`Rule.finish`)."""
+    if finish == "length":
+        # The reply stops partway: a tool call's arguments are cut, so they no longer parse.
+        cut = [
+            {**c, "function": {**c["function"], "arguments": c["function"]["arguments"][:12]}} for c in done.tool_calls
+        ]
+        text = (done.text or "")[:12] or None
+        return Completion(text, done.input_tokens, max(done.output_tokens, 4000), cut, ended="length")
+    if finish == "refusal":
+        return Completion(None, done.input_tokens, len(REFUSED.split()), ended="stop", refusal=REFUSED)
+    if finish == "content_filter":
+        return Completion(None, done.input_tokens, 0, ended="content_filter")
+    return done
+
+
 async def answer(script: Script, model: str, body: dict[str, Any]) -> Completion:
+    """The reply to `body`, ended as its rule's `finish` says."""
+    messages: list[dict[str, Any]] = list(body.get("messages") or [])
+    listed: list[dict[str, Any]] = list(body.get("tools") or [])
+    offered = {str(dict[str, Any](t.get("function") or {}).get("name")) for t in listed}
+    hit = _rule_for(script, messages, offered)
+    finish = hit[0].finish if hit else None
+    if finish == "late":
+        await asyncio.sleep(LATE_SECONDS)
+    done = await _answer(script, model, body)
+    return _ended(done, finish) if finish else done
+
+
+async def _answer(script: Script, model: str, body: dict[str, Any]) -> Completion:
     messages: list[dict[str, Any]] = list(body.get("messages") or [])
     prompt_tokens = sum(len(_text(m).split()) for m in messages)
     tools: list[dict[str, Any]] = list(body.get("tools") or [])
@@ -351,6 +390,8 @@ def create_app(script: Script, api_key: str | None = None, azure_region: str = "
         message: dict[str, Any] = {"role": "assistant", "content": done.text}
         if done.tool_calls:
             message["tool_calls"] = done.tool_calls
+        if done.refusal:
+            message["refusal"] = done.refusal
         usage = {
             "prompt_tokens": done.input_tokens,
             "completion_tokens": done.output_tokens,
