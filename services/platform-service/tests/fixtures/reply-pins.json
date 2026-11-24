@@ -5286,6 +5286,8 @@
       "egressNewHosts": "ask_security",
       "evalsRequired": {},
       "extractionFloor": 0.8,
+      "extractionNoAnswer": "review",
+      "extractionRetries": "1",
       "mcpConnectionHours": 8,
       "memoryRetentionDays": null,
       "pageImages": {},

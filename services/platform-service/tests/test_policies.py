@@ -28,6 +28,8 @@ DEFAULTS: dict[str, Any] = {
     # No floor under the teams' approval rules until the Security team sets one.
     "approvalsFloor": {},
     "extractionFloor": 0.8,
+    "extractionRetries": "1",
+    "extractionNoAnswer": "review",
     "stepUp": False,
     "publishReview": {},
     # No team set: a skill written as text publishes with a write the agent decides, shown as a hint.

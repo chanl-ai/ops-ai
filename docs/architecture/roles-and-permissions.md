@@ -362,6 +362,8 @@ fails the commit until it is classified.
 | `memoryRetentionDays` | none | yes | How long agents keep what they remember about a person | `chat.manage` | no |
 | `reviewSlaHours` | 8 | n/a | When a waiting publish review shows as overdue | `reviews.manage` | no |
 | `extractionFloor` | 0.8 | n/a | The lowest confidence an extraction step accepts; a quality threshold, not an access rule | `settings.manage` | no |
+| `extractionRetries` | `"1"`: one more ask | n/a | How many more times (1 or 2) a one-record document read is asked, unchanged, when the reply is cut off or empty; a declined or filtered reply and a read of several records are never asked again. Read live on each read; unreadable, the default applies. A change writes a `policy.set` audit entry | `settings.manage` (Govern > Policies) | yes |
+| `extractionNoAnswer` | `"review"` | n/a | What a read with no answer after its retries does: `review` saves it as not read (outcome `incomplete`, every field not read) for a person to type, `fail` fails the read with `reply_incomplete`. Read live; unreadable, review. A change writes a `policy.set` audit entry | `settings.manage` (Govern > Policies) | yes |
 
 Per-agent settings that decide what a person may do in a chat, saved with the agent's version and published through
 its review:
