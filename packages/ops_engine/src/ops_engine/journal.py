@@ -48,29 +48,35 @@ def never_sent(error: Any) -> bool:
 
 
 def sent_and_unanswered(error: Any) -> bool:
-    """Whether a gateway error says the call may have reached the outside system and no answer came back that says
-    what it did: it timed out after connecting, broke off, or answered 5xx (tools-service executor.py
-    transport_failure and status_failure), or a plugin's request failed or the plugin itself raised, either of which
-    can happen after a request went out (plugins/executor.py). A write that ends this way may have happened."""
+    """Whether a gateway error says the call reached the outside system and no answer came back that says what it did:
+    it timed out after connecting, broke off, or answered 5xx (tools-service executor.py transport_failure and
+    status_failure). A write that ends this way may have happened, so a run's own pass fails it as uncertain."""
     if not isinstance(error, dict):
         return False
     e = cast(dict[str, Any], error)
     code, status = e.get("code"), e.get("status")
-    if code in ("UPSTREAM_TIMEOUT", "UPSTREAM_UNREACHABLE", "PLUGIN_FAILED"):
+    if code == "UPSTREAM_TIMEOUT":
         return True
     return code == "UPSTREAM_ERROR" and (status is None or (isinstance(status, int) and status >= 500))
+
+
+# A plugin's request that failed, or a plugin that raised (plugins/executor.py): either can happen after a request went
+# out. A run's own pass routes these to the step's error port; a Redrive reads them as may-have-run and never resends.
+PLUGIN_MAY_HAVE_SENT = frozenset({"UPSTREAM_UNREACHABLE", "PLUGIN_FAILED"})
 
 
 def definitely_not_done(error: Any) -> bool:
     """Whether a recorded gateway error proves the call did nothing: it never left (NEVER_SENT), the gateway refused it
     before sending (REFUSED_BEFORE_SENDING, or its own side), or the system answered with a 4xx refusal. Anything else,
-    an unknown code included, may have run."""
+    a plugin failure (PLUGIN_MAY_HAVE_SENT) or an unknown code included, may have run. Read only by a Redrive."""
     if not isinstance(error, dict) or sent_and_unanswered(error):
         return False
     e = cast(dict[str, Any], error)
     code, status = e.get("code"), e.get("status")
     if never_sent(e) or code in REFUSED_BEFORE_SENDING or e.get("side") == "ours":
         return True
+    if code in PLUGIN_MAY_HAVE_SENT:
+        return False
     return isinstance(status, int) and 400 <= status < 500 and status != 408
 
 
