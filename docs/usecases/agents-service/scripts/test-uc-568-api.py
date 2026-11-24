@@ -227,11 +227,6 @@ def _settled(documents: httpx.Client, eid: str) -> dict[str, Any] | None:
     return row if row.get("status") not in ("queued", "running") else None
 
 
-def model_calls(model_admin: httpx.Client, run_id: str) -> list[dict[str, Any]]:
-    items = every_page(model_admin, "/v1/models/calls", headers=MODELS_ADMIN)
-    return [c for c in items if c.get("runId") == run_id]
-
-
 def publish(api: httpx.Client, definition: dict[str, Any]) -> str:
     saved = api.post("/v1/workflows/definitions", json={"definition": definition}, headers=OPS)
     if saved.status_code not in (200, 201):
@@ -241,15 +236,8 @@ def publish(api: httpx.Client, definition: dict[str, Any]) -> str:
 
 
 def runs_of(api: httpx.Client, wid: str) -> list[dict[str, Any]]:
-    """Every run of the workflow, a page of 100 (the most the list gives) at a time."""
-    out: list[dict[str, Any]] = []
-    for number in range(1, 11):
-        params: dict[str, Any] = {"workflowId": wid, "pageSize": 100, "page": number}
-        rows = (got(api.get("/v1/runs", params=params, headers=OPS)) or {}).get("data") or []
-        out += rows
-        if len(rows) < 100:
-            break
-    return out
+    """Every run of the workflow, read on the shared list contract until it says there is no next page."""
+    return every_page(api, "/v1/runs", headers=OPS, workflowId=wid, pageSize=50)
 
 
 def end(nid: str, outcome: str, *, failed: bool = False) -> dict[str, Any]:
@@ -374,19 +362,29 @@ def csv_bytes(header: list[str], rows: list[list[str]]) -> bytes:
 def reads(
     documents: httpx.Client, files: httpx.Client, api: httpx.Client, model_admin: httpx.Client, scan: str
 ) -> None:
-    # 1. The whole scan as text: every page in order, its tables, no document type.
-    res, full = read(documents, scan, {"read": "text", "ocr": True})
+    # 1. The whole scan as text: the file's one shared reading, every page in order with its tables, no document type.
+    # A full-text read is the reading (POST /v1/documents/readings); an extraction reads fields or proposes them.
+    calls_before = len(every_page(model_admin, "/v1/models/calls", headers=MODELS_ADMIN))
+    res = documents.post("/v1/documents/readings", json={"fileId": scan, "ocr": "auto"})
+
+    def finished() -> dict[str, Any] | None:
+        row = got(documents.get(f"/v1/documents/readings/{scan}", params={"ocr": "auto"})) or {}
+        return row if row.get("status") in ("done", "failed") else None
+
+    first = got(res) or {}
+    full = first if first.get("status") in ("done", "failed") else (until(finished, 240) or first)
     pages = full.get("pages") if isinstance(full.get("pages"), list) else []
     numbers = [p.get("number") for p in pages]
-    text = str(full.get("text") or "")
+    text = "\n".join(str(p.get("text") or "") for p in pages)
     order = [text.find(f"Page {n} of 12") for n in range(1, 13)]
     table_page = next((p for p in pages if p.get("number") == 3), {})
+    # An OCR page keeps its words in reading order; the table's rows read top to bottom in the page's text.
     t3 = str(table_page.get("text") or "")
     check(
-        "1 a 12-page scan read as full text comes back page by page in reading order, each page with its tables",
+        "1 a 12-page scan read as full text comes back page by page in reading order, its table rows in order",
         full.get("status") == "done"
         and numbers == list(range(1, 13))
-        and all(isinstance(p.get("tables"), list) and p.get("text") for p in pages)
+        and all(p.get("text") for p in pages)
         and all(i >= 0 for i in order)
         and order == sorted(order)
         and 0 <= t3.find("CHK-0091") < t3.find("SAV-0217"),
@@ -395,22 +393,21 @@ def reads(
     )  # fmt: skip
 
     # 2. The same read made no model call.
-    calls = model_calls(model_admin, str(full.get("id")))
+    calls_after = len(every_page(model_admin, "/v1/models/calls", headers=MODELS_ADMIN))
     check(
         "2 the full-text read makes no model call and charges nothing",
-        bool(full.get("id")) and full.get("status") == "done" and calls == [] and full.get("path") is None,
-        {"id": full.get("id"), "status": full.get("status"), "calls": len(calls), "path": full.get("path")},
+        full.get("status") == "done" and calls_after == calls_before,
+        {"status": full.get("status"), "calls": calls_after - calls_before},
     )
 
-    # 3. maxPages reads only the pages asked for; an unknown read is refused.
-    _, three = read(documents, scan, {"read": "text", "ocr": True, "maxPages": 3})
-    shown = [p.get("number") for p in three.get("pages") or [] if isinstance(p, dict)]
-    bad = documents.post("/v1/documents/extractions", json={"fileId": scan, "read": "nonsense"})
+    # 3. One page is read back on its own; an unknown OCR mode is refused.
+    one = got(documents.get(f"/v1/documents/readings/{scan}", params={"ocr": "auto", "page": 3})) or {}
+    shown = [p.get("number") for p in one.get("pages") or [] if isinstance(p, dict)]
+    bad = documents.post("/v1/documents/readings", json={"fileId": scan, "ocr": "nonsense"})
     check(
-        "3 maxPages 3 reads pages 1 to 3 only, and an unknown read is refused validation_failed",
-        three.get("status") == "done" and shown == [1, 2, 3] and three.get("readPages") == 3
-        and bad.status_code == 400 and code(bad) == "validation_failed",
-        {"pages": shown, "readPages": three.get("readPages"), "bad": said(bad)},
+        "3 page 3 reads back on its own, and an unknown OCR mode is refused validation_failed",
+        one.get("status") == "done" and shown == [3] and bad.status_code == 400 and code(bad) == "validation_failed",
+        {"pages": shown, "bad": said(bad)},
     )  # fmt: skip
 
     # 4. An Extract from file step reads Full text with no fields: it validates clean, and its run returns only the

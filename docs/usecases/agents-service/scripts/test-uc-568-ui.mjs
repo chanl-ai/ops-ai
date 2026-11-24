@@ -394,14 +394,14 @@ try {
           // The dialog only picks the file (dialogs stay small); the check and the table are on their own page.
           const dryInDialog = await page.getByRole('dialog').getByTestId('batch-dry-run').count();
           await page.getByTestId('batch-check').click();
-          await page.waitForURL(/\/workflows\/batches\/check\?/, { timeout: 60_000 });
+          await page.waitForURL(/\/build\/runs\/batches\/check\?/, { timeout: 60_000 });
           const onPage = (await page.getByRole('dialog').count()) === 0 && (await seen(page.getByTestId('batch-check-page'), 30_000));
           const dry = page.getByTestId('batch-dry-run');
           await dry.waitFor({ timeout: 60_000 });
           const shown = await dry.innerText();
           await page.screenshot({ path: join(SHOTS, 'start-from-file-1280.png') });
           await page.getByTestId('batch-start').click();
-          await page.waitForURL((u) => /\/workflows\/batches\/[^/?]+$/.test(u.pathname) && !u.pathname.endsWith('/check'), { timeout: 60_000 });
+          await page.waitForURL((u) => /\/build\/runs\/batches\/[^/?]+$/.test(u.pathname) && !u.pathname.endsWith('/check'), { timeout: 60_000 });
           batchUrl = page.url();
           check('39 Start from a file shows the chosen file in place of the drop zone, the row count and the first 5 rows mapped, then starts one run per row', /\b12\b/.test(shown) && ['CUS-6001', 'CUS-6005'].every((c) => shown.includes(c)) && !shown.includes('CUS-6006') && /notes/.test(shown) && collapsed && dryInDialog === 0 && onPage, { dryInDialog, onPage, shown: shown.slice(0, 300), collapsed, batchUrl });
         });

@@ -32,9 +32,9 @@ a spreadsheet of 200 cases each needs new code or a person retyping it.
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | (api) Read the 12-page scan with `read: "text"`, `ocr: true`, no document type | `status: done`; `pages` numbered 1 to 12 in order, each with its `text` and a `tables` list; `text` holds every page's text in page order; the table page's cells read row by row |
-| 2 | (api) The same read's cost | No call in models-service's call log for that read, and the read recorded no tokens |
-| 3 | (api) Read with `read: "text"`, `maxPages: 3`; then with `read: "nonsense"` | Pages 1 to 3 only, `readPages: 3`; the bad value is refused 400 `validation_failed` |
+| 1 | (api) Read the 12-page scan's shared reading (`POST /v1/documents/readings`, `ocr: auto`), no document type | `status: done`; `pages` numbered 1 to 12 in order, each with its `text`; the pages' text runs in page order; the table page's rows read top to bottom in its text |
+| 2 | (api) The same read's cost | models-service's call log has no new call |
+| 3 | (api) The reading's page 3 alone (`page=3`); then a reading with `ocr: "nonsense"` | Page 3 only; the bad value is refused 400 `validation_failed` |
 | 4 | (api) A workflow whose Extract from file step reads `read: "text"`, `maxPages: 2`, run on the scan | It validates clean; the run succeeds with the text of pages 1 and 2 only (a Files read request takes fields or propose, not text) |
 | 5 | (api) Read with `read: "propose"`, `hint: "a tax levy notice"` | `proposal` with a name and the four fields; the propose call saw only pages 1 to 5; every value has a quote, a page and a confidence from the checks |
 | 6 | (api) Rename `taxpayer` to `debtor_name`; `POST /v1/document-types` with the proposal and `sampleFileId`; read again with that type | 201; the type is listed in team_ops with the file as its first sample and not in team_security; the read gives the same values under the new name |
