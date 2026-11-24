@@ -552,6 +552,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `services/files-service/tests.md` | files-service failure modes and the test guarding each |
 | `services/runner-service/overview.md` | runner-service on :8770: code tools' Python on WASM, its walls, `ops.call` back through tools-service |
 | `services/documents-service/overview.md` | documents-service on :8760: extractions, document types, samples and test runs, reading bytes through files-service; the sample documents as requirements |
+| `packages/ops_sources/overview.md` | Source reading library: changes since a saved place with every page read, paced fetches, the state port |
 | `packages/ops_ingest/overview.md` | Knowledge ingestion library: parsing, splitting, metadata, dedupe, source rules |
 | `packages/ops_ingest/tests.md` | Knowledge ingestion failure modes and the test guarding each |
 | `packages/ops_email/overview.md` | Email library: mail in and out behind two protocols, providers picked by settings |

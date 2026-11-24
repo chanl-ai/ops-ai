@@ -50,6 +50,7 @@ class FakeTools:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         # "same": every page names itself as the next; "endless": every page names a new one.
         self.pages = ""
+        self.get_tool: str | None = GET
 
     async def source_hosts(self, tenant_id: str, team_id: str, cfg: dict[str, Any], **_: Any) -> list[dict[str, Any]]:
         return []
@@ -61,7 +62,7 @@ class FakeTools:
                 "source": "articles",
                 "title": "Salesforce Knowledge articles",
                 "listTool": LIST,
-                "getTool": GET,
+                "getTool": self.get_tool,
                 "deletedTool": None,
                 "schedule": {"kind": "daily", "time": "02:00"},
                 "connectionId": "con_sf",
@@ -350,3 +351,14 @@ async def test_a_fetch_that_raises_fails_the_sync_and_keeps_nothing(kb: httpx.As
     tools.call = real  # type: ignore[method-assign]
     again = await sync(kb, src["id"])
     assert again["status"] == "success" and again["counts"]["upserted"] == 4, again
+
+
+async def test_a_source_that_declares_no_get_tool_calls_no_tool_named_none(
+    kb: httpx.AsyncClient, tools: FakeTools
+) -> None:
+    """A stored null get tool was sent as the text "None", so the gateway was asked for a tool nobody declared."""
+    tools.get_tool = None
+    src = await source(kb)
+    r = await kb.post(f"/v1/sources/{src['id']}/sync", json={"full": False})
+    assert "None" not in {t for t, _ in tools.calls}, tools.calls
+    assert r.status_code == 500 and await items(kb, src["id"]) == {}, r.text

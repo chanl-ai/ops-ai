@@ -38,6 +38,7 @@ members = [
     "ops-runner-service",
     "ops-service-kit",
     "ops-signin",
+    "ops-sources",
     "ops-storage",
     "ops-store",
     "ops-tools-service",
@@ -1614,6 +1615,7 @@ dependencies = [
     { name = "ops-runner-service" },
     { name = "ops-service-kit" },
     { name = "ops-signin", extra = ["fake"] },
+    { name = "ops-sources" },
     { name = "ops-storage" },
     { name = "ops-store" },
     { name = "ops-tools-service" },
@@ -1665,6 +1667,7 @@ requires-dist = [
     { name = "ops-runner-service", editable = "services/runner-service" },
     { name = "ops-service-kit", editable = "packages/ops_service_kit" },
     { name = "ops-signin", extras = ["fake"], editable = "packages/ops_signin" },
+    { name = "ops-sources", editable = "packages/ops_sources" },
     { name = "ops-storage", editable = "packages/ops_storage" },
     { name = "ops-store", editable = "packages/ops_store" },
     { name = "ops-tools-service", editable = "services/tools-service" },
@@ -1996,6 +1999,7 @@ dependencies = [
     { name = "ops-identity" },
     { name = "ops-ingest" },
     { name = "ops-service-kit" },
+    { name = "ops-sources" },
     { name = "ops-store" },
     { name = "sqlalchemy" },
     { name = "uvicorn" },
@@ -2017,6 +2021,7 @@ requires-dist = [
     { name = "ops-identity", editable = "packages/ops_identity" },
     { name = "ops-ingest", editable = "packages/ops_ingest" },
     { name = "ops-service-kit", editable = "packages/ops_service_kit" },
+    { name = "ops-sources", editable = "packages/ops_sources" },
     { name = "ops-store", editable = "packages/ops_store" },
     { name = "sqlalchemy", specifier = ">=2.0" },
     { name = "uvicorn", specifier = ">=0.30" },
@@ -2260,6 +2265,23 @@ requires-dist = [
     { name = "uvicorn", marker = "extra == 'fake'", specifier = ">=0.30" },
 ]
 provides-extras = ["fake"]
+
+[[package]]
+name = "ops-sources"
+version = "0.1.0"
+source = { editable = "packages/ops_sources" }
+dependencies = [
+    { name = "ops-identity" },
+    { name = "ops-service-kit" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ops-identity", editable = "packages/ops_identity" },
+    { name = "ops-service-kit", editable = "packages/ops_service_kit" },
+    { name = "pydantic", specifier = ">=2.7" },
+]
 
 [[package]]
 name = "ops-storage"

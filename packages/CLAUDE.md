@@ -80,6 +80,7 @@ SERVICE=<service>`, [registry](../docs/usecases/README.md)).
 | [ops_service_kit](ops_service_kit/CLAUDE.md) | `ops_service_kit` | yes (flags only) |
 | [ops_signin](ops_signin/CLAUDE.md) | `ops_signin` | yes |
 | [ops_storage](ops_storage/CLAUDE.md) | `ops_storage` | none (in files-service) |
+| [ops_sources](ops_sources/CLAUDE.md) | `ops_sources` | yes |
 | [ops_store](ops_store/CLAUDE.md) | `ops_store` | yes |
 | [usecase-runner](usecase-runner/CLAUDE.md) | `@ops-ai/usecase-runner` | yes |
 
