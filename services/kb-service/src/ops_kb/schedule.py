@@ -51,7 +51,14 @@ async def run_due(service: KnowledgeService, now: datetime) -> list[str]:
     for tenant in await service.store.tenants():
         with isolation.tenant_wide(FIND_DUE, tenant_id=tenant):
             readable = [s for s in await service.store.sources(tenant) if s.type != "tool" or service.tools]
-            sources = [s for s in readable if due(service, s, now)]
+            sources: list[SourceRow] = []
+            for s in readable:
+                # One source whose stored schedule no rule reads must not stop the others syncing.
+                try:
+                    if due(service, s, now):
+                        sources.append(s)
+                except ValueError as e:
+                    log.warning("kb_schedule_unreadable", source=s.id, error=str(e))
         for s in sources:
             with isolation.scope(tenant, str(s.team_id)):
                 who = Who(tenant, "knowledge schedule", str(s.team_id))

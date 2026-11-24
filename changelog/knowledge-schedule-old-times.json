@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "Knowledge syncs keep running for sources with older times",
+  "description": "A knowledge source saved with a time like 2 or 2:5 still syncs at that time, and one source with a schedule that cannot be read no longer stops the others from syncing.",
+  "tag": "fix"
+}
