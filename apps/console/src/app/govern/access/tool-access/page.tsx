@@ -45,7 +45,7 @@ const COLUMNS: ColumnDef<Row>[] = [
   },
   { accessorKey: 'status', header: 'Status', cell: ({ row }) => <Badge variant={row.original.status === 'approved' ? 'secondary' : 'outline'}>{STATUS[row.original.status]}</Badge> },
   { id: 'expires', header: 'Ends', cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{row.original.expiresAt ? relativeTime(row.original.expiresAt) : 'No end'}</span> },
-  { id: 'access', header: 'May call', cell: ({ row }) => <span className="text-muted-foreground"><ListCell values={row.original.operations} empty="Every operation" label="Operations" /></span> },
+  { id: 'access', header: 'May call', cell: ({ row }) => <span className="text-muted-foreground"><ListCell values={row.original.operations} shown={2} empty="Every operation" label="Operations" /></span> },
   { accessorKey: 'environment', header: 'Environment', cell: ({ row }) => <span className="capitalize">{row.original.environment}</span> },
   { id: 'decided', header: 'Decided by', cell: ({ row }) => <span className="text-muted-foreground">{row.original.decidedBy ?? '—'}</span> },
 ];

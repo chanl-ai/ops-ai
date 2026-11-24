@@ -259,7 +259,7 @@ function FieldsPanel({
                 )}
               </TableCell>
               <TableCell className="text-sm">
-                <ListCell values={f.options ?? []} />
+                <ListCell values={f.options ?? []} label="Allowed values" />
               </TableCell>
               <TableCell className="text-sm">
                 {f.alwaysReview ? (

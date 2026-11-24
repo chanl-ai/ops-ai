@@ -12,6 +12,7 @@ import { ConnectProviderDialog } from '@/components/models/connect-provider-dial
 import { PROVIDER_TYPES } from '@/components/models/provider-meta';
 import { SettingsPageLayout } from '@/components/settings/settings-page-layout';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
+import { TextCell } from '@/components/shared/table-cells';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField, StopRowClick } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -127,7 +128,7 @@ const connectionColumns: ColumnDef<ProviderConnection>[] = [
   {
     accessorKey: 'baseUrl',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Endpoint" />,
-    cell: ({ row }) => <code className="font-mono text-xs break-all">{row.original.baseUrl ?? 'None'}</code>,
+    cell: ({ row }) => <code className="font-mono text-xs"><TextCell>{row.original.baseUrl ?? 'None'}</TextCell></code>,
   },
   {
     accessorKey: 'region',
