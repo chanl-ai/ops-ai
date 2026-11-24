@@ -1484,8 +1484,10 @@ class Wrapper:
         attempt = (last.attempt if last else 0) + 1
         first = attempt
         timeout = await self.deadline(params)
-        # The step's total duration counts from its earliest attempt this run knows of, a previous pass's included.
-        began = monotonic() - _since(last.started_at if last is not None else None)
+        # The step's total duration counts from its earliest attempt this run knows of, a previous pass's included;
+        # an attempt a Redrive set aside is history, so the redriven step starts its duration over.
+        counted = last is not None and last.status != "redriven"
+        began = monotonic() - _since(last.started_at if counted and last is not None else None)
 
         def next_wait(n: int, retry_after: float | None = None) -> float | None:
             """The wait before attempt `n` of this pass, or None when it would end past the step's total duration."""

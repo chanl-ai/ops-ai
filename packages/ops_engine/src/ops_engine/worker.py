@@ -44,7 +44,7 @@ from .compiler import (
     technical,
 )
 from .definition import parse
-from .journal import RunCancelledError
+from .journal import FAILING_PORTS, RunCancelledError
 from .node_types import TypeRegistry
 from .ports import EnginePorts, EventPort, LeaseBusyError, LeasePort
 from .store import TERMINAL, DefinitionStore, RunRow, RunStore, SqlJournal, Transactions, Work, WorkQueue
@@ -172,8 +172,6 @@ def ending(values: Json) -> Json | None:
     return None
 
 
-# The ways a step leaves when it did not do its job: what a failure End names as the reason the run failed.
-FAILING_PORTS = ("error", "refused", "unreadable", "timeout")
 # An error as the engine records it, "DocumentNotFound: 404 not_found: File was not found.": the exception's name and
 # the service's status and code are for builders, who read them on the step; the run's reason keeps the message.
 _ENGINE_PREFIX = re.compile(r"^(?:[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+: )?(?:\d{3} [a-z]+(?:_[a-z]+)*: )?")

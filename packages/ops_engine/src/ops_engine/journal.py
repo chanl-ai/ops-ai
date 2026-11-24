@@ -10,8 +10,13 @@ from typing import Any, Literal, Protocol
 
 # running: an attempt under way, or one whose process died (dangling). waiting: a review paused for a person.
 # ok: recorded output, returned on any re-run. pinned: an output set before a test run. error: the attempt failed.
-# abandoned: a dangling read or model attempt superseded by a new attempt.
-StepStatus = Literal["running", "waiting", "ok", "pinned", "error", "abandoned"]
+# abandoned: a dangling read or model attempt superseded by a new attempt. redriven: the failing attempt a Redrive set
+# aside, kept with its port and output as history, so the step runs again instead of returning it.
+StepStatus = Literal["running", "waiting", "ok", "pinned", "error", "abandoned", "redriven"]
+
+# The ways a step leaves when it did not do its job: what a failure End names as the reason the run failed, and the
+# recorded attempts a Redrive sets aside.
+FAILING_PORTS = ("error", "refused", "unreadable", "timeout")
 
 
 @dataclass(frozen=True)

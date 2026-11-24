@@ -41,3 +41,8 @@ async def test_a_bulk_redrive_touches_only_the_runs_its_filter_matches(stack: St
         found = (await conn.execute(sa.select(engine_runs.c.id, engine_runs.c.status))).all()
     statuses = {row.id: row.status for row in found}
     assert (statuses[matched], statuses[other_code], statuses[too_old]) == ("queued", "failed", "stuck"), statuses
+    # A single redrive records who redrove the run on its events, where the run page's history reads it from.
+    r = await c.post(f"/v1/runs/{other_code}/redrive", headers=BUILDER)
+    assert r.status_code == 200, r.text
+    events = await c.get(f"/v1/runs/{other_code}/events", params={"follow": "false"}, headers=BUILDER)
+    assert '"type": "redriven"' in events.text or '"type":"redriven"' in events.text, events.text[:2000]

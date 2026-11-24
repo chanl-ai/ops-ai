@@ -14,6 +14,7 @@ from ops_store.listing import ListPage, list_page
 from ops_store.rows import one, rows
 from ops_store.team_scope import acting_team, team_visible
 
+from ..journal import FAILING_PORTS
 from .clock import now_iso
 from .tables import engine_definitions, engine_runs, engine_steps, engine_waits, engine_work
 from .tx import Transactions
@@ -501,7 +502,9 @@ class RunStore:
                 )
         return await self.row(run_id), changed
 
-    async def retry(self, run_id: str, *, statuses: tuple[str, ...] = ("stuck",)) -> tuple[RunRow | None, bool]:
+    async def retry(
+        self, run_id: str, *, statuses: tuple[str, ...] = ("stuck",), failed_step: bool = False
+    ) -> tuple[RunRow | None, bool]:
         """Queues a Stuck run again: its set-aside work rows are closed and one new row goes on under the
         current engine build. A run paused at a step is resumed at that step, which reads its state again; any other
         continues from its last checkpoint, where recorded steps return their record and a write reconciles by its
@@ -516,6 +519,8 @@ class RunStore:
                 return None, False
             if found.status not in statuses:
                 return await self.row(run_id), False
+            if failed_step and found.status == "failed":
+                await self._set_aside_failed_step(c, found)
             await c.execute(
                 r.update()
                 .where(mine)
@@ -540,7 +545,39 @@ class RunStore:
         a later publish is never read). A failed run's checkpoints are gone, so its pass starts the graph over:
         every step the journal recorded returns its record instead of running, the failed step takes its next
         attempt, and a write whose outcome was unknown reconciles by its last key before any second send."""
-        return await self.retry(run_id, statuses=REDRIVABLE)
+        return await self.retry(run_id, statuses=REDRIVABLE, failed_step=True)
+
+    async def _set_aside_failed_step(self, c: Any, run: Any) -> None:
+        """Marks the failed step's recorded failing attempt `redriven`, in the redrive's own transaction. Every
+        recorded port is returned on a re-run (compiler.recorded), so without this a step that left by its error or
+        refused port returns that record and the run walks to the same failure End without running it. Only a definite
+        answer is set aside: an attempt with no port (a write whose outcome is unknown) keeps its row, so the wrapper
+        reconciles it by its key before any second send. The step is the one the run's failure names, at its latest
+        iteration; a failure that names no step (a run failed before the record existed) sets one aside only when the
+        run ended at a failure End, at its last failing step, as the worker's reason names it."""
+        s = engine_steps
+        mine = sa.and_(s.c.run_id == run.id, s.c.tenant_id == self.tx.tenant(), s.c.port.in_(FAILING_PORTS))
+        failure = cast(dict[str, Any] | None, run.failure) or {}
+        step = cast(dict[str, Any] | None, failure.get("step")) or {}
+        if step.get("id"):
+            mine = sa.and_(mine, s.c.node_id == str(step["id"]))
+        elif run.outcome is None:
+            return
+        last = (
+            await c.execute(
+                sa.select(s.c.node_id, s.c.iteration)
+                .where(mine)
+                .order_by(s.c.started_at.desc(), s.c.attempt.desc())
+                .limit(1)
+            )
+        ).first()
+        if last is None:
+            return
+        await c.execute(
+            s.update()
+            .where(mine, s.c.node_id == last.node_id, s.c.iteration == last.iteration, s.c.status.in_(("ok", "error")))
+            .values(status="redriven")
+        )
 
     async def step_rows(self, run_id: str) -> list[RunStep]:
         """Every attempt of every node, in the order they started."""
