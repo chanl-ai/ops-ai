@@ -1615,7 +1615,7 @@ export interface paths {
         /**
          * Delete Guardrail
          * @description Refused (403) unless the caller created the guardrail or is an admin of its team, and (409) while it is
-         *     pinned. Who deleted it is logged; agents-service has no audit table yet.
+         *     pinned. Who deleted it is logged; this write records no audit entry yet.
          */
         delete: operations["agents_delete_guardrail"];
         options?: never;
@@ -2491,7 +2491,7 @@ export interface paths {
         /**
          * Delete Skill
          * @description Refused (403) unless the caller created the skill or is an admin of its team, and (409) while it is pinned.
-         *     Who deleted it is logged; agents-service has no audit table yet.
+         *     Who deleted it is logged; this write records no audit entry yet.
          */
         delete: operations["agents_delete_skill"];
         options?: never;
