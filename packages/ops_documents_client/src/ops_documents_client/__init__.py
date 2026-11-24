@@ -196,6 +196,25 @@ class DocumentsClient:
             raise _refused(e) from e
         return found
 
+    async def correct(
+        self, tenant: str, team: str, extraction_id: str, corrections: list[Json], *, entered_by: str, checked: bool
+    ) -> Json:
+        """Saves the values a person typed ([{field, record?, value}]) on an extraction in one call, recorded as
+        `entered_by`; documents-service normalises each by its field's type and skips unchanged ones. `checked`: the
+        person checked the whole read. Needs `documents:edit`."""
+        body: dict[str, Any] = {"corrections": corrections, "enteredBy": entered_by, "checked": checked}
+        try:
+            saved = await self._documents.request(
+                "POST",
+                f"/v1/documents/extractions/{_id(extraction_id)}/corrections",
+                json=body,
+                tenant=tenant,
+                team=team,
+            )
+        except ServiceCallError as e:
+            raise _refused(e) from e
+        return saved
+
     async def purge(self, tenant: str, team: str, file_id: str) -> Json:
         """Removes what documents-service read from a deleted file: {extractions, samples}; needs `documents:delete`."""
         try:

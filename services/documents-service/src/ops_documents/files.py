@@ -23,6 +23,8 @@ class Who:
     creates: bool = True
     edits: bool = True
     manages: bool = False
+    # A service token, which may say whom it acts for where a route takes that (a batch of typed values).
+    service: bool = False
     admin_teams: frozenset[str] = field(default_factory=frozenset[str])
 
 

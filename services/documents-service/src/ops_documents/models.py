@@ -57,6 +57,24 @@ class CorrectionIn(In):
     record: int | None = Field(default=None, ge=0)
 
 
+class TypedValue(In):
+    field: str = Field(min_length=1)
+    value: Any
+    # The record's position, for an extraction of several records.
+    record: int | None = Field(default=None, ge=0)
+
+
+class CorrectionsIn(In):
+    """Values for several fields of one read, saved together (POST /v1/documents/extractions/{id}/corrections)."""
+
+    corrections: list[TypedValue] = Field(max_length=500)
+    # Who typed the values, when a service saves them for a person (a workflow's Save typed values step). Taken only
+    # from a service token holding documents:edit; a person is always recorded as themselves.
+    entered_by: str | None = Field(default=None, min_length=3, max_length=320)
+    # The person checked the whole read: no field waits for a person afterwards, typed or not.
+    checked: bool = False
+
+
 class DocumentTypeRef(Out):
     id: str
     version: int

@@ -518,6 +518,7 @@ class Settings(BaseSettings):
             # documents:view, documents:run: the Extract from file step reads a file through documents-service and a
             # workflow save pins its document type versions there.
             # documents:delete: the system workflow on the file-deleted trigger purges what was derived from the file.
+            # documents:edit: a Save typed values step saves what a person typed in a task, named as enteredBy.
             # files:edit: a Save data on file step records what was read on the file.
             "agents": [
                 "files:view",
@@ -531,6 +532,7 @@ class Settings(BaseSettings):
                 "settings:view",
                 "documents:view",
                 "documents:run",
+                "documents:edit",
                 "documents:delete",
                 # secrets_egress:manage: an approved held host joins the tenant's allow-list in tools-service;
                 # claimed only on that call (GatewayClient.egress_host_decision).

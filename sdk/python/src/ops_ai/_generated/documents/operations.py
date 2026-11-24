@@ -181,6 +181,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "documents_correct_fields": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/documents/extractions/{extraction_id}/corrections",
+        "pathParams": ["extraction_id"],
+        "query": [],
+        "stream": False,
+    },
     "documents_extract": {
         "body": "json",
         "headers": ["Idempotency-Key"],
@@ -474,6 +483,12 @@ class Operations:
             SERVICE, OPERATIONS["documents_get_extraction"], {"extraction_id": extraction_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    def documents_correct_fields(self, extraction_id: str, body: CorrectionsIn) -> Extraction:
+        "Correct Fields"
+        return self._t.call(
+            SERVICE, OPERATIONS["documents_correct_fields"], {"extraction_id": extraction_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
     def documents_correct_field(self, extraction_id: str, key: str, body: CorrectionIn) -> Extraction:
         "Correct Field"
         return self._t.call(
@@ -717,6 +732,12 @@ class AsyncOperations:
         "Get Extraction"
         return await self._t.call(
             SERVICE, OPERATIONS["documents_get_extraction"], {"extraction_id": extraction_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def documents_correct_fields(self, extraction_id: str, body: CorrectionsIn) -> Extraction:
+        "Correct Fields"
+        return await self._t.call(
+            SERVICE, OPERATIONS["documents_correct_fields"], {"extraction_id": extraction_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
     async def documents_correct_field(self, extraction_id: str, key: str, body: CorrectionIn) -> Extraction:

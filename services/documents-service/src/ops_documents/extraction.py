@@ -26,14 +26,14 @@ import httpx
 import regex
 
 from ops_access import team_off, team_on
-from ops_contracts.field_values import FIELD_TYPES
+from ops_contracts.field_values import FIELD_TYPES, normalise
 from ops_documents.errors import IdempotencyConflictError, InvalidRequestError, StateError
 from ops_documents.files import Files, Who
 from ops_documents.pending import Pending
 from ops_documents.readings import READING_PROCESS, SYNC_BYTES, SYNC_PAGES, Readings, settings_of
 from ops_documents.store import ExtractionRow, ExtractionsStore
 from ops_documents.store.document_types import SINGLE
-from ops_documents.store.extractions import CorrectedEvent, NewExample, file_read
+from ops_documents.store.extractions import CorrectedEvent, NewCorrection, NewExample, file_read
 from ops_extract import boxes, classify, page_images, prompt, result, rules, templates
 from ops_extract.checks import CLEAN_RULES, DEFAULT_FLOOR, in_quote, threshold
 from ops_extract.floor import FloorUnreadError, PlatformFloor
@@ -529,6 +529,76 @@ def fields_of(request: Json) -> list[FieldDefinition]:
     return [FIELD(f) for f in entries(request.get("fields"))]
 
 
+def _typed_value(asked: FieldDefinition | None, raw: JsonValue) -> JsonValue:
+    """A typed value in its field's type's form; empty text is no value. A value its type cannot hold is refused,
+    naming the field, rather than stored as nothing."""
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    if asked is None:
+        return raw
+    value, _ = normalise(asked, raw)
+    if value is None:
+        raise InvalidRequestError(f"{raw!r} is not a {asked.get('type') or 'text'} value for {asked['key']}")
+    return cast(JsonValue, value)
+
+
+def _target(answer: Json, key: str, record: int | None) -> tuple[Json, Json]:
+    """The record (or the read, for one record) holding field `key`, and the field as read."""
+    many = "records" in answer
+    if many != (record is not None):
+        raise InvalidRequestError("record names the record to correct, for an extraction of several records only")
+    if many:
+        records = a_list(answer["records"], "records")
+        if record is None or record >= len(records):
+            raise InvalidRequestError(f"there is no record {record}")
+        target = an_object(records[record], f"record {record}")
+    else:
+        target = answer
+    fields = an_object(target["fields"], "fields")
+    if key not in fields:
+        raise InvalidRequestError(f"there is no field {key}")
+    return target, an_object(fields[key], f"field {key}")
+
+
+def _set(answer: Json, target: Json, key: str, record: int | None, *, original: Json, value: JsonValue) -> None:
+    """Puts a person's value on the stored answer: the field keeps what was read beside it (a not-read field keeps its
+    reason) and no longer waits for a person, so the to-check count follows the correction."""
+    an_object(target["fields"], "fields")[key] = {**original, "value": value, "corrected": True, "needsReview": False}
+    target["needsReview"] = [k for k in a_list(target.get("needsReview") or [], "needsReview") if k != key]
+    if record is not None:
+        an_object(target["values"], "values")[key] = value
+        records = a_list(answer["records"], "records")
+        answer["needsReview"] = [i for i, r in enumerate(records) if an_object(r, f"record {i}")["needsReview"]]
+
+
+def _targets(answer: Json) -> list[Json]:
+    """Each record of a read of several, or the read itself for one record."""
+    if "records" not in answer:
+        return [answer]
+    return [an_object(r, "a record") for r in a_list(answer["records"], "records")]
+
+
+def _checked(answer: Json) -> None:
+    """A person checked the whole read: nothing in it waits for a person."""
+    for target in _targets(answer):
+        for f in an_object(target["fields"], "fields").values():
+            an_object(f, "a field")["needsReview"] = False
+        target["needsReview"] = []
+    answer["needsReview"] = []
+
+
+def _required_left(answer: Json, asked: dict[str, FieldDefinition]) -> bool:
+    """Whether a read no reply answered still has a required field with no value; an answered read never waits."""
+    if not answer.get("incomplete"):
+        return False
+    required = [k for k, f in asked.items() if f.get("required")]
+    for target in _targets(answer):
+        fields = an_object(target["fields"], "fields")
+        if any(an_object(fields.get(k) or {}, f"field {k}").get("value") in (None, "") for k in required):
+            return True
+    return False
+
+
 def review_below(request: Json) -> float | None:
     """The confidence below which a stored request's fields wait for a person; a value that is not one fails the read,
     as the scorer would."""
@@ -845,49 +915,63 @@ class Extractor:
     ) -> Json | None:
         """A checker's value for one field of a done extraction. The answer then carries the corrected value, and the
         correction row keeps the original value and confidence, so a correction never erases what was extracted."""
+        return await self.correct_many(who, extraction_id, [(key, record, value)], normalised=False)
+
+    async def correct_many(
+        self,
+        who: Who,
+        extraction_id: str,
+        values: Sequence[tuple[str, int | None, JsonValue]],
+        *,
+        normalised: bool = True,
+        checked: bool = False,
+    ) -> Json | None:
+        """Several fields' values (key, record, value) of one done extraction in one transaction, with one corrected
+        event. With `normalised` each value is put in its field's type's form first ("1,940.00" for money is 1940),
+        and a value equal to what is stored is skipped, so a repeat adds no rows; `checked` leaves no field waiting
+        for a person. A read no reply answered sends its event once every required field has a value."""
         row = await self.store.get(extraction_id)
         if row is None or row.team != who.team:
             return None
         if row.status != "done" or row.result is None:
             raise StateError(f"{extraction_id} is {row.status}; only a done extraction is corrected")
         answer = row.result
-        many = "records" in answer
-        if many != (record is not None):
-            raise InvalidRequestError("record names the record to correct, for an extraction of several records only")
-        # Each read is the stored object itself, so the changes below land in the answer that is saved.
-        records = a_list(answer["records"], "records") if many else []
-        if many:
-            if record is None or record >= len(records):
-                raise InvalidRequestError(f"there is no record {record}")
-            target = an_object(records[record], f"record {record}")
-        else:
-            target = answer
-        fields = an_object(target["fields"], "fields")
-        if key not in fields:
-            raise InvalidRequestError(f"there is no field {key}")
-        original = an_object(fields[key], f"field {key}")
-        fields[key] = {**original, "value": value, "corrected": True, "needsReview": False}
-        # A person set the value, so it no longer waits for one: the to-check count follows the correction.
-        target["needsReview"] = [k for k in a_list(target.get("needsReview") or [], "needsReview") if k != key]
-        if many:
-            an_object(target["values"], "values")[key] = value
-            answer["needsReview"] = [i for i, r in enumerate(records) if an_object(r, f"record {i}")["needsReview"]]
-        await self.store.correct(
-            {
-                "tenant_id": who.tenant_id,
-                "extraction_id": extraction_id,
-                "field": key,
-                "record": record,
-                "original": original.get("value"),
-                "original_confidence": _confidence(original),
-                "corrected": value,
-                "corrected_by": who.actor,
-                "corrected_at": self.clock(),
-            },
-            answer,
-            event=await self._corrected_event(who, row, answer, key, record),
-            example=self._example(who, row, key, original, value, record=record),
-        )
+        asked = {f["key"]: f for f in fields_of(row.request)}
+        corrections: list[NewCorrection] = []
+        examples: list[NewExample] = []
+        changed: list[tuple[str, int | None]] = []
+        for key, record, raw in values:
+            value = _typed_value(asked.get(key), raw) if normalised else raw
+            target, original = _target(answer, key, record)
+            if normalised and original.get("value") == value:
+                continue
+            _set(answer, target, key, record, original=original, value=value)
+            changed.append((key, record))
+            corrections.append(
+                {
+                    "tenant_id": who.tenant_id,
+                    "extraction_id": extraction_id,
+                    "field": key,
+                    "record": record,
+                    "original": original.get("value"),
+                    "original_confidence": _confidence(original),
+                    "corrected": value,
+                    "corrected_by": who.actor,
+                    "corrected_at": self.clock(),
+                }
+            )
+            if (example := self._example(who, row, key, original, value, record=record)) is not None:
+                examples.append(example)
+        if checked:
+            _checked(answer)
+        if not corrections and not checked:
+            return await self.get(who, extraction_id)
+        event = None
+        if changed and not _required_left(answer, asked):
+            event = await self._corrected_event(who, row, answer, changed[-1][0], changed[-1][1])
+            if event is not None:
+                event["payload"]["fields"] = [k for k, _ in changed]
+        await self.store.correct(extraction_id, who.tenant_id, corrections, answer, event=event, examples=examples)
         return await self.get(who, extraction_id)
 
     def _example(

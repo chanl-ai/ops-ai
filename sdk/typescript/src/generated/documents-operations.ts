@@ -213,6 +213,17 @@ export const documentsOperations = {
     "query": [],
     "stream": false
   },
+  "documents_correct_fields": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/documents/extractions/{extraction_id}/corrections",
+    "pathParams": [
+      "extraction_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "documents_extract": {
     "body": "json",
     "headers": [

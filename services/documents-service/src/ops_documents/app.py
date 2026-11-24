@@ -13,6 +13,7 @@ import asyncio
 import time
 from collections.abc import AsyncGenerator, Callable, Coroutine, Sequence
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, Header, Query, Request, Response
@@ -38,6 +39,7 @@ from ops_documents.models import (
     Classification,
     ClassifyIn,
     CorrectionIn,
+    CorrectionsIn,
     DocumentType,
     DocumentTypeExample,
     DocumentTypeIn,
@@ -140,7 +142,7 @@ async def who(p: CurrentCaller, request: Request) -> Who:
         if not p.team_id:
             raise Forbidden("A service token for a team's documents names that team.", code="team_required")
         can(p, "documents", action, team=p.team_id, what="documents")
-        return Who(tenant_id=p.tenant_id, team=p.team_id, actor=p.sub)
+        return Who(tenant_id=p.tenant_id, team=p.team_id, actor=p.sub, service=True)
     if getattr(request.state, "documents_services_only", False):
         raise Forbidden("Only a service does this.", code="scope_required")
     if not p.team_id:
@@ -405,6 +407,24 @@ def create_documents_app(
         if not who.edits:
             raise CreateNotAllowedError("Your role in this team cannot correct documents.")
         return ok(found(await extractor.correct(who, extraction_id, key, body.value, record=body.record), "Extraction"))
+
+    @docs.post(
+        "/extractions/{extraction_id}/corrections",
+        response_model=Envelope[Extraction],
+        dependencies=[service_scope("edit")],
+    )
+    async def correct_fields(extraction_id: str, body: CorrectionsIn, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Values for several fields at once, each in its field's type's form, with one corrected event; a value equal
+        to the stored one is skipped, so a repeat adds no rows. A service saving what a person typed names them as
+        enteredBy, which is recorded as who corrected; a person is always recorded as themselves."""
+        if body.entered_by is not None:
+            if not who.service:
+                raise Forbidden("Only a service names who entered the values.", code="entered_by_service_only")
+            who = replace(who, actor=body.entered_by)
+        elif not who.service and not who.edits:
+            raise CreateNotAllowedError("Your role in this team cannot correct documents.")
+        values = [(v.field, v.record, v.value) for v in body.corrections]
+        return ok(found(await extractor.correct_many(who, extraction_id, values, checked=body.checked), "Extraction"))
 
     @docs.post("/purge", response_model=Envelope[Purged], dependencies=[service_scope("delete", services_only=True)])
     async def purge(body: PurgeIn, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

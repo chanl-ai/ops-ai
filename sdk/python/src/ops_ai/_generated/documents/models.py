@@ -428,6 +428,12 @@ class TestRun(TypedDict, closed=True):
     version: int
 
 
+class TypedValue(TypedDict, closed=True):
+    field: str
+    record: NotRequired[int | None]
+    value: Any
+
+
 class UpdateExpect(TypedDict, closed=True):
     digest: NotRequired[str | None]
     recordDigest: NotRequired[str | None]
@@ -442,6 +448,12 @@ class UpdateInput(TypedDict, closed=True):
 
 class BackgroundHealthOut(TypedDict, closed=True):
     processes: list[BackgroundProcessOut]
+
+
+class CorrectionsIn(TypedDict, closed=True):
+    checked: NotRequired[bool]
+    corrections: list[TypedValue]
+    enteredBy: NotRequired[str | None]
 
 
 class DocumentTypeExample(TypedDict, closed=True):
