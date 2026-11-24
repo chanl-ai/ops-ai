@@ -1,6 +1,7 @@
 """Schedule rule kinds, by failure mode: a wall time that drifts or doubles at a clock change, a weekday rule that lands
-on the wrong day, and a bad rule saved (under the floor, no day, a window that ends before it starts, an unknown zone or
-kind). The knowledge-base rule's own failure modes stay in test_schedule.py."""
+on the wrong day, a bad rule saved (under the floor, every 0, a start the schema refuses, no day, a window that ends
+before it starts, an unknown zone or kind), and a stored weekly rule with a bad day looping for good. The
+knowledge-base rule's own failure modes stay in test_schedule.py."""
 
 from __future__ import annotations
 
@@ -89,6 +90,8 @@ def test_a_bad_rule_is_refused_naming_its_field_and_stored_kinds_still_load() ->
         ({"kind": "every", "every": 15, "unit": "minutes", "between": ["18:00", "07:00"]}, "between"),
         ({"kind": "every", "every": 15, "unit": "minutes", "tz": "Mars/Phobos"}, "tz"),
         ({"kind": "hourly", "every": 3}, "every"),
+        ({"kind": "every", "every": 0, "unit": "hours"}, "every"),
+        ({"kind": "every", "every": 1, "unit": "hours", "start": "7"}, "start"),
     ]
     for bad, field in cases:
         with pytest.raises(InvalidSchedule) as refused:
@@ -108,3 +111,4 @@ def test_a_bad_rule_is_refused_naming_its_field_and_stored_kinds_still_load() ->
         assert kinds.checked(stored, now, FLOOR) == stored
     every = kinds.checked({"kind": "every", "every": 15, "unit": "minutes", "tz": "Europe/London"}, now, FLOOR)
     assert every["anchor"] == "2026-11-23", "the save writes the anchor day"
+    assert kinds.next_slots({"kind": "weekly", "day": "xyz", "time": "02:00"}, now, 3) == [], "a bad stored day ends"

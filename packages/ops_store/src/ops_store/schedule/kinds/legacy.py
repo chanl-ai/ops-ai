@@ -122,7 +122,10 @@ class Daily:
     def next_slots(self, rule: Mapping[str, JsonValue], after: datetime, n: int) -> list[datetime]:
         tz, at = zone(str(rule.get("tz") or "UTC")), clock(str(rule.get("time") or "02:00"))
         day, out = local_date(after, tz), list[datetime]()
-        while len(out) < n:
+        # Bounded: a stored rule whose day matches no weekday gives no slots instead of looping for good.
+        for _ in range(8 * n + 8):
+            if len(out) == n:
+                break
             if self._on(rule, day.weekday()) and (slot := wall(day, at, tz)) > after:
                 out.append(slot)
             day += timedelta(days=1)

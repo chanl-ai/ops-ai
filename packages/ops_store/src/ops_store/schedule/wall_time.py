@@ -21,9 +21,12 @@ def zone(name: str, field: str = "tz") -> ZoneInfo:
 
 
 def clock(at: str, field: str = "time") -> time:
-    hour, _, minute = at.partition(":")
+    """`at` as a time of day; the same `H:MM` or `HH:MM` the kinds' schemas give as their pattern."""
+    hour, sep, minute = at.partition(":")
     try:
-        return time(int(hour), int(minute or 0))
+        if not (sep and hour.isdigit() and len(hour) <= 2 and minute.isdigit() and len(minute) == 2):
+            raise ValueError(at)
+        return time(int(hour), int(minute))
     except ValueError as e:
         raise InvalidSchedule(f"{at} is not a time of day (HH:MM).", field=field) from e
 
