@@ -1,6 +1,6 @@
 {
-  "date": "2026-11-23",
-  "title": "Storage settings list watched folder files",
-  "description": "Storage settings show a target for files that will arrive from a watched folder, suggested as confidential. Watching a folder from Files is not available yet.",
+  "date": "2026-11-24",
+  "title": "Watch a SharePoint folder from Files",
+  "description": "Files has a Watched folders tab where admins and builders pick a connected app's folders and press Check now. Everyone who reads Files sees each check's result and its failed files.",
   "tag": "new"
 }

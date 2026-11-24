@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
+import { FilesTabs } from '@/components/files/files-tabs';
 import { fileIcon, PURPOSE_LABEL, RetentionCell, SCAN_LABEL, ScanText, SENSITIVITY_LABEL, SensitivityBadge } from '@/components/files/file-meta';
 import { AddDocumentsDialog } from '@/components/shared/add-documents-dialog';
 import { DeleteFilesDialog } from '@/components/shared/delete-files-dialog';
@@ -189,7 +190,7 @@ export default function FilesPage() {
   const done = () => setResetKey((k) => k + 1);
 
   return (
-    <PageLayout switcher icon={FolderOpen} title="Files" description="Every file the platform stores, with its scan, retention and what uses it."
+    <PageLayout switcher icon={FolderOpen} title="Files" tabs={<FilesTabs />} description="Every file the platform stores, with its scan, retention and what uses it."
       actions={
         canUpload ? (
           <Button onClick={() => setUploadOpen(true)} data-testid="files-upload">
