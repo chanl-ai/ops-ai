@@ -47098,7 +47098,7 @@
     },
     "/v1/guardrails/{guardrail_id}": {
       "delete": {
-        "description": "Refused (403) unless the caller created the guardrail or is an admin of its team, and (409) while it is\npinned. Who deleted it is logged; agents-service has no audit table yet.",
+        "description": "Refused (403) unless the caller created the guardrail or is an admin of its team, and (409) while it is\npinned. Who deleted it is logged; this write records no audit entry yet.",
         "operationId": "agents_delete_guardrail",
         "parameters": [
           {
@@ -56636,7 +56636,7 @@
     },
     "/v1/skills/{skill_id}": {
       "delete": {
-        "description": "Refused (403) unless the caller created the skill or is an admin of its team, and (409) while it is pinned.\nWho deleted it is logged; agents-service has no audit table yet.",
+        "description": "Refused (403) unless the caller created the skill or is an admin of its team, and (409) while it is pinned.\nWho deleted it is logged; this write records no audit entry yet.",
         "operationId": "agents_delete_skill",
         "parameters": [
           {
