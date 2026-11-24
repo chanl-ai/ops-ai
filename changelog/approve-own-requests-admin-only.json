@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "Only an Admin approves their own request",
+  "description": "The two-person switch on the Approvals page is gone, and the Approve own requests row on the Roles page decides instead. In a workspace from before 1.2.0, every role but Admin lost the unused cell and a team that let people approve their own requests is back to Admin only, each change with its own audit entry.",
+  "tag": "improved"
+}

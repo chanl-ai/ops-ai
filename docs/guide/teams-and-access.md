@@ -44,6 +44,9 @@ opsai people invite a.osei@example.com --role viewer
 | Chat user | Chat with the team's published agents and read only their own chats. Given on a first single sign-on |
 | Security admin | Egress, any team's secrets, storage settings and security reviews of tool modules. Held by admins of the Security team |
 
+From 1.2.0 only an Admin may approve their own request. To let another role's holders approve their own, tick
+**Approve own requests** on that role in Govern › Access › Roles. Each tick and untick is in the audit log.
+
 ## Options
 
 | Setting | Where | What it does | Default |
