@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "A stopped schedule shows why, and Enter works in the sheet",
+  "description": "A schedule whose trigger a newer version removed now shows a notice above the canvas with Clear schedule, and the trigger's start name moves under Advanced once a schedule is set. Pressing Enter or a letter on a control in the step sheet no longer triggers a canvas shortcut.",
+  "tag": "improved"
+}

@@ -106,6 +106,8 @@ const SHORTCUTS: [string, string][] = [
 function typing(e: KeyboardEvent): boolean {
   const el = e.target as HTMLElement | null;
   if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return true;
+  // A key pressed on a control in the step sheet is the control's: Enter on a button presses it and a letter is not a canvas key.
+  if (el?.closest('[data-testid="step-sheet"]')) return true;
   // The step sheet is not modal and leaves the canvas keys on; any other open dialog or menu owns the keyboard.
   return !!document.querySelector('[role="dialog"][data-state="open"]:not([data-testid="step-sheet"]), [role="menu"][data-state="open"], [role="listbox"]');
 }

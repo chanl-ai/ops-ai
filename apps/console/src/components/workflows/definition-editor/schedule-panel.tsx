@@ -183,3 +183,40 @@ function ReadOnlyWords({ schedule }: { schedule: ScheduleView }) {
     </Section>
   );
 }
+
+/**
+ * A schedule whose step is gone (or is no longer a Schedule trigger) has no sheet to open, so its notice sits above the
+ * canvas: the server's sentence, the schedule in words, and Clear schedule for a person who may.
+ */
+export function IdleScheduleNotices({ workflowId, schedules }: { workflowId: string; schedules: ScheduleView[] | undefined }) {
+  const idle = (schedules ?? []).filter((s) => s.idleCode === 'step_missing' || s.idleCode === 'not_schedulable');
+  if (idle.length === 0) return null;
+  return (
+    <>
+      {idle.map((s) => (
+        <IdleNotice key={s.triggerStep} workflowId={workflowId} schedule={s} />
+      ))}
+    </>
+  );
+}
+
+function IdleNotice({ workflowId, schedule }: { workflowId: string; schedule: ScheduleView }) {
+  const mayEdit = useCan('workflows', 'edit') === true && useCan('deployments', 'create') === true;
+  const clear = useClearSchedule(workflowId, schedule.triggerStep);
+  return (
+    <Alert data-testid="schedule-idle-notice">
+      <AlertTriangle />
+      <AlertTitle>A saved schedule is not running</AlertTitle>
+      <AlertDescription>
+        <p>
+          {schedule.words}. {schedule.idle}
+        </p>
+        {mayEdit && (
+          <Button variant="outline" size="sm" className="mt-2" disabled={clear.isPending} onClick={() => clear.mutate()} data-testid="schedule-idle-clear">
+            Clear schedule
+          </Button>
+        )}
+      </AlertDescription>
+    </Alert>
+  );
+}
