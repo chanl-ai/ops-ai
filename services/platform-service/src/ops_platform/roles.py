@@ -19,6 +19,7 @@ from ops_service_kit.listing import ListParams
 from ops_store.listing import ListPage
 
 from .store.roles import (
+    SELF_APPROVAL,
     AlreadyGrantedError,
     Holdings,
     PrivilegedForGroupError,
@@ -29,9 +30,8 @@ from .store.roles import (
     UnknownGroupError,
 )
 
-# Approvals · decide is "approve own requests": a role holds it only where someone ticked it, so a copy leaves it out
-# and the new role gains it only with its own audited tick.
-SELF_APPROVAL = ("approvals", "decide")
+# Approvals · decide (SELF_APPROVAL) is "approve own requests": a role holds it only where someone ticked it, so a copy
+# leaves it out and the new role gains it only with its own audited tick.
 
 
 def _not_copied(area: str, action: str) -> bool:

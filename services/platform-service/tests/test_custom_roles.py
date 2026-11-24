@@ -350,3 +350,16 @@ async def test_ticking_approve_own_requests_on_a_role_writes_its_own_audit_actio
     audit = (await platform.public.get("/v1/audit", headers={**ah, "X-Team-Id": mine})).json()["data"]["data"]
     actions = [e.get("platformAction") or e.get("action") for e in audit if e.get("targetId") == rid]
     assert "role.edit" in actions and "role.self_approval" in actions, audit[:4]
+
+
+async def test_a_role_created_holding_approve_own_requests_writes_its_own_audit_action(platform: Platform) -> None:
+    owner, ah = await _admin(platform)
+    ticked = [*CASE_DESK, {"area": "approvals", "action": "decide", "scope": "all"}]
+    made = await platform.public.post("/v1/roles", headers=ah, json={"name": "Loan approver", "permissions": ticked})
+    assert made.status_code == 201, made.text
+    rid = made.json()["data"]["id"]
+    mine = next(iter(owner.teams))
+    audit = (await platform.public.get("/v1/audit", headers={**ah, "X-Team-Id": mine})).json()["data"]["data"]
+    mine_rows = [e for e in audit if e.get("targetId") == rid]
+    actions = [e.get("platformAction") or e.get("action") for e in mine_rows]
+    assert "role.create" in actions and "role.self_approval" in actions, mine_rows
