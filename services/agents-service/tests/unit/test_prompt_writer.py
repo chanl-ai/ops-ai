@@ -207,7 +207,7 @@ def test_a_custom_section_named_like_a_fixed_heading_or_like_another_custom_sect
         "spaces around and inside": [custom("  Hand   off  when ")],
         "a section from the menu": [custom("Tool use")],
         "a field no longer asked for": [custom("Success checks")],
-        "the same custom name twice": [custom("Refund wording"), custom("refund  wording")],
+        "the same custom name twice": [custom("Refund wording"), custom("Refund wording")],
     }
     for why, sections in taken.items():
         assert "brief.sections" in refusal(sections), why

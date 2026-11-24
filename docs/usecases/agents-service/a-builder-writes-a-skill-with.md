@@ -68,7 +68,7 @@ with a read and a write on a mock bank, published for the team, and platform sig
 | 25 | James saves a brief with no `sections`, as every brief before them | `brief.sections` is `[]` and the prompt's headings are the ones it had: Who you are, How to answer, Hand off when, Never |
 | 26 | The SDK applies an agent definition whose brief has `sections`, reads it back and reads the prompt | The same two sections and the same heading order |
 | 27 | `opsai agents apply` on a file whose brief has `sections`, then `export` | The export prints `brief.sections` and `instructions` with the headings in order |
-| 28 | James opens an agent whose brief has no sections, picks Tone from Add section and then Add custom section (the menu's last item), names it and writes both; he opens View prompt; Maya opens the same agent (ui, 1440 and 390) | The agent opens with no added section and View prompt reads as the service writes it. Both sections save and are drawn, each with a Remove control; View prompt shows Tone before How to answer, his section after it and Never last; at 390 nothing scrolls sideways. Maya reads both sections and sees no Add section and no Remove |
+| 28 | James opens an agent whose brief has no sections, picks Tone from Add section and then Add custom section, names it and writes both; he opens View prompt; Maya opens the same agent (ui, 1440 and 390) | The agent opens with no added section and View prompt reads as the service writes it. Both sections save and are drawn, each with a Remove control; View prompt shows Tone before How to answer, his section after it and Never last; at 390 nothing scrolls sideways. Maya reads both sections and sees no Add section and no Remove |
 
 ## Acceptance layers
 

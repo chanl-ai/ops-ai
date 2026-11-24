@@ -76,11 +76,15 @@ with bank_stack() as s:
     )
 
     # 26. The same sections through the SDK: the definition's `brief.sections` field, read back, and the prompt.
-    desk = ops.agents.apply(
-        {"name": f"Sections desk sdk {RUN}", "role": "Freezes accounts", "brief": sections_brief(SECTIONS)}
-    )
-    replied = (ops.agents.get(str(desk["id"])).get("brief") or {}).get("sections")
-    shown = ops.raw.agents.agents_agent_prompt(str(desk["id"]))["text"]
+    replied, shown = None, ""
+    try:
+        desk = ops.agents.apply(
+            {"name": f"Sections desk sdk {RUN}", "role": "Freezes accounts", "brief": sections_brief(SECTIONS)}
+        )
+        replied = (ops.agents.get(str(desk["id"])).get("brief") or {}).get("sections")
+        shown = ops.raw.agents.agents_agent_prompt(str(desk["id"]))["text"]
+    except OpsError as error:
+        replied = (error.status, error.code)
     check(
         "26 the SDK applies a brief with Tone and a custom section, reads both back and the prompt has them in order",
         replied == [{**SECTIONS[0]}, {"kind": "tone", "name": "Tone", "text": "Calm and plain."}]

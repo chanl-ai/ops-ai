@@ -94,7 +94,7 @@ with bank_stack() as s:
     # 24. A builder adds Tone and one section of his own. Each is replied with its kind and title, and View prompt
     # shows them in their places with the never rules last, whatever order they were saved in.
     desk = data(s.api.post("/v1/agents", json={"name": f"Sections desk {RUN}", "role": "Freezes accounts"}, headers=me))
-    with_sections = data(save_agent(s.api, desk["id"], {"brief": sections_brief(SECTIONS)}, headers=me))
+    with_sections = data(save_agent(s.api, desk["id"], {"brief": sections_brief(SECTIONS)}, headers=me)) or {}
     replied = (with_sections.get("brief") or {}).get("sections")
     shown = data(s.api.get(f"/v1/agents/{desk['id']}/prompt", headers=me))["text"]
     check(
@@ -117,13 +117,13 @@ with bank_stack() as s:
     )
     # 25. A brief saved without sections, as every brief before them: no heading is added and it replies none.
     plain = data(s.api.post("/v1/agents", json={"name": f"Plain desk {RUN}", "role": "Freezes accounts"}, headers=me))
-    unchanged = data(save_agent(s.api, plain["id"], {"brief": sections_brief()}, headers=me))
+    unchanged = data(save_agent(s.api, plain["id"], {"brief": sections_brief()}, headers=me)) or {}
     plain_prompt = data(s.api.get(f"/v1/agents/{plain['id']}/prompt", headers=me))["text"]
     check(
         "25 a brief saved without sections writes the prompt it wrote before them and replies no sections",
         (unchanged.get("brief") or {}).get("sections") == []
         and headings(plain_prompt) == ["# Who you are", "# How to answer", "# Hand off when", "# Never"]
-        and plain_prompt.startswith(unchanged["instructions"]),
+        and plain_prompt.startswith(str(unchanged.get("instructions"))),
         ((unchanged.get("brief") or {}).get("sections", "absent"), headings(plain_prompt)),
     )
 
