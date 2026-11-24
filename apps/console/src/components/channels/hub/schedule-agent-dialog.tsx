@@ -7,22 +7,21 @@ import { toast } from 'sonner';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
-import { ScheduleForm, localTimeZone } from '@/components/shared/schedule-form';
+import { ScheduleForm } from '@/components/shared/schedule-form';
 import { formOf, ruleOf, type EveryFormValue } from '@/components/shared/schedule-forms/every-rule';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useCreateScheduledWorkflow, useSchedulePreview } from '@/hooks/schedule-queries';
-import { slugify } from '@/lib/validation/names';
-import { ApiError } from '@/lib/api/contract';
+import { starterDefinition } from '@/components/workflows/definition-editor/starter';
+import { localTimeZone } from '@/lib/format';
+import { refusalOf, SCHEDULE_FIELDS } from '@/lib/schedule-refusal';
 import type { EngineDefinition } from '@/lib/types/engine';
 
-const FIELDS = ['every', 'unit', 'start', 'days', 'between', 'tz'];
-const slug = (name: string) => slugify(name, { sep: '_', width: 40, fallback: 'scheduled_agent' });
-
 /** A workflow with one Schedule trigger, the agent as its one step, and the two ways that step can end. */
-function workflowFor(id: string, name: string, agentId: string, prompt: string): EngineDefinition {
+function workflowFor(name: string, agentId: string, prompt: string): EngineDefinition {
+  const { id } = starterDefinition(name, '');
   return {
     schemaVersion: 2,
     id,
@@ -38,7 +37,7 @@ function workflowFor(id: string, name: string, agentId: string, prompt: string):
       { from: { node: 'ask', port: 'ok' }, to: { node: 'done', port: 'in' } },
       { from: { node: 'ask', port: 'error' }, to: { node: 'failed', port: 'in' } },
     ],
-  } as unknown as EngineDefinition;
+  };
 }
 
 /**
@@ -54,15 +53,14 @@ export function ScheduleAgentDialog({ open, onOpenChange, agentId, agentName }: 
   const rule = Number.isFinite(Number(form.every)) && form.every !== '' ? ruleOf(form) : null;
   const preview = useSchedulePreview(rule);
   const create = useCreateScheduledWorkflow();
-  const fromPreview = preview.isError && preview.error instanceof ApiError && FIELDS.includes(String(preview.error.details?.field)) ? { [String(preview.error.details?.field)]: preview.error.message } : {};
+  const fromPreview = preview.isError ? refusalOf(preview.error).byField : {};
   const canCreate = name.trim() !== '' && prompt.trim() !== '' && rule !== null && !preview.isError;
 
   const submit = () => {
     if (!rule) return;
     setProblem({ byField: {} });
-    const id = `${slug(name)}_${Math.random().toString(36).slice(2, 6)}`;
     create.mutate(
-      { definition: workflowFor(id, name.trim(), agentId, prompt.trim()), rule },
+      { definition: workflowFor(name.trim(), agentId, prompt.trim()), rule },
       {
         onSuccess: ({ workflowId, saveError }) => {
           if (saveError) toast.error(`The workflow was made, but its schedule was not saved: ${saveError}`);
@@ -71,8 +69,8 @@ export function ScheduleAgentDialog({ open, onOpenChange, agentId, agentName }: 
           router.push(`/build/workflows/${encodeURIComponent(workflowId)}`);
         },
         onError: (e) => {
-          const field = e instanceof ApiError ? String(e.details?.field ?? '') : '';
-          setProblem(FIELDS.includes(field) ? { byField: { [field]: e.message } } : { byField: {}, general: e.message || 'The workflow was not made.' });
+          const refused = refusalOf(e);
+          setProblem(refused.general || Object.keys(refused.byField).length ? refused : { byField: {}, general: 'The workflow was not made.' });
         },
       },
     );
@@ -102,10 +100,10 @@ export function ScheduleAgentDialog({ open, onOpenChange, agentId, agentName }: 
           </Alert>
         )}
         <FormField id="schedule-agent-name" label="Workflow name">
-          <Input id="schedule-agent-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Morning report" />
+          <Input id="schedule-agent-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Morning report" />
         </FormField>
         <FormField id="schedule-agent-prompt" label="Ask the agent">
-          <Textarea id="schedule-agent-prompt" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3} placeholder="Summarise yesterday's held wires." />
+          <Textarea id="schedule-agent-prompt" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3} placeholder="e.g. Summarise yesterday's held wires." />
         </FormField>
         <ScheduleForm value={form} onChange={setForm} errors={{ ...fromPreview, ...problem.byField }} idPrefix="schedule-agent" preview={preview.data} previewing={preview.isFetching} />
       </div>

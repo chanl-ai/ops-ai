@@ -158,8 +158,9 @@ export function StepSheet({ node, type, workflowId, steps, checks, order, readOn
                 </AlertDescription>
               </Alert>
             )}
+            {/* A schedule saves on its own and is valid on a copy the editor locks, so its panel decides what a person may do. */}
             {trigger && (
-              <fieldset disabled={locked} className="min-w-0">
+              <fieldset disabled={locked && node.type !== 'ops.trigger.schedule'} className="min-w-0">
                 <HowItStarts node={node} workflowId={workflowId} readOnly={locked} onChange={(parameters) => onChange({ parameters })} />
               </fieldset>
             )}

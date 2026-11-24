@@ -6,20 +6,11 @@ import { FormField } from '@/components/shared/form-field';
 import { SearchSelect } from '@/components/shared/search-select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { zoneOptions } from '@/hooks/schedule-queries';
-import { dateTime } from '@/lib/format';
+import { dateTimeIn } from '@/lib/format';
 import type { SchedulePreview } from '@/lib/types/schedules';
 
 import { EveryForm } from './schedule-forms/every-form';
 import { type EveryFormValue } from './schedule-forms/every-rule';
-
-/** The browser's own time zone, where Time zone opens; a zone the service does not know is refused beside the field. */
-export const localTimeZone = () => {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  } catch {
-    return 'UTC';
-  }
-};
 
 /**
  * The schedule form: the rule kind's fields, Time zone as a search over the service's zones, then what the server makes of it,
@@ -73,7 +64,7 @@ export function ScheduleForm({
             <p className="text-sm text-muted-foreground" data-testid="schedule-words">{preview.words}</p>
             <ul className="text-sm tabular-nums">
               {preview.nextRuns.map((t) => (
-                <li key={t}>{dateTime(t)}</li>
+                <li key={t}>{dateTimeIn(t, value.tz)}</li>
               ))}
             </ul>
           </>

@@ -636,7 +636,14 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         },
         ui=_form(
             ("key", _f("Start name", "text", "A second start with the same name runs nothing")),
-            ("inputSchema", _f("Input form", "json", "The fields a start must send; empty takes any")),
+            (
+                "inputSchema",
+                _f(
+                    "Input form",
+                    "json",
+                    "A scheduled run's input is the time it was due (dueAt). The schema may not require anything else.",
+                ),
+            ),
         ),
         start=StartSpec(
             kind="schedule",

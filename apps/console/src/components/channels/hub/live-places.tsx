@@ -6,6 +6,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Activity, CalendarClock, Route } from 'lucide-react';
 
 import { DataTableWithViews } from '@/components/data-table-with-views';
+import { EmptyState } from '@/components/shared/empty-state';
 import { QueryError } from '@/components/shared/query-states';
 import { StatusDot } from '@/components/shared/setting/status-dot';
 import { Badge } from '@/components/ui/badge';
@@ -89,6 +90,17 @@ const COLUMNS: ColumnDef<Place>[] = [
  * Where an agent or workflow is live: which versions answer in how many places, then every place with its version,
  * status and traffic (GET /v1/{agents|workflows}/{id}/live). A place is changed on Channels; versions are this record's.
  */
+/** Rows in the place of the card and the table while the list loads. */
+function LiveSkeleton() {
+  return (
+    <div className="flex flex-col gap-2" data-testid="live-skeleton">
+      {[0, 1, 2].map((i) => (
+        <Skeleton key={i} className="h-14 w-full" />
+      ))}
+    </div>
+  );
+}
+
 export function LivePlacesPanel({ kind, id, name, between }: { kind: 'agent' | 'workflow'; id: string; name: string; between?: React.ReactNode }) {
   const q = useLivePlaces(kind, id);
   // Scheduling an agent makes a workflow and saves its schedule, so it needs all three rights.
@@ -113,14 +125,14 @@ export function LivePlacesPanel({ kind, id, name, between }: { kind: 'agent' | '
   // Activity is read under activity.view; without it there is no list to link to, so nothing is asked.
   const readsActivity = useCan('activity', 'view') === true;
   const count = useActivityCount(sources, readsActivity);
-  if (q.isPending) return <Skeleton className="h-64 w-full" />;
-  if (q.isError) return <QueryError what={`where ${name} is live`} error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching} />;
+  if (q.isPending) return <LiveSkeleton />;
+  if (q.isError) return <QueryError what={`where this ${kind} is live`} error={q.error} onRetry={() => q.refetch()} retrying={q.isFetching} />;
   const latest = q.data.latestVersion;
   return (
     <div className="flex flex-col gap-4">
       <Card className="gap-3" data-testid="versions-live">
         <CardHeader>
-          <CardTitle>Versions live</CardTitle>
+          <CardTitle>Where it&rsquo;s live</CardTitle>
           <CardDescription>Published v{latest}. A place follows the latest published version or pins one; publishing never moves a pinned one.</CardDescription>
           {(readsActivity || (kind === 'agent' && mayCreate && mayEdit && mayDeploy)) && (
             <CardAction className="flex flex-wrap gap-2">
@@ -156,7 +168,7 @@ export function LivePlacesPanel({ kind, id, name, between }: { kind: 'agent' | '
                 ))}
             </ItemGroup>
           ) : (
-            <p className="text-sm text-muted-foreground">Not live anywhere yet. Put the agent on a channel, in a workflow, or on a schedule.</p>
+            <EmptyState icon={Route} title="Not live anywhere yet" description={`Put the ${kind} on a channel, in a workflow, or on a schedule.`} testId="live-empty" />
           )}
         </CardContent>
       </Card>

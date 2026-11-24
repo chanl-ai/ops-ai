@@ -4,7 +4,8 @@ import * as React from 'react';
 import Link from 'next/link';
 import { AlertTriangle } from 'lucide-react';
 
-import { ScheduleForm, localTimeZone } from '@/components/shared/schedule-form';
+import { ScheduleForm } from '@/components/shared/schedule-form';
+import { QueryError } from '@/components/shared/query-states';
 import { formOf, ruleOf, type EveryFormValue } from '@/components/shared/schedule-forms/every-rule';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -16,23 +17,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useDefinition, useSetDefinitionPaused } from '@/hooks/engine-queries';
 import { useCan } from '@/hooks/me-queries';
 import { useClearSchedule, useSaveSchedule, useSchedulePreview } from '@/hooks/schedule-queries';
-import { ApiError } from '@/lib/api/contract';
-import { dateTime } from '@/lib/format';
+import { dateTime, localTimeZone } from '@/lib/format';
+import { refusalOf } from '@/lib/schedule-refusal';
+import { lastRunWords } from '@/lib/schedule-words';
 import type { EveryRule, ScheduleView } from '@/lib/types/schedules';
 
 import type { TriggerPanelProps } from './trigger-panels';
-
-/** What the clock did with the last slot, in the words the panel shows. */
-const OUTCOME: Record<NonNullable<ScheduleView['lastOutcome']>, string> = { ran: 'ran', late: 'ran late', skipped: 'skipped', refused: 'refused', missed: 'missed', seen: 'seen' };
-
-const FIELDS = ['every', 'unit', 'start', 'days', 'between', 'tz'];
-
-/** The refusal beside the field it names; one that names no field of this form (a required input) is shown above the form. */
-function refusal(error: unknown): { byField: Record<string, string>; general?: string } {
-  if (!(error instanceof ApiError)) return { byField: {}, general: error instanceof Error ? error.message : undefined };
-  const field = String(error.details?.field ?? '');
-  return FIELDS.includes(field) ? { byField: { [field]: error.message } } : { byField: {}, general: error.message };
-}
 
 /**
  * The Schedule trigger's panel in the step sheet's "How it starts" slot. A schedule is saved on its own, outside the
@@ -42,13 +32,18 @@ function refusal(error: unknown): { byField: Record<string, string>; general?: s
 export function SchedulePanel({ node, workflowId }: TriggerPanelProps) {
   const view = useDefinition(workflowId);
   const schedule = view.data?.schedules?.find((s) => s.triggerStep === node.id);
-  const mayEdit = useCan('workflows', 'edit') === true && useCan('deployments', 'create') === true;
+  // The rights are asked unconditionally: a hook skipped by a short-circuit changes the hook order between renders.
+  const mayEditWorkflow = useCan('workflows', 'edit') === true;
+  const mayDeploy = useCan('deployments', 'create') === true;
   if (view.isPending) return <Skeleton className="h-48 w-full" data-testid="schedule-loading" />;
+  if (view.isError || !view.data) return <QueryError what="this schedule" error={view.error} onRetry={() => view.refetch()} retrying={view.isFetching} />;
+  // The server answers 404 to a save until the saved workflow holds this step, so Save waits for it.
+  const held = (view.data.workingCopy?.definition ?? view.data.definition).nodes.some((n) => n.id === node.id);
   // Keyed by the saved rule's words, so a change saved elsewhere (the API, the CLI) opens as it is.
-  return <PanelBody key={schedule?.words ?? 'none'} node={node} workflowId={workflowId} schedule={schedule} paused={view.data?.paused ?? false} mayEdit={mayEdit} />;
+  return <PanelBody key={schedule?.words ?? 'none'} node={node} workflowId={workflowId} schedule={schedule} paused={view.data.paused} mayEdit={mayEditWorkflow && mayDeploy} mayResume={mayEditWorkflow} held={held} />;
 }
 
-function PanelBody({ node, workflowId, schedule, paused, mayEdit }: { node: TriggerPanelProps['node']; workflowId: string; schedule: ScheduleView | undefined; paused: boolean; mayEdit: boolean }) {
+function PanelBody({ node, workflowId, schedule, mayEdit, mayResume, held }: { node: TriggerPanelProps['node']; workflowId: string; schedule: ScheduleView | undefined; paused: boolean; mayEdit: boolean; mayResume: boolean; held: boolean }) {
   const saved = schedule && schedule.rule.kind === 'every' ? (schedule.rule as EveryRule) : undefined;
   const [form, setForm] = React.useState<EveryFormValue>(() => formOf(saved, localTimeZone()));
   const [confirmClear, setConfirmClear] = React.useState(false);
@@ -57,7 +52,7 @@ function PanelBody({ node, workflowId, schedule, paused, mayEdit }: { node: Trig
   const save = useSaveSchedule(workflowId, node.id);
   const clear = useClearSchedule(workflowId, node.id);
   const resume = useSetDefinitionPaused(workflowId);
-  const refused = refusal(save.error ?? (preview.isError ? preview.error : null));
+  const refused = refusalOf(save.error ?? (preview.isError ? preview.error : null));
   const idle = schedule?.idleCode ?? null;
   const showsPaused = idle === 'paused';
 
@@ -82,7 +77,7 @@ function PanelBody({ node, workflowId, schedule, paused, mayEdit }: { node: Trig
             <AlertTitle>Paused: no scheduled runs</AlertTitle>
             <AlertDescription>
               Pause stops the whole workflow, not just this schedule. Resume waits for the next time on the schedule.
-              {mayEdit && (
+              {mayResume && (
                 <Button size="sm" variant="outline" className="mt-2" disabled={resume.isPending} onClick={() => resume.mutate(false)} data-testid="schedule-resume">
                   Resume
                 </Button>
@@ -114,10 +109,11 @@ function PanelBody({ node, workflowId, schedule, paused, mayEdit }: { node: Trig
           previewing={preview.isFetching}
           nextRunsNote={showsPaused ? 'None while paused' : undefined}
         />
-        {schedule && <LastRun schedule={schedule} />}
+        {schedule && <LastRun schedule={schedule} tz={saved?.tz} />}
+        {mayEdit && !held && <p className="text-sm text-muted-foreground" data-testid="schedule-save-first">Save the workflow first: a schedule is set on a step the workflow already holds.</p>}
         {mayEdit ? (
           <div className="flex flex-wrap gap-2">
-            <LoadingButton isLoading={save.isPending} loadingText="Saving…" disabled={rule === null} onClick={() => rule && save.mutate(rule)} data-testid="schedule-save">
+            <LoadingButton isLoading={save.isPending} loadingText="Saving…" disabled={rule === null || !held} onClick={() => rule && save.mutate(rule)} data-testid="schedule-save">
               Save schedule
             </LoadingButton>
             {schedule && (
@@ -147,26 +143,22 @@ function PanelBody({ node, workflowId, schedule, paused, mayEdit }: { node: Trig
   );
 }
 
-function LastRun({ schedule }: { schedule: ScheduleView }) {
+function LastRun({ schedule, tz }: { schedule: ScheduleView; tz?: string }) {
+  const last = lastRunWords(schedule, tz);
   return (
     <div className="flex flex-col gap-1" data-testid="schedule-last-run">
       <p className="text-sm font-medium">Last scheduled run</p>
-      {schedule.lastOutcome && schedule.lastSlotAt ? (
-        <p className="text-sm text-muted-foreground">
-          {dateTime(schedule.lastSlotAt)} · {OUTCOME[schedule.lastOutcome]}
-          {schedule.lastOutcomeReason ? `: ${schedule.lastOutcomeReason}` : ''}
-          {schedule.lastRunId && (
-            <>
-              {' '}
-              <Link href={`/build/runs/${encodeURIComponent(schedule.lastRunId)}`} className="underline underline-offset-2">
-                Open the run
-              </Link>
-            </>
-          )}
-        </p>
-      ) : (
-        <p className="text-sm text-muted-foreground">Not run yet.</p>
-      )}
+      <p className="text-sm text-muted-foreground">
+        {last.text}
+        {last.runHref && (
+          <>
+            {' '}
+            <Link href={last.runHref} className="underline underline-offset-2">
+              Open the run
+            </Link>
+          </>
+        )}
+      </p>
     </div>
   );
 }
@@ -179,7 +171,7 @@ function ReadOnlyWords({ schedule }: { schedule: ScheduleView }) {
           <li key={t}>{dateTime(t)}</li>
         ))}
       </ul>
-      <LastRun schedule={schedule} />
+      <LastRun schedule={schedule} tz={(schedule.rule as EveryRule).tz} />
     </Section>
   );
 }
@@ -201,8 +193,10 @@ export function IdleScheduleNotices({ workflowId, schedules }: { workflowId: str
 }
 
 function IdleNotice({ workflowId, schedule }: { workflowId: string; schedule: ScheduleView }) {
-  const mayEdit = useCan('workflows', 'edit') === true && useCan('deployments', 'create') === true;
+  const mayEditWorkflow = useCan('workflows', 'edit') === true;
+  const mayDeploy = useCan('deployments', 'create') === true;
   const clear = useClearSchedule(workflowId, schedule.triggerStep);
+  const [confirming, setConfirming] = React.useState(false);
   return (
     <Alert data-testid="schedule-idle-notice">
       <AlertTriangle />
@@ -211,12 +205,26 @@ function IdleNotice({ workflowId, schedule }: { workflowId: string; schedule: Sc
         <p>
           {schedule.words}. {schedule.idle}
         </p>
-        {mayEdit && (
-          <Button variant="outline" size="sm" className="mt-2" disabled={clear.isPending} onClick={() => clear.mutate()} data-testid="schedule-idle-clear">
+        {clear.isError && <p className="text-destructive-text">{clear.error instanceof Error ? clear.error.message : 'The schedule was not cleared.'}</p>}
+        {mayEditWorkflow && mayDeploy && (
+          <Button variant="outline" size="sm" className="mt-2" onClick={() => setConfirming(true)} data-testid="schedule-idle-clear">
             Clear schedule
           </Button>
         )}
       </AlertDescription>
+      <DeleteDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        entityType="schedule"
+        verb="Clear"
+        description="Nothing runs on this schedule now. Clearing it removes the saved schedule."
+        isLoading={clear.isPending}
+        onConfirm={async () => {
+          await clear.mutateAsync().catch(() => undefined);
+          setConfirming(false);
+        }}
+        testIdPrefix="schedule-idle-clear"
+      />
     </Alert>
   );
 }
