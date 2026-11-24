@@ -1,6 +1,6 @@
 # A long list or text in a table cell stays inside its column
 
-Status: draft. Id: `uc-772`. Service: `console`. Layers: ui.
+Status: draft. Id: `uc-780`. Service: `console`. Layers: ui.
 
 A table cell with many values shows the first few and "+N more"; a long text is cut to its column. Both open the full
 value in a popover that a click, a tap or the keyboard reaches, and a click inside a clickable row's cell never opens
@@ -25,7 +25,7 @@ the row.
 
 | Layer | Script | State |
 |---|---|---|
-| ui | `console/scripts/test-uc-772-ui.mjs` | draft |
+| ui | `console/scripts/test-uc-780-ui.mjs` | draft |
 
 ## Non-vacuous check
 

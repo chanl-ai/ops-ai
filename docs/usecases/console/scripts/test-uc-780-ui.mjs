@@ -1,4 +1,4 @@
-// uc-772 A long list or text in a table cell stays inside its column, ui layer:
+// uc-780 A long list or text in a table cell stays inside its column, ui layer:
 // docs/usecases/console/long-values-in-tables.md. Demo stack, signed in as James (builder).
 import { check, chromium, consoleSignIn, expectSampleData, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { PASSWORD } from '@ops-ai/usecase-runner/steps';
