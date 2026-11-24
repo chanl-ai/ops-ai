@@ -116,6 +116,17 @@ export default function HumanTasksPage() {
     moveOn();
   };
 
+  const assignToMe = async () => {
+    if (!active) return;
+    try {
+      await assign.mutateAsync({ ids: [active.id] });
+    } catch (e) {
+      toast.error('Couldn’t assign the task', { description: (e as Error).message });
+      return;
+    }
+    toast.success('Assigned to you', { description: `${active.title} is in your Assigned to me.` });
+  };
+
   const twoPanes = !!task?.evidence.some((n) => n.type === 'viewer');
   const allTasks = (
     <Button variant="outline" asChild>
@@ -213,6 +224,7 @@ export default function HumanTasksPage() {
                       reviewers={(lookups?.reviewers ?? []).filter((p) => p !== active.assignee)}
                       platformTeam={team?.scope === 'all'}
                       onReassign={(to) => void reassign(to)}
+                      onAssignToMe={() => void assignToMe()}
                       className={cn(twoPanes && pane !== 'decide' ? 'hidden' : 'flex', 'lg:flex')}
                     />
                   </div>
