@@ -122,6 +122,8 @@ class WatchRow(Out):
 
 
 class EventRow(Out):
+    tenant_id: str
+    team: str
     watch_id: str
     number: int
     file_id: str | None

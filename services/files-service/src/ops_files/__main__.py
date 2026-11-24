@@ -23,9 +23,11 @@ from ops_files.settings import StorageSettings, build_store
 from ops_files.store import FilesStore, ReadRequestsStore, SettingsStore, engine_for
 from ops_files.store.files import SYSTEM_ROLE, service_outbox
 from ops_files.tenant_files import TenantFiles
+from ops_files.watches import WatchChecks, keep_checking
 from ops_identity import Auth, ServiceClient
 from ops_service_kit.logging import configure_logging
 from ops_service_kit.settings import Settings, require_keys
+from ops_sources import ToolReader
 from ops_storage.local import LocalObjectStore
 from ops_store.outbox import relay, run_relay
 from ops_store.schema_version import require_current_schema
@@ -95,7 +97,7 @@ def build(settings: Settings) -> TenantFiles:
 def main() -> None:
     settings = Settings()
     # agents-service reads every file event (file.deleted starts the purge workflow), so files cannot run without it.
-    settings.require(*settings.identity_endpoints, "agents")
+    settings.require(*settings.identity_endpoints, "agents", "tools")
     require_keys(settings, "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
     configure_logging(service="files-service")
@@ -109,8 +111,12 @@ def main() -> None:
     events = relay(
         files.engine, service_outbox, routes={"*": ("agents",)}, targets=targets, role=SYSTEM_ROLE, enrich=enrich
     )
+    # A watched folder's check reads the source through tools-service with the team's sign-in, as knowledge does.
+    tools = ServiceClient.for_settings(settings, service="files", audience="tools", scopes=["tools:view", "tools:run"])
+    checks = WatchChecks(files, ToolReader(tools, key_prefix="files"))
     background: list[Callable[[], Coroutine[Any, Any, None]]] = [
         lambda: keep_purging(files),
+        lambda: keep_checking(checks),
         lambda: run_relay(events, key="files_relay", stop=asyncio.Event()),
     ]
     app = create_files_app(

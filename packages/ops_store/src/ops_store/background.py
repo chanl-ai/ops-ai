@@ -167,6 +167,14 @@ PROCESSES: list[Process] = [
         "every team's old watch events in one statement.",
     ),
     Process(
+        "files_watch_checks",
+        "files",
+        "Watched folder checks",
+        "Checks each watched folder someone asked to check, bringing its new and changed files into Files.",
+        5.0,
+        "It lists every team's asked-for checks, then checks each folder as its own team under the folder's lease.",
+    ),
+    Process(
         "documents_relay",
         "documents",
         "Document hand-off",
