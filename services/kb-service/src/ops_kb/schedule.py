@@ -57,8 +57,8 @@ async def run_due(service: KnowledgeService, now: datetime) -> list[str]:
                 try:
                     if due(service, s, now):
                         sources.append(s)
-                except ValueError as e:
-                    log.warning("kb_schedule_unreadable", source=s.id, error=str(e))
+                except Exception as e:
+                    log.warning("kb_schedule_unreadable", source=s.id, error=type(e).__name__)
         for s in sources:
             with isolation.scope(tenant, str(s.team_id)):
                 who = Who(tenant, "knowledge schedule", str(s.team_id))
