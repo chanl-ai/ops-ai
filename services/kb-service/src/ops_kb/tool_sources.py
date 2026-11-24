@@ -326,10 +326,12 @@ def _place(cfg: SourceConfig) -> Place:
 
 
 def _keep(cfg: SourceConfig, place: Place) -> None:
-    """The place written back into the source's config; a key with nothing to hold is left out."""
+    """The place written back into the source's config; a key with nothing to hold is left out, except the cursor,
+    which a run that read a page keeps as null once its listing finished."""
     cfg["tombstones"] = place.tombstones
+    if place.cursor is not None or "cursor" in cfg:
+        cfg["cursor"] = place.cursor
     for key, value in (
-        ("cursor", place.cursor),
         ("watermark", place.watermark),
         ("changesCursor", place.changes_cursor),
         ("lastFullAt", place.last_full_at),
