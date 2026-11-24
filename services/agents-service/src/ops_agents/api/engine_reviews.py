@@ -1121,9 +1121,9 @@ async def get(rt: Runtime, review_id: str) -> EngineReview:
 
 async def _check_decider(rt: Runtime, approver: Principal, run: Json, calls: list[Json]) -> None:
     """Who may decide a run's review: a reviewer or admin of the run's team, whatever the writes it decides (`calls`)
-    are, and not who started the run or whom the step names in requestedBy while requesterMayDecide is off.
-    Anyone the step names in notDecidedBy is refused whatever the policy, such as whoever saved the version it
-    approves."""
+    are, and not who started the run or whom the step names in requestedBy unless they hold Approvals decide in the
+    run's team. Anyone the step names in notDecidedBy is refused whatever their roles, such as whoever saved the
+    version it approves."""
     del calls
     paused = PAYLOAD(WAITING(run.get("waiting") or {}).get("payload") or {})
     # `entries` iterates as `or []` did: a number in either list still fails the check rather than passing it.
@@ -1208,7 +1208,8 @@ async def decide(
     amount: float | None = None,
 ) -> EngineReview:
     """Records the decision as the run's resume work row; a repeat of the same decision returns the review, a
-    different one is refused. The person who started the run decides its review only while requesterMayDecide is on.
+    different one is refused. The person who started the run decides its review only while they hold Approvals decide
+    in the run's team.
 
     A decision that approves a write (an option's call, or Approve on a step that `approves` a tool node) follows the
     v1 levy rule (hitl_facade.decide): the reviewer's inputs are validated against the option's declaration, the

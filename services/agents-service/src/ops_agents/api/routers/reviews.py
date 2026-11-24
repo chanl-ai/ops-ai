@@ -96,7 +96,7 @@ async def record_approval(
     policy = await policy_of(rt, cast(str, call["tool"]))
     payload: Json = cast(Json, waiting[0]["payload"]) if waiting else {}
     # Every route that records an approval passes through the one decider check: the asker alone for a card the person
-    # answers (ask_first), else a reviewer of the card's role who is not its asker unless requesterMayDecide lets them.
+    # answers (ask_first), else a reviewer of the card's role who is not its asker unless they hold Approvals decide.
     await hitl_facade.check_thread_decider(rt, approver, row, payload, [call])
     if policy.approvers > 1 or workspace_step_up(approver):
         require_step_up(rt, approver.email, step_up_token)
