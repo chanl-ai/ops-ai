@@ -5,8 +5,8 @@ Status: current. Checked against the release's workflow engine, chat turns and e
 A risk reviewer needs to know what happens to a customer's request when a process dies halfway through it: whether a
 model is asked twice, whether a payment or a record change is sent twice, and who may start a stopped run again. In
 Ops AI a workflow run and a chat reply are kept in the database step by step, so a replacement process continues from
-the last recorded step, and a write to your systems is never sent a second time under a new key unless the gateway
-proves the first one never ran.
+the last recorded step. A write to your systems is sent a second time, under a new key, only when its first send's
+recorded answer or the gateway's record proves it did nothing.
 
 ## Try it
 
@@ -28,7 +28,8 @@ A builder fixes a failed run's cause and sends it on from where it stopped.
 | A write's outcome is unknown (a timeout, a gateway that died) | The gateway's record under the attempt's key decides. Found done: the step takes that answer. Never received: it is sent once more under the next key. Otherwise the run stops for a person | The write itself, unless the gateway proves it never ran |
 | A run fails | It ends Failed with one error record (kind, code, step, attempt, whether a retry helps) | |
 | Retry (a Stuck run) | Continues from its last checkpoint | Every recorded step |
-| Redrive (a Failed or Stuck run) | Runs again from the failed step, on the version the run started on; a later publish is not used | Every step that finished before it, and any write whose outcome is unknown until its key is read |
+| Redrive (a Failed or Stuck run) | Runs again from the failed step, on the version the run started on; a later publish is not used | Every step that finished before it |
+| Redrive of a failed write | Sent again under the next key, on the earlier approval with the arguments that were approved, only when its answer proves it did nothing: refused, never sent (no connection, rate limited), refused by the gateway before sending (no address, account, sign-in or secret) or refused by the system with a 4xx. A timeout, a 5xx, a call that broke off, a plugin failure or an answer that could not be read goes to reconcile: the gateway's record under its key decides, and an unclear record stops the run for a person | A write that may have run |
 | An event between services cannot be delivered | The relay tries it again with a backoff of up to a minute; after 15 failures (about ten minutes) it is a dead letter, kept with its last error and never sent again on its own | The change the event reports, which committed with it |
 
 A step the run's failure names is the only one a redrive runs again. Its failed attempt is kept on the run as
@@ -49,6 +50,8 @@ history, marked redriven.
   the service's database. Bulk redrive and cancel have no console screen.
 - No tool declares how its writes may be settled after a dead gateway, so every such write pauses the run as Stuck for
   a person, and no tool passes the run-and-step key to the system it writes to.
+- Redriving a run whose Run workflow step failed because a child run failed finds that same child and fails again;
+  redrive the child run instead.
 - Redrive is offered on any Failed run, of any age, including one that ended at an End the builder marked as a
   failure.
 - A chat reply that outlives its deadline is ended by the worker, not by the process streaming it.
