@@ -16,7 +16,7 @@ const KNOWN: Record<string, { label: string; hint?: string; placeholder?: string
   follow_links: { label: 'Follow links', hint: 'Same site only.' },
   depth: { label: 'Depth', hint: 'How many links deep to follow from the start.' },
   max_pages: { label: 'Max pages' },
-  include: { label: 'Include', hint: 'Rules match where each page is kept, starting with /.', placeholder: 'e.g. /claims/**' },
+  include: { label: 'Include', hint: 'Rules match the address of each page, starting with /.', placeholder: 'e.g. /claims/**' },
   exclude: { label: 'Exclude', hint: 'Exclude wins. Rules match where each page is kept, starting with /.', placeholder: 'e.g. /claims/archive/**' },
   rate: { label: 'Speed', hint: 'Pages per second for this site. robots.txt can only make it slower.' },
   render: { label: 'Render JavaScript', hint: 'Loads pages in a browser first. 5 to 10 times slower.' },

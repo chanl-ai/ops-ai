@@ -38,7 +38,7 @@ and its place in the app.
 
 ## Failed files
 
-A check that cannot bring one file in names it in the **In files** column of the folder's row, with its size and the
+A check that cannot bring one file in names it in the **In Files** column of the folder's row, with its size and the
 reason. The other files in the check still arrive.
 
 | Reason | What it means | What to do |

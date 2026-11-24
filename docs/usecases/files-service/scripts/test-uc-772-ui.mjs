@@ -159,7 +159,7 @@ try {
         const guideIndex = await readFile(join(ROOT, 'docs/guide/README.md'), 'utf8');
         check(
           '24 the guide page on watching a folder exists with a Failed files section, is linked from the guide index and the docs nav, and the failed file links to it',
-          /^## Failed files/m.test(guideFile) && guideIndex.includes('watch-a-folder.md') && guideNav.includes('guide/watch-a-folder.md') && /watch-a-folder\.md#failed-files$/.test(guideLink ?? ''),
+          /^## Failed files/m.test(guideFile) && guideIndex.includes('watch-a-folder.md') && guideNav.includes('guide/watch-a-folder.md') && /\/docs\/guide\/watch-a-folder#failed-files$/.test(guideLink ?? ''),
           { guideLink },
         );
         await page.setViewportSize({ width: 390, height: 900 });
@@ -168,7 +168,8 @@ try {
         const phoneScroll = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
         check('25 at 390 the row shows the last check and the failed file with no sideways scroll', /brought in/.test(phoneText) && phoneText.includes('failed') && !phoneScroll, { phoneText, phoneScroll });
         await page.setViewportSize({ width: 1440, height: 1000 });
-        await shoot(page, 'uc-772-watched-folders', async () => failedCell.waitFor(), wide);
+        // The failed file is drawn in the In Files cell from 640 wide and under the folder's name below it.
+        await shoot(page, 'uc-772-watched-folders', async () => page.locator(`[data-testid="watch-failed-${watch.id}"], [data-testid="watch-failed-stacked-${watch.id}"]`).locator('visible=true').first().waitFor(), wide);
 
         // The file page's Source section, for a file the check brought in.
         const leave = events.find((e) => e.kind === 'new' && String(e.path).endsWith('leave.md'));

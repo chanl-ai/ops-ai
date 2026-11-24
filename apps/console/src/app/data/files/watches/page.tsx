@@ -9,7 +9,6 @@ import { toast } from 'sonner';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
-import { FilesTabs } from '@/components/files/files-tabs';
 import { WatchFolderDialog } from '@/components/files/watch-folder-dialog';
 import { PageLayout } from '@/components/page-layout';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
@@ -29,7 +28,7 @@ import { bytes, plural, relativeTime } from '@/lib/format';
 type Row = Watch;
 
 /** The guide's page on watching a folder, which says what to do about each failed file. */
-const WATCH_GUIDE = 'https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/watch-a-folder.md';
+const WATCH_GUIDE = 'https://opsai.chanl.ai/docs/guide/watch-a-folder';
 
 /** An app's id as a name when its card is not there: its last word, capitalised. */
 const plainName = (plugin: string) => (plugin.split('.').pop() ?? plugin).replace(/^\w/, (c) => c.toUpperCase());
@@ -128,23 +127,58 @@ function nextStep(reason: string | null | undefined) {
     : 'The next checks try it again; if it keeps failing, change the file in the app or upload it directly.';
 }
 
-/** The failed files of the last check, under the count in the In Files cell: the first one, why, and what to do. */
-function Failures({ w }: { w: Watch }) {
+/**
+ * The failed files of the last check, under the count in the In Files cell: the first one, why, and what to do. At phone
+ * width that column is a few characters wide, so the same text sits under the folder's name instead (`stacked`).
+ */
+function Failures({ w, stacked }: { w: Watch; stacked?: boolean }) {
   const c = w.lastCheck;
   if (!c || !c.failed) return null;
   const first = c.failures?.[0];
   return (
-    <span className="flex max-w-80 flex-col gap-0.5 whitespace-normal text-xs text-destructive-text" data-testid={`watch-failed-${w.id}`}>
+    <span className={`flex min-w-0 max-w-80 flex-col gap-0.5 whitespace-normal break-words text-xs text-destructive-text ${stacked ? 'mt-1 sm:hidden' : 'max-sm:hidden'}`} data-testid={stacked ? `watch-failed-stacked-${w.id}` : `watch-failed-${w.id}`}>
       <span>
         {c.failed} failed{first ? `: ${first.path ?? 'a file'}${first.size ? `, ${bytes(first.size)}` : ''}${first.reason ? ` (${first.reason})` : ''}` : ''}
       </span>
       <span className="text-muted-foreground">
         {nextStep(first?.reason)}{' '}
-        <a href={`${WATCH_GUIDE}#failed-files`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 underline underline-offset-2" data-testid={`watch-failed-help-${w.id}`}>
+        <a href={`${WATCH_GUIDE}#failed-files`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 underline underline-offset-2" data-testid={stacked ? undefined : `watch-failed-help-${w.id}`}>
           What to do <ExternalLink className="size-3" />
         </a>
       </span>
     </span>
+  );
+}
+
+/**
+ * One alert for an app whose checks were refused. It waits for the app's card: while the name loads it has no text, so an
+ * alert drawn then reads "Checks stopped:  refused the sign-in" with a gap where the name goes. A card that fails to load
+ * settles the query, and the alert falls back to the id's last word.
+ */
+function RefusedAlert({ w, canManage }: { w: Watch; canManage: boolean }) {
+  const card = useSystemCard(`plugin:${w.plugin}`);
+  if (card.isPending) return null;
+  const why = refusal(w.lastCheck?.code);
+  return (
+    <Alert data-testid="watch-refused" data-code={w.lastCheck?.code || undefined}>
+      <Plug className="size-4" />
+      <AlertTitle>
+        Checks stopped: <AppName plugin={w.plugin} /> {why.title}
+      </AlertTitle>
+      <AlertDescription className="flex flex-col items-start gap-2">
+        <span>
+          {w.lastCheck?.stopped || why.fallback} Nothing was lost; {why.next}
+          {canManage || !why.action ? '' : ' Ask a builder to fix it on the app’s page.'}
+        </span>
+        {canManage && why.action && (
+          <Button asChild variant="outline" size="sm">
+            <Link href={appPageHref(`plugin:${w.plugin}`)} data-testid="watch-reconnect">
+              <Plug className="size-4" /> {why.action}
+            </Link>
+          </Button>
+        )}
+      </AlertDescription>
+    </Alert>
   );
 }
 
@@ -154,7 +188,7 @@ function columns(onCheck: ((w: Watch) => void) | undefined, onChange: (w: Watch)
       id: 'name',
       accessorFn: (w) => w.name,
       header: ({ column }) => <DataTableColumnHeader column={column} title="Watched folder" />,
-      meta: { kind: 'name' },
+      meta: { kind: 'name', wrap: true },
       cell: ({ row }) => (
         <div className="flex min-w-0 max-w-96 flex-col" data-testid={`watch-row-${row.original.id}`}>
           <span className="truncate font-medium">{row.original.name}</span>
@@ -164,6 +198,8 @@ function columns(onCheck: ((w: Watch) => void) | undefined, onChange: (w: Watch)
           <span className="mt-1 whitespace-normal sm:hidden">
             <LastCheck w={row.original} stacked />
           </span>
+          <span className="mt-1 text-xs tabular-nums text-muted-foreground sm:hidden">{plural(row.original.filesInFiles, 'file')} in Files</span>
+          <Failures w={row.original} stacked />
         </div>
       ),
       enableHiding: false,
@@ -171,6 +207,7 @@ function columns(onCheck: ((w: Watch) => void) | undefined, onChange: (w: Watch)
     {
       id: 'files',
       header: 'In Files',
+      meta: { className: 'max-sm:hidden min-w-64' },
       cell: ({ row }) => (
         <div className="flex flex-col gap-1">
           <span className="text-sm tabular-nums" data-testid={`watch-files-${row.original.id}`}>
@@ -237,7 +274,6 @@ export default function WatchedFoldersPage() {
       icon={FolderOpen}
       title="Files"
       description="Folders of your apps whose files arrive here, one entry per file and a version per change."
-      tabs={<FilesTabs />}
       actions={
         canManage ? (
           <Button onClick={() => setDialog({})} data-testid="watch-add">
@@ -252,30 +288,9 @@ export default function WatchedFoldersPage() {
         <QueryError what="watched folders" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
       ) : (
         <div className="flex flex-col gap-4">
-          {refused.map((w) => {
-            const why = refusal(w.lastCheck?.code);
-            return (
-              <Alert key={`${w.plugin}:${w.lastCheck?.code ?? ''}`} data-testid="watch-refused" data-code={w.lastCheck?.code || undefined}>
-                <Plug className="size-4" />
-                <AlertTitle>
-                  Checks stopped: <AppName plugin={w.plugin} /> {why.title}
-                </AlertTitle>
-                <AlertDescription className="flex flex-col items-start gap-2">
-                  <span>
-                    {w.lastCheck?.stopped || why.fallback} Nothing was lost; {why.next}
-                    {canManage || !why.action ? '' : ' Ask a builder to fix it on the app’s page.'}
-                  </span>
-                  {canManage && why.action && (
-                    <Button asChild variant="outline" size="sm">
-                      <Link href={appPageHref(`plugin:${w.plugin}`)} data-testid="watch-reconnect">
-                        <Plug className="size-4" /> {why.action}
-                      </Link>
-                    </Button>
-                  )}
-                </AlertDescription>
-              </Alert>
-            );
-          })}
+          {refused.map((w) => (
+            <RefusedAlert key={`${w.plugin}:${w.lastCheck?.code ?? ''}`} w={w} canManage={canManage} />
+          ))}
           <DataTableWithViews
             columns={cols}
             data={rows}
