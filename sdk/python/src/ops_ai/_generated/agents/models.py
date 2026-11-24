@@ -1080,6 +1080,12 @@ class KindRow(TypedDict, closed=True):
     type: str
 
 
+class KindView(TypedDict, closed=True):
+    label: str
+    name: str
+    schema: dict[str, JsonValue]
+
+
 class KnowledgeBaseRef(TypedDict, closed=True):
     id: str
     name: str
@@ -1395,6 +1401,12 @@ class PortView(TypedDict, closed=True):
     name: str
 
 
+class PreviewView(TypedDict, closed=True):
+    nextRuns: list[str]
+    rule: dict[str, JsonValue]
+    words: str
+
+
 class PromptVariable(TypedDict, closed=True):
     example: str
     key: str
@@ -1652,6 +1664,10 @@ class RoutedVersion(TypedDict, closed=True):
     workflowId: str
 
 
+class RuleIn(TypedDict, closed=True):
+    rule: dict[str, JsonValue]
+
+
 class RunChild(TypedDict, closed=True):
     index: int
     nodeId: str
@@ -1760,6 +1776,18 @@ class SavedCaseCheck(TypedDict, closed=True):
 
 class SavedCaseContext(TypedDict, closed=True):
     collections: NotRequired[list[str]]
+
+
+class ScheduleView(TypedDict, closed=True):
+    changedAt: str
+    changedBy: str
+    lastOutcome: NotRequired[str | None]
+    lastSlotAt: NotRequired[str | None]
+    nextRuns: list[str]
+    rule: dict[str, JsonValue]
+    triggerStep: str
+    words: str
+    workflowId: str
 
 
 class Serves(TypedDict, closed=True):
@@ -3222,6 +3250,11 @@ class EnvelopePlatformEventOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopePreviewView(TypedDict, closed=True):
+    data: PreviewView
+    success: Literal[True]
+
+
 class EnvelopePublishDecisionFields(TypedDict, closed=True):
     data: PublishDecisionFields
     success: Literal[True]
@@ -3269,6 +3302,11 @@ class EnvelopeRouted(TypedDict, closed=True):
 
 class EnvelopeRunStarted(TypedDict, closed=True):
     data: RunStarted
+    success: Literal[True]
+
+
+class EnvelopeScheduleView(TypedDict, closed=True):
+    data: ScheduleView
     success: Literal[True]
 
 
@@ -3334,6 +3372,11 @@ class EnvelopeListGraphVersion(TypedDict, closed=True):
 
 class EnvelopeListInboxItem(TypedDict, closed=True):
     data: list[InboxItem]
+    success: Literal[True]
+
+
+class EnvelopeListKindView(TypedDict, closed=True):
+    data: list[KindView]
     success: Literal[True]
 
 

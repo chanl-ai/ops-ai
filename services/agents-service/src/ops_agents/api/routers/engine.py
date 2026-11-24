@@ -65,6 +65,7 @@ from ...store.definition_list import definitions_page
 from ...store.engine import DatabaseError, EngineTransactions
 from ...store.events import EventLog
 from ...store.mailboxes import MailboxStore
+from ...store.schedules import WorkflowSchedules
 from ...store.template_copies import TemplateCopies
 from ...store.tenancy import current_team, current_tenant
 from ...store.trigger_events import TriggerEvents
@@ -711,6 +712,8 @@ async def delete_definition(rt: Rt, me: Me, _: Tx, workflow_id: str) -> Response
         )
     # A workflow installed from a template stops counting as the team's copy, so the template can be installed again.
     await TemplateCopies(rt.db).removed_record("workflow", workflow_id)
+    # Its schedules live outside the versions, so they go with it here.
+    await WorkflowSchedules(rt.db).delete_workflow(workflow_id)
     return Response(status_code=204)
 
 

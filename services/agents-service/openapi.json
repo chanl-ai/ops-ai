@@ -8751,6 +8751,25 @@
         "title": "Envelope[PlatformEventOut]",
         "type": "object"
       },
+      "Envelope_PreviewView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PreviewView"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[PreviewView]",
+        "type": "object"
+      },
       "Envelope_PublicForm_": {
         "additionalProperties": false,
         "properties": {
@@ -9129,6 +9148,25 @@
           "data"
         ],
         "title": "Envelope[SavedCases]",
+        "type": "object"
+      },
+      "Envelope_ScheduleView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ScheduleView"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ScheduleView]",
         "type": "object"
       },
       "Envelope_SkillDetail_": {
@@ -9928,6 +9966,29 @@
           "data"
         ],
         "title": "Envelope[list[InboxItem]]",
+        "type": "object"
+      },
+      "Envelope_list_KindView__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/KindView"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[list[KindView]]",
         "type": "object"
       },
       "Envelope_list_KnowledgeUsage__": {
@@ -12808,6 +12869,33 @@
         "title": "KindRow",
         "type": "object"
       },
+      "KindView": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "schema": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Schema",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "schema"
+        ],
+        "title": "KindView",
+        "type": "object"
+      },
       "KnowledgeBaseRef": {
         "additionalProperties": false,
         "properties": {
@@ -15623,6 +15711,36 @@
         "title": "PortView",
         "type": "object"
       },
+      "PreviewView": {
+        "additionalProperties": false,
+        "properties": {
+          "nextRuns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Nextruns",
+            "type": "array"
+          },
+          "rule": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Rule",
+            "type": "object"
+          },
+          "words": {
+            "title": "Words",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule",
+          "words",
+          "nextRuns"
+        ],
+        "title": "PreviewView",
+        "type": "object"
+      },
       "PromptVariable": {
         "additionalProperties": false,
         "description": "A `{key}` an agent's instructions may name, filled at run time from the turn's variables.",
@@ -17659,6 +17777,23 @@
         "title": "RoutedVersion",
         "type": "object"
       },
+      "RuleIn": {
+        "additionalProperties": false,
+        "properties": {
+          "rule": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Rule",
+            "type": "object"
+          }
+        },
+        "required": [
+          "rule"
+        ],
+        "title": "RuleIn",
+        "type": "object"
+      },
       "RunChild": {
         "additionalProperties": false,
         "description": "A run a step started (Start workflow, once or for each item), with where it is now.",
@@ -19015,6 +19150,78 @@
           "cases"
         ],
         "title": "SavedCases",
+        "type": "object"
+      },
+      "ScheduleView": {
+        "additionalProperties": false,
+        "properties": {
+          "changedAt": {
+            "title": "Changedat",
+            "type": "string"
+          },
+          "changedBy": {
+            "title": "Changedby",
+            "type": "string"
+          },
+          "lastOutcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastoutcome"
+          },
+          "lastSlotAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastslotat"
+          },
+          "nextRuns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Nextruns",
+            "type": "array"
+          },
+          "rule": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Rule",
+            "type": "object"
+          },
+          "triggerStep": {
+            "title": "Triggerstep",
+            "type": "string"
+          },
+          "words": {
+            "title": "Words",
+            "type": "string"
+          },
+          "workflowId": {
+            "title": "Workflowid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflowId",
+          "triggerStep",
+          "rule",
+          "words",
+          "nextRuns",
+          "changedBy",
+          "changedAt"
+        ],
+        "title": "ScheduleView",
         "type": "object"
       },
       "Serves": {
@@ -54720,6 +54927,374 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/schedules/kinds": {
+      "get": {
+        "description": "Every rule kind a schedule may be written in, with its label and the JSON Schema of its own fields.",
+        "operationId": "schedules_schedule_kinds",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_KindView__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Schedule Kinds",
+        "tags": [
+          "Schedules"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/schedules/preview": {
+      "post": {
+        "description": "The rule as it would be saved, in words, with its next three runs. 422 naming the field for a rule a save would\nrefuse, including one under the install's shortest interval.",
+        "operationId": "schedules_preview_schedule",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PreviewView_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Preview Schedule",
+        "tags": [
+          "Schedules"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/skills": {
       "get": {
         "description": "One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when\nor slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,\nwhich is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,\n`ownerTeam`, `origin` and `loading` filter by facet; `knowledgeBases` keeps skills naming any base given. The view\ncounts and facets cover every skill the search leaves, before the view and the facet filters; the page, its counts\nand its facets are read in SQL (`store/skill_list.py`).\n\nEvery view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.\nWith `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing\na tool or knowledge base the agent lacks as `locked`, naming them in `needs`.",
@@ -67761,6 +68336,596 @@
           }
         },
         "summary": "Resume Definition",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule": {
+      "delete": {
+        "description": "Clears the schedule: nothing more ticks. 404 when none was saved.",
+        "operationId": "workflows_clear_schedule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "step",
+            "required": true,
+            "schema": {
+              "title": "Step",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Clear Schedule",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      },
+      "get": {
+        "description": "The schedule saved on the trigger step, in words, with its next runs and last outcome; 404 when none is saved.",
+        "operationId": "workflows_get_schedule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "step",
+            "required": true,
+            "schema": {
+              "title": "Step",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ScheduleView_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Get Schedule",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      },
+      "put": {
+        "description": "Saves the schedule; it applies at once to the live version, with no publish, and first runs at its next slot.\n403 without the rights to pause the workflow and put it on a channel; 422 naming the field for a bad rule, a rule\nunder the shortest interval, an input schema that needs more than dueAt, or a workflow with no team.",
+        "operationId": "workflows_save_schedule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "step",
+            "required": true,
+            "schema": {
+              "title": "Step",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ScheduleView_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Save Schedule",
         "tags": [
           "Workflows"
         ],
