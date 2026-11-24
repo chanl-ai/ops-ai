@@ -1,6 +1,6 @@
 {
   "date": "2026-11-24",
   "title": "A schedule saved shortly before its time runs that time",
-  "description": "A schedule saved or changed in the minute before a slot now runs that slot. A weekday schedule no longer runs Friday's slot late on Saturday evening, and the workflow view says when a schedule is idle because the workflow is paused or the step is no longer a schedule trigger.",
+  "description": "A schedule saved in the minute before a slot runs that slot, while a resumed schedule waits for its next slot. A weekday schedule no longer runs Friday's slot late on Saturday evening, and the workflow view says when a schedule is idle.",
   "tag": "fix"
 }

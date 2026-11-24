@@ -247,7 +247,7 @@ async def test_an_agents_live_places_are_its_channels_and_the_steps_that_run_it(
         await WorkflowSchedules(rt.db).save("fraud_summary", trigger, "team_fraud", rule, "user_omar")
     both = (await c.get("/v1/agents/ag_branch/live", headers=BUILDER)).json()["data"]["rows"]
     steps = {p["where"]["workflowId"]: p["schedule"] for p in both if p["where"]["kind"] == "workflow_step"}
-    assert steps["customer_summary"] is not None and steps.get("fraud_summary", "absent") in (None, "absent"), steps
+    assert steps["customer_summary"] is not None and steps["fraud_summary"] is None, steps
     assert (await c.get("/v1/agents/ag_nobody/live", headers=BUILDER)).status_code == 404
 
 
