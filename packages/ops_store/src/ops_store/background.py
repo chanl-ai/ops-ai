@@ -213,6 +213,14 @@ PROCESSES: list[Process] = [
         "Reads queued before a restart are resumed for every team, each in its own team.",
     ),
     Process(
+        "agents_relay",
+        "agents",
+        "Agents hand-off",
+        "Sends schedule saves and clears to the account's audit log.",
+        2.0,
+        "It delivers every team's entries, each as its own team.",
+    ),
+    Process(
         "kb_relay",
         "kb",
         "Knowledge hand-off",

@@ -536,6 +536,8 @@ class Settings(BaseSettings):
                 # secrets_egress:manage: an approved held host joins the tenant's allow-list in tools-service;
                 # claimed only on that call (GatewayClient.egress_host_decision).
                 "secrets_egress:manage",
+                # audit:create: its relay writes a schedule's save and clear to the account's audit log.
+                "audit:create",
             ],
             # deployments:view: it reads a mailbox's reply sender when a send_reply names the mailbox.
             # settings:view: a tool module publish reads the team's publishReview live.

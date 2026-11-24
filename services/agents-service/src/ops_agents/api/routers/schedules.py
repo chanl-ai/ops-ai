@@ -34,6 +34,7 @@ from .. import engine_lifecycle
 from ..auth import caller_of, principal
 from ..deps import Runtime
 from ..envelope import ok
+from ..schedule_audit import entry
 from ..schedule_clock import required_beyond_due
 from ..schedule_view import ScheduleView, next_runs, schedulable, schedule_views
 from ..schemas import Out  # pyright: ignore[reportPrivateImportUsage]
@@ -182,6 +183,9 @@ async def save_schedule(rt: Rt, me: Me, _: Tx, workflow_id: str, step: str, body
     rule = checked(rt, body.rule, now)
     store = WorkflowSchedules(rt.db)
     before = await store.save(workflow_id, step, wf.team_id, rule, me.sub, by_name=me.name or me.email)
+    await store.audit(
+        team_id=wf.team_id, actor=me.sub, workflow_id=workflow_id, **entry("save", wf.name, step, before, rule)
+    )
     log.info(
         "schedule_saved",
         workflow=workflow_id,
@@ -200,10 +204,16 @@ async def clear_schedule(rt: Rt, me: Me, _: Tx, workflow_id: str, step: str) -> 
     """Clears the schedule: nothing more ticks. Needs the same rights as a save and nothing else, so a schedule whose
     step a newer version dropped, or whose newest version needs an input, can still be cleared. 404 when none was
     saved."""
-    await _rights(rt, me, workflow_id)
+    wf = await _rights(rt, me, workflow_id)
     store = WorkflowSchedules(rt.db)
     before = await store.get(workflow_id, step)
     if before is None or not await store.clear(workflow_id, step):
         raise NotFound(f"No schedule on {step} of {workflow_id}")
+    await store.audit(
+        team_id=before.team_id,
+        actor=me.sub,
+        workflow_id=workflow_id,
+        **entry("clear", wf.name, step, before.rule, None),
+    )
     log.info("schedule_cleared", workflow=workflow_id, step=step, by=me.sub, before=KINDS.words(before.rule))
     return Response(status_code=204)

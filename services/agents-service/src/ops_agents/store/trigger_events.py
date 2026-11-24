@@ -209,6 +209,7 @@ class TriggerEvents:
             t.c.workflow_id == workflow_id,
             t.c.source.like(f"{SCHEDULE_SOURCE}%"),
             t.c.event_key.in_(event_keys),
+            team_visible(t),
         )
         async with tenant_tx(self.engine) as c:
             found = (await c.execute(q.order_by(t.c.recorded_at))).all()

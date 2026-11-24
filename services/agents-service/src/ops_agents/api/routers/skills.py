@@ -419,7 +419,7 @@ async def deprecate_skill(rt: Rt, me: Me, _: Tx, skill_id: str, body: DeprecateI
 @router.delete("/v1/skills/{skill_id}", status_code=204, response_class=Response)
 async def delete_skill(rt: Rt, me: Me, _: Tx, skill_id: str) -> Response:
     """Refused (403) unless the caller created the skill or is an admin of its team, and (409) while it is pinned.
-    Who deleted it is logged; agents-service has no audit table yet."""
+    Who deleted it is logged; this write records no audit entry yet."""
     row = await skills(rt).row(skill_id)
     require_owner_or_admin(me, area="skills", team_id=row.team_id, created_by=row.created_by or "", what=row.slug)
     require_unpinned(await pinned_by(rt, skill_id), row.slug)
