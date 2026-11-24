@@ -46,6 +46,7 @@ export const SITE = [
           { page: 'guide/apps.md', title: 'Tools and apps', icon: 'app-window' },
           { page: 'guide/ops-assistant.md', title: 'Chat and channels', icon: 'message-square' },
           { page: 'guide/knowledge.md', title: 'Knowledge', icon: 'library' },
+          { page: 'guide/watch-a-folder.md', title: 'Watch a folder', icon: 'folder-input' },
           { page: 'guide/human-tasks.md', title: 'Human tasks and approvals', icon: 'user-check' },
           { page: 'guide/cases.md', title: 'Cases', icon: 'folder-open' },
           { page: 'guide/teams-and-access.md', title: 'Teams and access', icon: 'users' },

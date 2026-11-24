@@ -222,6 +222,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `guide/apps-setup.md` | Set up an app: its states, turning it on, the first time for a plugin's app, auth configs and secrets, a run waiting for a person, turning it off |
 | `guide/whats-built-today.md` | Built, partial or planned, capability by capability |
 | `guide/knowledge.md` | Knowledge: bases, sources, presets and sync settings, and what is not enforced yet |
+| `guide/watch-a-folder.md` | Watch a folder: pick an app's folders, what arrives in Files, versions, failed files and what to do, Check now, stopping, and who may do it |
 | `guide/human-tasks.md` | Human tasks and approvals: pausing for a person, task types, approval settings and their defaults |
 | `guide/cases.md` | Cases: the record of one piece of work, opened by a workflow or the API, and what a case page shows |
 | `guide/teams-and-access.md` | Teams and access: teams as the data boundary, the built-in roles, the roles grid and its limits |

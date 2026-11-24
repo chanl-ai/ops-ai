@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
-import { CircleAlert, CircleCheck, FolderInput, FolderOpen, FolderSearch, Loader2, Pencil, Plug, RefreshCw, Trash2 } from 'lucide-react';
+import { CircleAlert, CircleCheck, ExternalLink, FolderInput, FolderOpen, FolderSearch, Loader2, Pencil, Plug, RefreshCw, Unplug } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
@@ -12,12 +12,12 @@ import { DataTableWithViews } from '@/components/data-table-with-views';
 import { FilesTabs } from '@/components/files/files-tabs';
 import { WatchFolderDialog } from '@/components/files/watch-folder-dialog';
 import { PageLayout } from '@/components/page-layout';
-import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { serverPagination } from '@/components/shared/server-pagination';
 import { StopRowClick } from '@/components/shared/form-field';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { type Watch, useCheckWatch, useDeleteWatch, useWatches } from '@/hooks/file-queries';
 import { useCan } from '@/hooks/me-queries';
@@ -28,10 +28,17 @@ import { bytes, plural, relativeTime } from '@/lib/format';
 
 type Row = Watch;
 
+/** The guide's page on watching a folder, which says what to do about each failed file. */
+const WATCH_GUIDE = 'https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/watch-a-folder.md';
+
+/** An app's id as a name when its card is not there: its last word, capitalised. */
+const plainName = (plugin: string) => (plugin.split('.').pop() ?? plugin).replace(/^\w/, (c) => c.toUpperCase());
+
 /** The app's name from its card; the card is cached, so a list of watches of one app asks once. */
 function AppName({ plugin }: { plugin: string }) {
   const card = useSystemCard(`plugin:${plugin}`);
-  return <>{card.data?.name ?? plugin.split('.').pop()}</>;
+  if (card.isPending) return <span className="inline-block h-3 w-16 animate-pulse rounded bg-muted align-middle" aria-hidden />;
+  return <>{card.data?.name ?? plainName(plugin)}</>;
 }
 
 /**
@@ -78,10 +85,12 @@ function partialReason(code: string | undefined, stopped: string | undefined): s
   }
 }
 
-function LastCheck({ w }: { w: Watch }) {
+/** `stacked` is the copy under the name on a phone, where the Last check column is hidden; it carries no test ids so each is found once. */
+function LastCheck({ w, stacked }: { w: Watch; stacked?: boolean }) {
+  const id = (name: string) => (stacked ? undefined : `${name}-${w.id}`);
   if (w.checking)
     return (
-      <span className="inline-flex items-center gap-1.5 text-sm" data-testid={`watch-checking-${w.id}`}>
+      <span className="inline-flex items-center gap-1.5 text-sm" data-testid={id('watch-checking')}>
         <Loader2 className="size-4 animate-spin text-muted-foreground" /> Checking…
       </span>
     );
@@ -90,13 +99,13 @@ function LastCheck({ w }: { w: Watch }) {
   const at = relativeTime(w.lastCheckAt);
   if (c.status === 'refused' || c.status === 'failed')
     return (
-      <span className="inline-flex items-center gap-1.5 text-sm text-destructive-text" data-testid={`watch-last-check-${w.id}`} data-status={c.status}>
+      <span className="inline-flex items-center gap-1.5 text-sm text-destructive-text" data-testid={id('watch-last-check')} data-status={c.status}>
         <CircleAlert className="size-4" /> {c.status === 'refused' ? 'Refused' : 'Failed'} {at}
       </span>
     );
   if (c.status === 'partial')
     return (
-      <span className="inline-flex items-start gap-1.5 text-sm text-warning-text" data-testid={`watch-last-check-${w.id}`} data-status="partial">
+      <span className="inline-flex items-start gap-1.5 text-sm text-warning-text" data-testid={id('watch-last-check')} data-status="partial">
         <CircleAlert className="mt-0.5 size-4 shrink-0" />
         <span>
           Partial {at}
@@ -105,25 +114,41 @@ function LastCheck({ w }: { w: Watch }) {
       </span>
     );
   return (
-    <span className="inline-flex items-center gap-1.5 text-sm" data-testid={`watch-last-check-${w.id}`} data-status={c.status}>
+    <span className="inline-flex items-center gap-1.5 text-sm" data-testid={id('watch-last-check')} data-status={c.status}>
       <CircleCheck className="size-4 text-success" /> {at} · {c.brought ? `${plural(c.brought, 'file')} brought in` : 'nothing new'}
       {c.removed ? ` · ${c.removed} removed` : ''}
     </span>
   );
 }
 
+/** What a person does about a failed file, from the reason the check gave. */
+function nextStep(reason: string | null | undefined) {
+  return /larger than|too large|too big/i.test(reason ?? '')
+    ? 'Split it or make it smaller, or upload it to Files directly. It stays out until then.'
+    : 'The next checks try it again; if it keeps failing, change the file in the app or upload it directly.';
+}
+
+/** The failed files of the last check, under the count in the In Files cell: the first one, why, and what to do. */
 function Failures({ w }: { w: Watch }) {
   const c = w.lastCheck;
-  if (!c || !c.failed) return <span className="text-xs text-muted-foreground">None</span>;
+  if (!c || !c.failed) return null;
   const first = c.failures?.[0];
   return (
-    <span className="text-sm" data-testid={`watch-failed-${w.id}`}>
-      {c.failed} failed{first ? `: ${first.path ?? 'a file'}${first.size ? `, ${bytes(first.size)}` : ''}${first.reason ? ` (${first.reason})` : ''}` : ''}
+    <span className="flex max-w-80 flex-col gap-0.5 whitespace-normal text-xs text-destructive-text" data-testid={`watch-failed-${w.id}`}>
+      <span>
+        {c.failed} failed{first ? `: ${first.path ?? 'a file'}${first.size ? `, ${bytes(first.size)}` : ''}${first.reason ? ` (${first.reason})` : ''}` : ''}
+      </span>
+      <span className="text-muted-foreground">
+        {nextStep(first?.reason)}{' '}
+        <a href={`${WATCH_GUIDE}#failed-files`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 underline underline-offset-2" data-testid={`watch-failed-help-${w.id}`}>
+          What to do <ExternalLink className="size-3" />
+        </a>
+      </span>
     </span>
   );
 }
 
-function columns(onCheck: ((w: Watch) => void) | undefined, onChange: (w: Watch) => void, onDelete: (w: Watch) => void): ColumnDef<Row>[] {
+function columns(onCheck: ((w: Watch) => void) | undefined, onChange: (w: Watch) => void, onStop: (w: Watch) => void): ColumnDef<Row>[] {
   const base: ColumnDef<Row>[] = [
     {
       id: 'name',
@@ -136,6 +161,9 @@ function columns(onCheck: ((w: Watch) => void) | undefined, onChange: (w: Watch)
           <span className="truncate text-xs text-muted-foreground">
             <AppName plugin={row.original.plugin} /> · {scopeSummary(row.original.folders, row.original.values)}
           </span>
+          <span className="mt-1 whitespace-normal sm:hidden">
+            <LastCheck w={row.original} stacked />
+          </span>
         </div>
       ),
       enableHiding: false,
@@ -144,13 +172,15 @@ function columns(onCheck: ((w: Watch) => void) | undefined, onChange: (w: Watch)
       id: 'files',
       header: 'In Files',
       cell: ({ row }) => (
-        <span className="text-sm tabular-nums" data-testid={`watch-files-${row.original.id}`}>
-          {plural(row.original.filesInFiles, 'file')}
-        </span>
+        <div className="flex flex-col gap-1">
+          <span className="text-sm tabular-nums" data-testid={`watch-files-${row.original.id}`}>
+            {plural(row.original.filesInFiles, 'file')}
+          </span>
+          <Failures w={row.original} />
+        </div>
       ),
     },
-    { id: 'lastCheck', header: 'Last check', cell: ({ row }) => <LastCheck w={row.original} /> },
-    { id: 'failures', header: 'Needs attention', cell: ({ row }) => <Failures w={row.original} /> },
+    { id: 'lastCheck', header: 'Last check', meta: { className: 'max-sm:hidden' }, cell: ({ row }) => <LastCheck w={row.original} /> },
   ];
   if (!onCheck) return base;
   return [
@@ -165,7 +195,7 @@ function columns(onCheck: ((w: Watch) => void) | undefined, onChange: (w: Watch)
             actions={[
               { label: 'Check now', icon: RefreshCw, onClick: (r) => onCheck(r.original), disabledReason: row.original.checking ? 'A check of this folder is running' : undefined },
               { label: 'Change folders', icon: Pencil, onClick: (r) => onChange(r.original) },
-              { label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (r) => onDelete(r.original), disabledReason: row.original.inUse ? 'A workflow’s Files changed trigger uses this folder' : undefined },
+              { label: 'Stop watching', icon: Unplug, variant: 'destructive', onClick: (r) => onStop(r.original), disabledReason: row.original.inUse ? 'A workflow starts from this folder; remove it there first' : undefined },
             ]}
           />
         </StopRowClick>
@@ -183,7 +213,7 @@ export default function WatchedFoldersPage() {
   const check = useCheckWatch();
   const del = useDeleteWatch();
   const [dialog, setDialog] = React.useState<{ watch?: Watch } | null>(null);
-  const [deleting, setDeleting] = React.useState<Watch | null>(null);
+  const [stopping, setStopping] = React.useState<Watch | null>(null);
   const [resetKey, setResetKey] = React.useState(0);
 
   const askCheck = React.useCallback(
@@ -194,7 +224,7 @@ export default function WatchedFoldersPage() {
       }),
     [check],
   );
-  const cols = React.useMemo(() => columns(canManage ? askCheck : undefined, (w) => setDialog({ watch: w }), setDeleting), [canManage, askCheck]);
+  const cols = React.useMemo(() => columns(canManage ? askCheck : undefined, (w) => setDialog({ watch: w }), setStopping), [canManage, askCheck]);
   const rows = query.data?.data ?? [];
   // One alert per app and reason a check was refused, saying that reason and, where a person can fix it, the way.
   const refused = Object.values(
@@ -211,7 +241,7 @@ export default function WatchedFoldersPage() {
       actions={
         canManage ? (
           <Button onClick={() => setDialog({})} data-testid="watch-add">
-            <FolderInput className="size-4" /> Watch folder
+            <FolderInput className="size-4" /> Watch a folder
           </Button>
         ) : undefined
       }
@@ -263,7 +293,7 @@ export default function WatchedFoldersPage() {
                 filtered={list.isFiltered}
                 onClear={() => setResetKey((k) => k + 1)}
                 description="Watch a SharePoint folder and its files arrive here, one entry per file and a version per change."
-                createLabel={canManage ? 'Watch folder' : undefined}
+                createLabel={canManage ? 'Watch a folder' : undefined}
                 onCreate={() => setDialog({})}
               />
             }
@@ -271,25 +301,36 @@ export default function WatchedFoldersPage() {
         </div>
       )}
       <WatchFolderDialog open={!!dialog} onOpenChange={(o) => !o && setDialog(null)} watch={dialog?.watch} />
-      <DeleteDialog
-        open={!!deleting}
-        onOpenChange={(o) => !o && setDeleting(null)}
-        entityType="watched folder"
-        entityName={deleting?.name}
-        isLoading={del.isPending}
-        description="Files stops watching this folder. The files already brought in stay in Files under their own retention."
-        testIdPrefix="watch-delete"
-        onConfirm={async () => {
-          if (!deleting) return;
-          try {
-            await del.mutateAsync(deleting.id);
-            toast.success(`Stopped watching ${deleting.name}`);
-            setDeleting(null);
-          } catch (e) {
-            toast.error(`Couldn’t delete it: ${(e as Error).message}`);
-          }
-        }}
-      />
+      <AlertDialog open={!!stopping} onOpenChange={(o) => !o && !del.isPending && setStopping(null)}>
+        <AlertDialogContent data-testid="watch-stop-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="break-words">Stop watching {stopping?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Files stops checking this folder, so files that change in {stopping ? <AppName plugin={stopping.plugin} /> : 'the app'} are no longer brought in. The {stopping ? plural(stopping.filesInFiles, 'file') : 'files'} already in Files stay there, with their versions and their retention. To start again, watch the folder again; it is read whole.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={del.isPending}>Keep watching</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={del.isPending}
+              data-testid="watch-stop-confirm"
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!stopping) return;
+                try {
+                  await del.mutateAsync(stopping.id);
+                  toast.success(`Stopped watching ${stopping.name}`, { description: 'Its files stay in Files.' });
+                  setStopping(null);
+                } catch (err) {
+                  toast.error(`Couldn’t stop watching it: ${(err as Error).message}`);
+                }
+              }}
+            >
+              {del.isPending ? 'Stopping…' : 'Stop watching'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PageLayout>
   );
 }

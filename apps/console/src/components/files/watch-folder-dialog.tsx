@@ -174,7 +174,7 @@ export function WatchFolderDialog({ open, onOpenChange, watch }: { open: boolean
       )}
       {step === 3 && (
         <LoadingButton isLoading={busy} loadingText="Saving…" onClick={submit} data-testid="watch-create">
-          {watch ? 'Save folders' : 'Watch folder'}
+          {watch ? 'Save folders' : 'Watch a folder'}
         </LoadingButton>
       )}
     </div>
@@ -258,7 +258,7 @@ export function WatchFolderDialog({ open, onOpenChange, watch }: { open: boolean
               <KeyValues
                 rows={[
                   ...Object.keys(inputs).map((n): [string, React.ReactNode] => [n.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase()), shown(named(values[n], names[n]))]),
-                  ['First check', preview.data ? `${count(preview.data.found)} files found, ${count(preview.data.willFetch)} will be brought in` : 'Not previewed'],
+                  ['First check', preview.data ? `${count(preview.data.found)} files found, ${count(preview.data.willFetch)} will be brought in` : 'Files lists the folders when you press Check now'],
                 ]}
               />
             </Section>
