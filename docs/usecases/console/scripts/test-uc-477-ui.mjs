@@ -83,7 +83,7 @@ await withUiStack(
         await page.getByRole('button', { name: 'Start run' }).first().click({ timeout: 120_000 });
         const picker = page.getByRole('dialog', { name: /^Start a run$/ });
         await picker.waitFor();
-        await picker.getByTestId('start-run-workflow').getByRole('button', { name: /Choose a workflow/ }).click();
+        await picker.getByTestId('start-run-workflow').getByRole('button', { name: 'Choose', exact: true }).click();
         await page.getByPlaceholder('Search workflows', { exact: true }).fill('uc-477');
         await page.getByRole('option', { name: /Court order notices by email/ }).first().click();
         const composer = page.getByRole('dialog', { name: /^Send a test email: Court order notices by email \(uc-477\)/ });

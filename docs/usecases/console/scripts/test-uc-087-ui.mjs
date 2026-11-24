@@ -35,7 +35,7 @@ await withUiStack(
 
       // Empty: nobody has chatted yet.
       await page.goto(`${consoleUrl}/chat`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      const empty = await page.getByText('No chats yet. Start one to ask an agent.').waitFor({ timeout: 60_000 }).then(() => true, () => false);
+      const empty = await page.getByText('No chats yet. Ask something to start one.').waitFor({ timeout: 60_000 }).then(() => true, () => false);
       check('with no chats the rail says so and offers to start one', empty);
 
       // Start from a suggested prompt: one click creates the thread and sends the prompt.
@@ -127,7 +127,7 @@ await withUiStack(
       await page.reload({ waitUntil: 'domcontentloaded' });
       const failed = await page.getByText(/Couldn’t load chats/).waitFor({ timeout: 60_000 }).then(() => true, () => false);
       await page.unroute('**/chat/threads?*');
-      if (failed) await page.getByRole('button', { name: 'Retry', exact: true }).click();
+      if (failed) await page.getByRole('button', { name: 'Couldn’t load chats. Try again' }).click();
       const recovered = await rows.first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
       check('a list that cannot load says so with Retry, and Retry loads it', failed && recovered, { failed, recovered });
 

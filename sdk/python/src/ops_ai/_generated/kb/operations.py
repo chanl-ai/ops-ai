@@ -73,6 +73,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "items_list_item_chunks": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/items/{item_id}/chunks",
+        "pathParams": ["item_id"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
+        "stream": False,
+    },
     "items_set_item_owner": {
         "body": "json",
         "headers": [],
@@ -474,6 +483,34 @@ class Operations:
         "Get Item"
         return self._t.call(SERVICE, OPERATIONS["items_get_item"], {"item_id": item_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def items_list_item_chunks(
+        self,
+        item_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultItemChunk:
+        "List Item Chunks"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["items_list_item_chunks"],
+            {"item_id": item_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def items_set_item_owner(self, item_id: str, body: OwnerIn) -> Item:
         "Set Item Owner"
         return self._t.call(SERVICE, OPERATIONS["items_set_item_owner"], {"item_id": item_id}, {}, {}, body)  # type: ignore[no-any-return]
@@ -836,6 +873,34 @@ class AsyncOperations:
     async def items_get_item(self, item_id: str) -> ItemWithDetail:
         "Get Item"
         return await self._t.call(SERVICE, OPERATIONS["items_get_item"], {"item_id": item_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def items_list_item_chunks(
+        self,
+        item_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultItemChunk:
+        "List Item Chunks"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["items_list_item_chunks"],
+            {"item_id": item_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def items_set_item_owner(self, item_id: str, body: OwnerIn) -> Item:
         "Set Item Owner"

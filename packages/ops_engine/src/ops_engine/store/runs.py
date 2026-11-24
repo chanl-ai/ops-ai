@@ -560,8 +560,8 @@ class RunStore:
         as the worker's reason names it."""
         s = engine_steps
         mine = sa.and_(s.c.run_id == run.id, s.c.tenant_id == self.tx.tenant())
-        failure = cast(dict[str, Any] | None, run.failure) or {}
-        step = cast(dict[str, Any] | None, failure.get("step")) or {}
+        failure = cast(Json | None, run.failure) or {}
+        step = cast(Json | None, failure.get("step")) or {}
         if step.get("id"):
             named = sa.and_(mine, s.c.node_id == str(step["id"]))
             latest = (s.c.iteration.desc(), s.c.attempt.desc())

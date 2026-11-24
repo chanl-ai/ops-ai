@@ -83,7 +83,7 @@ Expected: both tools are listed.
 ```python tab="MCP"
 listed = asyncio.run(call("priya", "list_templates", {"kind": "skill"}))
 assert listed.is_error is False
-assert any(r.get("id") == "doc-coauthoring" for r in listed.structured_content["templates"])
+assert any(r.get("id") == "doc-coauthoring" for r in listed.structured_content["data"])
 ```
 
 Expected: Doc co-authoring is returned.

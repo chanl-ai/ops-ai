@@ -182,7 +182,7 @@ await withUiStack(
 
       await step('6 the old task address and a decided task open here', async () => {
         await page.goto(`${consoleUrl}/reviews/${encodeURIComponent(ids.tom)}`, { waitUntil: 'domcontentloaded' });
-        await page.waitForURL((u) => u.pathname === '/reviews' && u.searchParams.get('review') === ids.tom, { timeout: 60_000 });
+        await page.waitForURL((u) => u.pathname === '/work/tasks' && u.searchParams.get('review') === ids.tom, { timeout: 60_000 });
         await page.goto(`${consoleUrl}/reviews?review=${encodeURIComponent(ids.marcus)}`, { waitUntil: 'domcontentloaded' });
         const decided = await page.getByTestId('task-decided').innerText({ timeout: 60_000 });
         check('6 the old task address and a decided task open here', /^Decided by /.test(decided.trim()), { decided });

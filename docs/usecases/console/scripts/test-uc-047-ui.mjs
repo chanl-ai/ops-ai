@@ -44,7 +44,7 @@ await withUiStack(
 
       await open('/workflows');
       await subRows.filter({ hasText: 'Runs' }).click();
-      await page.waitForURL((u) => u.pathname === '/workflows/runs', { timeout: 60_000 });
+      await page.waitForURL((u) => u.pathname === '/build/runs', { timeout: 60_000 });
       await page.waitForTimeout(800);
       check('a sub-row opens its page and is the only active row', JSON.stringify(await active()) === '["Runs"]', await active());
 
@@ -68,7 +68,7 @@ await withUiStack(
         await page.getByTestId('title-switcher').click();
         const items = (await page.getByRole('menuitem').allInnerTexts()).map((t) => t.trim());
         await page.getByRole('menuitem', { name: 'All workflows' }).click();
-        await page.waitForURL((u) => u.pathname === '/workflows', { timeout: 30_000 });
+        await page.waitForURL((u) => u.pathname === '/build/workflows', { timeout: 30_000 });
         return items;
       })().catch((e) => String(e));
       check(

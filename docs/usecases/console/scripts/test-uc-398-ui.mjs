@@ -83,8 +83,8 @@ await withUiStack(
       await page.waitForTimeout(3000);
       // Leaving the page in the app (not a full load, which skips React's cleanup) frees the document; that must not
       // throw either.
-      await page.locator('[data-sidebar="sidebar"] a[href="/files"]').first().click();
-      await page.waitForURL((u) => u.pathname === '/files', { timeout: 60_000 });
+      await page.locator('[data-sidebar="sidebar"] a[href="/data/files"]').first().click();
+      await page.waitForURL((u) => u.pathname === '/data/files', { timeout: 60_000 });
       await page.waitForTimeout(1500);
       check('2 the viewer draws the page, no script in it runs, and leaving it frees the document cleanly', drawn && !seen.dialogs.length && !seen.requests.length && !seen.logs.length && !errors.length, { drawn, ...seen, worker: undefined, errors: errors.slice(0, 3) });
 

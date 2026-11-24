@@ -37,7 +37,7 @@ await withUiStack(
         const said = await page.getByText('That task wasn’t found or is closed').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
         await page.waitForURL((u) => !u.searchParams.has('review'), { timeout: 15_000 }).catch(() => undefined);
         const url = new URL(page.url());
-        check('1 a link to a task that does not exist says so and shows the queue', said && url.pathname === '/reviews' && !url.searchParams.has('review'), { said, url: page.url() });
+        check('1 a link to a task that does not exist says so and shows the queue', said && url.pathname === '/work/tasks' && !url.searchParams.has('review'), { said, url: page.url() });
       });
 
       await step('2 a session signed out elsewhere goes back to sign-in, keeping the page', async () => {

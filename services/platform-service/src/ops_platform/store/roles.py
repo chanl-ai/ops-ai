@@ -833,11 +833,27 @@ async def holdings_with(c: AsyncConnection, user_id: str, names: dict[str, str])
     acting there answers 403. A group's assignment of a role that holds a privileged cell where it is given counts for
     nothing, whenever the role gained the cell. `/v1/me`, `/v1/me/permissions` and the token's `access` claim all
     read it."""
-    groups = sa.select(group_members.c.group_id).where(group_members.c.user_id == user_id)
+    return (await holdings_of(c, {user_id: names}))[user_id]
+
+
+async def holdings_of(c: AsyncConnection, names: Mapping[str, dict[str, str]]) -> dict[str, Holdings]:
+    """`holdings_with` for several people at once, each given their active member teams: one assignments read for all
+    of them, so a list of people costs the same statements as one person."""
+    if not names:
+        return {}
+    users = list(names)
+    every_team = sorted({t for n in names.values() for t in n})
+    # A group's assignment comes back once per person of `users` in the group, with that person, so one statement
+    # answers for all of them.
+    in_group = sa.and_(
+        role_assignments.c.subject_kind == "group",
+        group_members.c.group_id == role_assignments.c.subject_id,
+        group_members.c.user_id.in_(users),
+    )
     subject = sa.or_(
-        sa.and_(role_assignments.c.subject_kind == "person", role_assignments.c.subject_id == user_id),
-        sa.and_(role_assignments.c.subject_kind == "team", role_assignments.c.subject_id.in_(list(names))),
-        sa.and_(role_assignments.c.subject_kind == "group", role_assignments.c.subject_id.in_(groups)),
+        sa.and_(role_assignments.c.subject_kind == "person", role_assignments.c.subject_id.in_(users)),
+        sa.and_(role_assignments.c.subject_kind == "team", role_assignments.c.subject_id.in_(every_team)),
+        group_members.c.user_id.is_not(None),
     )
     q = (
         sa.select(
@@ -848,28 +864,41 @@ async def holdings_with(c: AsyncConnection, user_id: str, names: dict[str, str])
             role_assignments.c.expires_at,
             teams.c.name,
             role_assignments.c.tenant_id,
+            role_assignments.c.subject_id,
+            group_members.c.user_id,
         )
         .join(roles, roles.c.id == role_assignments.c.role_id)
         .outerjoin(teams, teams.c.id == role_assignments.c.team_id)
+        .outerjoin(group_members, in_group)
         .where(subject, sa.or_(role_assignments.c.team_id == ANY_TEAM, teams.c.status == "active"))
         .order_by(role_assignments.c.created_at, role_assignments.c.id)
     )
-    rows = (await c.execute(q)).all()
-    by_group = [r for r in rows if r[3] == "group"]
+    found = (await c.execute(q)).all()
+    by_group = [r for r in found if r[3] == "group"]
     if by_group:
         grids = await grids_in(c, sorted({str(r[0]) for r in by_group}))
         security = (
             await c.execute(sa.select(tenants.c.security_team_id).where(tenants.c.id == by_group[0][6]))
         ).scalar()
-        rows = [
+        found = [
             r
-            for r in rows
+            for r in found
             if r[3] != "group" or not privileged_cells(grids.get(str(r[0]), []), team=str(r[2]), security_team=security)
         ]
-    # A team named by an assignment but not a membership still needs its name.
-    names = {**names, **{str(r[2]): str(r[5]) for r in rows if r[5] is not None and str(r[2]) not in names}}
-    assignments = [Assignment(str(r[0]), str(r[1]), str(r[2]), r[3], r[4]) for r in rows]
-    return Holdings(teams=names, assignments=assignments)
+    out: dict[str, Holdings] = {}
+    for user_id, teams_of in names.items():
+        mine = [
+            r
+            for r in found
+            if (r[3] == "person" and str(r[7]) == user_id)
+            or (r[3] == "team" and str(r[7]) in teams_of)
+            or (r[3] == "group" and str(r[8]) == user_id)
+        ]
+        # A team named by an assignment but not a membership still needs its name.
+        named = {**teams_of, **{str(r[2]): str(r[5]) for r in mine if r[5] is not None and str(r[2]) not in teams_of}}
+        assignments = [Assignment(str(r[0]), str(r[1]), str(r[2]), r[3], r[4]) for r in mine]
+        out[user_id] = Holdings(teams=named, assignments=assignments)
+    return out
 
 
 async def _refuse_privileged_for_group(c: AsyncConnection, tenant_id: str, role_id: str, team_id: str) -> None:
@@ -1026,9 +1055,45 @@ async def holds_admin(c: AsyncConnection, tenant_id: str, user_id: str) -> bool:
     """Whether the person may manage access in any team they hold a role in, or in every team, or is on the break-glass
     list: none of them is ever linked to a provider by the email it asserts. Decided by the cell through `can`, so a
     custom role holding `access.manage` counts as Admin does."""
-    listed = sa.select(signin_break_glass.c.user_id).where(signin_break_glass.c.user_id == user_id)
-    if (await c.execute(listed)).first() is not None:
-        return True
-    p, access = await live_in(c, tenant_id, user_id)
-    held = {*p.team_ids, *p.access}
-    return any(access.may(p, "access", "manage", team=t, from_any_team=True) for t in held)
+    return user_id in await admins_in(c, tenant_id, [user_id])
+
+
+async def admins_in(c: AsyncConnection, tenant_id: str, user_ids: Sequence[str]) -> set[str]:
+    """Which of these people `holds_admin` names, in statements that do not grow with the number of people: the
+    break-glass list, their teams, their assignments and the grids those name are each read once, and `can` decides
+    each person from them."""
+    if not user_ids:
+        return set()
+    users = list(dict.fromkeys(user_ids))
+    listed = sa.select(signin_break_glass.c.user_id).where(signin_break_glass.c.user_id.in_(users))
+    out = {str(r[0]) for r in (await c.execute(listed)).all()}
+    rest = [u for u in users if u not in out]
+    if not rest:
+        return out
+    mine = (
+        sa.select(members.c.user_id, teams.c.id, teams.c.name)
+        .join(teams, members.c.team_id == teams.c.id)
+        .where(members.c.user_id.in_(rest), members.c.status == "active", teams.c.status == "active")
+    )
+    names: dict[str, dict[str, str]] = {u: {} for u in rest}
+    for u, t, n in (await c.execute(mine)).all():
+        names[str(u)][str(t)] = str(n)
+    held = await holdings_of(c, names)
+    workspace = sa.select(tenants.c.permission_version, tenants.c.security_team_id).where(tenants.c.id == tenant_id)
+    found = (await c.execute(workspace)).first()
+    version, security = (int(found[0] or 0), found[1]) if found is not None else (0, None)
+    builtins = [r.id for r in BUILTIN_ROLES]
+    wanted = sorted({a.role_id for h in held.values() for a in h.assignments} | set(builtins))
+    grids = await grids_in(c, wanted)
+
+    async def fetch(_t: str, _v: int, ids: list[str]) -> dict[str, list[Grant]]:
+        return {i: grids[i] for i in ids if i in grids}
+
+    for user_id in rest:
+        p, access = await access_from(
+            tenant_id, user_id, held[user_id], version=version, security=security, fetch=fetch, also=builtins
+        )
+        teams_held = {*p.team_ids, *p.access}
+        if any(access.may(p, "access", "manage", team=t, from_any_team=True) for t in teams_held):
+            out.add(user_id)
+    return out

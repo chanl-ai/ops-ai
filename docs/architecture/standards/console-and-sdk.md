@@ -25,6 +25,9 @@ Also `apps/console/src/components/shared/team-name.tsx:11` (a per-row join of `t
 
 Pattern (`apps/console/src/hooks/systems-queries.ts`): the hook asks the API for the shape the screen shows; the row
 carries its labels and the list carries its facets.
+A list the person searches is searched on the server: a table through the data table's server mode, a picker through
+`EntityPicker` or `SearchSelect` over an `/options` source, any other list (a gallery, a document's pieces) through
+`useServerList` (`apps/console/src/hooks/server-list.ts`). Rule 16's `listFilter` fails a list searched in the browser.
 
 Check: `apps/console/scripts/check-standards.mjs` rule 23 fails on `.reduce(` and `.filter(...).length` inside
 components and pages, on `pageSize` above 50 outside the options hooks, and on `fetch(` outside `lib/api`, with

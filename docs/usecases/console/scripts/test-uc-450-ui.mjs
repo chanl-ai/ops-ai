@@ -60,7 +60,7 @@ try {
   await step('b the run picker shows each workflow once', async () => {
     await page.goto(`${ORIGIN}/workflows`, { waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'Start run' }).click();
-    await page.getByTestId('start-run-workflow').getByRole('button', { name: 'Choose a workflow' }).click();
+    await page.getByTestId('start-run-workflow').getByRole('button', { name: 'Choose', exact: true }).click();
     const options = page.getByRole('option');
     await options.first().waitFor();
     await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {});
