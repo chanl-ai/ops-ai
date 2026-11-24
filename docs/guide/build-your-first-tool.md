@@ -55,4 +55,4 @@ Tool that calls the App and is changed in one place.
 <!-- site: cards -->
 - [Connect an app and use it in an agent](use-cases/connect-an-app.md): give the Tool to an agent and use it in chat.
 - [Hold a write for approval](use-cases/approve-a-write.md): make the Tool's writes wait for a person.
-- [Sign in with a key or password](integrations/sign-in-keys.md): the kinds of key an App can hold.
+- [Sign in with a key or password](integrations/authentication.md#sign-in-with-a-key-or-password): the kinds of key an App can hold.

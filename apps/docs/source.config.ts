@@ -1,14 +1,16 @@
 import { defineConfig, defineDocs, frontmatterSchema } from 'fumadocs-mdx/config';
 import { z } from 'zod';
 
+import { sitePages } from './src/lib/nav.mjs';
 import { remarkOpsAi } from './src/lib/remark-ops-ai.mjs';
 
-// The docs are ops-ai's own markdown in ../../docs, read in place. They carry no frontmatter: the title comes from
-// each page's first heading (remarkOpsAi moves it into the frontmatter).
+// The docs are ops-ai's own markdown in ../../docs, read in place; the site publishes only the pages SITE names in
+// src/lib/nav.mjs. They carry no frontmatter: the title comes from each page's first heading (remarkOpsAi moves it
+// into the frontmatter).
 export const docs = defineDocs({
   dir: '../../docs',
   docs: {
-    files: ['**/*.md', '!plan/**', '!media/**', '!**/node_modules/**'],
+    files: sitePages(),
     schema: frontmatterSchema.extend({ title: z.string().optional() }),
   },
   meta: { files: [] },

@@ -1,5 +1,5 @@
 /**
- * What the docs site knows about the repository it lives in: every public file, every docs page with its URL and
+ * What the docs site knows about the repository it lives in: every public file, every published page with its URL and
  * heading anchors, and the order docs/README.md lists them in. Read once per process from the working tree, so the
  * site always renders the commit it is built from.
  *
@@ -14,6 +14,8 @@ import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import { visit } from 'unist-util-visit';
 
+import { sitePages } from './nav.mjs';
+
 export const REPO = 'chanl-ai/ops-ai';
 // The commit a GitHub link points at: the deployed commit on Vercel, otherwise main.
 export const REF = process.env.VERCEL_GIT_COMMIT_SHA || process.env.OPS_DOCS_GIT_REF || 'main';
@@ -21,10 +23,6 @@ export const REF = process.env.VERCEL_GIT_COMMIT_SHA || process.env.OPS_DOCS_GIT
 // Folders that exist in a working copy but not in the repository; a link into one is a broken link.
 const NOT_PUBLIC = ['evidence', 'shape', 'triage', 'dist'];
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', '.source', '.venv', '__pycache__', '.pytest_cache', '.turbo']);
-// Folders of docs/ the site does not show: docs/media/ (README screenshots).
-// Delivery plans are internal working notes, not documentation.
-export const SITE_EXCLUDE = ['docs/media/', 'docs/plan/'];
-
 /** The repository root: two folders above the docs app. */
 export function repoRoot() {
   const fromCwd = path.resolve(process.cwd(), '../..');
@@ -55,8 +53,11 @@ export function pageUrl(repoPath) {
   return `/${trimmed}`;
 }
 
+const SITE_PAGES = new Set(sitePages().map((p) => `docs/${p}`));
+
+/** True for a page the site publishes: one that SITE in nav.mjs names. Every other file under docs/ is only in the repository. */
 export function isSitePage(repoPath) {
-  return repoPath.startsWith('docs/') && repoPath.endsWith('.md') && !SITE_EXCLUDE.some((d) => repoPath.startsWith(d));
+  return SITE_PAGES.has(repoPath);
 }
 
 function headingSlugs(markdown) {

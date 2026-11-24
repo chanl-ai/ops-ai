@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Runs the site's remark plugin over every docs page before `next build` and fails on a broken link or a page that no
-// sidebar tab places, listing each one. The same failure inside `next build` shows only as "Cannot find module
+// Runs the site's remark plugin over every published page before `next build` and fails on a broken link or a page SITE
+// names that does not exist, listing each one. The same failure inside `next build` shows only as "Cannot find module
 // 'fumadocs-mdx:collections/server'".
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,7 +9,7 @@ import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import { visit } from 'unist-util-visit';
 
-import { docsTabPages, unplacedPages } from '../src/lib/nav.mjs';
+import { docsTabPages, sitePages } from '../src/lib/nav.mjs';
 import { remarkOpsAi } from '../src/lib/remark-ops-ai.mjs';
 import { repoIndex } from '../src/lib/repo.mjs';
 
@@ -25,9 +25,9 @@ for (const page of Object.keys(idx.pages)) {
   }
   errors.push(...(file.data.opsAi?.errors ?? []));
 }
-// A page no tab places renders but cannot be reached from the sidebar.
-for (const page of unplacedPages(Object.keys(idx.pages).map((p) => p.slice('docs/'.length)))) {
-  errors.push(`docs/${page}: in no sidebar tab; add it to SITE in apps/docs/src/lib/nav.mjs`);
+// A page SITE names that is not in docs/ would publish nothing.
+for (const page of sitePages()) {
+  if (!idx.pages[`docs/${page}`]) errors.push(`docs/${page}: named in SITE in apps/docs/src/lib/nav.mjs but not in the repository`);
 }
 // A Docs-tab page opens in the reader's words: no code span (a path, a service, a package) in its status line or its
 // first paragraph. Where things live belongs in a table further down.
@@ -43,4 +43,4 @@ if (errors.length) {
   console.error(`check-links: ${errors.length} problem(s) in docs/\n  ${errors.join('\n  ')}`);
   process.exit(1);
 }
-console.log(`check-links: ${Object.keys(idx.pages).length} pages, every link resolves and every page is in a tab`);
+console.log(`check-links: ${Object.keys(idx.pages).length} pages, every link resolves`);

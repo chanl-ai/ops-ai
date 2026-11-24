@@ -13,7 +13,7 @@ permissions, so an agent never sees a record that user could not.
 2. **Pick where the team signs in**: login.salesforce.com, test.salesforce.com for a sandbox, or your company's My
    Domain address.
 3. **Pick whose account calls use**: each person's own, the team's, or each person's with the team's for runs nobody
-   started. See [Team or personal sign-in](sign-in-oauth.md#team-or-personal-sign-in).
+   started. See [Team or personal sign-in](authentication.md#team-or-personal-sign-in).
 4. **Connect.** Press **Connect the team account** or **Connect my account**, and allow access on Salesforce's page.
    The App reads **Connected** once the test after sign-in passes.
 
@@ -57,7 +57,7 @@ how to make them wait.
 | Records, with the signed-in user's permissions (api) | Every tool |
 | Stay signed in (refresh_token) | Without it, people are signed out when the first token ends |
 
-To use your own connected app instead of Ops AI's, see [Bring your own OAuth app](sign-in-oauth.md#bring-your-own-oauth-app).
+To use your own connected app instead of Ops AI's, see [Bring your own OAuth app](authentication.md#bring-your-own-oauth-app).
 
 ## If sign-in fails
 

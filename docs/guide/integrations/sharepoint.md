@@ -63,7 +63,7 @@ Ops AI only reads. It never writes to SharePoint or OneDrive.
 | Access was not given in Microsoft 365 | Press **Connect** again and accept |
 
 A bank that signs in with a certificate instead of a client secret uses
-[Sign in with a certificate](sign-in-certificates.md).
+[Sign in with a certificate](authentication.md#sign-in-with-a-certificate).
 
 ## Limits
 

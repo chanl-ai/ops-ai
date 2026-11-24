@@ -68,12 +68,14 @@ shared list: the shareable guide built from `guide/*.md` is meant to present the
 | A relative link, or a code span naming a file (`services/x/y.py:42`) | A link to the page here, or to the file on GitHub |
 
 A link to a page or file that does not exist fails the site build, and so does a diagram SVG that no longer matches
-its data file. The sidebar is the list `SITE` in `apps/docs/src/lib/nav.mjs`: five tabs (Docs, Deploy and operate,
-Security, Reference, Contributing), each with groups in the order a reader needs them. Internals (architecture,
-standards, services, packages, use cases, designs, plans) go only in Contributing. On a Docs, Security or Reference
-page, `apps/docs/scripts/check-public-pages.mjs` refuses repository paths, `file:line` references, local ports and
-make targets in code; its allowlist of older pages may only shrink. A page appears there once `SITE`
-names it or a folder it takes whole, and a page it does not place fails the site build. Edit a diagram in `diagrams/<name>.yaml`, then run `pnpm --filter docs diagrams` to export its SVG.
+its data file. The site publishes only the pages that `SITE` in `apps/docs/src/lib/nav.mjs` names: the Docs,
+Deploy and operate, Security and Reference tabs for readers, and a short Contributing tab. Every other file under
+`docs/` (use-case test pages, design proposals, agent skills, process pages) stays in the repository, and a link to
+one opens on GitHub. On a Docs, Security or Reference page, `apps/docs/scripts/check-public-pages.mjs` refuses
+repository paths and links, local ports, make targets, a Status line, roadmap and release words, internal names, a
+name or console path that differs from [the glossary](guide/glossary.md), and table cells over 15 words; its
+allowlist of older pages may only shrink. The page types and voice are in
+[the writing skill](guide/skills/ops-docs-write.md). Edit a diagram in `diagrams/<name>.yaml`, then run `pnpm --filter docs diagrams` to export its SVG.
 
 ## Reading order
 
@@ -196,6 +198,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `guide/README.md` | The client guide's index: its sections in order and what each holds |
 | `guide/quickstart.md` | Quickstart: install on one machine with the install script and the test model, sign in with `opsai`, run a first workflow and call it from Python |
 | `guide/overview.md` | What Ops AI does, for whom, the platform map and the ideas it rests on |
+| `guide/glossary.md` | Glossary: one name per thing, and where each lives in the console |
 | `guide/system-components.md` | Every container: purpose, port, what it stores and what it calls |
 | `guide/how-work-flows.md` | A chat turn with a tool approval, a workflow with a human task, and a court order notice emailed to a team mailbox |
 | `guide/build-with-ops-ai.md` | Developer landing: the example folders in order, how agents and workflows call each other, and the same operations on every surface |
@@ -582,9 +585,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `guide/integrations/sharepoint.md` | SharePoint and OneDrive: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
 | `guide/integrations/confluence.md` | Confluence: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
 | `guide/integrations/website.md` | Website: turn it on, what it brings, settings, permissions asked, sign-in errors, limits |
-| `guide/integrations/sign-in-oauth.md` | Sign in with OAuth: team or personal sign-in, your own OAuth app |
-| `guide/integrations/sign-in-keys.md` | Sign in with an API key, username and password, or bearer token; each person's own key |
-| `guide/integrations/sign-in-certificates.md` | Sign in with a certificate: signed assertion, signed service account, mutual TLS |
+| `guide/integrations/authentication.md` | Authentication: sign in with OAuth, a key or password, or a certificate; team or personal sign-in |
 | `guide/integrations/build-a-plugin.md` | Build a plugin: a four-file example, validate, test, install |
 
 File names are topics. Specs keep their number (01–17; 05 and 06 unused) and decision records their ADR id in the

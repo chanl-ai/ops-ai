@@ -47,7 +47,7 @@ Expected: the space's pages are listed as indexed. A later sync fetches only pag
 | Data Center | Bearer token | A personal access token |
 
 Both are kept sealed, are never shown again, and serve only your team. See [Sign in with a key or
-password](sign-in-keys.md).
+password](authentication.md#sign-in-with-a-key-or-password).
 
 ## Limits
 
