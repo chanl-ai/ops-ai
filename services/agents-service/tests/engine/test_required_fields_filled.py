@@ -8,25 +8,33 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
 import pytest
+from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_access import BUILTIN_GRIDS, encode_grid
-from ops_agents.api import engine_reviews
+from ops_agents.api import engine_lifecycle, engine_reviews
 from ops_agents.api.auth import Principal
+from ops_agents.api.service_events import SEED, ensure_event_workflows
+from ops_agents.api.task_type_seeds import StoredTaskTypes
+from ops_agents.store.agent_registry import AgentRegistry
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
-from ops_engine.store import RunStore
+from ops_engine.store import DefinitionStore, RunStore
 from ops_identity import Principal as Caller
 from ops_service_kit import narrow
 from ops_service_kit.errors import Forbidden, ValidationFailed
 from ops_service_kit.http import Json
+from ops_service_kit.ids import new_id
 from tests.engine.review_flows import flow, paused
-from tests.engine.test_worker import M, drain
+from tests.engine.test_event_workflow_follow import Policies
+from tests.engine.test_worker import CountingTools, M, drain, worker
+from tests.run_rows import write_run
 
 EVENT_SEED = Path(__file__).resolve().parents[2] / "seed" / "event_workflows.json"
 SCHEMA = [
@@ -193,3 +201,77 @@ async def test_the_shipped_extract_waits_for_typed_required_fields_and_takes_the
     sent = [{"field": "invoice", "value": "NWF-88213"}, {"field": "total", "value": "1,940.00"}]
     assert docs.corrected == [("ext_88213", sent, M.email)], docs.corrected
     assert [d["fieldsToCheck"] for d in docs.saved] == [0], docs.saved
+
+
+class Answered(NotRead):
+    """A read the model answered with one field under the floor: it waits at the same check, and the update changes
+    nothing for it."""
+
+    async def extract(self, run_id: str, file_id: str, request: Json, *, key: str) -> Any:
+        doubtful = {"value": "PO-7", "extractedValue": "PO-7", "confidence": 0.41, "needsReview": True}
+        sure = {"value": "NWF-41", "extractedValue": "NWF-41", "confidence": 0.97, "needsReview": False}
+        return {
+            "id": "ext_41",
+            "status": "done",
+            "outcome": "review",
+            "fileId": "fil_41",
+            "schema": SCHEMA,
+            "fields": {"invoice": sure, "total": {**sure, "value": 410}, "po": doubtful},
+            "needsReview": ["po"],
+            "documentType": {"id": "freight_invoice", "version": 1, "name": "Freight invoice"},
+        }
+
+
+def _before_typed_values(seeded: Any) -> Any:
+    """system_extract as it shipped before its check took typed values: no editable, approve straight to the save."""
+    nodes: list[Any] = [dict(n) for n in seeded["nodes"] if n["id"] != "save_typed"]
+    for n in nodes:
+        if n["id"] == "check":
+            n["parameters"] = {k: v for k, v in n["parameters"].items() if k != "editable"}
+    ends = [(e, str(e["from"]["node"]), str(e["to"]["node"])) for e in seeded["connections"]]
+    edges: list[Any] = [e for e, a, b in ends if "save_typed" not in (a, b)]
+    edges.append({"from": {"node": "check", "port": "approve"}, "to": {"node": "save_checked", "port": "in"}})
+    return {**seeded, "nodes": nodes, "connections": edges}
+
+
+async def test_the_pending_extract_update_counts_the_tasks_that_can_only_be_rejected_until_it_is_live(
+    engine: AsyncEngine,
+) -> None:
+    """A tenant still on the Extract from before typed values: its not-read tasks can only be rejected, and the update
+    waiting in Reviews says how many it unlocks. A task on an answered read waits at the same step and is not one."""
+    seeded = next(w for w in json.loads(EVENT_SEED.read_text()) if w["id"] == "system_extract")
+    old = parse(_before_typed_values(seeded))
+    tenant, tx = f"t-{uuid4().hex[:8]}", EngineTransactions(engine)
+    w = worker(engine, CountingTools(), InMemorySaver())
+    w.host.ports.task_types = StoredTaskTypes(engine)
+    with tenant_scope(tenant):
+        version, _ = await DefinitionStore(tx).publish(
+            old.id, name="Extract a file", definition=old.wire(), digest=old.digest(), now="n", by=SEED, stage="live"
+        )
+    runs: list[str] = []
+    for docs in (NotRead(), NotRead(), Answered()):
+        for port in ("documents", "file_data"):
+            setattr(w.host.ports, port, docs)
+        run_id = new_id("wfrun")
+        row = {"id": run_id, "team_id": "team_a", "workflow_id": old.id, "version": version, "digest": old.digest()}
+        with tenant_scope(tenant):
+            given = {"run_key": run_id, "mode": "live", "input": {"fileId": "fil_1"}, "created_by": "a@x"}
+            await write_run(tx, row | given)
+        await drain(w)
+        runs.append(run_id)
+    rt: Any = SimpleNamespace(
+        db=engine,
+        event_workflows=[seeded],
+        event_workflows_seen=set(),
+        policies=Policies({}),
+        settings=SimpleNamespace(registry_auto_approve=False, environment="test", lease_ttl_seconds=6.0),
+    )
+    with tenant_scope(tenant):
+        with pytest.raises(ValidationFailed) as refused:
+            await engine_reviews.decide(rt, M, runs[0], decision="approve", reason=None)
+        await ensure_event_workflows(rt)
+        (req,) = await AgentRegistry(engine).requests(engine_lifecycle.KIND, old.id)
+        review: Any = await engine_lifecycle.view(rt, req)
+    assert refused.value.code == "not_editable", refused.value
+    assert req.status == "pending", req
+    assert review["publish"]["waitingTasks"] == 2, review["publish"]

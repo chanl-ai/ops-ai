@@ -45,6 +45,12 @@ function PublishRequestBody({ review }: { review: Review }) {
           <p className="mt-2 text-xs text-muted-foreground">
             {review.workflowName} · v{p.fromVersion} → v{p.toVersion} · requested by {p.requestedBy}
           </p>
+          {!!p.waitingTasks && (
+            // Counted by the server when read: tasks on the live version that can only be rejected until this is live.
+            <p className="mt-2 text-sm" data-testid="publish-waiting-tasks">
+              {p.waitingTasks === 1 ? '1 task waits' : `${p.waitingTasks} tasks wait`} on this update: each can only be rejected until it is live, then its file is read again.
+            </p>
+          )}
         </div>
       </Section>
       <Section title={`Changes · ${p.changes.length}`}>

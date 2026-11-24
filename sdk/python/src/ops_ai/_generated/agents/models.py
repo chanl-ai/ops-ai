@@ -3728,6 +3728,7 @@ class PublishRequestInfo(TypedDict, closed=True):
     reviewRequired: NotRequired[bool | None]
     toVersion: int
     validation: ValidationSummary | None
+    waitingTasks: NotRequired[int | None]
     workflowId: str
 
 

@@ -9479,6 +9479,8 @@ export interface components {
             /** Toversion */
             toVersion: number;
             validation: components["schemas"]["ValidationSummary"] | null;
+            /** Waitingtasks */
+            waitingTasks?: number | null;
             /** Workflowid */
             workflowId: string;
         };

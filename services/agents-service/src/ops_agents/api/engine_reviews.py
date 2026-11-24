@@ -23,6 +23,7 @@ from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.logging import get_logger
 from ops_service_kit.narrow import an_object, entries, json_list, json_object
 from ops_store.documents import stored
+from ops_store.team_scope import acting_as
 
 from ..store.cases import CaseNotFound, CaseStore
 from ..store.engine import DatabaseError, EngineTransactions
@@ -1230,6 +1231,23 @@ def approve_refused(read: ReadView) -> ApproveRefused | None:
     if not read["editable"]:
         return {"code": "not_editable", "message": NOT_EDITABLE}
     return None
+
+
+async def tasks_an_update_unlocks(rt: Runtime, workflow_id: str, version: int) -> int:
+    """How many tasks on `version` of a workflow can only be rejected because its step takes no typed values
+    (approve_refused's not_editable), which a later version that does would let a person approve once read again.
+    Counted over every team: the shipped workflow's update is the workspace's, so its reviewer sees the whole wait;
+    only the number leaves this function. A task with nothing read stays reject-only after any update and is not one."""
+    with acting_as(None):
+        waiting = await _runs(rt).list(workflow_id=workflow_id, status="waiting", limit=None)
+    count = 0
+    for run in waiting:
+        if run.version != version:
+            continue
+        paused = PAYLOAD(WAITING(run.waiting or {}).get("payload") or {})
+        read = document_read(paused.get("draft"), paused, None)
+        count += bool(read and (refused := read["approveRefused"]) and refused["code"] == "not_editable")
+    return count
 
 
 def _refuse_unapprovable(paused: ReviewPayload) -> None:

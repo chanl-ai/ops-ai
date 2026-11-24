@@ -178,6 +178,12 @@ id}}`. A channel source is the record's id: an email's mailbox (`mbx_…`, the a
 widget chat's deployment (`wd_…`); a console chat's source is its agent. A person's `actor.name` is their display name from platform-service (`GET /v1/people-names`, read once a minute); an
 API key's (`key:<id>`) is its label (`GET /v1/api-key-summaries`). Workflow steps journaled before agents migration 0057 carry no node type and are not listed as tool calls.
 
+A pending update to `system_extract` carries `publish.waitingTasks`: how many tasks on the live version can only be
+rejected because its check takes no typed values (`not_editable`), counted across teams when the request is read
+(`engine_reviews.tasks_an_update_unlocks`). A task with nothing read is not counted, since no update lets it be
+approved. Every other request has none. Test:
+`tests/engine/test_required_fields_filled.py::test_the_pending_extract_update_counts_the_tasks_that_can_only_be_rejected_until_it_is_live`.
+
 When a mailbox refuses the stored read position (tools-service's key changed, or the cursor predates sealing), the
 trigger starts reading again from now and adds a `cursor_reset` row, "Mail since the last read was skipped", to the
 workflow's trigger list and to Activity. Mail that arrived between the last read and the reset is not read; a person

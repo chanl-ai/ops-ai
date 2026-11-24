@@ -646,6 +646,9 @@ class PublishRequestInfo(PublishDecisionFields):
     changes: list[str]
     validation: ValidationSummary | None
     digest: str
+    # On a pending update to a shipped workflow that unlocks tasks (system_extract): how many tasks on the live
+    # version can only be rejected until it is live, counted when read. None on every other request.
+    waiting_tasks: int | None = None
 
 
 class SkillPublishAgent(Out):

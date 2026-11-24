@@ -16110,6 +16110,17 @@
               }
             ]
           },
+          "waitingTasks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waitingtasks"
+          },
           "workflowId": {
             "title": "Workflowid",
             "type": "string"

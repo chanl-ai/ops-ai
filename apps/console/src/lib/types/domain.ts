@@ -613,6 +613,8 @@ export interface PublishRequestInfo {
   requestedBy: string;
   changes: string[];
   validation: ValidationSummary | null;
+  /** A pending update to a shipped workflow that unlocks tasks: how many on the live version can only be rejected until it is live, counted when read. */
+  waitingTasks?: number | null;
   /** Each pinned agent's eval result for the version being pinned, and the eval gate for the workflow's tier. */
   agentEvals?: import('./evals').AgentEvalPin[];
   evalGate?: import('./evals').EvalGate;
