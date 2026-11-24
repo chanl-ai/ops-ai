@@ -361,7 +361,7 @@ fails the commit until it is classified.
 | `securityTeamAddsSecrets` | off | yes | Only the Security team adds secrets | `settings.manage` | no |
 | `memoryRetentionDays` | none | yes | How long agents keep what they remember about a person | `chat.manage` | no |
 | `reviewSlaHours` | 8 | n/a | When a waiting publish review shows as overdue | `reviews.manage` | no |
-| `schedule_floor_minutes` | 5 | n/a | The shortest gap between two runs of any saved schedule, whatever its rule kind; a save under it is refused naming the field. An install setting (`OPS_SCHEDULE_FLOOR_MINUTES`), changed by whoever runs the install, not by a role. Saving or clearing a schedule needs the right to pause the workflow and `deployments.create` in its team | the operator | no |
+| `schedule_floor_minutes` | 5 | n/a | The shortest gap between two runs of any saved schedule, whatever its rule kind; a save under it is refused naming the field. Raising it leaves saved schedules running: a save applies at once, outside the workflow's versions, so only a save checks the floor, and each schedule under the new floor is refused at its next save. An install setting (`OPS_SCHEDULE_FLOOR_MINUTES`), changed by whoever runs the install, not by a role. Reading a schedule needs `workflows.view` in the team; saving or clearing one needs the right to pause the workflow and `deployments.create` in its team, and clearing needs nothing else | the operator | no |
 | `extractionFloor` | 0.8 | n/a | The lowest confidence an extraction step accepts; a quality threshold, not an access rule | `settings.manage` | no |
 
 Per-agent settings that decide what a person may do in a chat, saved with the agent's version and published through

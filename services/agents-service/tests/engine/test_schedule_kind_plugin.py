@@ -78,10 +78,10 @@ def kinds() -> Iterator[None]:
 
 
 @pytest.fixture
-async def stack(database_url: str, graph_models: Any) -> AsyncIterator[tuple[AsyncClient, AsyncEngine]]:
+async def stack(database_url: str, graph_models: Any) -> AsyncIterator[tuple[AsyncClient, AsyncEngine, Settings]]:
     settings = Settings(database_url=database_url, seed_dir=SEED, schedule_floor_minutes=1)
     async with empty_engine(database_url) as engine, started(engine, settings, graph_models, checked=True) as (_, c):
-        yield c, engine
+        yield c, engine, settings
 
 
 def at(hhmm: str) -> datetime:
@@ -108,9 +108,9 @@ async def live(c: AsyncClient, engine: AsyncEngine, trigger: str) -> str:
 
 
 async def test_a_rule_kind_and_a_target_kind_added_in_a_test_run_through_the_real_routes_and_clock(
-    stack: tuple[AsyncClient, AsyncEngine], kinds: None
+    stack: tuple[AsyncClient, AsyncEngine, Settings], kinds: None
 ) -> None:
-    c, engine = stack
+    c, engine, settings = stack
     listed = (await c.get("/v1/schedules/kinds", headers=JAMES)).json()["data"]
     assert "odd_minutes" in [k["name"] for k in listed]
     ours = {"kind": "odd_minutes"}
@@ -139,3 +139,11 @@ async def test_a_rule_kind_and_a_target_kind_added_in_a_test_run_through_the_rea
         made = await runs.list(workflow_id=started_runs)
     assert sorted(str(cast(dict[str, Any], r.input)["dueAt"])[11:16] for r in made) == ["10:01", "10:03", "10:05"]
     assert ticks.slots == ["10:01", "10:03", "10:05"]
+
+    # The install raises its floor past the kind's 2 minutes: the saved schedule keeps running (saves apply at once,
+    # outside versions, so only a save checks the floor), and its next save is refused naming the kind's field.
+    settings.schedule_floor_minutes = 5
+    await clock.pass_once(at("10:07"))
+    assert ticks.slots[-1] == "10:07"
+    again = await c.put(f"/v1/workflows/definitions/{fast}/triggers/start/schedule", json={"rule": ours}, headers=JAMES)
+    assert again.status_code == 422 and again.json()["error"]["details"]["field"] == "kind", again.text
