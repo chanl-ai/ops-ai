@@ -15,8 +15,8 @@ You need the app turned on for your team and signed in ([Set up an app](apps-set
 3. Name it, for example "Supplier invoices", and pick the app. Select **Next**.
 4. Pick the sites, libraries or folders to include. Each list searches by name. Add a rule under **Include** or
    **Exclude** to narrow it further; a rule starts with `/`, and Exclude wins. Select **Next**.
-5. Read the review. It names the folders you picked and how many files the first check will find. Select **Watch a
-   folder**.
+5. Read the review. It names the folders you picked. Files lists what it found after you select Check now. Select
+   **Watch a folder**.
 6. Nothing is copied yet. On the folder's row, open the menu and select **Check now**. The row shows **Checking…**, and a
    moment later it shows when the check ran and how many files it brought in.
 
@@ -44,7 +44,9 @@ reason. The other files in the check still arrive.
 | Reason | What it means | What to do |
 |---|---|---|
 | Larger than 25 MB | A watched folder takes files up to 25 MB | Split the file or make it smaller in the app, or upload it to Files directly with **Upload** on **All files**. A file that is made smaller is tried again on the next check |
-| Any other reason, shown in brackets | The app did not hand over that one file | The next checks try it again, up to three times. If it still fails, change the file in the app or upload it directly |
+| Could not be fetched | The app did not hand over that one file | The next checks try it again, up to three times. If it still fails, change the file in the app or upload it directly |
+
+A file larger than the limit is listed once with its size. It is listed again only if its size changes.
 
 A check that stopped part way says **Partial** and why, for example that the app slowed the check down or that the
 folder is long. The next check carries on from there.

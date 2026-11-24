@@ -16,7 +16,16 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fake_sharepoint_confluence import OVERSIZE_BYTES, OVERSIZE_NAME, add_oversize, connect, document_systems
+from fake_sharepoint_confluence import (
+    MIDSIZE_BYTES,
+    MIDSIZE_NAME,
+    OVERSIZE_BYTES,
+    OVERSIZE_NAME,
+    add_midsize,
+    add_oversize,
+    connect,
+    document_systems,
+)
 from usecase_harness import PLATFORM_INTERNAL_PORT, check, files, finish, platform, tools
 
 PASSWORD = "northfield-demo"
@@ -145,6 +154,37 @@ with ExitStack() as stack:
         "7 a brought-in file says which watched folder and path it came from",
         source.get("watchId") == wid and source.get("watchName") == NAME and "leave.md" in str(source.get("path")),
         {"name": detail.get("name"), "source": source},
+    )
+
+    def checked() -> dict[str, Any]:
+        assert fs.post(f"/v1/watches/{wid}/check", headers=james).status_code == 202
+        for _ in range(240):
+            seen = body(fs.get(f"/v1/watches/{wid}", headers=james)) or {}
+            if not seen.get("checking"):
+                return seen
+            time.sleep(0.5)
+        return {}
+
+    # A file listed under the limit whose bytes at fetch are over it fails as the 30 MB one does: one failed event
+    # with the size code and the same reason, and a second check says nothing new about it.
+    add_midsize(systems)
+    first = checked()
+    second = checked()
+    events = (body(fs.get(f"/v1/watches/{wid}/events", headers=ravi)) or {}).get("data", [])
+    failed = {str(e.get("path")).rsplit("/", 1)[-1]: e for e in events if e["kind"] == "failed"}
+    mid = [e for e in events if e["kind"] == "failed" and MIDSIZE_NAME in str(e.get("path"))]
+    big = failed.get(OVERSIZE_NAME, {})
+    check(
+        "9 a file listed at 20 MB and over 25 MB at fetch is one failed event, too large with a size reason, as the 30 MB file is; a second check adds none",
+        len(mid) == 1
+        and mid[0].get("code") == "too_large"
+        and mid[0].get("reason") == "Larger than 25 MB"
+        and mid[0].get("size") == MIDSIZE_BYTES
+        and big.get("code") == "too_large"
+        and big.get("reason") == "Larger than 25 MB"
+        and (first.get("lastCheck") or {}).get("failures", [{}])[0].get("code") == "too_large"
+        and bool(second.get("lastCheckAt")),
+        {"failed": list(failed.values()), "first": first.get("lastCheck"), "second": second.get("lastCheck")},
     )
 
 finish()
