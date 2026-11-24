@@ -10,7 +10,7 @@ commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](../..
 
 | Item | Detail |
 |---|---|
-| Contract | A pattern is masked whole: streamed text is held back by `HOLD` (32) characters and cut only at whitespace, so a number split across two chunks is masked once, and a field name is released with its value. Ids glued to letters (`fil_13cf…`) are never masked. A name that only mentions an account or card (`accountName`, `cards`) is not a personal data field. The rule: [roles and permissions E34](../../docs/architecture/roles-and-permissions.md) |
+| Contract | A pattern is masked whole: streamed text is held back by `HOLD` (32) characters and cut only at whitespace, so a number split across two chunks is masked once, and a field name is released with its value. Ids glued to letters (`fil_13cf…`) are never masked. A name that only mentions an account or card (`accountName`, `cards`) is not a personal data field. `masked` is the one walk of JSON by key: a task view, a run's story and logs call it (`keep` for the top object's ids, `text` and `hidden` for a log's extra scrubbing), never a walker of their own. The rule: [roles and permissions E34](../../docs/architecture/roles-and-permissions.md) |
 | Used by | `ops_agent_kernel.pii` (re-exports `mask`, `masked`, `StreamMasker`, `HOLD`), `ops_service_kit.logging`, documents-service, and agents-service's run reads, batches and Human Tasks |
 | Tests | None here; covered by `make test PKG=services/agents-service T=tests/unit/test_pii_masking.py` |
 | Lint, types | `uv run ruff check packages/ops_pii`, `uv run pyright packages/ops_pii` |

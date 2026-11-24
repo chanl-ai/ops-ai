@@ -4,10 +4,13 @@ what is shown; the real value stays wherever it is kept or sent on (an agent's m
 
 A value is also masked by the name of its field, whatever it holds: a last four ("4471") or a lettered account id
 ("BUS-7781") matches no pattern on its own, and a number is not text at all. A field is named as personal data when its
-name holds "ssn", or "account", "acct", "card", "tax" or "taxpayer" followed only by identifier words (id, ids, number,
-no, last 4, ...): ssnLast4, accountIds, account_number, cardLast4, taxId. A name that only mentions one (accountName,
-accountCount, cards, card_limit, tax) is not, so chat's cards and a tax amount stay readable. The name is a JSON key,
-the label of a {label, value} row, or a key written in text ('accountId': 'BUS-7781', Account id BUS-7781).
+name holds "ssn", or "account", "acct", "iban", "card", "tax" or "taxpayer" followed only by identifier words (id, ids,
+number, no, last 4, ref, code, key, token, ...), or account, acct, iban or card alone: ssnLast4, accountIds,
+account_number, accountid, bankAccount, debitCard, card_token, taxId. A name that only mentions one (accountName,
+accountCount, cards, card_limit, tax) is not, so chat's cards and a tax amount stay readable. The name is a JSON key
+(an object under it has its identifiers masked: account.id, ssn.last4), the label, name, key or field of a
+{label, value} row, or a key written in text: JSON, a repr, key=value, an arrow, a table cell, a tab, XML, or a call
+worded "account_id CHQ-2219". A value with no digit is masked only after a separator, so prose about a field is kept.
 
 A pattern is masked whole, never a part of it: streamed text is held back by HOLD characters and cut only at
 whitespace, so a number arriving across two chunks is masked as one, and an email (no whitespace in it) is never cut.
@@ -16,6 +19,7 @@ whitespace, so a number arriving across two chunks is masked as one, and an emai
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Mapping
 from itertools import pairwise
 from typing import Any, cast
 
@@ -44,60 +48,126 @@ _OPEN_TAIL = re.compile(_WORDS + _BETWEEN + r"$")
 # An unquoted value after a field name: a dashed SSN, a lettered id, or digits in groups as a card number is written.
 _BARE = r"-?[A-Za-z]{0,6}-?\d[\w.-]*(?: \d[\d-]*)*"
 _OPEN_KEYED = re.compile(
-    r"""(["']?)([A-Za-z][A-Za-z0-9_]*)\1\s*[:=]\s*(?:["']?|\[[^\[\]{}\n]*|""" + _BARE + r""" ?)$"""
+    r"""(?:(["'])([A-Za-z][\w ]*?)\1|()([A-Za-z]\w*))(?:\s*(?:[:=|]|->|=>|→)\s*|\t+)"""
+    r"""(?:["']?|\[[^\[\]{}\n]*|""" + _BARE + r""" ?|[A-Za-z][\w.-]* ?)$"""
 )
 _OPEN_LABELLED = re.compile(
-    r"(?i)\b(?:ssn|account|acct|card|tax(?:payer)?)(?:\s+(?:id|number|no\.?|#))?(?:\s+last\s*4)?\s*[:#]?\s*$"
+    r"(?i)\b(?:ssn|account|acct|card|tax(?:payer)?)(?:[\s_]+(?:id|number|no\.?|#))?(?:\s+last\s*4)?"
+    r"\s*(?:[:#|]|->|=>|→)?\s*$"
 )
 
 
 # The words of a field's name: camelCase, snake_case, spaced or upper case ("ssnLast4", "account_id", "Account id").
 _NAME_WORDS = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+")
 # The word a name starts its identifier with, and what is shown in place of the value.
-_KINDS = {"account": "[account]", "acct": "[account]", "card": "[card]", "tax": "[tax ID]", "taxpayer": "[tax ID]"}
+_KINDS = {
+    "account": "[account]", "acct": "[account]", "iban": "[account]", "card": "[card]", "tax": "[tax ID]",
+    "taxpayer": "[tax ID]",
+}  # fmt: skip
+# Kinds that name the identifier on their own (account, bankAccount, debitCard, iban); a bare "tax" is an amount.
+_ALONE = frozenset({"account", "acct", "iban", "card"})
 # The words that may follow it: the name says the value identifies the account, card or taxpayer.
 _ID_WORDS = frozenset(
-    {"id", "ids", "number", "numbers", "num", "no", "nr", "last", "4", "four", "digits", "ein", "tin"}
-)
-# A key written in text with its value: JSON ("ssnLast4": "4471"), a Python repr ('accountId': 'BUS-7781') or key=value.
-# An unquoted value is taken whole (_BARE), so a dashed SSN or a spaced card number is never masked in part.
+    {
+        "id", "ids", "number", "numbers", "num", "no", "nr", "last", "4", "four", "digits", "ein", "tin", "ref",
+        "reference", "code", "key", "token",
+    }
+)  # fmt: skip
+# Plural identifier words: an object under such a name (accountIds: {checking: ...}) holds only identifiers.
+_PLURAL = frozenset({"ids", "numbers"})
+# The words a lower case name with no break is read as ("accountid", "ssnlast4"), longest first.
+_GLUED = sorted({"ssn", *_KINDS, *_ID_WORDS}, key=len, reverse=True)
+# A key written in text with its value: JSON ("ssnLast4": "4471"), a Python repr ('accountId': 'BUS-7781'), key=value,
+# an arrow, a table cell or a tab. An unquoted value is taken whole (_BARE), so a dashed SSN or a spaced card number is
+# never masked in part; one with no digit is taken only as a word after a separator, never a null, true or false.
+_SEP = r"(?:\s*(?:[:=|]|->|=>|→)\s*|\t+)"
+_WORD_VALUE = r"(?!(?i:null|none|true|false|undefined)\b)[A-Za-z][\w.-]*"
 _KEYED = re.compile(
-    r"""(["']?)([A-Za-z][A-Za-z0-9_]*)\1(\s*[:=]\s*)(?:(["'])([^"'\n]*)\4|(""" + _BARE + r""")|\[([^\[\]{}\n]*)\])"""
+    r"""(?:(["'])([A-Za-z][\w ]*?)\1|()([A-Za-z]\w*))("""
+    + _SEP
+    + r""")(?:(["'])([^"'\n]*)\6|("""
+    + _BARE
+    + r"|"
+    + _WORD_VALUE
+    + r""")|\[([^\[\]{}\n]*)\])"""
 )
+# XML: <accountId>BUS-7781</accountId>.
+_XML = re.compile(r"<([A-Za-z][\w.-]*)(\s[^<>]*)?>([^<>]*)</\1>")
+_OPEN_NAME = re.compile(r"""["']([A-Za-z][\w ]*)["']?\s*$|\b([A-Za-z]\w*)\s*$""")
+_OPEN_XML = re.compile(r"<([A-Za-z][\w.-]*)(?:\s[^<>]*)?>[^<>]*$")
 # One item of a list written in text: a quoted text or a number.
 _ITEM = re.compile(r"""(["'])[^"'\n]*\1|-?\d[\d.]*""")
-# The name in words before the value, as a field is labelled in a sentence ("Account id BUS-7781", "Tax ID 98-7654321").
-_LABELLED = re.compile(
-    r"(?i)\b((?:ssn|account|acct|card|tax(?:payer)?)(?:\s+(?:id|number|no\.?|#))(?:\s+last\s*4)?)(\s*[:#]?\s*)"
-    r"([A-Za-z]{0,6}-?\d[\w-]*)"
-)
+# The name in words before the value, as a field is labelled in a sentence ("Account id BUS-7781", "Tax ID 98-7654321")
+# or a call is worded ("place_hold: account_id CHQ-2219"); the value holds a digit, so prose about the field is kept.
+_LABEL = r"(?:ssn|account|acct|card|tax(?:payer)?)(?:[\s_]+(?:id|number|no\.?|#))(?:\s+last\s*4)?"
+_LABELLED = re.compile(r"(?i)\b(" + _LABEL + r")(\s*(?:[:#|]|->|=>|→)?\s*)([A-Za-z]{0,12}-?\d[\w-]*)")
+
+
+def _words(name: str) -> list[str]:
+    """The words of a field name, a lower case word with no break read by the words it is made of ("accountid")."""
+    words: list[str] = []
+    for word in (w.lower() for w in _NAME_WORDS.findall(name)):
+        parts: list[str] = []
+        rest = word
+        while rest:
+            part = next((g for g in _GLUED if rest.startswith(g)), None)
+            if part is None:
+                break
+            parts.append(part)
+            rest = rest[len(part) :]
+        words.extend(parts if not rest and len(parts) > 1 else [word])
+    return words
 
 
 def field_kind(name: str) -> str | None:
     """What a value under the field `name` is shown as when the name says it is personal data: [SSN], [account],
     [card] or [tax ID]; None for any other name."""
-    words = [w.lower() for w in _NAME_WORDS.findall(name)]
+    words = _words(name)
     if "ssn" in words or ("social", "security") in pairwise(words):
         return "[SSN]"
     for i, word in enumerate(words):
         rest = words[i + 1 :]
-        if word in _KINDS and rest and all(w in _ID_WORDS for w in rest):
+        if word in _KINDS and (rest or word in _ALONE) and all(w in _ID_WORDS for w in rest):
             return _KINDS[word]
     return None
 
 
 def _keyed(m: re.Match[str]) -> str:
-    shown = field_kind(m.group(2))
+    key = m.group(2) if m.group(2) is not None else m.group(4)
+    shown = field_kind(key)
     if shown is None:
         return m.group(0)
-    name = f"{m.group(1)}{m.group(2)}{m.group(1)}{m.group(3)}"
-    if m.group(7) is not None:
-        items = _ITEM.sub(lambda i: f"{i.group(1)}{shown}{i.group(1)}" if i.group(1) else f'"{shown}"', m.group(7))
+    quote_key = m.group(1) or ""
+    name = f"{quote_key}{key}{quote_key}{m.group(5)}"
+    if m.group(9) is not None:
+        items = _ITEM.sub(lambda i: f"{i.group(1)}{shown}{i.group(1)}" if i.group(1) else f'"{shown}"', m.group(9))
         return f"{name}[{items}]"
-    if not (m.group(5) or m.group(6)):
+    if not (m.group(7) or m.group(8)):
         return m.group(0)
-    quote = m.group(4) or m.group(1)
+    quote = m.group(6) or quote_key
     return f"{name}{quote}{shown}{quote}"
+
+
+def _keyed_values(text: str) -> str:
+    """`text` with each value written after a personal data field name replaced (`_keyed`). A match under any other
+    name gives back only its name, so a field written as its value ("customer: accountId: ABCDEFG") is still read."""
+    out: list[str] = []
+    pos = 0
+    while (m := _KEYED.search(text, pos)) is not None:
+        if field_kind(m.group(2) if m.group(2) is not None else m.group(4)) is None:
+            out.append(text[pos : m.end(5)])
+            pos = m.end(5)
+            continue
+        out.append(text[pos : m.start()] + _keyed(m))
+        pos = m.end()
+    return "".join(out) + text[pos:]
+
+
+def _xml(m: re.Match[str]) -> str:
+    shown = field_kind(m.group(1))
+    if shown is None or not m.group(3).strip():
+        return m.group(0)
+    return f"<{m.group(1)}{m.group(2) or ''}>{shown}</{m.group(1)}>"
 
 
 def _labelled(m: re.Match[str]) -> str:
@@ -109,7 +179,8 @@ def mask(text: str) -> str:
     """`text` with each pattern replaced by what it is: [email], [SSN], [card], [phone], [account], or the digits after
     an SSN, account or card word as ••••; a value written after a field name that names personal data is replaced
     whole ([tax ID] for a taxpayer's)."""
-    text = _KEYED.sub(_keyed, text)
+    text = _keyed_values(text)
+    text = _XML.sub(_xml, text)
     text = _EMAIL.sub("[email]", text)
     text = _SSN.sub("[SSN]", text)
     text = _CARD.sub("[card]", text)
@@ -121,24 +192,69 @@ def mask(text: str) -> str:
     return _LABELLED.sub(_labelled, text)
 
 
-def masked(value: Any, key: str | None = None) -> Any:
-    """A JSON value as people see it: every string in it masked, and every value under a field whose name names personal
-    data (`field_kind`) replaced whole, a number included; `key` is the name of the field `value` sits under. A
-    {label, value} row is named by its label. A true or false, a null and an empty text are left: they say nothing."""
+# The names a row ({label, value}) is named by: a form's label, a record's name, key or field.
+_ROW_NAMES = ("label", "name", "key", "field")
+
+
+def _row_name(row: dict[Any, Any]) -> str | None:
+    """What a {label, value} row's value is shown as, by the first of its names that names personal data."""
+    if "value" not in row:
+        return None
+    for k in _ROW_NAMES:
+        if isinstance(name := row.get(k), str) and (shown := field_kind(name)) is not None:
+            return shown
+    return None
+
+
+def masked(
+    value: Any,
+    key: str | None = None,
+    *,
+    keep: frozenset[str] = frozenset(),
+    text: Callable[[str], str] = mask,
+    hidden: Callable[[str, Any], Any] | None = None,
+) -> Any:
+    """A JSON value as people see it: every string in it masked (`text`, `mask` by default), and every value under a
+    field whose name names personal data (`field_kind`) replaced whole, a number included; `key` is the name of the
+    field `value` sits under. A {label, value} row is named by its label (or its name, key or field). A true or false,
+    a null and an empty text are left: they say nothing. This is the one walk of JSON by key: every reader that masks
+    one calls it.
+
+    `keep` names the fields of the top object whose text is shown as it is (a task's ids and state); below the top it
+    names nothing, so a tool input's own `id` or `status` is masked like any other value. `hidden`, given a field name
+    and its value, returns what is shown in its place (a log's secrets) or None to mask it as usual."""
+    return _walk(value, key, keep, text, hidden)
+
+
+def _walk(
+    value: Any,
+    key: str | None,
+    keep: frozenset[str],
+    text: Callable[[str], str],
+    hidden: Callable[[str, Any], Any] | None,
+) -> Any:
     shown = field_kind(key) if key else None
     if shown is not None:
-        return _whole(value, shown)
+        return _whole(value, shown, key or "", text)
     if isinstance(value, str):
-        return mask(value)
-    if isinstance(value, list):
-        return [masked(v) for v in cast(list[Any], value)]
-    if isinstance(value, dict):
+        return text(value)
+    if isinstance(value, list | tuple | set | frozenset):
+        return [_walk(v, key, frozenset(), text, hidden) for v in cast(list[Any], value)]
+    if isinstance(value, Mapping):
         row = cast(dict[Any, Any], value)
-        label = row.get("label") if "value" in row else None
-        named = field_kind(label) if isinstance(label, str) else None
-        return {
-            k: _whole(v, named) if named is not None and k == "value" else masked(v, str(k)) for k, v in row.items()
-        }
+        named = _row_name(row)
+        out: dict[Any, Any] = {}
+        for k, v in row.items():
+            name = str(k)
+            if hidden is not None and (instead := hidden(name, v)) is not None:
+                out[k] = instead
+            elif name in keep and not isinstance(v, Mapping | list):
+                out[k] = v
+            elif named is not None and k == "value":
+                out[k] = _whole(v, named, name, text)
+            else:
+                out[k] = _walk(v, name, frozenset(), text, hidden)
+        return out
     return value
 
 
@@ -146,40 +262,49 @@ def masked(value: Any, key: str | None = None) -> Any:
 _CELL_VALUES = ("value", "extractedValue")
 
 
-def _whole(value: Any, shown: str) -> Any:
-    """A personal data field's value with each scalar in it replaced by `shown`; an object in it is masked by its own
-    field names, since a list of accounts holds names and balances too. An object holding the field's value under
-    `value` (a document read's field: its value, the value read, its confidence and the page quote) has that value
-    replaced, and wherever its text recurs in the object (the quote), since no pattern finds it there."""
+def _whole(value: Any, shown: str, key: str, text: Callable[[str], str] = mask) -> Any:
+    """A personal data field's value with each scalar in it replaced by `shown`. An object in it keeps what is not an
+    identifier (a list of accounts holds names and balances too): a field named by identifier words alone (account.id,
+    ssn.last4) is masked as the field, and under a plural name (accountIds) every field is. An object holding the
+    field's value under `value` (a document read's field: its value, the value read, its confidence and the page quote)
+    has that value replaced, and a text in it that is the value itself (a quote of it alone); the value is never
+    replaced as a part of a longer text, where it may be any number."""
     if value is None or isinstance(value, bool) or value == "":
         return value
     if isinstance(value, str | int | float):
         return shown
-    if isinstance(value, list):
-        return [_whole(v, shown) for v in cast(list[Any], value)]
+    if isinstance(value, list | tuple | set | frozenset):
+        return [_whole(v, shown, key, text) for v in cast(list[Any], value)]
     row = cast(dict[Any, Any], value)
     if "value" not in row:
-        return masked(value)
+        every = bool(_PLURAL & set(_words(key)))
+        return {
+            k: _whole(v, shown, key, text)
+            if every or all(w in _ID_WORDS for w in _words(str(k)))
+            else _walk(v, str(k), frozenset(), text, None)
+            for k, v in row.items()
+        }
     real = {
-        str(row[k])
+        str(row[k]).strip()
         for k in _CELL_VALUES
         if isinstance(row.get(k), str | int | float) and not isinstance(row.get(k), bool) and row.get(k) != ""
     }
     return {
-        k: _whole(v, shown) if k in _CELL_VALUES else _hidden(masked(v, str(k)), real, shown) for k, v in row.items()
+        k: _whole(v, shown, key, text)
+        if k in _CELL_VALUES
+        else _quoted(_walk(v, str(k), frozenset(), text, None), real, shown)
+        for k, v in row.items()
     }
 
 
-def _hidden(value: Any, real: set[str], shown: str) -> Any:
-    """`value` with every occurrence of the texts in `real` replaced by `shown`."""
+def _quoted(value: Any, real: set[str], shown: str) -> Any:
+    """`value` with every text in it that is one of `real` alone replaced by `shown`."""
     if isinstance(value, str):
-        for text in sorted(real, key=len, reverse=True):
-            value = value.replace(text, shown)
-        return value
+        return shown if value.strip() in real else value
     if isinstance(value, list):
-        return [_hidden(v, real, shown) for v in cast(list[Any], value)]
+        return [_quoted(v, real, shown) for v in cast(list[Any], value)]
     if isinstance(value, dict):
-        return {k: _hidden(v, real, shown) for k, v in cast(dict[Any, Any], value).items()}
+        return {k: _quoted(v, real, shown) for k, v in cast(dict[Any, Any], value).items()}
     return value
 
 
@@ -193,14 +318,18 @@ def holds_placeholder(text: str) -> bool:
 
 
 def _opened(released: str) -> int | None:
-    """Where text about to be released ends on a word or field name still waiting for its value, else None."""
-    if (
-        m := _OPEN_TAIL.search(released) or _OPEN_RECORD.search(released) or _OPEN_LABELLED.search(released)
-    ) is not None:
-        return m.start()
-    if (m := _OPEN_KEYED.search(released)) is not None and field_kind(m.group(2)) is not None:
-        return m.start()
-    return None
+    """Where text about to be released ends on a word or field name still waiting for its value, else None: the
+    earliest such start, so a quote or a bracket before a name is held with it."""
+    starts = [
+        m.start() for m in (_OPEN_TAIL.search(released), _OPEN_RECORD.search(released), _OPEN_LABELLED.search(released))
+        if m is not None
+    ]  # fmt: skip
+    named = ((_OPEN_KEYED, (2, 4)), (_OPEN_XML, (1,)), (_OPEN_NAME, (1, 2)))
+    for pattern, groups in named:
+        m = pattern.search(released)
+        if m is not None and field_kind(next((g for g in (m.group(i) for i in groups) if g), "")) is not None:
+            starts.append(m.start())
+    return min(starts, default=None)
 
 
 class StreamMasker:

@@ -19,7 +19,7 @@ from typing import Any, NotRequired, TypedDict, cast
 from langgraph.types import Command
 
 from ops_access import can
-from ops_agent_kernel.pii import field_kind, masked
+from ops_agent_kernel.pii import masked
 from ops_agents.graphs.definition import WorkflowDefinition, option_declarations, option_name
 from ops_service_kit import narrow
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ValidationFailed
@@ -167,28 +167,21 @@ def sees_real_values(reader: Principal, review: Listed) -> bool:
     so a missing team never shows the real values."""
     if caller_of(reader).kind != "person" or publish_reviews.is_request_id(str(review.get("id") or "")):
         return True
+    # Whoever may decide it now reads what they decide, as `can_decide` says: the asker of an "ask the person" step
+    # answers it alone, whatever roles they hold.
+    if review.get("canDecide") is True:
+        return True
     team = narrow.json_object(review.get("decidingTeam") or {}).get("id")
     return isinstance(team, str) and team in review_teams(reader)
 
 
 def as_seen_by(reader: Principal, review: Listed) -> Listed:
     """A task as `reader` reads it (`sees_real_values`): its real values, or its personal data masked by the same rule
-    as a run's page (`ops_pii.masked`), its ids, state and team kept so it still opens, links and sorts."""
+    as a run's page (`ops_pii.masked`), its ids, state and team kept at its top so it still opens, links and sorts; a
+    tool input's own id or status is masked like any other value."""
     if sees_real_values(reader, review):
         return review
-    return cast(Listed, _for_reader(cast(JsonValue, review)))
-
-
-def _for_reader(value: JsonValue, key: str | None = None) -> JsonValue:
-    if key in _TASK_KEEP:
-        return value
-    # A field named as personal data goes to ops_pii whole, which masks what the object holds as the field's value.
-    if isinstance(value, dict) and not ("label" in value and "value" in value) and not (key and field_kind(key)):
-        return {k: _for_reader(v, k) for k, v in value.items()}
-    if isinstance(value, list):
-        return [_for_reader(v, key) for v in value]
-    # A scalar, or a {label, value} row, which ops_pii masks by its label.
-    return cast(JsonValue, masked(value, key))
+    return cast(Listed, masked(review, keep=_TASK_KEEP))
 
 
 class ReviewStats(TypedDict):

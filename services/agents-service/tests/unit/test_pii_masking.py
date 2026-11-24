@@ -77,6 +77,10 @@ def test_each_kind_of_personal_data_is_masked(text: str, shown: str) -> None:
         "fil_13cf059e9367473281ca9d7d61f8d116",
         "wfrun_273808292bd7",
         "doc 4f1234567890123456ab",
+        # Prose about a field, and a field with no value, are not values.
+        "The account number is required before the card id can be checked.",
+        '{"accountId": null, "cardNumber": true}',
+        "1 of 12 items, total 1100",
     ],
 )
 def test_amounts_dates_case_numbers_and_ids_are_not_masked(text: str) -> None:
@@ -100,6 +104,15 @@ def test_amounts_dates_case_numbers_and_ids_are_not_masked(text: str) -> None:
         ("taxId", "98-7654321", "[tax ID]"),
         ("tax_id", 987654321, "[tax ID]"),
         ("taxpayerIdLast4", "4321", "[tax ID]"),
+        # Named by the account or card alone, or by a reference word, and in lower case with no word break.
+        ("account", "CHQ-2219", "[account]"),
+        ("bankAccount", 4401235567, "[account]"),
+        ("debitCard", "5521", "[card]"),
+        ("iban", "GB33BUKB20201555555555", "[account]"),
+        ("accountRef", "ACME", "[account]"),
+        ("card_token", "tok_9f2a", "[card]"),
+        ("accountid", "SAVINGS-2219", "[account]"),
+        ("ssnlast4", "4471", "[SSN]"),
     ],
 )
 def test_a_value_is_masked_by_its_field_name_whatever_its_type(key: str, value: Any, shown: Any) -> None:
@@ -120,6 +133,16 @@ def test_a_value_is_masked_by_its_field_name_whatever_its_type(key: str, value: 
         ("Tax ID 98-7654321 was filed", "Tax ID [tax ID] was filed"),
         ("SSN: 123-45-6789 on file", "SSN: [SSN] on file"),
         ("accountId=BUS-7781 card_number: 4111 1111 1111 1111", "accountId=[account] card_number: [card]"),
+        # A value with more than six letters, with no digit at all, or after a field name with no separator.
+        ("Account ID: SAVINGS-2219 on file", "Account ID: [account] on file"),
+        ("accountId: ABCDEFG", "accountId: [account]"),
+        ("place_hold: account_id CHQ-2219, reason fraud", "place_hold: account_id [account], reason fraud"),
+        # A table, a tab, an arrow, XML and a quoted name with a space in it.
+        ("| Account ID | SAVINGS-2219 |", "| Account ID | [account] |"),
+        ("Account ID\tSAVINGS-2219", "Account ID\t[account]"),
+        ("accountId -> BUS-7781", "accountId -> [account]"),
+        ("<accountId>BUS-7781</accountId>", "<accountId>[account]</accountId>"),
+        ('{"Account ID": "SAVINGS-2219"}', '{"Account ID": "[account]"}'),
     ],
 )
 def test_a_field_named_in_text_is_masked_by_its_name(text: str, shown: str) -> None:
@@ -150,6 +173,36 @@ def test_a_field_named_in_text_is_masked_by_its_name(text: str, shown: str) -> N
 def test_fields_that_name_no_identifier_are_kept(key: str, value: Any) -> None:
     assert masked({key: value}) == {key: value}
     assert mask(json.dumps({key: value})) == json.dumps({key: value})
+
+
+def test_an_object_under_a_personal_data_field_has_its_identifiers_masked() -> None:
+    # account.{id, number} is the shape a workflow's definition reads; ssn.{last4}; ids keyed by the account's kind.
+    value = {
+        "account": {"id": "CHQ-2219", "number": 4401235567, "name": "Acme Lending", "balance": 1250.5},
+        "ssn": {"last4": "4471"},
+        "accountIds": {"checking": "CHQ-1003", "savings": 7781},
+    }
+    assert masked(value) == {
+        "account": {"id": "[account]", "number": "[account]", "name": "Acme Lending", "balance": 1250.5},
+        "ssn": {"last4": "[SSN]"},
+        "accountIds": {"checking": "[account]", "savings": "[account]"},
+    }
+
+
+@pytest.mark.parametrize("name", ["label", "name", "key", "field"])
+def test_a_row_is_named_by_its_name_key_or_field(name: str) -> None:
+    rows = [{name: "accountId", "value": "BUS-7781"}, {name: "Customer", "value": "Ann Lee"}]
+    assert masked(rows) == [{name: "accountId", "value": "[account]"}, {name: "Customer", "value": "Ann Lee"}]
+
+
+def test_a_short_value_is_masked_under_its_field_and_not_wherever_its_digits_appear() -> None:
+    # A value 1 turned "1 of 12 items, total 1100" into "[account] of [account]2 items, total [account][account]00".
+    read = {"accountId": {"value": 1, "citation": {"page": 1, "quote": "1 of 12 items, total 1100"}}}
+    assert masked(read) == {
+        "accountId": {"value": "[account]", "citation": {"page": 1, "quote": "1 of 12 items, total 1100"}}
+    }
+    # A quote that is the value itself is still masked.
+    assert masked({"accountId": {"value": "BUS-7781", "quote": "BUS-7781"}})["accountId"]["quote"] == "[account]"
 
 
 @pytest.mark.parametrize("cut", range(1, len(REPLY)))
