@@ -132,8 +132,8 @@ shown in the trigger's log with the reason. Pause stops the ticks; Resume waits 
 sends only `dueAt`, so the trigger's input schema may require nothing else (a save naming another field is refused with
 422), and the workflow needs a team. The shortest interval is the install's `schedule_floor_minutes`, 5 by default;
 raising it leaves saved schedules running, and each is refused at its next save. After the clock was down, the latest
-slot runs once, marked late, if it is within half the interval (and at least 90 seconds); an older one is shown as
-missed. Reading a schedule needs the right to view the team's workflows; clearing one works even when a newer version
+slot runs once, marked late, if it is within half the smaller gap to the slot before or after it (and at least 90
+seconds); an older one is shown as missed. A rule saved just before its slot runs that slot. Reading a schedule needs the right to view the team's workflows; clearing one works even when a newer version
 dropped the step, and the workflow's view says when a schedule is idle and why.
 
 From a script or a terminal (`step` is the trigger step's id):
