@@ -168,7 +168,7 @@ await withUiStack(
         await phone.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
         // An agent's page: a record page whose icon holds the back arrow, shown on hover on a desktop.
         await phone.goto(`${consoleUrl}/agents`, { waitUntil: 'load' });
-        const agentHref = await phone.locator('main tbody tr a[href^="/agents/"]').first().getAttribute('href', { timeout: 30_000 });
+        const agentHref = await phone.locator('main tbody tr a[href^="/build/agents/"]').first().getAttribute('href', { timeout: 30_000 });
         await phone.goto(`${consoleUrl}${agentHref}`, { waitUntil: 'load' });
         await phone.getByTestId('page-back-icon').waitFor({ timeout: 30_000 });
         await phone.waitForTimeout(800);
@@ -211,7 +211,7 @@ await withUiStack(
         let secretsLanded = null;
         if (tools.secrets) {
           await page.locator('main [data-testid^=unset-secrets-]').first().click();
-          await page.waitForURL((u) => u.pathname === '/integrations/credentials', { timeout: 15_000 }).catch(() => undefined);
+          await page.waitForURL((u) => u.pathname === '/data/secrets', { timeout: 15_000 }).catch(() => undefined);
           secretsLanded = new URL(page.url()).pathname;
         }
         check('5 the queue shows amount and customer, one Human Tasks count, Tool calls settles, and Tools has no error', !cutInQueue.length && counts.overview === 0 && counts.reviews === mine && mine >= 1 && calls.skeletons === 0 && calls.notServed && tools.nested === 0 && tools.opens.every((n) => n === 1) && !toolErrors.length && tools.secrets > 0 && secretsLanded === '/integrations/credentials', { cutInQueue, counts, mine, calls, tools, toolErrors, secretsLanded });
@@ -240,7 +240,7 @@ await withUiStack(
 
       await step('7 an old workflow link lands on the workflow, or says it is no longer available', async () => {
         await go('/workflows/uc562_credit');
-        await page.waitForURL((u) => u.pathname === '/workflows/definitions/uc562_credit', { timeout: 30_000 }).catch(() => undefined);
+        await page.waitForURL((u) => u.pathname === '/build/workflows/definitions/uc562_credit', { timeout: 30_000 }).catch(() => undefined);
         const current = new URL(page.url()).pathname;
         await go('/workflows/dispute_email');
         await page.waitForTimeout(1500);

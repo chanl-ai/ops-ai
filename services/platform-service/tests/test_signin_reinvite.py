@@ -9,7 +9,7 @@ import httpx
 import sqlalchemy as sa
 
 from ops_platform.keys import dev_signer
-from ops_platform.store.tables import members, password_credentials, signin_identities
+from ops_platform.store.tables import members, password_credentials, role_assignments, signin_identities, users
 from ops_policy import Ed25519Verifier, verify
 from ops_service_kit.ids import now_iso
 
@@ -126,6 +126,43 @@ async def test_a_link_invite_works_once_for_its_own_person_and_never_for_an_admi
         await c.execute(members.update().where(members.c.id == member).values(invite_expires_at=now_iso()))
     late = await signin.sign_in_sso(email, invite=signin.mailed_invite(email))
     assert late.query == {"error": "link_required"} and await _links(signin, person) == 0
+
+
+async def test_the_list_marks_each_member_who_manages_access_and_no_one_else(signin: SignInRig) -> None:
+    # The page's members are decided in one read: one person's role or break-glass place must not mark another, and
+    # an expired grant of a role holding access.manage marks nobody.
+    domain = f"many.{signin.zone}"
+    # Made before the provider, while a password still signs them in.
+    await signin.security_admin_only(f"keeper@{domain}")
+    await signin.saml(domain)
+    viewer = await signin.person(f"viewer@{domain}")
+    boss = await signin.person(f"boss@{domain}", role="admin")
+    desk, lapsed = await signin.person(f"desk@{domain}"), await signin.person(f"lapsed@{domain}")
+    async with signin.engine.connect() as c:
+        keeper = str((await c.execute(sa.select(users.c.id).where(users.c.email == f"keeper@{domain}"))).scalar_one())
+    glass = await signin.public.put(f"/v1/settings/sign-in/break-glass/{keeper}", headers=signin.admin)
+    assert glass.status_code == 200, glass.text
+    for person in (viewer, boss, desk, lapsed, keeper):
+        await _team_of(signin, person)
+    # The keeper is a viewer with no password now, so only the break-glass list makes them one.
+    async with signin.engine.begin() as c:
+        await c.execute(members.update().where(members.c.user_id == keeper).values(role="viewer"))
+        await c.execute(password_credentials.delete().where(password_credentials.c.user_id == keeper))
+    access = {
+        "name": f"Access desk {signin.zone}",
+        "permissions": [{"area": "access", "action": "manage", "scope": "all"}],
+    }
+    role = (await signin.public.post("/v1/roles", headers=signin.admin, json=access)).json()["data"]["id"]
+    h = {**signin.admin, "X-Team-Id": signin.ops_team}
+    for person in (desk, lapsed):
+        given = await signin.public.post(f"/v1/people/{person}/role-grants", headers=h, json={"roleId": role})
+        assert given.status_code == 201, given.text
+    async with signin.engine.begin() as c:
+        lapse = role_assignments.update().where(role_assignments.c.subject_id == lapsed)
+        await c.execute(lapse.values(expires_at="2000-01-01T00:00:00Z"))
+    shown = (await signin.public.get("/v1/settings/members", headers=h)).json()["data"]["data"]
+    own = {m["email"].split("@")[0]: m["linksOwnSession"] for m in shown if m["email"].endswith(f"@{domain}")}
+    assert own == {"viewer": False, "boss": True, "desk": True, "lapsed": False, "keeper": True}, own
 
 
 async def test_sso_links_name_the_workspace_provider_and_whether_it_is_linked(signin: SignInRig) -> None:

@@ -36,7 +36,8 @@ from ops_documents.tools_client import OfferedTemplate, PluginTemplates
 from ops_identity import ServiceCallError, ServiceUnreachable
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import Envelope, In, Json, JsonValue, Out, ok
+from ops_service_kit.http import Envelope, In, Json, JsonValue, ListResult, Out, ok, page_rows
+from ops_service_kit.listing import ListQuery
 from ops_service_kit.names import Name
 from ops_service_kit.narrow import a_list, an_object, entries, required
 from ops_service_kit.template_merge import Choice, FieldOutcome, apply, merge
@@ -282,16 +283,21 @@ def templates_router(
         return [t for t in await offered(request, who) if t.get("kind") == KIND]
 
     @router.get(
-        "/v1/templates", tags=["templates"], response_model=Envelope[list[TemplateView]], dependencies=[scope("view")]
+        "/v1/templates",
+        tags=["templates"],
+        response_model=Envelope[ListResult[TemplateView]],
+        dependencies=[scope("view")],
     )
     async def list_templates(  # pyright: ignore[reportUnusedFunction]
         request: Request,
         who: Annotated[Who, Depends(caller)],
+        q: ListQuery,
         kind: Annotated[Kind | None, Query()] = None,
     ) -> JSONResponse:
         """The document types the team's plugins bring, each with its state for the team, the copies the team holds of
         it and whether the caller may add it. A copy whose template the app no longer ships, while the app is still on,
-        is listed too, as `removed_upstream`; a copy of an app turned off for the team reads `added`."""
+        is listed too, as `removed_upstream`; a copy of an app turned off for the team reads `added`. A page of the
+        shared list query; `search` matches the title and the plugin's title."""
         held = await copies.of_team()
         everything = await offered(request, who)
         on_sources = {str(t["source"]) for t in everything}
@@ -364,7 +370,14 @@ def templates_router(
                 "copy": _copy_view(c),
             }
             out.append(TemplateView.model_validate(gone).model_dump(by_alias=True))
-        return ok(out)
+        return ok(
+            page_rows(
+                out,
+                q,
+                search=_searched,
+                key=lambda t: f"{t['source']}:{t['id']}",
+            )
+        )
 
     async def make_type(who: Who, t: OfferedTemplate, body: InstallInput) -> tuple[str, Json]:
         """The create route's body and path: `DocumentTypeIn`, then `DocumentTypes.create`, which checks the fields as
@@ -607,3 +620,9 @@ def templates_router(
         return ok(_copy_view(await copies.detach(row.id, by=who.actor)))
 
     return router
+
+
+def _searched(t: Json) -> str:
+    """What the list's `search` matches: the template's title and its plugin's title."""
+    plugin = t.get("plugin")
+    return f"{t.get('title', '')} {plugin.get('title', '') if isinstance(plugin, dict) else ''}"

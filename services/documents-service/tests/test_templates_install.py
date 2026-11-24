@@ -88,7 +88,7 @@ async def install(
 
 
 async def listed(svc: Service, headers: dict[str, str] = OPS) -> list[dict[str, Any]]:
-    return list(data(await svc.client.get("/v1/templates", params={"kind": "document_type"}, headers=headers)))
+    return list(data(await svc.client.get("/v1/templates", params={"kind": "document_type"}, headers=headers))["data"])
 
 
 async def types_of(svc: Service, headers: dict[str, str] = OPS) -> list[str]:

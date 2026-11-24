@@ -602,7 +602,8 @@ export interface paths {
          * List Templates
          * @description The document types the team's plugins bring, each with its state for the team, the copies the team holds of
          *     it and whether the caller may add it. A copy whose template the app no longer ships, while the app is still on,
-         *     is listed too, as `removed_upstream`; a copy of an app turned off for the team reads `added`.
+         *     is listed too, as `removed_upstream`; a copy of an app turned off for the team reads `added`. A page of the
+         *     shared list query; `search` matches the title and the plugin's title.
          */
         get: operations["templates_list_templates"];
         put?: never;
@@ -1032,6 +1033,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[TemplateView]] */
+        Envelope_ListResult_TemplateView__: {
+            data: components["schemas"]["ListResult_TemplateView_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[Purged] */
         Envelope_Purged_: {
             data: components["schemas"]["Purged"];
@@ -1109,16 +1119,6 @@ export interface components {
         Envelope_list_TemplateOffer__: {
             /** Data */
             data: components["schemas"]["TemplateOffer"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[TemplateView]] */
-        Envelope_list_TemplateView__: {
-            /** Data */
-            data: components["schemas"]["TemplateView"][];
             /**
              * Success
              * @constant
@@ -1538,6 +1538,18 @@ export interface components {
         ListResult_Extraction_: {
             /** Data */
             data: components["schemas"]["Extraction"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[TemplateView] */
+        ListResult_TemplateView_: {
+            /** Data */
+            data: components["schemas"]["TemplateView"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -5286,6 +5298,12 @@ export interface operations {
         parameters: {
             query?: {
                 kind?: "document_type" | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -5299,7 +5317,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_TemplateView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_TemplateView__"];
                 };
             };
             /** @description Invalid request */

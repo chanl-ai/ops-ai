@@ -113,24 +113,24 @@ async def install(client: AsyncClient, body: dict[str, Any] | None = None, *, ti
 
 async def test_the_list_shows_the_teams_templates_and_which_it_holds(client: AsyncClient) -> None:
     wire(client, [AGENT])
-    before = ok(await client.get("/v1/templates", params={"kind": "agent"}, headers=OPS))
+    before = ok(await client.get("/v1/templates", params={"kind": "agent"}, headers=OPS))["data"]
     assert [(t["id"], t["installed"]) for t in before] == [
         ("case-helper", {"copies": 0, "version": None, "newerAvailable": False, "changed": False})
     ]
     ok(await install(client, {"knowledgeBases": ["kb_support"]}), 201)
-    after = ok(await client.get("/v1/templates", params={"kind": "agent"}, headers=OPS))
+    after = ok(await client.get("/v1/templates", params={"kind": "agent"}, headers=OPS))["data"]
     assert after[0]["installed"] == {"copies": 1, "version": 2, "newerAvailable": False, "changed": False}
     # A newer version shipped by the plugin is offered, and the copy stays as it is.
     wire(client, [AGENT | {"version": 3}])
-    newer = ok(await client.get("/v1/templates", params={"kind": "agent"}, headers=OPS))
+    newer = ok(await client.get("/v1/templates", params={"kind": "agent"}, headers=OPS))["data"]
     assert newer[0]["installed"] == {"copies": 1, "version": 2, "newerAvailable": True, "changed": False}
 
 
 async def test_the_list_keeps_one_plugins_templates_when_asked(client: AsyncClient) -> None:
     """A plugin update's review shows the version each of that plugin's copies came from."""
     wire(client, [AGENT])
-    mine = ok(await client.get("/v1/templates", params={"source": SOURCE}, headers=OPS))
-    other = ok(await client.get("/v1/templates", params={"source": "plugin:test.other"}, headers=OPS))
+    mine = ok(await client.get("/v1/templates", params={"source": SOURCE}, headers=OPS))["data"]
+    other = ok(await client.get("/v1/templates", params={"source": "plugin:test.other"}, headers=OPS))["data"]
     assert [t["id"] for t in mine] == ["case-helper"] and other == []
 
 
@@ -189,7 +189,7 @@ async def test_a_template_of_an_app_off_for_the_team_that_needs_its_tools_is_ref
 ) -> None:
     why = "Case desk is off for this team; a team admin turns it on."
     wire(client, [AGENT | {"off": why}])
-    listed = ok(await client.get("/v1/templates", params={"source": SOURCE}, headers=OPS))
+    listed = ok(await client.get("/v1/templates", params={"source": SOURCE}, headers=OPS))["data"]
     assert [(t["id"], t["canAdd"], t["off"]) for t in listed] == [("case-helper", False, why)]
     r = await install(client)
     assert r.status_code == 422 and r.json()["error"]["code"] == "app_off", r.text
@@ -238,12 +238,12 @@ async def test_deleting_a_copy_marks_it_removed_and_a_changed_template_shows_as_
     aid = ok(await install(client), 201)["copy"]["recordId"]
     # The plugin ships a changed body at the same version: the copy was made from the old one.
     wire(client, [AGENT | {"digest": "b" * 64}])
-    changed = ok(await client.get("/v1/templates", params={"kind": "agent"}, headers=OPS))[0]["installed"]
+    changed = ok(await client.get("/v1/templates", params={"kind": "agent"}, headers=OPS))["data"][0]["installed"]
     assert changed["copies"] == 1 and changed["changed"] is True, changed
     gone = await client.delete(f"/v1/agents/{aid}", headers=OPS)
     assert gone.status_code == 204, gone.text
     # The delete marks the copy removed at once, before any reinstall looks.
-    after = ok(await client.get("/v1/templates", params={"kind": "agent"}, headers=OPS))[0]["installed"]
+    after = ok(await client.get("/v1/templates", params={"kind": "agent"}, headers=OPS))["data"][0]["installed"]
     assert after["copies"] == 0, after
 
 

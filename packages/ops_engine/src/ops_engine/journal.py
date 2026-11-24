@@ -8,6 +8,8 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, cast
 
+from ops_service_kit.http import Json
+
 # running: an attempt under way, or one whose process died (dangling). waiting: a review paused for a person.
 # ok: recorded output, returned on any re-run. pinned: an output set before a test run. error: the attempt failed.
 # abandoned: a dangling read or model attempt superseded by a new attempt. redriven: the failing attempt a Redrive set
@@ -44,7 +46,7 @@ REFUSED_BEFORE_SENDING = frozenset(
 
 
 def never_sent(error: Any) -> bool:
-    return isinstance(error, dict) and cast(dict[str, Any], error).get("code") in NEVER_SENT
+    return isinstance(error, dict) and cast(Json, error).get("code") in NEVER_SENT
 
 
 def sent_and_unanswered(error: Any) -> bool:
@@ -53,7 +55,7 @@ def sent_and_unanswered(error: Any) -> bool:
     status_failure). A write that ends this way may have happened, so a run's own pass fails it as uncertain."""
     if not isinstance(error, dict):
         return False
-    e = cast(dict[str, Any], error)
+    e = cast(Json, error)
     code, status = e.get("code"), e.get("status")
     if code == "UPSTREAM_TIMEOUT":
         return True
@@ -71,7 +73,7 @@ def definitely_not_done(error: Any) -> bool:
     a plugin failure (PLUGIN_MAY_HAVE_SENT) or an unknown code included, may have run. Read only by a Redrive."""
     if not isinstance(error, dict) or sent_and_unanswered(error):
         return False
-    e = cast(dict[str, Any], error)
+    e = cast(Json, error)
     code, status = e.get("code"), e.get("status")
     if never_sent(e) or code in REFUSED_BEFORE_SENDING or e.get("side") == "ours":
         return True
@@ -82,9 +84,9 @@ def definitely_not_done(error: Any) -> bool:
 
 def error_of(out: Any) -> Any:
     """The gateway's error inside a step's output: the error port wraps the tool's own `{"error": ...}` once more."""
-    error: Any = cast(dict[str, Any], out).get("error") if isinstance(out, dict) else None
+    error: Any = cast(Json, out).get("error") if isinstance(out, dict) else None
     while isinstance(error, dict):
-        layer = cast(dict[str, Any], error)
+        layer = cast(Json, error)
         inner: Any = layer.get("error")
         if "code" in layer or not isinstance(inner, dict):
             break

@@ -29,7 +29,7 @@ CHECKS = \
   isolation-markings isolation-sites \
   store-inventory roles-matrix sbom k8s-base \
   ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards \
-  downgrades migration-heads token-lifetime cross-service standards service-standards service-standards-self-test \
+  downgrades migration-heads token-lifetime cross-service standards service-standards service-standards-self-test list-routes \
   ci-steps ci-steps-self-test ci-local-self-test new-migration-self-test builder-watch-self-test usecase-outputs
 
 # Access decided outside can(), the exceptions each lane may still hold, and the trailer a new line needs.
@@ -132,6 +132,10 @@ check-run.service-standards = $(PY) scripts/check_service_standards.py
 check-paths.service-standards = ^(services|packages)/.*\.py$$|^scripts/check_service_standards\.py$$
 check-run.service-standards-self-test = $(PY) scripts/check_service_standards.py --self-test
 check-paths.service-standards-self-test = ^scripts/check_service_standards\.py$$
+# Every list route pages and searches on the server (ListQuery or an /options page), or is on list-routes-allowlist.txt
+# with its reason; the allowlist only shrinks. Read from the committed openapi.json files.
+check-run.list-routes = $(PY) scripts/check_list_routes.py && $(PY) scripts/check_list_routes.py --self-test
+check-paths.list-routes = ^services/[^/]+/openapi\.json$$|^list-routes-allowlist\.txt$$|^scripts/check_list_routes\.py$$
 
 # Strict types on the code and its tests: `packages` as one run, and each service through its own typecheck target. A new
 # test file's untyped helper reached CI because nothing on this list type-checked tests. Pre-commit runs only the members

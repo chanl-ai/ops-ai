@@ -660,3 +660,4 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/console/my-apps-page.md` | uc-769: My apps is a page of its own, the same for an admin and a member |
 | `usecases/tools-service/admins-see-people-s-app-sign.md` | uc-770: Admins see people's app sign-ins and end one |
 | `usecases/agents-service/a-builder-takes-a-new-skill.md` | uc-771: A builder takes a new skill to its first publish in under ten minutes |
+| `usecases/kb-service/search-a-long-document-s-pieces.md` | uc-772: Search a long document's pieces on the server |

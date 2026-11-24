@@ -91,7 +91,7 @@ async def test_two_packs_shipping_the_same_case_type_make_two_types_and_never_cr
     assert ok(await client.get(f"/v1/task-types/{task['recordId']}", headers=OPS))["name"] == "Call back"
     # B changes its dispute: A's copy is offered nothing.
     wire(client, [dispute(A), dispute(B, 2, amount="Disputed amount"), callback()])
-    rows = ok(await client.get("/v1/templates", headers=OPS))
+    rows = ok(await client.get("/v1/templates", headers=OPS))["data"]
     assert (state(rows, A), state(rows, B)) == ("added", "available"), rows
     # Adding B's under the name A's holds asks for another; under another name it is a second type beside A's.
     taken = await client.post(f"/v1/resources/{B}:dispute/copies", json={}, headers=OPS)

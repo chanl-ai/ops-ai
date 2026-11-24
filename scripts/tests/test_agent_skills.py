@@ -36,7 +36,9 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A repository with one skill page, AGENTS.md and CLAUDE.md, and the generator pointed at it."""
     (tmp_path / "docs/guide/skills").mkdir(parents=True)
     (tmp_path / "docs/guide/skills/ops-demo.md").write_text(PAGE)
-    (tmp_path / "AGENTS.md").write_text("# Rules\n\n| Rule | Detail |\n|---|---|\n| Verify | Run it |\n")
+    (tmp_path / "AGENTS.md").write_text(
+        "# Rules\n\nStatus: current.\n\n| Rule | Detail |\n|---|---|\n| Verify | Run it |\n"
+    )
     (tmp_path / "CLAUDE.md").write_text("# C\n\n## Four rules every change follows\n\nOne of each thing.\n\n## Next\n")
     # The generated skills' folder, at the same place under tmp_path as in the repository.
     skills_dir = tmp_path / agent_skills.CLAUDE_SKILLS.relative_to(agent_skills.ROOT)
