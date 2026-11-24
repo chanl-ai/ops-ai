@@ -196,3 +196,7 @@ async def test_a_member_without_the_workflows_view_cell_reads_no_workflow_defini
     assert (await c.get(picker, params={"source": "workflows"}, headers=NOT_A_WORKFLOW_READER)).status_code == 403
     assert (await c.get(picker, params={"source": "agents"}, headers=NOT_A_WORKFLOW_READER)).status_code == 200
     assert (await c.get(picker, params={"source": "workflows"}, headers=VIEWER)).status_code == 200
+    # The step types a form is built from are read with the same view cell.
+    for who in (NOT_A_WORKFLOW_READER, CHAT_USER):
+        assert (await c.get("/v1/workflows/node-types", headers=who)).status_code == 403
+    assert (await c.get("/v1/workflows/node-types", headers=VIEWER)).status_code == 200

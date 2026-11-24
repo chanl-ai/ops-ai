@@ -188,6 +188,18 @@ async def test_a_publish_while_a_review_is_open_is_listed_and_refused_before_a_v
     await _refused_and_kept(client, base, "review_open", [1])
 
 
+async def test_an_unparseable_copy_still_lists_the_review_that_is_open(reviewed: AsyncClient) -> None:
+    client = reviewed
+    made = await client.post("/v1/workflows/definitions", json={"yaml": BASIC.read_text()})
+    assert made.status_code == 201, made.text
+    assert (await client.post(f"{WF}/publish-requests", json={"note": "first"})).status_code == 201
+    opened = (await client.get(WF)).json()["data"]["saveBase"]
+    saved = await _save(client, basic() | {"connections": "not a list"}, opened)
+    assert saved.status_code == 200, saved.text
+    preview = (await client.get(f"{WF}/publish-preview")).json()["data"]
+    assert {b["code"] for b in preview["blockers"]} >= {"review_open", "invalid_definition"}, preview
+
+
 async def test_a_copy_equal_to_the_live_version_is_listed_and_refused_with_the_copy_kept(client: AsyncClient) -> None:
     view = await _published(client)
     # The editor's copy after a change was made and taken back: the live version again.

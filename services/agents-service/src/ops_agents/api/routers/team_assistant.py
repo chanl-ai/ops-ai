@@ -191,7 +191,8 @@ async def _skill_copies(
         if held is not None:
             sid = held.record_id
             row = await skills(rt).row(sid)
-            now = (await skills(rt).versions(sid))[0].content
+            newest = (await skills(rt).versions(sid))[0]
+            now = newest.content
             # A skill row holds no name of its own; the newest version's content names it.
             name = str(now.get("name") or tid)
             if not await _stale(rt, held, t):
@@ -200,7 +201,7 @@ async def _skill_copies(
             kbs = [str(k) for k in narrow.a_list(now.get("knowledgeBases") or [], "knowledgeBases")]
             content = await _skill_content(rt, team, t, name, kbs)
             note = f"Update from {cast(Json, t.get('plugin') or {}).get('title') or source}"
-            n = await skills(rt).save_draft(sid, content, by=me.email, note=note)
+            n = await skills(rt).save_draft(sid, content, by=me.email, note=note, base=(newest.version, newest.digest))
             await skills(rt).publish(sid, n, by=me.email, review_id="app_turn_on")
             await copies.updated(
                 held.id, version=version, digest=t.get("digest"),

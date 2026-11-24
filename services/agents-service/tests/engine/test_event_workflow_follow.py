@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.api.engine_lifecycle import KIND
+from ops_agents.api.platform_policies import PolicyUnread
 from ops_agents.api.service_events import SEED, UPDATE_AVAILABLE, UPDATED, ensure_event_workflows
 from ops_agents.store.agent_registry import AgentRegistry
 from ops_agents.store.engine import EngineTransactions
@@ -127,4 +128,34 @@ async def test_a_tenant_on_the_platform_owned_version_follows_the_seed_too(engin
     await provision(engine, tenant, new)
     with tenant_scope(tenant):
         asked = await AgentRegistry(engine).requests(KIND, old.id)
+    assert [(r.version, r.status) for r in asked] == [(2, "pending")], asked
+
+
+async def test_an_update_is_not_made_while_the_publish_policy_cannot_be_read(engine: AsyncEngine) -> None:
+    """With platform-service down the shipped update makes no version at all; the next pass, with the policy readable,
+    makes it and asks for review."""
+    tenant = f"t-{uuid4().hex[:8]}"
+    old, new = shipped("purged"), shipped("purged_v2")
+    await provision(engine, tenant, old)
+
+    class Down:
+        async def value(self, key: str) -> Any:
+            raise PolicyUnread("platform-service did not answer")
+
+    rt: Any = SimpleNamespace(
+        db=engine,
+        event_workflows=[new],
+        event_workflows_seen=set(),
+        policies=Down(),
+        settings=SimpleNamespace(registry_auto_approve=False, environment="test"),
+    )
+    store = DefinitionStore(EngineTransactions(engine))
+    with tenant_scope(tenant):
+        await ensure_event_workflows(rt)
+        versions = [v.version for v in await store.versions(old["id"])]
+        asked = await AgentRegistry(engine).requests(KIND, old["id"])
+    assert versions == [1] and asked == [], (versions, asked)
+    await provision(engine, tenant, new)
+    with tenant_scope(tenant):
+        asked = await AgentRegistry(engine).requests(KIND, old["id"])
     assert [(r.version, r.status) for r in asked] == [(2, "pending")], asked

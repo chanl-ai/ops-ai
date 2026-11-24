@@ -389,3 +389,32 @@ async def test_no_connection_is_held_while_tools_service_answers_and_a_detach_ta
         finally:
             event.remove(Pool, "checkout", checked_out)
     assert (codes, set(asked), detached.status_code, checkouts) == ([200] * 5, {0}, 200, [1])
+
+
+async def test_an_update_never_writes_over_a_skill_draft_saved_after_it_was_read(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A skill draft another builder saves between the update reading the copy and saving the merge is kept: the save
+    names the version it read, so the update answers 409 and writes nothing."""
+    from ops_agents.api.routers import templates  # noqa: PLC0415 - the read being interleaved is private to it
+    from ops_agents.api.skills import skills  # noqa: PLC0415
+
+    sid = await add_skill(client)
+    await edit_skill(client, sid, instructions="Quote the schedule.")
+    wire(client, [pack(2, use_when="A customer disputes a fee")])
+    read = templates._newest  # pyright: ignore[reportPrivateUsage]
+    saves: list[int] = []
+
+    async def read_then_lose_the_race(rt: Any, kind: str, record_id: str) -> Any:
+        found = await read(rt, kind, record_id)
+        if kind == "skill":
+            saves.append(len(saves))
+            newest = (await skills(rt).versions(record_id))[0].content
+            body = {**newest, "instructions": f"Edited by someone else, {len(saves)}."}
+            await skills(rt).save_draft(record_id, body, by="other@x", note="meanwhile")
+        return found
+
+    monkeypatch.setattr(templates, "_newest", read_then_lose_the_race)
+    refused = await client.post(path(sid), json={}, headers=OPS)
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "stale_base", refused.text
+    assert str((await versions(client, sid))[0].content["instructions"]).startswith("Edited by someone else")

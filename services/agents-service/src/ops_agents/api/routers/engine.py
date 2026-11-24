@@ -188,6 +188,7 @@ async def node_types(rt: Rt, me: Me) -> JSONResponse:
     """Every registered node type at every version: ports with their connection types, parameters as JSON Schema with
     the form generated from them, effects, retry and executor, and why the acting team cannot use one now. No request
     transaction: it reads no row, and the AI-steps policy comes from platform-service."""
+    require_view(caller_of(me), "workflows")
     ai_on = await ai_steps_gate.allowed(rt, current_team() or me.team_id or None)
     return ok(
         [
@@ -459,7 +460,7 @@ async def _store_version(
             definition=d.wire(),
             digest=digest,
             now=now_iso(),
-            by=me.email,
+            by=me.actor,
             team=team,
             reopen=reopen,
         )
@@ -948,7 +949,7 @@ async def save_working_copy(rt: Rt, me: Me, workflow_id: str, body: WorkingCopyI
             checks=checks,
             base=base,
             now=now_iso(),
-            by=me.email,
+            by=me.actor,
             replaces=body.replaces_digest,
         )
     except StaleWorkingCopy as e:

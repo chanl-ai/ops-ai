@@ -459,3 +459,10 @@ def test_the_reader_reads_each_keyword_with_or_without_a_list_marker(
         (k["word"], lines[m["line"] - 1].strip()[k["start"] : k["end"]].lower()) for m in r.marks if (k := m["keyword"])
     ]
     assert all(said in ({"else", "otherwise"} if word == "else" else {word}) for word, said in spans), spans
+
+
+def test_a_stop_under_an_else_with_no_if_above_ends_no_run() -> None:
+    r = read('Find it with @tool:find_policy\nelse:\n    Stop "no cover"', fields={"@tool:find_policy": _POLICY})
+    assert not (r.program and r.program.exit), r.program
+    assert [m["kind"] for m in r.marks][-1] == "text", r.marks
+    assert any(h["line"] == 2 for h in r.hints), r.hints

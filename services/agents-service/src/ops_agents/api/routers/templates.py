@@ -1064,7 +1064,18 @@ async def review_update(rt: Rt, me: Me, resource: str, copy: str) -> JSONRespons
     return ok(UpdateReview.model_validate(review).model_dump(by_alias=True))
 
 
-async def _save(rt: Runtime, me: Principal, kind: str, record_id: str, body: Json, *, note: str) -> int:
+async def _skill_base(rt: Runtime, kind: str, record_id: str) -> tuple[int, str] | None:
+    """The newest skill version and its digest, read before the copy's body is, so the save that follows names what it
+    was built from and another builder's save in between is refused, never written over."""
+    if kind != "skill":
+        return None
+    newest = (await skills(rt).versions(record_id))[0]
+    return newest.version, newest.digest
+
+
+async def _save(
+    rt: Runtime, me: Principal, kind: str, record_id: str, body: Json, *, note: str, base: tuple[int, str] | None = None
+) -> int:
     """One draft through the kind's own save: an open draft is merged into, a published version or a draft a publish
     request names is never rewritten (the save opens the next version)."""
     if kind == "agent":
@@ -1072,7 +1083,7 @@ async def _save(rt: Runtime, me: Principal, kind: str, record_id: str, body: Jso
     if kind == "guardrail":
         checked = check_guardrail("blocked_topics", body)
         return await guardrails(rt).save_draft(record_id, checked, by=me.email, note=note)
-    return await skills(rt).save_draft(record_id, body, by=me.email, note=note)
+    return await skills(rt).save_draft(record_id, body, by=me.email, note=note, base=base)
 
 
 @resources.post("/{resource}/copies/{copy}/update", response_model=Envelope[UpdateReview])
@@ -1117,13 +1128,14 @@ async def take_update(rt: Rt, me: Me, resource: str, copy: str, body: UpdateInpu
     base: Json | None = None
     if kind in FIELDS:
         assert template_body is not None
+        read_from = await _skill_base(rt, kind, copy)
         yours, _ = await _newest(rt, kind, copy)
         # A reset is the template's body with the copy's bindings, dropping every edit the team made.
         merged = template_body if mode == "reset" else apply(yours, outcomes, choices)
         if kind == "guardrail":
             merged = cast(Json, check_guardrail("blocked_topics", merged))
         if merged != yours:
-            version = await _save(rt, me, kind, copy, merged, note=note)
+            version = await _save(rt, me, kind, copy, merged, note=note, base=read_from)
         base = copy_base(kind, template_body)
     elif kind in tt.TYPE_KINDS:
         assert template_body is not None
