@@ -235,6 +235,47 @@ async def test_a_redrive_never_resends_a_write_whose_error_says_it_may_have_run(
     assert run["status"] == "waiting", (run, [(s["attempt"], s["status"], s["port"]) for s in steps])
 
 
+class NeverReceived(MayHaveRunTools):
+    """The unreadable write never reached the system: the gateway has no record of it, and the next send meets one
+    outage before it answers."""
+
+    async def call(
+        self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
+    ) -> ToolResult:
+        if len(self.calls) == 1:
+            self.calls.append(key)
+            error = {"code": "CONNECT_FAILED", "message": "crm.test could not be reached", "side": "ours"}
+            return ToolResult(False, {"error": error}, reason="the operation returned an error")
+        if self.calls:
+            self.calls.append(key)
+            return ToolResult(True, {"id": "C-1"})
+        return await super().call(operation, input, key, generation, token)
+
+    async def find(self, key: str, operation: str) -> ToolResult | None:
+        return None
+
+
+async def test_a_reconciled_write_sent_again_on_redrive_keeps_its_retries_however_old_the_failure(
+    engine: AsyncEngine,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Counted from the day-old attempt the redrive left dangling, the write sent again would have no time for its
+    # second try.
+    async def no_wait(_: float) -> None:
+        return None
+
+    monkeypatch.setattr("ops_engine.compiler.sleep", no_wait)
+    tenant, tools = f"t-{uuid4().hex[:8]}", NeverReceived("ANSWER_UNREADABLE")
+    run_id = await failed_at_its_end(engine, tenant, tools)
+    async with engine.begin() as c:
+        await c.execute(
+            engine_steps.update().where(engine_steps.c.run_id == run_id).values(started_at="2026-11-01T00:00:00Z")
+        )
+    run, steps = await redriven(engine, tenant, run_id, tools)
+    assert [k.rsplit(":", 1)[1] for k in tools.calls if k.startswith(run_id)] == ["1", "2", "3"], tools.calls
+    assert run["status"] == "waiting", (run, [(s["attempt"], s["status"], s["port"]) for s in steps])
+
+
 async def test_a_redrive_runs_the_version_the_run_pinned_not_the_latest(engine: AsyncEngine) -> None:  # noqa: F811
     tenant, tools = f"t-{uuid4().hex[:8]}", AnsweredTools()
     run_id = await failed_run(engine, tenant, tools)
