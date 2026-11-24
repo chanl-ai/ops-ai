@@ -228,9 +228,9 @@ class GatewayExpressions:
 
 class StarterApprovals:
     """A review step approving one write, decided as the run starter's own when they may approve it: the run recorded at
-    its start that they hold reviews.decide under the four-eyes policy. Only
-    a write one person approves without a step-up qualifies, the operation's policy and the workspace's stepUp read
-    live; anything unread leaves the step waiting for a person. The approval is recorded as the starter's, so the
+    its start that they held Approvals decide in its team, and the write's send asks again whether they hold it now.
+    Only a write one person approves without a step-up qualifies, the operation's policy and the workspace's stepUp
+    read live; anything unread leaves the step waiting for a person. The approval is recorded as the starter's, so the
     tool node mints its token from it as from any decision."""
 
     def __init__(self, db: AsyncEngine, gateway: GatewayClient | None, policies: PolicySource | None = None) -> None:

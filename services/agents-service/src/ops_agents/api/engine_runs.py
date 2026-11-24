@@ -89,7 +89,7 @@ async def start_run(
     field and the reason, and text that reads as a declared number is stored as the number. A version paused or
     superseded since it was read is refused here, under the lock the run's write takes. `started_by_approver` is
     `approves_own_writes` of the person starting it, read here because the worker that runs its steps has no
-    principal."""
+    principal; the write's send reads the cell again, so a cell unticked while the run waits refuses it."""
     run_id = new_id(RUN_PREFIX.rstrip("_"))
     try:
         return await starts.start(
