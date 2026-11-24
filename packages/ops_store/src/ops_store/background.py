@@ -160,9 +160,11 @@ PROCESSES: list[Process] = [
         "files_retention",
         "files",
         "File retention",
-        "Deletes knowledge snapshots their sources let go once their days have passed.",
+        "Deletes knowledge snapshots their sources let go once their days have passed, and watched-folder events "
+        "older than 90 days.",
         3600.0,
-        "It lists every team's released snapshots past their date, then deletes each as its own team.",
+        "It lists every team's released snapshots past their date, then deletes each as its own team; it deletes "
+        "every team's old watch events in one statement.",
     ),
     Process(
         "documents_relay",

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
-from typing import Any, ClassVar, NotRequired, TypedDict
+from typing import Any, ClassVar, NamedTuple, NotRequired, TypedDict
 
 import sqlalchemy as sa
 from pydantic import JsonValue
@@ -23,6 +23,7 @@ from ops_service_kit.http import Out
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee, isolation
 from ops_store.database import open_database, reachable
+from ops_store.dialect import locked
 from ops_store.listing import LISTED, ListPage, list_page, listed_rows
 from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
@@ -136,6 +137,20 @@ class SourceFile(TypedDict):
     mime: str
     access_list: list[str] | None
     access_read_at: datetime
+    # The watch that found it, so a full listing removes only its own watch's files, and the listing's marker for it.
+    watch_id: NotRequired[str]
+    marker: NotRequired[str | None]
+
+
+class HeldSource(NamedTuple):
+    """What Files holds for one source file of a watch, as the listing compares it."""
+
+    file_id: str
+    marker: str | None
+    tag: str | None
+    gone_count: int
+    name: str
+    removed: bool
 
 
 class SourceVersion(TypedDict):
@@ -249,6 +264,10 @@ files = sa.Table(
     # Who may see the file at its source, as last read: null when the source never said, [] when it listed nobody.
     sa.Column("access_list", sa.JSON),
     sa.Column("access_read_at", sa.DateTime(timezone=True)),
+    sa.Column("watch_id", sa.String(64)),
+    sa.Column("source_marker", sa.String(200)),
+    # Checks in a row the source answered gone for this file; it is removed on the second.
+    sa.Column("gone_count", sa.Integer, nullable=False, server_default="0"),
     # One entry per source file in a team: a second check that finds the same file adds a version, never a file.
     sa.Index("ux_files_source_key", "tenant_id", "team", "source_scope", "source_key_hash", unique=True),
     sa.Index("ix_files_team_status", "tenant_id", "team", "status", "uploaded_at"),
@@ -405,6 +424,9 @@ class FileOut(Out):
     removed_at: datetime | None = None
     access_list: list[str] | None = None
     access_read_at: datetime | None = None
+    watch_id: str | None = None
+    source_marker: str | None = None
+    gone_count: int = 0
 
 
 class ListedFile(FileOut):
@@ -757,7 +779,11 @@ class FilesStore(Store):
                     )
                     await c.execute(
                         sa.insert(file_versions).values(
-                            file_id=file_id, tenant_id=tenant, team=team, scan_status=row.file.scan_status, **version
+                            file_id=file_id,
+                            tenant_id=tenant,
+                            team=team,
+                            scan_status=values.get("scan_status", row.file.scan_status),
+                            **version,
                         )
                     )
             except IntegrityError:
@@ -796,17 +822,29 @@ class FilesStore(Store):
             "access_list": found["access_list"],
             "access_read_at": found["access_read_at"],
             "removed_at": None,
+            "gone_count": 0,
         }
+        if "watch_id" in found:
+            follows["watch_id"] = found["watch_id"]
+        if "marker" in found:
+            follows["source_marker"] = found["marker"]
+        newest = None
         async with self.tx() as c:
             file_id = (await c.execute(sa.select(f.c.id).where(*where))).scalar_one_or_none()
             if file_id is None:
-                file_id = str(new_file["id"])
                 row = {**new_file, **follows, "source_scope": "source", "source_key_hash": found["key_hash"],
                        "mime": found["mime"], "status": "available", "digest": version["digest"],
                        "size": version["size"], "declared_size": version["size"], "version_count": 0}  # fmt: skip
-                await c.execute(sa.insert(f).values(**row))
-                newest = None
-            else:
+                try:
+                    async with self.attempt(c):
+                        await c.execute(sa.insert(f).values(**row))
+                    file_id = str(new_file["id"])
+                except IntegrityError:
+                    # Two checks found the same new file at once: the other wrote the entry; this one adds to it.
+                    file_id = (await c.execute(sa.select(f.c.id).where(*where))).scalar_one()
+            if file_id != str(new_file["id"]):
+                q = locked(sa.select(f.c.id).where(*where), f)
+                await c.execute(q)
                 q = sa.select(v.c.version, v.c.digest).where(v.c.tenant_id == tenant, v.c.file_id == file_id)
                 newest = (await c.execute(q.order_by(v.c.version.desc()).limit(1))).first()
                 await c.execute(sa.update(f).where(*where).values(**follows))
@@ -823,9 +861,54 @@ class FilesStore(Store):
                 )
             )  # fmt: skip
             await c.execute(
-                sa.update(f).where(*where).values(version_count=number, digest=version["digest"], size=version["size"])
+                sa.update(f)
+                .where(*where)
+                .values(
+                    version_count=number,
+                    digest=version["digest"],
+                    size=version["size"],
+                    storage_key=version["storage_key"],
+                )
             )
         return file_id, number
+
+    async def held_sources(self, team: str, watch_id: str) -> dict[str, HeldSource]:
+        """Every source file this watch brought in, by the source's id, as the listing compares it."""
+        f, v = files, file_versions
+        tag = (
+            sa.select(v.c.source_tag)
+            .where(v.c.tenant_id == f.c.tenant_id, v.c.file_id == f.c.id, v.c.current.is_(True))
+            .scalar_subquery()
+        )
+        q = sa.select(f.c.id, f.c.source_id, f.c.source_marker, tag, f.c.gone_count, f.c.name, f.c.removed_at).where(
+            f.c.tenant_id == isolation.tenant(), f.c.team == team, f.c.source_scope == "source",
+            f.c.watch_id == watch_id, team_visible(f),
+        )  # fmt: skip
+        async with self.tx() as c:
+            return {
+                str(r[1]): HeldSource(str(r[0]), r[2], r[3], int(r[4] or 0), str(r[5]), r[6] is not None)
+                for r in await c.execute(q)
+            }
+
+    async def mark_source(self, file_id: str, *, marker: str | None, gone_count: int | None = None) -> None:
+        """Keeps the listing's marker for a source file (or how many checks in a row found it gone)."""
+        given: dict[str, object] = {"source_marker": marker} if gone_count is None else {"gone_count": gone_count}
+        async with self.tx() as c:
+            await c.execute(
+                sa.update(files).where(files.c.tenant_id == isolation.tenant(), files.c.id == file_id).values(**given)
+            )
+
+    async def remove_sources(self, file_ids: Sequence[str], at: datetime) -> None:
+        """Marks source files removed at the source; each entry stays for its retention."""
+        if not file_ids:
+            return
+        f = files
+        async with self.tx() as c:
+            await c.execute(
+                sa.update(f)
+                .where(f.c.tenant_id == isolation.tenant(), f.c.id.in_(list(file_ids)), f.c.removed_at.is_(None))
+                .values(removed_at=at)
+            )
 
     async def released_due(self, purposes: Sequence[str], today: date) -> list[tuple[str, str, str]]:
         """(tenant, team, file id) of every available file of `purposes` whose date has passed; whether each may go

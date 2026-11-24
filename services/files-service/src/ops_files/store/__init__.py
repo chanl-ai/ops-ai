@@ -9,6 +9,7 @@ from ops_files.store.files import (
     FileDeletedPayload,
     FileRow,
     FilesStore,
+    HeldSource,
     HoldRow,
     ListedFile,
     NewReference,
@@ -24,21 +25,25 @@ from ops_files.store.files import (
 )
 from ops_files.store.read_requests import NewReadRequest, ReadRequestedPayload, ReadRequestRow, ReadRequestsStore
 from ops_files.store.settings import CredentialRow, SavedSettings, SettingsStore, StaleVersionError
+from ops_files.store.watches import EventRow, NewWatch, WatchesStore, WatchEvent, WatchRow
 
 __all__ = [
     "AsyncEngine",
     "CredentialRow",
+    "EventRow",
     "FileChange",
     "FileDeleted",
     "FileDeletedPayload",
     "FileRow",
     "FilesStore",
+    "HeldSource",
     "HoldRow",
     "ListedFile",
     "NewReadRequest",
     "NewReference",
     "NewUpload",
     "NewVersion",
+    "NewWatch",
     "ReadRequestRow",
     "ReadRequestedPayload",
     "ReadRequestsStore",
@@ -49,6 +54,9 @@ __all__ = [
     "StaleVersionError",
     "UploadClaim",
     "UploadCompleted",
+    "WatchEvent",
+    "WatchRow",
+    "WatchesStore",
     "engine_for",
     "metadata",
     "reachable",
