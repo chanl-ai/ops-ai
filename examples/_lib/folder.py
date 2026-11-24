@@ -1079,18 +1079,6 @@ def _setup_agent(ops: OpsAI, folder: Path, meta: dict[str, Any], bindings: dict[
     return 0
 
 
-def _team_name(ops: OpsAI) -> str:
-    wanted_id, wanted_name = _wanted_team()
-    wanted = str(getattr(ops.config, "team", "") or wanted_id or "")
-    named = wanted_name
-    for team in ops.teams.list():
-        if str(team.get("id")) == wanted and team.get("name"):
-            return str(team["name"])
-        if str(team.get("name")) == wanted_name:
-            named = wanted_name
-    return named
-
-
 def _decide_publish(pending_id: str | None, note: str) -> None:
     if not pending_id:
         return
@@ -1178,11 +1166,8 @@ def _ensure_published_skill(ops: OpsAI, spec: dict[str, Any], note: str) -> dict
     name = str(spec["name"])
     found = find_skill(ops, name)
     if found is None:
-        body: dict[str, Any] = {
-            "name": name,
-            "instructions": spec["instructions"],
-            "ownerTeam": spec.get("ownerTeam") or _team_name(ops),
-        }
+        # No ownerTeam: the skill is owned by the team the client acts in, the team the folder installs into.
+        body: dict[str, Any] = {"name": name, "instructions": spec["instructions"]}
         for key in ("useWhen", "loading", "refusal"):
             if spec.get(key):
                 body[key] = spec[key]

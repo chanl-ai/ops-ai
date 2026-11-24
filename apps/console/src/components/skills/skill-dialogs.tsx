@@ -14,13 +14,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { plural } from '@/lib/format';
-import type { SkillCreateInput, SkillDetail, SkillImportPreview, SkillLoading, SkillVersion } from '@/lib/types/skills';
+import type { SkillCreateInput, SkillDetail, SkillImportPreview, SkillLoading, SkillVersion, TeamChoice } from '@/lib/types/skills';
 
 import { DiffView, EDIT_CLASS, EditClassBadge, UNWRITTEN_SECTIONS, WORKED_EXAMPLE } from './skill-meta';
 import { SkillLoadingField } from './skill-loading';
 import { nameError } from '@/lib/validation/names';
 
-function TeamSelect({ id, teams, value, onChange, error }: { id: string; teams: string[]; value: string; onChange: (v: string) => void; error?: string }) {
+/** The owner team, chosen by name; the value sent is the team's id. */
+function TeamSelect({ id, teams, value, onChange, error }: { id: string; teams: TeamChoice[]; value: string; onChange: (v: string) => void; error?: string }) {
   return (
     <FormField id={id} label="Owner team" error={error} hint="Owns the skill, its reviews and its versions.">
       <Select value={value} onValueChange={onChange}>
@@ -29,8 +30,8 @@ function TeamSelect({ id, teams, value, onChange, error }: { id: string; teams: 
         </SelectTrigger>
         <SelectContent>
           {teams.map((t) => (
-            <SelectItem key={t} value={t}>
-              {t}
+            <SelectItem key={t.id} value={t.id}>
+              {t.name ?? t.id}
             </SelectItem>
           ))}
         </SelectContent>
@@ -40,7 +41,7 @@ function TeamSelect({ id, teams, value, onChange, error }: { id: string; teams: 
 }
 
 /** A blank skill: name, when to use it and the owner team. The instructions are written on the skill page. */
-export function NewSkillDialog({ open, onOpenChange, teams, defaultTeam, maxUseWhen, isPending, onSubmit }: { open: boolean; onOpenChange: (o: boolean) => void; teams: string[]; defaultTeam?: string; maxUseWhen: number; isPending: boolean; onSubmit: (i: SkillCreateInput) => Promise<unknown> }) {
+export function NewSkillDialog({ open, onOpenChange, teams, defaultTeam, maxUseWhen, isPending, onSubmit }: { open: boolean; onOpenChange: (o: boolean) => void; teams: TeamChoice[]; defaultTeam?: string; maxUseWhen: number; isPending: boolean; onSubmit: (i: SkillCreateInput) => Promise<unknown> }) {
   const [name, setName] = React.useState('');
   const [useWhen, setUseWhen] = React.useState('');
   const [loading, setLoading] = React.useState<SkillLoading>('on_match');
@@ -57,7 +58,7 @@ export function NewSkillDialog({ open, onOpenChange, teams, defaultTeam, maxUseW
   }, [open]);
   // Teams can arrive after the dialog opens; pick the default once they do.
   React.useEffect(() => {
-    if (open && !team && teams.length) setTeam(defaultTeam && teams.includes(defaultTeam) ? defaultTeam : teams[0]);
+    if (open && !team && teams.length) setTeam(defaultTeam && teams.some((t) => t.id === defaultTeam) ? defaultTeam : teams[0].id);
   }, [open, team, teams, defaultTeam]);
 
   const submit = async () => {
@@ -125,7 +126,7 @@ export function ImportSkillDialog({
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  teams: string[];
+  teams: TeamChoice[];
   defaultTeam?: string;
   /** The uploaded file's id once it passed the scan, so the page can read the preview. */
   onFile: (fileId: string | undefined) => void;
@@ -149,7 +150,7 @@ export function ImportSkillDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   React.useEffect(() => {
-    if (open && !team && teams.length) setTeam(defaultTeam && teams.includes(defaultTeam) ? defaultTeam : teams[0]);
+    if (open && !team && teams.length) setTeam(defaultTeam && teams.some((t) => t.id === defaultTeam) ? defaultTeam : teams[0].id);
   }, [open, team, teams, defaultTeam]);
   const fileId = uploadsReady(upload) ? upload[0].fileId : undefined;
   React.useEffect(() => {
@@ -248,7 +249,7 @@ export function RequestReviewDialog({ open, onOpenChange, skill, isPending, onSu
       onOpenChange={onOpenChange}
       testId="request-review"
       title={`Request review of v${v?.version}`}
-      description={`A publisher in ${skill.ownerTeam} other than you decides it in Reviews. Agents keep their pinned version until someone moves them.`}
+      description={`A publisher in ${skill.ownerTeamName ?? skill.ownerTeam} other than you decides it in Reviews. Agents keep their pinned version until someone moves them.`}
       blockers={[...check.blockers, ...(check.warnings ?? []).map((w) => ({ node: null, field: w.position?.field ?? null, level: 'warning', code: w.kind, message: w.message }))]}
       onJump={onJump}
       note={{ label: 'What changed and why', placeholder: 'e.g. Adds the posted-payment warning Lending Servicing asked for.', multiline: true, required: true, missing: 'Say what changed and why.' }}

@@ -34,7 +34,6 @@ SKILL = {
     "name": "Address change 099",
     "useWhen": "The customer asks to change their postal address.",
     "instructions": "Confirm the customer, then record the new address.",
-    "ownerTeam": "Retail",
 }
 DEFINITION = {
     "schemaVersion": 2,

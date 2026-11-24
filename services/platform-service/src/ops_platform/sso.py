@@ -9,6 +9,10 @@ turns that code into a session only alongside the flow key of the browser that s
 log or another browser opens nothing. A step-up runs the same round trip with the provider told to ask for credentials
 again, for the session's own provider, and must come back as the session's own person.
 
+A provider's email never opens the account of a person already here. That person links the provider from their own
+signed-in session (a link round trip, completed only by that session and the browser that started it), or signs in
+from their invite; a sign-in that names an existing person's email otherwise ends with `error=link_required`.
+
 Every failure in the round trip lands on the console with `error=sign_in_refused`; what failed goes to the log only.
 """
 
@@ -23,7 +27,7 @@ from urllib.parse import urlencode
 import httpx
 from pydantic import JsonValue, SecretStr
 
-from ops_service_kit.errors import NotFound, ServiceUnavailable, Unauthorized, ValidationFailed
+from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unauthorized, ValidationFailed
 from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 from ops_service_kit.public_address import PublicFetch
@@ -42,7 +46,16 @@ from ops_store.documents import Reader, StoredShapeError
 
 from .auth import SSO_METHODS, Auth, Issued, StepUpIssued
 from .store.identity import IdentityStore
-from .store.signin import OIDC_SIGN_IN, SAML_SIGN_IN, Flow, Provider, SignInStore, group_settings
+from .store.signin import (
+    OIDC_SIGN_IN,
+    SAML_SIGN_IN,
+    AlreadyLinked,
+    Flow,
+    LinkRequired,
+    Provider,
+    SignInStore,
+    group_settings,
+)
 from .store.signin_secrets import SignInSecretStore
 
 log = get_logger(__name__)
@@ -51,6 +64,8 @@ SIGN_IN = "sign_in"
 STEP_UP = "step_up"
 # A test round trip an admin starts from the provider's settings: it records what came back and signs nobody in.
 TEST = "test"
+# A signed-in person adding their account at the workspace's provider as a way to sign in.
+LINK = "link"
 OIDC_CALLBACK = "/v1/auth/oidc/callback"
 SAML_ACS = "/v1/auth/saml/acs"
 SAML_SP = "/v1/auth/saml"
@@ -117,6 +132,10 @@ def saml_addresses(public_url: str, sp_id: str | None) -> dict[str, str]:
 class NoAccess(SignInRefused):
     """The provider proved who the person is, but nobody here may sign in as them: no link, no first-sign-in team,
     or an admin, whom a provider never signs in by email. The person is told to ask an admin."""
+
+
+class MustLink(NoAccess):
+    """The provider's email is a person's already here, and only their own session or their invite links it."""
 
 
 def _refused() -> Unauthorized:
@@ -232,11 +251,13 @@ class Sso:
         next_path: str | None,
         session_id: str | None = None,
         user_id: str | None = None,
+        invite_hash: str | None = None,
     ) -> Started:
         public, _ = self._urls()
         now = datetime.now(UTC)
         flow_key = secrets.token_urlsafe(32)
-        force = purpose == STEP_UP
+        # A step-up and a link both need the person to enter credentials at the provider now, not an old login.
+        force = purpose in (STEP_UP, LINK)
 
         async def keep(
             state: str, *, verifier: str | None = None, nonce: str | None = None, request: str | None = None
@@ -255,6 +276,7 @@ class Sso:
                 next_path=next_path,
                 session_id=session_id,
                 user_id=user_id,
+                invite_hash=invite_hash,
             )
 
         try:
@@ -274,12 +296,21 @@ class Sso:
             raise ServiceUnavailable("Your company's sign-in did not answer. Try again.", code="sso_unavailable") from e
         raise ValidationFailed("This workspace does not sign in through a company provider.", code="sso_not_enabled")
 
-    async def start(self, email: str, *, next_path: str | None) -> Started:
+    async def start(self, email: str, *, next_path: str | None, invite: str | None = None) -> Started:
+        """A sign-in for the email's provider. With `invite`, the invite link's token, the answer may link the invited
+        person when the provider vouches for the invited email."""
+        p = await self._provider_for(email)
+        invite_hash = _hash(invite) if invite else None
+        return await self._begin(p, purpose=SIGN_IN, login_hint=email, next_path=next_path, invite_hash=invite_hash)
+
+    async def _provider_for(self, email: str, tenant_id: str | None = None) -> Provider:
         hit = await self.store.domain(email.rpartition("@")[2])
+        if hit is not None and tenant_id is not None and hit.tenant_id != tenant_id:
+            hit = None
         p = await self.store.provider(hit.tenant_id, hit.provider_id) if hit else None
         if p is None or not p.enabled or p.kind not in SSO_METHODS:
             raise ValidationFailed("This email does not sign in through a company provider.", code="sso_not_enabled")
-        return await self._begin(p, purpose=SIGN_IN, login_hint=email, next_path=next_path)
+        return p
 
     async def start_tile(self, sp_id: str, *, next_path: str | None) -> Started:
         """A sign-in an app-portal tile opened (`/sso?provider=`): the same round trip as `start`, for the provider the
@@ -310,7 +341,7 @@ class Sso:
                 verifier=flow.verifier,
                 nonce=flow.nonce,
                 redirect_uri=f"{public}{OIDC_CALLBACK}",
-                fresh_since=_unix(flow.created_at) if flow.purpose == STEP_UP else None,
+                fresh_since=_unix(flow.created_at) if flow.purpose in (STEP_UP, LINK) else None,
             )
             return await self._answer(flow, p, who)
         except SignInRefused as e:
@@ -342,7 +373,7 @@ class Sso:
             who = self._saml(p).complete(
                 saml_response=saml_response,
                 request_id=flow.request_id,
-                fresh_since=_unix(flow.created_at) if flow.purpose == STEP_UP else None,
+                fresh_since=_unix(flow.created_at) if flow.purpose in (STEP_UP, LINK) else None,
             )
             return await self._answer(flow, p, who)
         except SignInRefused as e:
@@ -381,19 +412,44 @@ class Sso:
             }
             await self.store.record_test(flow, result, at=now)
             return self._tested(flow)
+        subject: str | None = None
         if flow.purpose == STEP_UP:
             user_id = await self.store.linked(p.tenant_id, p.id, who.subject)
             if user_id is None or user_id != flow.user_id:
                 raise SignInRefused("step-up answered by another person")
+        elif flow.purpose == LINK:
+            # Kept on the flow, not linked yet: only the session that started the link completes it. The provider
+            # must answer as the session's own person: their address, on a domain the provider holds, vouched for.
+            person = await self.identity.user(flow.tenant_id, flow.user_id or "")
+            if person is None:
+                raise SignInRefused("link flow names nobody")
+            if (
+                who.email != person.email.lower()
+                or who.email.rpartition("@")[2] not in p.verified_domains
+                or (p.kind == "oidc" and not who.email_verified)
+            ):
+                raise SignInRefused("link answered by an account that is not the session's person")
+            user_id, subject = person.id, who.subject
         else:
-            person = await self.store.resolve(
-                p, subject=who.subject, email=who.email, name=who.name, at=now, request_id=flow.id, groups=who.groups
-            )
+            try:
+                person = await self.store.resolve(
+                    p,
+                    subject=who.subject,
+                    email=who.email,
+                    name=who.name,
+                    at=now,
+                    request_id=flow.id,
+                    groups=who.groups,
+                    email_verified=who.email_verified,
+                    invite_hash=flow.invite_hash,
+                )
+            except LinkRequired as e:
+                raise MustLink("the email is an existing person's, with no session or invite to link it") from e
             if person is None:
                 raise NoAccess("no person may sign in as this answer")
             user_id = person.user_id
         handoff = secrets.token_urlsafe(32)
-        if not await self.store.answer(flow, user_id=user_id, handoff_hash=_hash(handoff), at=now):
+        if not await self.store.answer(flow, user_id=user_id, handoff_hash=_hash(handoff), at=now, subject=subject):
             raise SignInRefused("flow already answered")
         return self._console(flow, {"code": handoff})
 
@@ -401,6 +457,8 @@ class Sso:
         _, console = self._urls()
         if flow is not None and flow.purpose == STEP_UP:
             params = {**params, "stepUp": "1"}
+        if flow is not None and flow.purpose == LINK:
+            params = {**params, "link": "1"}
         if flow is not None and flow.next_path:
             params = {**params, "next": flow.next_path}
         return f"{console}/sso/callback?{urlencode(params)}"
@@ -418,7 +476,9 @@ class Sso:
         """The console's error page. Only the reasons a person can act on are named; every failed check is
         `sign_in_refused`, so the page tells an attacker nothing about which check stopped them."""
         reason = (
-            "no_access"
+            "link_required"
+            if isinstance(e, MustLink)
+            else "no_access"
             if isinstance(e, NoAccess)
             else "certificate_expired"
             if isinstance(e, CertificateExpired)
@@ -467,3 +527,69 @@ class Sso:
         if user is None or p is None:
             raise _refused()
         return await self.auth.mint_step_up(ref, user, method=p.kind, request_id=request_id)
+
+    # ── Linking a provider from the person's own session ──
+
+    async def link_start(self, token: str, *, step_up: str, next_path: str | None) -> Started:
+        """A round trip to the provider the session person's email domain names, in their own workspace, after a
+        step-up in this session: a stolen session token alone cannot add a way in."""
+        ref, _ = await self.auth.session_of(token)
+        self.auth.check_step_up(ref, step_up)
+        user = await self.identity.user(ref.tenant_id, ref.user_id)
+        if user is None:
+            raise _refused()
+        p = await self._provider_for(user.email, ref.tenant_id)
+        return await self._begin(
+            p, purpose=LINK, login_hint=user.email, next_path=next_path, session_id=ref.id, user_id=user.id
+        )
+
+    async def links(self, token: str) -> list[Json]:
+        """The providers the session person can link: the one their email's domain names in their own workspace, when
+        it is an enabled SSO provider, with whether they have linked it. Reads only."""
+        ref, _ = await self.auth.session_of(token)
+        user = await self.identity.user(ref.tenant_id, ref.user_id)
+        if user is None:
+            raise _refused()
+        try:
+            p = await self._provider_for(user.email, ref.tenant_id)
+        except ValidationFailed:
+            return []
+        at = await self.store.linked_at(ref.tenant_id, p.id, user.id)
+        return [{"providerId": p.id, "kind": p.kind, "label": p.label, "linked": at is not None, "linkedAt": at}]
+
+    async def link_complete(self, token: str, *, code: str, flow_key: str, request_id: str) -> Provider:
+        """Links the subject the provider answered with to the session's person: only the session that started the
+        link, from the browser that started it, so an answer from someone else's round trip links nobody."""
+        ref, _ = await self.auth.session_of(token)
+        flow = await self._taken(code, flow_key, LINK)
+        if flow.session_id != ref.id or flow.user_id != ref.user_id or not flow.subject:
+            raise _refused()
+        user = await self.identity.user(ref.tenant_id, ref.user_id)
+        p = await self.store.provider(ref.tenant_id, flow.provider_id)
+        if user is None or p is None or not p.enabled:
+            raise NotFound("sign-in provider")
+        try:
+            await self.store.link(
+                p, ref.user_id, flow.subject, email=user.email, at=_iso(datetime.now(UTC)), request_id=request_id
+            )
+        except AlreadyLinked as e:
+            raise Conflict(
+                "This account at your company's provider is linked already, or you have one linked there.",
+                code="already_linked",
+            ) from e
+        return p
+
+    async def unlink_own(self, token: str, provider_id: str, *, request_id: str) -> None:
+        """Removes the session person's own link to `provider_id`; 404 when they have none."""
+        ref, _ = await self.auth.session_of(token)
+        gone = await self.store.unlink(
+            ref.tenant_id,
+            ref.user_id,
+            actor=ref.user_id,
+            team_id=None,
+            at=_iso(datetime.now(UTC)),
+            request_id=request_id,
+            provider_id=provider_id,
+        )
+        if not gone:
+            raise NotFound("sign-in link")

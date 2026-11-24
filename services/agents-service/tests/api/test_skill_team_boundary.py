@@ -18,7 +18,6 @@ BRIEF: dict[str, Any] = {
     "name": "Client brief",
     "useWhen": "Before a client meeting.",
     "instructions": "Prepare a brief for {{client}}.",
-    "ownerTeam": "Lending",
     "inputs": [{"name": "client", "required": True}],
 }
 

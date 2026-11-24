@@ -33,7 +33,6 @@ sample team, and its second step runs another skill.
 
 ```yaml title="confirm-the-wording.yaml"
 name: Confirm the wording
-ownerTeam: Customer Operations
 useWhen: A note must be confirmed before it is saved.
 instructions: ""
 steps:
@@ -43,7 +42,6 @@ steps:
 
 ```yaml title="add-a-customer-note.yaml"
 name: Add a customer note
-ownerTeam: Customer Operations
 useWhen: Staff ask to add a note to a customer's record.
 notWhen: Staff only ask to read notes.
 instructions: Never add a note to more than one customer.

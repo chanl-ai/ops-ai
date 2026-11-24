@@ -843,7 +843,7 @@ export function createSkillsMock(deps: SkillsDeps) {
         // Checked before anything is stored, so a refused review never leaves a half-saved skill behind.
         if (input.requestReview && !input.tests?.length) throw new ApiError('Add at least one test case before requesting review, or save as a draft.', 422);
         if (input.requestReview && !input.instructions.trim()) throw new ApiError('Write the instructions before requesting review.', 422);
-        const sk = createStored({ ...input, note: input.origin === 'generated' ? 'Generated' : 'First draft', provenance: input.provenance ? { ...input.provenance, detail: input.gatewayCallId ? `${input.provenance.detail} · AI gateway call ${input.gatewayCallId}` : input.provenance.detail } : undefined });
+        const sk = createStored({ ...input, ownerTeam: input.ownerTeam ?? deps.teams.find((t) => inTeam(t)) ?? '', note: input.origin === 'generated' ? 'Generated' : 'First draft', provenance: input.provenance ? { ...input.provenance, detail: input.gatewayCallId ? `${input.provenance.detail} · AI gateway call ${input.gatewayCallId}` : input.provenance.detail } : undefined });
         audit(sk, 'created', input.origin === 'generated' ? `Generated v1 with the AI gateway (${input.gatewayCallId ?? 'no call id'})` : 'Created v1', { diff: [{ field: 'Owner team', after: sk.ownerTeam }, { field: 'Tools', after: newest(sk).content.toolIds.map((t) => toolById(t)?.name).join(', ') || 'None' }] });
         if (sk.tests.length && input.requestReview) {
           const run = evaluate(sk, newest(sk).content, sk.tests);
@@ -1193,7 +1193,7 @@ export function createSkillsMock(deps: SkillsDeps) {
         limits: LIMITS,
       }));
     },
-    options: () => respond(() => ({ teams: deps.teams.filter((t) => inTeam(t)), tools: refs(deps.tools().filter((t) => t.enabled).map((t) => t.id)), knowledgeBases: deps.kbNames(), limits: LIMITS })),
+    options: () => respond(() => ({ teams: deps.teams.filter((t) => inTeam(t)), ownerTeams: deps.teams.filter((t) => inTeam(t)).map((t) => ({ id: t, name: t })), tools: refs(deps.tools().filter((t) => t.enabled).map((t) => t.id)), knowledgeBases: deps.kbNames(), limits: LIMITS })),
     candidates: (scope) => respond((m) => (m === 'empty' ? { attachable: [], blocked: [], limits: LIMITS } : candidatesFor(scope))),
     previewImport: (fileId) => respond(() => parseImport(fileId)),
     importSkill: (fileId, ownerTeam) =>

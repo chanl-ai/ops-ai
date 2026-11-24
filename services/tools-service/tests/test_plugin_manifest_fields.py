@@ -194,7 +194,7 @@ async def test_a_form_tools_operation_is_a_form_body_as_a_custom_tools_is(rig: R
     # executor and Request sent read a plugin's form tool as they read a builder's.
     op = (await rig.resolve("post_message")).operation
     assert op is not None and "form" not in op, op
-    assert (op["body_encoding"], json.loads(op["body"])) == (
+    assert (op["body_encoding"], json.loads(str(op["body"]))) == (
         "form",
         {"channel": "{{channel}}", "text": "{{text}}", "thread_ts": "{{thread}}"},
     )
@@ -426,3 +426,14 @@ async def test_a_lookup_that_fails_redirects_or_names_another_host_fails_the_sig
         await host.on_token(tenant, conn, {"access_token": "at-team"})
     assert refused.value.code == code, refused.value
     assert (await host.own_settings(tenant, conn)).get("site_id") is None
+
+
+async def test_a_tool_with_no_python_function_is_refused_on_our_side(rig: Rig) -> None:
+    # Nothing was sent, so a Redrive may send the write again (ops_engine journal.definitely_not_done reads `side`).
+    r = await rig.resolve("echo")
+    assert r.module is not None and r.operation is not None
+    op = {**r.operation, "name": "fields_not_in_the_package"}
+    out = await rig.plugins.run(r.module, op, {}, actor="t", environment="live", acting_for=None)  # type: ignore[arg-type]
+    assert not out.ok and out.output["error"]["code"] == "PLUGIN_FAILED", out
+    assert out.output["error"].get("side") == "ours", out
+    assert rig.seen == []

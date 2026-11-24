@@ -274,6 +274,16 @@ class Auth:
             raise Unauthorized("That password is not right.", code="wrong_password")
         return await self.mint_step_up(ref, user, method=method.auth_method, request_id=request_id)
 
+    def check_step_up(self, ref: SessionRef, step_up: str) -> None:
+        """Refuses unless `step_up` is this service's unexpired step-up for the session `ref`: the same person and the
+        same session, so a step-up taken in another session or by someone else proves nothing here."""
+        try:
+            claims = verify(step_up, self.signer.verifier(AUDIENCE))
+        except TokenError as e:
+            raise Unauthorized("Confirm it is you first.", code="step_up_required") from e
+        if (claims.get("typ"), claims.get("sub"), claims.get("sid")) != (STEP_UP_TYPE, ref.user_id, ref.id):
+            raise Unauthorized("Confirm it is you first.", code="step_up_required")
+
     async def mint_step_up(self, ref: SessionRef, user: User, *, method: str, request_id: str) -> StepUpIssued:
         """Signed with the same key as the session token, so every service verifies it through the published key
         set. It names the person by `sub` and `email` and carries the session's `aud`; a service compares the subject

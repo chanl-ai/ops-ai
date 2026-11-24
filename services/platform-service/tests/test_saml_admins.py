@@ -19,14 +19,9 @@ async def _links(rig: SignInRig, user: str) -> int:
 async def test_a_provider_cannot_sign_in_as_an_admin_by_email(signin: SignInRig) -> None:
     await signin.saml(f"adm.{signin.zone}")
     admin = await signin.person(f"boss@adm.{signin.zone}", role="admin")
-    viewer = await signin.person(f"viewer@adm.{signin.zone}", role="viewer")
     refused = await signin.sign_in_sso(f"boss@adm.{signin.zone}")
     assert refused.query == {"error": "no_access"} and refused.completed is None
     assert await _links(signin, admin) == 0
-    # Someone who is no admin is linked by email as before.
-    ok = await signin.sign_in_sso(f"viewer@adm.{signin.zone}")
-    assert ok.completed is not None and ok.completed.status_code == 200, ok.location
-    assert await _links(signin, viewer) == 1
 
 
 async def test_a_group_rule_never_gives_admin(signin: SignInRig) -> None:

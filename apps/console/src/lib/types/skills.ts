@@ -149,7 +149,10 @@ export interface Skill {
   slug: string;
   useWhen: string;
   loading: SkillLoading;
+  /** The owning team's id. */
   ownerTeam: string;
+  /** Its name, filled on the list and detail reads; null when the name cannot be read. */
+  ownerTeamName?: string | null;
   status: SkillStatus;
   /** Newest version number, whatever its state. */
   version: number;
@@ -341,7 +344,8 @@ export interface SkillCreateInput {
   /** Defaults to `on_match`. */
   loading?: SkillLoading;
   instructions: string;
-  ownerTeam: string;
+  /** A team id from `SkillOptions.ownerTeams`; the acting team when left out. */
+  ownerTeam?: string;
   toolIds: string[];
   knowledgeBases: string[];
   guardrails: string[];
@@ -520,6 +524,7 @@ export interface SkillPublishRequest {
   skillId: string;
   skillName: string;
   ownerTeam: string;
+  ownerTeamName?: string | null;
   fromVersion: number | null;
   toVersion: number;
   editClass: SkillEditClass;
@@ -600,8 +605,16 @@ export interface SkillCandidates {
   limits: SkillRuntimeLimits;
 }
 
+/** A team New skill may name as the owner: its id, and its name (null when it cannot be read). */
+export interface TeamChoice {
+  id: string;
+  name: string | null;
+}
+
 export interface SkillOptions {
+  /** The ids of `ownerTeams`. */
   teams: string[];
+  ownerTeams: TeamChoice[];
   tools: SkillToolRef[];
   knowledgeBases: string[];
   limits: SkillRuntimeLimits;

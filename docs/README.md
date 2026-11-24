@@ -571,6 +571,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `security/data-handling-and-masking.md` | Security: personal data masked for people by default, where data is stored, retention and its limits |
 | `security/model-calls.md` | Security: every model call through the AI gateway, keys, budgets, clearance, and what the call log keeps |
 | `security/egress-and-connections.md` | Security: the tool gateway, the HTTPS allow-list and new-address policy, connections and credentials |
+| `security/recovery-and-redrive.md` | Security: what a crash repeats and never repeats, Retry, Redrive, bulk actions and dead letters |
 | `guide/ops-assistant.md` | The Ops Assistant: checklist, Connect card, Think harder, Save read-back, reused reads, suggestion chips, memories |
 | `guide/whats-new.md` | What's new: every change a person would notice, newest first, built from the changelog |
 | `guide/use-cases/card-disputes.md` | Use case: card disputes, from the request to the approved credit, with SDK code |

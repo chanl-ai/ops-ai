@@ -100,7 +100,7 @@ export function SkillMenu({
               <CommandEmpty>{q ? `No skill matches “${query}”.` : `${agentName} offers no skills in chat. A builder publishes skills, and an admin sets which ones an agent offers.`}</CommandEmpty>
               {skills.map(({ s, rows }) => {
                 return (
-                  <CommandGroup key={s.id} heading={rows.length > 1 || s.parts?.length ? s.name : s.ownerTeam}>
+                  <CommandGroup key={s.id} heading={rows.length > 1 || s.parts?.length ? s.name : (s.ownerTeamName ?? s.ownerTeam)}>
                     {rows.map((e) => (
                       <CommandItem
                         key={`${e.skillId}/${e.part ?? ''}`}

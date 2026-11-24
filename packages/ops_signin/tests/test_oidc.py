@@ -96,6 +96,13 @@ async def test_a_token_this_provider_signed_for_this_client_signs_in() -> None:
     assert (who.subject, who.email) == ("s-1", "ana@bank.test")
 
 
+async def test_an_email_is_vouched_for_only_when_the_provider_says_so() -> None:
+    # A provider that leaves out email_verified signs the person in, but its email can never match an existing person.
+    unsaid = await sign_in(provider(signed(lambda n: {k: v for k, v in _claims(n).items() if k != "email_verified"})))
+    said = await sign_in(provider(signed(_claims)))
+    assert (unsaid.email, unsaid.email_verified, said.email_verified) == ("ana@bank.test", False, True)
+
+
 REFUSED: dict[str, Callable[[str], str]] = {
     "another issuer": signed(lambda n: _claims(n, iss="https://evil.test/oidc/bank")),
     "another audience": signed(lambda n: _claims(n, aud="someone-else")),

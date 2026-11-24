@@ -190,7 +190,7 @@
         "loading": "on_match",
         "name": "Hardship request triage",
         "origin": "blank",
-        "ownerTeam": "Retail",
+        "ownerTeam": "team_ops",
         "parts": [],
         "provenance": {
           "citations": [],
@@ -405,7 +405,7 @@
         "loading": "on_match",
         "name": "Hardship request triage",
         "origin": "blank",
-        "ownerTeam": "Retail",
+        "ownerTeam": "team_ops",
         "parts": [],
         "provenance": {
           "citations": [],
@@ -544,7 +544,7 @@
             "loading": "on_match",
             "missing": [],
             "name": "Hardship request triage",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
             "skillId": "<sk>",
             "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
           }
@@ -622,7 +622,7 @@
         "loading": "on_match",
         "name": "Hardship request triage",
         "origin": "blank",
-        "ownerTeam": "Retail",
+        "ownerTeam": "team_ops",
         "parts": [],
         "provenance": {
           "citations": [],
@@ -784,7 +784,8 @@
             "loading": "on_match",
             "name": "Hardship request triage",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": 1,
             "slug": "hardship-request-triage",
@@ -814,7 +815,8 @@
             "loading": "on_match",
             "name": "Same name 0",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": null,
             "slug": "same-name-0",
@@ -844,7 +846,8 @@
             "loading": "on_match",
             "name": "Same name 1",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": null,
             "slug": "same-name-1",
@@ -874,7 +877,8 @@
             "loading": "on_match",
             "name": "Same name 2",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": null,
             "slug": "same-name-2",
@@ -896,7 +900,7 @@
             "blank": 4
           },
           "ownerTeam": {
-            "Retail": 4
+            "team_ops": 4
           },
           "status": {
             "draft": 3,
@@ -910,6 +914,9 @@
           "pageSize": 20,
           "total": 4,
           "totalPages": 1
+        },
+        "teamNames": {
+          "team_ops": "Operations"
         },
         "viewCounts": {
           "all": 4,
@@ -948,7 +955,8 @@
             "name": "Hardship request triage",
             "needs": [],
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": 1,
             "slug": "hardship-request-triage",
@@ -970,7 +978,7 @@
             "blank": 1
           },
           "ownerTeam": {
-            "Retail": 1
+            "team_ops": 1
           },
           "status": {
             "published": 1
@@ -983,6 +991,9 @@
           "pageSize": 20,
           "total": 1,
           "totalPages": 1
+        },
+        "teamNames": {
+          "team_ops": "Operations"
         },
         "viewCounts": {
           "all": 1,
@@ -1019,7 +1030,8 @@
             "loading": "on_match",
             "name": "Same name 0",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": null,
             "slug": "same-name-0",
@@ -1049,7 +1061,8 @@
             "loading": "on_match",
             "name": "Same name 1",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": null,
             "slug": "same-name-1",
@@ -1079,7 +1092,8 @@
             "loading": "on_match",
             "name": "Same name 2",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": null,
             "slug": "same-name-2",
@@ -1101,7 +1115,7 @@
             "blank": 4
           },
           "ownerTeam": {
-            "Retail": 4
+            "team_ops": 4
           },
           "status": {
             "draft": 3,
@@ -1115,6 +1129,9 @@
           "pageSize": 20,
           "total": 3,
           "totalPages": 1
+        },
+        "teamNames": {
+          "team_ops": "Operations"
         },
         "viewCounts": {
           "all": 4,
@@ -1148,6 +1165,7 @@
           "total": 0,
           "totalPages": 1
         },
+        "teamNames": {},
         "viewCounts": {
           "all": 0,
           "always": 0,
@@ -1183,7 +1201,8 @@
             "loading": "on_match",
             "name": "Same name 1",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": null,
             "slug": "same-name-1",
@@ -1213,7 +1232,8 @@
             "loading": "on_match",
             "name": "Same name 2",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": null,
             "slug": "same-name-2",
@@ -1235,7 +1255,7 @@
             "blank": 4
           },
           "ownerTeam": {
-            "Retail": 4
+            "team_ops": 4
           },
           "status": {
             "draft": 3,
@@ -1249,6 +1269,9 @@
           "pageSize": 2,
           "total": 4,
           "totalPages": 2
+        },
+        "teamNames": {
+          "team_ops": "Operations"
         },
         "viewCounts": {
           "all": 4,
@@ -1285,7 +1308,8 @@
             "loading": "on_match",
             "name": "Same name 1",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": null,
             "slug": "same-name-1",
@@ -1315,7 +1339,8 @@
             "loading": "on_match",
             "name": "Same name 2",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": null,
             "slug": "same-name-2",
@@ -1337,7 +1362,7 @@
             "blank": 4
           },
           "ownerTeam": {
-            "Retail": 4
+            "team_ops": 4
           },
           "status": {
             "draft": 3,
@@ -1351,6 +1376,9 @@
           "pageSize": 2,
           "total": 4,
           "totalPages": 2
+        },
+        "teamNames": {
+          "team_ops": "Operations"
         },
         "viewCounts": {
           "all": 4,
@@ -1387,7 +1415,8 @@
             "loading": "on_match",
             "name": "Hardship request triage",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": 1,
             "slug": "hardship-request-triage",
@@ -1409,7 +1438,7 @@
             "blank": 4
           },
           "ownerTeam": {
-            "Retail": 4
+            "team_ops": 4
           },
           "status": {
             "draft": 3,
@@ -1423,6 +1452,9 @@
           "pageSize": 20,
           "total": 1,
           "totalPages": 1
+        },
+        "teamNames": {
+          "team_ops": "Operations"
         },
         "viewCounts": {
           "all": 4,
@@ -1459,7 +1491,8 @@
             "loading": "on_match",
             "name": "Hardship request triage",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": 1,
             "slug": "hardship-request-triage",
@@ -1489,7 +1522,8 @@
             "loading": "on_match",
             "name": "Same name 0",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": null,
             "slug": "same-name-0",
@@ -1519,7 +1553,8 @@
             "loading": "on_match",
             "name": "Same name 1",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": null,
             "slug": "same-name-1",
@@ -1549,7 +1584,8 @@
             "loading": "on_match",
             "name": "Same name 2",
             "origin": "blank",
-            "ownerTeam": "Retail",
+            "ownerTeam": "team_ops",
+            "ownerTeamName": "Operations",
             "parts": [],
             "publishedVersion": null,
             "slug": "same-name-2",
@@ -1571,7 +1607,7 @@
             "blank": 4
           },
           "ownerTeam": {
-            "Retail": 4
+            "team_ops": 4
           },
           "status": {
             "draft": 3,
@@ -1585,6 +1621,9 @@
           "pageSize": 20,
           "total": 4,
           "totalPages": 1
+        },
+        "teamNames": {
+          "team_ops": "Operations"
         },
         "viewCounts": {
           "all": 4,
@@ -1616,6 +1655,12 @@
           "tokenBudget": 6000,
           "useWhenMaxChars": 1024
         },
+        "ownerTeams": [
+          {
+            "id": "team_ops",
+            "name": "Operations"
+          }
+        ],
         "teams": [
           "team_ops"
         ],
@@ -1784,7 +1829,7 @@
         "loading": "on_match",
         "name": "Hardship request triage",
         "origin": "blank",
-        "ownerTeam": "Retail",
+        "ownerTeam": "team_ops",
         "parts": [],
         "provenance": {
           "citations": [],
@@ -1968,7 +2013,8 @@
         "loading": "on_match",
         "name": "Hardship request triage",
         "origin": "blank",
-        "ownerTeam": "Retail",
+        "ownerTeam": "team_ops",
+        "ownerTeamName": "Operations",
         "parts": [],
         "provenance": {
           "citations": [],

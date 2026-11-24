@@ -54,7 +54,7 @@ from ...store.engine import EngineTransactions
 from ...store.form_links import FormLinkRow, FormLinks, source_of
 from ...store.tenancy import current_tenant
 from ...store.trigger_events import TriggerEvent, TriggerEvents
-from ..auth import Principal, principal, require_builder, started_by
+from ..auth import Principal, principal, reader_of, require_builder, started_by
 from ..deps import Runtime, runtime
 from ..engine_runs import live_version, start_run
 from ..envelope import ok
@@ -64,6 +64,8 @@ from ..widget_sessions import RateLimit
 router = APIRouter(tags=["forms"])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
+# A workflow's forms are read with the workflows view cell, as every GET under /v1/workflows is.
+Reader: TypeAlias = Annotated[Principal, Depends(reader_of("workflows"))]  # noqa: UP040
 
 # The isolation context of a link submission: the tenant and team its signed token names.
 FORM = "form"
@@ -277,7 +279,7 @@ async def create_form(rt: Rt, me: Me, _: Tx, workflow_id: str, body: FormIn) -> 
 
 
 @router.get("/v1/workflows/{workflow_id}/forms", response_model=Envelope[ListResult[FormView]])
-async def workflow_forms(rt: Rt, me: Me, _: Tx, workflow_id: str, q: ListQuery) -> JSONResponse:
+async def workflow_forms(rt: Rt, me: Reader, _: Tx, workflow_id: str, q: ListQuery) -> JSONResponse:
     """The workflow's forms in the caller's team on the shared list contract: newest first, then by id; `search`
     matches the title and slug, `ids` names forms."""
     listed = await _links(rt).page(workflow_id, q)

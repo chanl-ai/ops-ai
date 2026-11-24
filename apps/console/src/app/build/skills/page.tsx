@@ -33,7 +33,7 @@ import { useSticky } from '@/hooks/use-sticky';
 import { useCanBuild } from '@/hooks/me-queries';
 import { useTeam } from '@/hooks/use-team';
 import { pct, plural, relativeTime } from '@/lib/format';
-import type { SkillFilters, SkillOrigin, SkillStatus, SkillView } from '@/lib/types/skills';
+import type { SkillFilters, SkillOrigin, SkillStatus, SkillView, TeamChoice } from '@/lib/types/skills';
 import { serverPagination } from '@/components/shared/server-pagination';
 import { TemplatesGallery } from '@/components/templates/templates-gallery';
 
@@ -43,7 +43,7 @@ const STATUS_OPTIONS = (Object.keys(STATUS_LABEL) as SkillStatus[]).map((v) => (
 const ORIGIN_OPTIONS = (Object.keys(ORIGIN) as SkillOrigin[]).map((v) => ({ value: v, label: ORIGIN[v].label, icon: ORIGIN[v].icon }));
 /** Tools and knowledge bases are filtered on the server, which matches a skill holding any selected value. */
 const serverFiltered = () => true;
-const NO_TEAMS: string[] = [];
+const NO_TEAMS: TeamChoice[] = [];
 
 function columns(open: (s: SkillRow) => void, onExport: (s: SkillRow) => void): ColumnDef<Row>[] {
   return [
@@ -87,7 +87,7 @@ function columns(open: (s: SkillRow) => void, onExport: (s: SkillRow) => void): 
     {
       accessorKey: 'ownerTeam',
       header: ({ column }) => <DataTableColumnHeader column={column} title="Owner team" />,
-      cell: ({ row }) => <span className="text-xs whitespace-nowrap">{row.original.ownerTeam}</span>,
+      cell: ({ row }) => <span className="text-xs whitespace-nowrap">{row.original.ownerTeamName ?? row.original.ownerTeam}</span>,
       filterFn: facetFilterFn,
     },
     {
@@ -237,7 +237,8 @@ export default function SkillsPage() {
   const withCounts = (column: string, opts: { value: string; label: string }[]) => opts.map((o) => ({ ...o, count: facets[column]?.[o.value] ?? 0 }));
   const facetOptions = (column: string) => withCounts(column, Object.keys(facets[column] ?? {}).sort().map((v) => ({ value: v, label: v })));
   const counts = query.data?.viewCounts;
-  const teams = options.data?.teams ?? NO_TEAMS;
+  const teamNames: Record<string, string> = query.data?.teamNames ?? {};
+  const teams = options.data?.ownerTeams ?? NO_TEAMS;
 
   return (
     <PageLayout
@@ -302,7 +303,7 @@ export default function SkillsPage() {
             filters={[
               { column: 'status', title: 'Status', options: withCounts('status', STATUS_OPTIONS) },
               { column: 'loading', title: 'Loading', options: withCounts('loading', SKILL_LOADING_OPTIONS) },
-              { column: 'ownerTeam', title: 'Owner team', options: facetOptions('ownerTeam') },
+              { column: 'ownerTeam', title: 'Owner team', options: withCounts('ownerTeam', Object.keys(facets.ownerTeam ?? {}).map((v) => ({ value: v, label: teamNames[v] ?? v })).sort((a, b) => a.label.localeCompare(b.label))) },
               { column: 'tools', title: 'Tool', options: facetOptions('tools') },
               { column: 'knowledgeBases', title: 'Knowledge base', options: facetOptions('knowledgeBases') },
               { column: 'origin', title: 'Origin', options: withCounts('origin', ORIGIN_OPTIONS) },
@@ -341,7 +342,7 @@ export default function SkillsPage() {
         defaultTeam={defaultTeam}
         onSaved={(s, requested) => {
           leaving.current = true;
-          if (requested) announcePublish({ name: s.name, version: s.version, live: !s.pendingReviewId, liveNote: 'Agents can attach it now.', decidedBy: `An approver in ${s.ownerTeam}`, reviewId: s.pendingReviewId, openReview: (id) => router.push(`/work/tasks?review=${id}`) });
+          if (requested) announcePublish({ name: s.name, version: s.version, live: !s.pendingReviewId, liveNote: 'Agents can attach it now.', decidedBy: `An approver in ${s.ownerTeamName ?? s.ownerTeam}`, reviewId: s.pendingReviewId, openReview: (id) => router.push(`/work/tasks?review=${id}`) });
           else toast.success(`Saved ${s.name} as a draft`, { description: 'Run its tests, then request review.' });
           router.push(`/build/skills/${s.id}`);
         }}

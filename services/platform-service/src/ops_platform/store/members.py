@@ -10,7 +10,7 @@ tenant.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import ClassVar
 
@@ -31,12 +31,50 @@ from ops_store.rows import one, rows
 from .audit import record, record_grants_ending
 from .key_events import change_keys
 from .lookups import INVITE, lookup
-from .roles import mirror_membership, team_admins
-from .tables import api_keys, audit_entries, members, platform_outbox, sessions, teams, users
+from .roles import holds_admin, mirror_membership, team_admins
+from .tables import (
+    api_keys,
+    audit_entries,
+    members,
+    password_credentials,
+    platform_outbox,
+    sessions,
+    signin_identities,
+    signin_providers,
+    teams,
+    users,
+)
 from .tenancy import INVITE_LOOKUP, TenantDb
 from .workspace import security_team_in
 
 ADMIN = "admin"
+
+
+def _needs_invite() -> sa.ColumnElement[int]:
+    """1 for an active member whose person has no provider link and no password, in a workspace that signs in only
+    through a provider (an enabled provider and no enabled password row, the inverse of `signin._password_on`): they
+    cannot sign in until a new invite links them. 1/0 rather than a boolean so SQL Server can select it."""
+    enabled = sa.select(signin_providers.c.id).where(
+        signin_providers.c.tenant_id == members.c.tenant_id, signin_providers.c.enabled == sa.true()
+    )
+    return sa.case(
+        (
+            sa.and_(
+                members.c.status == "active",
+                members.c.user_id.is_not(None),
+                ~sa.exists(sa.select(signin_identities.c.id).where(signin_identities.c.user_id == members.c.user_id)),
+                ~sa.exists(
+                    sa.select(password_credentials.c.user_id).where(password_credentials.c.user_id == members.c.user_id)
+                ),
+                sa.exists(enabled),
+                ~sa.exists(enabled.where(signin_providers.c.kind == "password")),
+            ),
+            1,
+        ),
+        else_=0,
+    )
+
+
 # Reported when a member is removed from a team (relay.py): tools-service deletes their own accounts on its apps.
 MEMBER_REMOVED = "member.removed"
 
@@ -105,6 +143,7 @@ class MemberRow(Out):
     status: str
     created_at: str
     user_id: str | None
+    needs_invite: bool = False
 
 
 class PersonOption(Out):
@@ -244,6 +283,7 @@ class TeamStore(TenantDb):
                 members.c.status,
                 members.c.created_at,
                 members.c.user_id,
+                _needs_invite().label("needs_invite"),
             )
             .join(teams, teams.c.id == members.c.team_id)
             .outerjoin(users, users.c.id == members.c.user_id)
@@ -272,6 +312,7 @@ class TeamStore(TenantDb):
                 members.c.status,
                 members.c.created_at,
                 members.c.user_id,
+                _needs_invite().label("needs_invite"),
             )
             # members first: list_page pages by the first table's key.
             .select_from(
@@ -362,6 +403,62 @@ class TeamStore(TenantDb):
                 bulk.updated.append(member_id)
                 made.append({"memberId": member_id, "email": email})
         return bulk, made
+
+    async def reinvite(
+        self, actor: Actor, ids: list[str] | None, *, tokens: Mapping[str, str], expires_at: str, at: str
+    ) -> tuple[Bulk, list[dict[str, str]]]:
+        """A fresh invite on each active member who cannot sign in (`_needs_invite`), the member staying active: its
+        token hash and expiry, which an SSO sign-in from that invite consumes to link their person. `ids` None means
+        every such member of the team; `tokens` maps each member id the caller may need to a token hash, from
+        `affected` read first. Others are skipped `not_affected`, unknown ids `not_found`, and a person who manages
+        access or is on the break-glass list `links_own_session`: a link invite never opens an admin's account."""
+        bulk, made = Bulk(), list[dict[str, str]]()
+        async with self.tenant_tx(actor.tenant_id) as c:
+            q = sa.select(members.c.id, members.c.email, _needs_invite(), members.c.user_id).where(
+                members.c.team_id == actor.team_id, members.c.status != "removed"
+            )
+            if ids is not None:
+                q = q.where(members.c.id.in_(ids))
+            found = {str(r[0]): (str(r[1]), bool(r[2]), str(r[3] or "")) for r in (await c.execute(q)).all()}
+            for member_id in ids if ids is not None else [i for i, (_, need, _u) in found.items() if need]:
+                if member_id not in found:
+                    bulk.skip(member_id, "not_found")
+                    continue
+                email, need, user_id = found[member_id]
+                if not need or member_id not in tokens:
+                    bulk.skip(member_id, "not_affected")
+                    continue
+                if await holds_admin(c, actor.tenant_id, user_id):
+                    bulk.skip(member_id, "links_own_session")
+                    continue
+                await c.execute(
+                    members.update()
+                    .where(members.c.id == member_id, members.c.status == "active")
+                    .values(invite_token_hash=tokens[member_id], invite_expires_at=expires_at, updated_at=at)
+                )
+                await _audit(c, actor, "member.reinvite", member_id, {"email": email})
+                bulk.updated.append(member_id)
+                made.append({"memberId": member_id, "email": email})
+        return bulk, made
+
+    async def people_of(self, tenant_id: str, team_id: str, ids: Sequence[str]) -> dict[str, str]:
+        """The person behind each of the team's active members among `ids`, by member id."""
+        q = sa.select(members.c.id, members.c.user_id).where(
+            members.c.team_id == team_id, members.c.id.in_(list(ids)), members.c.status == "active"
+        )
+        async with self.tenant_tx(tenant_id) as c:
+            return {str(r[0]): str(r[1]) for r in (await c.execute(q)).all() if r[1]}
+
+    async def admins_among(self, tenant_id: str, user_ids: Sequence[str]) -> set[str]:
+        """Which of these people manage access in some team or are on the break-glass list (`holds_admin`)."""
+        async with self.tenant_tx(tenant_id) as c:
+            return {u for u in user_ids if await holds_admin(c, tenant_id, u)}
+
+    async def affected(self, tenant_id: str, team_id: str) -> list[str]:
+        """The ids of the team's members `_needs_invite` names, so the caller makes one token for each."""
+        q = sa.select(members.c.id).where(members.c.team_id == team_id, _needs_invite() == 1)
+        async with self.tenant_tx(tenant_id) as c:
+            return [str(r[0]) for r in (await c.execute(q)).all()]
 
     async def set_role(self, actor: Actor, ids: list[str], role: str, *, at: str) -> Bulk:
         bulk = Bulk()
@@ -485,17 +582,60 @@ class TeamStore(TenantDb):
                         created_at=at,
                     )
                 )
-            done = await c.execute(
-                members.update()
-                .where(members.c.id == invite.member_id, members.c.status == "invited")
-                .values(status="active", user_id=user_id, updated_at=at)
-            )
-            if done.rowcount != 1:
-                raise _AlreadyDone  # rolls back the user it may have created
             actor = Actor(invite.tenant_id, invite.team_id, user_id, request_id)
-            await self._mirror(c, actor, user_id, invite.role, at)
-            await _audit(c, actor, "member.accept", invite.member_id, {"email": invite.email})
+            if not await accept_invite_on(c, actor, invite.member_id, invite.role, invite.email, at=at):
+                raise _AlreadyDone  # rolls back the user it may have created
         return user_id
+
+
+async def accept_invite_on(
+    c: AsyncConnection, actor: Actor, member_id: str, role: str, email: str, *, at: str, via: str | None = None
+) -> bool:
+    """The one place a pending invite becomes a membership: the member row turns active for `actor.user_id` with the
+    invite's role, the role is mirrored and the accept audited, on the caller's transaction. `via` names the
+    sign-in provider when an SSO sign-in accepted it. False when the invite was accepted or withdrawn meanwhile."""
+    done = await c.execute(
+        members.update()
+        .where(members.c.id == member_id, members.c.status == "invited")
+        # An active row keeps its token hash, so a used link still reads as accepted; a null expiry is what says no
+        # invite is pending on it (`reinvite` sets one again).
+        .values(status="active", user_id=actor.user_id, invite_expires_at=None, updated_at=at)
+    )
+    if done.rowcount != 1:
+        return False
+    await mirror_membership(
+        c,
+        tenant_id=actor.tenant_id,
+        team_id=actor.team_id,
+        user_id=actor.user_id,
+        member_role=role,
+        security_team=await security_team_in(c, actor.tenant_id),
+        granted_by=actor.user_id,
+        at=at,
+    )
+    await _audit(c, actor, "member.accept", member_id, {"email": email} | ({"provider": via} if via else {}))
+    return True
+
+
+async def use_link_invite_on(
+    c: AsyncConnection, actor: Actor, member_id: str, email: str, *, at: str, via: str
+) -> bool:
+    """A link invite (`TeamStore.reinvite`) used once, on the person's own active membership: its expiry is cleared so
+    it cannot be used again, and no role or membership changes. False when it is not pending for `actor.user_id`."""
+    done = await c.execute(
+        members.update()
+        .where(
+            members.c.id == member_id,
+            members.c.status == "active",
+            members.c.user_id == actor.user_id,
+            members.c.invite_expires_at > at,
+        )
+        .values(invite_expires_at=None, updated_at=at)
+    )
+    if done.rowcount != 1:
+        return False
+    await _audit(c, actor, "member.reinvite_accept", member_id, {"email": email, "provider": via})
+    return True
 
 
 class TeamArchivedError(Exception):

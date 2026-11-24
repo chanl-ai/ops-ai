@@ -31,7 +31,7 @@ export function SkillPublishBody({ review }: { review: Review }) {
         <div className="rounded-lg border border-primary/25 bg-primary/5 p-4">
           <p className="text-sm font-medium">{p.note}</p>
           <p className="mt-2 text-xs text-muted-foreground">
-            {p.skillName} · {p.fromVersion ? `v${p.fromVersion} → ` : 'first version, '}v{p.toVersion} · {p.ownerTeam} · requested by {p.requestedBy}
+            {p.skillName} · {p.fromVersion ? `v${p.fromVersion} → ` : 'first version, '}v{p.toVersion} · {p.ownerTeamName ?? p.ownerTeam} · requested by {p.requestedBy}
           </p>
         </div>
       </Section>

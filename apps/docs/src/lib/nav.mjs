@@ -174,6 +174,7 @@ export const SITE = [
           { page: 'security/data-handling-and-masking.md', icon: 'eye-off' },
           { page: 'security/model-calls.md', icon: 'cpu' },
           { page: 'security/egress-and-connections.md', icon: 'globe-lock' },
+          { page: 'security/recovery-and-redrive.md', icon: 'rotate-ccw' },
         ],
       },
     ],

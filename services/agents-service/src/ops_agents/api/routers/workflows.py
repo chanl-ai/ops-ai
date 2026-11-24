@@ -42,7 +42,7 @@ from ...store.workflow_registry import (
 from .. import engine_lifecycle
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import review_view
-from ..auth import Principal, principal, require_builder
+from ..auth import Principal, principal, reader_of, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..publish_policy import decide
@@ -84,6 +84,8 @@ router = APIRouter(prefix="/v1/workflows", dependencies=[Depends(principal)])
 refs_router = APIRouter(prefix="/v1/workflow-refs")
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
+# Every GET here asks the acting team's workflows view cell, as the engine routes do (engine.Reader).
+Reader: TypeAlias = Annotated[Principal, Depends(reader_of("workflows"))]  # noqa: UP040
 
 # A test run answers each pause with an approval; a graph that pauses more often than this is looping.
 MAX_TEST_PAUSES = 5
@@ -218,7 +220,7 @@ class WorkflowsQuery(BaseModel):
 
 
 @router.get("", response_model=Envelope[ListResult[Workflow]])
-async def list_workflows(rt: Rt, me: Me, _: Tx, q: Annotated[WorkflowsQuery, Query()]) -> JSONResponse:
+async def list_workflows(rt: Rt, me: Reader, _: Tx, q: Annotated[WorkflowsQuery, Query()]) -> JSONResponse:
     """The team's workflows of both engines, a page at a time, from one statement over both (store.workflow_list).
     `startable` keeps those a person starts by hand (Start run), `takesFiles` those whose start form takes a file
     (Files' "Start a workflow with this file"); each row's `start` says how it starts. `engine=current` leaves out the
@@ -329,7 +331,7 @@ async def create_workflow(rt: Rt, me: Me, _: Tx, body: WorkflowInput) -> JSONRes
 
 
 @router.get("/route-fields", response_model=Envelope[RouteVocabulary])
-async def route_fields() -> JSONResponse:
+async def route_fields(_: Reader) -> JSONResponse:
     """What a branch's route may compare (`data.routes`): the fields with their types, and the operators with the
     types each applies to. The same lists the definition's validation enforces."""
     fields = [{"name": n, "type": t} for n, t in route_field_types().items()]
@@ -341,7 +343,7 @@ async def route_fields() -> JSONResponse:
 
 
 @router.get("/{workflow_id}", response_model=Envelope[WorkflowDetail])
-async def get_workflow(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
+async def get_workflow(rt: Rt, me: Reader, workflow_id: str) -> JSONResponse:
     async with isolation.request_transaction():
         detail = await _detail(rt, workflow_id)
         rights_of = await rights(lambda action: changeable(rt, me, workflow_id, action))
@@ -434,7 +436,7 @@ def _validation_view(run: NewValidation | ValidationRow) -> ValidationRunJSON:
 
 
 @router.get("/{workflow_id}/validations/latest", response_model=Envelope[ValidationRun | None])
-async def last_validation(rt: Rt, _: Tx, workflow_id: str) -> JSONResponse:
+async def last_validation(rt: Rt, _: Tx, __: Reader, workflow_id: str) -> JSONResponse:
     await registry(rt).row(workflow_id)
     run = await registry(rt).last_validation(workflow_id)
     return ok(_validation_view(run) if run else None)
@@ -528,7 +530,7 @@ async def set_status(rt: Rt, me: Me, _: Tx, workflow_id: str, body: StatusInput)
 
 
 @router.get("/{workflow_id}/versions", response_model=Envelope[list[Version]])
-async def list_versions(rt: Rt, _: Tx, workflow_id: str) -> JSONResponse:
+async def list_versions(rt: Rt, _: Tx, __: Reader, workflow_id: str) -> JSONResponse:
     row = await registry(rt).row(workflow_id)
     return ok(
         [
@@ -573,7 +575,7 @@ class RunsQuery(BaseModel):
 
 
 @router.get("/{workflow_id}/runs", response_model=Envelope[ListResult[WorkflowRun]])
-async def list_runs(rt: Rt, _: Tx, workflow_id: str, q: Annotated[RunsQuery, Query()]) -> JSONResponse:
+async def list_runs(rt: Rt, _: Tx, __: Reader, workflow_id: str, q: Annotated[RunsQuery, Query()]) -> JSONResponse:
     """The workflow's runs, most recently changed first then by id, a page at a time; `status` keeps those
     statuses, and the status counts are over every run."""
     await registry(rt).row(workflow_id)

@@ -225,12 +225,50 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "auth_sso_link_complete": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/auth/sso/link/complete",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "auth_sso_link_start": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/auth/sso/link/start",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "auth_sso_links": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/auth/sso/links",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "auth_sso_start": {
     "body": "json",
     "headers": [],
     "method": "POST",
     "path": "/v1/auth/sso/start",
     "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "auth_sso_unlink": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/auth/sso/links/{provider_id}",
+    "pathParams": [
+      "provider_id"
+    ],
     "query": [],
     "stream": false
   },
@@ -385,11 +423,33 @@ export const platformOperations = {
     ],
     "stream": false
   },
+  "members_reinvite_members": {
+    "body": "json",
+    "headers": [
+      "x-acting-for"
+    ],
+    "method": "POST",
+    "path": "/v1/settings/members/reinvite",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "members_remove_members": {
     "body": "json",
     "headers": [],
     "method": "POST",
     "path": "/v1/settings/members/delete",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "members_unlink_members": {
+    "body": "json",
+    "headers": [
+      "x-acting-for"
+    ],
+    "method": "POST",
+    "path": "/v1/settings/members/unlink",
     "pathParams": [],
     "query": [],
     "stream": false
