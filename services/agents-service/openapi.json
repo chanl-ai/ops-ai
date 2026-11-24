@@ -17267,13 +17267,18 @@
       "Retried": {
         "additionalProperties": false,
         "properties": {
+          "notRetryable": {
+            "title": "Notretryable",
+            "type": "integer"
+          },
           "retried": {
             "title": "Retried",
             "type": "integer"
           }
         },
         "required": [
-          "retried"
+          "retried",
+          "notRetryable"
         ],
         "title": "Retried",
         "type": "object"

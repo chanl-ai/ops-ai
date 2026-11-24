@@ -24,7 +24,7 @@ from ops_engine.store.tables import engine_runs
 from tests.api.test_engine_transactions import checkouts
 from tests.api.test_forms import flow, runs_of
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
-from tests.engine.test_lifecycle_rights import BUILDER, TENANT
+from tests.engine.test_lifecycle_rights import ADMIN, BUILDER, TENANT, person
 from tests.engine.test_run_starts import Files, files_client
 
 WID = "claim_follow_up"
@@ -247,3 +247,33 @@ async def test_a_workflows_batches_count_a_check_file_that_never_ran_and_a_waiti
     assert [x["id"] for x in newest.json()["data"]["data"]] == [check.id, upload], newest.text
     unknown = await c.get("/v1/workflows/no_such_flow/batches", headers=BUILDER)
     assert unknown.status_code == 404, unknown.text
+
+
+async def test_retry_asks_workflows_decide_and_says_how_many_files_it_cannot_run_again(stack: Stack) -> None:  # noqa: F811
+    """A builder whose role an admin took workflows.decide off still edits the workflow but does not start its runs
+    again; a check's file that never ran (removed, too large) has no run to start again, so a retry leaves it and
+    counts it."""
+    no_decide = person("dee", "team_ops", "builder", unticked=(("workflows", "decide"),))
+    from ops_agents.store.check_batches import CheckBatch, CheckRow, write_check  # noqa: PLC0415
+
+    c, _ = stack
+    rt, files = wired(c)
+    await ready(c, files, csv(1))
+    with tenant_scope(TENANT):
+        check = await write_check(
+            rt.db, binding_id=f"files:{WID}", watch_id="wat_inv", expected=None, to="2",
+            batch=CheckBatch(team_id="team_ops", workflow_id=WID, version=1, mode="live", watch_id="wat_inv",
+                             label="Invoices", checked_at="2026-12-02T09:00:00Z", created_by="trigger"),
+            rows=[CheckRow("f2:1", {"claim_ref": "b.pdf"}, "removed"),
+                  CheckRow("f3:1", {"claim_ref": "c.zip"}, "failed", "too_large", "Larger than 25 MB")],
+        )  # fmt: skip
+    assert check is not None
+    as_builder = (await c.get(f"/v1/batches/{check.id}", headers=no_decide)).json()["data"]
+    as_admin = (await c.get(f"/v1/batches/{check.id}", headers=ADMIN)).json()["data"]
+    assert (as_builder["mayRetry"], as_admin["mayRetry"]) == (False, True)
+    refused = await c.post(f"/v1/batches/{check.id}/retry", headers=no_decide)
+    assert refused.status_code == 403, refused.text
+    retried = await c.post(f"/v1/batches/{check.id}/retry", headers=ADMIN)
+    assert retried.status_code == 202, retried.text
+    assert retried.json()["data"] == {"retried": 0, "notRetryable": 2}
+    assert await tick(rt) == 0, "a file that never ran is not started by a retry"

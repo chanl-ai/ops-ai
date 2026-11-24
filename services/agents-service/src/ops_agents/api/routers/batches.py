@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
+from ops_access import can
 from ops_engine import default_registry
 from ops_engine.node_types import start_form
 from ops_engine.store import DefinitionRow
@@ -28,7 +29,7 @@ from ops_service_kit.listing import ListQuery
 
 from ...store.batches import MAX_ROWS, Batches, BatchOut, BatchRowOut
 from ...store.tenancy import current_team, current_tenant
-from ..auth import ACCESS, Principal, caller_of, principal, reader_of, require_builder, started_by
+from ..auth import ACCESS, Principal, caller_of, principal, reader_of, started_by
 from ..deps import Runtime, runtime
 from ..engine_runs import checked_input
 from ..envelope import ok
@@ -126,6 +127,8 @@ class BatchLine(Out):
 
 class Retried(Out):
     retried: int
+    # Rows a retry cannot change: a check's file that never ran.
+    not_retryable: int
 
 
 def _inputs(stored: DefinitionRow) -> Json:
@@ -264,7 +267,7 @@ async def batch_page(rt: Rt, me: Reader, _: Tx, batch_id: str) -> JSONResponse:
         "running": sum(s not in NOT_RUNNING for s in statuses),
         "retryable": retryable,
         "notRetryable": failed - retryable,
-        "mayRetry": ACCESS.may(caller_of(me), "workflows", "edit", team=batch.team_id),
+        "mayRetry": ACCESS.may(caller_of(me), "workflows", "decide", team=batch.team_id),
         "stopped": {"reason": batch.stopped_reason, "at": batch.stopped_at} if batch.stopped_at else None,
         "rows": [
             {
@@ -284,8 +287,10 @@ async def retry_batch(rt: Rt, me: Me, batch_id: str) -> JSONResponse:
     No request transaction: the rows are queued for the workflow worker, and committing them with the request's reads
     would change when the worker sees them."""
     batch = await _batch(rt, me, batch_id)
-    require_builder(me, area="workflows", team_id=batch.team_id, action="edit", what=f"batch {batch_id}")
-    return ok({"retried": await Batches(rt.db).retry_failed(batch_id)}, 202)
+    # Starting runs again is a decision on the workflow's runs, as a reviewer or admin makes, not an edit.
+    can(caller_of(me), "workflows", "decide", team=batch.team_id or None, what=f"batch {batch_id}")
+    retried, left = await Batches(rt.db).retry_failed(batch_id)
+    return ok({"retried": retried, "notRetryable": left}, 202)
 
 
 @router.get(

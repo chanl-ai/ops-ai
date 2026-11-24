@@ -261,11 +261,17 @@ class Batches(RuntimeStore):
         async with self.tx() as c:
             return await rows(c, q, BatchRowOut)
 
-    async def retry_failed(self, batch_id: str) -> int:
-        """A new attempt for each row whose run failed or was cancelled; rows that succeeded or are under way stay."""
+    async def retry_failed(self, batch_id: str) -> tuple[int, int]:
+        """A new attempt for each row whose run failed or was cancelled; rows that succeeded or are under way stay.
+        Rows that never ran (a check's file removed at the source or refused) have no run to start again: they are
+        left and counted. Answers (retried, not retryable)."""
         r, e, b = run_batch_rows, engine_runs, run_batches
         failed = sa.select(e.c.id).where(e.c.tenant_id == current_tenant(), e.c.status.in_(("failed", "cancelled")))
+        never_ran = sa.select(sa.func.count()).where(
+            r.c.batch_id == batch_id, team_visible(r), r.c.run_id.is_(None), r.c.status.in_(("failed", "removed"))
+        )
         async with self.tx() as c:
+            left = int((await c.execute(never_ran)).scalar_one())
             done = await c.execute(
                 r.update()
                 .where(r.c.batch_id == batch_id, team_visible(r), r.c.run_id.in_(failed))
@@ -274,7 +280,7 @@ class Batches(RuntimeStore):
             await c.execute(
                 b.update().where(b.c.id == batch_id, team_visible(b)).values(stopped_reason=None, stopped_at=None)
             )
-        return int(done.rowcount or 0)
+        return int(done.rowcount or 0), left
 
     async def pending(self, limit: int) -> list[PendingRowOut]:
         """Rows waiting for their attempt to start, across every tenant, oldest batch first; none of a stopped batch."""

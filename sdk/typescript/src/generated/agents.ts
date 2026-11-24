@@ -9902,6 +9902,8 @@ export interface components {
         };
         /** Retried */
         Retried: {
+            /** Notretryable */
+            notRetryable: number;
             /** Retried */
             retried: number;
         };

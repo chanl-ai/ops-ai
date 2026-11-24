@@ -1536,6 +1536,7 @@ class Retired(TypedDict, closed=True):
 
 
 class Retried(TypedDict, closed=True):
+    notRetryable: int
     retried: int
 
 
