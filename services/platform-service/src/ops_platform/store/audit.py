@@ -51,6 +51,7 @@ KIND = {
     "policy.set": "edited",
     "access.check": "checked",
     "role.edit": "edited",
+    "role.self_approval": "edited",
     "role.reset": "edited",
     "role.create": "created",
     "role.rename": "edited",
