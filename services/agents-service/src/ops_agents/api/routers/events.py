@@ -10,14 +10,16 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncGenerator
-from typing import Annotated, TypeAlias
+from typing import Annotated, TypeAlias, cast
 
 from fastapi import APIRouter, Depends
 from sse_starlette import EventSourceResponse
 
 from ops_service_kit.errors import NotFound
+from ops_service_kit.http import Json
 
 from ...store.events import EventLog
+from .. import hitl_facade
 from ..auth import Principal, principal
 from ..chat_threads import may_read_thread
 from ..deps import Runtime, runtime
@@ -31,16 +33,26 @@ Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 POLL_SECONDS = 0.25
 
 
+def _seen(me: Principal, team: str | None, wire: Json) -> Json:
+    """An event as `me` reads it: a waiting step's payload is a task's data, real only to who may decide it."""
+    data = wire.get("data")
+    if not isinstance(data, dict) or "payload" not in data:
+        return wire
+    asker = hitl_facade.asker_of(data.get("payload"))
+    return {**wire, "data": hitl_facade.as_seen_in(me, team, data, asker=asker)}
+
+
 async def run_frames(
-    rt: Runtime, thread_id: str, run_id: str, after: int, *, follow: bool
+    rt: Runtime, me: Principal, thread: tuple[str, str | None], run_id: str, after: int, *, follow: bool
 ) -> AsyncGenerator[dict[str, str]]:
+    thread_id, team = thread
     store = graph_store(rt)
     cursor = after
     while True:
         batch = await EventLog(store.engine).run_events(thread_id, run_id, cursor)
         for e in batch:
             cursor = e.seq
-            yield {"id": str(e.seq), "event": e.type, "data": json.dumps(e.wire(), ensure_ascii=False)}
+            yield {"id": str(e.seq), "event": e.type, "data": json.dumps(_seen(me, team, e.wire()), ensure_ascii=False)}
         if not follow:
             return
         # Ends when the run has, not at the first terminal type: the paused node's own end event follows `waiting`.
@@ -70,7 +82,8 @@ async def team_frames(
             thread_id = e.thread_id
             if not readable[thread_id]:
                 continue
-            yield {"id": str(position), "event": f"thread.{e.type}", "data": json.dumps(e.wire(), ensure_ascii=False)}
+            wire = _seen(me, team_id, e.wire())
+            yield {"id": str(position), "event": f"thread.{e.type}", "data": json.dumps(wire, ensure_ascii=False)}
         if not follow:
             return
         if not batch:
@@ -89,7 +102,8 @@ async def reattach(
     run = await store.run(run_id)
     if thread is None or not may_read_thread(thread.model_dump(), me) or run is None or run.thread_id != thread_id:
         raise NotFound("Run")
-    return EventSourceResponse(run_frames(rt, thread_id, run_id, after, follow=follow), sep="\n", ping=15)
+    team = cast(str | None, thread.team_id)
+    return EventSourceResponse(run_frames(rt, me, (thread_id, team), run_id, after, follow=follow), sep="\n", ping=15)
 
 
 @router.get("/v1/events", response_model=None, responses=SSE_RESPONSE)

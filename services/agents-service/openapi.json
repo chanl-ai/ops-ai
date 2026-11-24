@@ -23261,6 +23261,12 @@
                 "type": "object"
               },
               {
+                "items": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "array"
+              },
+              {
                 "type": "null"
               }
             ],

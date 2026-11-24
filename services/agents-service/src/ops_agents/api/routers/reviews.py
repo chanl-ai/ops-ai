@@ -256,14 +256,15 @@ async def decide(rt: Rt, me: Me, thread_id: str, body: ReviewDecisionInput) -> J
         amount=body.amount,
         inputs=body.inputs,
     )
-    return ok(review)
+    # A decision posted again to a decided task answers with the task as it was decided, before any decider check.
+    return ok(hitl_facade.as_seen_by(me, review))
 
 
 @console_router.post("/{thread_id}/team-account", response_model=Envelope[Review])
 async def run_as_team_account(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     """Run as the team account: a run waiting for a person's own account of an app goes on with the app's team account,
     for a person who may use it (connections.run), on an app that has one."""
-    return ok(await engine_reviews.run_as_team_account(rt, me, thread_id))
+    return ok(hitl_facade.as_seen_by(me, await engine_reviews.run_as_team_account(rt, me, thread_id)))
 
 
 class BulkDecisionInput(In):

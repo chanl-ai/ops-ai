@@ -172,7 +172,27 @@ def sees_real_values(reader: Principal, review: Listed) -> bool:
     if review.get("canDecide") is True:
         return True
     team = narrow.json_object(review.get("decidingTeam") or {}).get("id")
-    return isinstance(team, str) and team in review_teams(reader)
+    return sees_real_values_in(reader, team if isinstance(team, str) else None)
+
+
+def sees_real_values_in(reader: Principal, team: str | None, *, asker: str | None = None) -> bool:
+    """`sees_real_values` for what a paused step holds where no task view is built (a thread's state, its events): an
+    API key or a service does, the asker of an "ask the person" step (`asker`) does, and a person who holds
+    `reviews.decide` in `team`."""
+    if caller_of(reader).kind != "person" or (asker is not None and reader.email == asker):
+        return True
+    return team is not None and team in review_teams(reader)
+
+
+def asker_of(payload: object) -> str | None:
+    """Who alone answers a paused step: the person who asked, when it asks them first (`check_thread_decider`)."""
+    step: Json = cast(Json, payload) if isinstance(payload, dict) else {}
+    return str(step.get("requested_by") or "") or None if step.get("ask_first") else None
+
+
+def as_seen_in[T](reader: Principal, team: str | None, value: T, *, asker: str | None = None) -> T:
+    """`value`, held by a step paused in `team`, as `reader` reads it (`sees_real_values_in`): as it is, or masked."""
+    return value if sees_real_values_in(reader, team, asker=asker) else cast(T, masked(value))
 
 
 def as_seen_by(reader: Principal, review: Listed) -> Listed:

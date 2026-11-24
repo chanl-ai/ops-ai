@@ -2162,7 +2162,7 @@ class TaskState(TypedDict, closed=True):
     id: str
     reason: str | None
     status: str
-    values: dict[str, JsonValue] | None
+    values: dict[str, JsonValue] | list[JsonValue] | None
 
 
 class TaskTypeRef(TypedDict, closed=True):

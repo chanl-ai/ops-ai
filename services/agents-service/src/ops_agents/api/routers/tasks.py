@@ -25,7 +25,7 @@ from ops_agent_kernel.pii import masked
 from ops_engine.compiler import DEFAULT_OPTIONS
 from ops_engine.store import RunStore
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import Envelope, In, Json, JsonValue, Out
+from ops_service_kit.http import Envelope, In, Json, JsonList, JsonValue, Out
 from ops_service_kit.ids import new_id
 
 from ... import task_types as tt
@@ -74,8 +74,9 @@ class TaskState(Out):
     reason: str | None
     decided_by: str | None
     decided_at: str | None
-    # Values the decision carried: a reviewer's corrections or an action's inputs.
-    values: dict[str, JsonValue] | None
+    # Values the decision carried: a reviewer's corrections (an object, or a list of records for an extract's read) or
+    # an action's inputs.
+    values: dict[str, JsonValue] | list[JsonValue] | None
 
 
 async def _opened(rt: Runtime, run_id: str) -> Literal["waiting", "starting"]:
@@ -173,6 +174,6 @@ async def get_task(rt: Rt, me: Me, task_id: str) -> JSONResponse:
         reason=cast(str | None, review.get("decisionReason")),
         decided_by=cast(str | None, review.get("decidedBy")),
         decided_at=cast(str | None, review.get("decidedAt")),
-        values=cast(Json | None, resume.get("edited") or resume.get("values")) if decided else None,
+        values=cast(Json | JsonList | None, resume.get("edited") or resume.get("values")) if decided else None,
     )
     return ok(state.model_dump(mode="json", by_alias=True))

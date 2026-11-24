@@ -11811,7 +11811,7 @@ export interface components {
             /** Values */
             values: {
                 [key: string]: components["schemas"]["JsonValue"];
-            } | null;
+            } | components["schemas"]["JsonValue"][] | null;
         };
         /** TaskTypeDetail */
         TaskTypeDetail: {

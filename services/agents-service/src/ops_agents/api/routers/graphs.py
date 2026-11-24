@@ -303,6 +303,10 @@ async def thread_state(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     if pending:
         async with isolation.request_transaction():
             interrupt = await hitl_facade.interrupt_view(rt, row, pending[0])
+    # What the paused step holds is a task's data: real only to who may decide it, as its task page shows it.
+    team, asker = row.get("team_id"), hitl_facade.asker_of(pending[0].get("payload")) if pending else None
+    values = hitl_facade.as_seen_in(me, team, values, asker=asker)
+    interrupt = hitl_facade.as_seen_in(me, team, interrupt, asker=asker)
     return ok(
         {
             "threadId": thread_id,

@@ -10,7 +10,7 @@ import json
 import pytest
 from httpx import AsyncClient
 
-from ops_service_kit.http import Json
+from ops_service_kit.http import Json, JsonList, JsonValue
 from tests.api.test_action_roles import KEY, REVIEWER
 from tests.api.test_case_page import _waiting_with, data, typed_case  # pyright: ignore[reportPrivateUsage]
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
@@ -103,8 +103,9 @@ async def test_a_viewer_reads_a_waiting_steps_document_read_with_its_account_and
     assert shown["read"]["records"][0]["fields"]["ssn"]["confidence"] == 0.9 and "Marcus Bell" in text, text
 
 
-async def _decided_with_a_correction(s: Stack) -> str:
-    """A run's step approved by Maya, an Approver, with the account id corrected and an SSN in her reason."""
+async def _decided_with_a_correction(s: Stack, read: JsonValue | None = None, fixed: JsonValue | None = None) -> str:
+    """A run's step approved by Maya, an Approver, with the account id corrected (or `fixed`, a correction of another
+    shape) and an SSN in her reason."""
     c, _ = s
     run = await _waiting_with(
         s,
@@ -112,10 +113,13 @@ async def _decided_with_a_correction(s: Stack) -> str:
         "pii_task",
         {
             "title": "Check the account",
-            "editable": {"path": "$.nodes.lookup.out", "value": {"name": "Marcus Bell", "accountId": "BUS-7781"}},
+            "editable": {
+                "path": "$.nodes.lookup.out",
+                "value": read if read is not None else {"name": "Marcus Bell", "accountId": "BUS-7781"},
+            },
         },
     )
-    fixed = {"name": "Marcus Bell", "accountId": "BUS-9902"}
+    fixed = fixed if fixed is not None else {"name": "Marcus Bell", "accountId": "BUS-9902"}
     body = {"decision": "approved", "inputs": {"edited": fixed}, "reason": "SSN 123-45-6789 matches the file"}
     decided = await c.post(f"/reviews/{run}/decision", json=body, headers=REVIEWER)
     assert decided.status_code == 200, decided.text
@@ -137,3 +141,43 @@ async def test_an_api_key_reads_its_tasks_decided_values_as_they_are(stack: Stac
     run = await _decided_with_a_correction(stack)
     shown = data(await c.get(f"/v1/tasks/{run}", headers=KEY))
     assert "BUS-9902" in json.dumps(shown["values"]) and "123-45-6789" in shown["reason"], shown
+
+
+async def test_a_task_decided_with_a_list_of_records_reads_back(stack: Stack) -> None:  # noqa: F811
+    # A correction of an extract's records is a list: GET /v1/tasks/{id} answered 500, its values typed as an object.
+    c, _ = stack
+    records: JsonList = [{"values": {"name": "Marcus Bell", "accountId": "BUS-9902"}}, {"values": {"name": "Ann Lee"}}]
+    was: JsonList = [{"values": {"name": "Marcus Bell", "accountId": "BUS-7781"}}, {"values": {"name": "Ann Lee"}}]
+    run = await _decided_with_a_correction(stack, was, records)
+    read = await c.get(f"/v1/tasks/{run}", headers=KEY)
+    assert read.status_code == 200, read.text
+    assert data(read)["values"] == records, read.text
+
+
+async def test_a_task_waiting_in_a_thread_reaches_no_one_but_its_deciders_with_real_values(
+    dev_platform: AsyncClient,  # noqa: F811
+) -> None:
+    # The thread's state, its run's and the team's event streams, and Overview gave James (who asked, a Viewer) and
+    # Vera (a Viewer) the account id and the SSN; replaying a decision gave Vera the decided task.
+    c = dev_platform
+    task, _ = await _task(c)
+    james = person("usr_james", ["team_ops"], role="viewer")
+    vera = person("usr_vera", ["team_ops"], role="viewer")
+    runs = await c.get(f"/v1/threads/{task}/runs", headers=james)
+    assert runs.status_code == 200, runs.text
+    run_ids = [r["runId"] for r in runs.json()["data"]]
+    reads = {
+        "state": await c.get(f"/v1/threads/{task}/state", headers=james),
+        "team events": await c.get("/v1/events?follow=false", headers=james),
+        "overview": await c.get("/v1/overview", headers=vera),
+        **{
+            f"run events {r}": await c.get(f"/v1/threads/{task}/runs/{r}/events?follow=false", headers=james)
+            for r in run_ids
+        },
+    }
+    approve = person("usr_amy", ["team_ops"], role="approver")
+    decided = await c.post(f"/reviews/{task}/decision", json={"decision": "approved"}, headers=approve)
+    assert decided.status_code == 200, decided.text
+    reads["decision replayed"] = await c.post(f"/reviews/{task}/decision", json={"decision": "approved"}, headers=vera)
+    leaks = {name: r.status_code for name, r in reads.items() if r.status_code != 200 or any(v in r.text for v in REAL)}
+    assert not leaks, leaks
