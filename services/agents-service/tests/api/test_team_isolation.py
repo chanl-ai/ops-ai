@@ -48,7 +48,6 @@ SKILL: dict[str, Any] = {
     "name": "Address change",
     "useWhen": "The customer asks to change their postal address.",
     "instructions": "Confirm the customer, then record the new address.",
-    "ownerTeam": "Retail",
 }
 
 
@@ -86,7 +85,7 @@ async def test_a_list_leaves_out_another_teams_records(
     # Each filter set to the record's own value: the owner finds it, another team still neither lists nor counts it.
     filtered = {
         "/v1/agents": {"availability": "not_published", "teamId": "team_ops"},
-        "/v1/skills": {"status": "draft", "ownerTeam": "Retail", "origin": "blank", "loading": "on_match"},
+        "/v1/skills": {"status": "draft", "ownerTeam": "team_ops", "origin": "blank", "loading": "on_match"},
     }
     for path, filters in filtered.items():
         for key, value in filters.items():

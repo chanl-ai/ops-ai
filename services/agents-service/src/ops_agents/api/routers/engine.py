@@ -109,8 +109,9 @@ REGISTRY = default_registry()
 log = get_logger("ops_agents.api.routers.engine")
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
-# Every read of a workflow definition: the acting team's workflows view cell, the check the agents and skills routers
-# use for their reads. A read route on /definitions takes it in place of `Me`.
+# Every read of a workflow, its runs and their steps: the acting team's workflows view cell, the check the agents and
+# skills routers use for their reads. Every GET on /v1/workflows and /v1/runs takes it in place of `Me`
+# (tests/engine/test_lifecycle_rights.py walks the routers); an API key is not asked and reads only its own runs.
 Reader: TypeAlias = Annotated[Principal, Depends(reader_of("workflows"))]  # noqa: UP040
 
 
@@ -176,7 +177,7 @@ class NodeTypeView(Out):
 
 
 @router.get("/node-types", response_model=Envelope[list[NodeTypeView]])
-async def node_types(rt: Rt, me: Me) -> JSONResponse:
+async def node_types(rt: Rt, me: Reader) -> JSONResponse:
     """Every registered node type at every version: ports with their connection types, parameters as JSON Schema with
     the form generated from them, effects, retry and executor, and why the acting team cannot use one now. No request
     transaction: it reads no row, and the AI-steps policy comes from platform-service."""
@@ -1725,7 +1726,7 @@ async def start_engine_run(rt: Rt, me: Starter, body: EngineRunInput) -> JSONRes
 async def list_engine_runs(
     *,
     rt: Rt,
-    me: Me,
+    me: Reader,
     q: ListQuery,
     workflow_id: Annotated[list[str] | None, Query(alias="workflowId")] = None,
     status: Annotated[list[str] | None, Query()] = None,
@@ -1770,7 +1771,7 @@ async def list_engine_runs(
 
 
 @runs_router.get("/{run_id}", response_model=Envelope[RunDetail])
-async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
+async def get_engine_run(rt: Rt, me: Reader, run_id: str) -> JSONResponse:
     """The run with every step from the journal: per node its input, output, port, attempts and errors.
     No request transaction. One transaction reads the run (a run the caller may not see is not found before any other
     service is asked) and what it is told from; names, the masking policy and file names come from platform-service and
@@ -2071,7 +2072,9 @@ async def event_frames(
 
 
 @runs_router.get("/{run_id}/events", response_model=None, responses=SSE_RESPONSE)
-async def engine_run_events(rt: Rt, me: Me, run_id: str, after: int = 0, follow: bool = True) -> EventSourceResponse:
+async def engine_run_events(
+    rt: Rt, me: Reader, run_id: str, after: int = 0, follow: bool = True
+) -> EventSourceResponse:
     """The run's events with `seq` above `after`; the SSE `id` is the seq to resume from. With `follow` it keeps
     polling until the run ends or waits for a person.
     No request transaction: the masking policy comes from platform-service, and each frame's read opens its own."""

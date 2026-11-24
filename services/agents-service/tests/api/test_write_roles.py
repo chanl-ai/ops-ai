@@ -77,7 +77,6 @@ SKILL: dict[str, Any] = {
     "name": "Address change",
     "useWhen": "The customer asks to change their postal address.",
     "instructions": "Confirm the customer, then record the new address.",
-    "ownerTeam": "Retail",
 }
 
 # One write: its method, what it does, its path and body from what the walk has made so far, the status the owning

@@ -287,7 +287,7 @@ def seed(owner: Session, made_ids: list[tuple[str, str]]) -> list[tuple[str, str
             "skill",
             "agents",
             "/v1/skills",
-            {"name": f"Probe skill {tag}", "useWhen": "Never.", "instructions": "None.", "ownerTeam": "Probe"},
+            {"name": f"Probe skill {tag}", "useWhen": "Never.", "instructions": "None."},
         ),
         ("guardrail", "agents", "/v1/guardrails", {"name": f"Probe rule {tag}", "topics": ["probe"], "message": "No."}),
         (
