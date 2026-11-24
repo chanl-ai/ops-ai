@@ -556,7 +556,13 @@ class FilesStore(Store):
             q = (
                 sa.select(old.c.source_path)
                 .select_from(e.join(old, linked))
-                .where(e.c.tenant_id == tenant, e.c.file_id == file_id, e.c.kind == "new", team_visible(e))
+                .where(
+                    e.c.tenant_id == tenant,
+                    e.c.watch_id == found.watch_id,
+                    e.c.file_id == file_id,
+                    e.c.kind == "new",
+                    team_visible(e),
+                )
                 .limit(1)
             )
             was_path = (await c.execute(q)).scalar_one_or_none()
