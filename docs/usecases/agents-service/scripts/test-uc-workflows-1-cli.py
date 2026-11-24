@@ -57,6 +57,15 @@ def main() -> None:
             {"exit": f_code, "said": str(refused)[:300]},
         )
 
+        u_code, unknown = ops_cli(
+            "builder", *sched, "save", WID, "--step", "start", "--kind", "daily", "--set", "at=07:30", options_first=True
+        )
+        check(
+            "12 a field the kind does not have exits non-zero naming it",
+            u_code != 0 and "at" in str(unknown) and "time" in str(unknown),
+            {"exit": u_code, "said": str(unknown)[:300]},
+        )
+
         c_code, _ = ops_cli("builder", *sched, "clear", WID, "--step", "start", options_first=True)
         gone_code, gone = ops_cli("builder", *sched, "show", WID, "--step", "start", options_first=True)
         check(

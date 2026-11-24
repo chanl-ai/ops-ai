@@ -20,6 +20,8 @@ worker's schedule clock starts one run at each slot, keyed by the slot and start
 | S7 | A schedule saved on a live workflow applies at once and the clock starts one run at its next slot | api | 8-10 | 9 |
 | S8 | The SDK previews, saves and shows a rule in the API's words, and a rule under the floor is refused | sdk | 11 | 11 |
 | S9 | `opsai workflows schedule` previews, saves, shows and clears, and exits non-zero under the floor | cli | 12 | 12 |
+| S10 | A daily rule in a zone whose clocks change has one slot on each such day, at its local time | api | 13 | 13 |
+| S11 | A rule with a field its kind does not have is refused naming the field | api | 14 | 14 |
 
 ## Preconditions
 
@@ -49,6 +51,8 @@ has no tool or model step. The run makes only the workflow it needs.
 | 10 | Read the schedule | Last outcome `ran` (or `late`), last slot at or after that run's `dueAt` |
 | 11 | sdk: preview, save and show "every 15 minutes from 07:00, Europe/London"; save every 2 minutes | One set of words and next runs; the second save raises naming `every` |
 | 12 | cli: `opsai workflows schedule preview`, `save`, `show`, a save under the floor, `clear`, `show` | Exit 0 with the server's words; non-zero naming `every`; exit 0; non-zero after clear |
+| 13 | Preview a daily 01:30 rule in Europe/London from the days before the spring and autumn clock changes (`after`) | Next runs 28 Mar 01:30, 29 Mar 01:00 (the first minute after the gap), 30 Mar 00:30 UTC; 24 Oct 00:30, 25 Oct 00:30 (the first 01:30 only), 26 Oct 01:30 UTC |
+| 14 | Preview a daily rule written with `at` instead of `time` | 422 naming `at` |
 
 ## Acceptance layers
 

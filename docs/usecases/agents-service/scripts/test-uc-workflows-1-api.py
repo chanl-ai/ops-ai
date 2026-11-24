@@ -205,4 +205,29 @@ with ExitStack() as stack:
         {"last": (shown.get("lastSlotAt"), shown.get("lastOutcome")), "dueAt": (started.get("input") or {}).get("dueAt")},
     )
 
+    # A daily rule in a zone whose clocks change: the preview counts from a chosen instant, so the days around both
+    # changes are read here. Each local day has exactly one slot, at the local time (the first minute after a gap, the
+    # first of a repeated hour).
+    def preview_from(rule: dict[str, Any], after: str) -> list[str]:
+        got = data(api.post("/v1/schedules/preview", json={"rule": rule, "after": after}, headers=TEAM)) or {}
+        return list(got.get("nextRuns") or [])
+
+    night = {"kind": "daily", "time": "01:30", "tz": "Europe/London"}
+    spring = preview_from(night, "2026-03-27T12:00:00Z")
+    autumn = preview_from(night, "2026-10-23T12:00:00Z")
+    check(
+        "13 a daily rule runs once on each day the clocks change, at its local time, never twice and never skipped",
+        spring == ["2026-03-28T01:30:00Z", "2026-03-29T01:00:00Z", "2026-03-30T00:30:00Z"]
+        and autumn == ["2026-10-24T00:30:00Z", "2026-10-25T00:30:00Z", "2026-10-26T01:30:00Z"],
+        {"spring": spring, "autumn": autumn},
+    )
+    unknown = api.post(
+        "/v1/schedules/preview", json={"rule": {"kind": "daily", "at": "07:30", "tz": "UTC"}}, headers=TEAM
+    )
+    check(
+        "14 a rule with a field the kind does not have is refused naming the field",
+        unknown.status_code == 422 and (unknown.json().get("error") or {}).get("details", {}).get("field") == "at",
+        f"{unknown.status_code} {unknown.text[:300]}",
+    )
+
 finish()
