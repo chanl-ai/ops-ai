@@ -7,11 +7,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import cast
 
+from ops_engine.node_types import TypeRegistry
+from ops_engine.store import DefinitionRow
 from ops_service_kit.http import Json, Out
 from ops_store.schedule import KINDS
 
 from ..store.schedules import ScheduleRow
-from .schedule_clock import iso
+from .schedule_clock import idle_reason, iso
 
 NEXT_RUNS = 3
 
@@ -35,17 +37,25 @@ def next_runs(rule: Json, now: datetime, n: int = NEXT_RUNS) -> list[str]:
     return [iso(t) for t in KINDS.next_slots(rule, now, n)]
 
 
-def idle(row: ScheduleRow, serving: Json | None) -> str | None:
-    """Why the saved schedule ticks nothing, given the definition of the version that serves the workflow."""
+def schedulable(registry: TypeRegistry, node: Json) -> bool:
+    """Whether the node's type is a trigger a schedule may start (a node type the registry marks schedulable)."""
+    found = registry.find(str(node.get("type")), int(cast(int, node.get("typeVersion") or 1)))
+    return found is not None and found.schedulable
+
+
+def idle(row: ScheduleRow, serving: DefinitionRow | None, registry: TypeRegistry) -> str | None:
+    """Why the saved schedule ticks nothing, given the version that serves the workflow (live or paused)."""
+
+    def takes(node: Json) -> bool:
+        return schedulable(registry, node)
+
     if serving is None:
-        return "No version is live yet; the schedule starts once one is."
-    if row.trigger_step not in {str(n.get("id")) for n in cast(list[Json], serving.get("nodes") or [])}:
-        return f"The live version has no step {row.trigger_step}, so this schedule starts nothing until one does."
-    return None
+        return idle_reason(row.trigger_step, None, None, takes)
+    return idle_reason(row.trigger_step, serving.definition, serving.stage, takes)
 
 
-def schedule_view(row: ScheduleRow, now: datetime, serving: Json | None) -> Json:
-    """`serving` is the definition of the version that serves the workflow (live or paused), None when there is none."""
+def schedule_view(row: ScheduleRow, now: datetime, serving: DefinitionRow | None, registry: TypeRegistry) -> Json:
+    """`serving` is the version that serves the workflow (live or paused), None when there is none."""
     return ScheduleView(
         workflow_id=row.workflow_id,
         trigger_step=row.trigger_step,
@@ -56,5 +66,5 @@ def schedule_view(row: ScheduleRow, now: datetime, serving: Json | None) -> Json
         changed_at=row.changed_at,
         last_slot_at=row.last_slot_at,
         last_outcome=row.last_outcome,
-        idle=idle(row, serving),
+        idle=idle(row, serving, registry),
     ).model_dump(mode="json", by_alias=True)

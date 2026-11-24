@@ -12,8 +12,9 @@ it saw, and starts nothing, so it first runs at its next slot. It is read from t
 memory: the rule differs from the one stored beside the slot, or `seen_at` is empty, which each pass makes it while
 the workflow is not live or its live version lacks the step. A tick that fails, or whose lease another machine holds,
 writes nothing, so its slot stays open and the next pass tries it again. After an outage the clock starts one catch-up
-run, marked late, when the latest slot is within half the interval (never less than LATE_AFTER, the most a normal
-pass trails its slot by); an older slot is recorded as missed.
+run, marked late, when the latest slot is within half the smaller gap to its neighbouring slots (never less than
+LATE_AFTER, the most a normal pass trails its slot by); an older slot is recorded as missed. A rule saved shortly
+before its slot runs that slot, as the pass that first sees it is still within LATE_AFTER of it.
 
 The clock knows no rule's fields (the registry answers) and no target's work (the handler answers). Scheduled runs act
 for no person: each is started by `trigger:schedule:{workflow}`."""
@@ -23,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, cast
@@ -140,10 +141,35 @@ class WorkflowStart:
         return run.id
 
 
+def idle_reason(step: str, definition: Json | None, stage: str | None, takes: Callable[[Json], bool]) -> str | None:
+    """Why a schedule on `step` starts nothing against the version serving its workflow, or None while it ticks. The
+    clock, the schedule view and the live places all ask this one rule. `stage` is the serving version's (live or
+    paused); `takes` says whether a step's node type is a trigger some target handles."""
+    if definition is None:
+        return "No version is live yet; the schedule starts once one is."
+    if stage != "live":
+        return "The workflow is paused, so the schedule starts nothing until it is resumed."
+    node = next((n for n in cast(list[Json], definition.get("nodes") or []) if n.get("id") == step), None)
+    if node is None:
+        return f"The live version has no step {step}, so this schedule starts nothing until one does."
+    if not takes(node):
+        return f"Step {step} is no longer a schedule trigger in the live version, so this schedule starts nothing."
+    return None
+
+
 def first_sighting(s: ScheduleRow) -> bool:
     """The rule differs from the one the last slot was counted against, or the clock has not seen it live since it
     was saved or last idle. A null last slot alone is not one: a rule whose first slot was ahead when it was seen."""
     return s.rule_digest != digest(s.rule) or s.seen_at is None
+
+
+def saved_before_slot(s: ScheduleRow, slot: datetime | None, now: datetime) -> bool:
+    """A rule saved or changed before its slot that this pass is the first to see: that slot is the rule's own first
+    one, so it runs instead of being recorded as seen. A resume or restore (same rule) and a slot found long after it
+    passed are not."""
+    if slot is None or s.rule_digest == digest(s.rule) or now - slot > LATE_AFTER:
+        return False
+    return datetime.fromisoformat(s.changed_at.replace("Z", "+00:00")) < slot
 
 
 class ScheduleClock:
@@ -179,18 +205,23 @@ class ScheduleClock:
             with isolation.tenant_wide(SCHEDULE_CLOCK, tenant_id=tenant):
                 for s in await self.schedules.everything():
                     definition = workflows.get(s.workflow_id)
-                    handler = self._handler(definition, s.trigger_step) if definition is not None else None
                     try:
-                        if handler is None:
+                        if definition is None or idle_reason(
+                            s.trigger_step, definition.definition, definition.stage, self._takes
+                        ):
                             # Not live, or the live version lacks the step: idle, and seen afresh when it is back.
                             if s.seen_at is not None:
                                 await self.schedules.idle(s.workflow_id, s.trigger_step)
                             continue
-                        assert definition is not None
+                        handler = self._handler(definition, s.trigger_step)
+                        assert handler is not None
                         started += await self._one(s, definition, handler, now)
                     except Exception as e:
                         log.exception("schedule_tick_failed", workflow=s.workflow_id, error=type(e).__name__)
         return started
+
+    def _takes(self, node: Json) -> bool:
+        return str(node.get("type")) in self.handlers
 
     def _handler(self, definition: DefinitionRow, step: str) -> TargetHandler | None:
         nodes = cast(list[Json], definition.definition.get("nodes") or [])
@@ -201,8 +232,8 @@ class ScheduleClock:
 
     async def _one(self, s: ScheduleRow, definition: DefinitionRow, handler: TargetHandler, now: datetime) -> int:
         slot = self.kinds.last_slot(s.rule, now)
-        if slot is None and not first_sighting(s):
-            return 0  # no slot yet, and already seen: nothing to do until the first one
+        if not first_sighting(s) and (slot is None or (s.last_slot_at is not None and iso(slot) <= s.last_slot_at)):
+            return 0  # nothing new: no slot yet, or this one counted; the lease is for a slot still to count
         lease = lease_key(definition.tenant_id, s.workflow_id, s.trigger_step)
         try:
             await self.leases.acquire(lease, KEY)
@@ -222,7 +253,7 @@ class ScheduleClock:
     ) -> int:
         rule_digest, at = digest(s.rule), iso(now)
         key = (s.workflow_id, s.trigger_step)
-        if first_sighting(s):
+        if first_sighting(s) and not saved_before_slot(s, slot, now):
             if slot is None:
                 await self.schedules.sighted(*key, expected=s.last_slot_at, digest=rule_digest, at=at)
             else:
@@ -248,18 +279,23 @@ class ScheduleClock:
                 outcome=outcome,
                 digest=rule_digest,
                 run_id=run_id or s.last_run_id,
-                at=s.seen_at,
+                at=s.seen_at or at,
             )
 
         await self._forget_old(s, now)
         tick = Tick(s, definition, slot)
         upcoming = self.kinds.next_slots(s.rule, slot, 1)
-        # Missed past half the interval, but never within LATE_AFTER: a pass lands up to EVERY_S after its slot, which
-        # for a one-minute rule is already past half, and that is a normal pass, not an outage.
-        if upcoming and now - slot > max((upcoming[0] - slot) / 2, LATE_AFTER):
+        before = self.kinds.last_slot(s.rule, slot - timedelta(seconds=1))
+        # Missed past half the smaller gap to the slot before or after, so a weekday rule's Friday slot is not caught
+        # up on Saturday evening; never within LATE_AFTER: a pass lands up to EVERY_S after its slot, which for a
+        # one-minute rule is already past half, and that is a normal pass, not an outage.
+        gaps = [g for g in (upcoming[0] - slot if upcoming else None, slot - before if before else None) if g]
+        if gaps and now - slot > max(min(gaps) / 2, LATE_AFTER):
             if await record("missed"):
                 await self._log(
-                    tick, "missed", reason="The clock was down past half the interval, so this slot did not run."
+                    tick,
+                    "missed",
+                    reason="The clock was down past half the gap to the next slot, so this slot did not run.",
                 )
             return 0
         if await handler.busy(tick):

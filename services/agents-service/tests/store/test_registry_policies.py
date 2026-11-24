@@ -276,8 +276,9 @@ RUNTIME = "ops_agents_runtime"
 
 async def test_a_tenants_transaction_is_refused_what_the_tenant_role_lacks(engine: AsyncEngine) -> None:
     """An append-only log is never changed or emptied, a case is never deleted, a trigger event is settled but what
-    fired it is never rewritten, and heartbeats are the system user's alone: as ops_runtime_tenant on PostgreSQL and
-    the runtime user on SQL Server (deploy/database/mssql.py RUNTIME_GRANTS)."""
+    fired it is never rewritten (the schedule clock's own delete is granted), and heartbeats are the system user's
+    alone: as ops_runtime_tenant on PostgreSQL and the runtime user on SQL Server
+    (deploy/database/mssql.py RUNTIME_GRANTS)."""
     tenant = _tag("t_a")
     statements = {
         "update case_events": case_events.update().values(kind="x").where(case_events.c.tenant_id == tenant),
@@ -289,7 +290,6 @@ async def test_a_tenants_transaction_is_refused_what_the_tenant_role_lacks(engin
         "update trigger_events.subject": trigger_events.update()
         .values(subject="x")
         .where(trigger_events.c.tenant_id == tenant),
-        "delete trigger_events": trigger_events.delete().where(trigger_events.c.tenant_id == tenant),
         "delete background_heartbeats": background_heartbeats.delete(),
     }
     for name, statement in statements.items():
