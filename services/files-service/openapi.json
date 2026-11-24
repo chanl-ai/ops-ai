@@ -1682,6 +1682,11 @@
             "title": "Brought",
             "type": "integer"
           },
+          "code": {
+            "default": "",
+            "title": "Code",
+            "type": "string"
+          },
           "failed": {
             "default": 0,
             "title": "Failed",

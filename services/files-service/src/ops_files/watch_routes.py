@@ -88,6 +88,9 @@ class LastCheck(Out):
     failed: int = 0
     removed: int = 0
     stopped: str = ""
+    # Why a refused or partial check stopped: needs_reconnect, unreachable, not_installed, app_off, rate_limited,
+    # fetch_failed, continues, list_failed, lease_lost; empty on a success. The console words its alert from it.
+    code: str = ""
     failures: list[FailedFile] = Field(default_factory=list[FailedFile])
 
 

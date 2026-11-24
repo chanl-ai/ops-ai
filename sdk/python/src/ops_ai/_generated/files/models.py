@@ -183,6 +183,7 @@ JsonValue: TypeAlias = Any
 
 class LastCheck(TypedDict, closed=True):
     brought: NotRequired[int]
+    code: NotRequired[str]
     failed: NotRequired[int]
     failures: NotRequired[list[FailedFile]]
     removed: NotRequired[int]

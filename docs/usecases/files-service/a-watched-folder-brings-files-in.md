@@ -35,7 +35,8 @@ and its Microsoft sign-in, which a fake Graph and a fake Microsoft sign-in serve
 | S3 | With SharePoint not yet on for the team, Watch a folder says no connection can list files, opens Apps and keeps Next disabled | ui | 11 | 11 |
 | S4 | A builder watches a folder, presses Check now, sees it running, then the time, the count and the failed file with its size; the file's page names its source | ui | 12-15 | 14 |
 | S5 | A viewer sees the same list with no Watch folder or Check now, and a direct add or check is refused | ui | 16 | 16 |
-| S6 | Knowledge's Add source keeps its SharePoint step 2, and the list draws its loading, empty and error states at both widths | ui | 17-19 | 17 |
+| S6 | Knowledge's Add source keeps its SharePoint step 2, and the list draws its loading, empty and error states at both widths | ui | 17-18, 20 | 17 |
+| S7 | A check in progress shows Checking, and a refused check says its actual reason, with Reconnect only for a refused sign-in | ui | 19 | 19 |
 
 ## Preconditions
 
@@ -48,7 +49,7 @@ and its Microsoft sign-in, which a fake Graph and a fake Microsoft sign-in serve
 
 ## Steps and expected results
 
-Steps 1-7 are the api script (`test-uc-772-api.py`); steps 11-19 the ui script (`test-uc-772-ui.mjs`), every screen at
+Steps 1-7 are the api script (`test-uc-772-api.py`); steps 11-20 the ui script (`test-uc-772-ui.mjs`), every screen at
 1440 and 390 wide.
 
 | # | Step | Expected |
@@ -68,7 +69,8 @@ Steps 1-7 are the api script (`test-uc-772-api.py`); steps 11-19 the ui script (
 | 16 | Ravi opens Watched folders | The row shows with its failed file; no Watch folder and no row menu; a direct add and Check now are 403 |
 | 17 | James opens Add source on a knowledge base and picks SharePoint | Step 2 shows the name, the sites and libraries pickers, Include and Exclude, and no preview (the SharePoint source declares none) |
 | 18 | The list's GET is held, emptied and refused | The skeleton, "No watched folders yet" with Watch folder, and "Couldn’t load watched folders" with Try again |
-| 19 | Every screen | No sideways scroll and no page or console errors (the refused request's own console line is not counted) |
+| 19 | The list's GET answers the watch as checking, then refused for its sign-in, then refused as unreachable | Checking on the row; "refused the sign-in" with Reconnect; "could not be reached" with no Reconnect |
+| 20 | Every screen | No sideways scroll and no page or console errors (the refused request's own console line is not counted) |
 
 ## Acceptance layers
 

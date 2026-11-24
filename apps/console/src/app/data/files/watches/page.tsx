@@ -47,6 +47,21 @@ function scopeSummary(folders: Watch['folders'], values: Watch['values']) {
   return folders.length > 2 ? `${shown} and ${folders.length - 2} more` : shown;
 }
 
+/** What a refused check's code means for a person: the alert's words, and the fix on the app's page when there is one. */
+function refusal(code: string | undefined): { title: string; fallback: string; next: string; action?: string } {
+  switch (code) {
+    case 'unreachable':
+      return { title: 'could not be reached', fallback: 'Apps did not answer.', next: 'the next check tries again by itself.' };
+    case 'not_installed':
+    case 'app_off':
+      return { title: 'is off for this team', fallback: 'The app is not turned on.', next: 'the next check after it is on takes everything since.', action: 'Turn on' };
+    case 'needs_reconnect':
+      return { title: 'refused the sign-in', fallback: 'No check could sign in.', next: 'the next check after reconnecting takes everything since.', action: 'Reconnect' };
+    default:
+      return { title: 'refused the check', fallback: 'No check could read the folder.', next: 'the next check lists the same changes again.' };
+  }
+}
+
 function LastCheck({ w }: { w: Watch }) {
   if (w.checking)
     return (
@@ -155,8 +170,10 @@ export default function WatchedFoldersPage() {
   );
   const cols = React.useMemo(() => columns(canManage ? askCheck : undefined, (w) => setDialog({ watch: w }), setDeleting), [canManage, askCheck]);
   const rows = query.data?.data ?? [];
-  // One alert per app whose sign-in was refused, with the way to fix it on the app's page.
-  const refused = Object.values(Object.fromEntries(rows.filter((w) => !w.checking && w.lastCheck?.status === 'refused').map((w) => [w.plugin, w])));
+  // One alert per app and reason a check was refused, saying that reason and, where a person can fix it, the way.
+  const refused = Object.values(
+    Object.fromEntries(rows.filter((w) => !w.checking && w.lastCheck?.status === 'refused').map((w) => [`${w.plugin}:${w.lastCheck?.code ?? ''}`, w])),
+  );
 
   return (
     <PageLayout
@@ -179,27 +196,30 @@ export default function WatchedFoldersPage() {
         <QueryError what="watched folders" onRetry={() => query.refetch()} retrying={query.isFetching} error={query.error} />
       ) : (
         <div className="flex flex-col gap-4">
-          {refused.map((w) => (
-            <Alert key={w.plugin} data-testid="watch-refused">
-              <Plug className="size-4" />
-              <AlertTitle>
-                Checks stopped: <AppName plugin={w.plugin} /> refused the sign-in
-              </AlertTitle>
-              <AlertDescription className="flex flex-col items-start gap-2">
-                <span>
-                  {w.lastCheck?.stopped || 'No check could reach it.'} Nothing was lost; the next check after reconnecting takes everything since.
-                  {canManage ? '' : ' Ask a builder to reconnect.'}
-                </span>
-                {canManage && (
-                  <Button asChild variant="outline" size="sm">
-                    <Link href={appPageHref(`plugin:${w.plugin}`)} data-testid="watch-reconnect">
-                      <Plug className="size-4" /> Reconnect
-                    </Link>
-                  </Button>
-                )}
-              </AlertDescription>
-            </Alert>
-          ))}
+          {refused.map((w) => {
+            const why = refusal(w.lastCheck?.code);
+            return (
+              <Alert key={`${w.plugin}:${w.lastCheck?.code ?? ''}`} data-testid="watch-refused" data-code={w.lastCheck?.code || undefined}>
+                <Plug className="size-4" />
+                <AlertTitle>
+                  Checks stopped: <AppName plugin={w.plugin} /> {why.title}
+                </AlertTitle>
+                <AlertDescription className="flex flex-col items-start gap-2">
+                  <span>
+                    {w.lastCheck?.stopped || why.fallback} Nothing was lost; {why.next}
+                    {canManage || !why.action ? '' : ' Ask a builder to fix it on the app’s page.'}
+                  </span>
+                  {canManage && why.action && (
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={appPageHref(`plugin:${w.plugin}`)} data-testid="watch-reconnect">
+                        <Plug className="size-4" /> {why.action}
+                      </Link>
+                    </Button>
+                  )}
+                </AlertDescription>
+              </Alert>
+            );
+          })}
           <DataTableWithViews
             columns={cols}
             data={rows}

@@ -226,8 +226,41 @@ try {
         await page.unroute((u) => isList(u.href));
         watching.on = true;
 
-        check('19 no sideways scroll at 1440 or 390 on any screen', wide.length === 0, wide);
-        check('19 no page or console errors', problems.length === 0, problems);
+        // The running and refused states, drawn on the real list by changing what its one request answers: a check
+        // in progress, then a check refused for its sign-in and one refused because apps could not be reached.
+        const answered = (change) => async (route) => {
+          if (route.request().method() !== 'GET') return route.continue();
+          const real = await route.fetch();
+          const json = await real.json();
+          json.data = { ...json.data, data: json.data.data.map((w) => (w.id === watch.id ? change(w) : w)) };
+          return route.fulfill({ response: real, json });
+        };
+        await page.route((u) => isList(u.href), answered((w) => ({ ...w, checking: true })));
+        await page.goto(watches, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        const checking = page.getByTestId(`watch-checking-${watch.id}`);
+        await checking.waitFor({ timeout: 60_000 });
+        check('19 a check in progress shows Checking on its row', await checking.isVisible());
+        await shoot(page, 'uc-772-checking', async () => checking.waitFor(), wide);
+        await page.unroute((u) => isList(u.href));
+        const refusedAs = (code, stopped) => (w) => ({ ...w, checking: false, lastCheckAt: new Date().toISOString(), lastCheck: { ...w.lastCheck, status: 'refused', code, stopped } });
+        await page.route((u) => isList(u.href), answered(refusedAs('needs_reconnect', 'The connection refused its sign-in.')));
+        await page.goto(watches, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        const alert = page.locator('[data-testid="watch-refused"][data-code="needs_reconnect"]');
+        await alert.waitFor({ timeout: 60_000 });
+        const alertText = await alert.innerText();
+        check('19 a check refused for its sign-in says so with Reconnect', /refused the sign-in/.test(alertText) && (await alert.getByTestId('watch-reconnect').isVisible()), alertText);
+        await shoot(page, 'uc-772-refused', async () => alert.waitFor(), wide);
+        await page.unroute((u) => isList(u.href));
+        await page.route((u) => isList(u.href), answered(refusedAs('unreachable', 'Apps could not be reached.')));
+        await page.goto(watches, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        const away = page.locator('[data-testid="watch-refused"][data-code="unreachable"]');
+        await away.waitFor({ timeout: 60_000 });
+        const awayText = await away.innerText();
+        check('19 a check refused because apps could not be reached says that, with no Reconnect', /could not be reached/.test(awayText) && !/sign-in/.test(awayText) && (await away.getByTestId('watch-reconnect').count()) === 0, awayText);
+        await page.unroute((u) => isList(u.href));
+
+        check('20 no sideways scroll at 1440 or 390 on any screen', wide.length === 0, wide);
+        check('20 no page or console errors', problems.length === 0, problems);
       } catch (e) {
         const shown = browser.contexts()[0]?.pages()[0];
         if (shown) console.log(`the page when it stopped: ${(await shown.locator('body').innerText().catch(() => '')).slice(0, 1500)}`);

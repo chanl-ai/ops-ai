@@ -1188,6 +1188,11 @@ export interface components {
              */
             brought: number;
             /**
+             * Code
+             * @default
+             */
+            code: string;
+            /**
              * Failed
              * @default 0
              */
