@@ -1,5 +1,6 @@
-"""The schedule clock on the migrated test database, by failure mode: two machines on one slot start two runs, or record
-a slot that ran as skipped; a dead clock looks healthy on Background."""
+"""The schedule clock on the migrated test database, by failure mode: two machines on one slot both tick it, so a slot
+that ran reads as skipped; the worker never starts the clock; a dead clock looks healthy on Background. The slot write
+that names the slot it read is proven in tests/store/test_workflow_schedules.py."""
 
 from __future__ import annotations
 
@@ -13,7 +14,8 @@ from uuid import uuid4
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from ops_agents.api.schedule_clock import ScheduleClock, keep_schedules_ticking
+from ops_agents.api.schedule_clock import SCHEDULE_TRIGGER, ScheduleClock, Tick, WorkflowStart, keep_schedules_ticking
+from ops_agents.api.worker import serve
 from ops_agents.store.background import heartbeats
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.leases import Leases
@@ -21,10 +23,32 @@ from ops_agents.store.schedules import WorkflowSchedules
 from ops_agents.store.tenancy import tenant_scope
 from ops_agents.store.trigger_events import TriggerEvents
 from ops_engine.store import DefinitionStore, RunStore
+from ops_service_kit.settings import Settings
 from ops_store.schedule import default_kinds
 from ops_store.testing import loop_reports_failure
+from tests.conftest import SEED
 
 TEAM = "team_pay"
+
+
+class Held(WorkflowStart):
+    """Machine a's target: holds inside its tick until the test lets go, so machine b's pass falls inside it."""
+
+    def __init__(self, runs: RunStore) -> None:
+        super().__init__(runs)
+        self.inside, self.go = asyncio.Event(), asyncio.Event()
+
+    async def tick(self, tick: Tick) -> str | None:
+        self.inside.set()
+        await self.go.wait()
+        return await super().tick(tick)
+
+
+class Behind(WorkflowStart):
+    """Machine b's target, one step behind: it still sees the last run as going."""
+
+    async def busy(self, tick: Tick) -> bool:
+        return True
 
 
 def at(hhmm: str) -> datetime:
@@ -56,10 +80,16 @@ async def test_two_machines_on_one_slot_give_one_run_and_one_outcome(database_ur
             )
             await store.go_live(wid, version)
             await WorkflowSchedules(db).save(wid, "start", TEAM, rule, "user_ana")
-        a = ScheduleClock(db, Leases(db, owner="worker:a", ttl=30))
-        b = ScheduleClock(db, Leases(db, owner="worker:b", ttl=30))
+        runs = RunStore(EngineTransactions(db))
+        held = Held(runs)
+        a = ScheduleClock(db, Leases(db, owner="worker:a", ttl=30), handlers={SCHEDULE_TRIGGER: held})
+        b = ScheduleClock(db, Leases(db, owner="worker:b", ttl=30), handlers={SCHEDULE_TRIGGER: Behind(runs)})
         await a.pass_once(at("09:59"))
-        await asyncio.gather(a.pass_once(at("10:00")), b.pass_once(at("10:00")))
+        first = asyncio.create_task(a.pass_once(at("10:00")))
+        await asyncio.wait_for(held.inside.wait(), 10)
+        await b.pass_once(at("10:00"))  # inside a's tick: the lease is a's
+        held.go.set()
+        await first
         with tenant_scope(tenant):
             runs = await RunStore(EngineTransactions(db)).list(workflow_id=wid)
             row = await WorkflowSchedules(db).get(wid, "start")
@@ -71,7 +101,9 @@ async def test_two_machines_on_one_slot_give_one_run_and_one_outcome(database_ur
         await db.dispose()
 
 
-async def test_a_failing_clock_pass_shows_on_health(client: AsyncClient, database_url: str) -> None:
+async def test_the_worker_starts_the_clock_and_a_failing_pass_shows_on_health(
+    client: AsyncClient, database_url: str
+) -> None:
     engine, stop, running = create_async_engine(database_url), asyncio.Event(), list[asyncio.Task[None]]()
     down = create_async_engine("postgresql+asyncpg://nobody@127.0.0.1:9/none")
 
@@ -80,6 +112,18 @@ async def test_a_failing_clock_pass_shows_on_health(client: AsyncClient, databas
         running.append(asyncio.create_task(keep_schedules_ticking(clock, stop, heartbeats(engine))))
 
     try:
+        worker_stop = asyncio.Event()
+        worker = asyncio.create_task(serve(Settings(database_url=database_url, seed_dir=SEED), worker_stop))
+        try:
+            for _ in range(100):
+                if any(b.process == "schedule_clock" for b in await heartbeats(engine).read()):
+                    break
+                await asyncio.sleep(0.1)
+            else:
+                raise AssertionError("the worker never wrote the schedule clock's heartbeat")
+        finally:
+            worker_stop.set()
+            await asyncio.wait_for(worker, 30)
         await loop_reports_failure(client, "schedule_clock", trip, within_s=10)
     finally:
         stop.set()

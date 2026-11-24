@@ -206,8 +206,9 @@ class Settings(BaseSettings):
     mailboxes_seed_file: Path | None = None
     # How often the workflow worker reads each bound mailbox.
     email_poll_seconds: float = 30.0
-    # The shortest gap between two runs a saved schedule may ask for, every rule kind alike. Raising it leaves saved
-    # schedules running; each is refused at its next save (docs/architecture/roles-and-permissions.md).
+    # The shortest gap between two runs a saved schedule may ask for, every rule kind alike. Only a save checks it (a
+    # save applies at once, outside versions), so raising it leaves saved schedules running and refuses each at its
+    # next save (docs/architecture/roles-and-permissions.md).
     schedule_floor_minutes: int = 5
     # Mail out (packages/ops_email): "none" fails every send with that reason; "smtp", "resend" and "graph" send from
     # `mail_from`; "fake" is dev only and writes each message to `mail_fake_out_dir`.
