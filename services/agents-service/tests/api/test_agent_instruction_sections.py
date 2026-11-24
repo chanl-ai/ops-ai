@@ -2,13 +2,14 @@
 drops or hides a fixed section is stored, or the never rules stop being the last thing the model reads once the list
 is reordered; a section an admin adds is written at the end of the prompt instead of where the list places it, or
 resetting the list leaves the prompt different from the one written before the list existed; a person without
-`settings.manage` changes the list.
+`settings.manage` changes the list; a section's menu group, example line or presets are dropped on save, or an item
+is stored with more presets than the eight the editor draws.
 
 Everything is read as a caller reads it: the list from GET, a refusal from PUT or DELETE, and the order from the
 prompt route of an agent saved after the change. What these tests ask beyond the design's words: the body and the
 reply are `{sections: [...], customMax}`; a refused list answers 422 `validation_failed` with a message naming
 `sections`; a section sent without an `id` is given one, read back here by its label; the cell is read in the team the
-request acts in."""
+request acts in; an item carries `group`, `example` and `presets`, each preset `{id, label, icon, text}`."""
 
 from __future__ import annotations
 
@@ -173,3 +174,32 @@ async def test_the_list_is_changed_only_by_a_person_who_holds_settings_manage(st
     assert tone["hint"] == "Formal, no slang."
     assert (await c.delete(ROUTE, headers=ADMIN)).status_code == 200
     assert await listed(c, VIEWER) == default
+
+
+def preset(n: int) -> dict[str, str]:
+    return {"id": f"p{n}", "label": f"Preset {n}", "icon": "smile", "text": f"Sentence {n} a builder may edit."}
+
+
+async def test_a_section_keeps_its_group_example_and_presets_and_more_than_eight_presets_are_refused(
+    stack: Stack,  # noqa: F811
+) -> None:
+    c, _ = stack
+    default = await listed(c, ADMIN)
+
+    def with_tone(presets: list[dict[str, str]]) -> dict[str, Any]:
+        tone = {"group": "House voice", "example": "Friendly, first names, no jargon.", "presets": presets}
+        return numbered([{**s, **tone} if s["id"] == "tone" else s for s in in_order(default)], default)
+
+    eight = [preset(n) for n in range(8)]
+    kept = await c.put(ROUTE, json=with_tone(eight), headers=ADMIN)
+    assert kept.status_code == 200, kept.text
+    stored = await listed(c, BUILDER)
+    tone = next(s for s in stored["sections"] if s["id"] == "tone")
+    assert (tone.get("group"), tone.get("example")) == ("House voice", "Friendly, first names, no jargon."), tone
+    assert tone.get("presets") == eight, tone
+
+    res = await c.put(ROUTE, json=with_tone([preset(n) for n in range(9)]), headers=ADMIN)
+    error = res.json().get("error", {})
+    assert (res.status_code, error.get("code")) == (422, "validation_failed"), res.text
+    assert "sections" in error.get("message", ""), error
+    assert await listed(c, BUILDER) == stored, "a refused list stores nothing"

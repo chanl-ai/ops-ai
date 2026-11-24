@@ -152,3 +152,11 @@ def compliance_id(listing: Any) -> str:
 def compliance_sections(section_id: str) -> list[dict[str, str]]:
     """What a builder adds once the list holds it: the workspace's section and Tone, saved in that order."""
     return [{"kind": section_id, "text": COMPLIANCE_TEXT}, {"kind": "tone", "text": "Calm and plain."}]
+
+
+def warm_preset(listing: Any) -> bool:
+    """Whether the list's Tone section offers a preset labelled Warm with an id, an icon name and a sentence."""
+    sections = listing.get("sections") if isinstance(listing, dict) else None
+    tone = next((s for s in sections or [] if isinstance(s, dict) and s.get("id") == "tone"), {})
+    presets = [p for p in tone.get("presets") or [] if isinstance(p, dict) and p.get("label") == "Warm"]
+    return bool(presets) and all(isinstance(presets[0].get(k), str) and presets[0][k] for k in ("id", "icon", "text"))

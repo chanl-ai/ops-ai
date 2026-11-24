@@ -37,6 +37,7 @@ with a read and a write on a mock bank, published for the team, and platform sig
 | S6 | A builder types `@` on the agent page, adds a tool, and the test chat shows the step | ui | 10, 12, 13, 17 | 13 |
 | S7 | A builder adds Tone and a section of his own to a brief, and the prompt shows them in order with Never last | api | 24, 25, 26, 27, 28 | 24 |
 | S8 | An admin adds a section to the workspace's list, a builder adds it to an agent, and agents saved before keep their prompt | api | 29, 30, 31, 32 | 29 |
+| S9 | A builder finds a section in a grouped menu he can search, and a preset writes a sentence he can edit | ui | 33 | 33 |
 
 ## Preconditions
 
@@ -71,10 +72,11 @@ with a read and a write on a mock bank, published for the team, and platform sig
 | 26 | The SDK applies an agent definition whose brief has `sections`, reads it back and reads the prompt | The same two sections and the same heading order |
 | 27 | `opsai agents apply` on a file whose brief has `sections`, then `export` | The export prints `brief.sections` and `instructions` with the headings in order |
 | 28 | James opens an agent whose brief has no sections, picks Tone from Add section and then Add custom section, names it and writes both; he opens View prompt; Maya opens the same agent (ui, 1440 and 390) | The agent opens with no added section and View prompt reads as the service writes it. Both sections save and are drawn, each with a Remove control; View prompt shows Tone before How to answer, his section after it and Never last; at 390 nothing scrolls sideways. Maya reads both sections and sees no Add section and no Remove |
-| 29 | Priya reads the workspace's list of sections, adds Compliance notes straight after Tone and renames Tone to Voice; James and a viewer read the list and each tries to save and to reset it; James saves a brief with Compliance notes and Tone; Priya resets the list | The save is Priya's alone: James and the viewer read the new section and are refused, 403. The brief replies the sections named Compliance notes and Voice, and the prompt's headings read Who you are, Voice, Compliance notes, How to answer, Hand off when, Never. The agent of step 24 has the same `instructions` and prompt as before, still headed Tone. After the reset the list is the one first read |
-| 30 | The SDK reads and saves the list as Priya, saves it as a viewer, applies an agent whose brief has the added section, and resets the list | The viewer's save is refused, 403; the same two sections and heading order; the list read after the reset is the first one |
+| 29 | Priya reads the workspace's list of sections, adds Compliance notes straight after Tone and renames Tone to Voice; James and a viewer read the list and each tries to save and to reset it; James saves a brief with Compliance notes and Tone; Priya resets the list | The save is Priya's alone: James and the viewer read the new section and are refused, 403. The brief replies the sections named Compliance notes and Voice, and the prompt's headings read Who you are, Voice, Compliance notes, How to answer, Hand off when, Never. The agent of step 24 has the same `instructions` and prompt as before, still headed Tone. After the reset the list is the one first read. The list first read offers a Warm preset on Tone with an id, an icon and a sentence |
+| 30 | The SDK reads and saves the list as Priya, saves it as a viewer, applies an agent whose brief has the added section, and resets the list | The viewer's save is refused, 403; the same two sections and heading order; the list read after the reset is the first one; the list read offers the Warm preset on Tone |
 | 31 | `opsai agents sections`, `sections-apply` on a file as Priya and as a viewer, `agents apply` and `export`, then `sections-reset` | The viewer's command fails; the export prints the two sections and `instructions` with the headings in the list's order; `sections` prints the first list again |
 | 32 | Priya opens Settings, Agent instructions and adds Compliance notes; the list then places it before Tone and renames Tone to Voice; James picks Compliance notes from Add section on an agent and opens View prompt, then opens the agent of step 28; a viewer opens the settings page; Priya presses Reset to default (ui, 1440 and 390) | The list holds Compliance notes as a menu section. View prompt reads Compliance notes, Voice, How to answer, Hand off when, Never last. The agent of step 28 shows the prompt it had, headed Tone. The viewer reads the list with no Add section and no Reset to default; at 390 nothing scrolls sideways. After the reset the list is the first one |
+| 33 | James opens an agent with no sections, opens Add section, searches it, picks Tone, presses its Warm preset, types into the sentence it wrote and opens View prompt (ui, 1440) | The menu has a search field and lists the sections under Voice and style, Context and Behaviour, each with its example line; a search for tone lists Tone first and a word no section has lists none. The preset's sentence is drawn as text, saves with the words he typed, and View prompt shows it under Tone |
 
 ## Acceptance layers
 
@@ -107,3 +109,7 @@ a new section after the ones the product ships fails the heading order, and Tone
 agent of step 24 fails the step if a change to the list rewrites a saved prompt. Priya's save going through is paired
 with James's and the viewer's being refused. In step 32 moving a section with the page's own control is not walked:
 the move is saved through the list's route (TODO: walk the control by hand).
+
+Step 33 is the check for presets: James types into the sentence the Warm preset wrote, so a preset kept as a
+setting beside the text, or drawn as text he cannot edit, fails the save. The search listing Tone is paired with a
+word no section has listing none.
