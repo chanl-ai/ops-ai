@@ -1,4 +1,4 @@
-# Hold a write for a person's approval
+# Hold a write for approval
 
 Status: current. Run end to end through the API, the SDK and the chat.
 

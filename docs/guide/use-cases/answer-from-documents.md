@@ -1,4 +1,4 @@
-# Answer questions from your documents
+# Answer from your documents
 
 Status: current. The steps below run end to end in the console, the CLI and both SDKs.
 

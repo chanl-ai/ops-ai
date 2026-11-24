@@ -31,7 +31,7 @@ export const SITE = [
         icon: 'rocket',
         open: true,
         entries: [
-          { page: 'welcome.md', title: 'Welcome', icon: 'house' },
+          { page: 'welcome.md', icon: 'house' },
           { page: 'guide/quickstart.md', icon: 'zap' },
           { page: 'guide/overview.md', title: 'Core concepts', icon: 'layout-grid' },
           { page: 'guide/examples/coming-from-other-frameworks.md', title: 'Coming from another framework', icon: 'arrow-right-left' },
@@ -45,12 +45,12 @@ export const SITE = [
         entries: [
           { page: 'guide/agents.md', icon: 'bot' },
           { page: 'guide/workflows.md', icon: 'git-branch' },
-          { page: 'guide/human-tasks.md', title: 'Approvals and human tasks', icon: 'user-check' },
+          { page: 'guide/human-tasks.md', icon: 'user-check' },
           { page: 'guide/cases.md', title: 'Cases', icon: 'folder-open' },
           { page: 'guide/knowledge.md', title: 'Knowledge', icon: 'library' },
-          { page: 'guide/apps.md', title: 'Apps and tools', icon: 'app-window' },
+          { page: 'guide/apps.md', icon: 'app-window' },
           { page: 'guide/ops-assistant.md', title: 'Chat and channels', icon: 'message-square' },
-          { page: 'guide/teams-and-access.md', title: 'Teams and roles', icon: 'users' },
+          { page: 'guide/teams-and-access.md', icon: 'users' },
         ],
       },
       {
@@ -71,10 +71,10 @@ export const SITE = [
         icon: 'plug',
         open: true,
         entries: [
-          { page: 'guide/integrations/overview.md', title: 'Catalog', icon: 'plug' },
+          { page: 'guide/integrations/overview.md', icon: 'plug' },
           { page: 'guide/integrations/salesforce.md', title: 'Salesforce', icon: 'cloud' },
           { page: 'guide/integrations/github.md', title: 'GitHub', icon: 'git-branch' },
-          { page: 'guide/integrations/sharepoint.md', title: 'SharePoint', icon: 'folder-open' },
+          { page: 'guide/integrations/sharepoint.md', icon: 'folder-open' },
           { page: 'guide/integrations/confluence.md', title: 'Confluence', icon: 'book-open-text' },
           { page: 'guide/integrations/website.md', title: 'Website', icon: 'globe' },
           { page: 'guide/integrations/authentication.md', title: 'Authentication', icon: 'key-round' },

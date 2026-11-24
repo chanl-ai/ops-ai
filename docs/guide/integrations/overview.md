@@ -1,4 +1,4 @@
-# Integrations
+# Integration catalog
 
 Status: current.
 

@@ -1,4 +1,4 @@
-# Connect an app and use it in an agent
+# Connect an app to an agent
 
 Status: current. Run end to end against a Salesforce stand-in, in the console, the API, the SDK and the CLI.
 

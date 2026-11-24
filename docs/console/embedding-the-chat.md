@@ -1,4 +1,4 @@
-# Chat on your own pages
+# Put chat on your own pages
 
 Status: current. The server side, the loader and the embed app are built and checked end to end on a sample page. The
 installer does not run the embed app yet; adding it to the Compose and Kubernetes installs is planned.
