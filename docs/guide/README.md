@@ -45,3 +45,4 @@ Each status in this guide is read from the code of the release it ships with. **
 16. [Azure SQL](azure-sql.md): what is ready for review and what is still to come
 17. [What's built today](whats-built-today.md): built, partial or planned, capability by capability
 18. [Support](support.md): who to contact
+19. [Watch a folder](watch-a-folder.md): bring an app's folders into Files, with versions and failed files

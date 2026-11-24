@@ -88,10 +88,16 @@ Grants = dict[str, tuple[tuple[str, ...], tuple[str, ...]]]
 # documents' restart. Held equal to the PostgreSQL grants by test_model_parity.py.
 SYSTEM_USERS: dict[str, tuple[str, Grants]] = {
     SYSTEM_CHAIN: (SYSTEM_USER, SYSTEM_READS),
-    # files: the retention purge reads which snapshots were released (files_0014).
+    # files: the retention purge reads which snapshots were released (files_0014); the watch check process lists
+    # watches with a check asked for, and the retention sweep deletes old watch events (files 20261124_0010).
     "files": (
         "ops_files_system",
-        {"files_outbox": (("SELECT", "UPDATE", "DELETE"), ()), "files": (("SELECT",), ())},
+        {
+            "files_outbox": (("SELECT", "UPDATE", "DELETE"), ()),
+            "files": (("SELECT",), ()),
+            "file_watches": (("SELECT",), ()),
+            "file_watch_events": (("SELECT", "DELETE"), ()),
+        },
     ),
     # tools: the team-default catch-up, review hand-over and sign-in keep-alive listings, the relay and the secret
     # audit sweep (tools_0081).

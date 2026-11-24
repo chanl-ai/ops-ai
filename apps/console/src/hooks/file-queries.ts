@@ -5,6 +5,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api, filesOnService } from '@/lib/api';
+import { sdk } from '@/lib/api/ops-sdk';
+import type { OpsAI } from '@chanl-ai/ops-ai';
 import type { EvidenceExportInput, FileFilters, FilePurpose, FileView, ScanStatus, StorageCredentialInput, StorageSettingsInput, StorageTarget } from '@/lib/types/files';
 import type { AuditFilters, AuditView } from '@/lib/types/governance';
 import type { ListParams } from '@/lib/types/query';
@@ -14,6 +16,7 @@ import { teamKey, useTeamQuery } from './team-query';
 export const useFilesOnService = () => filesOnService;
 
 export const fk = {
+  watches: (p: unknown) => ['files', 'watches', p] as const,
   list: (p: unknown) => ['files', 'list', p] as const,
   one: (id: string) => ['files', 'one', id] as const,
   limits: ['files', 'limits'] as const,
@@ -187,3 +190,38 @@ export function useFileUpload({ purpose, team, retentionClass, multiple, upload 
 
   return { items, add, remove, retry, reset, limit, limitsLoading: limits.isPending, scanning: limits.data?.scanning ?? true };
 }
+
+// ── Watched folders ─────────────────────────────────────────────────────────
+
+type FilesOps = OpsAI['raw']['files'];
+type Data<K extends keyof FilesOps> = Awaited<ReturnType<FilesOps[K]>>;
+export type WatchPage = Data<'watches_list_watches'>;
+export type Watch = WatchPage['data'][number];
+export type WatchLastCheck = NonNullable<Watch['lastCheck']>;
+export type WatchInput = NonNullable<NonNullable<Parameters<FilesOps['watches_create_watch']>[0]>['body']>;
+
+/** How often a list with a check running is read again, so Checking… ends without a reload. */
+const CHECK_POLL_MS = 2000;
+
+/** One page of the team's watched folders, searched on the server (GET /v1/watches); polls while a check runs. */
+export const useWatches = (p: ListParams) =>
+  usePagedQuery({
+    queryKey: fk.watches(p),
+    queryFn: () => sdk((ops) => ops.raw.files.watches_list_watches({ query: { page: p.page, pageSize: p.pageSize, search: p.search } })),
+    refetchInterval: (q) => (q.state.data?.data.some((w) => w.checking) ? CHECK_POLL_MS : false),
+  });
+
+/** A watch's writes show in the list and in the audit log, which names the folders. */
+function useWatchWrite<A, R>(fn: (a: A) => Promise<R>) {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: fn, onSuccess: () => Promise.all(['files', 'logs'].map((k) => qc.invalidateQueries({ queryKey: [k] }))) });
+}
+
+export const useCreateWatch = () => useWatchWrite((body: WatchInput) => sdk((ops) => ops.raw.files.watches_create_watch({ body })));
+export const useChangeWatch = () =>
+  useWatchWrite(({ id, name, values, names }: { id: string; name?: string; values?: WatchInput['values']; names?: WatchInput['names'] }) =>
+    sdk((ops) => ops.raw.files.watches_change_watch({ path: { watch_id: id }, body: { name, values, names } })),
+  );
+/** Check now; a check already running answers 409 `already_checking`, which the caller words. */
+export const useCheckWatch = () => useWatchWrite((id: string) => sdk((ops) => ops.raw.files.watches_check_watch({ path: { watch_id: id } })));
+export const useDeleteWatch = () => useWatchWrite((id: string) => sdk((ops) => ops.raw.files.watches_delete_watch({ path: { watch_id: id } })));

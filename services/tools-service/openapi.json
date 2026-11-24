@@ -6826,6 +6826,11 @@
             "title": "Fetchatonce",
             "type": "integer"
           },
+          "files": {
+            "default": false,
+            "title": "Files",
+            "type": "boolean"
+          },
           "getTakesTag": {
             "default": false,
             "title": "Gettakestag",

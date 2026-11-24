@@ -180,3 +180,78 @@ async def test_a_file_the_source_answers_unchanged_keeps_its_new_marker() -> Non
 
 
 async def _none(row: Json, item: Json) -> None: ...
+
+
+async def test_a_run_that_does_not_settle_keeps_the_changes_cursor_so_the_next_lists_the_same_changes() -> None:
+    folder = Folder()
+    tools = SourceTools(list="list_files", get="get_file", changes="list_changes")
+    place = Place(watermark="2026-11-20T00:00:00Z", changes_cursor="delta-6", last_full_at="2026-11-21T00:00:00+00:00")
+    asked: list[JsonValue] = []
+
+    async def call(tenant_id: str, team_id: str, tool: str | None, args: dict[str, JsonValue], *, act: str) -> Answer:
+        asked.append(args.get("cursor"))
+        row: JsonValue = {"id": "inv-004.pdf", "updated_at": "2026-11-22T08:00:00Z"}
+        return Answer(True, {"items": [row], "cursor": "delta-7"})
+
+    folder.call = call  # type: ignore[method-assign]
+    for status in ("partial", "success"):
+        counts = {"listed": 0, "unchanged": 0, "skipped": 0, "failed": 0}
+        listing = await read_changes(
+            folder, Watch({}), place, tools, tenant="local", team="team_ap", values=None, connection_id="con_ap",
+            full=False, trigger="schedule", act="files-check:watch_1", counts=counts,
+            clock=lambda: datetime(2026, 11, 22, 9, tzinfo=UTC),
+        )  # fmt: skip
+        listing.settle(place, status)
+    # The partial run left the place where it was, so the run after it asked for the same changes again.
+    assert asked == ["delta-6", "delta-6"]
+    assert (place.changes_cursor, place.last_full_at) == ("delta-7", "2026-11-21T00:00:00+00:00")
+
+
+async def test_a_file_that_fails_every_fetch_is_tried_three_runs_then_left_until_its_marker_moves() -> None:
+    folder = Folder()
+    got: list[str] = []
+    first: JsonValue = {"id": "inv-001.pdf", "updated_at": "2026-11-20T09:00:00Z", "marker": "e1"}
+    page: dict[str, JsonValue] = {"items": [first]}
+
+    async def call(tenant_id: str, team_id: str, tool: str | None, args: dict[str, JsonValue], *, act: str) -> Answer:
+        if tool == "get_file":
+            got.append(str(args["id"]))
+            return Answer(False, code="ACCESS_DENIED", message="The file is locked for editing.")
+        return Answer(True, page)
+
+    folder.call = call  # type: ignore[method-assign]
+    tools = SourceTools(list="list_files", get="get_file")
+    watch, place = Watch({}), Place()
+    said: list[tuple[list[str], list[str], bool]] = []
+    for _ in range(4):
+        counts = {"listed": 0, "unchanged": 0, "skipped": 0, "failed": 0}
+        listing = await read_changes(
+            folder, watch, place, tools, tenant="local", team="team_ap", values=None, connection_id="con_ap",
+            full=True, trigger="schedule", act="files-check:watch_1", counts=counts,
+            clock=lambda: datetime(2026, 11, 22, tzinfo=UTC),
+        )  # fmt: skip
+        fetcher = Fetcher(folder, watch, tools, listing, tenant="local", team="team_ap", act="files-check:watch_1")
+        done = await fetcher.fetch_changed(place, counts, [], [], on_listed=_none, on_fetched=_none)
+        said.append((done.failed_first, done.retrying, "inv-001.pdf" in listing.seen))
+        listing.settle(place, "partial" if done.retrying else "success")
+    # One failure said per version; tried on three runs, then left (still listed, so never removed) and the run settles.
+    assert got == ["inv-001.pdf"] * 3
+    assert said == [
+        (["inv-001.pdf"], ["inv-001.pdf"], True),
+        ([], ["inv-001.pdf"], True),
+        ([], [], True),
+        ([], [], True),
+    ]
+    assert place.last_full_at == "2026-11-22T00:00:00+00:00"
+    # A new version at the source is fetched again.
+    page["items"] = [{"id": "inv-001.pdf", "updated_at": "2026-11-23T09:00:00Z", "marker": "e2"}]
+    counts = {"listed": 0, "unchanged": 0, "skipped": 0, "failed": 0}
+    listing = await read_changes(
+        folder, watch, place, tools, tenant="local", team="team_ap", values=None, connection_id="con_ap",
+        full=True, trigger="schedule", act="files-check:watch_1", counts=counts,
+        clock=lambda: datetime(2026, 11, 23, tzinfo=UTC),
+    )  # fmt: skip
+    done = await Fetcher(folder, watch, tools, listing, tenant="local", team="team_ap", act="w").fetch_changed(
+        place, counts, [], [], on_listed=_none, on_fetched=_none
+    )
+    assert (got[-1], done.failed_first) == ("inv-001.pdf", ["inv-001.pdf"])

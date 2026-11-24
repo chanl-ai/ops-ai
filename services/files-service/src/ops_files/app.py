@@ -88,6 +88,7 @@ from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
 from ops_service_kit.names import FileName
 from ops_service_kit.settings import Settings
+from ops_sources import Reader
 from ops_storage.base import ObjectLockedError, ObjectNotFoundError, content_disposition
 from ops_store import isolation
 from ops_store.background import LOCAL as LOCAL_BEATS
@@ -147,6 +148,10 @@ class ScanResultIn(In):
     status: Literal["clean", "infected", "failed"]
     engine: str = Field(min_length=1, max_length=64)
     detail: str | None = Field(default=None, max_length=500)
+    # Which version was scanned, by number or by the SHA-256 of its bytes; required once a file has more than one, so a
+    # late verdict on an older version never clears a newer one.
+    version: int | None = Field(default=None, ge=1)
+    digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
 def _status(e: FilesError | HoldRefusedError | ObjectLockedError) -> ApiError:
@@ -253,10 +258,12 @@ def create_files_app(
     auth: Auth | None = None,
     settings: StorageSettings | None = None,
     background: Sequence[Callable[[], Coroutine[Any, Any, None]]] = (),
+    reader: Reader | None = None,
 ) -> FastAPI:
     """`files` holds the storage backend and tables; `auth` resolves callers through ops_identity, by default from
     Settings for audience "files": platform tokens are verified locally against platform-service's key set.
-    `settings` serves the storage settings routes; without it they are not mounted."""
+    `settings` serves the storage settings routes; without it they are not mounted. `reader` reads the sources the
+    team's apps declare, which a watched folder is checked against; without it a watch cannot be added."""
 
     async def kept(start: Callable[[], Coroutine[Any, Any, None]]) -> None:
         # Each process reports its own failures on /health/background; one that still escapes is logged here, so it
@@ -472,13 +479,15 @@ def create_files_app(
         return ok(link.model_dump(mode="json", by_alias=True))
 
     @public.get("/{file_id}/content", response_class=StreamingResponse, dependencies=[service_scope("view")])
-    async def get_content(file_id: str, who: Caller) -> StreamingResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_content(  # pyright: ignore[reportUnusedFunction]
+        file_id: str, who: Caller, version: Annotated[int | None, Query(ge=1)] = None
+    ) -> StreamingResponse:
         """A clean file's bytes: the proxy download for people, and the read agent runs, knowledge ingest and tool
-        fixtures use with a service token."""
+        fixtures use with a service token. `version` reads an earlier version once its own scan is clean."""
         # Not on Tx: the file's rows are read in the request's one transaction, closed before the first byte is read
         # from storage, so a slow download holds no connection (tests/test_request_transactions.py).
         async with isolation.request_transaction():
-            detail, chunks = await files.open_content(who, file_id)
+            detail, chunks = await files.open_content(who, file_id, version=version)
         return await _stream(detail, chunks)
 
     @public.delete("/{file_id}", status_code=204, response_class=Response)
@@ -509,13 +518,18 @@ def create_files_app(
 
     @public.post("/scan-results", response_model=Envelope[FileDetail])
     async def scan_result(body: ScanResultIn, caller: CurrentService, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """A scanner's verdict on one file of the token's tenant; the file stays pending and unreadable until then. Only
+        """A scanner's verdict on one version of a file of the token's tenant; that version stays pending and unreadable
+        until then, and 400 when a file of several versions is not told which. Only
         a token holding `files:decide`, which Settings.service_scopes gives the scanner alone, records one."""
         if not caller.tenant_id:
             raise Forbidden("The service token names no tenant.", code="tenant_required")
         can(caller, "files", "decide", what="a file's scan verdict")
         detail = await files.record_scan(
-            caller.tenant_id, body.file_id, ScanResult(body.status, body.engine, body.detail)
+            caller.tenant_id,
+            body.file_id,
+            ScanResult(body.status, body.engine, body.detail),
+            version=body.version,
+            digest=body.digest,
         )
         return ok(detail.model_dump(mode="json", by_alias=True))
 
@@ -547,6 +561,11 @@ def create_files_app(
         return ok(detail.model_dump(mode="json", by_alias=True))
 
     app.include_router(public)
+    # Imported here: the watches routes read this module's `who`, so they load once it has.
+    from ops_files.store import WatchesStore  # noqa: PLC0415
+    from ops_files.watch_routes import watches_router  # noqa: PLC0415
+
+    app.include_router(watches_router(WatchesStore(engine), reader=reader), responses=errors)
     if settings is not None:
         app.include_router(_settings_router(settings))
     return app

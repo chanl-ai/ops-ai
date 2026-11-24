@@ -8,6 +8,8 @@ account a test run uses); an account method left without `account` acts on the a
 
 from __future__ import annotations
 
+import asyncio
+import time
 from collections.abc import Iterator
 from typing import Any, cast
 
@@ -892,3 +894,100 @@ class AsyncPolicies:
 
     async def set(self, key: str, value: Any) -> dict[str, Any]:
         return cast(dict[str, Any], await self._raw.platform.policies_set_policy(key, {"value": value}))
+
+
+def _watch_body(
+    name: str, plugin: str, source: str, values: dict[str, Any], connection_id: str | None
+) -> dict[str, Any]:
+    body: dict[str, Any] = {"name": name, "plugin": plugin, "source": source, "values": values}
+    if connection_id is not None:
+        body["connectionId"] = connection_id
+    return body
+
+
+def _change_body(name: str | None, values: dict[str, Any] | None) -> dict[str, Any]:
+    return {k: v for k, v in (("name", name), ("values", values)) if v is not None}
+
+
+class Watches:
+    """The team's watched folders (Files > Watched folders): an app's folders a team copies into Files, one entry per
+    source file with a version per change. Adding, changing, checking and deleting one needs watches.manage (Admin
+    and Builder); every member reads them."""
+
+    def __init__(self, raw: Any) -> None:
+        self._raw = raw
+
+    def list(self, **query: Any) -> list[dict[str, Any]]:
+        return _every(self._raw.files.watches_list_watches, **query)
+
+    def get(self, watch_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], self._raw.files.watches_get_watch(watch_id))
+
+    def add(
+        self, name: str, *, plugin: str, source: str, values: dict[str, Any], connection_id: str | None = None
+    ) -> dict[str, Any]:
+        """Watches the folders `values` names (as the source's picker saves them); nothing is copied until a check."""
+        body = _watch_body(name, plugin, source, values, connection_id)
+        return cast(dict[str, Any], self._raw.files.watches_create_watch(body))
+
+    def change(self, watch_id: str, *, name: str | None = None, values: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Renames the watch or changes its folders; new folders are listed whole on the next check."""
+        return cast(dict[str, Any], self._raw.files.watches_change_watch(watch_id, _change_body(name, values)))
+
+    def delete(self, watch_id: str) -> None:
+        """Stops watching; the files already brought in stay in Files."""
+        self._raw.files.watches_delete_watch(watch_id)
+
+    def check(self, watch_id: str, *, wait: float = 0) -> dict[str, Any]:
+        """Check now. With `wait` (seconds), waits for the check to end and answers the watch with its last check;
+        otherwise answers at once. A check already running is refused with `already_checking`."""
+        self._raw.files.watches_check_watch(watch_id)
+        deadline = time.monotonic() + wait
+        watch = self.get(watch_id)
+        while wait and watch.get("checking") and time.monotonic() < deadline:
+            time.sleep(1)
+            watch = self.get(watch_id)
+        return watch
+
+    def events(self, watch_id: str, *, after: int = 0, limit: int = 100) -> dict[str, Any]:
+        """What the checks found after event `after`, oldest first; `nextAfter` asks for the next page."""
+        return cast(dict[str, Any], self._raw.files.watches_watch_events(watch_id, after=after, limit=limit))
+
+
+class AsyncWatches:
+    """The team's watched folders (Files > Watched folders); see `Watches`."""
+
+    def __init__(self, raw: Any) -> None:
+        self._raw = raw
+
+    async def list(self, **query: Any) -> list[dict[str, Any]]:
+        return await _every_async(self._raw.files.watches_list_watches, **query)
+
+    async def get(self, watch_id: str) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._raw.files.watches_get_watch(watch_id))
+
+    async def add(
+        self, name: str, *, plugin: str, source: str, values: dict[str, Any], connection_id: str | None = None
+    ) -> dict[str, Any]:
+        body = _watch_body(name, plugin, source, values, connection_id)
+        return cast(dict[str, Any], await self._raw.files.watches_create_watch(body))
+
+    async def change(
+        self, watch_id: str, *, name: str | None = None, values: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._raw.files.watches_change_watch(watch_id, _change_body(name, values)))
+
+    async def delete(self, watch_id: str) -> None:
+        await self._raw.files.watches_delete_watch(watch_id)
+
+    async def check(self, watch_id: str, *, wait: float = 0) -> dict[str, Any]:
+        await self._raw.files.watches_check_watch(watch_id)
+        deadline = time.monotonic() + wait
+        watch = await self.get(watch_id)
+        while wait and watch.get("checking") and time.monotonic() < deadline:
+            await asyncio.sleep(1)
+            watch = await self.get(watch_id)
+        return watch
+
+    async def events(self, watch_id: str, *, after: int = 0, limit: int = 100) -> dict[str, Any]:
+        return cast(dict[str, Any], await self._raw.files.watches_watch_events(watch_id, after=after, limit=limit))

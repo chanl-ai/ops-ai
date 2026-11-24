@@ -6,7 +6,8 @@ A run lists the changed items page by page from the saved place, saving it after
 marker with what is held, so only items whose marker moved are fetched. A full listing (the first, after a week, or
 every run of a source that lists whole) sees every item, so the reading service can remove what was not listed. A
 rate limit ends the run partial and the next resumes from the saved page; a saved page the system no longer honours
-restarts the listing once; a refused sign-in pauses the source until its connection is healthy again."""
+restarts the listing once; a refused sign-in pauses the source until its connection is healthy again. An item whose
+fetch failed on FETCH_TRIES runs in a row is left, still listed and so never removed, until its marker moves."""
 
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ from ops_service_kit.errors import Conflict
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.narrow import json_object
 
-from .contract import RECONNECT, SourceError, SourceTools, listing_of
+from .contract import FETCH_TRIES, RECONNECT, SourceError, SourceTools, listing_of
 from .state import Place, Reader, SourceState
 
 # Pages one run reads before it stops partial and saves its place, so a listing that never ends cannot hold a run.
@@ -52,6 +53,9 @@ class Listing:
     # large to fetch), so a reading service can record one as failed rather than as removed.
     skipped: list[Json] = field(default_factory=list[Json])
     watermark: str | None = None
+    # The changes tool's cursor the last page named; the place takes it only when the run settles as a success, so a
+    # change whose fetch failed is listed again by the next run.
+    changes_cursor: JsonValue = None
     # Seconds between two fetches: the source's own rate, or the slower pace its listing names.
     pace: float = 0.0
     errors: list[SourceError] = field(default_factory=list[SourceError])
@@ -60,12 +64,19 @@ class Listing:
     given: Json = field(default_factory=dict[str, JsonValue])
 
     def settle(self, place: Place, status: str) -> None:
-        """After a run that ended `status`: a finished listing moves the place on to its watermark."""
+        """After a run that ended `status`: a finished listing moves the place on to its watermark and its changes
+        cursor."""
         if status == "success":
             place.watermark = self.watermark
             place.cursor = None
+            if self.changes_cursor:
+                place.changes_cursor = self.changes_cursor
             if self.full:
                 place.last_full_at = self.started.isoformat()
+            if self.full and self.whole:
+                # A full listing names every item, so a failure kept for one it no longer names is dropped.
+                for gone in set(place.failed_fetches) - self.seen:
+                    place.failed_fetches.pop(gone)
 
 
 def _less_overlap(stamp: str) -> str:
@@ -197,8 +208,10 @@ async def read_changes(
             seen.add(item_id)
             newest = max(newest or "", str(r["updated_at"]))
             marker = str(r.get("marker") or r["updated_at"])
+            failed = json_object(place.failed_fetches.get(item_id))
             if r.get("deleted"):
                 found.removed_at_source.append(item_id)
+                place.failed_fetches.pop(item_id, None)
                 continue
             if item_id in tombstones:
                 # Removed after answering gone twice: a link elsewhere does not bring it back until it is lifted.
@@ -212,6 +225,11 @@ async def read_changes(
                 counts["skipped"] += 1
                 found.skipped.append(r)
                 log.append(f"{r.get('title') or item_id}: {r['skipped']}")
+                continue
+            tries = failed.get("tries")
+            if failed.get("marker") == marker and isinstance(tries, int) and tries >= FETCH_TRIES:
+                # Its fetch failed on every try for this version: left, but still seen, so a full listing keeps it.
+                counts["skipped"] += 1
                 continue
             ex = state.held(item_id)
             if ex is not None and ex.marker == marker and ex.current:
@@ -233,7 +251,7 @@ async def read_changes(
             found.watermark = str(out.get("watermark") or (_less_overlap(newest) if newest else since or ""))
             # The last page of a listing or of changes names where the next run's changes start.
             if out.get("cursor"):
-                place.changes_cursor = out["cursor"]
+                found.changes_cursor = out["cursor"]
             break
 
     if not found.resumes:

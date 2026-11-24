@@ -362,3 +362,20 @@ async def test_a_source_that_declares_no_get_tool_calls_no_tool_named_none(
     r = await kb.post(f"/v1/sources/{src['id']}/sync", json={"full": False})
     assert "None" not in {t for t, _ in tools.calls}, tools.calls
     assert r.status_code == 500 and await items(kb, src["id"]) == {}, r.text
+
+
+async def test_an_article_whose_fetch_failed_once_is_fetched_again_on_the_next_sync(
+    kb: httpx.AsyncClient, tools: FakeTools
+) -> None:
+    src = await source(kb)
+    await sync(kb, src["id"])
+    tools.articles["ka2"] |= {"updated_at": "2026-10-09T09:00:00Z", "body": "<p>Block it in the app at once.</p>"}
+    tools.fail[f"{GET}:ka2"] = "TOOL_FAILED"
+    failed = await sync(kb, src["id"])
+    # The watermark stays where it was, so the next sync lists the change again and fetches it.
+    assert failed["status"] == "partial", failed
+    tools.calls.clear()
+    again = await sync(kb, src["id"])
+    assert (again["status"], tools.got()) == ("success", ["ka2"]), again
+    found = {i["title"]: i for i in data(await kb.get(f"/v1/sources/{src['id']}/items"))["data"]}
+    assert found["Report a lost card"]["version"] == "v2"

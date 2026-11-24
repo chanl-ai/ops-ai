@@ -9,4 +9,4 @@ export {
   Unauthorized,
 } from './errors.js';
 export type { Config, Service, ServerEvent } from './transport.js';
-export { Accounts, Apps, Connectors, Credentials, Egress, Me, Policies, Resources, Secrets, Tools, Usage } from './words.js';
+export { Accounts, Apps, Connectors, Credentials, Egress, Me, Policies, Resources, Secrets, Tools, Usage, Watches } from './words.js';

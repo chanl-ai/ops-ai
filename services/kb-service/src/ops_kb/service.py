@@ -1120,6 +1120,8 @@ class KnowledgeService:
                     "plugin": d.plugin,
                     "source": d.source,
                     "site": d.site,
+                    "files": d.files,
+                    "connectionId": d.connectionId,
                     "needsConnection": needs,
                     "connected": not needs or (bool(d.connectionId) and d.connectionStatus == "healthy"),
                     "canCreate": refusal is None,
@@ -3796,6 +3798,8 @@ class AppKindParts(TypedDict, total=False):
     plugin: str
     source: str
     site: bool
+    files: bool
+    connectionId: str | None
     needsConnection: bool
     connected: bool
     canCreate: bool

@@ -224,6 +224,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `guide/apps-setup.md` | Set up an app: its states, turning it on, the first time for a plugin's app, auth configs and secrets, a run waiting for a person, turning it off |
 | `guide/whats-built-today.md` | Built, partial or planned, capability by capability |
 | `guide/knowledge.md` | Knowledge: bases, sources, presets and sync settings, and what is not enforced yet |
+| `guide/watch-a-folder.md` | Watch a folder: pick an app's folders, what arrives in Files, versions, failed files and what to do, Check now, stopping, and who may do it |
 | `guide/human-tasks.md` | Human tasks and approvals: pausing for a person, task types, approval settings and their defaults |
 | `guide/cases.md` | Cases: the record of one piece of work, opened by a workflow or the API, and what a case page shows |
 | `guide/teams-and-access.md` | Teams and access: teams as the data boundary, the built-in roles, the roles grid and its limits |
@@ -666,3 +667,4 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/admins-see-people-s-app-sign.md` | uc-770: Admins see people's app sign-ins and end one |
 | `usecases/agents-service/a-builder-takes-a-new-skill.md` | uc-771: A builder takes a new skill to its first publish in under ten minutes |
 | `usecases/kb-service/search-a-long-document-s-pieces.md` | uc-772: Search a long document's pieces on the server |
+| `usecases/files-service/a-watched-folder-brings-files-in.md` | uc-779: A watched folder brings files in |

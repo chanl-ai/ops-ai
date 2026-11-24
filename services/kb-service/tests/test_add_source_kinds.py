@@ -3,6 +3,8 @@ templates preset, and Add source offering a source the create then refuses."""
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 
 from .test_bases_and_sources import data
@@ -31,3 +33,21 @@ async def test_add_source_offers_only_what_create_accepts_and_says_why_not(
         json={"type": "tool", "name": "Articles", "config": {"plugin": "opsai.salesforce", "source": "articles"}},
     )
     assert refused.status_code == 400 and refused.json()["error"]["code"] == "sign_in_not_team", refused.text
+
+
+async def test_a_kind_says_whether_its_items_are_files_and_which_connection_it_reads(
+    kb: httpx.AsyncClient,  # noqa: F811
+    tools: FakeTools,  # noqa: F811
+) -> None:
+    """Files > Watch a folder offers only the kinds whose items are files, and saves the connection each reads."""
+    real = tools.declared
+
+    async def declared(tenant_id: str, team_id: str) -> list[dict[str, Any]]:
+        rows = await real(tenant_id, team_id)
+        sharepoint = {**rows[0], "plugin": "sharepoint", "source": "files", "files": True, "connectionId": "con_sp"}
+        return [*rows, sharepoint]
+
+    tools.declared = declared  # pyright: ignore[reportAttributeAccessIssue]
+    kinds = {k["source"]: k for k in (await kb.get("/v1/knowledge/source-kinds")).json()["data"] if k["type"] == "tool"}
+    assert (kinds["files"]["files"], kinds["files"]["connectionId"]) == (True, "con_sp"), kinds["files"]
+    assert (kinds["articles"]["files"], kinds["articles"]["connectionId"]) == (False, "con_sf"), kinds["articles"]

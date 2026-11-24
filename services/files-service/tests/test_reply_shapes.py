@@ -26,10 +26,10 @@ DAY = re.compile(r"^\d{4}-\d\d-\d\d$")
 DETAIL_KEYS = {
     "id", "name", "mime", "size", "digest", "purpose", "team", "uploadedBy", "uploadedAt", "scan", "sensitivity",
     "sensitivitySuggested", "retention", "legalHold", "immutable", "referenceCount", "versionCount", "storage", "data",
-    "versions", "references", "deleteBlockedBy", "canEdit", "canDelete", "canPublish",
+    "versions", "references", "source", "deleteBlockedBy", "canEdit", "canDelete", "canPublish",
 }  # fmt: skip
 # A list row is the detail without the keys only the detail route sets.
-ROW_KEYS = DETAIL_KEYS - {"versions", "references", "deleteBlockedBy", "canEdit", "canDelete", "canPublish"}
+ROW_KEYS = DETAIL_KEYS - {"versions", "references", "source", "deleteBlockedBy", "canEdit", "canDelete", "canPublish"}
 
 
 def _data(r: httpx.Response) -> Any:
@@ -69,7 +69,7 @@ async def test_replies_keep_their_datetime_format_and_their_null_and_missing_key
     assert [done["file"][k] for k in ("deleteBlockedBy", "canEdit", "canDelete", "canPublish")] == [None] * 4
 
     assert set(detail) == DETAIL_KEYS
-    assert {k for k, v in detail.items() if v is None} == {"legalHold", "data", "deleteBlockedBy"}
+    assert {k for k, v in detail.items() if v is None} == {"legalHold", "data", "source", "deleteBlockedBy"}
     assert WHEN.match(detail["uploadedAt"]) and WHEN.match(detail["scan"]["at"])
     assert set(detail["scan"]) == {"status", "engine", "at", "detail"} and detail["scan"]["detail"] == "scanning is off"
     assert DAY.match(detail["retention"]["deleteAfter"])

@@ -37,6 +37,8 @@ from ops_sources import (
     ToolReader,
     access_list,
     read_changes,
+    refusal_of,
+    source_values,
 )
 from ops_store import documents
 
@@ -52,8 +54,7 @@ if TYPE_CHECKING:
 
 # The listing, its pacing and gone-twice live in ops_sources; kb-service reads them through its knowledge state.
 # MAX_PAGES and FULL_EVERY are named here and read at each sync, so a test can shorten them for this service.
-__all__ = ["FULL_EVERY", "MAX_PAGES", "Answer", "Declared", "ToolReader"]
-TEAM_SIGN_IN = ("team",)
+__all__ = ["FULL_EVERY", "MAX_PAGES", "Answer", "Declared", "ToolReader", "refusal_of", "source_values"]
 
 
 class Host(BaseModel):
@@ -100,6 +101,8 @@ class SourceConfig(TypedDict, total=False):
     changesCursor: JsonValue
     seenSoFar: list[str] | None
     tombstones: JsonValue
+    # Items whose fetch failed, by id: the version each failed on and the runs in a row that tried it.
+    failedFetches: JsonValue
     repeats: JsonValue
 
 
@@ -147,21 +150,6 @@ def scopes_of(places: list[FoundPlace], following: str | None) -> ScopesPage:
 async def declared_sources(reader: ToolReader, tenant_id: str, team_id: str) -> list[Declared]:
     """Every knowledge source the team's apps declare."""
     return [Declared.model_validate(d) for d in await reader.declared(tenant_id, team_id)]
-
-
-def refusal_of(found: Declared) -> tuple[str, str] | None:
-    """Why a source declared for the team cannot be made, as (code, message), or None when it can. Create and the
-    Add source list both ask this, so a source is offered exactly when create accepts it."""
-    if not found.needsConnection:
-        return None
-    if not found.connectionId:
-        return "connection_missing", f"{found.title} needs the team's connection; sign in first."
-    if found.signIn not in TEAM_SIGN_IN:
-        return (
-            "sign_in_not_team",
-            "This connection signs in each person. A knowledge source needs a team sign-in.",
-        )
-    return None
 
 
 async def declared_source(reader: ToolReader | None, who: Who, plugin: str, name: str) -> Declared:
@@ -230,37 +218,6 @@ async def waiting_hosts(reader: ToolReader, who: Who, cfg: dict[str, JsonValue])
     return [{"host": h.host, "runKey": h.runKey} for h in answers if h.state == "waiting"]
 
 
-INPUT_TYPES: dict[str, type | tuple[type, ...]] = {
-    "string": str,
-    "integer": int,
-    "number": (int, float),
-    "boolean": bool,
-    "array": list,
-    "object": dict,
-}
-
-
-def source_values(declared: Declared, given: JsonValue) -> dict[str, JsonValue]:
-    """A source's own settings checked against the inputs its plugin declares: a required one present, each of its
-    declared type, and nothing undeclared."""
-    inputs = declared.inputs
-    values = given if isinstance(given, dict) else {}
-    if unknown := sorted(set(values) - set(inputs)):
-        raise ValidationFailed(f"{declared.title} takes no {', '.join(unknown)}.", code="invalid_source_values")
-    for name, declared_input in inputs.items():
-        if values.get(name) in (None, "", []):
-            if declared_input.get("required", True):
-                raise ValidationFailed(f"{declared.title} needs {name}.", code="invalid_source_values")
-            continue
-        expected = INPUT_TYPES.get(str(declared_input.get("type") or "string"), str)
-        if not isinstance(values[name], expected):
-            raise ValidationFailed(
-                f"{name} is a {declared_input.get('type') or 'string'} for {declared.title}.",
-                code="invalid_source_values",
-            )
-    return values
-
-
 def _as_given(value: JsonValue) -> str | None:
     """A plugin's title or address stored as the plugin sent it, as it always was: a plugin declares both as text, and
     one that sends another kind has it kept, not dropped or rewritten."""
@@ -289,6 +246,7 @@ def _place(cfg: SourceConfig) -> Place:
         last_full_at=cfg.get("lastFullAt"),
         seen_so_far=list(cfg.get("seenSoFar") or []) if "seenSoFar" in cfg else None,
         tombstones=an_object(cfg.setdefault("tombstones", {}), "tombstones"),
+        failed_fetches=dict(an_object(cfg.get("failedFetches") or {}, "failedFetches")),
         paused=cfg.get("paused"),
     )
 
@@ -305,6 +263,7 @@ def _keep(cfg: SourceConfig, place: Place) -> None:
         ("lastFullAt", place.last_full_at),
         ("seenSoFar", place.seen_so_far),
         ("paused", place.paused),
+        ("failedFetches", place.failed_fetches or None),
     ):
         if value is None:
             cfg.pop(key, None)
@@ -418,6 +377,10 @@ async def sync_tool_source(
         done = await fetcher.fetch_changed(place, counts, listing.errors, log, on_listed=listed, on_fetched=fetched)
         if done.rate_limited:
             status = "partial"
+        elif done.retrying and status == "success":
+            # The watermark stays, so the next sync lists the items whose fetch failed and tries them again.
+            status = "partial"
+            stopped = stopped or "Some items could not be fetched; the next sync tries them again."
         gone_now = done.gone_now
         # A base this source feeds may keep what its source removed: then it stays searchable and says so.
         keep = (await service.sync_rules(tenant, str(s.id)))["removedAtSource"] == "keep"

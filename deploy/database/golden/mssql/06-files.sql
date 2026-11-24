@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- files-service, stamped at files_0017
+-- files-service, stamped at 20261124_2041_merge_heads
 CREATE TABLE files (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -34,6 +34,16 @@ CREATE TABLE files (
 	data NVARCHAR(max) NULL, 
 	read_as VARCHAR(64) NULL, 
 	read_path VARCHAR(16) NULL, 
+	source_scope VARCHAR(16) NOT NULL, 
+	source_key_hash VARCHAR(64) NOT NULL, 
+	source_id VARCHAR(1024) NULL, 
+	source_path VARCHAR(1024) NULL, 
+	removed_at DATETIMEOFFSET NULL, 
+	access_list NVARCHAR(max) NULL, 
+	access_read_at DATETIMEOFFSET NULL, 
+	watch_id VARCHAR(64) NULL, 
+	source_marker VARCHAR(200) NULL, 
+	gone_count INTEGER NOT NULL DEFAULT '0', 
 	CONSTRAINT files_pkey PRIMARY KEY (id)
 );
 GO
@@ -56,6 +66,8 @@ GO
 CREATE INDEX ix_files_team_status ON files (tenant_id, team, status, uploaded_at);
 GO
 CREATE INDEX ix_files_uploaded_at ON files (tenant_id, uploaded_at);
+GO
+CREATE UNIQUE INDEX ux_files_source_key ON files (tenant_id, team, source_scope, source_key_hash);
 GO
 CREATE TABLE files_outbox (
 	id VARCHAR(64) NOT NULL, 
@@ -93,6 +105,10 @@ CREATE TABLE file_versions (
 	uploaded_by VARCHAR(320) NOT NULL, 
 	uploaded_at DATETIMEOFFSET NOT NULL, 
 	[current] BIT NOT NULL, 
+	source_tag VARCHAR(200) NULL, 
+	source_changed_at DATETIMEOFFSET NULL, 
+	scan_status VARCHAR(16) NOT NULL, 
+	scan_at DATETIMEOFFSET NULL, 
 	team VARCHAR(64) NOT NULL, 
 	CONSTRAINT file_versions_pkey PRIMARY KEY (file_id, version)
 );
@@ -189,6 +205,50 @@ CREATE TABLE storage_settings_audit (
 GO
 CREATE INDEX ix_storage_settings_audit_tenant ON storage_settings_audit (tenant_id, at);
 GO
+CREATE TABLE file_watches (
+	tenant_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(64) NOT NULL, 
+	team VARCHAR(64) NOT NULL, 
+	name VARCHAR(200) NOT NULL, 
+	plugin VARCHAR(120) NOT NULL, 
+	source VARCHAR(120) NOT NULL, 
+	connection_id VARCHAR(64) NULL, 
+	[values] NVARCHAR(max) NOT NULL, 
+	value_names NVARCHAR(max) NULL, 
+	place NVARCHAR(max) NOT NULL, 
+	created_by VARCHAR(320) NOT NULL, 
+	created_at DATETIMEOFFSET NOT NULL, 
+	updated_at DATETIMEOFFSET NOT NULL, 
+	check_requested_at DATETIMEOFFSET NULL, 
+	lease_owner VARCHAR(64) NULL, 
+	lease_until DATETIMEOFFSET NULL, 
+	last_check_at DATETIMEOFFSET NULL, 
+	last_outcome NVARCHAR(max) NULL, 
+	next_event INTEGER NOT NULL DEFAULT '1', 
+	refused_sizes NVARCHAR(max) NULL, 
+	CONSTRAINT file_watches_pkey PRIMARY KEY (tenant_id, id)
+);
+GO
+CREATE INDEX ix_file_watches_requested ON file_watches (check_requested_at);
+GO
+CREATE TABLE file_watch_events (
+	tenant_id VARCHAR(64) NOT NULL, 
+	watch_id VARCHAR(64) NOT NULL, 
+	number INTEGER NOT NULL, 
+	team VARCHAR(64) NOT NULL, 
+	file_id VARCHAR(64) NULL, 
+	version INTEGER NULL, 
+	kind VARCHAR(16) NOT NULL, 
+	reason VARCHAR(500) NULL, 
+	code VARCHAR(32) NULL, 
+	size BIGINT NULL, 
+	path VARCHAR(1024) NULL, 
+	at DATETIMEOFFSET NOT NULL, 
+	CONSTRAINT file_watch_events_pkey PRIMARY KEY (tenant_id, watch_id, number)
+);
+GO
+CREATE INDEX ix_file_watch_events_at ON file_watch_events (at);
+GO
 IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
 GO
 CREATE FUNCTION ops_security.files_tenant_read (@tenant_id VARCHAR(64))
@@ -273,10 +333,22 @@ CREATE SECURITY POLICY ops_security.storage_settings_audit_tenant
     ADD BLOCK PREDICATE ops_security.files_tenant_write(tenant_id) ON dbo.storage_settings_audit AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.file_watches_isolation
+    ADD FILTER PREDICATE ops_security.files_team_read(tenant_id, team) ON dbo.file_watches,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.file_watches AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.file_watches AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.file_watch_events_isolation
+    ADD FILTER PREDICATE ops_security.files_team_read(tenant_id, team) ON dbo.file_watch_events,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.file_watch_events AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.files_team_write(tenant_id, team) ON dbo.file_watch_events AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE TABLE alembic_version_files (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_files_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_files (version_num) VALUES ('files_0017');
+INSERT INTO alembic_version_files (version_num) VALUES ('20261124_2041_merge_heads');
 GO

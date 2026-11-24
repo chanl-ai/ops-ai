@@ -33,6 +33,9 @@ class Place:
     seen_so_far: list[str] | None = None
     # Items removed after answering gone twice, by id, each with when and why; not taken in again until lifted.
     tombstones: Json = field(default_factory=dict[str, JsonValue])
+    # Items whose fetch failed, by id, each with the marker it failed for, how many runs in a row tried it, when and
+    # why. Tried again until FETCH_TRIES runs have, then left until its marker moves.
+    failed_fetches: Json = field(default_factory=dict[str, JsonValue])
     # `needs_reconnect` while the connection refuses its sign-in.
     paused: bool | str | None = None
 

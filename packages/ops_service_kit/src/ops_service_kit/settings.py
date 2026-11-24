@@ -573,8 +573,11 @@ class Settings(BaseSettings):
                 "guardrails:create",
                 "workflows:run",
             ],
-            # events:emit: it reports a deleted file as a service event, which purges what was derived from it.
-            "files": ["events:emit"],
+            # events:emit: it reports a deleted file as a service event, which purges what was derived from it, and a
+            # watched folder's finished check. tools:view, tools:run: a watched folder's check reads the source
+            # through tools-service with the team's sign-in, as kb-service does. audit:create: its relay writes
+            # changes to watched folders to the account's audit log.
+            "files": ["events:emit", "tools:view", "tools:run", "audit:create"],
             # files:view, files:edit: documents-service reads the bytes it reads from as the caller's team and keeps a
             # sample's file with a reference; settings:view: the extractionFloor policy.
             # events:emit: it reports a person's correction as a service event, which saves it on the file.
