@@ -4,6 +4,7 @@ reply has tool calls."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from typing import Any
 
@@ -29,8 +30,10 @@ def _replies() -> Iterator[dict[str, object]]:
 
 async def test_a_reply_keeps_how_it_ended_and_the_log_row_records_it(models: Models) -> None:
     replies = _replies()
+    limits: list[object] = []
 
-    def handle(_: httpx.Request) -> httpx.Response:
+    def handle(request: httpx.Request) -> httpx.Response:
+        limits.append(json.loads(request.content).get("max_completion_tokens"))
         return httpx.Response(200, json=next(replies))
 
     async for rig in provider_rig(models, handle, images=True):
@@ -39,6 +42,7 @@ async def test_a_reply_keeps_how_it_ended_and_the_log_row_records_it(models: Mod
             body = {
                 "model": rig.alias,
                 "messages": [{"role": "user", "content": [{"type": "text", "text": "Read invoice"}, PAGE]}],
+                "max_completion_tokens": 4000,
             }
             r = await rig.models.client.post(
                 "/v1/models/chat/completions",
@@ -50,4 +54,5 @@ async def test_a_reply_keeps_how_it_ended_and_the_log_row_records_it(models: Mod
         assert [a["finish_reason"] for a in answers] == ["length", "stop", "stop"]
         assert answers[1]["message"]["refusal"] == "I can't help with this document."
         assert "refusal" not in answers[0]["message"], "a reply that was not declined carries no refusal key"
+        assert limits == [4000, 4000, 4000], "the caller's output limit reaches the provider"
         return
