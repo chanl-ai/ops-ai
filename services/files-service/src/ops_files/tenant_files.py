@@ -896,6 +896,10 @@ class TenantFiles:
             # The newest version already holds these bytes: the object just written is nobody's.
             await asyncio.to_thread(store.delete, key)
             return entry, None
+        # Read after the version commits, so a hold placed while it was written is seen: under hold, every version's
+        # bytes are held, and a set_legal_hold that ran before this version existed did not reach its object.
+        if (written := await self._files.get(entry)) is not None and written.hold is not None:
+            await asyncio.to_thread(store.set_legal_hold, key, True)
         if self._scanning == "off":
             status, engine, detail = "clean", "off", "scanning is off"
         elif self._scanning == "inline":
@@ -990,12 +994,19 @@ class TenantFiles:
     ) -> FileDetail:
         """The scan-result hook for an asynchronous scanner (ClamAV loop, Defender, GuardDuty). The tenant comes from
         the scanner's service token; the result names the version it scanned, by number or digest, and sets only that
-        one. A file of one version may leave it out."""
+        one. A file of one version may leave it out. Named by both, they must be one version's: a verdict on version 1
+        sent with version 2's digest would otherwise clear version 2, which was never scanned."""
         row = await self._files.get(file_id)
         if row is None:
             raise FileMissingError(file_id)
         versions = row.versions
         newest = max((v.version for v in versions), default=None)
+        if version is not None and digest is not None:
+            named = next((v for v in versions if v.version == version), None)
+            if named is None:
+                raise FileMissingError(f"{file_id} has no version {version}")
+            if named.digest != digest:
+                raise InvalidUploadError(f"{file_id} version {version} does not hold the bytes with digest {digest}")
         if version is not None or digest is not None:
             # Bytes that came back (version 3 the same as version 1) share a digest: the verdict holds for each.
             numbers: list[int | None] = [
