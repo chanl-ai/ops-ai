@@ -12,9 +12,10 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
+from ops_agent_kernel.prompt_writer import SectionKind, titled
 from ops_agent_kernel.steps import IfNot, Jump, Ref, ReturnField, StepCheck
 from ops_agents.activities.agent_limits import AgentLimits
 
@@ -183,6 +184,19 @@ class WidgetSettings(Out):
     per_turn: int | None = Field(default=None, ge=1)
 
 
+class BriefSectionView(Out):
+    """A section added to a brief, as replied: a menu kind carries its fixed title as `name`, whatever was stored."""
+
+    kind: SectionKind
+    name: str = ""
+    text: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _titled(cls, data: object) -> object:
+        return titled(data)
+
+
 class BriefView(Out):
     """An agent's brief as replied (`ops_agent_kernel.prompt_writer.Brief` is the request form)."""
 
@@ -193,6 +207,8 @@ class BriefView(Out):
     examples: str = ""
     never: list[str] = Field(default_factory=list[str])
     success: list[str] = Field(default_factory=list[str])
+    # Empty on a brief stored before sections.
+    sections: list[BriefSectionView] = Field(default_factory=list[BriefSectionView])
 
 
 class PatternsView(Out):

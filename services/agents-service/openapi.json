@@ -3139,7 +3139,7 @@
       },
       "Brief": {
         "additionalProperties": false,
-        "description": "What a builder writes instead of one block of instructions. Persona, tone and glossary are text inside\n`how_to_answer`. `purpose` is the Job; `goal` is kept on agents that already have one and is not asked for on\nnew ones. `success` is kept readable on old versions and is never sent to the model. `hand_off` and `examples`\ndefault to empty, so a version stored before them reads and runs as it did.",
+        "description": "What a builder writes instead of one block of instructions. Personality, tone and the like are `sections`\nthe builder adds; text already inside `how_to_answer` stays there. `purpose` is the Job; `goal` is kept on agents\nthat already have one and is not asked for on new ones. `success` is kept readable on old versions and is never\nsent to the model. `hand_off`, `examples` and `sections` default to empty, so a version stored before them reads\nand runs as it did.",
         "properties": {
           "examples": {
             "default": "",
@@ -3184,6 +3184,14 @@
             "minLength": 1,
             "title": "Purpose",
             "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/BriefSection"
+            },
+            "maxItems": 12,
+            "title": "Sections",
+            "type": "array"
           },
           "success": {
             "items": {
@@ -3259,6 +3267,79 @@
         "title": "BriefDraftInput",
         "type": "object"
       },
+      "BriefSection": {
+        "additionalProperties": false,
+        "description": "A headed section a builder adds to the brief. A menu kind is written under its fixed title, whatever name is\nsent; `kind` is the tag evals read. A custom section is prompt text only and drives nothing.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "personality",
+              "tone",
+              "environment",
+              "context",
+              "tool_use",
+              "error_handling",
+              "escalation",
+              "custom"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name"
+        ],
+        "title": "BriefSection",
+        "type": "object"
+      },
+      "BriefSectionView": {
+        "additionalProperties": false,
+        "description": "A section added to a brief, as replied: a menu kind carries its fixed title as `name`, whatever was stored.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "personality",
+              "tone",
+              "environment",
+              "context",
+              "tool_use",
+              "error_handling",
+              "escalation",
+              "custom"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "BriefSectionView",
+        "type": "object"
+      },
       "BriefView": {
         "additionalProperties": false,
         "description": "An agent's brief as replied (`ops_agent_kernel.prompt_writer.Brief` is the request form).",
@@ -3295,6 +3376,13 @@
           "purpose": {
             "title": "Purpose",
             "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/BriefSectionView"
+            },
+            "title": "Sections",
+            "type": "array"
           },
           "success": {
             "items": {

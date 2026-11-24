@@ -12,7 +12,7 @@ from typing import Literal, TypedDict
 
 from pydantic import ValidationError
 
-from ops_agent_kernel.prompt_writer import Brief, Patterns, head, tail
+from ops_agent_kernel.prompt_writer import Brief, Patterns, head, section_problem, tail
 from ops_contracts.skill_run import REF_TOKEN, Ref
 from ops_service_kit.errors import Unprocessable, ValidationFailed
 from ops_service_kit.http import Json
@@ -105,9 +105,13 @@ def patched(
 
     Raises:
         ValidationFailed: `validation_failed` when the mode is brief and no purpose can be found.
+        Unprocessable: `validation_failed` (422) when the brief's sections break a rule `section_problem` names: a
+            menu section twice, more than five of the builder's own, or a name taken.
         Unprocessable: `brief_owns_prompt` when a save edits the instructions or the role of an agent in brief mode
             without changing the brief or switching to full prompt.
     """
+    if brief is not None and (problem := section_problem(brief.sections)):
+        raise Unprocessable(problem, code="validation_failed")
     out = dict(spec)
     if patterns is not None:
         out["patterns"] = patterns.model_dump(by_alias=True)
@@ -182,6 +186,7 @@ def publish_problems(spec: Json) -> list[Problem]:
         ({"field": "brief.howToAnswer", "step": None, "index": None}, brief.how_to_answer),
         *(({"field": "brief.handOff", "step": None, "index": i}, rule) for i, rule in enumerate(brief.hand_off)),
         ({"field": "brief.examples", "step": None, "index": None}, brief.examples),
+        *(({"field": "brief.sections", "step": None, "index": i}, s.text) for i, s in enumerate(brief.sections)),
         *(({"field": "brief.never", "step": None, "index": i}, rule) for i, rule in enumerate(brief.never)),
     ]
     problems: list[Problem] = []
