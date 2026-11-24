@@ -23,11 +23,11 @@ const toValue = (b: AgentBrief, only: 'all' | 'never'): DocumentValue => ({
           { kind: 'field', key: 'brief.purpose', label: 'Job', locked: true, text: b.purpose, placeholder: 'What this agent is for and what a good outcome is, in a sentence or two. Type @ to name a tool, knowledge or skill.' },
           ...(b.goal.trim() ? ([{ kind: 'field', key: 'brief.goal', label: 'Goal', locked: true, text: b.goal, placeholder: 'Clear this to keep the outcome in Job.' }] as const) : []),
           { kind: 'field', key: 'brief.howToAnswer', label: 'How to answer', locked: true, text: b.howToAnswer, placeholder: 'Tone, order and what to include. Type @ to start a skill.' },
-          { kind: 'list', key: 'brief.handOff', label: 'Hand off when', items: b.handOff, placeholder: 'A moment this agent passes the conversation to a person.' },
-          { kind: 'field', key: 'brief.examples', label: 'Examples', locked: true, text: b.examples, placeholder: 'Optional. A question and the answer you want, as the person would see it.' },
+          { kind: 'list', key: 'brief.handOff', label: 'Hand off when', optional: true, items: b.handOff, placeholder: 'A moment this agent passes the conversation to a person.' },
+          { kind: 'field', key: 'brief.examples', label: 'Examples', optional: true, locked: true, text: b.examples, placeholder: 'Optional. A question and the answer you want, as the person would see it.' },
         ] as const)
       : []),
-    { kind: 'list', key: 'brief.never', label: 'Never · applied last, on every reply', items: b.never, placeholder: 'Something this agent must never do. Applied last, on every reply.' },
+    { kind: 'list', key: 'brief.never', label: 'Never · applied last, on every reply', optional: true, items: b.never, placeholder: 'Something this agent must never do. Applied last, on every reply.' },
   ],
 });
 
@@ -117,7 +117,8 @@ export function AgentBriefEditor({
         controls={controls}
         readOnly={readOnly}
         footerSlot={cardFooter}
-        headerSlot={mode === 'full' || readOnly ? undefined : cardHeader}
+        headerSlot={cardHeader}
+        showHint={false}
         hint="Type @ to add a tool, knowledge, skill or agent"
       />
     </div>
