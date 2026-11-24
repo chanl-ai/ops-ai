@@ -155,9 +155,10 @@ EVENT_OWNERS: dict[str, tuple[str, ...]] = {
 }
 
 
-# A step waits on a reading's end as reading.finished; documents-service reports a reading that could not be read as
-# reading.failed, so that wakes the step too, which then reads the failed reading and takes its error port.
-ALSO_WAKES = {"reading.failed": "reading.finished"}
+# Events that only wake parked steps, never start a workflow and are not kept: a reading's end, which a Full text step
+# waits on as reading.finished. reading.failed also wakes a step parked on reading.finished, which then reads the
+# failed reading and takes its error port.
+WAKES_ONLY = {"reading.finished": "", "reading.failed": "reading.finished"}
 
 REMINDER = "task.reminder"
 
@@ -284,17 +285,24 @@ async def _deliver(
     actor: str | None,
     payload: Json,
 ) -> DeliveredEvent:
+    if name in WAKES_ONLY:
+        # Every reading of the workspace ends with one of these; only a step parked on it hears it, so it is not kept.
+        woke = await wake_parked(db, name=name, key=key, team_id=team_id, payload=payload)
+        if (ends := WAKES_ONLY[name]) and key.startswith(f"{name}:"):
+            # A failed end wakes the step parked on reading.finished: the key differs only by the event's name.
+            also = f"{ends}:{key.removeprefix(f'{name}:')}"
+            woke += await wake_parked(db, name=ends, key=also, team_id=team_id, payload=payload)
+        now = now_iso()
+        return DeliveredEvent(
+            id="", tenant_id=current_tenant(), team_id=team_id, name=name, event_key=key, source=source, actor=actor,
+            payload=payload, status="resumed" if woke else "unhandled", run_ids=[], attempts=0, recorded_at=now,
+            updated_at=now, woke=woke,
+        )  # fmt: skip
     events = ServiceEvents(db)
     jobs = BackgroundJobs(db)
     event = await events.record(name=name, key=key, team_id=team_id, source=source, actor=actor, payload=payload)
     # A step parked on this event and key resumes before any listener starts: the run it belongs to is waiting.
     woken = await wake_parked(db, name=name, key=key, team_id=str(event.team_id), payload=cast(Json, event.payload))
-    if (ends := ALSO_WAKES.get(name)) and key.startswith(f"{name}:"):
-        # The same end reported under another name: the key differs only by that name.
-        also = f"{ends}:{key.removeprefix(f'{name}:')}"
-        woken += await wake_parked(
-            db, name=ends, key=also, team_id=str(event.team_id), payload=cast(Json, event.payload)
-        )
     # The stored event is what runs: a repeat with another payload or team cannot change what an earlier one meant.
     run_key = f"{name}:{key}"
     runs = RunStore(EngineTransactions(db))

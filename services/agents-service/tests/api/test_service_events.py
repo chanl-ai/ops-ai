@@ -24,6 +24,7 @@ from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
 from ops_agents.store.base import metadata
 from ops_agents.store.engine import EngineTransactions
+from ops_agents.store.service_events import service_events as service_events_table
 from ops_agents.store.tenancy import tenant_scope
 from ops_agents.store.tool_copies import ToolCopies
 from ops_engine.definition import parse
@@ -237,7 +238,7 @@ async def test_kb_service_reports_its_knowledge_events_and_no_other_service_can(
 
 async def test_a_reading_that_failed_wakes_the_full_text_step_parked_on_its_end(stack: Stack) -> None:
     """A Full text read parks on reading.finished; a reading that could not be read is reported as reading.failed
-    alone, so the step slept until its time limit. documents-service may report both, and either wakes the step."""
+    alone, so the step slept until its time limit. Either wakes the step, and neither is kept."""
     c, rt = stack
     tx, flow = EngineTransactions(rt.db), parse(event_workflow("full_text"))
     end = "d1:r1:auto:eng:fil_9"
@@ -265,6 +266,12 @@ async def test_a_reading_that_failed_wakes_the_full_text_step_parked_on_its_end(
         r = await c.post("/v1/events", json=body, headers=headers)
         assert r.status_code == 202, r.text
         got.append(r.json()["data"]["woke"])
+    unparked = {"name": "reading.finished", "key": "reading.finished:d2:r1:auto:eng:fil_2", "teamId": "team_ops"}
+    nobody = await c.post("/v1/events", json=unparked, headers=headers)
+    async with rt.db.connect() as conn:
+        kept = (await conn.execute(sa.select(sa.func.count()).select_from(service_events_table))).scalar_one()
+    # Every reading of the workspace ends with one of these: one no step waits on is not kept as unhandled.
+    assert (nobody.json()["data"]["status"], kept) == ("unhandled", 0), (nobody.text, kept)
     assert got == [[parked[0]], [parked[1]]], got
 
 
