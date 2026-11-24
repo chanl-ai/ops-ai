@@ -88,11 +88,31 @@ async def test_a_cut_off_reply_is_not_read_and_stays_the_answer_for_its_key(make
         again = await _read(c, fid, "batch-7:NWF-88213", fields=FIELDS)
     assert (first["status"], first["outcome"]) == ("done", "incomplete"), first
     assert first["incomplete"]["reason"] == "cut_off", first
+    # A person types the values in the task, so the read names its fields and which are required.
+    assert [(f["key"], f["required"]) for f in first["schema"]] == [("invoice", True), ("amount", True)], first
     for key in ("invoice", "amount"):
         field = first["fields"][key]
         assert field["value"] is None and field["notRead"] == "cut_off" and field["needsReview"], field
     assert models.steps == ["extract", "extract:retry"], "one ask, one retry, and none for the same key again"
     assert again["id"] == first["id"] and again["outcome"] == "incomplete", again
+
+
+class FailAfter:
+    async def rule(self, tenant: str, team: str) -> tuple[int, str]:
+        return 1, "fail"
+
+
+async def test_a_read_failed_by_the_no_answer_policy_stays_the_answer_for_its_key(make: Make) -> None:
+    models = Replies(cut(), cut())
+    s = make(models.service(), Floor())
+    s.extractor.no_answer = FailAfter()
+    async with s.client as c:
+        fid = await s.stored(NOTICE)
+        first = await _read(c, fid, "batch-7:NWF-88214", fields=FIELDS)
+        again = await _read(c, fid, "batch-7:NWF-88214", fields=FIELDS)
+    assert (first["status"], first["error"]["code"]) == ("failed", "reply_incomplete"), first
+    assert (again["id"], again["status"]) == (first["id"], "failed"), again
+    assert models.steps == ["extract", "extract:retry"], "a parked step's wake on the same key calls no model"
 
 
 async def test_a_reply_cut_off_once_is_asked_again_unchanged_with_an_output_limit(make: Make) -> None:

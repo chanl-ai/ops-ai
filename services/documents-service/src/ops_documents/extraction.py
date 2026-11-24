@@ -76,6 +76,8 @@ INCOMPLETE_SAID: dict[str, str] = {
     "declined": "The model declined to read this file.",
     "filtered": "The provider's content filter stopped the model's reply.",
 }
+# Failed reads a retry under the same key gets back as they are, with no model call.
+HELD_FAILURES = frozenset({"schema_error", "reply_incomplete"})
 REFUSAL_CHARS = 300
 
 
@@ -695,12 +697,13 @@ class Extractor:
                     "asked_at": self.clock(),
                 }
             )
-            # A retry after the floor or the model was out of reach runs it again; a schema error stays the answer.
+            # A retry after the floor or the model was out of reach runs it again. A schema error, and a reply with no
+            # answer that the workspace fails, stay the answer: a parked step's wake asks under this key again.
             again = (
                 held.id != extraction_id
                 and held.request_hash == request_hash
                 and held.status == "failed"
-                and held.error_code != "schema_error"
+                and held.error_code not in HELD_FAILURES
             )
             if again:
                 held = await self.store.requeue(held.id)
@@ -1372,7 +1375,14 @@ class Extractor:
             said["refusal"] = mask(e.refusal) if await self.masks(who) else e.refusal
         if after == "fail":
             return await self._fail(row, "reply_incomplete", INCOMPLETE_SAID[e.reason])
-        out: Json = {"fileId": row.file_id, "incomplete": said, "path": PATH_MODEL, **limited}
+        # The fields asked for, as a scored read names them, so the person typing them sees which are required.
+        out: Json = {
+            "fileId": row.file_id,
+            "incomplete": said,
+            "path": PATH_MODEL,
+            "schema": [*result.asked(fields)],
+            **limited,
+        }
         if row.request["many"]:
             out |= {"records": [], "count": 0, "needsReview": []}
         else:
