@@ -85,6 +85,10 @@ async def test_each_tenant_lists_only_its_calls_newest_first_with_its_key_totals
         "requestHash": None,
         "createdAt": "2026-11-01T09:00:00+00:00",
         "images": 0,
+        # A row written with no reply ending or image detail lists them as null.
+        "ended": None,
+        "declined": None,
+        "imageDetail": None,
     }
     totals = {t["keyId"]: (t["calls"], t["cost"]) for t in got["byKey"]}
     assert totals == {key_a: (2, "0.050000"), key_b: (1, "0.025000")}

@@ -466,9 +466,42 @@
             ],
             "title": "Createdat"
           },
+          "declined": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declined"
+          },
+          "ended": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "imageDetail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Imagedetail"
           },
           "images": {
             "default": 0,

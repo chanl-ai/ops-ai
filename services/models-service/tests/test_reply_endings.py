@@ -55,4 +55,12 @@ async def test_a_reply_keeps_how_it_ended_and_the_log_row_records_it(models: Mod
         assert answers[1]["message"]["refusal"] == "I can't help with this document."
         assert "refusal" not in answers[0]["message"], "a reply that was not declined carries no refusal key"
         assert limits == [4000, 4000, 4000], "the caller's output limit reaches the provider"
+        rows = sorted(await rig.models.calls(rig.key_id), key=lambda r: r["createdAt"])
+        # The log keeps how each reply ended, whether it was declined and the image detail sent, never its words.
+        assert [(r["ended"], r["declined"], r["imageDetail"]) for r in rows] == [
+            ("length", False, "high"),
+            ("stop", True, "high"),
+            ("eos", False, "high"),
+        ], rows
+        assert "help with this document" not in json.dumps(rows), "a declined reply's words stay off the call log"
         return

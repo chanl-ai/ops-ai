@@ -551,7 +551,7 @@ erDiagram
 | `provider_connections` | A model provider endpoint and the name of its credential | built |
 | `model_aliases` | Versioned aliases with prices and the data sensitivity each is cleared for | built |
 | `model_keys` | Gateway keys per identity, with budget, rate limit and rotation | built |
-| `model_call_log` | Metadata for every call: alias, tokens, cost, latency, outcome | built |
+| `model_call_log` | Metadata for every call: alias, tokens, cost, latency, outcome, how the reply ended, whether it was declined, the image detail asked for | built |
 
 ## Knowledge and files
 

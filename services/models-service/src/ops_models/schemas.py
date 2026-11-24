@@ -107,6 +107,12 @@ class CallOut(Out):
     request_hash: str | None
     created_at: str | None
     images: int = 0
+    # The provider's word for how the reply ended (stop, length, content_filter, or its own), whether the model
+    # declined, and the image detail the request asked for (high, auto, low). Null where there was no reply or no
+    # image, and on calls logged before they were kept. The reply's words are never logged.
+    ended: str | None = None
+    declined: bool | None = None
+    image_detail: str | None = None
 
 
 class KeySpend(Out):
