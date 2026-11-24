@@ -3566,7 +3566,8 @@ export interface paths {
         };
         /**
          * Get Schedule
-         * @description The schedule saved on the trigger step, in words, with its next runs and last outcome; 404 when none is saved.
+         * @description The schedule saved on the trigger step, in words, with its next runs, last outcome and why it is idle when it
+         *     is. 403 without the right to view the team's workflows; 404 when none is saved.
          */
         get: operations["workflows_get_schedule"];
         /**
@@ -3579,7 +3580,9 @@ export interface paths {
         post?: never;
         /**
          * Clear Schedule
-         * @description Clears the schedule: nothing more ticks. 404 when none was saved.
+         * @description Clears the schedule: nothing more ticks. Needs the same rights as a save and nothing else, so a schedule whose
+         *     step a newer version dropped, or whose newest version needs an input, can still be cleared. 404 when none was
+         *     saved.
          */
         delete: operations["workflows_clear_schedule"];
         options?: never;
@@ -10552,6 +10555,8 @@ export interface components {
             changedAt: string;
             /** Changedby */
             changedBy: string;
+            /** Idle */
+            idle?: string | null;
             /** Lastoutcome */
             lastOutcome?: string | null;
             /** Lastslotat */

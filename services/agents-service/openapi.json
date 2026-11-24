@@ -19211,6 +19211,17 @@
             "title": "Changedby",
             "type": "string"
           },
+          "idle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idle"
+          },
           "lastOutcome": {
             "anyOf": [
               {
@@ -68392,7 +68403,7 @@
     },
     "/v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule": {
       "delete": {
-        "description": "Clears the schedule: nothing more ticks. 404 when none was saved.",
+        "description": "Clears the schedule: nothing more ticks. Needs the same rights as a save and nothing else, so a schedule whose\nstep a newer version dropped, or whose newest version needs an input, can still be cleared. 404 when none was\nsaved.",
         "operationId": "workflows_clear_schedule",
         "parameters": [
           {
@@ -68580,7 +68591,7 @@
         "x-ops-public": "sdk"
       },
       "get": {
-        "description": "The schedule saved on the trigger step, in words, with its next runs and last outcome; 404 when none is saved.",
+        "description": "The schedule saved on the trigger step, in words, with its next runs, last outcome and why it is idle when it\nis. 403 without the right to view the team's workflows; 404 when none is saved.",
         "operationId": "workflows_get_schedule",
         "parameters": [
           {
