@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import replace
 from typing import Any, TypedDict
 
 import httpx
@@ -201,10 +202,12 @@ class DocumentsClient:
     ) -> Json:
         """Saves the values a person typed ([{field, record?, value}]) on an extraction in one call, recorded as
         `entered_by`; documents-service normalises each by its field's type and skips unchanged ones. `checked`: the
-        person checked the whole read. Needs `documents:edit`."""
+        person checked the whole read. Claims `documents:edit`, which the calling service must hold."""
         body: dict[str, Any] = {"corrections": corrections, "enteredBy": entered_by, "checked": checked}
+        # documents:edit is claimed on this call only, so the client's other calls never carry it.
+        editing = replace(self._documents, scopes=[*self._documents.scopes, "documents:edit"])
         try:
-            saved = await self._documents.request(
+            saved = await editing.request(
                 "POST",
                 f"/v1/documents/extractions/{_id(extraction_id)}/corrections",
                 json=body,

@@ -909,6 +909,49 @@ async def files_set_data(call: NodeCall) -> Outcome:
     return Outcome("ok", {"data": saved.get("data", data)})
 
 
+def typed_values(read: Json, edited: Any) -> list[Json]:
+    """What a person typed over a read, as documents-service takes it: [{field, record?, value}] for each value that
+    differs from what was read. `edited` is the records list a Human Task approved; anything else (the read itself,
+    when nobody typed) is nothing typed."""
+    if not isinstance(edited, list):
+        return []
+    many = "records" in read
+    if many:
+        rows = [cast(Json, r) for r in cast(list[Any], read.get("records") or [])]
+        was: list[Json] = [cast(Json, r.get("values") or {}) for r in rows]
+    else:
+        fields = cast(Json, read.get("fields") or {})
+        was = [{k: cast(Json, f).get("value") if isinstance(f, dict) else f for k, f in fields.items()}]
+    typed: list[Json] = []
+    for i, row in enumerate(cast(list[Any], edited)):
+        values = cast(Json, cast(Json, row).get("values") or {}) if isinstance(row, dict) else {}
+        before = was[i] if i < len(was) else {}
+        for key, value in values.items():
+            if value != before.get(key):
+                typed.append({"field": key, "value": value, **({"record": i} if many else {})})
+    return typed
+
+
+async def documents_correct(call: NodeCall) -> Outcome:
+    """Save typed values: what a person typed in a Human Task over an Extract from file read, saved on its extraction
+    through documents-service as the run's team, recorded as the person who decided the task, with the read checked.
+    Nothing typed saves nothing; a value documents-service refuses takes the error port."""
+    if call.ports.documents is None:
+        raise RuntimeError("no documents port: this worker cannot run Save typed values")
+    read = cast(Json, call.params.get("read") or {})
+    typed = typed_values(read, call.params.get("edited"))
+    if not typed:
+        return Outcome("ok", {"saved": 0})
+    extraction = str(read.get("extractionId") or "")
+    by = str(call.params.get("by") or "")
+    if not extraction or not by:
+        return Outcome("error", {"error": "The read names no extraction or nobody typed it.", "code": "no_read"})
+    saved = await call.ports.documents.correct(call.run_id, extraction, typed, entered_by=by)
+    if refused := saved.get("refused"):
+        return Outcome("error", {"error": cast(Json, refused).get("message"), "code": cast(Json, refused).get("code")})
+    return Outcome("ok", {"saved": len(typed), "extractionId": extraction})
+
+
 async def documents_purge(call: NodeCall) -> Outcome:
     """Purge what was read from a file: the extractions and samples documents-service holds for a deleted file,
     as the run's team. Repeating it removes nothing more."""
@@ -1330,6 +1373,7 @@ EXECUTORS: dict[str, Executor] = {
     "ai.extract": ai_extract,
     "ai.prompt": ai_prompt,
     "files.setData": files_set_data,
+    "documents.correct": documents_correct,
     "documents.purge": documents_purge,
     "workflow.start": workflow_start,
     "case.open": case_open,

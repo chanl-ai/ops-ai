@@ -11,6 +11,7 @@ from typing import Any, cast
 
 SEED = Path(__file__).resolve().parents[2] / "seed"
 EXTRACT, SAVE, REVIEW = "ops.ai.extract", "ops.files.setData", "ops.flow.humanReview"
+TYPED = "ops.documents.correct"
 
 
 def _seeded() -> list[dict[str, Any]]:
@@ -32,13 +33,16 @@ def _typed_reads(w: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _saves(w: dict[str, Any], start: str, port: str, read: str) -> bool:
-    """`start`'s `port` leads to a Save data on file step of `read`'s output, directly or through a person's check."""
+    """`start`'s `port` leads to a Save data on file step of `read`'s output, directly or through a person's check and
+    the Save typed values step after it."""
     nodes = {n["id"]: n for n in w["nodes"]}
     nxt = [c["to"]["node"] for c in w["connections"] if c["from"] == {"node": start, "port": port}]
     for node in (nodes[i] for i in nxt):
         if node["type"] == SAVE and node["parameters"].get("read") == f"$.nodes.{read}.out":
             return True
         if node["type"] == REVIEW and _saves(w, node["id"], "approve", read):
+            return True
+        if node["type"] == TYPED and _saves(w, node["id"], "ok", read):
             return True
     return False
 

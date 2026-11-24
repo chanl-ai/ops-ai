@@ -37,6 +37,8 @@ CUSTOMER: Shape = {
     "additionalProperties": False,
 }
 LEVY = [{"key": "debtor", "type": "text"}, {"key": "amount", "type": "money"}]
+# A Human Task's corrected one-record read: one value typed over what was read.
+TYPED = [{"values": {"total": "1,940.00"}}]
 
 
 class Lookups:
@@ -189,6 +191,13 @@ CASES: list[tuple[str, Callable[[], Awaitable[tuple[Outcome, Any]]]]] = [
         case(node("ops.files.setData", file="fil_1", read=READ, typeName="Notice"), ports(file_data=FilePorts())),
     ),
     ("ops.documents.purge", case(node("ops.documents.purge", file="fil_1"), ports(documents=FilePorts()))),
+    (
+        "ops.documents.correct",
+        case(
+            node("ops.documents.correct", read=READ | {"fields": {"total": {"value": None}}}, edited=TYPED, by="a@x"),
+            ports(documents=FilePorts()),
+        ),
+    ),
     ("ops.action.workflow", case(node("ops.action.workflow", workflow="child"), ports(runs=FakeRuns()))),
     ("ops.action.openCase", case(node("ops.action.openCase", subject="Levy"), ports(cases=Cases()))),
     ("ops.action.addToCase", case(node("ops.action.addToCase", caseId="case_1"), ports(cases=Cases()))),

@@ -149,40 +149,47 @@ async def test_a_decider_without_documents_edit_changes_no_values_through_a_task
 
 
 class NotRead:
-    """documents-service answering the shipped Extract's read with no answer, files-service keeping its saves."""
+    """documents-service answering the shipped Extract's read with no answer and keeping the typed values it is sent,
+    files-service keeping its saves."""
 
     def __init__(self) -> None:
         self.saved: list[Json] = []
+        self.corrected: list[tuple[str, list[Json], str]] = []
 
     async def extract(self, run_id: str, file_id: str, request: Json, *, key: str) -> Json:
         typed: Json = {"documentType": {"id": "freight_invoice", "version": 1, "name": "Freight invoice"}}
         answer: Json = {"id": "ext_88213", "status": "done", "outcome": "incomplete"}
         return answer | dict[str, Any](ONE) | typed
 
+    async def correct(self, run_id: str, extraction_id: str, corrections: list[Json], *, entered_by: str) -> Json:
+        self.corrected.append((extraction_id, corrections, entered_by))
+        return {"id": extraction_id}
+
     async def set_data(self, run_id: str, file_id: str, data: Json) -> Json:
         self.saved.append(data)
         return {"data": data}
 
 
-# The check step declares no editable value, so correction() refuses typed fields ("This review has nothing to
-# correct."). Declaring `$.nodes.read.out.fields` turns this green, but needs the console to send that shape
-# (use-review-decider.tsx sends a records list) and a save that carries the typed values to the read.
-@pytest.mark.xfail(strict=True, reason="system_extract takes no typed fields yet", raises=ValidationFailed)
 async def test_the_shipped_extract_waits_for_typed_required_fields_and_takes_them(engine: AsyncEngine) -> None:
     """system_extract, as Extract starts it: a read with no answer waits at its check with nothing on the file, an
-    empty approve is refused, and an approve sending the fields the step declares as editable is taken."""
+    empty approve is refused, and an approve with the console's records list saves the typed values on the extraction
+    as the person who decided, then the checked read on the file."""
     seeded = next(w for w in json.loads(EVENT_SEED.read_text()) if w["id"] == "system_extract")
     docs = NotRead()
     tenant, run_id, rt, w = await paused(
         engine, parse({**seeded, "id": f"sx_{uuid4().hex[:6]}"}), ports={"documents": docs, "file_data": docs}
     )
     assert docs.saved == [], "a read with no answer puts nothing on the file while it waits"
-    typed: Json = {"invoice": {"value": "NWF-88213"}, "total": {"value": "1,940.00"}, "po": {"value": None}}
+    typed: Json = {"invoice": "NWF-88213", "total": "1,940.00", "po": None}
     with tenant_scope(tenant):
         with pytest.raises(ValidationFailed) as empty:
             await engine_reviews.decide(rt, M, run_id, decision="approve", reason=None)
-        await engine_reviews.decide(rt, M, run_id, decision="approve", reason=None, inputs={"edited": typed})
+        await engine_reviews.decide(
+            rt, M, run_id, decision="approve", reason=None, inputs={"edited": [{"values": typed}]}
+        )
     assert empty.value.code == "required_fields_empty", empty.value
     await drain(w)
     assert await _outcome(engine, tenant, run_id) == "saved"
+    sent = [{"field": "invoice", "value": "NWF-88213"}, {"field": "total", "value": "1,940.00"}]
+    assert docs.corrected == [("ext_88213", sent, M.email)], docs.corrected
     assert [d["fieldsToCheck"] for d in docs.saved] == [0], docs.saved

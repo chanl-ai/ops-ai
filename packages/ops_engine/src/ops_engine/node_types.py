@@ -1493,6 +1493,41 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         ),
     ),
     NodeType(
+        id="ops.documents.correct",
+        version=1,
+        group="action",
+        label="Save typed values",
+        description=(
+            "Saves what a person typed in a Human Task over an Extract from file read on its extraction, recorded as "
+            "the person who decided the task, with the read checked. Each value is put in its field's type's form, "
+            "and values that did not change are skipped, so a repeat saves nothing more. The file follows the "
+            "extraction. Nothing typed saves nothing."
+        ),
+        executor="documents.correct",
+        effects="write",
+        idempotent=True,
+        retry=Retry(3, (1.0, 30.0)),
+        inputs=MAIN_IN,
+        outputs=(Port("ok"), Port("error")),
+        parameters={
+            "type": "object",
+            "required": ["read", "edited", "by"],
+            "properties": {
+                "read": {"description": "The Extract from file step's output: " + _MAPPING},
+                "edited": {"description": "The Human Task's corrected read, such as $.nodes.check.out.edited"},
+                "by": {"description": "Who decided the task, such as $.nodes.check.out.by"},
+            },
+        },
+        ui=_form(
+            ("read", _f("Read", "mapping", "The Extract from file step's output, such as $.nodes.read.out")),
+            (
+                "edited",
+                _f("Typed values", "mapping", "The Human Task's corrected read, such as $.nodes.check.out.edited"),
+            ),
+            ("by", _f("Typed by", "mapping", "Who decided the task, such as $.nodes.check.out.by")),
+        ),
+    ),
+    NodeType(
         id="ops.documents.purge",
         version=1,
         group="action",

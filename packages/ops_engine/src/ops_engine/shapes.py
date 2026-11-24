@@ -201,6 +201,10 @@ async def _purge(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
     return {"ok": closed(("extractions", "samples"))}
 
 
+async def _correct(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
+    return {"ok": closed(("saved",), ("extractionId",)), "error": ERROR}
+
+
 async def _start(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
     collected = ("workflowId", "count", "children", "counts")
     ports = {
@@ -257,6 +261,7 @@ BUILDERS: dict[str, Builder] = {
     "ai.extract": _extract,
     "files.setData": _set_file_data,
     "documents.purge": _purge,
+    "documents.correct": _correct,
     "workflow.start": _start,
     "case.open": _case_open,
     "case.add": _case_add,

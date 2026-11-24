@@ -234,7 +234,7 @@
     "schemaVersion": 2,
     "id": "system_extract",
     "name": "Extract a file",
-    "description": "Reads a file with a document type, sends fields under the floor to a person, and saves what was read on the file.",
+    "description": "Reads a file with a document type, sends fields under the floor to a person, saves what they typed, and saves what was read on the file.",
     "nodes": [
       {
         "id": "start",
@@ -284,7 +284,19 @@
           "summary": {
             "file": "$.input.fileName",
             "read": "$.nodes.read.out"
-          }
+          },
+          "editable": "$.nodes.read.out"
+        }
+      },
+      {
+        "id": "save_typed",
+        "type": "ops.documents.correct",
+        "typeVersion": 1,
+        "name": "Save typed values",
+        "parameters": {
+          "read": "$.nodes.read.out",
+          "edited": "$.nodes.check.out.edited",
+          "by": "$.nodes.check.out.by"
         }
       },
       {
@@ -417,7 +429,27 @@
           "port": "approve"
         },
         "to": {
+          "node": "save_typed",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save_typed",
+          "port": "ok"
+        },
+        "to": {
           "node": "save_checked",
+          "port": "in"
+        }
+      },
+      {
+        "from": {
+          "node": "save_typed",
+          "port": "error"
+        },
+        "to": {
+          "node": "not_saved",
           "port": "in"
         }
       },
