@@ -50,6 +50,9 @@ sheet; James's My apps card then says an admin ended it. It runs on the use case
 | 4 | Priya opens Apps and People at 390 | Neither page scrolls sideways |
 | 5 | James opens Apps, then `/data/connectors/people`, then My apps | No People tab; the API answers 403; the page names Manage on Connections; his Claims desk card reads "Ended by an admin" |
 | 6 | Priya and Ravi open the Salesforce app page | `GET /v1/apps/plugin:opsai.salesforce` answers 200 and no request answers 5xx |
+| 7 | Priya turns Core on from its page, then presses Turn off, at 1440 and 390 | One click turns it on; Turn off opens the window naming what uses it, Turn off in it sends the request, and the app reads off |
+| 8 | Priya opens Build > Skills > From a template with Starter skills off, follows the link in the empty list, and turns the pack on, at 1440 and 390 | The empty list links to the pack's page, which Apps does not list; one click turns it on |
+| 9 | Priya presses Turn on on Website for the first time | No window opens, the request is sent and the app reads connected |
 
 ## Acceptance layers
 

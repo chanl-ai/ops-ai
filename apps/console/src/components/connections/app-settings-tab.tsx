@@ -47,11 +47,13 @@ export function SettingsTab({
   const [off, setOff] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [changing, setChanging] = React.useState(false);
-  // An app with no account yet (never turned on) still shows whether it is on, and its one next action.
+  // An app with no account (a template pack, or one never turned on) still shows whether it is on, and its one next
+  // action; Turn off opens the same window as for an app with an account.
   if (!conn)
     return app.card.pluginId && app.card.mayManage && app.card.plugin ? (
       <div className="flex flex-col gap-4" data-testid="app-settings">
         <OnForTeam app={app} onTurnOn={onTurnOn} onTurnOff={() => setOff(true)} />
+        {off && <TurnOffDialog name={app.card.name} appId={app.card.id} onClose={() => setOff(false)} />}
       </div>
     ) : null;
   // An app the system no longer has installed changes nothing here; an admin may still delete what it left.

@@ -167,6 +167,83 @@ await withUiStack(async (consoleUrl) => {
       check('6 the Salesforce app page loads as an admin and a viewer with no request failing', status === 200 && out.priya.length === 0 && out.ravi.length === 0, { status, ...out });
     });
 
+    const STARTERS = 'plugin:opsai.starters';
+    const WEB = 'plugin:opsai.web';
+    const appPath = (id) => `/v1/apps/${encodeURIComponent(id)}`;
+    const teamState = async (id) => (await api(PRIYA, 'GET', appPath(id))).body?.data?.card?.appState;
+    const setTeam = (id, enabled) => api(PRIYA, 'PUT', `${appPath(id)}/team`, { enabled, sandbox: false });
+    const isTeamPut = (id) => (r) => r.request().method() === 'PUT' && r.url().endsWith(`${appPath(id)}/team`);
+
+    await step('7 Priya turns Core on in one click and off again from its page: the window opens, the request is sent, the app reads off', async () => {
+      await setTeam(CORE, false);
+      for (const [width, name] of [[1440, '1440'], [390, '390']]) {
+        const page = await priya.context().newPage();
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+        await page.goto(`${CONSOLE}/data/connectors/${encodeURIComponent(CORE)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.getByTestId('app-tab-settings').click();
+        const onPut = page.waitForResponse(isTeamPut(CORE), { timeout: 60_000 }).catch(() => null);
+        await page.getByTestId('app-settings-turn-on').click();
+        const on = await onPut;
+        await page.getByTestId('app-off').waitFor({ timeout: 30_000 });
+        const stateOn = await teamState(CORE);
+        // Turn off: the window names what uses the pack, then the request goes.
+        await page.getByTestId('app-off').click();
+        const listed = await page.getByTestId('app-off-users').waitFor({ timeout: 30_000 }).then(() => true, () => false);
+        await page.screenshot({ path: join(SHOTS, `core-turn-off-${name}.png`) });
+        const offPut = page.waitForResponse(isTeamPut(CORE), { timeout: 20_000 }).catch(() => null);
+        await page.getByTestId('app-off-confirm').click();
+        const off = await offPut;
+        await page.getByTestId('app-settings-turn-on').waitFor({ timeout: 30_000 });
+        const stateOff = await teamState(CORE);
+        const fit = await fits(page);
+        await page.close();
+        check(`7 Core turns on in one click and off from its page at ${name}`, on?.status() === 200 && /connected/.test(stateOn ?? '') && listed && off?.status() === 200 && stateOff === 'off' && fit, { on: on?.status(), stateOn, listed, off: off?.status(), stateOff, fit });
+      }
+    });
+
+    await step('8 Priya finds the Starter skills pack from the Skills templates empty state and turns it on, at both widths', async () => {
+      await setTeam(STARTERS, false);
+      for (const [width, name] of [[1440, '1440'], [390, '390']]) {
+        const page = await priya.context().newPage();
+        await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+        // The real list is never empty (a starter skill copies whether or not its pack is on), so the empty state is
+        // reached by answering the templates list with none, as a team whose plugins bring no skill templates reads it.
+        await page.route(/\/v1\/templates(\?|$)/, (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"success":true,"data":[]}' }));
+        await page.goto(`${CONSOLE}/build/skills`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.getByTestId('templates-gallery-button').click();
+        const link = page.getByTestId('templates-gallery-pack');
+        await link.waitFor({ timeout: 30_000 }).catch(async (e) => {
+          await page.screenshot({ path: join(SHOTS, `skills-gallery-${name}-missing-link.png`) });
+          throw e;
+        });
+        await page.screenshot({ path: join(SHOTS, `skills-empty-${name}.png`) });
+        await link.click();
+        await page.waitForURL(/\/data\/connectors\/plugin(%3A|:)opsai\.starters/, { timeout: 30_000 });
+        await page.getByTestId('app-tab-settings').click();
+        const onPut = page.waitForResponse(isTeamPut(STARTERS), { timeout: 60_000 }).catch(() => null);
+        await page.getByTestId('app-settings-turn-on').click();
+        const on = await onPut;
+        const state = await teamState(STARTERS);
+        await page.close();
+        if (name === '1440') await setTeam(STARTERS, false);
+        check(`8 the empty template list leads to the pack, which turns on, at ${name}`, on?.status() === 200 && /connected/.test(state ?? ''), { on: on?.status(), state });
+      }
+    });
+
+    await step("9 Website's first turn-on is one click: no window, the request is sent, the app reads connected", async () => {
+      const page = await priya.context().newPage();
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(`${CONSOLE}/data/connectors/${encodeURIComponent(WEB)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      const onPut = page.waitForResponse(isTeamPut(WEB), { timeout: 60_000 }).catch(() => null);
+      await page.getByTestId('app-connect').click();
+      const on = await onPut;
+      const windows = await page.getByTestId('connect-window').count();
+      const state = await teamState(WEB);
+      await page.screenshot({ path: join(SHOTS, 'website-turned-on-1440.png') });
+      await page.close();
+      check("9 Website's first turn-on is one click with no window", on?.status() === 200 && windows === 0 && /connected/.test(state ?? ''), { on: on?.status(), windows, state });
+    });
+
     check('no page error on any screen', errors.length === 0, errors.slice(0, 5));
   } finally {
     await browser.close();
