@@ -29,6 +29,7 @@ import { useTeam, useTeamsNamed } from '@/hooks/use-team';
 import { teamLabel } from '@/components/shared/team-name';
 import { initials, relativeTime } from '@/lib/format';
 import type { Member, MemberFilters } from '@/lib/types/settings';
+import { ListCell } from '@/components/shared/table-cells';
 import { serverPagination } from '@/components/shared/server-pagination';
 
 /**
@@ -45,7 +46,7 @@ function MemberRoles({ member }: { member: Member }) {
       </Badge>
       {extra.length > 0 && (
         <span className="text-xs text-muted-foreground" data-testid={`member-workspace-role-${member.id}`}>
-          Also {extra.join(', ')} in every team
+          Also <ListCell values={extra} shown={1} label="Also held in every team" className="inline-flex align-bottom" />
         </span>
       )}
     </span>

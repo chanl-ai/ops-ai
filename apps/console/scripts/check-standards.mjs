@@ -354,6 +354,15 @@ function pageSizeHits(text) {
     return /^[A-Z][A-Z0-9_]*$/.test(v);
   });
 }
+// 29. A table cell never renders a joined array or opts into wrapping unbounded text (docs/console/standards.md). A cell
+//     that joins values (`options.join(', ')`) or sets `whitespace-normal` lets one long value widen the table or wrap
+//     into a tall block; the cell is ListCell (the first values, "+N more", all in a popover) or TextCell (cut to the
+//     column, the whole text in a tooltip) from components/shared/table-cells.tsx. Held per file like rule 23.
+function cellHits(text) {
+  const hits = openings(text, ['TableCell', 'TableHead']).filter((o) => /\.join\(/.test(o.inner) || /whitespace-normal/.test(o.attrs));
+  for (const m of text.matchAll(/\bcell:\s*[^\n]*\.join\(/g)) hits.push({ index: m.index });
+  return hits;
+}
 const DATA = {
   pageSize: {
     what: 'a page size above 50 (ask for the page the screen shows; a picker pages through hooks/options-queries.ts)',
@@ -364,6 +373,11 @@ const DATA = {
     what: 'a sum or count worked out in the browser (the API returns it: a facet, a count or a field on the row)',
     reads: (rel) => /^src\/(app|components)\//.test(rel) && !rel.startsWith('src/components/ui/'),
     hits: (text) => [...text.matchAll(/\.reduce\(|\.filter\((?:[^()]|\([^()]*\))*\)\.length\b/g)],
+  },
+  rawCell: {
+    what: 'a table cell that joins an array or wraps long text (use ListCell or TextCell from components/shared/table-cells.tsx)',
+    reads: (rel) => /^src\/(app|components)\//.test(rel) && !/^src\/components\/(ui|shared)\//.test(rel),
+    hits: cellHits,
   },
   fetch: {
     what: 'fetch( outside lib/api (call the API contract through a hook)',
@@ -458,6 +472,10 @@ if (process.argv.includes('--self-test')) {
     ['header: raw actions on a record page', headerHits('src/app/build/agents/[id]/page.tsx', '<PageLayout title="a" actions={<Button>Go</Button>}>'), 1],
     ['header: RecordActions', headerHits('src/app/build/agents/[id]/page.tsx', '<PageLayout title="a" actions={<RecordActions />}>'), 0],
     ['save: Saving soon', saveWordHits('<span>Saving soon…</span>'), 1],
+    ['cell: a joined array in a TableCell', cellHits('<TableCell>{f.options.join(", ")}</TableCell>'), 1],
+    ['cell: a joined array in a column cell', cellHits("{ id: 'a', cell: ({ row }) => <span>{row.original.ops.join(', ')}</span> }"), 1],
+    ['cell: whitespace-normal', cellHits('<TableCell className="max-w-96 whitespace-normal">{c.text}</TableCell>'), 1],
+    ['cell: ListCell', cellHits('<TableCell><ListCell values={f.options ?? []} /></TableCell>'), 0],
     ['name: a slug regex by hand', [nameRuleAt("const s = n.toLowerCase().replace(/[^a-z0-9]+/g, '-');")].filter((i) => i >= 0), 1],
     ['name: a blank check by hand', [nameRuleAt("const e = { name: name.trim() ? undefined : 'Name the role.' };")].filter((i) => i >= 0), 1],
     ['name: nameError', [nameRuleAt("const e = { name: nameError(name, 'Name the role.') };")].filter((i) => i >= 0), 0],

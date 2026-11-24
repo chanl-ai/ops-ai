@@ -75,8 +75,8 @@ export function InputSchemaEditor({ value, onChange, boundArg, errors, note }: {
             const error = errors?.[f.name.trim()];
             return (
               <TableRow key={i} data-testid={`input-field-${i}`}>
-                <TableCell className="min-w-36 align-top">
-                  <Input aria-label={`Field ${i + 1} name`} value={f.name} onChange={(e) => set(i, { name: e.target.value })} disabled={bound} className="font-mono text-xs" aria-invalid={!!error} />
+                <TableCell className="min-w-24 align-top">
+                  <Input aria-label={`Field ${i + 1} name`} value={f.name} onChange={(e) => set(i, { name: e.target.value })} disabled={bound} className="w-full min-w-0 font-mono text-xs" aria-invalid={!!error} />
                   {bound && (
                     <span className="mt-1 inline-flex items-center gap-0.5 text-[11px] text-muted-foreground">
                       <Lock className="size-3" /> Bound
@@ -84,7 +84,7 @@ export function InputSchemaEditor({ value, onChange, boundArg, errors, note }: {
                   )}
                   {error && <p className="mt-1 text-xs text-destructive-text">{error}</p>}
                 </TableCell>
-                <TableCell className="min-w-28 align-top">
+                <TableCell className="min-w-20 align-top">
                   <Select value={f.type} onValueChange={(v) => set(i, { type: v as SchemaType, ...(v === 'string' ? {} : { allowed: '' }) })}>
                     <SelectTrigger aria-label={`Field ${i + 1} type`} className="w-full text-xs">
                       <SelectValue />
@@ -101,14 +101,14 @@ export function InputSchemaEditor({ value, onChange, boundArg, errors, note }: {
                 <TableCell className="align-top">
                   <Checkbox aria-label={`Field ${i + 1} required`} checked={f.required} onCheckedChange={(v) => set(i, { required: v === true, ...(v === true ? { dflt: '' } : {}) })} className="mt-2" />
                 </TableCell>
-                <TableCell className="min-w-40 align-top">
-                  <Input aria-label={`Field ${i + 1} description`} value={f.description} onChange={(e) => set(i, { description: e.target.value })} className="text-xs" />
+                <TableCell className="min-w-24 align-top">
+                  <Input aria-label={`Field ${i + 1} description`} value={f.description} onChange={(e) => set(i, { description: e.target.value })} className="w-full min-w-0 text-xs" />
                 </TableCell>
-                <TableCell className="min-w-32 align-top">
-                  <Input aria-label={`Field ${i + 1} allowed values`} value={f.allowed} onChange={(e) => set(i, { allowed: e.target.value })} disabled={f.type !== 'string'} placeholder={f.type === 'string' ? 'a, b, c' : 'Strings only'} className="text-xs" />
+                <TableCell className="min-w-20 align-top">
+                  <Input aria-label={`Field ${i + 1} allowed values`} value={f.allowed} onChange={(e) => set(i, { allowed: e.target.value })} disabled={f.type !== 'string'} placeholder={f.type === 'string' ? 'a, b, c' : 'Strings only'} className="w-full min-w-0 text-xs" />
                 </TableCell>
-                <TableCell className="min-w-28 align-top">
-                  <Input aria-label={`Field ${i + 1} default`} value={f.dflt} onChange={(e) => set(i, { dflt: e.target.value })} disabled={f.required} placeholder={f.required ? 'Required' : 'None'} className="text-xs" />
+                <TableCell className="min-w-20 align-top">
+                  <Input aria-label={`Field ${i + 1} default`} value={f.dflt} onChange={(e) => set(i, { dflt: e.target.value })} disabled={f.required} placeholder={f.required ? 'Required' : 'None'} className="w-full min-w-0 text-xs" />
                 </TableCell>
                 <TableCell className="align-top">
                   <Button variant="ghost" size="icon" aria-label={`Remove ${f.name || `field ${i + 1}`}`} disabled={bound} onClick={() => onChange(value.filter((_, n) => n !== i))}>

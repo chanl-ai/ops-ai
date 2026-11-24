@@ -75,6 +75,7 @@ else, with no baseline.
 | Create, edit, confirm | `DialogShell` (`sm`, `md`, `lg`) | `components/shared/dialog-shell.tsx` | Header and footer fixed, body scrolls inside `max-h-[85vh]`; too much content means a wider size or steps, never a taller dialog |
 | Inspect a row without leaving | `DetailSheet` | `components/shared/detail-sheet.tsx` | Prev and next, `scrollKey`, an id in the URL (`?run=`) so it reopens on reload |
 | Record page | `RecordLayout` + `AttributeCard` + `FieldRow` | `components/shared/record-layout.tsx` | Rail of attributes, tabbed main |
+| A list or long text in a table cell | `ListCell`, `TextCell` | `components/shared/table-cells.tsx` | The first values then "+N more" with all of them in a popover; free text cut to its column with the whole text in a tooltip. A cell never joins an array or sets `whitespace-normal` (check-standards rule 29, held per file in `scripts/data-baseline.json`) |
 | Delete, bulk change | `DeleteDialog`, `BulkConfirmDialog`, `BulkFieldDialog` + `toastBulk` | `components/shared/` | Consequence stated; skipped items named with the reason |
 
 ## Compose, never hand-roll

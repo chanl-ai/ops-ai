@@ -102,6 +102,7 @@ A `feat` or `fix` that changes this folder needs a What's new entry ([Commits](.
 | Inspect a row | `DetailSheet` with prev/next and `scrollKey` | navigating away for a peek |
 | Delete | `DeleteDialog` with consequence text (`count` for bulk) | `confirm()` |
 | Bulk change | `BulkConfirmDialog` / `BulkFieldDialog` + `toastBulk` (skipped items named by reason) + `useSticky` | silent partial success |
+| A list of values or long text in a table cell | `ListCell` / `TextCell` (`components/shared/table-cells.tsx`) | a raw `TableCell` that joins an array or wraps (`check-standards` rule 29) |
 | Record page | `RecordLayout` / `AttributeCard` / `FieldRow`, or a settings form with a right rail | bespoke grids |
 | Field | `FormField` (label, "(optional)", hint, inline error, `aria-invalid`) | placeholder-as-label |
 | Any form | One zod schema (shared with the API types where one exists) + `react-hook-form` with `zodResolver`, rendered through the shadcn `Form` parts and `FormField`; validate on blur and submit, show server errors on the field they belong to, disable submit while saving, keep unsaved changes guarded | `useState` per field, hand-written validation, `<form onSubmit>` reading inputs directly |

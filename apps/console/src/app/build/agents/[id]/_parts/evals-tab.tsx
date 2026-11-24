@@ -12,6 +12,7 @@ import { CheckChips, SOURCE_LABEL } from '@/components/evals/eval-meta';
 import { costLabel, EvalResultsTable, EvalRunSummary, triggerLabel, versionsLabel } from '@/components/evals/eval-results';
 import { ImportEvalCasesDialog } from '@/components/evals/import-eval-cases-dialog';
 import { SelectedList, toastBulk } from '@/components/shared/bulk';
+import { ListCell } from '@/components/shared/table-cells';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { DetailSheet } from '@/components/shared/detail-sheet';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -64,7 +65,7 @@ function caseColumns(onDelete: ((c: EvalCase) => void) | null): ColumnDef<CaseRo
     {
       id: 'context',
       header: 'Knowledge',
-      cell: ({ row }) => <div className="max-w-48 truncate text-xs text-muted-foreground">{row.original.collections.join(', ') || 'The agent’s own'}</div>,
+      cell: ({ row }) => <div className="text-xs text-muted-foreground"><ListCell values={row.original.collections} empty="The agent’s own" label="Collections" className="max-w-48" /></div>,
     },
     { id: 'checks', header: 'Checks', cell: ({ row }) => <CheckChips checks={row.original.checks} max={2} /> },
     {

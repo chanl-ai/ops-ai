@@ -19,6 +19,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { PageSkeleton } from "@/components/shared/page-skeleton";
 import { QueryError } from "@/components/shared/query-states";
 import { Section } from "@/components/shared/surface";
+import { ListCell } from "@/components/shared/table-cells";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -258,11 +259,7 @@ function FieldsPanel({
                 )}
               </TableCell>
               <TableCell className="text-sm">
-                {f.options?.length ? (
-                  f.options.join(", ")
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
+                <ListCell values={f.options ?? []} />
               </TableCell>
               <TableCell className="text-sm">
                 {f.alwaysReview ? (
