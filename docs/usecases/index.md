@@ -313,4 +313,4 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-769 | console | My apps is a page of its own, the same for an admin and a member | ui | `console/my-apps-page.md` |
 | uc-770 | tools-service | Admins see people's app sign-ins and end one | ui | `tools-service/admins-see-people-s-app-sign.md` |
 | uc-771 | agents-service | A builder takes a new skill to its first publish in under ten minutes | ui | `agents-service/a-builder-takes-a-new-skill.md` |
-| uc-772 | documents-service | A read no model reply answered goes to a person | api | `documents-service/a-read-no-model-reply-answered.md` |
+| uc-776 | documents-service | A read no model reply answered goes to a person | api | `documents-service/a-read-no-model-reply-answered.md` |

@@ -1,6 +1,6 @@
 # A read no model reply answered goes to a person
 
-Status: passing. Id: `uc-772`. Service: `documents-service`. Layers: api.
+Status: passing. Id: `uc-776`. Service: `documents-service`. Layers: api.
 
 Short title: A read no model reply answered goes to a person
 
@@ -26,10 +26,10 @@ declined. The fake model answers what the fixtures expect, so this proves the ch
 
 | # | Story | Layer | Steps | Proved by |
 |---|---|---|---|---|
-| S1 | On a workspace still on the Extract from before typed values, a cut-off read waits for a person with the reason, approve is refused with `not_editable`, and the task can only be rejected | api | 1-2 | 1 |
-| S2 | After the update goes live, the rejected file is read again from Files without uploading it, an empty approve is refused, and typed values are approved and saved on the file | api | 3-4 | 2 |
-| S3 | The typed values are kept on the read with the person who typed them and no original value | api | 5 | 3 |
-| S4 | A declined reply waits for a person as declined, with every field not read | api | 6 | 4 |
+| S1 | On a workspace still on the Extract from before typed values, a cut-off read waits for a person with the reason, approve is refused with `not_editable`, and the task can only be rejected | api | 1 | 1 |
+| S2 | After the update goes live, the rejected file is read again from Files without uploading it, an empty approve is refused, and typed values are approved and saved on the file | api | 2 | 2 |
+| S3 | The typed values are kept on the read with the person who typed them and no original value | api | 3 | 3 |
+| S4 | A declined reply waits for a person as declined, with every field not read | api | 4 | 4 |
 
 ## Preconditions
 
@@ -43,18 +43,16 @@ declined. The fake model answers what the fixtures expect, so this proves the ch
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Read one fixture invoice from Files, then publish the version of `system_extract` whose check takes no typed values | The read saves; the older version is live |
-| 2 | Upload invoice INV-77201 and ask Files to read it; open its task; approve with typed values; reject it | The task's read says `notRead: cut_off`, `editable: false` and `approveRefused.code: not_editable`; its line says "the reply was cut off"; approve answers 400 `not_editable`; the run ends `needs_manual_read` and the file has no read |
-| 3 | Publish the shipped `system_extract` again (the update) and ask Files to read the same file | The new task is editable and has no refusal |
-| 4 | Approve with nothing typed; then with the invoice number, vendor and total typed and the key fields confirmed | 400 `required_fields_empty`; then the run ends `saved` and the file is a supplier invoice with no fields to check |
-| 5 | Read the extraction from documents-service | One correction per typed field, each by Maya with original null; "1,940.00" is stored as 1940 |
-| 6 | Upload invoice INV-77202 and ask Files to read it | Its task says `notRead: declined` and "the model declined"; every value is empty |
+| 1 | Read one fixture invoice from Files, publish the version of `system_extract` whose check takes no typed values, upload invoice INV-77201 and ask Files to read it; open its task, try to approve with typed values, then reject it | The task's read says `notRead: cut_off`, `editable: false` and `approveRefused.code: not_editable`; its line says "the reply was cut off"; approve answers 400 `not_editable`; the run ends `needs_manual_read` and the file has no read |
+| 2 | Publish the shipped `system_extract` again (the update), ask Files to read the same file, approve with nothing typed, then with the invoice number, vendor and total typed and the key fields confirmed | The new task is editable with no refusal; the empty approve answers 400 `required_fields_empty`; the typed one ends `saved` and the file is a supplier invoice with no fields to check |
+| 3 | Read the extraction from documents-service | One correction per typed field, each by Maya with original null; "1,940.00" is stored as 1940 |
+| 4 | Upload invoice INV-77202 and ask Files to read it | Its task says `notRead: declined` and "the model declined"; every value is empty |
 
 ## Acceptance layers
 
 | Layer | Script | State |
 |---|---|---|
-| api | `documents-service/scripts/test-uc-772-api.py` | passing: S1 to S4 (4 of 4) |
+| api | `documents-service/scripts/test-uc-776-api.py` | passing: S1 to S4 (4 of 4) |
 
 ## Non-vacuous check
 

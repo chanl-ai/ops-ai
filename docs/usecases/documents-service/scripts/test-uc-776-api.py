@@ -1,6 +1,6 @@
 # The use case runner puts docs/usecases/lib (usecase_harness) on the path; pyright alone cannot see it.
 # pyright: basic, reportMissingImports=false
-"""uc-772 A read no model reply answered goes to a person, api layer:
+"""uc-776 A read no model reply answered goes to a person, api layer:
 docs/usecases/documents-service/a-read-no-model-reply-answered.md.
 
 Own services, no real model: models-service on the fake OpenAI with the documents fixtures' rules and, ahead of them,
@@ -120,7 +120,7 @@ def worker(files_url: str, models_url: str, documents_url: str) -> Generator[Non
         "OPS_ENGINE_POLL_SECONDS": "0.2",
     }
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    with (LOG_DIR / "worker-uc772.log").open("ab") as fh:
+    with (LOG_DIR / "worker-uc776.log").open("ab") as fh:
         proc = subprocess.Popen(
             ["uv", "run", "python", "-m", "ops_agents.api.worker"], cwd=AGENTS_DIR, env=env, stdout=fh, stderr=fh
         )
@@ -201,7 +201,7 @@ def main() -> None:
     subprocess.run(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
     agents_url = f"http://127.0.0.1:{AGENTS_PORT}"
     with (
-        tempfile.TemporaryDirectory(prefix="uc772-") as tmp,
+        tempfile.TemporaryDirectory(prefix="uc776-") as tmp,
         fake_openai(rules(Path(tmp))) as fake,
         models({"OPS_MODELS_FAKE_OPENAI_URL": fake}) as models_url,
         kb(Path(tmp) / "files", models_url=models_url, document_types=True, agents_url=agents_url) as knowledge,
