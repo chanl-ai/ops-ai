@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""A watched folder's files in the store, by failure mode: the same bytes in two folders folded into one entry; the
-same bytes saved again at the source made a version; a changed file got no version 2, or one readable before its
-scan; a rename made a second entry; and an access list nobody read stored the same as one that lists nobody."""
+"""A watched folder's files in the store, by failure mode: the same bytes in two folders folded into one entry, or an
+access list nobody read stored the same as one that lists nobody; the same bytes saved again at the source made a
+version, or a rename made a second entry. A changed file's version 2 waiting on its own scan is in
+test_watch_routes.py, through the download it guards."""
 
 from __future__ import annotations
 
@@ -41,60 +42,35 @@ def _bytes(digest: str) -> SourceVersion:
     }
 
 
-async def test_the_same_bytes_in_two_folders_are_two_entries(engine: AsyncEngine, tenant: str) -> None:
+async def test_the_same_bytes_in_two_folders_are_two_entries_with_their_own_access_lists(
+    engine: AsyncEngine, tenant: str
+) -> None:
     store = FilesStore(engine)
     with isolation.scope(tenant, TEAM):
         one, _ = await store.put_source_version(TEAM, _new(f"fil_{tenant}_1", tenant), _found("k1"), _bytes("a"))
         two, _ = await store.put_source_version(
-            TEAM, _new(f"fil_{tenant}_2", tenant), _found("k2", "Archive/inv-0042.pdf"), _bytes("a")
+            TEAM, _new(f"fil_{tenant}_2", tenant), _found("k2", "Archive/inv-0042.pdf", allowed=[]), _bytes("a")
         )
+        a, b = await store.get(one), await store.get(two)
     assert one != two
+    assert a is not None and b is not None
+    assert (a.file.access_list, b.file.access_list, b.file.access_read_at) == (None, [], NOW)
 
 
-async def test_the_same_bytes_saved_again_make_no_version(engine: AsyncEngine, tenant: str) -> None:
-    store = FilesStore(engine)
-    with isolation.scope(tenant, TEAM):
-        first = await store.put_source_version(TEAM, _new(f"fil_{tenant}_1", tenant), _found("k1"), _bytes("a"))
-        again = await store.put_source_version(TEAM, _new(f"fil_{tenant}_x", tenant), _found("k1"), _bytes("a"))
-    assert first == (f"fil_{tenant}_1", 1) and again == (f"fil_{tenant}_1", None)
-
-
-async def test_changed_bytes_are_version_two_waiting_on_its_scan(engine: AsyncEngine, tenant: str) -> None:
+async def test_the_same_bytes_again_make_no_version_and_a_rename_keeps_the_entry(
+    engine: AsyncEngine, tenant: str
+) -> None:
     store = FilesStore(engine)
     file_id = f"fil_{tenant}_1"
     with isolation.scope(tenant, TEAM):
-        await store.put_source_version(TEAM, _new(file_id, tenant), _found("k1"), _bytes("a"))
-        await store.update(file_id, {"scan_status": "clean"})
-        await store.set_version_scan(file_id, 1, "clean", NOW)
-        assert await store.put_source_version(TEAM, _new("unused", tenant), _found("k1"), _bytes("b")) == (file_id, 2)
-        row = await store.get(file_id)
-    assert row is not None and row.file.version_count == 2
-    assert [(v.version, v.scan_status, v.current) for v in row.versions] == [(1, "clean", False), (2, "pending", True)]
-
-
-async def test_a_rename_keeps_the_entry(engine: AsyncEngine, tenant: str) -> None:
-    store = FilesStore(engine)
-    file_id = f"fil_{tenant}_1"
-    with isolation.scope(tenant, TEAM):
-        await store.put_source_version(TEAM, _new(file_id, tenant), _found("k1"), _bytes("a"))
+        first = await store.put_source_version(TEAM, _new(file_id, tenant), _found("k1"), _bytes("a"))
         moved = await store.put_source_version(
             TEAM, _new("unused", tenant), _found("k1", "Invoices/2026/inv-0042-paid.pdf"), _bytes("a")
         )
         row = await store.get(file_id)
-    assert moved == (file_id, None)
-    assert row is not None and (row.file.name, row.file.source_path) == (
+    assert (first, moved) == ((file_id, 1), (file_id, None))
+    assert row is not None and (row.file.name, row.file.source_path, row.file.version_count) == (
         "inv-0042-paid.pdf",
         "Invoices/2026/inv-0042-paid.pdf",
+        1,
     )
-
-
-async def test_the_access_list_keeps_not_known_apart_from_empty(engine: AsyncEngine, tenant: str) -> None:
-    store = FilesStore(engine)
-    with isolation.scope(tenant, TEAM):
-        unknown, _ = await store.put_source_version(TEAM, _new(f"fil_{tenant}_1", tenant), _found("k1"), _bytes("a"))
-        nobody, _ = await store.put_source_version(
-            TEAM, _new(f"fil_{tenant}_2", tenant), _found("k2", allowed=[]), _bytes("b")
-        )
-        a, b = await store.get(unknown), await store.get(nobody)
-    assert a is not None and b is not None
-    assert (a.file.access_list, b.file.access_list, b.file.access_read_at) == (None, [], NOW)
