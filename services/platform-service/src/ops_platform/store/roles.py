@@ -21,6 +21,7 @@ from ops_access import (
     BUILTIN_IDS,
     BUILTIN_ROLES,
     OWNER,
+    SELF_APPROVAL,
     Access,
     Assignment,
     Grant,
@@ -58,8 +59,6 @@ from .tenancy import TenantDb
 
 MEMBERSHIP = "membership"
 
-# Approvals · decide is "approve own requests" (Admin only by default).
-SELF_APPROVAL: tuple[str, str] = ("approvals", "decide")
 _SELF_APPROVAL_KEY = ".".join(SELF_APPROVAL)
 
 

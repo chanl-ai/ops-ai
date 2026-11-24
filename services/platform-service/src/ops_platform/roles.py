@@ -10,7 +10,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import NotRequired, TypedDict
 
-from ops_access import ACTIONS, ANY_TEAM, AREAS, BUILTIN_GRIDS, SECURITY_TEAM_ACTIONS, Grant, Granted, effective
+from ops_access import (
+    ACTIONS,
+    ANY_TEAM,
+    AREAS,
+    BUILTIN_GRIDS,
+    SECURITY_TEAM_ACTIONS,
+    SELF_APPROVAL,
+    Grant,
+    Granted,
+    effective,
+)
 from ops_access.catalogue import ADMIN, FIXED_ROLES
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Json
@@ -19,7 +29,6 @@ from ops_service_kit.listing import ListParams
 from ops_store.listing import ListPage
 
 from .store.roles import (
-    SELF_APPROVAL,
     AlreadyGrantedError,
     Holdings,
     PrivilegedForGroupError,

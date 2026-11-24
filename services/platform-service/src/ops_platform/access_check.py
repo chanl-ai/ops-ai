@@ -14,7 +14,7 @@ from ops_service_kit.errors import Forbidden, NotFound
 from ops_service_kit.ids import now_iso
 
 from .store.holders import HolderStore
-from .store.identity import IdentityStore
+from .store.identity import IdentityStore, User
 from .store.members import Actor, TeamStore
 from .store.policies import PolicyStore
 from .store.roles import RoleStore
@@ -96,13 +96,20 @@ class AccessCheck:
         workflow's behalf (tools-service: may the asker decide their own request). The service's `access:view` scope
         and the token's tenant and team stand in for the person caller's access.view; a read changes nothing, so it
         writes no audit entry. 404 when nobody active in the tenant has the address."""
-        person = next(
-            (u for u in await self.identity.users_by_email(email) if u.tenant_id == tenant),
-            None,
-        )
-        if person is None:
-            raise NotFound("No person with that email.")
+        person = await self.person(tenant, email=email)
         return await self._answer(tenant, team, person.id, area, action, owner=None, requested_by=requested_by)
+
+    async def person(self, tenant: str, *, person_id: str | None = None, email: str | None = None) -> User:
+        """The one active person of `tenant` named by id (an admin's check) or by email (a service's): every answer
+        is read for a person found here, so a suspended person is not found whichever way they are named. 404
+        otherwise."""
+        if person_id is not None:
+            found = await self.identity.user(tenant, person_id)
+        else:
+            found = next((u for u in await self.identity.users_by_email(email or "") if u.tenant_id == tenant), None)
+        if found is None:
+            raise NotFound("No person with that id." if person_id is not None else "No person with that email.")
+        return found
 
     async def why(self, caller: Actor, area: str, action: str) -> AccessAnswer:
         """The caller's own answer for `area.action` in the team they act in, the roles that grant it there, and who
@@ -131,9 +138,7 @@ class AccessCheck:
         requested_by: str | None,
         about_someone_else: bool = False,
     ) -> AccessAnswer:
-        who = await self.identity.user(tenant, person_id)
-        if who is None:
-            raise NotFound("No person with that id.")
+        who = await self.person(tenant, person_id=person_id)
         held = await self.roles.holdings(tenant, person_id)
         now = now_iso()
         live = active(held.assignments, now)

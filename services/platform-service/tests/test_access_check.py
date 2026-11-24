@@ -8,8 +8,9 @@ from __future__ import annotations
 from typing import Any
 
 from ops_identity import dev_service_signer, mint_service_token
+from ops_platform.store.tables import users
 
-from .conftest import DEMO_PASSWORD, SignInRig
+from .conftest import DEMO_PASSWORD, SignInRig, seed_tx
 
 
 async def _headers(rig: SignInRig, email: str, team: str) -> dict[str, str]:
@@ -135,3 +136,28 @@ async def test_a_service_asks_by_email_in_its_tokens_team_and_needs_access_view(
     assert (no_scope.status_code, no_scope.json()["error"]["code"]) == (403, "scope_required"), no_scope.text
     elsewhere = await signin.public.post("/v1/access/check", json=own, headers=svc(["access:view"], "ten_other"))
     assert elsewhere.status_code in (403, 404), elsewhere.text
+
+
+async def test_a_service_and_a_person_token_get_one_answer_for_the_same_asker(signin: SignInRig) -> None:
+    """tools-service and agents-service name the asker by email and an admin names them by id; both must reach the
+    same person through one lookup. A suspended person keeps their user row and role assignments, so a lookup by
+    email that skipped the status would let them approve their own request."""
+    email = f"suspended.admin@{signin.zone}"
+    person = await signin.person(email, role="admin")
+    team = await _team_of(signin, person)
+    token = mint_service_token(
+        dev_service_signer(), service="tools", audience="platform", tenant_id=signin.tenant,
+        scopes=["access:view"], team_id=team,
+    )  # fmt: skip
+    svc = {"Authorization": f"Bearer {token}"}
+    own = {"area": "reviews", "action": "decide", "requestedBy": email}
+    h = await _headers(signin, await _admin_email(signin), team)
+
+    before = await _check(signin, svc, email=email, **own)
+    assert before["allowed"] is True, before
+    async with seed_tx(signin.engine, signin.tenant) as c:
+        await c.execute(users.update().where(users.c.id == person).values(status="suspended"))
+
+    by_service = await signin.public.post("/v1/access/check", json={"email": email, **own}, headers=svc)
+    by_person = await signin.public.post("/v1/access/check", json={"personId": person, **own}, headers=h)
+    assert (by_service.status_code, by_person.status_code) == (404, 404), (by_service.text, by_person.text)

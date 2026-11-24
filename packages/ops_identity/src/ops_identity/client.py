@@ -194,6 +194,18 @@ class ServiceClient:
             cursor = str(following)
 
 
+async def own_request_answer(platform: ServiceClient, *, tenant: str, team: str, email: str) -> Json | None:
+    """platform-service's access check (POST /v1/access/check, the caller's `access:view` token for `tenant` and the
+    deciding `team`) for the person with `email` deciding a request they asked for, read now rather than from a token
+    minted earlier. The answer as sent (`allowed`, `refusedBy`), so each caller reads it its own way; None when the
+    check could not be made, which every caller treats as not their own to decide."""
+    body = {"email": email, "area": "reviews", "action": "decide", "requestedBy": email}
+    try:
+        return json_object(await platform.post("/v1/access/check", body, tenant=tenant, team=team))
+    except (ServiceCallError, ServiceUnreachable):
+        return None
+
+
 def _data(audience: str, r: httpx.Response) -> Any:
     try:
         body: Any = r.json() if r.content else None

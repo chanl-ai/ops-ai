@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 from ops_access import Access, EffectiveAnswer, effective_answer, publish_mode, team_on
-from ops_identity import Principal, ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_identity import Principal, ServiceCallError, ServiceClient, ServiceUnreachable, own_request_answer
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import Json
 from ops_service_kit.narrow import json_object
@@ -225,12 +225,10 @@ class OwnRequests:
         fallback = Forbidden(f"You asked for {what}, so someone else has to decide it.", code="own_request")
         if self.platform is None or team_id is None:
             return fallback
-        body = {"email": asker, "area": REVIEWS, "action": "decide", "requestedBy": asker}
-        try:
-            data = await self.platform.post("/v1/access/check", body, tenant=tenant_id, team=team_id)
-        except (ServiceCallError, ServiceUnreachable):
+        data = await own_request_answer(self.platform, tenant=tenant_id, team=team_id, email=asker)
+        if data is None:
             return fallback
-        refused = json_object(json_object(data).get("refusedBy"))
+        refused = json_object(data.get("refusedBy"))
         if refused.get("code") == "own_request":
             return Forbidden(str(refused.get("reason") or fallback.message), code="own_request")
         return None

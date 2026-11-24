@@ -38,6 +38,7 @@ from .catalogue import (
     AREAS,
     BUILTIN_ROLES,
     SECURITY_TEAM_ACTIONS,
+    SELF_APPROVAL,
     BuiltinRole,
     Grant,
     Scope,
@@ -192,9 +193,7 @@ class Access:
         # approver of a two-person decision, a step's notDecidedBy) binds every holder.
         dev = p.auth_method == "dev" and not p.roles and not p.access
         may_decide = dev or (
-            p.kind != "api_key"
-            and deciding_in is not None
-            and self.scope(p, "approvals", "decide", deciding_in) is not None
+            p.kind != "api_key" and deciding_in is not None and self.scope(p, *SELF_APPROVAL, deciding_in) is not None
         )
         refused = [*not_by, *(requested_by if not may_decide else ())]
         if any(n and n.lower() in (p.email.lower(), p.sub.lower()) for n in refused):

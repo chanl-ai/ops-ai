@@ -39,7 +39,7 @@ from ops_engine.ports import (
     outside_call,
 )
 from ops_engine.store import DefinitionStore, RunStore
-from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_identity import ServiceCallError, ServiceClient, own_request_answer
 from ops_policy import input_hash
 from ops_policy.approval import Binding, mint_approval
 from ops_service_kit.http import Json, JsonList
@@ -250,13 +250,9 @@ class StarterApprovals:
     async def _approves_own(self, tenant_id: str, team_id: str, starter: str) -> bool:
         if self.access is None or "@" not in starter:
             return False
-        body = {"email": starter, "area": "reviews", "action": "decide", "requestedBy": starter}
-        try:
-            with outside_call():
-                out = await self.access.post("/v1/access/check", body, tenant=tenant_id, team=team_id)
-        except (ServiceCallError, ServiceUnreachable):
-            return False
-        return isinstance(out, dict) and cast(Json, out).get("allowed") is True
+        with outside_call():
+            out = await own_request_answer(self.access, tenant=tenant_id, team=team_id, email=starter)
+        return out is not None and out.get("allowed") is True
 
     async def decision(self, run_id: str, node_id: str, payload: Json) -> Json | None:
         run = await RunStore(EngineTransactions(self.db)).row(run_id)
