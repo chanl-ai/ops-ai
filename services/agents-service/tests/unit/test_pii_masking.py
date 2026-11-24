@@ -118,6 +118,8 @@ def test_a_value_is_masked_by_its_field_name_whatever_its_type(key: str, value: 
         ("Account id BUS-7781; Document proof", "Account id [account]; Document proof"),
         ('{"accountIds": ["CHQ-1003", "BUS-7781"]}', '{"accountIds": ["[account]", "[account]"]}'),
         ("Tax ID 98-7654321 was filed", "Tax ID [tax ID] was filed"),
+        ("SSN: 123-45-6789 on file", "SSN: [SSN] on file"),
+        ("accountId=BUS-7781 card_number: 4111 1111 1111 1111", "accountId=[account] card_number: [card]"),
     ],
 )
 def test_a_field_named_in_text_is_masked_by_its_name(text: str, shown: str) -> None:

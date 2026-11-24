@@ -163,9 +163,12 @@ def as_seen_by(reader: Principal, review: Listed) -> Listed:
     """A task as `reader` reads it. Whoever may decide it (`reviews.decide` in its deciding team, by `can()`: an
     Approver's, a Builder's and an Admin's by default) sees its real values, which they check before they approve;
     anyone else who may open it sees its personal data masked by the same rule as a run's page (`ops_pii.masked`).
-    A review with no deciding team (a publish request) holds a definition, not a customer's data, and is left."""
+    A publish request holds a definition, not a customer's data, and is left; any other review that names no deciding
+    team (a decided thread's stored review) is masked, so a missing team never shows the real values."""
+    if publish_reviews.is_request_id(str(review.get("id") or "")):
+        return review
     team = narrow.json_object(review.get("decidingTeam") or {}).get("id")
-    if not isinstance(team, str) or team in review_teams(reader):
+    if isinstance(team, str) and team in review_teams(reader):
         return review
     return cast(Listed, _for_reader(cast(JsonValue, review)))
 

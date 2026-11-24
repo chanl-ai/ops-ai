@@ -41,7 +41,11 @@ _OPEN_RECORD = re.compile(_RECORD_WORDS + r"$")
 # The same words still waiting for their digits at the end of released text: a cut must come before them.
 _OPEN_TAIL = re.compile(_WORDS + _BETWEEN + r"$")
 # A field name still waiting for its value at the end of released text ("ssnLast4": , Tax ID ).
-_OPEN_KEYED = re.compile(r"""(["']?)([A-Za-z][A-Za-z0-9_]*)\1\s*[:=]\s*(?:["']?|\[[^\[\]{}\n]*)$""")
+# An unquoted value after a field name: a dashed SSN, a lettered id, or digits in groups as a card number is written.
+_BARE = r"-?[A-Za-z]{0,6}-?\d[\w.-]*(?: \d[\d-]*)*"
+_OPEN_KEYED = re.compile(
+    r"""(["']?)([A-Za-z][A-Za-z0-9_]*)\1\s*[:=]\s*(?:["']?|\[[^\[\]{}\n]*|""" + _BARE + r""" ?)$"""
+)
 _OPEN_LABELLED = re.compile(
     r"(?i)\b(?:ssn|account|acct|card|tax(?:payer)?)(?:\s+(?:id|number|no\.?|#))?(?:\s+last\s*4)?\s*[:#]?\s*$"
 )
@@ -56,8 +60,9 @@ _ID_WORDS = frozenset(
     {"id", "ids", "number", "numbers", "num", "no", "nr", "last", "4", "four", "digits", "ein", "tin"}
 )
 # A key written in text with its value: JSON ("ssnLast4": "4471"), a Python repr ('accountId': 'BUS-7781') or key=value.
+# An unquoted value is taken whole (_BARE), so a dashed SSN or a spaced card number is never masked in part.
 _KEYED = re.compile(
-    r"""(["']?)([A-Za-z][A-Za-z0-9_]*)\1(\s*[:=]\s*)(?:(["'])([^"'\n]*)\4|(-?\d[\d.]*)|\[([^\[\]{}\n]*)\])"""
+    r"""(["']?)([A-Za-z][A-Za-z0-9_]*)\1(\s*[:=]\s*)(?:(["'])([^"'\n]*)\4|(""" + _BARE + r""")|\[([^\[\]{}\n]*)\])"""
 )
 # One item of a list written in text: a quoted text or a number.
 _ITEM = re.compile(r"""(["'])[^"'\n]*\1|-?\d[\d.]*""")

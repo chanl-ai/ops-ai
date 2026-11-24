@@ -14,6 +14,7 @@ from tests.api.test_write_approval_policy import (
     dev_platform,  # noqa: F401  # pyright: ignore[reportUnusedImport] - a fixture
     person,
 )
+from tests.conftest import sse_events
 
 ASK = (
     'call request_document {"customerId": "C-1042", "accountId": "BUS-7781", "document": "proof of address",'
@@ -22,8 +23,8 @@ ASK = (
 REAL = ("BUS-7781", "123-45-6789")
 
 
-async def _task(c: AsyncClient) -> str:
-    """A write James, a Viewer, asked for in chat, waiting for a person in team_ops."""
+async def _task(c: AsyncClient) -> tuple[str, str]:
+    """A write James, a Viewer, asked for in chat, waiting for a person in team_ops: its id and its approval URL."""
     james = person("usr_james", ["team_ops"], role="viewer")
     thread = (await c.post("/chat/threads", json={"agentId": "ag_dispute", "kbIds": []}, headers=james)).json()["data"]
     sent = await c.post(
@@ -32,7 +33,10 @@ async def _task(c: AsyncClient) -> str:
         headers={**james, "Accept": "text/event-stream"},
     )
     assert sent.status_code == 200, sent.text
-    return str(thread["id"])
+    events = sse_events(sent.text)
+    widget = next(e["widget"] for e in events if e["type"] == "widget" and e["widget"]["kind"] == "approval")
+    url = f"/chat/threads/{thread['id']}/messages/{events[0]['messageId']}/widgets/{widget['id']}/actions"
+    return str(thread["id"]), url
 
 
 @pytest.mark.parametrize(("role", "decides"), [("viewer", False), ("approver", True), ("admin", True)])
@@ -42,7 +46,7 @@ async def test_only_who_may_decide_a_task_sees_its_real_values(
     decides: bool,
 ) -> None:
     c = dev_platform
-    task = await _task(c)
+    task, url = await _task(c)
     reader = person(f"usr_{role}", ["team_ops"], role=role)
     one = await c.get(f"/reviews/{task}", headers=reader)
     listed = await c.get("/reviews", headers=reader)
@@ -56,3 +60,9 @@ async def test_only_who_may_decide_a_task_sees_its_real_values(
             assert not any(v in shown for v in REAL) and "[account]" in shown and "[SSN]" in shown, shown
             # What names the task stays readable: its id, its customer's id and its deciding team.
             assert task in shown and "C-1042" in shown and "team_ops" in shown, shown
+    if not decides:
+        # Once decided the task is read from its stored review; it stays masked for whoever may not decide it.
+        approved = await c.post(url, json={"type": "approve"}, headers=person("usr_maya", ["team_ops"]))
+        assert approved.status_code == 200, approved.text
+        after = json.dumps((await c.get(f"/reviews/{task}", headers=reader)).json())
+        assert not any(v in after for v in REAL) and "[account]" in after, after
