@@ -2299,8 +2299,9 @@ export interface paths {
         /**
          * Redrive Engine Run
          * @description Queues a Failed or Stuck run again from its failed step, on the version the run pinned: steps it recorded are
-         *     not run again and a write with a record at the gateway is never sent again. Who may cancel the run may redrive
-         *     it; a run neither Failed nor Stuck is refused (409 run_not_redrivable).
+         *     not run again. A failed write is sent again, on its earlier approval, only when its answer proves it did nothing
+         *     (refused, never sent, or refused before acting); any other is reconciled by its key at the gateway first. Who may
+         *     cancel the run may redrive it; a run neither Failed nor Stuck is refused (409 run_not_redrivable).
          *     No request transaction: the masking policy (platform-service) is asked after the write, with none open.
          */
         post: operations["workflows_redrive_engine_run"];

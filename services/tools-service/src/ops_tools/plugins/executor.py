@@ -128,7 +128,8 @@ class PluginExecutor:
                 tool, module, op, args, actor=actor, environment=environment, acting_for=acting_for, trial=trial
             )
         if tool is None or tool.function is None:
-            return _failure("PLUGIN_FAILED", f"{op['name']} has no Python function in {plugin.manifest.id}.")
+            # Refused before anything is sent: a Redrive may send the write again.
+            return _failure("PLUGIN_FAILED", f"{op['name']} has no Python function in {plugin.manifest.id}.", side=OURS)
         try:
             prepared = await self.http._signed_in(module, op, environment, actor, acting_for=acting_for)  # pyright: ignore[reportPrivateUsage]
         except AuthFailed as e:

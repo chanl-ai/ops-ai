@@ -38,7 +38,8 @@ from ops_service_kit.http import Json, JsonList, JsonValue
 
 from . import ai_steps
 from .definition import FALLBACK, MAPPING_PREFIX, TEXT_PATH, NodeInstance, WorkflowDefinition
-from .journal import Journal, StepRow, StepStatus
+from .journal import Journal, StepRow, StepStatus, never_sent, sent_and_unanswered
+from .journal import error_of as _error_of
 from .node_types import CASE_PRIORITIES, DEFAULT_MAX_ITEMS, RETRY_BY_EFFECTS, NodeType, TypeRegistry
 from .ports import (
     AS_TEAM_ACCOUNT,
@@ -495,28 +496,6 @@ def write_call(call: NodeCall, node_id: str) -> Json:
 TIMEOUT_CODES = frozenset({"UPSTREAM_TIMEOUT", "CONNECT_TIMEOUT"})
 
 
-# Gateway codes for a call that never reached the outside system (tools-service executor.py transport_failure), and
-# a 429 the system refused before acting: safe to send again.
-NEVER_SENT = frozenset({"CONNECT_FAILED", "CONNECT_TIMEOUT", "POOL_TIMEOUT", "TLS_FAILED", "RATE_LIMITED"})
-
-
-def never_sent(error: Any) -> bool:
-    return isinstance(error, dict) and cast(Json, error).get("code") in NEVER_SENT
-
-
-def sent_and_unanswered(error: Any) -> bool:
-    """Whether a gateway error says the call reached the outside system and no answer came back that says what it did:
-    it timed out after connecting, broke off, or answered 5xx (tools-service executor.py transport_failure and
-    status_failure). A write that ends this way may have happened."""
-    if not isinstance(error, dict):
-        return False
-    e = cast(Json, error)
-    code, status = e.get("code"), e.get("status")
-    if code == "UPSTREAM_TIMEOUT":
-        return True
-    return code == "UPSTREAM_ERROR" and (status is None or (isinstance(status, int) and status >= 500))
-
-
 def _error_code(output: Any) -> str | None:
     """The gateway's failure code in a tool's output (`{"error": {"code": ...}}`), or None."""
     if not isinstance(output, dict):
@@ -945,7 +924,8 @@ def child_label(template: Any, scope: Mapping[str, JsonValue], item: Any, loopin
 async def workflow_start(call: NodeCall) -> Outcome:
     """Start workflow: one child, or one per item of `forEach`, each keyed by this run, step, iteration and item so a
     retried or re-run step finds its children instead of starting more. A refusal stops at the item it refused, with
-    the children already started listed, and they stay started."""
+    the children already started listed, and they stay started. The key names no attempt, so a Redrive of the parent
+    finds the same failed child and reads its failure again: a failed child is redriven on its own run."""
     if call.ports.runs is None:
         raise RuntimeError("no run port: this worker cannot start workflows")
     workflow = str(call.params["workflow"])
@@ -1465,6 +1445,9 @@ class Wrapper:
         # An idempotent write is keyed by its step, so it is retried like a read instead.
         reconciled = effects == "write" and not self.type.idempotent
         policy = self.type.retry_policy() if effects == self.type.effects else RETRY_BY_EFFECTS[cast(Any, effects)]
+        # A write's attempts count against its budget by number; the attempts a Redrive set aside are history, so the
+        # count starts after the last of them.
+        set_aside = max((r.attempt for r in rows if r.status == "redriven"), default=0)
         if (
             last is not None
             and last.status in ("running", "error")
@@ -1474,7 +1457,10 @@ class Wrapper:
             # A write that may have reached the gateway (its process died mid-call, or the call raised) is never sent
             # again: its own key decides what happened.
             settled = await self.reconcile(
-                last, deadline_s=await self.deadline(params), may_resend=last.attempt < policy.attempts, params=params
+                last,
+                deadline_s=await self.deadline(params),
+                may_resend=last.attempt - set_aside < policy.attempts,
+                params=params,
             )
             if settled is not None:
                 return settled
@@ -1484,8 +1470,12 @@ class Wrapper:
         attempt = (last.attempt if last else 0) + 1
         first = attempt
         timeout = await self.deadline(params)
-        # The step's total duration counts from its earliest attempt this run knows of, a previous pass's included.
-        began = monotonic() - _since(last.started_at if last is not None else None)
+        # The step's total duration counts from its earliest attempt this run knows of, a previous pass's included (a
+        # process that died mid-attempt). An attempt a Redrive set aside, or a failed one the previous pass ended on
+        # (a write a Redrive left dangling, a step that failed with no port), closed that pass, so this one starts the
+        # duration over.
+        counted = last is not None and last.status not in ("redriven", "error")
+        began = monotonic() - _since(last.started_at if counted and last is not None else None)
 
         def next_wait(n: int, retry_after: float | None = None) -> float | None:
             """The wait before attempt `n` of this pass, or None when it would end past the step's total duration."""
@@ -1510,7 +1500,11 @@ class Wrapper:
                 if reconciled:
                     # A timeout or a 5xx says nothing about whether the write happened; the gateway's record does.
                     settled = await self.reconcile(
-                        r, cause=message, deadline_s=timeout, may_resend=attempt < policy.attempts, params=params
+                        r,
+                        cause=message,
+                        deadline_s=timeout,
+                        may_resend=attempt - set_aside < policy.attempts,
+                        params=params,
                     )
                     if settled is not None:
                         return settled
@@ -1559,7 +1553,7 @@ class Wrapper:
                     step_name=self.node.name,
                     attempt=r.attempt,
                 )
-            tried = attempt if reconciled else attempt - first + 1
+            tried = attempt - set_aside if reconciled else attempt - first + 1
             outage = never_sent(error) or (not reconciled and sent_and_unanswered(error))
             if outage and tried < policy.attempts and (wait := next_wait(tried + 1)) is not None:
                 # An outage, not an answer: a read is tried again; a write the system never got is sent again
@@ -1675,18 +1669,6 @@ def _past(started_at: str | None, seconds: float) -> bool:
     if began.tzinfo is None:
         began = began.replace(tzinfo=UTC)
     return (datetime.now(UTC) - began).total_seconds() >= seconds
-
-
-def _error_of(out: Any) -> Any:
-    """The gateway's error inside a step's output: the error port wraps the tool's own `{"error": ...}` once more."""
-    error: Any = cast(Json, out).get("error") if isinstance(out, dict) else None
-    while isinstance(error, dict):
-        layer = cast(Json, error)
-        inner: Any = layer.get("error")
-        if "code" in layer or not isinstance(inner, dict):
-            break
-        error = cast(Any, inner)
-    return cast(Any, error)
 
 
 def technical_error(out: Any) -> str:

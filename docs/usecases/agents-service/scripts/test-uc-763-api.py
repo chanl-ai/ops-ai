@@ -33,11 +33,13 @@ from usecase_harness import (
     check,
     core_bank,
     data,
+    discovered,
     engine_worker,
     every_page,
     fake_openai,
     finish,
     models,
+    picks,
     platform,
     service_headers,
     signed_in,
@@ -91,10 +93,8 @@ DEFINITION = {
 def bank_module(gw: httpx.Client, host: str) -> None:
     """The core bank as a published module whose note write runs without an approval."""
     source = {"kind": "openapi", "specUrl": f"https://{host}/openapi.json"}
-    found = data(gw.post("/v1/tool-modules/discover", json=source))
-    ops = [
-        {**o, "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"} for o in found["operations"]
-    ]
+    found = discovered(gw, source)
+    ops = picks(found)
     body = {
         "name": f"uc763-bank-{RUN}",
         "displayName": "Core Banking (uc-763)",

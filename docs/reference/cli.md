@@ -30,8 +30,10 @@ opsai runs start wf_card_dispute --input "cardholder=Jordan Example,amount=120.0
 | `--quiet` | Print only what a script needs | Off |
 
 Profiles are kept in `~/.config/ops-ai/config.json`, readable only by you; `OPS_CONFIG` names another file. An API key in
-`OPS_API_KEY` is used instead of a saved session. The command exits 0 when done, 1 when refused or failing, and 2 for a
-usage or setup problem.
+`OPS_API_KEY` is used instead of a saved session. The command exits 0 when done. A refused or failed call, and a run
+that ended failed, exit by the error's kind: input 2, refused 3, upstream 4, timeout 5, internal 6
+(`ops_ai.errors.EXIT_CODES`). A bad value the command finds before calling exits 1; any other usage or setup problem
+exits 2.
 
 ## Commands
 

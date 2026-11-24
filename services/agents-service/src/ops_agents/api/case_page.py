@@ -208,9 +208,10 @@ def _called_step(review: Json) -> str | None:
 
 
 async def failed_calls(rt: Runtime, runs: list[Json]) -> set[str]:
-    """The step keys of the case's runs' calls that answered an error, read in one query for every run."""
+    """The step keys of the case's runs' calls that answered an error, read in one query for every run; an attempt a
+    Redrive set aside (`redriven`) answered one too."""
     steps = await RunStore(EngineTransactions(rt.db)).steps_of([str(r["id"]) for r in runs])
-    return {s.key for rows in steps.values() for s in rows if s.status == "error"}
+    return {s.key for rows in steps.values() for s in rows if s.status in ("error", "redriven")}
 
 
 def actions_of(reviews: list[Json], failed: set[str]) -> list[Json]:
