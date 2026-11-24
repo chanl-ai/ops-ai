@@ -4,7 +4,8 @@ import * as React from 'react';
 import Link from 'next/link';
 import { Check, ChevronRight, FileText } from 'lucide-react';
 
-import type { ReadConfirmed, ReadEdits } from '@/lib/approve-block';
+import { notReadSaid } from '@/lib/not-read-said';
+import { type ReadConfirmed, type ReadEdits, requiredFieldsLeft } from '@/lib/approve-block';
 import { EmailPreview } from '@/components/shared/email-preview';
 import { Row, Rows } from '@/components/shared/surface';
 import { ConfidenceBadge } from '@/components/status-badges';
@@ -119,6 +120,7 @@ function RecordTable({
   tabbed?: boolean }) {
   const record = read.records[index];
   const corrected = read.corrected?.[index];
+  const notRead = !!read.notRead;
   // Fields that need a check come first, then the rest in the workflow's own order.
   const fields = [...read.schema].sort((a, b) => Number(!!record.fields[b.key]?.needsReview) - Number(!!record.fields[a.key]?.needsReview));
   const title = shown(record.values.name) || `Record ${index + 1}`;
@@ -137,8 +139,10 @@ function RecordTable({
             const fixed = editing ? text !== asRead : corrected !== undefined && asText(f, corrected[f.key]) !== asRead;
             // Nothing read means nothing to be confident about: the row says so and shows no confidence.
             const missing = asRead === '';
-            // A person's correction settles the field, whatever the read thought of it.
-            const check = !!scored?.needsReview && !scored?.corrected;
+            // A person's correction settles the field, whatever the read thought of it. A read no reply answered marks
+            // every field for a check, which says nothing: its Status column says what is left to type.
+            const check = !notRead && !!scored?.needsReview && !scored?.corrected;
+            const hasValue = (fixed && !editing ? asText(f, corrected?.[f.key]) : text) !== '';
             return (
               <TableRow key={f.key} data-testid={`read-field-${index}-${f.key}`} data-needs-review={check ? 'true' : 'false'} className={cn(check && 'bg-warning/5')}>
                 <TableCell className="align-top text-sm whitespace-normal">
@@ -183,13 +187,25 @@ function RecordTable({
                     </span>
                   )}
                   {/* On a phone the source sits under the value; from sm up it has its own column. */}
-                  <span className="mt-1.5 block sm:hidden">
+                  {!notRead && (
+                    <span className="mt-1.5 block sm:hidden">
+                      <SourceCell citation={scored?.citation ?? null} onOpen={onOpenSource ? () => onOpenSource(f.key) : undefined} />
+                    </span>
+                  )}
+                </TableCell>
+                {notRead ? (
+                  // A field nothing was read for cites no page; the column says whether it must be typed and whether it has been.
+                  <TableCell className="align-top text-sm whitespace-normal" data-testid={`read-status-${index}-${f.key}`}>
+                    <span className="flex flex-col gap-1">
+                      <span className="text-muted-foreground">{f.keyField ? 'Key field' : f.required ? 'Required' : 'Optional'}</span>
+                      <span className={cn('text-xs', hasValue ? 'text-success-text' : 'text-muted-foreground')}>{hasValue ? 'Typed' : 'Not read'}</span>
+                    </span>
+                  </TableCell>
+                ) : (
+                  <TableCell className="hidden align-top whitespace-normal sm:table-cell">
                     <SourceCell citation={scored?.citation ?? null} onOpen={onOpenSource ? () => onOpenSource(f.key) : undefined} />
-                  </span>
-                </TableCell>
-                <TableCell className="hidden align-top whitespace-normal sm:table-cell">
-                  <SourceCell citation={scored?.citation ?? null} onOpen={onOpenSource ? () => onOpenSource(f.key) : undefined} />
-                </TableCell>
+                  </TableCell>
+                )}
                 {sources.map((name) => (
                   // Each source's own value beside the one the read kept, so a disagreement is read, not guessed.
                   <TableCell key={name} className="hidden align-top text-sm whitespace-normal sm:table-cell" data-testid={`read-source-${index}-${f.key}-${name}`}>
@@ -205,7 +221,7 @@ function RecordTable({
       <TableRow>
         <TableHead className="w-28">Field</TableHead>
         <TableHead>Value</TableHead>
-        <TableHead className="hidden sm:table-cell">Source</TableHead>
+        {notRead ? <TableHead className="w-28">Status</TableHead> : <TableHead className="hidden sm:table-cell">Source</TableHead>}
         {sources.map((name) => (
           <TableHead key={name} className="hidden sm:table-cell">
             {name.charAt(0).toUpperCase() + name.slice(1)}
@@ -375,13 +391,17 @@ export function DocumentReadSection({
   );
 }
 
-/** Why nothing was read, by the read's reason, in the design's words (extraction-incomplete-replies, option A). */
-const NOT_READ_SAID: Record<string, string> = {
-  cut_off: 'The model’s reply stopped at its length limit, so no field was saved.',
-  empty: 'The model’s reply held no answer, so no field was saved.',
-  declined: 'The model answered that it would not help with this content, so nothing was read and no retry was made.',
-  filtered: 'The provider’s filter stopped the reply, so no field was saved.',
-};
+/** What a header says of a task whose read no reply answered: the required fields still to type, or that nothing can be. */
+export function RequiredToType({ read, edits, open }: { read: DocumentRead | null | undefined; edits: ReadEdits; open: boolean }) {
+  if (!read?.notRead || !open) return null;
+  const left = requiredFieldsLeft(read, edits);
+  const text = read.approveRefused ? 'Nothing read' : left ? `${left} required to type` : null;
+  return text ? (
+    <Badge variant="outline" className="border-warning/50 text-warning-text" data-testid="required-to-type">
+      {text}
+    </Badge>
+  ) : null;
+}
 
 /**
  * Why nothing was read, before the document: the reason, and what the person does. A task that can only be rejected
@@ -396,7 +416,7 @@ function NotReadAlert({ read, open }: { read: DocumentRead; open: boolean }) {
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription>
         <p data-testid="read-not-read-reason">
-          {NOT_READ_SAID[read.notRead ?? ''] ?? 'No reply answered, so no field was saved.'}{' '}
+          {notReadSaid(read.notRead, read.notReadTries)}{' '}
           {refused ? refused.message : open && read.editable ? 'Type the required values from the document, or reject the task.' : ''}
         </p>
         {refused?.code === 'not_editable' && admin && (

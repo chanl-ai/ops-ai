@@ -592,6 +592,8 @@ export interface DocumentRead {
   corrected: Record<string, unknown>[] | null;
   /** Why no model reply answered the read; every field is then not read and a person types the required ones. Null for a read that was answered. */
   notRead?: 'cut_off' | 'empty' | 'declined' | 'filtered' | null;
+  /** How many times the model was asked before the read gave up, the first ask and its retries; null on a read saved before the count was kept. */
+  notReadTries?: number | null;
   /** Set when the task can only be rejected, with the words the server refuses approve with. */
   approveRefused?: { code: 'not_editable' | 'nothing_read'; message: string } | null;
 }

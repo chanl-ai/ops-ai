@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { UserRoundPlus } from 'lucide-react';
 
 import { EvidenceExportButton } from '@/components/files/file-actions';
-import type { ReadChecks, ReadEdits } from '@/components/reviews/document-read';
+import { type ReadChecks, type ReadEdits, RequiredToType } from '@/components/reviews/document-read';
 import { isOpen } from '@/components/reviews/review-columns';
 import { TaskDecision } from '@/components/reviews/task-decision';
 import type { useReviewDecider } from '@/components/reviews/use-review-decider';
@@ -76,6 +76,7 @@ export function DecisionPanel({
         </h2>
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <ReviewStatusBadge status={review.status} />
+          <RequiredToType read={view.read ?? review.read} edits={edits} open={open} />
           <span className="inline-flex items-center gap-1.5">
             Risk <RiskBadge risk={review.risk} />
           </span>

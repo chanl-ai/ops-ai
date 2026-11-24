@@ -1207,6 +1207,9 @@ class DocumentRead(Out):
     # Why no model reply answered the read (cut_off, empty, declined or filtered): every field is not read and a
     # person types the required ones. None for a read that was answered.
     not_read: Literal["cut_off", "empty", "declined", "filtered"] | None = None
+    # How many times the model was asked before the read gave up, the first ask and its retries; None when the read
+    # was answered or was saved before the count was kept.
+    not_read_tries: int | None = None
     # Set when the task can only be rejected, with the words approve is refused with: nothing_read for a
     # several-records read with no records, not_editable for a step that takes no typed values.
     approve_refused: ApproveRefused | None = None

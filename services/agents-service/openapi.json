@@ -7122,6 +7122,17 @@
             ],
             "title": "Notread"
           },
+          "notReadTries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notreadtries"
+          },
           "records": {
             "items": {
               "$ref": "#/components/schemas/ReadRecord"

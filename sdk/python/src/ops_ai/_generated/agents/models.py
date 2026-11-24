@@ -4319,6 +4319,7 @@ class DocumentRead(TypedDict, closed=True):
     fileName: str | None
     floor: float | None
     notRead: NotRequired[Literal["cut_off", "empty", "declined", "filtered"] | None]
+    notReadTries: NotRequired[int | None]
     records: list[ReadRecord]
     schema: list[ReadField]
     sources: NotRequired[list[str]]

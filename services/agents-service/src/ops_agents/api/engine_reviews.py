@@ -252,6 +252,9 @@ class ReadView(TypedDict):
     corrected: list[Json] | None
     # Why no model reply answered the read (cut_off, empty, declined, filtered); None for a read that was answered.
     notRead: str | None
+    # How many times the model was asked before the read gave up (the first ask and its retries); None for a read
+    # that was answered or one saved before the count was kept.
+    notReadTries: int | None
     # Set when the task can only be rejected (approve_refused); None while approve can go through.
     approveRefused: ApproveRefused | None
 
@@ -630,8 +633,14 @@ def read_view(read: Json, file_name: str | None, edited: JsonValue) -> ReadView:
         if isinstance(edited, list)
         else None,
         "notRead": str(json_object(read.get("incomplete")).get("reason") or "") or None,
+        "notReadTries": _tries(read.get("incomplete")),
         "approveRefused": None,
     }
+
+
+def _tries(incomplete: object) -> int | None:
+    n = json_object(incomplete).get("tries")
+    return n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else None
 
 
 def is_read(value: object) -> bool:

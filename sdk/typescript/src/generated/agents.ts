@@ -6099,6 +6099,8 @@ export interface components {
             floor: number | null;
             /** Notread */
             notRead?: ("cut_off" | "empty" | "declined" | "filtered") | null;
+            /** Notreadtries */
+            notReadTries?: number | null;
             /** Records */
             records: components["schemas"]["ReadRecord"][];
             /** Schema */

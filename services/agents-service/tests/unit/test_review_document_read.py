@@ -265,7 +265,7 @@ async def test_a_read_with_no_answer_names_its_reason_and_counts_required_fields
     empty = {"value": None, "extractedValue": None, "confidence": 0.0, "needsReview": True, "notRead": "declined"}
     read: dict[str, Any] = {
         "fileId": "file_claim",
-        "incomplete": {"reason": "declined", "step": "extract", "tries": 1},
+        "incomplete": {"reason": "declined", "step": "extract", "tries": 2},
         "schema": READ["schema"],
         "fields": {"name": empty, "address": empty},
         "needsReview": ["name", "address"],
@@ -273,6 +273,8 @@ async def test_a_read_with_no_answer_names_its_reason_and_counts_required_fields
     payload: dict[str, Any] = {**CHECK, "draft": {"document": "claim_form.pdf", "read": read}, "editable": None}
     review: Any = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": payload}}, case_id="", titles=TITLES)
     assert review["read"]["notRead"] == "declined", review["read"]
+    # The alert says how many retries stopped too, so the read keeps how many asks it took.
+    assert review["read"]["notReadTries"] == 2, review["read"]
     assert review["proposal"] == "Nothing read from claim_form.pdf: the model declined; 1 required field to type"
     # The step takes no typed values (a version of Extract a file from before it did): approve is refused, and the
     # read says why, so the console disables Approve with the server's own words.
