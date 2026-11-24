@@ -34,6 +34,8 @@ export interface DocumentContextValue {
   /** Lines that do not block a publish, drawn like a problem in the warning colour. */
   warnings: readonly InvalidField[];
   readOnly: boolean;
+  /** Removes the block a Remove control on its heading names; left out, no block draws one. */
+  removeBlock?: (key: string) => void;
   /** Set where a missing reference can be given back (the agent page). */
   addBack?: (ref: Ref) => void;
   chooseAnother: (ref: Ref) => void;
@@ -95,7 +97,7 @@ function WarningLine({ message }: { message: string }) {
  * and an Add link, until the person adds to it (or the cursor is in it); read-only, the line says None.
  */
 export function BlockView({ node, editor, getPos }: ReactNodeViewProps) {
-  const { missing, invalid, warnings, readOnly } = React.useContext(DocumentContext);
+  const { missing, invalid, warnings, readOnly, removeBlock } = React.useContext(DocumentContext);
   const key = node.attrs.key as string;
   const error = invalid.find((i) => i.field === key);
   const errorId = `${React.useId()}-error`;
@@ -130,6 +132,12 @@ export function BlockView({ node, editor, getPos }: ReactNodeViewProps) {
           {label}
           {collapsed && !label.includes('·') && <span className="font-normal text-muted-foreground"> · optional</span>}
         </div>
+        {!!node.attrs.note && <span className="text-xs text-muted-foreground">{node.attrs.note as string}</span>}
+        {!!node.attrs.removable && !readOnly && removeBlock && (
+          <Button type="button" variant="ghost" size="icon" className="ml-auto size-6" aria-label={`Remove ${label}`} title={`Remove ${label}`} onClick={() => removeBlock(key)} data-testid={`brief-remove-${key}`}>
+            <X className="size-3.5" />
+          </Button>
+        )}
         {collapsed && (readOnly ? <span className="text-sm text-muted-foreground">None</span> : (
           <Button type="button" variant="link" size="sm" onClick={open} data-testid={`brief-add-${key}`}>
             <Plus /> Add
