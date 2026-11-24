@@ -1,18 +1,22 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { FileSearch, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ProposedRead } from '@/components/files/proposed-read';
+import { isOpen } from '@/components/reviews/review-columns';
 import { correctedRecords, DocumentReadSection, hasCorrections, type ReadEdits } from '@/components/reviews/document-read';
 import { EmptyState } from '@/components/shared/empty-state';
 import { FieldRow } from '@/components/shared/field-row';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { ConfidenceBadge } from '@/components/status-badges';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useCorrectFields } from '@/hooks/extraction-queries';
+import { useCorrectFields, useFileTask } from '@/hooks/extraction-queries';
+import { notReadSaid } from '@/lib/not-read-said';
 import { plural } from '@/lib/format';
 import type { DocumentRead } from '@/lib/types/domain';
 import type { Extraction } from '@/lib/types/extractions';
@@ -35,6 +39,8 @@ export function asDocumentRead(row: Extraction, fileName: string, editing = fals
     records: editing || !anyCorrected ? rows : rows.map(asRead),
     editable: editing,
     corrected: editing || !anyCorrected ? null : rows.map((r) => r.values),
+    notRead: row.outcome === 'incomplete' ? (row.incomplete?.reason ?? null) : null,
+    notReadTries: row.outcome === 'incomplete' ? (row.incomplete?.tries ?? null) : null,
   };
 }
 
@@ -52,6 +58,60 @@ function NoFieldsRead({ onExtract, canExtract }: { onExtract: () => void; canExt
       action={canExtract ? { label: 'Extract', onClick: onExtract } : undefined}
       testId="file-no-fields"
     />
+  );
+}
+
+/**
+ * A read no model reply answered: the reason, and where the values are typed. A read a workflow started has a task,
+ * the one place to type, which this links to while it waits and which Extract again replaces once it is decided; a
+ * read asked through the API has none, so Edit fields types its values. Without the cells to extract or edit the
+ * person gets the reason and no buttons.
+ */
+function NotReadPanel({ latest, onExtract, canExtract, canEdit, children }: { latest: Extraction; onExtract: () => void; canExtract: boolean; canEdit: boolean; children: React.ReactNode }) {
+  const task = useFileTask(latest.fileId, true);
+  const reason = latest.incomplete?.reason;
+  const title = !latest.records?.length && latest.count === 0 ? 'No records were read' : reason === 'declined' ? 'The model declined to read this file' : 'Nothing was read from this file';
+  const said = notReadSaid(reason, latest.incomplete?.tries);
+  const review = task.data;
+  const waiting = !!review && isOpen(review);
+  const apiRead = task.isSuccess && !review;
+  const where = waiting ? ' The values are typed in the task the run opened.' : review ? ` Its task was ${review.status === 'rejected' ? 'rejected' : 'decided'}. Extract again starts a new read.` : apiRead ? ` This read came from the API, so no task was opened.${children ? ' Type the required fields with Edit fields; the file gets them once all are typed.' : ' Extract again starts a new read.'}` : '';
+  return (
+    <div className="flex flex-col gap-3" data-testid="file-not-read">
+      <Alert data-testid="file-not-read-alert">
+        <AlertTitle>{title}</AlertTitle>
+        <AlertDescription>
+          <p data-testid="file-not-read-reason">
+            {said}
+            {where}
+          </p>
+          {task.isError && <p className="text-xs">The task could not be looked up. Try again in a moment.</p>}
+          {(canExtract || canEdit) && (waiting || (review && canExtract)) && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {waiting && review && (
+                <Button asChild size="sm" data-testid="file-open-task">
+                  <Link href={`/govern/reviews?review=${encodeURIComponent(review.id)}`}>Open task</Link>
+                </Button>
+              )}
+              {!waiting && review && canExtract && (
+                <Button size="sm" onClick={onExtract} data-testid="file-extract-again">
+                  Extract again
+                </Button>
+              )}
+            </div>
+          )}
+        </AlertDescription>
+      </Alert>
+      {/* An API read has no task, so its fields are typed here; a task's read is typed in the task alone. */}
+      {apiRead && children}
+      {apiRead && canExtract && (
+        <div>
+          <Button variant="outline" size="sm" onClick={onExtract} data-testid="file-extract-again">
+            Extract again
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -73,6 +133,7 @@ export function FileFields({ latest, fileName, onExtract, canExtract, canEdit = 
   if (latest.status === 'done' && latest.proposal) return <ProposedRead key={latest.id} read={latest} proposal={latest.proposal} fileName={fileName} />;
   if (latest.status === 'done' && !latest.schema?.length) return <NoFieldsRead onExtract={onExtract} canExtract={canExtract} />;
   const read = asDocumentRead(latest, fileName, editing);
+  const notRead = latest.status === 'done' && latest.outcome === 'incomplete';
   const changed = editing && hasCorrections(read, edits);
   const submit = async () => {
     const next = correctedRecords(read, edits);
@@ -87,7 +148,8 @@ export function FileFields({ latest, fileName, onExtract, canExtract, canEdit = 
       toast.error('Couldn’t save the corrections', { description: (e as Error).message });
     }
   };
-  return (
+  // A read of several records with none read has no row to type into: the panel's reason is all there is.
+  const body = read.records.length === 0 ? null : (
     <div className="flex flex-col gap-3">
       {canEdit && latest.status === 'done' && (
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -110,6 +172,13 @@ export function FileFields({ latest, fileName, onExtract, canExtract, canEdit = 
       <DocumentReadSection read={read} open={editing} edits={edits} onEdit={(record, key, text) => setEdits((x) => ({ ...x, [record]: { ...(x[record] ?? {}), [key]: text } }))} />
     </div>
   );
+  return notRead ? (
+    <NotReadPanel latest={latest} onExtract={onExtract} canExtract={canExtract} canEdit={canEdit}>
+      {body}
+    </NotReadPanel>
+  ) : (
+    body
+  );
 }
 
 /**
@@ -126,7 +195,7 @@ export function FileFieldList({ latest, onExtract, canExtract, selected, onSelec
   const record = latest.records?.[0] ?? (latest.fields ? { values: {}, fields: latest.fields } : null);
   if (!record) return null;
   // A person's correction settles a field, whatever the read thought of it.
-  const toCheck = (k: string) => !!record.fields[k]?.needsReview && !record.fields[k]?.corrected;
+  const toCheck = (k: string) => latest.outcome !== 'incomplete' && !!record.fields[k]?.needsReview && !record.fields[k]?.corrected;
   const schema = [...(latest.schema ?? [])].sort((a, b) => Number(toCheck(b.key)) - Number(toCheck(a.key)));
   const check = schema.filter((f) => toCheck(f.key)).length;
   return (
@@ -158,7 +227,7 @@ export function FileFieldList({ latest, onExtract, canExtract, selected, onSelec
                 className="border-t-0 py-0"
                 label={f.label}
                 value={empty ? undefined : String(value)}
-                emptyHint={scored?.rejected ? `Read but rejected: ${String(scored.extractedValue ?? '')}` : 'Not on the page'}
+                emptyHint={scored?.rejected ? `Read but rejected: ${String(scored.extractedValue ?? '')}` : latest.outcome === 'incomplete' ? 'Not read' : 'Not on the page'}
                 adornment={
                   toCheck(f.key) ? (
                     <Badge variant="outline" className="border-warning/50 text-warning-text">

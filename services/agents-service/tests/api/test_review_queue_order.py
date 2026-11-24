@@ -136,3 +136,24 @@ async def test_a_case_of_a_team_the_reader_is_not_in_has_no_title(stack: Stack) 
     assert fraud_task in rows, list(rows)
     assert rows[fraud_task].get("caseTitle") is None, rows[fraud_task]
     assert rows[seeded["order"][0]]["caseTitle"] == "Dispute A"
+
+
+async def test_the_files_panel_lists_only_the_tasks_about_its_file(stack: Stack) -> None:  # noqa: F811
+    """The Files panel matched a file to its task in the browser from every task; the route takes the file."""
+    c, rt = stack
+    with tenant_scope(TENANT):
+        await seeded_store(rt.db, "team_ops")
+    case = await _case(stack, "Invoices")
+    first = await _waiting_on(stack, case, "file_a", 5)
+    second = await _waiting_on(stack, case, "file_b", 5)
+    # The run id is the step id's first part; the file is in the step's draft, which the view's sourceFile reads.
+    for review_id, file_id in ((first, "fil_aaa111"), (second, "fil_bbb222")):
+        run = review_id.split(":", 1)[0]
+        with tenant_scope(TENANT):
+            current = cast(dict[str, Any], await RunStore(EngineTransactions(rt.db)).get(run))
+            waiting: dict[str, Any] = dict(cast(dict[str, Any], current["waiting"]))
+            waiting["payload"] = {**waiting["payload"], "draft": {"file": file_id}}
+            await RunStore(EngineTransactions(rt.db)).update(run, status="waiting", waiting=waiting)
+    params = {"view": "all", "pageSize": 100, "fileId": "fil_aaa111"}
+    rows = cast(list[dict[str, Any]], data(await c.get("/reviews", params=params, headers=BUILDER))["data"])
+    assert [r["id"] for r in rows] == [first], [r["id"] for r in rows]

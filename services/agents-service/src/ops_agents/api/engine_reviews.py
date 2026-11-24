@@ -298,6 +298,8 @@ class EngineRow(TypedDict):
     dueAt: str | None
     createdAt: JsonValue
     caseId: str | None
+    # The file the task is about, so a list can be cut to one file's tasks without building each review.
+    sourceFile: str | None
     _engine_review: tuple[Json, Json | None, str]
     decidedAt: NotRequired[JsonValue]
     assignee: NotRequired[JsonValue]
@@ -1085,6 +1087,7 @@ async def build_rows(rt: Runtime, reads: RowReads | None) -> list[EngineRow]:
             "createdAt": run["updated_at"],
             # "" says "looked up, on no case", so expand does not ask again per row.
             "caseId": on_case.get(str(run["id"])) or None,
+            "sourceFile": source_file(payload.get("draft"), run.get("input")),
             BUILD: (run, decided, on_case.get(str(run["id"]), "")),
         }
         if decided is not None:

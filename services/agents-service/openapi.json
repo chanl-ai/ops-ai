@@ -28380,6 +28380,22 @@
           },
           {
             "in": "query",
+            "name": "fileId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fileid"
+            }
+          },
+          {
+            "in": "query",
             "name": "group",
             "required": false,
             "schema": {

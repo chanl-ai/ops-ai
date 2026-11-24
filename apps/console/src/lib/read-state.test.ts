@@ -37,3 +37,8 @@ test('the header names the newest read when nothing was saved on the file', () =
   // A read saved on the file is shown as Read as shows it.
   assert.equal(readBadge({ typeId: 't', typeName: null, templateId: null, version: 1, path: 'model', fieldsToCheck: 0, extractionId: 'e', readAt: '' }, read({})), null);
 });
+
+test('a read no reply answered says why nothing was read, not that every field needs a check', () => {
+  const r = read({ outcome: 'incomplete', incomplete: { reason: 'cut_off', step: 'extract', tries: 2 }, needsReview: ['a', 'b'], fields: { a: field(0), b: field(0) } });
+  assert.equal(waitReason(r), 'nothing was read, because the model’s reply stopped at its length limit');
+});

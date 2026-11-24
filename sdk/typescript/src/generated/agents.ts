@@ -13574,6 +13574,7 @@ export interface operations {
                 kind?: string[];
                 agentSlug?: string[];
                 status?: string[];
+                fileId?: string | null;
                 group?: string | null;
             };
             header?: never;

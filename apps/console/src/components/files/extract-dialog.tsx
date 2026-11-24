@@ -16,6 +16,7 @@ import { SearchSelect } from '@/components/shared/search-select';
 import { documentTypeOptions, useDocumentType, useDocumentTypes } from '@/hooks/document-type-queries';
 import type { OptionSource } from '@/hooks/options-queries';
 import { type ReadResult, useStartExtraction } from '@/hooks/extraction-queries';
+import { notReadSaid } from '@/lib/not-read-said';
 import { cn } from '@/lib/utils';
 
 /** What each end of the extract workflow means for the person who pressed Extract. */
@@ -96,7 +97,8 @@ export function ExtractDialog({ open, onOpenChange, fileId, fileName, onDone, on
           : {};
       const run = await start.mutateAsync({ fileId, input, key });
       if (run.status === 'failed' || run.status === 'cancelled') return setError(`The read stopped (${run.status}). Open run ${run.runId} for the step that failed.`);
-      const said = READ_OUTCOME[run.status === 'waiting' || run.status === 'reading' ? run.status : (run.outcome ?? '')] ?? `Finished with outcome ${run.outcome ?? 'none'}`;
+      // A read no reply answered waits for a person to type its values: say why before the generic line about fields to check.
+      const said = run.notRead ? `${notReadSaid(run.notRead.reason, run.notRead.tries)} Type the required values in Human Tasks.` : READ_OUTCOME[run.status === 'waiting' || run.status === 'reading' ? run.status : (run.outcome ?? '')] ?? `Finished with outcome ${run.outcome ?? 'none'}`;
       // Top centre: the default corner sits over the fields the read just filled.
       toast.success(`Read ${fileName}`, { position: 'top-center', description: said, action: { label: 'Open run', onClick: () => router.push(`/build/runs/${encodeURIComponent(run.runId)}`) } });
       onOpenChange(false);

@@ -23,6 +23,18 @@ export const useFileExtractions = (fileId: string) =>
   });
 
 /**
+ * The newest Human Task about the file, open or decided, or null when no workflow task is about it: a read no reply
+ * answered waits in one (the Files panel links to it), and one the API asked for has none. Off until `enabled`.
+ */
+export const useFileTask = (fileId: string, enabled: boolean) =>
+  useTeamQuery({
+    queryKey: ['reviews', 'file-task', fileId],
+    queryFn: () => api.reviews.list({ view: 'all', fileId, page: 1, pageSize: 1 }),
+    select: (r) => r.data[0] ?? null,
+    enabled,
+  });
+
+/**
  * The file's layout for its Text tab: the cached one, or read now when there is none (a scanned page through OCR). The
  * read can take a minute on a long scan, so it is asked for once per visit and never retried on its own.
  */
@@ -64,6 +76,15 @@ export interface ReadResult {
    * while the file is still being read. */
   status: string;
   outcome: string | null;
+  /** Set when the run waits at a task whose read no model reply answered: why, and how many times the model was asked. */
+  notRead?: { reason: string; tries: number | null } | null;
+}
+
+/** The reason a waiting run's read was not read, from the draft its task shows; null for any other wait. */
+function notReadOf(run: { waiting?: { payload?: Record<string, unknown> } | null }): ReadResult['notRead'] {
+  const draft = run.waiting?.payload?.draft as { read?: { incomplete?: { reason?: unknown; tries?: unknown } } } | undefined;
+  const said = draft?.read?.incomplete;
+  return typeof said?.reason === 'string' ? { reason: said.reason, tries: typeof said.tries === 'number' ? said.tries : null } : null;
 }
 
 // A run parked on its own read (a long file read in the background) is not waiting for a person: it is said as
@@ -94,7 +115,7 @@ export function useStartExtraction() {
         await new Promise((r) => setTimeout(r, 1000));
         run = await api.engine.run(req.runId);
       }
-      return { runId: req.runId, status: onTheRead(run) ? 'reading' : run.status, outcome: run.outcome ?? null };
+      return { runId: req.runId, status: onTheRead(run) ? 'reading' : run.status, outcome: run.outcome ?? null, notRead: run.status === 'waiting' ? notReadOf(run) : null };
     },
     onSuccess: (_, { fileId }) =>
       Promise.all([qc.invalidateQueries({ queryKey: ek.byFile(fileId) }), qc.invalidateQueries({ queryKey: ['files'] })]),

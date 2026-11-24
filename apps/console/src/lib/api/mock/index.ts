@@ -1036,7 +1036,7 @@ export function createMockApi(): OpsApi {
       list: (p) =>
         respond((m) => {
           const scoped = teamReviews();
-          const byView = scoped.filter((r) =>
+          const byView = scoped.filter((r) => (p.fileId ? r.sourceFile === p.fileId : true)).filter((r) =>
             p.view === 'all' ? true : p.view === 'resolved' ? !isOpen(r) : p.view === 'overdue' ? isOpen(r) && (r.slaMinutes ?? 0) < 0 : p.view === 'mine' ? isOpen(r) && r.assignee === me : isOpen(r),
           );
           const sorted = p.view === 'resolved' || p.view === 'all' ? byView.sort((a, b) => (b.decidedAt ?? '').localeCompare(a.decidedAt ?? '')) : byView.sort((a, b) => (a.slaMinutes ?? 0) - (b.slaMinutes ?? 0));

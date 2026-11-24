@@ -1339,7 +1339,19 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/reviews",
         "pathParams": [],
-        "query": ["view", "page", "pageSize", "search", "risk", "workflowId", "kind", "agentSlug", "status", "group"],
+        "query": [
+            "view",
+            "page",
+            "pageSize",
+            "search",
+            "risk",
+            "workflowId",
+            "kind",
+            "agentSlug",
+            "status",
+            "fileId",
+            "group",
+        ],
         "stream": False,
     },
     "reviews_list_task_types": {
@@ -2030,6 +2042,7 @@ class Operations:
         kind: list[str] | None = None,
         agent_slug: list[str] | None = None,
         status: list[str] | None = None,
+        file_id: str | None = None,
         group: str | None = None,
     ) -> ReviewList:
         "List Reviews"
@@ -2047,6 +2060,7 @@ class Operations:
                 "kind": kind,
                 "agentSlug": agent_slug,
                 "status": status,
+                "fileId": file_id,
                 "group": group,
             },
             {},
@@ -3727,6 +3741,7 @@ class AsyncOperations:
         kind: list[str] | None = None,
         agent_slug: list[str] | None = None,
         status: list[str] | None = None,
+        file_id: str | None = None,
         group: str | None = None,
     ) -> ReviewList:
         "List Reviews"
@@ -3744,6 +3759,7 @@ class AsyncOperations:
                 "kind": kind,
                 "agentSlug": agent_slug,
                 "status": status,
+                "fileId": file_id,
                 "group": group,
             },
             {},
