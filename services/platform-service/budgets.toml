@@ -44,6 +44,11 @@ queries = 1
 ["GET /v1/auth/session"]
 queries = 1
 
+["GET /v1/auth/sso/links"]
+queries = 3
+transactions = 3   # listed: a bearer route like /v1/auth/session; the session, its person and the provider are each read by their own store call, owed one request transaction
+connections = 3
+
 ["GET /v1/health"]
 queries = 0
 
@@ -105,7 +110,7 @@ queries = 9
 queries = 9
 
 ["GET /v1/settings/members"]
-queries = 12
+queries = 17   # listed: which shown members who need a new invite manage access (linksOwnSession), read once for the page
 
 ["GET /v1/settings/members/options"]
 queries = 8
