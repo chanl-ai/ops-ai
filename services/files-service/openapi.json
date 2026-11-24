@@ -1622,6 +1622,31 @@
         "title": "FileVersion",
         "type": "object"
       },
+      "Folder": {
+        "additionalProperties": false,
+        "description": "One picked place of a watch: the input it was picked for, the source's id, and the name the picker showed\n(the id when none was kept).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input": {
+            "title": "Input",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input",
+          "id",
+          "name"
+        ],
+        "title": "Folder",
+        "type": "object"
+      },
       "Health": {
         "additionalProperties": false,
         "properties": {
@@ -2926,6 +2951,26 @@
             ],
             "title": "Name"
           },
+          "names": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "additionalProperties": {
+                    "maxLength": 300,
+                    "type": "string"
+                  },
+                  "maxProperties": 200,
+                  "type": "object"
+                },
+                "maxProperties": 50,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Names"
+          },
           "values": {
             "anyOf": [
               {
@@ -3081,6 +3126,19 @@
             "title": "Name",
             "type": "string"
           },
+          "names": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "maxLength": 300,
+                "type": "string"
+              },
+              "maxProperties": 200,
+              "type": "object"
+            },
+            "maxProperties": 50,
+            "title": "Names",
+            "type": "object"
+          },
           "plugin": {
             "maxLength": 120,
             "minLength": 1,
@@ -3138,9 +3196,24 @@
             "title": "Createdby",
             "type": "string"
           },
+          "filesInFiles": {
+            "title": "Filesinfiles",
+            "type": "integer"
+          },
+          "folders": {
+            "items": {
+              "$ref": "#/components/schemas/Folder"
+            },
+            "title": "Folders",
+            "type": "array"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "inUse": {
+            "title": "Inuse",
+            "type": "boolean"
           },
           "lastCheck": {
             "anyOf": [
@@ -3196,6 +3269,9 @@
           "source",
           "connectionId",
           "values",
+          "folders",
+          "filesInFiles",
+          "inUse",
           "createdBy",
           "createdAt",
           "updatedAt",

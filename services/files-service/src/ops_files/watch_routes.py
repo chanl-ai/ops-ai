@@ -34,6 +34,11 @@ from ops_service_kit.listing import ListQuery
 # A watch's settings as the source's picker saved them (site, libraries, folders); kept small, as a knowledge
 # source's are.
 VALUES_MAX = 50
+# Names kept per input for its picked places.
+NAMES_MAX = 200
+
+# {input: {id: name}}: what the picker called each place it saved in `values`, so the list names them.
+PickedNames = dict[str, Annotated[dict[str, Annotated[str, Field(max_length=300)]], Field(max_length=NAMES_MAX)]]
 
 
 async def watch_manager(p: CurrentPrincipal) -> Who:
@@ -53,13 +58,17 @@ class WatchIn(In):
     name: str = Field(min_length=1, max_length=200)
     plugin: str = Field(min_length=1, max_length=120)
     source: str = Field(min_length=1, max_length=120)
+    # The app connection the source reads through, as Add source's kinds name it; part of each file's identity.
     connection_id: str | None = Field(default=None, max_length=64)
     values: dict[str, JsonValue] = Field(max_length=VALUES_MAX)
+    names: PickedNames = Field(default_factory=dict, max_length=VALUES_MAX)
 
 
 class WatchChange(In):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     values: dict[str, JsonValue] | None = Field(default=None, max_length=VALUES_MAX)
+    # Replaces the kept names when given; left out, the kept names still label the ids that remain.
+    names: PickedNames | None = Field(default=None, max_length=VALUES_MAX)
 
 
 class FailedFile(Out):
@@ -80,6 +89,15 @@ class LastCheck(Out):
     failures: list[FailedFile] = Field(default_factory=list[FailedFile])
 
 
+class Folder(Out):
+    """One picked place of a watch: the input it was picked for, the source's id, and the name the picker showed
+    (the id when none was kept)."""
+
+    input: str
+    id: str
+    name: str
+
+
 class WatchView(Out):
     id: str
     name: str
@@ -87,6 +105,12 @@ class WatchView(Out):
     source: str
     connection_id: str | None
     values: dict[str, JsonValue]
+    # The picked places by name, in the order picked; inputs with no picker (path patterns) are not listed.
+    folders: list[Folder]
+    # The watch's files in Files now (entries not removed at the source).
+    files_in_files: int
+    # A workflow's Files changed trigger uses it, so Delete is refused. Always false until that trigger exists.
+    in_use: bool
     created_by: str
     created_at: datetime
     updated_at: datetime
@@ -127,6 +151,9 @@ def _view(w: WatchRow, now: datetime) -> WatchView:
         source=w.source,
         connection_id=w.connection_id,
         values=w.values,
+        folders=_named(w.values, w.value_names or {}),
+        files_in_files=w.files_in_files,
+        in_use=False,
         created_by=w.created_by,
         created_at=w.created_at,
         updated_at=w.updated_at,
@@ -134,6 +161,28 @@ def _view(w: WatchRow, now: datetime) -> WatchView:
         last_check_at=w.last_check_at,
         last_check=LastCheck.model_validate(w.last_outcome) if w.last_outcome else None,
     )
+
+
+def _named(values: dict[str, JsonValue], names: dict[str, dict[str, str]]) -> list[Folder]:
+    """Each picked id of the inputs the picker named, with its kept name; an id picked later and never named shows
+    as itself."""
+    out: list[Folder] = []
+    for field, labels in names.items():
+        picked = values.get(field)
+        for one in picked if isinstance(picked, list) else [picked] if isinstance(picked, str) else []:
+            if isinstance(one, str) and one:
+                out.append(Folder(input=field, id=one, name=labels.get(one, one)))
+    return out
+
+
+def _kept(names: dict[str, dict[str, str]], values: dict[str, JsonValue]) -> dict[str, dict[str, str]]:
+    """Only the names of ids the values pick, so a name the picker showed for a place left unpicked is not kept."""
+    out: dict[str, dict[str, str]] = {}
+    for field, labels in names.items():
+        picked = values.get(field)
+        ids = {x for x in (picked if isinstance(picked, list) else [picked]) if isinstance(x, str)}
+        out[field] = {k: v for k, v in labels.items() if k in ids}
+    return out
 
 
 def _folders(values: dict[str, JsonValue]) -> JsonValue:
@@ -200,6 +249,7 @@ def watches_router(store: WatchesStore, *, clock: Callable[[], datetime] = lambd
                 "source": body.source,
                 "connection_id": body.connection_id,
                 "values": body.values,
+                "value_names": _kept(body.names, body.values),
                 "created_by": who.actor,
                 "created_at": at,
             },
@@ -227,7 +277,8 @@ def watches_router(store: WatchesStore, *, clock: Callable[[], datetime] = lambd
                 "foldersBefore": _folders(before.values),
             },
         }
-        if not await store.change(watch_id, name=body.name, values=body.values, at=at, audit=audit):
+        names = None if body.names is None else _kept(body.names, body.values or before.values)
+        if not await store.change(watch_id, name=body.name, values=body.values, names=names, at=at, audit=audit):
             raise NotFound("watched folder")
         return ok(_view(await found(watch_id), at).model_dump(mode="json", by_alias=True))
 

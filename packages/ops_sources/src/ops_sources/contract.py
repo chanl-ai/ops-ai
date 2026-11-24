@@ -95,6 +95,7 @@ class Declared(BaseModel):
     listsWhole: bool = False  # noqa: N815
     fetchAtOnce: int | None = None  # noqa: N815
     site: bool = False
+    files: bool = False
     getTakesTag: bool = False  # noqa: N815
     schedule: dict[str, JsonValue] | None = None
     inputs: dict[str, dict[str, JsonValue]] = {}

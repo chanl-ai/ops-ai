@@ -3102,7 +3102,14 @@ export interface components {
              * @default false
              */
             connected: boolean;
+            /** Connectionid */
+            connectionId?: string | null;
             defaults: components["schemas"]["SourceKindDefaults"];
+            /**
+             * Files
+             * @default false
+             */
+            files: boolean;
             /**
              * Group
              * @enum {string}

@@ -167,6 +167,12 @@ class FileVersion(TypedDict, closed=True):
     version: int
 
 
+class Folder(TypedDict, closed=True):
+    id: str
+    input: str
+    name: str
+
+
 class Health(TypedDict, closed=True):
     reason: NotRequired[str | None]
     status: str
@@ -454,6 +460,7 @@ class UploadTicket(TypedDict, closed=True):
 
 class WatchChange(TypedDict, closed=True):
     name: NotRequired[str | None]
+    names: NotRequired[dict[str, dict[str, str]] | None]
     values: NotRequired[dict[str, JsonValue] | None]
 
 
@@ -476,6 +483,7 @@ class WatchEvents(TypedDict, closed=True):
 class WatchIn(TypedDict, closed=True):
     connectionId: NotRequired[str | None]
     name: str
+    names: NotRequired[dict[str, dict[str, str]]]
     plugin: str
     source: str
     values: dict[str, JsonValue]
@@ -486,7 +494,10 @@ class WatchView(TypedDict, closed=True):
     connectionId: str | None
     createdAt: str
     createdBy: str
+    filesInFiles: int
+    folders: list[Folder]
     id: str
+    inUse: bool
     lastCheck: LastCheck | None
     lastCheckAt: str | None
     name: str

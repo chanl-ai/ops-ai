@@ -8,7 +8,7 @@ order the check wrote them. Events are kept 90 days and swept by the retention p
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 import sqlalchemy as sa
 from pydantic import JsonValue
@@ -26,7 +26,7 @@ from ops_store.schema import TENANT_SCOPED, team_owned
 from ops_store.store import Store
 from ops_store.team_scope import any_team, team_visible
 
-from .files import ROLE
+from .files import ROLE, files
 
 file_watches = sa.Table(
     "file_watches",
@@ -40,6 +40,8 @@ file_watches = sa.Table(
     sa.Column("connection_id", sa.String(64)),
     # The source's settings as the picker saved them (site, library, folders), sent to every call as `source`.
     sa.Column("values", sa.JSON, nullable=False),
+    # {input: {id: name}}: what the picker called each picked place, for the list; the calls are sent only `values`.
+    sa.Column("value_names", sa.JSON),
     # ops_sources.Place, saved after every page by the lease holder.
     sa.Column("place", sa.JSON, nullable=False),
     sa.Column("created_by", sa.String(320), nullable=False),
@@ -91,6 +93,7 @@ class NewWatch(TypedDict):
     source: str
     connection_id: str | None
     values: dict[str, JsonValue]
+    value_names: NotRequired[dict[str, dict[str, str]]]
     created_by: str
     created_at: datetime
 
@@ -128,6 +131,7 @@ class WatchRow(Out):
     source: str
     connection_id: str | None
     values: dict[str, JsonValue]
+    value_names: dict[str, dict[str, str]] | None = None
     place: dict[str, JsonValue]
     created_by: str
     created_at: datetime
@@ -138,6 +142,8 @@ class WatchRow(Out):
     last_check_at: datetime | None
     last_outcome: dict[str, JsonValue] | None
     next_event: int
+    # The watch's files in Files now: its entries not removed at the source.
+    files_in_files: int = 0
 
 
 class EventRow(Out):
@@ -156,6 +162,18 @@ class EventRow(Out):
 
 class WatchesStore(Store):
     role = ROLE
+
+    @staticmethod
+    def _with_count() -> sa.Select[Any]:
+        """The watch's row with how many of its files are in Files, counted in the same statement."""
+        w, f = file_watches, files
+        held = (
+            sa.select(sa.func.count())
+            .where(f.c.tenant_id == w.c.tenant_id, f.c.watch_id == w.c.id, f.c.removed_at.is_(None), team_visible(f))
+            .correlate(w)
+            .scalar_subquery()
+        )
+        return sa.select(w, held.label("files_in_files"))
 
     def _mine(self, watch_id: str) -> tuple[sa.ColumnElement[bool], ...]:
         w = file_watches
@@ -185,14 +203,14 @@ class WatchesStore(Store):
 
     async def get(self, watch_id: str) -> WatchRow | None:
         async with self.tx() as c:
-            row = (await c.execute(sa.select(file_watches).where(*self._mine(watch_id)))).mappings().first()
+            row = (await c.execute(self._with_count().where(*self._mine(watch_id)))).mappings().first()
         return WatchRow.model_validate(dict(row)) if row else None
 
     async def list(self, team: str, params: ListParams) -> tuple[list[WatchRow], ListPage[dict[str, JsonValue]]]:
         """A page of the team's watches by name on the shared list contract, searched by name; the rows and the page
         they came from (its pagination)."""
         w = file_watches
-        q = sa.select(w).where(w.c.tenant_id == isolation.tenant(), w.c.team == team, team_visible(w))
+        q = self._with_count().where(w.c.tenant_id == isolation.tenant(), w.c.team == team, team_visible(w))
         async with self.tx() as c:
             page = await list_page(c, q, params, search=(w.c.name,), default_sort=w.c.name.asc())
         return [WatchRow.model_validate(r) for r in page["data"]], page
@@ -213,14 +231,24 @@ class WatchesStore(Store):
             return [(str(r[0]), str(r[1])) for r in await c.execute(q)]
 
     async def change(
-        self, watch_id: str, *, name: str | None, values: dict[str, JsonValue] | None, at: datetime, audit: Audit
+        self,
+        watch_id: str,
+        *,
+        name: str | None,
+        values: dict[str, JsonValue] | None,
+        names: dict[str, dict[str, str]] | None = None,
+        at: datetime,
+        audit: Audit,
     ) -> bool:
-        """New folders start a fresh place, so the next check lists the new folders whole."""
+        """New folders start a fresh place, so the next check lists the new folders whole. `names` replaces the
+        picked places' names when given; else the names kept still label the ids that remain."""
         given: dict[str, object] = {"updated_at": at}
         if name is not None:
             given["name"] = name
         if values is not None:
             given["values"], given["place"] = values, {}
+        if names is not None:
+            given["value_names"] = names
         async with self.tx() as c:
             team = (await c.execute(sa.select(file_watches.c.team).where(*self._mine(watch_id)))).scalar()
             if team is None:

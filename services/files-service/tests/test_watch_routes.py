@@ -159,3 +159,29 @@ async def test_the_file_page_names_its_watched_folder_and_an_upload_names_none(
             None,
             "2026-11-24T10:40:00Z",
         ), after
+
+
+async def test_the_list_names_a_watchs_folders_counts_its_files_and_keeps_its_connection(
+    client: Client,  # noqa: F811
+    engine: AsyncEngine,
+    tenant: str,
+    tmp_path: Path,
+) -> None:
+    """The Watched folders row shows folder names (not "libraries: 1"), how many of its files are in Files, and the
+    connection it was made with; a name for a folder no longer picked is dropped when the folders change."""
+    names = {"libraries": {"Invoices": "Supplier invoices", "Elsewhere": "Not picked"}}
+    async with client() as builder:
+        made = _data(await builder.post("/v1/watches", json={**WATCH, "names": names}, headers=OPS))
+        await _brought_in(engine, tmp_path, tenant, made["id"])
+        [row] = _data(await builder.get("/v1/watches", headers=OPS))["data"]
+        assert row["folders"] == [
+            {"input": "libraries", "id": "Invoices", "name": "Supplier invoices"},
+        ], row["folders"]
+        assert (row["filesInFiles"], row["inUse"], row["connectionId"]) == (1, False, "con_1"), row
+        changed = await builder.patch(
+            f"/v1/watches/{made['id']}", json={"values": {"libraries": ["Invoices", "Archive"]}}, headers=OPS
+        )
+        assert _data(changed)["folders"] == [
+            {"input": "libraries", "id": "Invoices", "name": "Supplier invoices"},
+            {"input": "libraries", "id": "Archive", "name": "Archive"},
+        ], _data(changed)

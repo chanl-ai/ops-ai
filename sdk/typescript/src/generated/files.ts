@@ -1153,6 +1153,19 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * Folder
+         * @description One picked place of a watch: the input it was picked for, the source's id, and the name the picker showed
+         *     (the id when none was kept).
+         */
+        Folder: {
+            /** Id */
+            id: string;
+            /** Input */
+            input: string;
+            /** Name */
+            name: string;
+        };
         /** Health */
         Health: {
             /** Reason */
@@ -1640,6 +1653,12 @@ export interface components {
         WatchChange: {
             /** Name */
             name?: string | null;
+            /** Names */
+            names?: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            } | null;
             /** Values */
             values?: {
                 [key: string]: components["schemas"]["JsonValue"];
@@ -1683,6 +1702,12 @@ export interface components {
             connectionId?: string | null;
             /** Name */
             name: string;
+            /** Names */
+            names?: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
             /** Plugin */
             plugin: string;
             /** Source */
@@ -1705,8 +1730,14 @@ export interface components {
             createdAt: string;
             /** Createdby */
             createdBy: string;
+            /** Filesinfiles */
+            filesInFiles: number;
+            /** Folders */
+            folders: components["schemas"]["Folder"][];
             /** Id */
             id: string;
+            /** Inuse */
+            inUse: boolean;
             lastCheck: components["schemas"]["LastCheck"] | null;
             /** Lastcheckat */
             lastCheckAt: string | null;
