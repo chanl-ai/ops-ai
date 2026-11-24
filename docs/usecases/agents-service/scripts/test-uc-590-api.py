@@ -77,8 +77,8 @@ def install(c: httpx.Client, tid: str, who: dict[str, str] = OPS, **body: Any) -
 
 
 def listed(c: httpx.Client, who: dict[str, str], kind: str | None = None) -> list[dict[str, Any]]:
-    r = c.get("/v1/templates", params={"kind": kind} if kind else None, headers=who)
-    return list(data(r) or []) if r.status_code == 200 else [{"error": said(r)}]
+    r = c.get("/v1/templates", params={"pageSize": 50, **({"kind": kind} if kind else {})}, headers=who)
+    return list((data(r) or {}).get("data") or []) if r.status_code == 200 else [{"error": said(r)}]
 
 
 def agent_total(c: httpx.Client) -> int:
@@ -294,8 +294,8 @@ def copy_id(r: httpx.Response) -> str | None:
 
 def rows(c: httpx.Client, who: dict[str, str]) -> list[dict[str, Any]]:
     """The desk's resources as a service lists them for `who`."""
-    r = c.get("/v1/templates", params={"source": DESK}, headers=who)
-    found = list(data(r) or []) if r.status_code == 200 else []
+    r = c.get("/v1/templates", params={"source": DESK, "pageSize": 50}, headers=who)
+    found = list((data(r) or {}).get("data") or []) if r.status_code == 200 else []
     # documents-service's list takes no source; the desk's are kept here.
     return [t for t in found if t.get("source") == DESK]
 

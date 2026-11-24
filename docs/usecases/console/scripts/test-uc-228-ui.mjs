@@ -57,7 +57,7 @@ await withUiStack(
         await page.getByRole('button', { name: 'Start run' }).first().click({ timeout: 120_000 });
         const dialog = page.getByRole('dialog', { name: 'Start a run' });
         await dialog.waitFor();
-        await dialog.getByTestId('start-run-workflow').getByRole('button', { name: 'Choose a workflow' }).click();
+        await dialog.getByTestId('start-run-workflow').getByRole('button', { name: 'Choose', exact: true }).click();
         const list = page.locator('[cmdk-list]');
         await page.getByRole('option').first().waitFor({ timeout: 30_000 });
         // The list pages on scroll; scrolling to the end loads every page the server has.

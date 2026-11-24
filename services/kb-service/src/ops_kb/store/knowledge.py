@@ -1426,8 +1426,18 @@ class KnowledgeStore(Store):
         async with self.tx() as c:
             return await rows(c, q, ChunkRow)
 
-    async def units(self, tenant: str, item_id: str) -> list[UnitRow]:
-        """The index units of the item's live pieces: what each is searched as."""
+    async def chunk_page(self, tenant: str, item_id: str, params: ListParams) -> tuple[ListPage, list[ChunkRow]]:
+        """One page of the item's live pieces in reading order, searched by text and section in SQL."""
+        k = kb_chunks.c
+        q = sa.select(k.id, k.position, k.section, k.page, k.tokens, k.text, k.metadata).where(
+            k.tenant_id == tenant, k.item_id == item_id, k.withdrawn_at.is_(None), team_visible(kb_chunks)
+        )
+        async with self.tx() as c:
+            page = await list_page(c, q, params, search=[k.text, k.section], default_sort=k.position.asc())
+        return page, [ChunkRow.model_validate(row) for row in page["data"]]
+
+    async def units(self, tenant: str, item_id: str, chunk_ids: list[str] | None = None) -> list[UnitRow]:
+        """The index units of the item's live pieces (of `chunk_ids` only, when given): what each is searched as."""
         q = (
             sa.select(kb_units.c.chunk_id, kb_units.c.kind, kb_units.c.position, kb_units.c.text)
             .join(
@@ -1439,6 +1449,7 @@ class KnowledgeStore(Store):
                 kb_chunks.c.withdrawn_at.is_(None),
                 team_visible(kb_units),
                 team_visible(kb_chunks),
+                *([kb_units.c.chunk_id.in_(chunk_ids)] if chunk_ids is not None else []),
             )
             .order_by(kb_chunks.c.position, kb_units.c.position)
         )

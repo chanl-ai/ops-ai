@@ -25,7 +25,7 @@ const openWidget = async (page, consoleUrl) => {
   await dialog.getByLabel('Name').fill(`Layout ${TAG}`);
   await dialog.getByLabel('When the agent uses it').fill('The person asks for a layout check.');
   await dialog.getByLabel('Name').press('Enter');
-  await page.waitForURL((u) => /^\/widgets\/[^/]+$/.test(u.pathname), { timeout: 30_000 });
+  await page.waitForURL((u) => /^\/build\/widgets\/[^/]+$/.test(u.pathname), { timeout: 30_000 });
   await page.getByTestId('widget-preview').waitFor({ timeout: 60_000 });
 };
 // Luminance of any CSS colour, through a canvas pixel, so oklch and color-mix values compare alike.
@@ -111,7 +111,7 @@ await withUiStack(
         return a.getAttribute('href');
       };
       const handles = {};
-      for (const [path, prefix, suffix] of [['/agents', '/agents/', ''], ['/model-risk', '/model-risk/', '']]) {
+      for (const [path, prefix, suffix] of [['/agents', '/build/agents/', ''], ['/model-risk', '/govern/models/', '']]) {
         const href = await firstLink(path, prefix);
         await page.goto(`${consoleUrl}${href}${suffix}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         handles[path] = await page.locator('[data-slot="resizable-handle"]').first().waitFor({ timeout: 60_000 }).then(() => true, () => false);
@@ -121,7 +121,7 @@ await withUiStack(
       // Rule 3: at 320px the tab labels of a record page sit inside their tabs and the page does not widen.
       const narrow = await signIn(browser, consoleUrl, 320);
       await narrow.goto(`${consoleUrl}/workflows`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      const link = narrow.locator('tbody a[href^="/workflows/"]').first();
+      const link = narrow.locator('tbody a[href^="/build/workflows/"]').first();
       await link.waitFor({ timeout: 120_000 });
       await narrow.goto(`${consoleUrl}${await link.getAttribute('href')}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await narrow.locator('[data-slot="tabs-list"]').first().waitFor({ timeout: 60_000 });

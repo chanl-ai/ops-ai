@@ -31,7 +31,7 @@ from ops_store.rows import one, rows
 from .audit import record, record_grants_ending
 from .key_events import change_keys
 from .lookups import INVITE, lookup
-from .roles import holds_admin, mirror_membership, team_admins
+from .roles import admins_in, holds_admin, mirror_membership, team_admins
 from .tables import (
     api_keys,
     audit_entries,
@@ -452,7 +452,7 @@ class TeamStore(TenantDb):
     async def admins_among(self, tenant_id: str, user_ids: Sequence[str]) -> set[str]:
         """Which of these people manage access in some team or are on the break-glass list (`holds_admin`)."""
         async with self.tenant_tx(tenant_id) as c:
-            return {u for u in user_ids if await holds_admin(c, tenant_id, u)}
+            return await admins_in(c, tenant_id, user_ids)
 
     async def affected(self, tenant_id: str, team_id: str) -> list[str]:
         """The ids of the team's members `_needs_invite` names, so the caller makes one token for each."""

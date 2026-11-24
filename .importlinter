@@ -142,7 +142,10 @@ source_modules = ops_engine.store
 forbidden_modules = ops_engine.*
 ignore_imports =
     ops_engine.store.** -> ops_engine.store.**
+    # journal.py is the step journal contract the store implements: its statuses, ports and what a recorded error
+    # proves, no I/O. steps.py writes the rows, runs.py sets a failed step aside for a Redrive by the same rules.
     ops_engine.store.steps -> ops_engine.journal
+    ops_engine.store.runs -> ops_engine.journal
 
 [importlinter:contract:services-independent]
 name = No service imports another

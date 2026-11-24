@@ -1,4 +1,4 @@
-// uc-772 a watched folder brings files in, ui layer: docs/usecases/files-service/a-watched-folder-brings-files-in.md.
+// uc-779 a watched folder brings files in, ui layer: docs/usecases/files-service/a-watched-folder-brings-files-in.md.
 // The built-in SharePoint plugin (the copy every stack ships) runs in the stack's tools-service against its fake (docs/usecases/lib/fake_sharepoint_confluence.py,
 // run as a script with --oversize: one file in the Policies folder Graph reports as 30 MB), and files-service checks the
 // watch through it. James (builder) watches a folder from Files › Watched folders before and after the team connects
@@ -89,7 +89,7 @@ try {
           links.length === 1 && links[0] === '/data/connectors' && (await next.isDisabled()) && (await next.innerText()).includes('connect an app first'),
           { links, disabled: await next.isDisabled(), next: await next.innerText() },
         );
-        await shoot(page, 'uc-772-no-connection', async () => none.waitFor(), wide);
+        await shoot(page, 'uc-779-no-connection', async () => none.waitFor(), wide);
         await dialog.getByRole('button', { name: 'Cancel' }).click();
 
         // The team's set-up, through the API: Security allows the hosts and range, Priya signs SharePoint in.
@@ -117,7 +117,7 @@ try {
         await notice.waitFor({ timeout: 30_000 });
         const review = await dialog.innerText();
         check('13 the review names the folders by name and says everyone on the team can read the files', review.includes('Human Resources') && review.includes('Policies Library') && review.includes('Everyone on the team can read these files'), review.slice(0, 600));
-        await shoot(page, 'uc-772-review', async () => notice.waitFor(), wide);
+        await shoot(page, 'uc-779-review', async () => notice.waitFor(), wide);
         const creating = armed(page.waitForResponse((r) => r.request().method() === 'POST' && isList(r.url()), { timeout: 60_000 }));
         await dialog.getByTestId('watch-create').click();
         const created = await creating;
@@ -169,7 +169,7 @@ try {
         check('25 at 390 the row shows the last check and the failed file with no sideways scroll', /brought in/.test(phoneText) && phoneText.includes('failed') && !phoneScroll, { phoneText, phoneScroll });
         await page.setViewportSize({ width: 1440, height: 1000 });
         // The failed file is drawn in the In Files cell from 640 wide and under the folder's name below it.
-        await shoot(page, 'uc-772-watched-folders', async () => page.locator(`[data-testid="watch-failed-${watch.id}"], [data-testid="watch-failed-stacked-${watch.id}"]`).locator('visible=true').first().waitFor(), wide);
+        await shoot(page, 'uc-779-watched-folders', async () => page.locator(`[data-testid="watch-failed-${watch.id}"], [data-testid="watch-failed-stacked-${watch.id}"]`).locator('visible=true').first().waitFor(), wide);
 
         // The file page's Source section, for a file the check brought in.
         const leave = events.find((e) => e.kind === 'new' && String(e.path).endsWith('leave.md'));
@@ -178,7 +178,7 @@ try {
         await source.waitFor({ timeout: 60_000 });
         const said = await source.innerText();
         check('15 a brought-in file\'s page names its watched folder and its path at the source', said.includes(NAME) && said.includes('Policies › leave.md'), said);
-        await shoot(page, 'uc-772-file-source', async () => source.waitFor(), wide);
+        await shoot(page, 'uc-779-file-source', async () => source.waitFor(), wide);
 
         // S1: Ravi reads the list with no Watch a folder and no row menu, and a direct call is refused.
         const ravi = await signIn(browser, consoleUrl, RAVI, problems, watching);
@@ -193,7 +193,7 @@ try {
           (await ravi.getByTestId('watch-add').count()) === 0 && (await raviRow.getByRole('button', { name: 'Open menu' }).count()) === 0 && (await raviRow.innerText()).includes(fakes.info.oversize.name) && add.status === 403 && checkNow.status === 403,
           { add: add.status, check: checkNow.status, buttons: await ravi.getByTestId('watch-add').count() },
         );
-        await shoot(ravi, 'uc-772-viewer', async () => raviRow.waitFor(), wide);
+        await shoot(ravi, 'uc-779-viewer', async () => raviRow.waitFor(), wide);
 
         // S4: Knowledge's Add source keeps its SharePoint step 2: both pickers, the path rules and the preview.
         await page.goto(`${consoleUrl}/data/knowledge`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -219,7 +219,7 @@ try {
           (await wizard.getByTestId('add-source-name').count()) === 1 && /Include/.test(step2) && /Exclude/.test(step2) && (await wizard.getByTestId('add-source-preview').count()) === 0,
           step2.slice(0, 800),
         );
-        await shoot(page, 'uc-772-knowledge-step-2', async () => kbLibs.waitFor(), wide);
+        await shoot(page, 'uc-779-knowledge-step-2', async () => kbLibs.waitFor(), wide);
 
         // The list's loading, empty and error states, by intercepting its one GET.
         let held;
@@ -227,7 +227,7 @@ try {
         await page.goto(watches, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const skeleton = page.getByTestId('page-skeleton');
         await skeleton.waitFor({ timeout: 60_000 });
-        await shoot(page, 'uc-772-loading', async () => skeleton.waitFor(), wide);
+        await shoot(page, 'uc-779-loading', async () => skeleton.waitFor(), wide);
         check('18 while the list loads the page shows its skeleton', await skeleton.isVisible());
         await held?.continue();
         await page.unroute((u) => isList(u.href));
@@ -243,7 +243,7 @@ try {
         const empty = page.getByText('No watched folders yet');
         await empty.waitFor({ timeout: 60_000 });
         check('18 a team with no watches sees the empty state with Watch a folder', await page.getByRole('button', { name: 'Watch a folder' }).first().isVisible());
-        await shoot(page, 'uc-772-empty', async () => empty.waitFor(), wide);
+        await shoot(page, 'uc-779-empty', async () => empty.waitFor(), wide);
         await page.unroute((u) => isList(u.href));
 
         // A refused request logs a console error by design; it is not counted for this state.
@@ -253,7 +253,7 @@ try {
         const failed = page.getByText('Couldn’t load watched folders');
         await failed.waitFor({ timeout: 90_000 });
         check('18 a list request that fails says so with Try again', await page.getByRole('button', { name: /Try again|Retrying/ }).isVisible());
-        await shoot(page, 'uc-772-error', async () => failed.waitFor(), wide);
+        await shoot(page, 'uc-779-error', async () => failed.waitFor(), wide);
         await page.unroute((u) => isList(u.href));
         watching.on = true;
 
@@ -272,7 +272,7 @@ try {
         const checkingShown = page.getByText('Checking…').locator('visible=true').first();
         await checking.waitFor({ timeout: 60_000 });
         check('19 a check in progress shows Checking on its row', await checking.isVisible());
-        await shoot(page, 'uc-772-checking', async () => checkingShown.waitFor({ timeout: 30_000 }), wide);
+        await shoot(page, 'uc-779-checking', async () => checkingShown.waitFor({ timeout: 30_000 }), wide);
         await page.unroute((u) => isList(u.href));
         const refusedAs = (code, stopped) => (w) => ({ ...w, checking: false, lastCheckAt: new Date().toISOString(), lastCheck: { ...w.lastCheck, status: 'refused', code, stopped } });
         await page.route((u) => isList(u.href), answered(refusedAs('needs_reconnect', 'The connection refused its sign-in.')));
@@ -281,7 +281,7 @@ try {
         await alert.waitFor({ timeout: 60_000 });
         const alertText = await alert.innerText();
         check('19 a check refused for its sign-in says so with Reconnect', /refused the sign-in/.test(alertText) && (await alert.getByTestId('watch-reconnect').isVisible()), alertText);
-        await shoot(page, 'uc-772-refused', async () => alert.waitFor(), wide);
+        await shoot(page, 'uc-779-refused', async () => alert.waitFor(), wide);
         await page.unroute((u) => isList(u.href));
         await page.route((u) => isList(u.href), answered(refusedAs('unreachable', 'Apps could not be reached.')));
         await page.goto(watches, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -298,7 +298,7 @@ try {
         const partialShown = await partial.waitFor({ timeout: 60_000 }).then(() => true, () => false);
         const partialText = partialShown ? await partial.innerText() : await row.innerText();
         check('19 a check that stopped partial says Partial with its reason and no green tick', partialShown && /Partial/.test(partialText) && /could not be fetched/.test(partialText) && (await partial.locator('.text-success').count()) === 0, partialText);
-        if (partialShown) await shoot(page, 'uc-772-partial', async () => page.getByText(/^Partial/).locator('visible=true').first().waitFor({ timeout: 30_000 }), wide);
+        if (partialShown) await shoot(page, 'uc-779-partial', async () => page.getByText(/^Partial/).locator('visible=true').first().waitFor({ timeout: 30_000 }), wide);
         await page.unroute((u) => isList(u.href));
 
         // Stop watching replaces Delete, and says what happens to the files.
@@ -312,7 +312,7 @@ try {
         await stopDialog.waitFor({ timeout: 30_000 });
         const stopText = await stopDialog.innerText();
         check('26 the row action is Stop watching, not Delete, and its dialog says the files stay in Files', hasDelete === 0 && /already in Files stay there/.test(stopText), { hasDelete, stopText });
-        await shoot(page, 'uc-772-stop-watching', async () => stopDialog.waitFor(), wide);
+        await shoot(page, 'uc-779-stop-watching', async () => stopDialog.waitFor(), wide);
         await stopDialog.getByTestId('watch-stop-confirm').click();
         await stopRow.waitFor({ state: 'detached', timeout: 60_000 });
         const kept = await fetch(`${files}/v1/files/${leave?.fileId}`, { headers: H });

@@ -520,11 +520,6 @@ class EnvelopeListTemplateOffer(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListTemplateView(TypedDict, closed=True):
-    data: list[TemplateView]
-    success: Literal[True]
-
-
 class ExtractionCorrection(TypedDict, closed=True):
     corrected: JsonValue
     correctedAt: str
@@ -551,6 +546,12 @@ class LayoutBlock(TypedDict, closed=True):
     order: int
     page: int
     text: str
+
+
+class ListResultTemplateView(TypedDict, closed=True):
+    data: list[TemplateView]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
 
 
 class ReadingBlock(TypedDict, closed=True):
@@ -614,6 +615,11 @@ class DocumentType(TypedDict, closed=True):
 
 class EnvelopeDocumentType(TypedDict, closed=True):
     data: DocumentType
+    success: Literal[True]
+
+
+class EnvelopeListResultTemplateView(TypedDict, closed=True):
+    data: ListResultTemplateView
     success: Literal[True]
 
 
