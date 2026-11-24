@@ -1,0 +1,53 @@
+# List routes that answer every row or cannot be searched (scripts/check_list_routes.py). This list only shrinks.
+# bounded: a fixed or per-record set; owed: unbounded, to move onto ListQuery. POST /v1/tool-modules/discover is
+# not a GET: it answers the operations of a source the caller just gave, held in the browser while the dialog is open.
+agents-service GET /v1/activity  # owed: pages; search not wired (list_page has no search columns)
+agents-service GET /v1/agents/{agent_id}/live  # bounded: one agent's live places
+agents-service GET /v1/agents/{agent_id}/runs  # bounded: an agent's most recent runs, capped by the route
+agents-service GET /v1/agents/{agent_id}/versions  # bounded: one agent's versions
+agents-service GET /v1/batches/{batch_id}  # bounded: one batch and its items
+agents-service GET /v1/channels/mailboxes  # owed: every mailbox of the team; takes search but no page
+agents-service GET /v1/eval-runs/{run_id}  # bounded: one kept eval run and its cases' results
+agents-service GET /v1/graphs  # owed: every graph name, read by the workflow editor
+agents-service GET /v1/graphs/{name}/versions  # bounded: one graph's versions
+agents-service GET /v1/knowledge-usage  # owed: every agent using a knowledge base
+agents-service GET /v1/me/memories  # owed: every memory the person holds
+agents-service GET /v1/model-aliases  # bounded: the install's model aliases
+agents-service GET /v1/prompts/variables  # bounded: the fixed prompt variables
+agents-service GET /v1/threads/{thread_id}/inbox  # bounded: one thread's inbox
+agents-service GET /v1/threads/{thread_id}/runs  # bounded: one thread's runs
+agents-service GET /v1/workflow-refs  # owed: every workflow name a reference may name
+agents-service GET /v1/workflows/node-types  # bounded: the fixed step types
+agents-service GET /v1/workflows/option-sources  # bounded: the fixed option sources of a form field
+agents-service GET /v1/workflows/{workflow_id}/live  # bounded: one workflow's live places
+agents-service GET /v1/workflows/{workflow_id}/runs  # owed: pages; search not wired
+agents-service GET /v1/workflows/{workflow_id}/versions  # bounded: one workflow's versions
+documents-service GET /v1/document-types/{type_id}/examples  # bounded: one document type's examples
+documents-service GET /v1/document-types/{type_id}/template-offers  # bounded: one document type's template offers
+documents-service GET /v1/document-types/{type_id}/versions/{version}  # bounded: one version's fields
+files-service GET /v1/settings/storage/credentials  # bounded: the install's storage credentials
+kb-service GET /v1/knowledge-bases/refs  # owed: every knowledge base name a reference may name
+kb-service GET /v1/knowledge/source-kinds  # bounded: the fixed source kinds
+kb-service GET /v1/sources/from-plugin  # bounded: one plugin's knowledge sources
+kb-service GET /v1/sources/{source_id}/tombstones  # owed: every removed item of a source
+models-service GET /v1/provider-keys/{name}/models  # bounded: the provider's model catalog, read upstream
+platform-service GET /v1/api-key-summaries  # owed: every API key of the team
+platform-service GET /v1/oauth/grants  # owed: every OAuth grant of the person
+platform-service GET /v1/people-names  # owed: names of the people a page shows, by id
+platform-service GET /v1/policies  # bounded: the install's policies
+platform-service GET /v1/settings/sign-in/break-glass  # bounded: the install's break-glass accounts
+platform-service GET /v1/settings/sign-in/providers  # bounded: the install's sign-in providers
+platform-service GET /v1/settings/sign-in/secret-names  # bounded: the install's sign-in secret names
+platform-service GET /v1/settings/sign-in/secrets  # bounded: the install's sign-in secrets
+platform-service GET /v1/team-names  # owed: names of the teams a page shows, by id
+platform-service GET /v1/teams  # owed: every team of the person
+tools-service GET /v1/app-credentials  # owed: every credential of an app
+tools-service GET /v1/apps/{app_id}/accounts  # owed: every account of an app
+tools-service GET /v1/apps/{app_id}/resources  # bounded: one app's resources
+tools-service GET /v1/grantable-operations  # owed: every operation a grant may name
+tools-service GET /v1/knowledge-sources  # bounded: the plugins' knowledge source kinds
+tools-service GET /v1/me/accounts  # owed: every account the person holds
+tools-service GET /v1/me/connections  # owed: every connection the person holds
+tools-service GET /v1/plugin-templates  # bounded: one plugin's templates
+tools-service GET /v1/tool-catalog  # owed: keyset pages by after; no search
+tools-service GET /v1/tool-modules/{module_id}  # bounded: one module and its operations

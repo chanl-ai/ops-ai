@@ -42,8 +42,9 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import Envelope, In, Json, JsonList, JsonValue, Out
+from ops_service_kit.http import Envelope, In, Json, JsonList, JsonValue, ListResult, Out, page_rows
 from ops_service_kit.ids import new_id
+from ops_service_kit.listing import ListQuery
 from ops_service_kit.names import Name
 from ops_service_kit.template_merge import Choice, FieldOutcome, Strictness, apply, merge
 
@@ -335,17 +336,19 @@ async def _record_digest(rt: Runtime, kind: str, record_id: str) -> str | None:
     return found.digest if found else None
 
 
-@router.get("", response_model=Envelope[list[TemplateView]])
+@router.get("", response_model=Envelope[ListResult[TemplateView]])
 async def list_templates(
     rt: Rt,
     me: Annotated[Principal, Depends(reader_of("agents"))],
+    q: ListQuery,
     kind: Annotated[Kind | None, Query()] = None,
     source: Annotated[str | None, Query(max_length=200)] = None,
 ) -> JSONResponse:
     """The agents, skills and workflows the team's plugins bring, each with its state for the team, the copies the team
     holds of it and whether the caller may add it; `source` keeps one plugin's. A copy whose template the app no longer
     ships, while the app is still on, is listed too, as `removed_upstream`; a copy of an app turned off for the team
-    reads `added`, with nothing to add."""
+    reads `added`, with nothing to add. A page of the shared list query: `search` matches the title and the plugin's
+    title; the rows come from the plugins rather than a table, so `page_rows` pages them."""
     team = _team(me)
     held = await TemplateCopies(rt.db).of_team()
     offered = await _templates(rt, team)
@@ -413,7 +416,7 @@ async def list_templates(
                 }
             ).model_dump(by_alias=True)
         )
-    return ok(out)
+    return ok(page_rows(out, q, search=_searched, key=lambda t: f"{t['source']}:{t['id']}"))
 
 
 async def _remove_cell(rt: Runtime, copy: TemplateCopyRow) -> Json:
@@ -1180,3 +1183,9 @@ async def detach_copy(rt: Rt, me: Me, _: Tx, resource: str, copy: str) -> JSONRe
 
 
 __all__ = ["resource_ref"]
+
+
+def _searched(t: Json) -> str:
+    """What the list's `search` matches: the template's title and its plugin's title."""
+    plugin = t.get("plugin")
+    return f"{t.get('title', '')} {plugin.get('title', '') if isinstance(plugin, dict) else ''}"

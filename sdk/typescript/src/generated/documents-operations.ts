@@ -376,7 +376,13 @@ export const documentsOperations = {
     "path": "/v1/templates",
     "pathParams": [],
     "query": [
-      "kind"
+      "kind",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   }

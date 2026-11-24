@@ -74,11 +74,10 @@
     "src/components/workflows/definition-editor/step-list.tsx"
   ],
   "listFilter": [
-    "src/components/knowledge/document-sheet.tsx",
+    "src/app/overview/page.tsx",
     "src/components/shared/instruction-document/instruction-document.tsx",
     "src/components/shared/tag-input.tsx",
-    "src/components/skills/generate-skill-dialog.tsx",
-    "src/components/templates/templates-gallery.tsx"
+    "src/components/skills/generate-skill-dialog.tsx"
   ],
   "nameRule": [
     "src/lib/api/mock/auth/index.ts",

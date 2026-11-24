@@ -1800,7 +1800,13 @@ export const agentsOperations = {
     "pathParams": [],
     "query": [
       "kind",
-      "source"
+      "source",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

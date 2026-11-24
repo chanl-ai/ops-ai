@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI
 
 from ops_service_kit import listing
-from ops_service_kit.http import install_error_handlers
+from ops_service_kit.http import install_error_handlers, page_rows
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.settings import Settings
 
@@ -78,3 +78,27 @@ async def test_ids_above_the_cap_answer_400_in_the_standard_error_format() -> No
     assert len((await asked(f"?{at_cap}")).json()["ids"]) == listing.IDS_MAX
     r = await asked(f"?{at_cap}&ids=one-more")
     assert (r.status_code, r.json()["error"]["code"]) == (400, "validation_failed"), r.text
+
+
+def test_rows_held_in_memory_answer_the_same_page_as_a_table() -> None:
+    """A list a service builds in memory searched, filtered and paged by the shared query: a search that ignores case
+    or a field, a facet that counts with its own filter on, or a page past the end answering nothing, each fails."""
+
+    rows = [
+        {"id": f"t{i}", "title": f"Refund desk {i}" if i % 2 else f"Intake {i}", "kind": "agent" if i < 4 else "skill"}
+        for i in range(6)
+    ]
+
+    def page(**given: Any) -> Any:
+        q = listing.ListParams.model_validate({"page_size": 2, **given})
+        return page_rows(
+            rows, q, search=lambda r: r["title"], key=lambda r: r["id"], filters={"kind": lambda r: r["kind"]}
+        )
+
+    found = page(search="REFUND", filters={"kind": ["agent"]})
+    assert [r["id"] for r in found["data"]] == ["t1", "t3"]
+    assert found["pagination"]["total"] == 2
+    assert found["facets"]["kind"] == {"agent": 2, "skill": 1}
+    assert page(ids=["t4"], search="refund")["data"] == [rows[4]]
+    last = page(page=9)
+    assert (last["pagination"]["page"], [r["id"] for r in last["data"]]) == (3, ["t4", "t5"])

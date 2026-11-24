@@ -32,6 +32,7 @@ follow each route.
 
 ### documents-service
 
+- `GET /v1/templates`: shared list contract. Read `data` and follow `pagination.hasNext`. Follow (done in the same change): `ops_documents_client.template_copies()`, tools-service `Copies.of`, `ops.templates.list` in both SDKs, the console gallery. Old form works: no.
 - `GET /v1/document-types`: shared list contract. Read `data` and page with `pagination.hasNext`. Follow: console `apps/console/src/hooks/document-type-queries.ts`, `apps/console/src/lib/types/document-types.ts` (`items` to `data`); `ops_documents_client.document_types()` pages (done); `apps/console/src/app/data/document-types/page.tsx:281` (`query.data.items.map` now throws: `items` is gone), `apps/console/src/components/files/extract-dialog.tsx:53` (`types.data?.items ?? []`), `apps/console/src/lib/api/files-http.ts:28` (`list: () => get(base)` asks the first page only), `sdk/python/src/ops_ai/_cli/records.py:88` (`ops types` reads the first page only). Old form works: no.
 
 ### platform-service
@@ -87,6 +88,7 @@ follow each route.
 
 ### agents-service
 
+- `GET /v1/templates`: shared list contract. Read `data` and follow `pagination.hasNext`. Follow (done in the same change): tools-service `Copies.of` and the MCP `list_templates` tool (its result is the page, `data` in place of `templates`), `ops.templates.list` in both SDKs, the console gallery and plugin update review, uc-590. Old form works: no.
 - `GET /reviews` (and `GET /v1/overview`'s review counts, a task's place in its queue): rows read per source. Nothing while each source holds fewer rows than the cap. Above it, the oldest decided reviews (and, past the cap in open ones, the oldest open ones) leave the list, the view counts and the stats. Follow: none; no console screen, hand-written SDK noun or CLI verb changes. Old form works: yes, while each source is under the cap.
 - `POST /v1/workflows/{workflow_id}/forms`, `PATCH /v1/forms/{form_id}`, `POST /v1/forms/public/{slug}/submit`, `POST /v1/forms/{slug}/members`: bodies on the kit's `In`; one transaction per builder route; a link's tenant checked. Send only the declared fields: `mode`, `expiresInDays`, `dailyCap`, `title`, `description`, `afterText`; `paused`, `dailyCap`, `afterText`; `values`. Follow: none; the console (`apps/console/src/components/workflows/definition-editor/share-as-form.tsx:66`, `apps/console/src/lib/api/forms-http.ts`), the embed page (`apps/embed/src/hosted-form-page.tsx:56`) and use cases uc-568 and uc-620 send only these; no hand-written SDK noun or CLI verb calls these routes. Old form works: yes, unless a caller sent an undeclared field.
 - `GET /v1/widgets`: shared list contract. Read `data` and page with `pagination.hasNext`, or ask for the pins wanted with `ids`. Follow: console `apps/console/src/lib/api/widgets-http.ts:12` (`list` reads a bare array) and its reader `useWidgetTemplates` (`apps/console/src/hooks/widget-queries.ts:14`, the agent page `apps/console/src/app/build/agents/[id]/page.tsx:169`); ui use cases `docs/usecases/console/scripts/test-uc-097-ui.mjs`, `test-uc-103-ui.mjs`; no hand-written SDK noun or CLI verb calls it. Old form works: no.

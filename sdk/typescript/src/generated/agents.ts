@@ -2741,7 +2741,8 @@ export interface paths {
          * @description The agents, skills and workflows the team's plugins bring, each with its state for the team, the copies the team
          *     holds of it and whether the caller may add it; `source` keeps one plugin's. A copy whose template the app no longer
          *     ships, while the app is still on, is listed too, as `removed_upstream`; a copy of an app turned off for the team
-         *     reads `added`, with nothing to add.
+         *     reads `added`, with nothing to add. A page of the shared list query: `search` matches the title and the plugin's
+         *     title; the rows come from the plugins rather than a table, so `page_rows` pages them.
          */
         get: operations["templates_list_templates"];
         put?: never;
@@ -6715,6 +6716,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[TemplateView]] */
+        Envelope_ListResult_TemplateView__: {
+            data: components["schemas"]["ListResult_TemplateView_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[ThreadView]] */
         Envelope_ListResult_ThreadView__: {
             data: components["schemas"]["ListResult_ThreadView_"];
@@ -7439,16 +7449,6 @@ export interface components {
         Envelope_list_RunJournalEntry__: {
             /** Data */
             data: components["schemas"]["RunJournalEntry"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[TemplateView]] */
-        Envelope_list_TemplateView__: {
-            /** Data */
-            data: components["schemas"]["TemplateView"][];
             /**
              * Success
              * @constant
@@ -8603,6 +8603,18 @@ export interface components {
         ListResult_TaskTypeView_: {
             /** Data */
             data: components["schemas"]["TaskTypeView"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[TemplateView] */
+        ListResult_TemplateView_: {
+            /** Data */
+            data: components["schemas"]["TemplateView"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -29399,6 +29411,12 @@ export interface operations {
             query?: {
                 kind?: ("agent" | "skill" | "workflow" | "guardrail" | "case_type" | "task_type") | null;
                 source?: string | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -29412,7 +29430,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_TemplateView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_TemplateView__"];
                 };
             };
             /** @description Invalid request */
