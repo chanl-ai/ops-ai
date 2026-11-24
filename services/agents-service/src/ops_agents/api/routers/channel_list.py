@@ -37,11 +37,14 @@ from ...store.channel_list import (
     watched_address,
 )
 from ...store.mailboxes import MailboxStore
+from ...store.schedules import ScheduleRow, WorkflowSchedules
 from ...store.widget_deployments import WidgetDeployments
 from .. import deployment_reviews
 from ..auth import Principal, caller_in, caller_of, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
+from ..schedule_view import KINDS as RULE_KINDS
+from ..schedule_view import next_runs
 from ..team_names import PlatformTeamNames
 from ..widget_sessions import normal_origin
 from .activity import _teams  # pyright: ignore[reportPrivateUsage]
@@ -254,6 +257,12 @@ class WhereReply(TypedDict):
     workflowId: NotRequired[str]
 
 
+class ScheduleReply(TypedDict):
+    words: str
+    nextRun: str | None
+    triggerStep: str
+
+
 class PlaceReply(TypedDict):
     """A LivePlace as `_place` and `_steps` build it, in reply order."""
 
@@ -265,6 +274,7 @@ class PlaceReply(TypedDict):
     traffic24h: int | None
     errors24h: int | None
     lastActivityAt: str | None
+    schedule: ScheduleReply | None
 
 
 class VersionReply(TypedDict):
@@ -412,6 +422,12 @@ class Where(Out):
     workflow_id: str | None = None
 
 
+class PlaceSchedule(Out):
+    words: str
+    next_run: str | None
+    trigger_step: str
+
+
 class LivePlace(Out):
     where: Where
     version: int | Literal["latest"] | None
@@ -421,6 +437,8 @@ class LivePlace(Out):
     traffic24h: int | None
     errors24h: int | None
     last_activity_at: str | None
+    # A workflow step's schedule, in words from the server, with its next run; none for a channel or an unscheduled one.
+    schedule: PlaceSchedule | None = None
 
 
 class LiveVersion(Out):
@@ -445,13 +463,36 @@ def _place(row: ChannelReply) -> PlaceReply:
         "traffic24h": row["traffic24h"],
         "errors24h": row["errors24h"],
         "lastActivityAt": row["lastActivityAt"],
+        "schedule": None,
     }
 
 
+def _schedule_of(definition: Json, saved: list[ScheduleRow], now: datetime) -> ScheduleReply | None:
+    """The workflow's saved schedule on a trigger step its live version still has, in words with its next run."""
+    steps = {str(n.get("id")) for n in cast(list[Json], definition.get("nodes") or [])}
+    for row in saved:
+        if row.trigger_step in steps:
+            upcoming = next_runs(row.rule, now, 1)
+            return {
+                "words": RULE_KINDS.words(row.rule),
+                "nextRun": upcoming[0] if upcoming else None,
+                "triggerStep": row.trigger_step,
+            }
+    return None
+
+
 def _steps(
-    live: list[LiveDefinition], node_type: str, param: str, target: str, version: int | None
+    live: list[LiveDefinition],
+    node_type: str,
+    param: str,
+    target: str,
+    version: int | None,
+    *,
+    schedules: dict[str, list[ScheduleRow]],
+    now: datetime,
 ) -> list[PlaceReply]:
-    """Each live workflow step that names `target`: it runs the published version, so it is never pinned."""
+    """Each live workflow step that names `target`: it runs the published version, so it is never pinned. A step of a
+    scheduled workflow carries the schedule and its next run."""
     out: list[PlaceReply] = []
     for d in live:
         definition = cast(Json, d.definition or {})
@@ -473,8 +514,16 @@ def _steps(
                         "traffic24h": None,
                         "errors24h": None,
                         "lastActivityAt": None,
+                        "schedule": _schedule_of(definition, schedules.get(d.workflow_id, []), now),
                     }
                 )
+    return out
+
+
+async def _saved(rt: Runtime) -> dict[str, list[ScheduleRow]]:
+    out: dict[str, list[ScheduleRow]] = {}
+    for row in await WorkflowSchedules(rt.db).everything():
+        out.setdefault(row.workflow_id, []).append(row)
     return out
 
 
@@ -500,7 +549,9 @@ async def agent_live(rt: Rt, me: Me, agent_id: str) -> JSONResponse:
         serving = await ChannelList(rt.db).rows(teams, now=now, agent_id=agent_id, types=["chat"])
         live = await ChannelList(rt.db).live_definitions()
     rows = [_place(r) for r in await replies(rt, me, serving, now)]
-    rows += _steps(live, "ops.ai.agent", "agent", agent_id, cast(int | None, latest))
+    rows += _steps(
+        live, "ops.ai.agent", "agent", agent_id, cast(int | None, latest), schedules=await _saved(rt), now=now
+    )
     return ok({"latestVersion": latest, "versions": _versions(rows, cast(int | None, latest)), "rows": rows})
 
 
@@ -518,7 +569,7 @@ async def workflow_live(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
     now = datetime.now(UTC)
     watching = await ChannelList(rt.db).rows(teams, now=now, mailbox=(str(mine.team_id), address)) if address else []
     rows = [_place(r) for r in await replies(rt, me, watching, now)]
-    rows += _steps(live, "ops.action.workflow", "workflow", workflow_id, latest)
+    rows += _steps(live, "ops.action.workflow", "workflow", workflow_id, latest, schedules=await _saved(rt), now=now)
     return ok({"latestVersion": latest, "versions": _versions(rows, latest), "rows": rows})
 
 

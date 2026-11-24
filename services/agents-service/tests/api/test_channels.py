@@ -16,12 +16,15 @@ from ops_agents.store.api_key_copies import ApiKeyCopies, KeySummary, api_key_co
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.mailboxes import MailboxRow, MailboxStore
 from ops_agents.store.poll_cursors import poll_cursors
+from ops_agents.store.schedules import WorkflowSchedules
 from ops_agents.store.tenancy import tenant_scope
 from ops_agents.store.widget_deployments import WidgetDeployments
 from ops_engine.store import RunStore
 from ops_identity import dev_service_signer, mint_service_token
 from ops_store import copies
 from ops_store.outbox import ApiKeyChanged
+from ops_store.schedule import Rule
+from ops_store.schedule.wall_time import DAYS
 from tests.api.test_action_roles import REVIEWER
 from tests.api.test_activity import email
 from tests.api.test_case_routes import started_run
@@ -218,6 +221,17 @@ async def test_an_agents_live_places_are_its_channels_and_the_steps_that_run_it(
     assert set(places) == {("channel", "wd_branch"), ("workflow_step", "summarise")}, places
     assert places[("channel", "wd_branch")]["pinned"] is True
     assert places[("workflow_step", "summarise")]["where"]["workflowId"] == "customer_summary"
+    assert places[("workflow_step", "summarise")]["schedule"] is None
+    trigger = next(n["id"] for n in d["nodes"] if str(n["type"]).startswith("ops.trigger."))
+    rule: Rule = {"kind": "every", "every": 15, "unit": "minutes", "start": "00:00", "tz": "UTC", "days": list(DAYS)}
+    with tenant_scope(TENANT):
+        await WorkflowSchedules(rt.db).save("customer_summary", trigger, "team_ops", rule, "user_ana")
+    again = (await c.get("/v1/agents/ag_branch/live", headers=BUILDER)).json()["data"]["rows"]
+    step = next(p for p in again if p["where"]["kind"] == "workflow_step")
+    assert step["schedule"]["words"] == "Every 15 minutes from 00:00, UTC", step
+    assert step["schedule"]["triggerStep"] == trigger
+    assert datetime.fromisoformat(step["schedule"]["nextRun"]) > datetime.now(UTC)
+    assert next(p for p in again if p["where"]["kind"] == "channel")["schedule"] is None
     assert (await c.get("/v1/agents/ag_nobody/live", headers=BUILDER)).status_code == 404
 
 

@@ -8715,6 +8715,7 @@ export interface components {
             lastActivityAt: string | null;
             /** Pinned */
             pinned: boolean;
+            schedule?: components["schemas"]["PlaceSchedule"] | null;
             /** Traffic24H */
             traffic24H: number | null;
             /** Version */
@@ -9322,6 +9323,15 @@ export interface components {
             email: string;
             /** Name */
             name: string;
+        };
+        /** PlaceSchedule */
+        PlaceSchedule: {
+            /** Nextrun */
+            nextRun: string | null;
+            /** Triggerstep */
+            triggerStep: string;
+            /** Words */
+            words: string;
         };
         /** Plan */
         Plan: {
