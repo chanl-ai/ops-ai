@@ -4913,10 +4913,11 @@ export interface components {
         };
         /**
          * Brief
-         * @description What a builder writes instead of one block of instructions. Persona, tone and glossary are text inside
-         *     `how_to_answer`. `purpose` is the Job; `goal` is kept on agents that already have one and is not asked for on
-         *     new ones. `success` is kept readable on old versions and is never sent to the model. `hand_off` and `examples`
-         *     default to empty, so a version stored before them reads and runs as it did.
+         * @description What a builder writes instead of one block of instructions. Personality, tone and the like are `sections`
+         *     the builder adds; text already inside `how_to_answer` stays there. `purpose` is the Job; `goal` is kept on agents
+         *     that already have one and is not asked for on new ones. `success` is kept readable on old versions and is never
+         *     sent to the model. `hand_off`, `examples` and `sections` default to empty, so a version stored before them reads
+         *     and runs as it did.
          */
         Brief: {
             /**
@@ -4940,6 +4941,8 @@ export interface components {
             never?: string[];
             /** Purpose */
             purpose: string;
+            /** Sections */
+            sections?: components["schemas"]["BriefSection"][];
             /** Success */
             success?: string[];
         };
@@ -4964,6 +4967,46 @@ export interface components {
         BriefDraftInput: {
             /** Description */
             description: string;
+        };
+        /**
+         * BriefSection
+         * @description A headed section a builder adds to the brief. A menu kind is written under its fixed title, whatever name is
+         *     sent; `kind` is the tag evals read. A custom section is prompt text only and drives nothing.
+         */
+        BriefSection: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "personality" | "tone" | "environment" | "context" | "tool_use" | "error_handling" | "escalation" | "custom";
+            /** Name */
+            name: string;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+        };
+        /**
+         * BriefSectionView
+         * @description A section added to a brief, as replied: a menu kind carries its fixed title as `name`, whatever was stored.
+         */
+        BriefSectionView: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "personality" | "tone" | "environment" | "context" | "tool_use" | "error_handling" | "escalation" | "custom";
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+            /**
+             * Text
+             * @default
+             */
+            text: string;
         };
         /**
          * BriefView
@@ -4991,6 +5034,8 @@ export interface components {
             never?: string[];
             /** Purpose */
             purpose: string;
+            /** Sections */
+            sections?: components["schemas"]["BriefSectionView"][];
             /** Success */
             success?: string[];
         };
