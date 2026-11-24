@@ -73,7 +73,7 @@ def kinds() -> Iterator[None]:
     KINDS.register(OddMinutes())
     REGISTRY.register(replace(REGISTRY.get(SCHEDULE_TRIGGER, 1), id=FAST, start=None))
     yield
-    KINDS._kinds.pop("odd_minutes")  # pyright: ignore[reportPrivateUsage]
+    KINDS.unregister("odd_minutes")
     REGISTRY._types.pop((FAST, 1))  # pyright: ignore[reportPrivateUsage]
 
 
