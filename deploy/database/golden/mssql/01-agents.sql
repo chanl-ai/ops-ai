@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 20261125_1000_check_batches
+-- agents-service, stamped at 20261127_0900_batch_groups
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -647,12 +647,18 @@ CREATE TABLE run_batches (
 	created_at VARCHAR(32) NOT NULL, 
 	stopped_reason VARCHAR(500) NULL, 
 	stopped_at VARCHAR(32) NULL, 
+	group_key VARCHAR(96) NOT NULL, 
+	group_name VARCHAR(300) NULL, 
+	group_parts NVARCHAR(max) NULL, 
+	part INTEGER NOT NULL DEFAULT '1', 
 	CONSTRAINT run_batches_pkey PRIMARY KEY (id)
 );
 GO
 CREATE INDEX ix_run_batches_created ON run_batches (tenant_id, team_id, created_at);
 GO
 CREATE INDEX ix_run_batches_workflow ON run_batches (tenant_id, workflow_id, created_at);
+GO
+CREATE UNIQUE INDEX ux_run_batches_group ON run_batches (tenant_id, workflow_id, group_key, part);
 GO
 CREATE TABLE run_batch_rows (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -1077,6 +1083,20 @@ CREATE TABLE thread_budgets_unattributed (
 	moved_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(), 
 	CONSTRAINT thread_budgets_unattributed_pkey PRIMARY KEY (thread_id)
 );
+GO
+CREATE TABLE batch_waiting_files (
+	tenant_id VARCHAR(64) NOT NULL, 
+	workflow_id VARCHAR(200) NOT NULL, 
+	item_key VARCHAR(96) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	group_key VARCHAR(96) NOT NULL, 
+	group_name VARCHAR(300) NOT NULL, 
+	input NVARCHAR(max) NOT NULL, 
+	held_at VARCHAR(32) NOT NULL, 
+	CONSTRAINT batch_waiting_files_pkey PRIMARY KEY (tenant_id, workflow_id, item_key)
+);
+GO
+CREATE INDEX ix_batch_waiting_group ON batch_waiting_files (tenant_id, workflow_id, group_key);
 GO
 CREATE TABLE registry_widgets (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -1608,6 +1628,12 @@ CREATE SECURITY POLICY ops_security.thread_budgets_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.thread_budgets AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.batch_waiting_files_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.batch_waiting_files,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.batch_waiting_files AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.batch_waiting_files AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.registry_widgets_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.registry_widgets,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_widgets AFTER INSERT,
@@ -1681,5 +1707,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('20261125_1000_check_batches');
+INSERT INTO alembic_version (version_num) VALUES ('20261127_0900_batch_groups');
 GO

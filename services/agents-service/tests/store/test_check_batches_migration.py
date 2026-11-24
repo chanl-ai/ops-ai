@@ -23,8 +23,8 @@ ROW = (
 READ = 'SELECT "row", workflow_id, item_key FROM run_batch_rows WHERE tenant_id = \'t-mig1000\' ORDER BY "row"'
 CHECK = (
     "INSERT INTO run_batches (id, tenant_id, team_id, workflow_id, version, mode, origin, file_name, watch_id, total,"
-    " created_by, created_at) VALUES ('batch_c1', 't-mig1000', 'team_ap', 'wf_levy', 1, 'live', 'check', 'x',"
-    " 'wat_1', 0, 'b', 'n')"
+    " created_by, created_at, group_key) VALUES ('batch_c1', 't-mig1000', 'team_ap', 'wf_levy', 1, 'live', 'check',"
+    " 'x', 'wat_1', 0, 'b', 'n', 'batch_c1')"
 )
 
 

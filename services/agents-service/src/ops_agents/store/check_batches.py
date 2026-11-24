@@ -67,8 +67,11 @@ async def _write(c: AsyncConnection, binding_id: str, *, watch_id: str, expected
     new = [x for x in rows if x.item_key not in held]
     if not new:
         return None
+    batch_id = new_id("batch")
     out = {
-        "id": new_id("batch"),
+        "id": batch_id,
+        # A check with no Group by is one batch, its own group.
+        "group_key": batch_id,
         "team_id": batch.team_id,
         "workflow_id": batch.workflow_id,
         "version": batch.version,

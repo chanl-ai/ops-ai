@@ -96,6 +96,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tool_catalog_operations TO ops_agent
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tool_team_state TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.thread_budgets TO ops_agents_runtime;
 REVOKE SELECT, INSERT, UPDATE, DELETE ON dbo.thread_budgets_unattributed FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.batch_waiting_files TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_widgets TO ops_agents_runtime;
 REVOKE DELETE ON dbo.timers FROM ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE ON dbo.timers TO ops_agents_runtime;
