@@ -37,7 +37,7 @@ Each runs the make targets it names; the same steps are Claude Code skills of th
 | `/ops-debug` | Diagnose a failing Ops AI service: which one is down, its log, its port, a stale process, or a second stack in the way. Use when a page, target or service fails. |
 | `/ops-docs-edit` | Apply review findings to a docs page and tighten it. |
 | `/ops-docs-review` | Review a docs page as its five readers; changes nothing. |
-| `/ops-docs-write` | Write a public docs page to the user-docs pattern. |
+| `/ops-docs-write` | Write a docs-site reader page to one of six page types. |
 | `/ops-fix-the-class` | Before committing a fix, find every other place with the same fault, fix them all once in the layer that owns the job, add a check that stops it coming back, and state the sweep in a Siblings trailer. Use for every fix commit and whenever QA, a review or a walk reports a defect. |
 | `/ops-mirror` | Install Ops AI through a company package mirror (Nexus, Artifactory): set it, test it, find locked versions it lacks. Use when installs fail behind a proxy or without public internet. |
 | `/ops-run` | Run the Ops AI stack locally, in the devcontainer or on a shared VM workspace, on the fake model or OpenAI. Use to start, stop or set up Ops AI. |
