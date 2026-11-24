@@ -14,9 +14,9 @@ is the plugin's real failure path. tools-service reaches all of it as any outsid
 OPS_EGRESS_RESOLVE, dev only), `hosts` and `range` for Security to allow.
 
 Run as a script for a Node ui use case: it prints one JSON line (the settings, hosts, range, plugin paths and the
-fakes' ids), then for each JSON line on stdin naming a tools-service and the headers to act with
-(`{"tools": url, "admin": {...}, "security": {...}}`) it connects both apps there and prints the outcome as one line.
-It serves until stdin closes."""
+fakes' ids; with --oversize also the file add_oversize puts in), then for each JSON line on stdin naming a tools-service
+and the headers to act with (`{"tools": url, "admin": {...}, "security": {...}}`) it connects both apps there and
+prints the outcome as one line. It serves until stdin closes."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ import json
 import os
 import secrets
 import signal
+import subprocess
 import sys
 import tempfile
 from collections.abc import Generator
@@ -55,7 +56,27 @@ SHAREPOINT_APP = "plugin:opsai.sharepoint"
 CONFLUENCE_APP = "plugin:opsai.confluence"
 DROPPED_HEADERS = ("content-length", "transfer-encoding", "content-encoding")
 
-PLUGINS_REPO = Path(os.environ.get("OPS_PLUGINS_REPO") or Path(__file__).resolve().parents[4] / "ops-ai-plugins")
+
+
+def _main_checkout() -> Path:
+    """The repository's main checkout, as make's STACK_HOME finds it: from a worktree, the plugins checkout sits beside
+    the main checkout, not beside the worktree."""
+    here = Path(__file__).resolve().parents[3]
+    try:
+        listed = subprocess.run(
+            ["git", "-C", str(here), "worktree", "list", "--porcelain"], capture_output=True, text=True, check=True
+        ).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return here
+    first = next((line.removeprefix("worktree ") for line in listed.splitlines() if line.startswith("worktree ")), "")
+    return Path(first) if first else here
+
+
+PLUGINS_REPO = Path(os.environ.get("OPS_PLUGINS_REPO") or _main_checkout().parent / "ops-ai-plugins")
+# A file the listing reports over the 25 MB a watch takes, for the run that passes --oversize: a watched folder's check
+# records it as one failed file with its size. Its bytes stay small; only the size Graph reports is large.
+OVERSIZE_NAME = "scanned-contracts-2026.zip"
+OVERSIZE_BYTES = 31_457_280
 
 
 def plugin_path(name: str) -> Path:
@@ -289,6 +310,14 @@ def connect(
     return out
 
 
+def add_oversize(systems: Systems) -> str:
+    """Puts OVERSIZE_NAME in the Policies Library's Policies folder; answers its item id."""
+    g = systems.graph_ids
+    systems.graph.add(g.LIB_POLICIES, "p9", OVERSIZE_NAME, "Policies", b"PK\x03\x04 archive", "application/zip")
+    systems.graph.drives[g.LIB_POLICIES]["p9"].size = OVERSIZE_BYTES
+    return "p9"
+
+
 def _data(res: httpx.Response) -> Any:
     try:
         return res.json().get("data")
@@ -300,6 +329,8 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     with document_systems() as running:
         g = running.graph_ids
+        if "--oversize" in sys.argv[1:]:
+            add_oversize(running)
         shown = {
             "settings": running.settings,
             "hosts": HOSTS,
@@ -308,6 +339,7 @@ if __name__ == "__main__":
             "sites": {"hr": g.SITE_HR, "ops": g.SITE_OPS},
             "libraries": {"policies": g.LIB_POLICIES, "handbook": g.LIB_HANDBOOK, "runbooks": g.LIB_RUNBOOKS},
             "failingQuery": FAILING_QUERY,
+            **({"oversize": {"name": OVERSIZE_NAME, "size": OVERSIZE_BYTES}} if "--oversize" in sys.argv[1:] else {}),
         }
         print(json.dumps(shown), flush=True)
         for line in sys.stdin:

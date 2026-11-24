@@ -1052,6 +1052,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       OPS_FILES_SCANNING: 'off',
       // Service events (file.deleted, file.read_requested) reach this run's agents-service.
       OPS_AGENTS_URL: `http://127.0.0.1:${AGENTS_PORT}`,
+      // A watched folder's check reads its app through this run's tools-service; files-service exits at start without it.
+      OPS_TOOLS_URL: `http://127.0.0.1:${TOOLS_PORT}`,
       // The console calls files-service for its Storage settings.
       OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
       ...auth,
