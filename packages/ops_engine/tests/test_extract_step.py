@@ -32,9 +32,12 @@ SCORED = {
 
 
 class Files:
-    def __init__(self, answer: dict[str, Any]) -> None:
+    def __init__(self, answer: dict[str, Any], reading: dict[str, Any] | None = None) -> None:
         self.answer = answer
+        # The file's shared reading as documents-service answers POST /v1/documents/readings.
+        self.reading_answer = reading or {}
         self.asked: list[tuple[str, dict[str, Any], str]] = []
+        self.read: list[tuple[str, str]] = []
         self.saved: list[tuple[str, dict[str, Any]]] = []
 
     async def set_data(self, run_id: str, file_id: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -44,6 +47,10 @@ class Files:
     async def extract(self, run_id: str, file_id: str, request: dict[str, Any], *, key: str) -> dict[str, Any]:
         self.asked.append((file_id, request, key))
         return self.answer
+
+    async def reading(self, run_id: str, file_id: str, *, ocr: str) -> dict[str, Any]:
+        self.read.append((file_id, ocr))
+        return self.reading_answer
 
     async def purge(self, run_id: str, file_id: str) -> dict[str, Any]:
         return {}

@@ -47,6 +47,7 @@ from .ports import (
     AgentRequest,
     CaseNotFoundError,
     CaseTypeNotFoundError,
+    DocumentsPort,
     EnginePorts,
     OutsideAnswerError,
     ReviewPort,
@@ -795,10 +796,11 @@ async def ai_extract(call: NodeCall) -> Outcome:
     # A full-text or proposed read names no fields, type or Detect: the read itself says what comes back. A read
     # that resolved to nothing (a read request that asked for none) is today's read.
     read = call.params.get("read")
-    if read in ("text", "propose"):
+    if read == "text":
+        return await _full_text(call, call.ports.documents, file_id)
+    if read == "propose":
         request = {"read": read, "ocr": request["ocr"], "reviewBelow": request["reviewBelow"]}
-        if read == "propose":
-            request |= {k: call.params[k] for k in ("hint", "proposePages") if call.params.get(k) not in (None, "")}
+        request |= {k: call.params[k] for k in ("hint", "proposePages") if call.params.get(k) not in (None, "")}
     for limit in ("maxPages", "maxTokens"):
         if isinstance(call.params.get(limit), int):
             request[limit] = call.params[limit]
@@ -840,6 +842,82 @@ async def ai_extract(call: NodeCall) -> Outcome:
         # A state this step does not know is raised, never turned into a port it does not have.
         raise OutsideAnswerError(f"documents-service answered status {status!r} with outcome {answer.get('outcome')!r}")
     return Outcome(str(answer["outcome"]), out)
+
+
+# The event documents-service reports a reading's end under; agents-service wakes the step on reading.failed too.
+READING_FINISHED = "reading.finished"
+# Characters per token for maxTokens, as documents-service counted them for a read.
+CHARS_PER_TOKEN = 4
+
+
+async def _full_text(call: NodeCall, documents: DocumentsPort, file_id: str) -> Outcome:
+    """Full text: the file's one shared reading (every caller of the same file and OCR choice gets it, and no model is
+    asked), its first `maxPages` pages and then as many as fit under `maxTokens`, each with its text and tables. A
+    reading still under way parks the step on reading.finished; the resumed pass reads it again, finished."""
+    reading = await documents.reading(call.run_id, file_id, ocr="auto" if call.params.get("ocr") else "off")
+    status = reading.get("status")
+    if status in ("queued", "reading"):
+        # The key documents-service posts the event under: the reading's bytes, reader, settings and the file.
+        settings = cast(Json, reading.get("settings") or {})
+        key = ":".join(
+            str(v)
+            for v in (
+                READING_FINISHED, reading.get("digest"), reading.get("readerVersion"), settings.get("ocr"),
+                settings.get("language"), reading.get("fileId") or file_id,
+            )
+        )  # fmt: skip
+        seconds = float(cast(float | str, call.params.get("waitSeconds") or EXTRACT_WAIT_SECONDS))
+        title = call.node.name or "Extract from file"
+        park_external(call, event=READING_FINISHED, key=key, title=title, timeout_seconds=seconds)
+        # Back here only when the time limit (or a callback) woke a reading still under way.
+        waited = {"waitedFor": READING_FINISHED, "key": key, "seconds": seconds, "fileId": file_id}
+        if call.params.get("onTimeout") == "port":
+            return Outcome("timeout", waited)
+        return Outcome(
+            "error", {"error": f"The read did not finish in {seconds:g} seconds", "code": "extraction_timeout"}
+        )
+    if status == "failed":
+        error = cast(Json, reading.get("error") or {})
+        return Outcome(
+            "error", {"error": error.get("message") or "The file could not be read", "code": error.get("code")}
+        )
+    if status != "done":
+        raise OutsideAnswerError(f"documents-service answered a reading with status {status!r}")
+    pages = sorted(cast(list[Json], reading.get("pages") or []), key=lambda p: int(cast(int, p.get("number") or 0)))
+    keep, said = pages, cast(Json, {})
+    max_pages, max_tokens = call.params.get("maxPages"), call.params.get("maxTokens")
+    if isinstance(max_pages, int):
+        keep = [p for p in keep if int(cast(int, p.get("number") or 0)) <= max_pages]
+    if isinstance(max_tokens, int):
+        budget, used, fits = max_tokens * CHARS_PER_TOKEN, 0, cast(list[Json], [])
+        for p in keep:
+            used += len(str(p.get("text") or ""))
+            if used > budget:
+                break
+            fits.append(p)
+        said["partial"] = len(fits) < len(keep)
+        keep = fits
+    if said or len(keep) < len(pages):
+        said["readPages"] = len(keep)
+    # Only what a later step reads: a page's words and boxes stay in documents-service, out of the run's state.
+    out_pages: list[JsonValue] = [
+        {
+            "number": p.get("number"),
+            "text": str(p.get("text") or ""),
+            "tables": [
+                {
+                    "cells": [
+                        {k: c.get(k) for k in ("row", "col", "text")} for c in cast(list[Json], b.get("cells") or [])
+                    ]
+                }
+                for b in cast(list[Json], p.get("blocks") or [])
+                if b.get("kind") == "table"
+            ],
+        }
+        for p in keep
+    ]
+    text = "\n\n".join(str(p.get("text")) for p in keep if p.get("text"))
+    return Outcome("ok", {"fileId": file_id, "text": text, "pages": out_pages, **said})
 
 
 def read_on_file(read: Json, *, checked: bool, type_name: Any) -> Json | None:

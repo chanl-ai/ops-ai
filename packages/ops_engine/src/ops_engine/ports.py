@@ -212,6 +212,13 @@ class DocumentsPort(Protocol):
         retries."""
         ...
 
+    async def reading(self, run_id: str, file_id: str, *, ocr: str) -> Json:
+        """The file's one shared reading with OCR mode `ocr` (auto or off), as the run's team, as documents-service
+        answers POST /v1/documents/readings, never waited for: done with every page, failed with its error, or queued
+        or reading, reported by reading.finished when it ends. Another team's or tenant's file is not found;
+        documents-service down is raised, so the wrapper retries."""
+        ...
+
     async def purge(self, run_id: str, file_id: str) -> Json:
         """Removes what documents-service read from a deleted file, as the run's team: {extractions, samples}."""
         ...
