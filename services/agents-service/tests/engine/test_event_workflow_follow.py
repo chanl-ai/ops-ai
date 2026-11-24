@@ -132,8 +132,8 @@ async def test_a_tenant_on_the_platform_owned_version_follows_the_seed_too(engin
 
 
 async def test_an_update_is_not_made_while_the_publish_policy_cannot_be_read(engine: AsyncEngine) -> None:
-    """With platform-service down the shipped update makes no version at all; the next pass, with the policy readable,
-    makes it and asks for review."""
+    """With platform-service down the shipped update makes no version at all; the next pass on the same running
+    service, with the policy readable again, makes it and asks for review."""
     tenant = f"t-{uuid4().hex[:8]}"
     old, new = shipped("purged"), shipped("purged_v2")
     await provision(engine, tenant, old)
@@ -155,7 +155,8 @@ async def test_an_update_is_not_made_while_the_publish_policy_cannot_be_read(eng
         versions = [v.version for v in await store.versions(old["id"])]
         asked = await AgentRegistry(engine).requests(KIND, old["id"])
     assert versions == [1] and asked == [], (versions, asked)
-    await provision(engine, tenant, new)
+    rt.policies = Policies({})
     with tenant_scope(tenant):
+        await ensure_event_workflows(rt)
         asked = await AgentRegistry(engine).requests(KIND, old["id"])
     assert [(r.version, r.status) for r in asked] == [(2, "pending")], asked

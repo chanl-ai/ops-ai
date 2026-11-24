@@ -490,7 +490,7 @@ async def _make_agent(rt: Runtime, me: Principal, team: str, t: OfferedTemplate,
     model = body.model_alias or str(b.get("model") or "")
     await require_known_alias(rt, model)
     name = body.name or str(b.get("name") or t["title"])
-    return await registry(rt).create(_spec_of(t, name, model, tools, body.knowledge_bases), by=me.email, team_id=team)
+    return await registry(rt).create(_spec_of(t, name, model, tools, body.knowledge_bases), by=me.actor, team_id=team)
 
 
 async def _skill_content(rt: Runtime, team: str, t: OfferedTemplate | Json, name: str, bases: list[str]) -> Json:
@@ -524,14 +524,14 @@ async def _make_skill(rt: Runtime, me: Principal, team: str, t: OfferedTemplate,
     """A draft skill owned by the team, marked imported."""
     b = t.get("body") or {}
     content = await _skill_content(rt, team, t, body.name or str(b.get("name") or t["title"]), body.knowledge_bases)
-    return await skills(rt).create(content, owner_team=team, team_id=team, origin="imported", by=me.email)
+    return await skills(rt).create(content, owner_team=team, team_id=team, origin="imported", by=me.actor)
 
 
 async def _make_guardrail(rt: Runtime, me: Principal, team: str, t: OfferedTemplate, name: str) -> str:
     """An unpublished guardrail owned by the team, through the guardrail create route's own config checks."""
     config = _guardrail_config(t)
     return await guardrails(rt).create(
-        name=name, kind="blocked_topics", config=config, owner=str(t["plugin"]["title"]), team_id=team, by=me.email
+        name=name, kind="blocked_topics", config=config, owner=str(t["plugin"]["title"]), team_id=team, by=me.actor
     )
 
 
@@ -738,7 +738,7 @@ async def copy_resource(rt: Rt, me: Maker, resource: str, body: InstallInput) ->
         source=source,
         template_id=template_id,
         version=int(t["version"]),
-        by=me.email,
+        by=me.actor,
         digest=t.get("digest"),
         record_digest=await _record_digest(rt, kind, record_id),
         base=_base_of(kind, t, record_id_body=(await _newest(rt, kind, record_id))[0] if kind in FIELDS else None),
@@ -1064,13 +1064,17 @@ async def review_update(rt: Rt, me: Me, resource: str, copy: str) -> JSONRespons
     return ok(UpdateReview.model_validate(review).model_dump(by_alias=True))
 
 
-async def _skill_base(rt: Runtime, kind: str, record_id: str) -> tuple[int, str] | None:
-    """The newest skill version and its digest, read before the copy's body is, so the save that follows names what it
-    was built from and another builder's save in between is refused, never written over."""
-    if kind != "skill":
-        return None
-    newest = (await skills(rt).versions(record_id))[0]
-    return newest.version, newest.digest
+async def _read_base(rt: Runtime, kind: str, record_id: str) -> tuple[int, str] | None:
+    """The newest version of an agent or a skill and its digest, read before the copy's body is, so the save that
+    follows names what it was built from and another builder's save in between is refused, never written over.
+    Guardrails and the case and task types have no such compare in their stores yet."""
+    if kind == "skill":
+        newest = (await skills(rt).versions(record_id))[0]
+        return newest.version, newest.digest
+    if kind == "agent":
+        row = await registry(rt).row(record_id)
+        return row.version, (await registry(rt).version(record_id, row.version)).digest
+    return None
 
 
 async def _save(
@@ -1079,11 +1083,11 @@ async def _save(
     """One draft through the kind's own save: an open draft is merged into, a published version or a draft a publish
     request names is never rewritten (the save opens the next version)."""
     if kind == "agent":
-        return await registry(rt).save(record_id, body, by=me.email, note=note)
+        return await registry(rt).save(record_id, body, by=me.actor, note=note, base=base)
     if kind == "guardrail":
         checked = check_guardrail("blocked_topics", body)
-        return await guardrails(rt).save_draft(record_id, checked, by=me.email, note=note)
-    return await skills(rt).save_draft(record_id, body, by=me.email, note=note, base=base)
+        return await guardrails(rt).save_draft(record_id, checked, by=me.actor, note=note)
+    return await skills(rt).save_draft(record_id, body, by=me.actor, note=note, base=base)
 
 
 @resources.post("/{resource}/copies/{copy}/update", response_model=Envelope[UpdateReview])
@@ -1092,8 +1096,9 @@ async def take_update(rt: Rt, me: Me, resource: str, copy: str, body: UpdateInpu
     only the template changed, and writes the template's value on a conflict only where `choices` says so; `reset`
     makes the draft from the template as it is, after `confirm` (409 `copy_edited` listing the edits it drops). What
     runs keeps running until the draft passes its publish review. 409 `update_stale` when the template or the copy
-    moved since the review `expect` names, and nothing is saved; 409 `detached` for a copy the team made its own; 422
-    `tool_not_available`, naming the tools, when the template needs one the team cannot call."""
+    moved since the review `expect` names, and nothing is saved; 409 `stale_base` when another builder saved the
+    agent's or skill's draft after it was read, and nothing is saved; 409 `detached` for a copy the team made its
+    own; 422 `tool_not_available`, naming the tools, when the template needs one the team cannot call."""
     team = _team(me)
     row, t, review, outcomes, template_body = await _review(rt, me, team, resource, copy)
     mode = body.mode or ("reset" if body.confirm else "merge")
@@ -1128,7 +1133,7 @@ async def take_update(rt: Rt, me: Me, resource: str, copy: str, body: UpdateInpu
     base: Json | None = None
     if kind in FIELDS:
         assert template_body is not None
-        read_from = await _skill_base(rt, kind, copy)
+        read_from = await _read_base(rt, kind, copy)
         yours, _ = await _newest(rt, kind, copy)
         # A reset is the template's body with the copy's bindings, dropping every edit the team made.
         merged = template_body if mode == "reset" else apply(yours, outcomes, choices)
@@ -1187,7 +1192,7 @@ async def detach_copy(rt: Rt, me: Me, _: Tx, resource: str, copy: str) -> JSONRe
         raise NotFound(f"{copy} is not the team's copy of {resource}.")
     kind = row.kind
     require_builder(me, area=AREAS[kind], team_id=team, action="edit", what="the team's copy")
-    detached = await copies.detach(row.id, by=me.email)
+    detached = await copies.detach(row.id, by=me.actor)
     return ok(_copy_view(detached))
 
 

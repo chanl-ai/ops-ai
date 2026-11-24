@@ -187,7 +187,8 @@ class NodeTypeView(Out):
 async def node_types(rt: Rt, me: Me) -> JSONResponse:
     """Every registered node type at every version: ports with their connection types, parameters as JSON Schema with
     the form generated from them, effects, retry and executor, and why the acting team cannot use one now. No request
-    transaction: it reads no row, and the AI-steps policy comes from platform-service."""
+    transaction: it reads no row, and the AI-steps policy comes from platform-service. 403 for a caller without the
+    workflows view cell."""
     require_view(caller_of(me), "workflows")
     ai_on = await ai_steps_gate.allowed(rt, current_team() or me.team_id or None)
     return ok(
@@ -730,7 +731,7 @@ async def _archived(rt: Runtime, me: Principal, workflow_id: str, archived: bool
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id}")
     engine_lifecycle.require_rights(me, row, "delete")
-    await definitions(rt).set_archived(workflow_id, archived, by=me.email or me.sub, now=now_iso(), team=current_team())
+    await definitions(rt).set_archived(workflow_id, archived, by=me.actor, now=now_iso(), team=current_team())
     return await definition_view(rt, me, workflow_id)
 
 
@@ -2002,7 +2003,7 @@ async def cancel_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
         raise Conflict(f"Run {run_id} has already {run.status}.", code="run_finished")
     await runs(rt).settle_parents(run_id, cancelled.created_by)
     await EventLog(rt.db).append(
-        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="cancelled", node=None, data={"by": me.email}
+        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="cancelled", node=None, data={"by": me.actor}
     )
     return ok(await for_people(rt, cancelled, await ended_view(rt, cancelled)))
 
@@ -2019,7 +2020,7 @@ async def retry_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     if not changed or retried is None:
         raise Conflict("This run is no longer stuck, so there is nothing to retry.", code="run_not_stuck")
     await EventLog(rt.db).append(
-        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="retried", node=None, data={"by": me.email}
+        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="retried", node=None, data={"by": me.actor}
     )
     return ok(
         await for_people(rt, retried, run_view(retried) | {"canCancel": can_cancel(me, retried), "canRetry": False})
@@ -2038,7 +2039,7 @@ async def redrive_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     if not changed or redriven is None:
         raise Conflict("Only a failed or stuck run can be redriven.", code="run_not_redrivable")
     await EventLog(rt.db).append(
-        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="redriven", node=None, data={"by": me.email}
+        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="redriven", node=None, data={"by": me.actor}
     )
     view = run_view(redriven) | {"canCancel": can_cancel(me, redriven), "canRetry": False, "canRedrive": False}
     return ok(await for_people(rt, redriven, view))
@@ -2105,7 +2106,7 @@ async def bulk_engine_runs(rt: Rt, me: Me, body: BulkRunsRequest) -> JSONRespons
         changed.append(run.id)
         kind = "redriven" if body.action == "redrive" else "cancelled"
         await EventLog(rt.db).append(
-            thread_id=run.id, team_id=run.team_id, run_id=run.id, type_=kind, node=None, data={"by": me.email}
+            thread_id=run.id, team_id=run.team_id, run_id=run.id, type_=kind, node=None, data={"by": me.actor}
         )
     return ok({"action": body.action, "changed": changed, "skipped": skipped})
 

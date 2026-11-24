@@ -17,6 +17,7 @@ import { QueryError } from '@/components/shared/query-states';
 import { ReadableValue } from '@/components/shared/readable-value';
 import { Row, Rows, Section } from '@/components/shared/surface';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ApiError } from '@/lib/api/contract';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RunCanvas } from '@/components/workflows/run-canvas';
@@ -227,7 +228,12 @@ export default function EngineRunPage() {
             {!!run.story?.lines?.length && <StoryFeed title="What happened" description="Each step of this run, oldest first." lines={run.story.lines} testId="run-story-feed" />}
             {run.story && <RunStoryView story={run.story} />}
             <Section title="Graph" description="The workflow as this run met it: what passed, failed or was skipped, and the paths it took. Click a step for its input and output.">
-              {definition.isError || nodeTypes.isError ? (
+              {[definition.error, nodeTypes.error].some((e) => e instanceof ApiError && e.status === 403) ? (
+                <Alert data-testid="run-graph-forbidden">
+                  <AlertTitle>You may see this run, not its workflow graph</AlertTitle>
+                  <AlertDescription>The graph needs the right to view workflows. The steps below show what each one did.</AlertDescription>
+                </Alert>
+              ) : definition.isError || nodeTypes.isError ? (
                 <QueryError
                   what="the workflow graph"
                   testId="run-graph-error"

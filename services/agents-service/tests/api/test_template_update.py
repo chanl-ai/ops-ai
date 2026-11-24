@@ -418,3 +418,31 @@ async def test_an_update_never_writes_over_a_skill_draft_saved_after_it_was_read
     refused = await client.post(path(sid), json={}, headers=OPS)
     assert refused.status_code == 409 and refused.json()["error"]["code"] == "stale_base", refused.text
     assert str((await versions(client, sid))[0].content["instructions"]).startswith("Edited by someone else")
+
+
+async def test_an_update_never_writes_over_an_agent_draft_saved_after_it_was_read(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ops_agents.api.agent_registry import registry  # noqa: PLC0415
+    from ops_agents.api.routers import templates  # noqa: PLC0415 - the read being interleaved is private to it
+
+    wire(client, [AGENT])
+    aid = ok(await client.post(f"/v1/resources/{SOURCE}:case-helper/copies", json={}, headers=OPS), 201)["copy"][
+        "recordId"
+    ]
+    body = cast(dict[str, Any], AGENT["body"])
+    wire(client, [AGENT | {"version": 3, "digest": "b" * 64, "body": {**body, "role": "Reads cases"}}])
+    read = templates._newest  # pyright: ignore[reportPrivateUsage]
+    saves: list[int] = []
+
+    async def read_then_lose_the_race(rt: Any, kind: str, record_id: str) -> Any:
+        found = await read(rt, kind, record_id)
+        if kind == "agent":
+            saves.append(len(saves))
+            newest = (await registry(rt).versions(record_id))[0].spec
+            await registry(rt).save(record_id, {**newest, "role": f"Edited by someone else, {len(saves)}."}, by="o@x")
+        return found
+
+    monkeypatch.setattr(templates, "_newest", read_then_lose_the_race)
+    refused = await client.post(f"/v1/resources/{SOURCE}:case-helper/copies/{aid}/update", json={}, headers=OPS)
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "stale_base", refused.text
