@@ -10,18 +10,24 @@ import time
 from typing import Any
 
 from brief_steps import (
+    COMPLIANCE_HEADINGS,
+    COMPLIANCE_TEXT,
     CONFIRMS,
     SECTION_HEADINGS,
     SECTIONS,
+    SECTIONS_ROUTE,
     brief,
+    compliance_id,
+    compliance_sections,
     confirm_skill,
     freeze_skill,
     headings,
     hold_skill,
     sections_brief,
+    with_compliance,
 )
 from main_chains import ACCOUNT, bank_stack, holds, publish_bank_module
-from usecase_harness import agents, check, data, finish, save_agent, sse
+from usecase_harness import agents, as_role, check, data, finish, save_agent, sse
 
 RUN = int(time.time())
 STREAM = {"Accept": "text/event-stream"}
@@ -125,6 +131,46 @@ with bank_stack() as s:
         and headings(plain_prompt) == ["# Who you are", "# How to answer", "# Hand off when", "# Never"]
         and plain_prompt.startswith(str(unchanged.get("instructions"))),
         ((unchanged.get("brief") or {}).get("sections", "absent"), headings(plain_prompt)),
+    )
+
+    # 29. The list of sections is the workspace's: an admin adds Compliance notes after Tone and renames Tone, a
+    # builder adds it to a new agent, and the agent of step 24, saved before the change, keeps the prompt it had.
+    admin, viewer = as_role(s.accounts, "admin"), as_role(s.accounts, "viewer")
+    listing = data(s.api.get(SECTIONS_ROUTE, headers=admin)) or {}
+    changed = s.api.put(SECTIONS_ROUTE, json=with_compliance(listing), headers=admin)
+    read_by = {who: compliance_id(data(s.api.get(SECTIONS_ROUTE, headers=h))) for who, h in (("builder", me), ("viewer", viewer))}
+    not_theirs = [s.api.put(SECTIONS_ROUTE, json=listing, headers=h).status_code for h in (me, viewer)]
+    not_theirs += [s.api.delete(SECTIONS_ROUTE, headers=h).status_code for h in (me, viewer)]
+    check(
+        "29 an admin adds Compliance notes to the workspace's sections; a builder and a viewer read it and cannot change the list",
+        changed.status_code == 200 and all(read_by.values()) and not_theirs == [403] * 4,
+        (changed.status_code, changed.text[:200], read_by, not_theirs),
+    )
+    noted = data(s.api.post("/v1/agents", json={"name": f"Compliance desk {RUN}", "role": "Freezes accounts"}, headers=me))
+    saved = save_agent(s.api, noted["id"], {"brief": sections_brief(compliance_sections(read_by["builder"]))}, headers=me)
+    names = [(x.get("name"), x.get("text")) for x in ((data(saved) or {}).get("brief") or {}).get("sections") or []]
+    noted_prompt = (data(s.api.get(f"/v1/agents/{noted['id']}/prompt", headers=me)) or {}).get("text", "")
+    check(
+        "29 a brief with Compliance notes has it where the list puts it, after the renamed Tone, with Never last",
+        names == [("Compliance notes", COMPLIANCE_TEXT), ("Voice", "Calm and plain.")]
+        and headings(noted_prompt) == COMPLIANCE_HEADINGS
+        and noted_prompt.rstrip().endswith("- Never promise when a freeze will be lifted."),
+        (code_of(saved), names, headings(noted_prompt)),
+    )
+    kept = data(s.api.get(f"/v1/agents/{desk['id']}", headers=me)) or {}
+    kept_prompt = (data(s.api.get(f"/v1/agents/{desk['id']}/prompt", headers=me)) or {}).get("text", "")
+    reset = s.api.delete(SECTIONS_ROUTE, headers=admin)
+    restored = data(s.api.get(SECTIONS_ROUTE, headers=admin)) or {}
+    check(
+        "29 the agent saved before the change keeps its prompt, and Reset to default brings the first list back",
+        changed.status_code == 200
+        and kept.get("instructions") == with_sections.get("instructions")
+        and kept_prompt == shown
+        and headings(kept_prompt) == SECTION_HEADINGS
+        and reset.status_code == 200
+        and bool(listing)
+        and restored == listing,
+        (headings(kept_prompt), reset.status_code, compliance_id(restored)),
     )
 
     # 20. Two sessions hold the same agent draft: the second save is refused and loses nothing the first saved.
