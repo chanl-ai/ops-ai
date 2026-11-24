@@ -391,6 +391,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-755 | tools-service | A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it | api, ui | works |
 | uc-756 | agents-service | A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record | api, ui | works |
 | uc-757 | agents-service | A builder writes a skill with steps and an agent brief, and a chat follows the steps | api, sdk, cli, ui | draft |
+| uc-948 | agents-service | A builder edits an agent's brief and what it uses on one page; a viewer and a member read it | api, sdk, cli, ui | current |
 | uc-761 | console | A builder edits a workflow that saves itself, publishes it past its problems and compares its versions | sdk, cli, ui | current |
 | uc-762 | agents-service | A builder tries one path of a skill: reads run, a write is planned and sent once only when confirmed, and nothing is stored | api, ui | current |
 | uc-763 | agents-service | A run outlives a killed worker and redrives from its failed step | api | works |

@@ -692,7 +692,12 @@ async def list_versions(rt: Rt, _: Reader, __: Tx, agent_id: str) -> JSONRespons
                 "savedAt": v.saved_at,
                 "savedBy": v.saved_by,
                 **({"publishedAt": v.published_at, "publishedBy": v.published_by} if v.published_at else {}),
-                **({"reviewId": v.review_id} if v.review_id else {}),
+                # A version waiting in Reviews names its open request, so the page can offer Withdraw.
+                **(
+                    {"reviewId": review}
+                    if (review := pending.id if pending and int(pending.version) == n else v.review_id)
+                    else {}
+                ),
             }
         )
     return ok(out)
