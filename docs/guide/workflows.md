@@ -137,7 +137,7 @@ From a script or a terminal (`step` is the trigger step's id):
 ```bash
 opsai workflows schedule kinds                                  # the rule kinds and their labels
 opsai workflows schedule preview --kind every --set every=15 --set unit=minutes --set tz=Europe/London
-opsai workflows schedule set held_wires --step start --kind every \
+opsai workflows schedule save held_wires --step start --kind every \
   --set every=15 --set unit=minutes --set start=07:00 --set tz=Europe/London \
   --set 'days=["mon","tue","wed","thu","fri"]'
 opsai workflows schedule show held_wires --step start           # the rule in words, the next runs, the last outcome
