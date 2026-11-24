@@ -209,8 +209,9 @@ RUNTIME_GRANTS: dict[str, Grants] = {
         "thread_budgets_unattributed": ((), ()),
         "thread_leases": (_SIU, ()),
         "timers": (_SIU, ()),
-        # A trigger event is settled in place (agents 0089, 0091); what fired it is never rewritten.
-        "trigger_events": (_SI, ("detail", "item", "outcome", "run_id")),
+        # A trigger event is settled in place (agents 0089, 0091); what fired it is never rewritten. The schedule
+        # clock deletes its own rows after KEEP_SCHEDULE_DAYS (agents 20261123_1900).
+        "trigger_events": (_SID, ("detail", "item", "outcome", "run_id")),
         "widget_deployments": (_SIU, ()),
         # Clearing a schedule and deleting its workflow remove the row (agents 20261123_1900).
         "workflow_schedules": ((*_SIU, "DELETE"), ()),

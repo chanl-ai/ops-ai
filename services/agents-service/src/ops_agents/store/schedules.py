@@ -18,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import now_iso
-from ops_store import Guarantee
+from ops_store import Guarantee, isolation
 from ops_store.schema import TENANT_SCOPED
 
 from .base import metadata
@@ -26,7 +26,7 @@ from .tenancy import current_tenant, tenant_tx
 
 Rule = dict[str, JsonValue]
 # What the clock records for a slot.
-OUTCOMES = ("ran", "skipped", "refused", "missed", "seen")
+OUTCOMES = ("ran", "late", "skipped", "refused", "missed", "seen")
 
 workflow_schedules = sa.Table(
     "workflow_schedules",
@@ -95,6 +95,19 @@ class WorkflowSchedules:
         async with tenant_tx(self.engine) as c:
             return [_row(r) for r in await c.execute(q.order_by(t.c.trigger_step))]
 
+    async def everything(self) -> list[ScheduleRow]:
+        """Every saved schedule of the acting tenant, for the clock, which reads them beside the live versions."""
+        t = workflow_schedules
+        cols = [c for c in t.c if c.name != "tenant_id"]
+        q = sa.select(*cols).where(t.c.tenant_id == current_tenant()).order_by(t.c.workflow_id, t.c.trigger_step)
+        async with tenant_tx(self.engine) as c:
+            return [_row(r) for r in await c.execute(q)]
+
+    async def seen(self, workflow_id: str, trigger_step: str, at: str) -> None:
+        """The clock saw the schedule live on its pass at `at` and its slot had not moved."""
+        async with tenant_tx(self.engine) as c:
+            await c.execute(workflow_schedules.update().where(self._key(workflow_id, trigger_step)).values(seen_at=at))
+
     async def save(self, workflow_id: str, trigger_step: str, team_id: str, rule: Rule, by: str) -> Rule | None:
         """Saves the builder's rule and returns the one it replaced (None for a new schedule); the slot state stays,
         and the clock treats the changed rule as a first sighting."""
@@ -103,7 +116,7 @@ class WorkflowSchedules:
         before = await self.get(workflow_id, trigger_step)
         if before is None:
             try:
-                async with tenant_tx(self.engine) as c:
+                async with tenant_tx(self.engine) as c, isolation.attempt(c):
                     await c.execute(t.insert().values(workflow_id=workflow_id, trigger_step=trigger_step, **values))
                 return None
             except IntegrityError:
@@ -132,9 +145,10 @@ class WorkflowSchedules:
         outcome: str,
         digest: str,
         run_id: str | None,
+        at: str | None = None,
     ) -> bool:
-        """Records `slot` and its outcome only while the stored last slot is still `expected`; False when another
-        machine moved it first."""
+        """Records `slot` and its outcome, seen on the pass at `at`, only while the stored last slot is still
+        `expected`; False when another machine moved it first."""
         if outcome not in OUTCOMES:
             raise ValueError(f"{outcome} is not a slot outcome")
         t = workflow_schedules
@@ -144,7 +158,7 @@ class WorkflowSchedules:
             "last_outcome": outcome,
             "rule_digest": digest,
             "last_run_id": run_id,
-            "seen_at": now_iso(),
+            "seen_at": at or now_iso(),
         }
         async with tenant_tx(self.engine) as c:
             done = await c.execute(t.update().where(self._key(workflow_id, trigger_step), same).values(**values))
