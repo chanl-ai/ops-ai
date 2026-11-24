@@ -28,7 +28,7 @@ from brief_steps import (
     with_compliance,
 )
 from main_chains import ACCOUNT, bank_stack, holds, publish_bank_module
-from usecase_harness import agents, as_role, check, data, finish, save_agent, sse
+from usecase_harness import agents, as_role, bearer, check, data, finish, save_agent, signed_in, sse
 
 RUN = int(time.time())
 STREAM = {"Accept": "text/event-stream"}
@@ -49,6 +49,12 @@ def made(res: Any) -> dict[str, Any]:
 
 
 with bank_stack() as s:
+    # The team's two-person rule on (requesterMayDecide off; the default is on), so the builder who asks for the freeze
+    # in step 6 does not decide it himself. Tokens carry the policy, so each person signs in again after the change.
+    team_admin = bearer(signed_in(s.accounts, "w.kamau@harborpine.example"), "team_ops")
+    two_person = s.accounts.put("/v1/policies/requesterMayDecide", json={"value": False}, headers=team_admin)
+    check("setup: the admin turns the two-person rule on for the team", two_person.status_code == 200, two_person.text[:200])
+    s.who = {role: as_role(s.accounts, role) for role in s.who}
     me = s.who["builder"]
     _, read, write = publish_bank_module(s.gw, RUN, approval=True, team=me, security=s.who["security"])
     time.sleep(31)  # agents-service keeps each tenant's tool list for 30 seconds
@@ -277,7 +283,7 @@ with bank_stack() as s:
     live = data(s.api.get(f"/v1/agents/{aid}", headers=me))
     check(
         "5 the agent publishes once nothing is missing, and says what it uses",
-        clear == {"canRequest": True, "problems": []}
+        (clear["canRequest"], clear["problems"], clear.get("blockers")) == (True, [], [])
         and sent.status_code == 201
         and live["publishedVersion"] == now["version"]
         and live["uses"] == {"tools": 2, "knowledgeBases": 0, "skills": 3, "agents": 0, "workflows": 0},

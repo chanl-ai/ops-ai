@@ -81,7 +81,8 @@ with bank_stack() as s:
         and len(live_skill["content"]["steps"]) == 3
         and agent.get("promptMode") == "brief"
         and [p["id"] for p in before["problems"]] == [f"tool:{read}"]
-        and after == {"canRequest": True, "problems": []}
+        and [(b["code"], b["field"]) for b in before.get("blockers") or []] == [("missing_reference", "brief.howToAnswer")]
+        and (after["canRequest"], after["problems"], after.get("blockers")) == (True, [], [])
         # A brief's never rules are reviewed by a second person, so the request waits for one or is live at once.
         and asked.get("status") in ("pending", "approved")
         and live["uses"]["skills"] == 2,

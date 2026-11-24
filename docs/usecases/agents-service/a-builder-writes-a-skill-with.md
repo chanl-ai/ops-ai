@@ -45,6 +45,7 @@ with a read and a write on a mock bank, published for the team, and platform sig
 |---|---|
 | PostgreSQL and OPA | `make db-up` |
 | A read tool and a write tool that needs approval | The scripts publish a tool module on a mock bank (`lib/main_chains.py`, `publish_bank_module`) |
+| The team's two-person rule on, so the write of step 6 waits for someone other than James | The api script turns `requesterMayDecide` off for the team as its admin, then signs each person in again |
 
 ## Steps and expected results
 
