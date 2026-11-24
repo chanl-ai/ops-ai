@@ -1368,6 +1368,12 @@ class PersonRef(TypedDict, closed=True):
     name: str
 
 
+class PlaceSchedule(TypedDict, closed=True):
+    nextRun: str | None
+    triggerStep: str
+    words: str
+
+
 class PlanInput(TypedDict, closed=True):
     resources: list[str]
 
@@ -3641,6 +3647,7 @@ class LivePlace(TypedDict, closed=True):
     health: Health | None
     lastActivityAt: str | None
     pinned: bool
+    schedule: NotRequired[PlaceSchedule | None]
     traffic24H: int | None
     version: int | Literal["latest"] | None
     where: Where

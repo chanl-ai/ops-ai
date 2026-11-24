@@ -13558,6 +13558,16 @@
             "title": "Pinned",
             "type": "boolean"
           },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlaceSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "traffic24H": {
             "anyOf": [
               {
@@ -15444,6 +15454,37 @@
           "name"
         ],
         "title": "PersonRef",
+        "type": "object"
+      },
+      "PlaceSchedule": {
+        "additionalProperties": false,
+        "properties": {
+          "nextRun": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextrun"
+          },
+          "triggerStep": {
+            "title": "Triggerstep",
+            "type": "string"
+          },
+          "words": {
+            "title": "Words",
+            "type": "string"
+          }
+        },
+        "required": [
+          "words",
+          "nextRun",
+          "triggerStep"
+        ],
+        "title": "PlaceSchedule",
         "type": "object"
       },
       "Plan": {
