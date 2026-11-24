@@ -10,35 +10,59 @@ from __future__ import annotations
 import json
 from typing import Any, cast
 
-from ops_agent_kernel.pii import masked
+from pydantic import ValidationError
+
 from ops_engine import default_registry
-from ops_engine.definition import NodeInstance, WorkflowDefinition, ancestors
+from ops_engine.definition import Connection, NodeInstance, WorkflowDefinition, ancestors
 from ops_engine.shapes import Ports
-from ops_engine.store.runs import RunRow, RunStep
+from ops_engine.store.runs import RunRow
 from ops_service_kit.http import Json
+
+from .review_text import humanize
 
 # A value longer than this is cut, with an ellipsis, so one large output cannot flood the sheet.
 SAMPLE_VALUE_MAX_CHARS = 500
 TRIGGER = "trigger"
 
 
-def shown(value: Any, *, mask: bool) -> str | None:
-    """A value as the sheet shows it: text as written, anything else as JSON, masked when the team masks personal data
-    for people, cut at SAMPLE_VALUE_MAX_CHARS."""
+def readable(workflow_id: str, definition: Json) -> Json:
+    """The working copy as far as it reads: the save keeps what the canvas holds, so a step drawn but not filled in
+    (no type yet) and a line to it are left out here rather than failing the whole sample, as Try step reads nodes."""
+
+    def node(raw: Any) -> NodeInstance | None:
+        try:
+            return NodeInstance.model_validate(raw)
+        except ValidationError:
+            return None
+
+    def line(raw: Any) -> Connection | None:
+        try:
+            return Connection.model_validate(raw)
+        except ValidationError:
+            return None
+
+    listed, wired = definition.get("nodes"), definition.get("connections")
+    nodes = [n for n in (node(r) for r in (listed if isinstance(listed, list) else [])) if n is not None]
+    kept = {n.id for n in nodes}
+    lines = [c for c in (line(r) for r in (wired if isinstance(wired, list) else [])) if c is not None]
+    connections = [c for c in lines if c.source.node in kept and c.target.node in kept]
+    return WorkflowDefinition.model_validate(
+        {"schemaVersion": 2, "id": workflow_id, "nodes": nodes, "connections": connections}
+    ).wire()
+
+
+def shown(value: Any) -> str | None:
+    """A value as the sheet shows it: text as written, anything else as JSON, cut at SAMPLE_VALUE_MAX_CHARS. Masking
+    is done before, by the route's `for_people`."""
     if value is None:
         return None
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-    if mask:
-        text = cast(str, masked(text))
     return text if len(text) <= SAMPLE_VALUE_MAX_CHARS else text[:SAMPLE_VALUE_MAX_CHARS] + "…"
 
 
 def _label(name: str, schema: Any) -> str:
     title = cast(Json, schema).get("title") if isinstance(schema, dict) else None
-    if isinstance(title, str) and title:
-        return title
-    spaced = "".join(f" {c.lower()}" if c.isupper() else c for c in name).replace("_", " ").strip()
-    return spaced[:1].upper() + spaced[1:]
+    return title if isinstance(title, str) and title else humanize(name)
 
 
 def _field_names(ports: Ports, output: Any) -> list[tuple[str, Any]]:
@@ -60,32 +84,30 @@ def sample_view(
     *,
     shapes: dict[str, Ports],
     run: RunRow | None,
-    steps: list[RunStep],
-    mask: bool,
+    values: Json,
 ) -> dict[str, Any]:
-    """The reply: `saved` is false when the working copy does not hold `step` yet (the sheet asks to save first)."""
+    """The reply: `saved` is false when the working copy does not hold `step` yet (the sheet asks to save first).
+    `values` holds the run's `input` and each node's last `output` by node id, as people may see them."""
     d = WorkflowDefinition.model_validate(definition)
     known = {n.id for n in d.nodes}
     saved = step is None or step in known
     before = ancestors(d, step) if step is not None and saved else known
-    # The last attempt of each node; a step the run had that the copy no longer holds is left out by the loop below.
-    last: dict[str, Any] = {}
-    for s in steps:
-        last[s.node_id] = s.output
+    # A step the run had that the copy no longer holds is left out by the loop below.
+    last = cast(Json, values.get("output") or {})
     registry = default_registry()
 
     def entry(n: NodeInstance) -> dict[str, Any]:
         t = registry.find(n.type, n.type_version)
         output = last.get(n.id)
         trigger = t is not None and t.group == TRIGGER
-        if trigger and output is None and run is not None:
-            output = run.input
+        if trigger and output is None:
+            output = values.get("input")
         fields: list[dict[str, Any]] = [
             {
                 "name": name,
                 "label": _label(name, schema),
                 "path": f"$.input.{name}" if trigger else f"$.nodes.{n.id}.out.{name}",
-                "sample": shown(cast(Json, output).get(name) if isinstance(output, dict) else None, mask=mask),
+                "sample": shown(cast(Json, output).get(name) if isinstance(output, dict) else None),
             }
             for name, schema in _field_names(shapes.get(n.id, {}), output)
         ]

@@ -135,3 +135,19 @@ async def test_earlier_steps_only_from_the_working_copy_and_a_deleted_step_is_le
     assert (await c.get(f"{WF}/sample", params={"step": "start"}, headers=BUILDER)).json()["data"]["steps"] == []
     unsaved = (await c.get(f"{WF}/sample", params={"step": "drawn_only"}, headers=BUILDER)).json()["data"]
     assert unsaved["saved"] is False and unsaved["steps"] == []
+
+
+async def test_a_half_drawn_step_the_save_accepted_does_not_break_the_sample(
+    shared: tuple[AsyncClient, AsyncEngine],
+) -> None:
+    c, _ = shared
+    # The working-copy save keeps what the canvas holds, so a step with no type yet is stored as drawn.
+    d = definition("shared_refunds")
+    d["nodes"].append({"id": "half", "name": "Half drawn"})
+    d["connections"].append({"from": {"node": "fields", "port": "out"}, "to": {"node": "half", "port": "in"}})
+    base = (await c.get(WF, headers=BUILDER)).json()["data"]["saveBase"]
+    body = {"definition": d, "baseVersion": base["version"], "baseDigest": base["digest"]}
+    assert (await c.put(f"{WF}/working-copy", json=body, headers=BUILDER)).status_code == 200
+    got = await c.get(f"{WF}/sample", params={"step": "big"}, headers=BUILDER)
+    assert got.status_code == 200, got.text
+    assert "fields" in [s["id"] for s in got.json()["data"]["steps"]]

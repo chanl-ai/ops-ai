@@ -808,7 +808,7 @@ async def definition_sample(
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id}")
     copy = await _open_copy(store, workflow_id, row.version)
-    held = copy.definition if copy is not None else row.definition
+    held = step_sample.readable(workflow_id, copy.definition if copy is not None else row.definition)
     team = current_team() or me.team_id or None
     picked = None
     steps: list[Any] = []
@@ -819,8 +819,11 @@ async def definition_sample(
             picked = await visible_run(rt, newest[0].id, me)
             steps = await runs(rt).step_rows(picked.id)
     shapes = await step_shapes.version_shapes(rt, team or "", held)
-    mask = await ai_steps_gate.people_see_masked(rt, picked.team_id if picked else team)
-    return ok(step_sample.sample_view(workflow_id, held, step, shapes=shapes, run=picked, steps=steps, mask=mask))
+    # The last attempt of each node; the values go through the one masker every run read uses.
+    values: Json = {"input": None, "output": {}}
+    if picked is not None:
+        values = await for_people(rt, picked, {"input": picked.input, "output": {s.node_id: s.output for s in steps}})
+    return ok(step_sample.sample_view(workflow_id, held, step, shapes=shapes, run=picked, values=values))
 
 
 @router.get("/definitions/{workflow_id}", response_model=Envelope[DefinitionView])
