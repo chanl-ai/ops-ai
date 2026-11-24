@@ -9,6 +9,7 @@ in `ops_sources.contract`."""
 
 from .contract import (
     AT_ONCE,
+    FETCH_TRIES,
     INPUT_TYPES,
     RECONNECT,
     TEAM_SIGN_IN,
@@ -31,6 +32,7 @@ from .state import Held, Place, Reader, SourceState
 
 __all__ = [
     "AT_ONCE",
+    "FETCH_TRIES",
     "FULL_EVERY",
     "GONE_TWICE",
     "INPUT_TYPES",

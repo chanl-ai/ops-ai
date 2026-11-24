@@ -101,6 +101,8 @@ class SourceConfig(TypedDict, total=False):
     changesCursor: JsonValue
     seenSoFar: list[str] | None
     tombstones: JsonValue
+    # Items whose fetch failed, by id: the version each failed on and the runs in a row that tried it.
+    failedFetches: JsonValue
     repeats: JsonValue
 
 
@@ -244,6 +246,7 @@ def _place(cfg: SourceConfig) -> Place:
         last_full_at=cfg.get("lastFullAt"),
         seen_so_far=list(cfg.get("seenSoFar") or []) if "seenSoFar" in cfg else None,
         tombstones=an_object(cfg.setdefault("tombstones", {}), "tombstones"),
+        failed_fetches=dict(an_object(cfg.get("failedFetches") or {}, "failedFetches")),
         paused=cfg.get("paused"),
     )
 
@@ -260,6 +263,7 @@ def _keep(cfg: SourceConfig, place: Place) -> None:
         ("lastFullAt", place.last_full_at),
         ("seenSoFar", place.seen_so_far),
         ("paused", place.paused),
+        ("failedFetches", place.failed_fetches or None),
     ):
         if value is None:
             cfg.pop(key, None)
@@ -373,6 +377,10 @@ async def sync_tool_source(
         done = await fetcher.fetch_changed(place, counts, listing.errors, log, on_listed=listed, on_fetched=fetched)
         if done.rate_limited:
             status = "partial"
+        elif done.retrying and status == "success":
+            # The watermark stays, so the next sync lists the items whose fetch failed and tries them again.
+            status = "partial"
+            stopped = stopped or "Some items could not be fetched; the next sync tries them again."
         gone_now = done.gone_now
         # A base this source feeds may keep what its source removed: then it stays searchable and says so.
         keep = (await service.sync_rules(tenant, str(s.id)))["removedAtSource"] == "keep"

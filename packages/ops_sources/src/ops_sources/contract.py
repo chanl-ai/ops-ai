@@ -30,6 +30,12 @@ from ops_service_kit.narrow import json_list, json_object
 RECONNECT = {"AUTH_EXPIRED", "CONNECTION_REVOKED", "SIGN_IN_NOT_FOUND", "CONNECTION_NOT_LINKED", "SECRET_MISSING"}
 # Items fetched at once from the system when the source names no number of its own.
 AT_ONCE = 4
+# Runs in a row that try an item whose fetch failed for the same version before it is left until its marker moves.
+# A passing fault (a lock held for an edit, a timeout) clears within a few runs; one that outlasts three is the
+# system refusing that version, and trying it every run would keep each run partial and its place from moving on.
+FETCH_TRIES = 3
+# A fetch that failed for one of these says nothing about the item: it is not counted as a try.
+PASSING = {"RATE_LIMITED", "UPSTREAM_UNREACHABLE"}
 
 
 @dataclass(frozen=True)

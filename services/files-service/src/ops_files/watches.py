@@ -6,11 +6,12 @@ A check holds the watch's lease from start to end, so Check now while one runs a
 background workers never check one watch at once. Files keeps the place on the watch and each file's marker on its
 entry (`FileState`). Fetched bytes are held a few files at a time (`CHUNK`), never the whole check's. A file listed as
 too large, or refused at fetch for its size, is one failed event with its size, and an entry already held for it is
-not removed; a file a folder's rule leaves out is no event. A fetch refused for another reason is a failed event and
-the check ends partial; a rate limit ends it partial; tools-service out of reach ends it refused. Only a check that
-ends success moves the place on, so the next check lists the same changes again. Only a full listing read whole
-removes the files it did not list. A check that loses its lease (saving its place, renewing it, or writing a version)
-stops at once."""
+not removed; a file a folder's rule leaves out is no event. A fetch refused for another reason is one failed event
+for that version: the check ends partial so the next lists it again, on up to FETCH_TRIES checks, and then the file is
+left (kept, and not fetched) until it changes at the source, so the check settles. A rate limit ends it partial;
+tools-service out of reach ends it refused. Only a check that ends success moves the place on, so the next check lists
+the same changes again. Only a full listing read whole removes the files it did not list. A check that loses its
+lease (saving its place, renewing it, or writing a version) stops at once."""
 
 from __future__ import annotations
 
@@ -298,7 +299,7 @@ class WatchChecks:
             part = dataclasses.replace(listing, changed=listing.changed[start : start + CHUNK])
             fetcher = Fetcher(gets, state, tools, part, tenant=tenant, team=team, act="watch")
             done = await fetcher.fetch_changed(
-                place, counts, errors, listing.log, on_listed=on_item, on_fetched=on_item
+                place, counts, errors, listing.log, on_listed=on_item, on_fetched=on_item, final=TOO_LARGE
             )
             gone_now += done.gone_now
             stop = False
@@ -317,19 +318,20 @@ class WatchChecks:
                 reason = answer.message or answer.code
                 if answer.code in TOO_LARGE:
                     reason = f"Too large to bring in: {reason}"
-                elif outcome.status == "success":
+                elif source_id in done.retrying and outcome.status == "success":
                     # A file that could not be fetched for another reason is tried again on the next check.
                     outcome.status, outcome.code = "partial", "fetch_failed"
                     outcome.stopped = "Some files could not be fetched; the next check tries them again."
                 skipped_ids.add(source_id)
                 held = state.by_id.get(source_id)
                 r = by_row.get(source_id, {})
-                failed.append(
-                    _event(
-                        held.file_id if held else None, None, "failed", reason, _size_of(r), _title(r, source_id), now
-                    )
+                event = _event(
+                    held.file_id if held else None, None, "failed", reason, _size_of(r), _title(r, source_id), now
                 )
-                outcome.fail(failed[-1])
+                outcome.fail(event)
+                # One failed event per version: a check that tries it again names it on the row, not as a new event.
+                if source_id in done.failed_first:
+                    failed.append(event)
             gets.failed.clear()
             if failed and not await self.watches.add_events(watch.id, owner=owner, events=failed):
                 raise LeaseLost(watch.id)
