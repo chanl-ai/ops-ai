@@ -264,7 +264,8 @@ async def test_two_checks_at_once_run_one_and_a_check_that_lost_its_lease_stops(
         reader.got = {"drv!a": _file("a", "e3", b"a, refunded"), "drv!b": _file("b", "e1", b"b")}
 
         async def taken(_item: str) -> None:
-            async with engine.begin() as c:
+            # In the tenant's own transaction: SQL Server's row security hides every row from a bare connection.
+            async with WatchesStore(engine).tx() as c:
                 await c.execute(sa.update(file_watches).values(lease_owner="chk_other"))
 
         reader.on_get = taken

@@ -287,6 +287,8 @@ IF USER_ID(N'ops_files_system') IS NULL CREATE USER ops_files_system WITHOUT LOG
 GO
 GRANT SELECT, UPDATE, DELETE ON dbo.files_outbox TO ops_files_system;
 GRANT SELECT ON dbo.files TO ops_files_system;
+GRANT SELECT ON dbo.file_watches TO ops_files_system;
+GRANT SELECT, DELETE ON dbo.file_watch_events TO ops_files_system;
 GRANT IMPERSONATE ON USER::ops_files_system TO ops_files_runtime;
 GO
 -- documents-service
