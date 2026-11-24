@@ -87,6 +87,17 @@ export interface Agent {
 
 export type PromptMode = 'brief' | 'full';
 
+export type MenuSectionKind = 'personality' | 'tone' | 'environment' | 'context' | 'tool_use' | 'error_handling' | 'escalation';
+export type BriefSectionKind = MenuSectionKind | 'custom';
+
+/** A headed section a builder adds to the brief; `kind` is the tag evals read, and a custom section drives nothing. */
+export interface BriefSection {
+  kind: BriefSectionKind;
+  /** A menu kind's fixed title, or a custom section's own name. */
+  name: string;
+  text: string;
+}
+
 export interface AgentBrief {
   purpose: string;
   goal: string;
@@ -97,6 +108,8 @@ export interface AgentBrief {
   never: string[];
   /** Kept readable on older versions; the brief no longer shows or writes them (they seed eval cases). */
   success: string[];
+  /** Sections added from the Add section menu or written by the builder; absent on a brief saved before them. */
+  sections?: BriefSection[];
 }
 
 export type Thinking = 'default' | 'low' | 'medium' | 'high';

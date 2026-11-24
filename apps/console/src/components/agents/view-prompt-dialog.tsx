@@ -26,9 +26,10 @@ export function ViewPromptDialog({ agentId, version, name }: { agentId: string; 
         onOpenChange={setOpen}
         size="lg"
         title={`Prompt for ${name}`}
-        description={<>What the model receives from v{version}, read only. Never is applied last, on every reply. The platform&rsquo;s own rules, always-on skills and any running skill step are added by each turn.</>}
+        description={<>What the model receives from v{version}, read only, in the order it is written: your headings and sections, then Never, applied last on every reply. The platform&rsquo;s own rules, always-on skills and any running skill step are added by each turn.</>}
       >
-        {prompt.isPending ? (
+        {/* A copy read before the last save is never shown: the sections may have changed in that save. */}
+        {prompt.isPending || (prompt.isFetching && !prompt.isError) ? (
           <Skeleton className="h-64 w-full" />
         ) : prompt.isError ? (
           <QueryError what="the prompt" error={prompt.error} onRetry={() => prompt.refetch()} retrying={prompt.isFetching} />

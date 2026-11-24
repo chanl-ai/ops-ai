@@ -1,20 +1,14 @@
+import { composeHead } from '@/lib/brief-sections';
 import type { Agent, AgentBrief } from '@/lib/types/domain';
 import type { AgentPublishCheck, PublishBlocker } from '@/lib/types/references';
 
 import { isOffered } from './index';
 
-/** The prompt the service writes from a brief, for the all-mock console only: headings in order, Never last. */
-export const composeBrief = (b: AgentBrief): string =>
-  [
-    `Job\n${b.purpose}`,
-    b.goal && `Goal\n${b.goal}`,
-    b.howToAnswer && `How to answer\n${b.howToAnswer}`,
-    b.handOff.length ? `Hand off when\n${b.handOff.map((s) => `- ${s}`).join('\n')}` : '',
-    b.examples && `Examples\n${b.examples}`,
-    b.never.length ? `Never\n${b.never.map((s) => `- ${s}`).join('\n')}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+/** The prompt the service writes from a brief, for the all-mock console only: its headings in order, Never last. */
+export const composeBrief = (name: string, b: AgentBrief): string => composeHead(name, b);
+
+/** The Never section the service writes after everything else, on every reply. */
+export const neverSection = (b: AgentBrief | null | undefined): string => (b?.never.length ? `\n\n# Never\n${b.never.map((r) => `- ${r}`).join('\n')}` : '');
 
 /** A brief the mock starts with: a card dispute desk that points at one tool, one knowledge base and one skill. */
 export const SEED_BRIEF: AgentBrief = {
@@ -25,6 +19,7 @@ export const SEED_BRIEF: AgentBrief = {
   examples: '',
   never: ['Promise a refund before the review is done', 'Ask for a full card number'],
   success: ['The cardholder knows what happens next', 'The evidence list is complete'],
+  sections: [],
 };
 
 const TOKEN = /@(tool|knowledge|skill|agent|workflow):([A-Za-z0-9_.-]*[A-Za-z0-9_])/g;
