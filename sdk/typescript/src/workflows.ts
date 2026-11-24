@@ -101,6 +101,12 @@ export class Workflows {
     return eachPage((page) => this.raw.agents.batches_list_batches({ path: { workflow_id: workflowId }, query: page }), query);
   }
 
+  /** The workflow's groups still waiting for their Ready when, oldest first: name, files held, since when. */
+  async waitingGroups(workflowId: string) {
+    const found = (await this.raw.agents.batches_waiting_groups({ path: { workflow_id: workflowId } })) as { data?: unknown[] };
+    return found.data ?? [];
+  }
+
   /** One batch with its counts and every row, failed first. */
   getBatch(batchId: string) {
     return this.raw.agents.batches_batch_page({ path: { batch_id: batchId } });

@@ -951,6 +951,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "batches_waiting_groups": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/workflows/{workflow_id}/batches/waiting",
+    "pathParams": [
+      "workflow_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "cases_add_event": {
     "body": "json",
     "headers": [],

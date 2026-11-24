@@ -51,3 +51,4 @@ tools-service GET /v1/plugin-templates  # bounded: one plugin's templates
 tools-service GET /v1/tool-catalog  # owed: keyset pages by after; no search
 tools-service GET /v1/tool-modules/discoveries/{discovery_id}/names  # owed: every operation name of one discovery for select-all; no cap on a discovery's size
 tools-service GET /v1/tool-modules/{module_id}  # bounded: one module and its operations
+agents-service GET /v1/workflows/{workflow_id}/batches/waiting  # at most 200 groups, oldest first; a group waits only until its next ready check, so the list stays short

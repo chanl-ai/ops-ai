@@ -157,6 +157,10 @@ class Workflows:
         """The workflow's batches, uploads and checks of a watched folder, newest first, every page (`sort_order`)."""
         return iter_pages(lambda **q: self._raw.agents.batches_list_batches(workflow_id, **q), **query)
 
+    def waiting_groups(self, workflow_id: str) -> list[Any]:
+        """The workflow's groups still waiting for their Ready when, oldest first: name, files held, since when."""
+        return list(dict(self._raw.agents.batches_waiting_groups(workflow_id)).get("data") or [])
+
     def get_batch(self, batch_id: str) -> Any:
         """One batch with its counts and every row, failed first."""
         return self._raw.agents.batches_batch_page(batch_id)
@@ -333,6 +337,9 @@ class AsyncWorkflows:
 
     def batches(self, workflow_id: str, **query: Any) -> AsyncIterator[Any]:
         return iter_pages_async(lambda **q: self._raw.agents.batches_list_batches(workflow_id, **q), **query)
+
+    async def waiting_groups(self, workflow_id: str) -> list[Any]:
+        return list(dict(await self._raw.agents.batches_waiting_groups(workflow_id)).get("data") or [])
 
     async def get_batch(self, batch_id: str) -> Any:
         return await self._raw.agents.batches_batch_page(batch_id)

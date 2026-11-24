@@ -3825,6 +3825,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/workflows/{workflow_id}/batches/waiting": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Waiting Groups
+         * @description The workflow's groups still waiting for their Ready when, oldest first, at most 200. 404 for a workflow the
+         *     team does not hold.
+         */
+        get: operations["batches_waiting_groups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/workflows/{workflow_id}/draft": {
         parameters: {
             query?: never;
@@ -4933,12 +4954,19 @@ export interface components {
             failed: number;
             /** Finished */
             finished: number;
+            /** Groupname */
+            groupName?: string | null;
             /** Id */
             id: string;
             /** Label */
             label: string;
             /** Origin */
             origin: string;
+            /**
+             * Part
+             * @default 1
+             */
+            part: number;
             /** Pending */
             pending: number;
             /** Removed */
@@ -4992,6 +5020,12 @@ export interface components {
             fileName: string;
             /** Finished */
             finished: number;
+            /** Groupname */
+            groupName?: string | null;
+            /** Groupparts */
+            groupParts?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
             /** Id */
             id: string;
             /** Mayretry */
@@ -5002,6 +5036,11 @@ export interface components {
             notRetryable: number;
             /** Origin */
             origin: string;
+            /**
+             * Part
+             * @default 1
+             */
+            part: number;
             /** Pending */
             pending: number;
             /** Removed */
@@ -7501,6 +7540,15 @@ export interface components {
         /** Envelope[ValidationRun] */
         Envelope_ValidationRun_: {
             data: components["schemas"]["ValidationRun"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[WaitingGroups] */
+        Envelope_WaitingGroups_: {
+            data: components["schemas"]["WaitingGroups"];
             /**
              * Success
              * @constant
@@ -13134,6 +13182,23 @@ export interface components {
             publishedBy: string;
             /** Version */
             version: number;
+        };
+        /**
+         * WaitingGroupLine
+         * @description A group whose Ready when has not passed: its name, how many files it holds, and since when.
+         */
+        WaitingGroupLine: {
+            /** Held */
+            held: number;
+            /** Name */
+            name: string;
+            /** Since */
+            since: string;
+        };
+        /** WaitingGroups */
+        WaitingGroups: {
+            /** Data */
+            data: components["schemas"]["WaitingGroupLine"][];
         };
         /** WaitingTask */
         WaitingTask: {
@@ -36072,6 +36137,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_Union_DryRun__BatchStarted__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    batches_waiting_groups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_WaitingGroups_"];
                 };
             };
             /** @description Invalid request */

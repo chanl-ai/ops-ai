@@ -137,6 +137,10 @@ queries = 2
 # The workflow (404 when the team holds none), the count and the page, rows counted in the page's own query.
 queries = 3
 
+["GET /v1/workflows/{workflow_id}/batches/waiting"]
+# The workflow (404 when the team holds none) and the waiting groups, counted in one grouped query.
+queries = 2
+
 ["GET /v1/batches/{batch_id}/results.csv"]
 queries = 2
 

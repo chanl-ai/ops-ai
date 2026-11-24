@@ -2529,6 +2529,16 @@ class Version(TypedDict, closed=True):
     version: int
 
 
+class WaitingGroupLine(TypedDict, closed=True):
+    held: int
+    name: str
+    since: str
+
+
+class WaitingGroups(TypedDict, closed=True):
+    data: list[WaitingGroupLine]
+
+
 class WaitingTask(TypedDict, closed=True):
     assignee: Assignee | None
     dueAt: str | None
@@ -2935,9 +2945,11 @@ class BatchLine(TypedDict, closed=True):
     createdAt: str
     failed: int
     finished: int
+    groupName: NotRequired[str | None]
     id: str
     label: str
     origin: str
+    part: NotRequired[int]
     pending: int
     removed: int
     running: int
@@ -2964,11 +2976,14 @@ class BatchView(TypedDict, closed=True):
     failed: int
     fileName: str
     finished: int
+    groupName: NotRequired[str | None]
+    groupParts: NotRequired[dict[str, JsonValue] | None]
     id: str
     mayRetry: bool
     mode: str
     notRetryable: int
     origin: str
+    part: NotRequired[int]
     pending: int
     removed: int
     retryable: int
@@ -3437,6 +3452,11 @@ class EnvelopeUnionDryRunBatchStarted(TypedDict, closed=True):
 
 class EnvelopeUploadedFile(TypedDict, closed=True):
     data: UploadedFile
+    success: Literal[True]
+
+
+class EnvelopeWaitingGroups(TypedDict, closed=True):
+    data: WaitingGroups
     success: Literal[True]
 
 

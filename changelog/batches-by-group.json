@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "A watched folder's batches by subfolder, date or client",
+  "description": "A batch made from a group of files carries the group's name and part, in the list, on its page and as the first column of its CSV, and a group still waiting to be ready is listed with how many files it holds.",
+  "tag": "new"
+}

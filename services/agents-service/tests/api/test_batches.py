@@ -317,3 +317,39 @@ async def test_a_check_csv_has_field_columns_failures_and_text_cells(stack: Stac
     assert (a["path"], a["version"], a["previousVersion"]) == ("/Invoices/a.pdf", "2", "1")
     assert (a["total"], json.loads(a["lines"]), a["note"]) == ("'=1+1", [1, 2], 'net, "30"\nday'), a
     assert (failed["status"], failed["reason"], failed["total"]) == ("failed", "Larger than 25 MB", ""), failed
+
+
+async def test_a_grouped_batch_is_named_by_its_group_and_a_waiting_group_is_listed_with_its_count(
+    stack: Stack,  # noqa: F811
+) -> None:
+    """A batch made from a group must say which group and part it is, in the list, on its page and in its CSV, and a
+    group that is not ready yet is listed with how many files it holds."""
+    from ops_agents.store.batches import Batches  # noqa: PLC0415
+    from ops_agents.store.waiting_files import WaitingFiles  # noqa: PLC0415
+
+    c, _ = stack
+    rt, files = wired(c)
+    await ready(c, files, csv(1))
+    with tenant_scope(TENANT):
+        made = await Batches(rt.db).open_group(
+            team_id="team_ops", workflow_id=WID, version=1, mode="live", watch_id="wat_inv",
+            checked_at="2026-12-02T09:00:00Z", group_key="g1", group_name="Batch001",
+            group_parts={"batch": "Batch001"}, created_by="trigger",
+        )  # fmt: skip
+        await Batches(rt.db).add_rows(made.id, [{"itemKey": "f1:1", "input": {"name": "a.pdf", "path": "Batch001"}}])
+        await WaitingFiles(rt.db).hold(
+            team_id="team_ops", workflow_id=WID, group_key="g2", group_name="Batch002",
+            files=[{"itemKey": "f2:1", "input": {}}, {"itemKey": "f3:1", "input": {}}],
+        )  # fmt: skip
+    line = (await c.get(f"/v1/workflows/{WID}/batches", headers=BUILDER)).json()["data"]["data"][0]
+    page = (await c.get(f"/v1/batches/{made.id}", headers=BUILDER)).json()["data"]
+    table = (await c.get(f"/v1/batches/{made.id}/results.csv", headers=BUILDER)).text
+    waiting = await c.get(f"/v1/workflows/{WID}/batches/waiting", headers=BUILDER)
+    unknown = await c.get("/v1/workflows/no_such_flow/batches/waiting", headers=BUILDER)
+    assert (line["groupName"], line["part"], line["total"]) == ("Batch001", 1, 1), line
+    assert (page["groupName"], page["groupParts"], page["part"]) == ("Batch001", {"batch": "Batch001"}, 1), page
+    assert next(DictReader(io.StringIO(table)))["group"] == "Batch001", table
+    assert waiting.status_code == 200 and [(g["name"], g["held"]) for g in waiting.json()["data"]["data"]] == [
+        ("Batch002", 2)
+    ], waiting.text
+    assert unknown.status_code == 404, unknown.text

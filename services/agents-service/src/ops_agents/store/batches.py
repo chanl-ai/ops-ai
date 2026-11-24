@@ -9,15 +9,17 @@ key already names instead of starting a second."""
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 import sqlalchemy as sa
+from sqlalchemy.exc import IntegrityError
 
 from ops_engine.store.tables import engine_runs
 from ops_service_kit.http import Json, ListPage, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
+from ops_store.dialect import locked
 from ops_store.listing import LISTED, list_page
 from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
@@ -56,7 +58,15 @@ run_batches = sa.Table(
     # Why the batch stopped starting rows, and when (a model budget refusal); cleared when its failed rows are retried.
     sa.Column("stopped_reason", sa.String(500)),
     sa.Column("stopped_at", sa.String(32)),
+    # The group a check's files were split into (Group by): a digest of its name, the name and its named parts, and
+    # the part, 2 onward once a group passes MAX_ROWS rows. Every other batch is its own group, keyed by its id.
+    sa.Column("group_key", sa.String(96), nullable=False),
+    sa.Column("group_name", sa.String(300)),
+    sa.Column("group_parts", sa.JSON),
+    sa.Column("part", sa.Integer, nullable=False, server_default="1"),
     sa.Index("ix_run_batches_workflow", "tenant_id", "workflow_id", "created_at"),
+    # One batch per group part per workflow: two checks that find a group's files at once add to one batch.
+    sa.Index("ux_run_batches_group", "tenant_id", "workflow_id", "group_key", "part", unique=True),
     # The batch list sorts on created_at (the listing gate's index, after the tenant and team every read names).
     sa.Index("ix_run_batches_created", "tenant_id", "team_id", "created_at"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
@@ -108,6 +118,10 @@ class BatchOut(Out):
     created_at: str
     stopped_reason: str | None = None
     stopped_at: str | None = None
+    group_key: str | None = None
+    group_name: str | None = None
+    group_parts: Json | None = None
+    part: int = 1
 
 
 class BatchRowOut(Out):
@@ -144,7 +158,8 @@ class PendingRowOut(Out):
 _b = run_batches.c
 BATCH_COLUMNS = (
     _b.id, _b.team_id, _b.workflow_id, _b.version, _b.mode, _b.origin, _b.file_id, _b.file_name, _b.watch_id,
-    _b.checked_at, _b.total, _b.created_by, _b.created_at, _b.stopped_reason, _b.stopped_at,
+    _b.checked_at, _b.total, _b.created_by, _b.created_at, _b.stopped_reason, _b.stopped_at, _b.group_key,
+    _b.group_name, _b.group_parts, _b.part,
 )  # fmt: skip
 
 
@@ -167,8 +182,10 @@ class Batches(RuntimeStore):
         created_by: str,
         rows: list[Json],
     ) -> BatchOut:
+        batch_id = new_id("batch")
         batch = {
-            "id": new_id("batch"),
+            "id": batch_id,
+            "group_key": batch_id,
             "team_id": team_id,
             "workflow_id": workflow_id,
             "version": version,
@@ -196,6 +213,109 @@ class Batches(RuntimeStore):
                 ],
             )
         return BatchOut.model_validate(batch)
+
+    async def open_group(
+        self,
+        *,
+        team_id: str,
+        workflow_id: str,
+        version: int,
+        mode: str,
+        watch_id: str,
+        checked_at: str,
+        group_key: str,
+        group_name: str,
+        group_parts: Json | None,
+        created_by: str,
+    ) -> BatchOut:
+        """The group's batch with room for another row: its newest part while that holds fewer than MAX_ROWS rows,
+        else the next part, made here. A part another check made at the same moment is read, not made twice."""
+        b = run_batches
+        newest = (
+            sa.select(*BATCH_COLUMNS)
+            .where(b.c.tenant_id == current_tenant(), b.c.workflow_id == workflow_id, b.c.group_key == group_key)
+            .order_by(b.c.part.desc())
+            .limit(1)
+        )
+        for _ in range(3):
+            async with self.tx() as c:
+                found = await one(c, newest, BatchOut)
+            if found is not None and found.total < MAX_ROWS:
+                return found
+            batch = {
+                "id": new_id("batch"),
+                "team_id": team_id,
+                "workflow_id": workflow_id,
+                "version": version,
+                "mode": mode,
+                "origin": "check",
+                "file_id": None,
+                "file_name": group_name if found is None else f"{group_name} (part {found.part + 1})",
+                "watch_id": watch_id,
+                "checked_at": checked_at,
+                "total": 0,
+                "created_by": created_by,
+                "created_at": now_iso(),
+                "group_key": group_key,
+                "group_name": group_name,
+                "group_parts": group_parts,
+                "part": 1 if found is None else found.part + 1,
+            }
+            try:
+                async with self.tx() as c:
+                    await c.execute(b.insert().values(**batch))
+            except IntegrityError:
+                continue
+            return BatchOut.model_validate(batch)
+        raise RuntimeError(f"Group {group_key} of {workflow_id} could not be opened: every attempt lost a race.")
+
+    async def add_rows(self, batch_id: str, rows_in: list[Json]) -> tuple[int, list[Json]]:
+        """Adds rows (`{itemKey, input, status?, failureCode?, reason?}`) after the batch's last row, as many as it
+        has room for, and raises its total in the same transaction. A row whose item the workflow already holds is
+        skipped. Answers the number added and the rows left for the next part."""
+        b, r = run_batches, run_batch_rows
+        async with self.tx() as c:
+            mine = sa.select(b.c.team_id, b.c.workflow_id, b.c.total).where(
+                b.c.tenant_id == current_tenant(), b.c.id == batch_id, team_visible(b)
+            )
+            found = (await c.execute(locked(cast(sa.Select[Any], mine), b))).mappings().first()
+            if found is None:
+                raise KeyError(batch_id)
+            keys = [str(x["itemKey"]) for x in rows_in]
+            held = set(
+                (await c.execute(sa.select(r.c.item_key).where(
+                    r.c.tenant_id == current_tenant(), r.c.workflow_id == found["workflow_id"], r.c.item_key.in_(keys)
+                ))).scalars()
+            )  # fmt: skip
+            fresh = [x for x in rows_in if str(x["itemKey"]) not in held]
+            room = max(MAX_ROWS - int(found["total"]), 0)
+            taking, left = fresh[:room], fresh[room:]
+            last = (await c.execute(sa.select(sa.func.max(r.c.row)).where(
+                r.c.tenant_id == current_tenant(), r.c.batch_id == batch_id
+            ))).scalar() or 0  # fmt: skip
+            if taking:
+                await c.execute(
+                    r.insert(),
+                    [
+                        {
+                            "batch_id": batch_id,
+                            "row": last + i,
+                            "team_id": found["team_id"],
+                            "workflow_id": found["workflow_id"],
+                            "item_key": str(x["itemKey"]),
+                            "input": x["input"],
+                            "status": str(x.get("status") or "pending"),
+                            "failure_code": x.get("failureCode"),
+                            "reason": x.get("reason"),
+                        }
+                        for i, x in enumerate(taking, 1)
+                    ],
+                )
+                await c.execute(
+                    sa.update(b).where(b.c.tenant_id == current_tenant(), b.c.id == batch_id)
+                    .values(total=b.c.total + len(taking))
+                )  # fmt: skip
+        return len(taking), left
 
     async def get(self, batch_id: str) -> BatchOut | None:
         async with self.tx() as c:
