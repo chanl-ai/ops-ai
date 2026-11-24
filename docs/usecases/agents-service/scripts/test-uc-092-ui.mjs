@@ -40,7 +40,7 @@ await withUiStack(
       await dialog.getByLabel('Name').fill(NAME);
       await dialog.getByLabel('Starts when').fill('A customer asks for a refund');
       const created = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${agents}/v1/workflows/definitions`, { timeout: 60_000 }));
-      await dialog.getByRole('button', { name: 'Create and open' }).click();
+      await dialog.getByRole('button', { name: 'Create', exact: true }).click();
       const id = (await (await created).json()).data?.workflowId;
       await page.waitForURL(`**/workflows/definitions/${id}`, { timeout: 60_000 });
       await page.getByTestId('definition-node').first().waitFor({ timeout: 60_000 });

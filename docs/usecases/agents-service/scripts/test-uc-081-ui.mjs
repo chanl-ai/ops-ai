@@ -160,7 +160,7 @@ await withUiStack(
       // One kind of workflow: the dialog asks no shape.
       const noShapes = (await dialog.getByRole('radio').count()) === 0;
       const published = page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${agents}/v1/workflows/definitions`, { timeout: 60_000 });
-      await dialog.getByRole('button', { name: 'Create and open' }).click();
+      await dialog.getByRole('button', { name: 'Create', exact: true }).click();
       const pub = await published;
       const newId = (await pub.json()).data?.workflowId;
       const openedNew = await page.waitForURL(`**/workflows/definitions/${newId}`, { timeout: 60_000 }).then(() => true, () => false);

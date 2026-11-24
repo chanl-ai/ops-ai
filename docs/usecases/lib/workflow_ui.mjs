@@ -257,10 +257,12 @@ export async function openHeldChatWrite(page, consoleUrl, thread) {
 }
 
 /**
- * Makes the next version from what the editor on `page` saved: waits for its working copy to read "Saved", makes the
- * version through `POST …/versions` as a builder would by publishing, and reloads the page so it edits on top of that
- * version. The editor saves itself and has no Save version button. Returns the version made (`created` false when the
- * copy equals a stored version).
+ * Makes the next version from what the editor on `page` saved: waits for its working copy to read "Saved", stores the
+ * copy as a version through `POST /v1/workflows/definitions` (a draft, with no publish request), and reloads the page
+ * so it edits on top of that version. The editor saves itself and has no Save version button, and the only route that
+ * turns a copy into a version also opens its publish request. The copy stays, so it is saved again on the new version
+ * (it is the same person's, so no `replacesDigest`): an outdated copy keeps the editor read-only. Returns the version
+ * made (`created` false when the copy equals a stored version).
  */
 export async function versionFromEditor(page, workflowId, headers) {
   const state = page.getByTestId('save-state');
@@ -268,8 +270,18 @@ export async function versionFromEditor(page, workflowId, headers) {
     throw new Error(`the working copy did not save: the header reads "${await state.innerText().catch(() => 'nothing')}" (${e.message.split('\n')[0]})`);
   });
   const path = `${agents}/v1/workflows/definitions/${encodeURIComponent(workflowId)}`;
-  const base = (await (await fetch(path, { headers })).json()).data.saveBase;
-  const made = await (await fetch(`${path}/versions`, { method: 'POST', headers, body: JSON.stringify({ baseVersion: base.version, baseDigest: base.digest }) })).json();
+  const read = async () => (await (await fetch(path, { headers })).json()).data;
+  const copy = (await read()).workingCopy;
+  if (!copy) throw new Error(`${workflowId} has no working copy to make a version from`);
+  const res = await fetch(`${agents}/v1/workflows/definitions`, { method: 'POST', headers, body: JSON.stringify({ definition: copy.definition }) });
+  const made = await res.json();
+  if (!res.ok) throw new Error(`storing the working copy of ${workflowId} as a version: ${res.status} ${JSON.stringify(made).slice(0, 300)}`);
+  const after = await read();
+  if (after.outdatedCopy) {
+    const body = { definition: after.outdatedCopy.definition, baseVersion: after.saveBase.version, baseDigest: after.saveBase.digest };
+    const moved = await fetch(`${path}/working-copy`, { method: 'PUT', headers, body: JSON.stringify(body) });
+    if (!moved.ok) throw new Error(`saving the working copy of ${workflowId} on version ${after.saveBase.version}: ${moved.status} ${(await moved.text()).slice(0, 300)}`);
+  }
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="definition-node"]').first().waitFor({ timeout: 120_000 });
   // The canvas fits itself once its steps are measured; a canvas key pressed before then is lost.
