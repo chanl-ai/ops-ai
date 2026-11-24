@@ -62,7 +62,7 @@ Walks and probes act in a test team and remove what they make where a route allo
 
 | Walk | Team | Cleanup |
 |---|---|---|
-| `deploy/fly/smoke.mjs` (run by `make stg-deploy` after the click walk; `SKIP_SMOKE=1` leaves it out) | `OPS_SMOKE_TEAM` (`team_security` in a deploy); default the admin's first team | Deletes its agent, workflow (archived when it has runs), files, chat and approver |
+| `deploy/fly/smoke.mjs` (run by `make stg-deploy` after the click walk; `make stg-smoke` runs it alone; `SKIP_SMOKE=1` leaves it out) | `OPS_SMOKE_TEAM` (`STG_ROLES_TEAM` in a deploy, as the roles team's admin); default the admin's first team | Deletes its agent, workflow (archived when it has runs), files, chat and approver, also when a request throws, and the approvers and agents named like its own that an earlier failed run left. Its invite changes the workspace's permission version, so every token issued before it is refused once (`permissions_changed`); the walk renews its own session right after and the console renews on the next call |
 | `docs/usecases/lib/stg_click_walk.mjs` | The first admin's first team; it only reads | None needed |
 | `scripts/team_isolation_probe.py --seed` | The team given as B (use `team_319b708e5de1`) | Deletes what it seeded; a case has no delete route and stays |
 
@@ -117,6 +117,7 @@ carry `<your-app>` or `<app-prefix>` placeholders; the deploy fills them in and 
 make stg-deploy-ci REF=develop   # on GitHub (deploy-staging.yml), the usual way
 make stg-deploy              # from this machine; REF=<sha> deploys another commit; SKIP_BUILD=1 reuses the pushed image
 make stg-health              # every process, up or down
+make stg-smoke               # the smoke check alone against staging, no deploy; writes to staging, so the owner runs it
 ```
 
 `deploy/fly/stg_deploy.sh` deploys from `git archive REF`, so uncommitted files never reach the image, and exits
@@ -132,7 +133,8 @@ non-zero on any failure:
 | Plugins | `deploy/images/bake_plugins.py --check` against the app's `OPS_PLUGINS_DIR`: fails unless the plugins match `deploy/plugins.json` by id and version | not measured |
 | Signed in | The first admin signs in through the origin and lists agents: platform issues the session, agents-service verifies it | not measured |
 | Role accounts | `deploy/fly/role_accounts.py seed`: invites the member-role accounts the install lacks, then signs in as each and checks the role it holds | 4 of 5 signed in on the first read-only check; the chat user is made by the first deploy |
-| Walk | `docs/usecases/lib/stg_click_walk.mjs` with the first admin from `<private-dir>/staging-admin.env`; `SKIP_WALK=1` leaves it out | 136 s, 41 OK |
+| Walk | `docs/usecases/lib/stg_click_walk.mjs` with the first admin from `<private-dir>/staging-admin.env`; `SKIP_WALK=1` leaves out the walk and the smoke check after it | 136 s, 41 OK |
+| Smoke check | `deploy/fly/smoke.mjs` as the roles team's admin (`STG_ROLE_ADMIN_*` in `staging-roles.env`) in `STG_ROLES_TEAM`: makes, publishes and runs an agent, a workflow, files and a document read, opens three console pages, removes what it made, and ends on one `smoke:` line; `SKIP_SMOKE=1` leaves out only this step. A failed check fails the deploy, and on GitHub a failure after the machine was replaced rolls the deploy back | 17 s, 13 checks |
 
 The image installs Tesseract with English data (`tesseract-ocr`, `tesseract-ocr-eng`), and `fly.toml` sets
 `OPS_KB_OCR` and `OPS_ATTACHMENTS_OCR` to `auto`, so scanned pages in knowledge sources and chat attachments are read by
@@ -164,11 +166,11 @@ is replaced by a newer one, a running one finishes). It starts two ways:
 hand-started run only for a workflow that is also on the default branch, `main`, so the button and `make stg-deploy-ci`
 work once `deploy-staging.yml` has reached `main` in a release; until then use `make stg-deploy` from a machine. A commit
 whose image an earlier release pushed is not built again (`SKIP_BUILD=1`). After the deploy the job checks every
-process, OCR, plugins and one signed-in request (the first admin signs in and lists agents), then the click walk, which
-`skip_walk` leaves out. If a step fails after the machine was replaced, the job runs `make stg-rollback TO=<the release
+process, OCR, plugins and one signed-in request (the first admin signs in and lists agents), then the click walk and the
+smoke check, which `skip_walk` leaves out together. If a step fails after the machine was replaced, the job runs `make stg-rollback TO=<the release
 before>` without the walk and fails either way; a failure before that point leaves staging as it was. The job summary
-shows the commit, the trigger, the reason, any pin it overrode, the URL, each step's seconds, the walk's counts and the
-rollback's result. A release is only tagged, by `release-tag.yml`, on the merge into `develop`.
+shows the commit, the trigger, the reason, any pin it overrode, the URL, each step's seconds, the walk's counts, the smoke
+check's last line (passed and failed counts, and the step and reason when a request stopped it) and the rollback's result. A release is only tagged, by `release-tag.yml`, on the merge into `develop`.
 
 The local pin (`staging-pin` in the config folder, written by `repo.sh snapshot`) still stops `make stg-deploy` on the
 owner's machine; the runner has no such file, so it lists the release and hotfix branches on origin (`git ls-remote`) and reads `STAGING_HOLD` instead.
