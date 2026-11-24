@@ -120,6 +120,8 @@ _SENSITIVITY: dict[str, str] = {
     "case_attachment": "confidential",
     "document_type_sample": "confidential",
     "email_body": "confidential",
+    # A watched folder is often a finance or claims library; a person lowers it once they look.
+    "source_file": "confidential",
     "chat_attachment": "confidential",
     "knowledge_source": "internal",
     "avatar": "public",

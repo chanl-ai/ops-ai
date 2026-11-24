@@ -126,6 +126,28 @@ class NewVersion(TypedDict):
     current: bool
 
 
+class SourceFile(TypedDict):
+    """A file a watched folder found, as the check writes it: its source key and where it sits now."""
+
+    key_hash: str
+    source_id: str
+    source_path: str
+    name: str
+    mime: str
+    access_list: list[str] | None
+    access_read_at: datetime
+
+
+class SourceVersion(TypedDict):
+    """One version of a source file: its bytes, where they are stored, and the source's tag for them."""
+
+    digest: str
+    size: int
+    storage_key: str
+    source_tag: str | None
+    at: datetime
+
+
 class FileChange(TypedDict, total=False):
     """The columns `update` may set on a file row."""
 
@@ -216,6 +238,19 @@ files = sa.Table(
     sa.Column("data", sa.JSON),
     sa.Column("read_as", sa.String(64), info=LISTED),
     sa.Column("read_path", sa.String(16), info=LISTED),
+    # Where the file came from: `upload` (its key is its own id) or `source` (its key is the hash of the connection
+    # and the source's id for it, so a rename keeps the entry and the same bytes in two folders are two entries).
+    sa.Column("source_scope", sa.String(16), nullable=False),
+    sa.Column("source_key_hash", sa.String(64), nullable=False),
+    sa.Column("source_id", sa.String(1024)),
+    sa.Column("source_path", sa.String(1024)),
+    # Set when the source no longer lists the file; the entry stays for its retention.
+    sa.Column("removed_at", sa.DateTime(timezone=True)),
+    # Who may see the file at its source, as last read: null when the source never said, [] when it listed nobody.
+    sa.Column("access_list", sa.JSON),
+    sa.Column("access_read_at", sa.DateTime(timezone=True)),
+    # One entry per source file in a team: a second check that finds the same file adds a version, never a file.
+    sa.Index("ux_files_source_key", "tenant_id", "team", "source_scope", "source_key_hash", unique=True),
     sa.Index("ix_files_team_status", "tenant_id", "team", "status", "uploaded_at"),
     sa.Index("ix_files_read_as", "tenant_id", "read_as", "team"),
     sa.Index("ix_files_delete_after", "tenant_id", "delete_after"),
@@ -258,6 +293,11 @@ file_versions = sa.Table(
     sa.Column("uploaded_by", sa.String(320), nullable=False),
     sa.Column("uploaded_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("current", sa.Boolean, nullable=False),
+    # The source's own version tag for this version (a SharePoint eTag), sent back so it can answer `unchanged`.
+    sa.Column("source_tag", sa.String(200)),
+    # Each version is scanned on its own: a new version stays unreadable until scanned while older ones still download.
+    sa.Column("scan_status", sa.String(16), nullable=False),
+    sa.Column("scan_at", sa.DateTime(timezone=True)),
     # The file's team, copied when the version is written, so the policy holds it without reading the file.
     sa.Column("team", sa.String(64), nullable=False),
     info={**TENANT_SCOPED, **team_owned("team")},
@@ -358,6 +398,13 @@ class FileOut(Out):
     data: JsonValue
     read_as: str | None
     read_path: str | None
+    source_scope: str = "upload"
+    source_key_hash: str = ""
+    source_id: str | None = None
+    source_path: str | None = None
+    removed_at: datetime | None = None
+    access_list: list[str] | None = None
+    access_read_at: datetime | None = None
 
 
 class ListedFile(FileOut):
@@ -380,6 +427,9 @@ class VersionOut(Out):
     uploaded_at: datetime
     current: bool
     team: str
+    source_tag: str | None = None
+    scan_status: str = "pending"
+    scan_at: datetime | None = None
 
 
 class ReferenceOut(Out):
@@ -644,7 +694,9 @@ class FilesStore(Store):
                                 created_at=values["uploaded_at"],
                             )
                         )
-                    await c.execute(sa.insert(files).values(**values))
+                    await c.execute(
+                        sa.insert(files).values(source_scope="upload", source_key_hash=values["id"], **values)
+                    )
             except IntegrityError:
                 if idempotency is None:
                     raise
@@ -704,7 +756,9 @@ class FilesStore(Store):
                         .values(**values)
                     )
                     await c.execute(
-                        sa.insert(file_versions).values(file_id=file_id, tenant_id=tenant, team=team, **version)
+                        sa.insert(file_versions).values(
+                            file_id=file_id, tenant_id=tenant, team=team, scan_status=row.file.scan_status, **version
+                        )
                     )
             except IntegrityError:
                 b = file_blobs
@@ -713,6 +767,65 @@ class FilesStore(Store):
                 )
                 return (await c.execute(held)).scalar_one()
         return None
+
+    async def set_version_scan(self, file_id: str, version: int, status: str, at: datetime) -> None:
+        """Records one version's scan, so that version alone becomes readable (or stays refused)."""
+        v = file_versions
+        async with self.tx() as c:
+            await c.execute(
+                sa.update(v)
+                .where(v.c.tenant_id == isolation.tenant(), v.c.file_id == file_id, v.c.version == version)
+                .values(scan_status=status, scan_at=at)
+            )
+
+    async def put_source_version(
+        self, team: str, new_file: NewUpload, found: SourceFile, version: SourceVersion
+    ) -> tuple[str, int | None]:
+        """Writes what a check fetched for one source file: found by its source key only, never by its bytes, so two
+        folders holding the same bytes are two entries. Bytes the same as the newest version write no version and
+        answer (file id, None); else the next version is written unscanned and answered with its number. The entry's
+        name, path and access list follow the source either way. `new_file` is the row written when the key is new."""
+        tenant = isolation.tenant()
+        f, v = files, file_versions
+        where = (f.c.tenant_id == tenant, f.c.team == team, f.c.source_scope == "source",
+                 f.c.source_key_hash == found["key_hash"])  # fmt: skip
+        follows = {
+            "name": found["name"],
+            "source_id": found["source_id"],
+            "source_path": found["source_path"],
+            "access_list": found["access_list"],
+            "access_read_at": found["access_read_at"],
+            "removed_at": None,
+        }
+        async with self.tx() as c:
+            file_id = (await c.execute(sa.select(f.c.id).where(*where))).scalar_one_or_none()
+            if file_id is None:
+                file_id = str(new_file["id"])
+                row = {**new_file, **follows, "source_scope": "source", "source_key_hash": found["key_hash"],
+                       "mime": found["mime"], "status": "available", "digest": version["digest"],
+                       "size": version["size"], "declared_size": version["size"], "version_count": 0}  # fmt: skip
+                await c.execute(sa.insert(f).values(**row))
+                newest = None
+            else:
+                q = sa.select(v.c.version, v.c.digest).where(v.c.tenant_id == tenant, v.c.file_id == file_id)
+                newest = (await c.execute(q.order_by(v.c.version.desc()).limit(1))).first()
+                await c.execute(sa.update(f).where(*where).values(**follows))
+                if newest is not None and newest.digest == version["digest"]:
+                    return file_id, None
+            number = (newest.version if newest is not None else 0) + 1
+            await c.execute(sa.update(v).where(v.c.tenant_id == tenant, v.c.file_id == file_id).values(current=False))
+            await c.execute(
+                sa.insert(v).values(
+                    file_id=file_id, version=number, tenant_id=tenant, team=team, digest=version["digest"],
+                    size=version["size"], storage_key=version["storage_key"], source_tag=version["source_tag"],
+                    uploaded_by=new_file["uploaded_by"], uploaded_at=version["at"], current=True,
+                    scan_status="pending",
+                )
+            )  # fmt: skip
+            await c.execute(
+                sa.update(f).where(*where).values(version_count=number, digest=version["digest"], size=version["size"])
+            )
+        return file_id, number
 
     async def released_due(self, purposes: Sequence[str], today: date) -> list[tuple[str, str, str]]:
         """(tenant, team, file id) of every available file of `purposes` whose date has passed; whether each may go

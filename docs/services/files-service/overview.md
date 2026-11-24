@@ -160,7 +160,8 @@ The typed contract is in the API reference tab; this table adds the rule each ro
 | ClamAV, Defender and GuardDuty adapters | not built: the scan hook route is built; the engines are not |
 | A tenant-wide platform admin role for legal holds | not built: holds need an admin of the file's team |
 | Checksum header on uploads to Object Lock buckets | not built: real S3 requires one per PUT; moto does not, so it is untested |
-| New versions of a file | not built: `file_versions` holds version 1 only |
+| New versions of a file | store only: `put_source_version` writes version 2 and later for a watched folder's file; no route serves a version by number yet, and an upload still holds version 1 only |
+| Watched folders | not built past the store: the watch, its check through `ops_sources`, the routes, SDK, CLI and screens follow (design: folder batch extraction, increment A) |
 | Asynchronous scanning | not built: the scanner runs inline in `complete_upload` when configured; `record_scan` is the hook for an engine that reports later |
 | Previews and evidence export from `files.ts` | not built |
 | Azure immutability and legal hold against a real account | partial: Azurite does not implement them, so `AzureBlobObjectStore.set_retention`, `set_legal_hold` and the version-by-version delete have not run |

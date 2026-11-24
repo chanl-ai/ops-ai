@@ -24,6 +24,9 @@ FilePurpose = Literal[
     # One version of an item a knowledge source fetched (a web page, a connector's page or record), stored before it
     # is read so a rebuild never fetches it again and a citation opens the exact copy used.
     "knowledge_snapshot",
+    # A file from a watched folder: one entry per source file, found by its source key (never by its bytes), with a
+    # version per change at the source.
+    "source_file",
     "test_import",
     "evidence_bundle",
     "export",
