@@ -107,6 +107,12 @@ class CallOut(Out):
     request_hash: str | None
     created_at: str | None
     images: int = 0
+    # The provider's word for how the reply ended (stop, length, content_filter, or its own), whether the model
+    # declined, and the image detail the request asked for (high, auto, low). Null where there was no reply or no
+    # image, and on calls logged before they were kept. The reply's words are never logged.
+    ended: str | None = None
+    declined: bool | None = None
+    image_detail: str | None = None
 
 
 class KeySpend(Out):
@@ -156,12 +162,16 @@ class ChatMessage(ExternalOut):
     role: Literal["assistant"]
     content: str | None
     tool_calls: list[ToolCall] | None = None
+    # The model's words when it declined; the key is absent on a reply it did not decline.
+    refusal: str | None = None
 
 
 class ChatChoice(ExternalOut):
     index: int
     message: ChatMessage
-    finish_reason: Literal["stop", "tool_calls"]
+    # `length`: cut at the output limit; `content_filter`: stopped by the provider's filter. A provider's word outside
+    # these is read from the reply's content (`Completion.finish_reason`).
+    finish_reason: Literal["stop", "tool_calls", "length", "content_filter"]
 
 
 class ChatUsage(ExternalOut):
@@ -193,7 +203,7 @@ class ChunkChoice(ExternalOut):
     index: int
     delta: ChunkDelta
     # Always set, `null` until the last chunk: OpenAI clients read the key on every chunk.
-    finish_reason: Literal["stop", "tool_calls"] | None
+    finish_reason: Literal["stop", "tool_calls", "length", "content_filter"] | None
 
 
 class ChatChunk(ExternalOut):

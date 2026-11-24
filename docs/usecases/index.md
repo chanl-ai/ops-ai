@@ -33,7 +33,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-040 | tools-service | Security decides a tool module review | api, ui | `tools-service/security-decides-a-module-review.md` |
 | uc-041 | tools-service | Workflow approvals use agents-service workflows | api | `tools-service/workflow-approvals-use-agents-service-workflows.md` |
 | uc-042 | tools-service | A module's call counts and activity come from real calls | api | `tools-service/module-traffic-from-real-calls.md` |
-| uc-047 | console | Sub-pages show as rows in the sidebar, in the area they belong to (retired) | ui | `console/sub-pages-in-the-sidebar.md` |
+| uc-047 | console | Sub-pages show as rows in the sidebar, in the area they belong to | none | `console/sub-pages-in-the-sidebar.md` |
 | uc-048 | agents-service | An agent is granted and calls a published tools-service operation | api | `agents-service/agent-calls-registry-operations.md` |
 | uc-049 | agents-service | A write runs only after as many people as its policy names approve it | api, ui | `agents-service/write-approval-policy.md` |
 | uc-052 | console | Access is Read or Write in the console | ui | `console/access-is-read-or-write.md` |
@@ -293,7 +293,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-750 | agents-service | An admin limits what the menu offers | api | `(no doc)` |
 | uc-723 | console | The console lists every area as an open sidebar section, offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams; with the area_tabs flag on, the area tabs come back | ui | `console/console-areas.md` |
 | uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | `console/console-areas-server-facts.md` |
-| uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due and once per key, and a saved schedule starts one run at each slot from the worker's clock | api, sdk, cli | `(no doc)` |
+| uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due and once per key, and a saved schedule starts one run at each slot from the worker's clock | api, sdk, cli, ui | `(no doc)` |
 | uc-workflows-2 | agents-service | A builder reads why a test run failed: its kind, code, the failed step, a sentence for an end user and the End it stopped at | api, sdk, cli | `(no doc)` |
 | uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | `(no doc)` |
 | uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, cli, ui | `agents-service/evals-keep-saved-cases-and-runs.md` |
@@ -315,4 +315,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-769 | console | My apps is a page of its own, the same for an admin and a member | ui | `console/my-apps-page.md` |
 | uc-770 | tools-service | Admins see people's app sign-ins and end one | ui | `tools-service/admins-see-people-s-app-sign.md` |
 | uc-771 | agents-service | A builder takes a new skill to its first publish in under ten minutes | ui | `agents-service/a-builder-takes-a-new-skill.md` |
+| uc-772 | kb-service | Search a long document's pieces on the server | api | `kb-service/search-a-long-document-s-pieces.md` |
+| uc-779 | files-service | A watched folder brings files in | api, ui | `files-service/a-watched-folder-brings-files-in.md` |
 | uc-780 | console | A long list or text in a table cell stays inside its column | ui | `console/long-values-in-tables.md` |
+| uc-776 | documents-service | A read no model reply answered goes to a person | api, ui | `documents-service/a-read-no-model-reply-answered.md` |

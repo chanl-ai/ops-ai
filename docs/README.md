@@ -669,3 +669,4 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/a-builder-takes-a-new-skill.md` | uc-771: A builder takes a new skill to its first publish in under ten minutes |
 | `usecases/kb-service/search-a-long-document-s-pieces.md` | uc-772: Search a long document's pieces on the server |
 | `usecases/files-service/a-watched-folder-brings-files-in.md` | uc-779: A watched folder brings files in |
+| `usecases/documents-service/a-read-no-model-reply-answered.md` | uc-776: A read no model reply answered goes to a person |

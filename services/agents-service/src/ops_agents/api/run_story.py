@@ -38,7 +38,8 @@ END = "ops.flow.end"
 READ = "ai.extract"
 START = "workflow.start"
 REVIEW = "review.open"
-# Ports an Extract from file step leaves by with a read in its output; `unreadable` and `error` carry none.
+# Ports an Extract from file step leaves by with a read in its output; `unreadable` and `error` carry none. A read no
+# reply answered leaves by `review` with every field not read.
 READ_PORTS = ("ok", "review")
 # Runs told per Start workflow step, as many as the step starts by default; the rest are counted, not told.
 MAX_CHILDREN = 50
@@ -712,6 +713,10 @@ def actors_in(run: Json, steps: list[Json]) -> list[str]:
 
 
 def _read_text(read: Json, names: dict[str, str]) -> str:
+    name = names.get(str(read.get("fileId") or "")) or "the document"
+    if isinstance(why := read.get("incomplete"), dict):
+        said = engine_reviews.NOT_READ_SAID.get(str(why.get("reason")), "no reply answered")
+        return f"Nothing read from {name}: {said}"
     records = a_list(read.get("records") or ([{"fields": read["fields"]}] if read.get("fields") else []), "records")
     fields = [
         an_object(f, "a read field")
@@ -719,7 +724,6 @@ def _read_text(read: Json, names: dict[str, str]) -> str:
         for f in an_object(an_object(r, "a read record").get("fields") or {}, "a record's fields").values()
     ]
     check = sum(1 for f in fields if f.get("needsReview"))
-    name = names.get(str(read.get("fileId") or "")) or "the document"
     counted = f"{plural(len(records), 'record')}, {plural(len(fields), 'field')}"
     return f"Read {name}: {counted}" + (f", {check} to check" if check else "")
 

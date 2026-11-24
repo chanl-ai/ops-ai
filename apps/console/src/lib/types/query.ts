@@ -56,7 +56,8 @@ export type ReviewView = 'mine' | 'open' | 'overdue' | 'resolved' | 'all';
 
 export type ReviewFilters = { risk?: string[]; workflowId?: string[]; kind?: string[]; agentSlug?: string[]; status?: string[] };
 /** `group: 'case'` lists the view grouped by case with each row's `caseTitle`. */
-export type ReviewListParams = ListParams<ReviewFilters> & { view: ReviewView; group?: 'case' };
+/** `fileId` lists only the tasks about that file (the Files panel's link to the task a read opened). */
+export type ReviewListParams = ListParams<ReviewFilters> & { view: ReviewView; group?: 'case'; fileId?: string };
 
 export type AgentFilters = { availability?: string[]; teamId?: string[] };
 /** `startable`: leave out workflows only other workflows start; `takesFiles`: only workflows a file can start. Both `['true']`. */

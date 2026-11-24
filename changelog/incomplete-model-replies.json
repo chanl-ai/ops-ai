@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "A cut-off or declined model reply never fills a field",
+  "description": "When the model's reply to a document read stops at its length limit, holds no answer or is declined, nothing from it is saved, and a one-record read is asked again before it goes to a person with the reason. Govern > Policies sets how many retries and what happens after them.",
+  "tag": "fix"
+}

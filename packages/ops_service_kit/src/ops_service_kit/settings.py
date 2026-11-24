@@ -175,6 +175,9 @@ class Settings(BaseSettings):
     # With the flag tool_search on, an agent with more granted tools than this searches for its tools instead
     # of being sent every schema; 0 means always, None the agent kernel's default (TOOL_SEARCH_ABOVE, 20).
     tool_search_above: int | None = Field(default=None, ge=0)
+    # The most tokens a document read may ask the model to write (OPS_EXTRACT_OUTPUT_TOKENS), sent on every read's
+    # request so a long reply ends at the limit, inside models-service's 60-second wait, rather than timing out.
+    extract_output_tokens: int = Field(default=4000, ge=256)
     anthropic_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("ANTHROPIC_API_KEY"))
     openai_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("OPENAI_API_KEY"))
     # Read here only so the agents kernel's direct path can refuse an Azure key; models-service reads and checks
@@ -519,6 +522,7 @@ class Settings(BaseSettings):
             # documents:view, documents:run: the Extract from file step reads a file through documents-service and a
             # workflow save pins its document type versions there.
             # documents:delete: the system workflow on the file-deleted trigger purges what was derived from the file.
+            # documents:edit: a Save typed values step saves what a person typed in a task, named as enteredBy.
             # files:edit: a Save data on file step records what was read on the file.
             # files:check: a Files changed trigger asks its watched folder's check on the workflow's schedule.
             "agents": [
@@ -534,6 +538,7 @@ class Settings(BaseSettings):
                 "settings:view",
                 "documents:view",
                 "documents:run",
+                "documents:edit",
                 "documents:delete",
                 # secrets_egress:manage: an approved held host joins the tenant's allow-list in tools-service;
                 # claimed only on that call (GatewayClient.egress_host_decision).

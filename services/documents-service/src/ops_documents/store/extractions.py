@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_documents.store.columns import JSON_TEXT
 from ops_documents.store.document_types import EXAMPLES_KEPT_PER_FIELD, document_type_examples
 from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
+from ops_extract.result import Outcome
 from ops_service_kit.http import Json, JsonValue, Out
 from ops_service_kit.listing import ListParams
 from ops_service_kit.narrow import a_list, an_object
@@ -304,7 +305,7 @@ class ExtractionsStore(Store):
         *,
         status: Status,
         at: datetime,
-        outcome: str | None = None,
+        outcome: Outcome | None = None,
         result: Json | None = None,
         error_code: str | None = None,
         error: str | None = None,
@@ -432,16 +433,18 @@ class ExtractionsStore(Store):
 
     async def correct(
         self,
-        values: NewCorrection,
+        extraction_id: str,
+        tenant_id: str,
+        corrections: list[NewCorrection],
         result: Json,
         *,
         event: CorrectedEvent | None = None,
-        example: NewExample | None = None,
+        examples: list[NewExample] | None = None,
     ) -> None:
-        """Records a correction and writes the extraction's answer with the corrected value, its event when given, and
-        the example it teaches its document type, in one transaction."""
+        """Records the corrections and writes the extraction's answer with the corrected values, its one event when
+        given, and the examples they teach its document type, in one transaction."""
         async with self.tx() as c:
-            if example is not None:
+            for example in examples or []:
                 await _keep_example(c, example)
             if event is not None:
                 now = time.time()
@@ -451,28 +454,29 @@ class ExtractionsStore(Store):
                     .where(
                         o.c.tenant_id == event["tenant_id"],
                         o.c.name == event["name"],
-                        o.c.event_key.like(f"{values['extraction_id']}:%"),
+                        o.c.event_key.like(f"{extraction_id}:%"),
                         o.c.sent_at.is_(None),
                     )
                     # Never sent and never due again: a superseded event must not look delivered.
                     .values(next_at=None, last_error=SUPERSEDED)
                 )
                 await add(c, service_outbox, **event, now=now, due_at=now + CORRECTION_SETTLE_SECONDS)
-            await c.execute(
-                sa.insert(extraction_corrections).values(
-                    **{
-                        **values,
-                        "original": json.dumps(values["original"]),
-                        "corrected": json.dumps(values["corrected"]),
-                        "team": sa.select(extractions.c.team)
-                        .where(extractions.c.id == values["extraction_id"], team_visible(extractions))
-                        .scalar_subquery(),
-                    }
+            for values in corrections:
+                await c.execute(
+                    sa.insert(extraction_corrections).values(
+                        **{
+                            **values,
+                            "original": json.dumps(values["original"]),
+                            "corrected": json.dumps(values["corrected"]),
+                            "team": sa.select(extractions.c.team)
+                            .where(extractions.c.id == values["extraction_id"], team_visible(extractions))
+                            .scalar_subquery(),
+                        }
+                    )
                 )
-            )
             await c.execute(
                 sa.update(extractions)
-                .where(extractions.c.tenant_id == values["tenant_id"], extractions.c.id == values["extraction_id"])
+                .where(extractions.c.tenant_id == tenant_id, extractions.c.id == extraction_id)
                 .values(result=json.dumps(result))
             )
 

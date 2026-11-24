@@ -20,20 +20,20 @@ import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from typing import Any, Protocol, TypedDict, cast
+from typing import Any, Literal, Protocol, TypedDict, cast
 
 import httpx
 import regex
 
 from ops_access import team_off, team_on
-from ops_contracts.field_values import FIELD_TYPES
+from ops_contracts.field_values import FIELD_TYPES, normalise
 from ops_documents.errors import IdempotencyConflictError, InvalidRequestError, StateError
 from ops_documents.files import Files, Who
 from ops_documents.pending import Pending
 from ops_documents.readings import READING_PROCESS, SYNC_BYTES, SYNC_PAGES, Readings, settings_of
 from ops_documents.store import ExtractionRow, ExtractionsStore
 from ops_documents.store.document_types import SINGLE
-from ops_documents.store.extractions import CorrectedEvent, NewExample, file_read
+from ops_documents.store.extractions import CorrectedEvent, NewCorrection, NewExample, file_read
 from ops_extract import boxes, classify, page_images, prompt, result, rules, templates
 from ops_extract.checks import CLEAN_RULES, DEFAULT_FLOOR, in_quote, threshold
 from ops_extract.floor import FloorUnreadError, PlatformFloor
@@ -43,6 +43,7 @@ from ops_extract.shapes import Box, Check, DocumentKind, FieldDefinition, Layout
 from ops_files_client import FileInfo
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_ingest.reading import Reading, read
+from ops_pii import mask
 from ops_service_kit import narrow
 from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.listing import ListParams
@@ -67,6 +68,39 @@ class ModelRefusedError(RuntimeError):
         self.code = code
 
 
+# Why a reply holds no answer: stopped at the output limit, no answer form in it, declined, or stopped by a filter.
+Incomplete = Literal["cut_off", "empty", "declined", "filtered"]
+INCOMPLETE_SAID: dict[str, str] = {
+    "cut_off": "The model's reply was cut off at its length limit.",
+    "empty": "The model's reply held no answer.",
+    "declined": "The model declined to read this file.",
+    "filtered": "The provider's content filter stopped the model's reply.",
+}
+# Failed reads a retry under the same key gets back as they are, with no model call.
+HELD_FAILURES = frozenset({"schema_error", "reply_incomplete"})
+REFUSAL_CHARS = 300
+
+
+class NotReadError(RuntimeError):
+    """No ask of a read answered: the last reply's reason, the step that made it and how many asks were made."""
+
+    def __init__(self, cause: IncompleteReplyError, step: str, tries: int) -> None:
+        super().__init__(str(cause))
+        self.reason: Incomplete = cause.reason
+        self.refusal = cause.refusal
+        self.step, self.tries = step, tries
+
+
+class IncompleteReplyError(RuntimeError):
+    """models-service answered, but the reply holds no answer: nothing in it may fill a field. `refusal` is the
+    model's words when it declined."""
+
+    def __init__(self, reason: Incomplete, refusal: str | None = None) -> None:
+        super().__init__(INCOMPLETE_SAID[reason])
+        self.reason: Incomplete = reason
+        self.refusal = refusal
+
+
 # models-service's refusals a person can act on, as the read's error: a spent budget waits for its reset, a busy model
 # for a minute. Anything else reads as the model being out of reach.
 SPENT = "The team's model budget is spent; reads that call a model wait until it resets."
@@ -74,6 +108,7 @@ REFUSALS = {
     "key_budget_exhausted": ("budget_exhausted", SPENT),
     "tenant_budget_exhausted": ("budget_exhausted", SPENT),
     "rate_limited": ("model_rate_limited", "The model is busy; try again in a minute."),
+    "provider_timeout": ("model_late", "The model did not answer in time."),
 }
 READS = ("fields", "propose")
 PROPOSE_PAGES = 5
@@ -171,6 +206,8 @@ class ModelsService:
     http: httpx.AsyncClient
     key: str
     alias: str = ALIAS
+    # The most tokens the model may write in one reply (Settings.extract_output_tokens).
+    output_tokens: int = 4000
 
     async def structured(
         self,
@@ -205,18 +242,24 @@ class ModelsService:
                 if images:
                     pages: JsonList = [*sorted({i.page for i in images})]
                     usage.image_calls.append({"step": step, "pages": pages, "images": len(images), "alias": name})
-            message = an_object(a_list(body["choices"], "choices")[0], "choice")["message"]
-            message = an_object(message, "message")
+            choice = an_object(a_list(body["choices"], "choices")[0], "choice")
+            message = an_object(choice["message"], "message")
             calls = a_list(message.get("tool_calls") or [], "tool_calls")
-            raw = (
-                an_object(an_object(calls[0], "tool call")["function"], "function")["arguments"]
-                if calls
-                else (message.get("content"))
-            )
+            ended, refusal = choice.get("finish_reason"), message.get("refusal")
+            # The request forces the answer tool, so a reply without its call holds no answer whatever its words.
+            if isinstance(refusal, str) and refusal:
+                raise IncompleteReplyError("declined", refusal[:REFUSAL_CHARS])
+            if ended == "length":
+                raise IncompleteReplyError("cut_off")
+            if ended == "content_filter":
+                raise IncompleteReplyError("filtered")
+            if not calls:
+                raise IncompleteReplyError("empty")
+            raw = an_object(an_object(calls[0], "tool call")["function"], "function")["arguments"]
             try:
                 return json.loads(raw) if isinstance(raw, str) else {}
             except json.JSONDecodeError:
-                return {}  # an unreadable answer fails the schema check and is asked again
+                return {}  # a whole reply whose arguments do not parse fails the schema check and is asked again
         raise ModelRefusedError(f"models-service has neither {self.alias} nor {FALLBACK_ALIAS}")
 
     async def _post(
@@ -247,8 +290,11 @@ class ModelsService:
                     "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}],
                     "tools": [{"type": "function", "function": {"name": "final_result", "parameters": schema}}],
                     "tool_choice": "required",
+                    "max_completion_tokens": self.output_tokens,
                 },
             )
+        except httpx.TimeoutException as e:
+            raise ModelRefusedError(f"models-service did not answer in time: {e}", "provider_timeout") from e
         except httpx.HTTPError as e:
             raise ModelRefusedError(f"models-service could not be reached: {e}") from e
 
@@ -262,6 +308,45 @@ class PlatformFloors:
 
     async def floor(self, tenant: str, team: str) -> float:
         return await PlatformFloor(self.client(tenant, team)).extraction_floor()
+
+
+RETRIES_POLICY = "extractionRetries"
+NO_ANSWER_POLICY = "extractionNoAnswer"
+# The catalogue's defaults (ops_access.policies), used too when the policy cannot be read.
+DEFAULT_RETRIES = 1
+DEFAULT_NO_ANSWER = "review"
+
+
+class NoAnswerPolicy(Protocol):
+    async def rule(self, tenant: str, team: str) -> tuple[int, str]:
+        """(how many more asks a cut-off or empty one-record read gets, "review" or "fail" after them)."""
+        ...
+
+
+@dataclass
+class PlatformNoAnswer:
+    """The workspace's extractionRetries and extractionNoAnswer policies, read live on each read that needs them. A
+    policy that cannot be read, or holds a value the catalogue does not list, takes the catalogue's default: one more
+    ask, then review, so a failed read never saves an empty field."""
+
+    client: Callable[[str, str], ServiceClient]
+
+    async def rule(self, tenant: str, team: str) -> tuple[int, str]:
+        retries, after = DEFAULT_RETRIES, DEFAULT_NO_ANSWER
+        try:
+            platform = self.client(tenant, team)
+            said = an_object(await platform.get(f"/v1/policies/{RETRIES_POLICY}") or {}, RETRIES_POLICY).get("value")
+            then = an_object(await platform.get(f"/v1/policies/{NO_ANSWER_POLICY}") or {}, NO_ANSWER_POLICY).get(
+                "value"
+            )
+        except (ServiceCallError, ServiceUnreachable) as e:
+            log.warning("read retry policies unread; the defaults apply", extra={"tenant": tenant, "error": str(e)})
+            return retries, after
+        if said in ("1", "2"):
+            retries = int(said)
+        if then in ("review", "fail"):
+            after = str(then)
+        return retries, after
 
 
 PAGE_IMAGES_POLICY = "pageImages"
@@ -444,6 +529,76 @@ def fields_of(request: Json) -> list[FieldDefinition]:
     return [FIELD(f) for f in entries(request.get("fields"))]
 
 
+def _typed_value(asked: FieldDefinition | None, raw: JsonValue) -> JsonValue:
+    """A typed value in its field's type's form; empty text is no value. A value its type cannot hold is refused,
+    naming the field, rather than stored as nothing."""
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    if asked is None:
+        return raw
+    value, _ = normalise(asked, raw)
+    if value is None:
+        raise InvalidRequestError(f"{raw!r} is not a {asked.get('type') or 'text'} value for {asked['key']}")
+    return cast(JsonValue, value)
+
+
+def _target(answer: Json, key: str, record: int | None) -> tuple[Json, Json]:
+    """The record (or the read, for one record) holding field `key`, and the field as read."""
+    many = "records" in answer
+    if many != (record is not None):
+        raise InvalidRequestError("record names the record to correct, for an extraction of several records only")
+    if many:
+        records = a_list(answer["records"], "records")
+        if record is None or record >= len(records):
+            raise InvalidRequestError(f"there is no record {record}")
+        target = an_object(records[record], f"record {record}")
+    else:
+        target = answer
+    fields = an_object(target["fields"], "fields")
+    if key not in fields:
+        raise InvalidRequestError(f"there is no field {key}")
+    return target, an_object(fields[key], f"field {key}")
+
+
+def _set(answer: Json, target: Json, key: str, record: int | None, *, original: Json, value: JsonValue) -> None:
+    """Puts a person's value on the stored answer: the field keeps what was read beside it (a not-read field keeps its
+    reason) and no longer waits for a person, so the to-check count follows the correction."""
+    an_object(target["fields"], "fields")[key] = {**original, "value": value, "corrected": True, "needsReview": False}
+    target["needsReview"] = [k for k in a_list(target.get("needsReview") or [], "needsReview") if k != key]
+    if record is not None:
+        an_object(target["values"], "values")[key] = value
+        records = a_list(answer["records"], "records")
+        answer["needsReview"] = [i for i, r in enumerate(records) if an_object(r, f"record {i}")["needsReview"]]
+
+
+def _targets(answer: Json) -> list[Json]:
+    """Each record of a read of several, or the read itself for one record."""
+    if "records" not in answer:
+        return [answer]
+    return [an_object(r, "a record") for r in a_list(answer["records"], "records")]
+
+
+def _checked(answer: Json) -> None:
+    """A person checked the whole read: nothing in it waits for a person."""
+    for target in _targets(answer):
+        for f in an_object(target["fields"], "fields").values():
+            an_object(f, "a field")["needsReview"] = False
+        target["needsReview"] = []
+    answer["needsReview"] = []
+
+
+def _required_left(answer: Json, asked: dict[str, FieldDefinition]) -> bool:
+    """Whether a read no reply answered still has a required field with no value; an answered read never waits."""
+    if not answer.get("incomplete"):
+        return False
+    required = [k for k, f in asked.items() if f.get("required")]
+    for target in _targets(answer):
+        fields = an_object(target["fields"], "fields")
+        if any(an_object(fields.get(k) or {}, f"field {k}").get("value") in (None, "") for k in required):
+            return True
+    return False
+
+
 def review_below(request: Json) -> float | None:
     """The confidence below which a stored request's fields wait for a person; a value that is not one fails the read,
     as the scorer would."""
@@ -529,6 +684,8 @@ class Extractor:
     page_image_policy: PageImagePolicy | None = None
     # The team's masking of personal data in what people see; without it, masked.
     masking: MaskingPolicy | None = None
+    # The workspace's retries and fallback for a reply with no answer; without it, the catalogue's defaults.
+    no_answer: NoAnswerPolicy | None = None
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
     _pending: Pending = field(default_factory=Pending)
 
@@ -549,8 +706,9 @@ class Extractor:
         if body.get("detect") and not body.get("documentTypeId") and not body.get("fields"):
             if idempotency_key is not None:
                 held = await self.store.held(_key_hash(who, idempotency_key))
-                if held is not None and held.status != "failed":
-                    # A retried step reads the first answer; it never pays for a second classification.
+                if held is not None and (held.status != "failed" or held.error_code in HELD_FAILURES):
+                    # A retried step reads the first answer, a failure the key holds included; it never pays for a
+                    # second classification.
                     return (200 if held.status not in ("queued", "running") else 202), answer_of(held)
             file = await self.files.readable(who, file_id)
             found = await self.classify(who, file, ocr=bool(body.get("ocr")))
@@ -610,12 +768,13 @@ class Extractor:
                     "asked_at": self.clock(),
                 }
             )
-            # A retry after the floor or the model was out of reach runs it again; a schema error stays the answer.
+            # A retry after the floor or the model was out of reach runs it again. A schema error, and a reply with no
+            # answer that the workspace fails, stay the answer: a parked step's wake asks under this key again.
             again = (
                 held.id != extraction_id
                 and held.request_hash == request_hash
                 and held.status == "failed"
-                and held.error_code != "schema_error"
+                and held.error_code not in HELD_FAILURES
             )
             if again:
                 held = await self.store.requeue(held.id)
@@ -673,9 +832,12 @@ class Extractor:
         schema = classify.schema(ids)
         user = classify.prompt(types, pages.texts)
         run = f"cls_{uuid.uuid4().hex[:16]}"
-        answer = await self.models.structured(
-            classify.SYSTEM, user, schema, run=run, step="classify", tenant=who.tenant_id
-        )
+        try:
+            answer = await self.models.structured(
+                classify.SYSTEM, user, schema, run=run, step="classify", tenant=who.tenant_id
+            )
+        except IncompleteReplyError:
+            return classify.classification({"reason": "The model gave no answer."}, types, floor)
         if prompt.schema_errors(answer, schema):
             return classify.classification({"reason": "The model's answer named no listed type."}, types, floor)
         # The schema check above proves an object.
@@ -753,49 +915,63 @@ class Extractor:
     ) -> Json | None:
         """A checker's value for one field of a done extraction. The answer then carries the corrected value, and the
         correction row keeps the original value and confidence, so a correction never erases what was extracted."""
+        return await self.correct_many(who, extraction_id, [(key, record, value)], normalised=False)
+
+    async def correct_many(
+        self,
+        who: Who,
+        extraction_id: str,
+        values: Sequence[tuple[str, int | None, JsonValue]],
+        *,
+        normalised: bool = True,
+        checked: bool = False,
+    ) -> Json | None:
+        """Several fields' values (key, record, value) of one done extraction in one transaction, with one corrected
+        event. With `normalised` each value is put in its field's type's form first ("1,940.00" for money is 1940),
+        and a value equal to what is stored is skipped, so a repeat adds no rows; `checked` leaves no field waiting
+        for a person. A read no reply answered sends its event once every required field has a value."""
         row = await self.store.get(extraction_id)
         if row is None or row.team != who.team:
             return None
         if row.status != "done" or row.result is None:
             raise StateError(f"{extraction_id} is {row.status}; only a done extraction is corrected")
         answer = row.result
-        many = "records" in answer
-        if many != (record is not None):
-            raise InvalidRequestError("record names the record to correct, for an extraction of several records only")
-        # Each read is the stored object itself, so the changes below land in the answer that is saved.
-        records = a_list(answer["records"], "records") if many else []
-        if many:
-            if record is None or record >= len(records):
-                raise InvalidRequestError(f"there is no record {record}")
-            target = an_object(records[record], f"record {record}")
-        else:
-            target = answer
-        fields = an_object(target["fields"], "fields")
-        if key not in fields:
-            raise InvalidRequestError(f"there is no field {key}")
-        original = an_object(fields[key], f"field {key}")
-        fields[key] = {**original, "value": value, "corrected": True, "needsReview": False}
-        # A person set the value, so it no longer waits for one: the to-check count follows the correction.
-        target["needsReview"] = [k for k in a_list(target.get("needsReview") or [], "needsReview") if k != key]
-        if many:
-            an_object(target["values"], "values")[key] = value
-            answer["needsReview"] = [i for i, r in enumerate(records) if an_object(r, f"record {i}")["needsReview"]]
-        await self.store.correct(
-            {
-                "tenant_id": who.tenant_id,
-                "extraction_id": extraction_id,
-                "field": key,
-                "record": record,
-                "original": original.get("value"),
-                "original_confidence": _confidence(original),
-                "corrected": value,
-                "corrected_by": who.actor,
-                "corrected_at": self.clock(),
-            },
-            answer,
-            event=await self._corrected_event(who, row, answer, key, record),
-            example=self._example(who, row, key, original, value, record=record),
-        )
+        asked = {f["key"]: f for f in fields_of(row.request)}
+        corrections: list[NewCorrection] = []
+        examples: list[NewExample] = []
+        changed: list[tuple[str, int | None]] = []
+        for key, record, raw in values:
+            value = _typed_value(asked.get(key), raw) if normalised else raw
+            target, original = _target(answer, key, record)
+            if normalised and original.get("value") == value:
+                continue
+            _set(answer, target, key, record, original=original, value=value)
+            changed.append((key, record))
+            corrections.append(
+                {
+                    "tenant_id": who.tenant_id,
+                    "extraction_id": extraction_id,
+                    "field": key,
+                    "record": record,
+                    "original": original.get("value"),
+                    "original_confidence": _confidence(original),
+                    "corrected": value,
+                    "corrected_by": who.actor,
+                    "corrected_at": self.clock(),
+                }
+            )
+            if (example := self._example(who, row, key, original, value, record=record)) is not None:
+                examples.append(example)
+        if checked:
+            _checked(answer)
+        if not corrections and not checked:
+            return await self.get(who, extraction_id)
+        event = None
+        if changed and not _required_left(answer, asked):
+            event = await self._corrected_event(who, row, answer, changed[-1][0], changed[-1][1])
+            if event is not None:
+                event["payload"]["fields"] = [k for k, _ in changed]
+        await self.store.correct(extraction_id, who.tenant_id, corrections, answer, event=event, examples=examples)
         return await self.get(who, extraction_id)
 
     def _example(
@@ -956,6 +1132,9 @@ class Extractor:
                 proposal = await self._propose(row, pages, usage)
             except ModelRefusedError as e:
                 return await self._refused(row, e)
+            except IncompleteReplyError as e:
+                # A proposal with no answer has no fields to read; saved done with none, it would pass as read.
+                return await self._fail(row, "reply_incomplete", str(e))
             fields = [FIELD(f) for f in entries(proposal["fields"])]
             if not fields:
                 out: Json = {
@@ -970,18 +1149,31 @@ class Extractor:
                     return await self._row(tenant, eid)
         schema = prompt.schema_for(fields, many=many)
         user = prompt.user_prompt(fields, pages.texts, many=many, examples=await self._examples(row, fields))
+        retries, after = await self._no_answer_rule(row)
         try:
             # A page read through OCR goes with its image when the read may show it; a text page never does.
             shown = await pictures.whole(sorted(pages.ocr)) if pictures is not None else []
-            answer = await self.models.structured(
-                prompt.SYSTEM, user, schema, run=eid, step="extract", tenant=tenant, usage=usage, images=shown
-            )
+            try:
+                answer, tries = await self._asked(row, user, schema, usage, shown, retries=0 if many else retries)
+            except NotReadError as e:
+                return await self._not_read(row, fields, e, usage, limited, after=after)
             if errors := prompt.schema_errors(answer, schema):
+                if tries > 1:
+                    # A whole retry that does not fit the fields: the call cap is spent, so no re-ask follows.
+                    return await self._fail(
+                        row, "schema_error", "The answer did not match the fields asked for.", {"details": [*errors]}
+                    )
                 again = prompt.reask(user, errors)
-                answer = await self.models.structured(
-                    prompt.SYSTEM, again, schema, run=eid, step="extract:reask", tenant=tenant, usage=usage,
-                    images=shown,
-                )  # fmt: skip
+                try:
+                    answer = await self.models.structured(
+                        prompt.SYSTEM, again, schema, run=eid, step="extract:reask", tenant=tenant, usage=usage,
+                        images=shown,
+                    )  # fmt: skip
+                except IncompleteReplyError as e:
+                    # A cut-off re-ask is not read, with no further call.
+                    return await self._not_read(
+                        row, fields, NotReadError(e, "extract:reask", 2), usage, limited, after=after
+                    )
                 if errors := prompt.schema_errors(answer, schema):
                     return await self._fail(
                         row, "schema_error", "The answer did not match the fields asked for.", {"details": [*errors]}
@@ -1112,6 +1304,9 @@ class Extractor:
                 )  # fmt: skip
             except ModelRefusedError:
                 answer = None
+            except IncompleteReplyError as e:
+                # The first values stay and the fields stay doubtful; the read says its re-read had no answer.
+                answer, out["rereadIncomplete"] = None, e.reason
             # An answer that is not an object fails the read, as it always has.
             said: Json = {k: v for k, v in an_object(answer or {}, "the re-read's answer").items() if k in failures}
             if answer is not None and not prompt.schema_errors(said, schema):
@@ -1214,6 +1409,84 @@ class Extractor:
             kept.append(named | {"type": kind})
         return {"name": str(raw.get("name") or ""), "fields": [*kept]}
 
+    async def _no_answer_rule(self, row: ExtractionRow) -> tuple[int, str]:
+        if self.no_answer is None:
+            return DEFAULT_RETRIES, DEFAULT_NO_ANSWER
+        return await self.no_answer.rule(row.tenant_id, row.team)
+
+    async def _asked(
+        self,
+        row: ExtractionRow,
+        user: str,
+        schema: Json,
+        usage: Usage,
+        shown: Sequence[page_images.PageImage],
+        *,
+        retries: int,
+    ) -> tuple[JsonValue, int]:
+        """The fields' answer and how many asks it took: a reply cut off or empty is asked again, unchanged, up to
+        `retries` more times, since a model's reasoning runs to a different length each time. A declined or filtered
+        reply is a policy answer that repeats, so it is never asked again. Raises NotReadError when no ask answered."""
+        assert self.models is not None
+        tries, step = 1, "extract"
+        while True:
+            try:
+                answer = await self.models.structured(
+                    prompt.SYSTEM, user, schema, run=row.id, step=step, tenant=row.tenant_id, usage=usage, images=shown
+                )
+                return answer, tries
+            except IncompleteReplyError as e:
+                if e.reason in ("declined", "filtered") or tries > retries:
+                    raise NotReadError(e, step, tries) from e
+            tries += 1
+            step = "extract:retry" if tries == 2 else f"extract:retry:{tries - 1}"
+
+    async def _not_read(
+        self,
+        row: ExtractionRow,
+        fields: list[FieldDefinition],
+        e: NotReadError,
+        usage: Usage,
+        limited: Json,
+        *,
+        after: str,
+    ) -> ExtractionRow:
+        """A read no reply answered: done with outcome incomplete and its reason, every field not read and nothing to
+        put on the file (the read event goes only with ok or review), or failed when the workspace says to fail. Its
+        tokens stay on the read but out of the columns the cost estimate averages, so cut-offs do not raise it."""
+        said: Json = {"reason": e.reason, "step": e.step, "tries": e.tries}
+        if e.refusal:
+            who = Who(tenant_id=row.tenant_id, team=row.team, actor=row.asked_by)
+            said["refusal"] = mask(e.refusal) if await self.masks(who) else e.refusal
+        if after == "fail":
+            return await self._fail(row, "reply_incomplete", INCOMPLETE_SAID[e.reason])
+        # The fields asked for, as a scored read names them, so the person typing them sees which are required.
+        out: Json = {
+            "fileId": row.file_id,
+            "incomplete": said,
+            "path": PATH_MODEL,
+            "schema": [*result.asked(fields)],
+            **limited,
+        }
+        if row.request["many"]:
+            out |= {"records": [], "count": 0, "needsReview": []}
+        else:
+            empty: Json = {
+                f["key"]: {
+                    "value": None,
+                    "extractedValue": None,
+                    "confidence": 0.0,
+                    "needsReview": True,
+                    "notRead": e.reason,
+                }
+                for f in fields
+            }
+            out |= {"fields": empty, "needsReview": [f["key"] for f in fields]}
+        _recorded(out, usage)
+        async with isolation.request_transaction():
+            await self.store.finish(row.id, status="done", outcome="incomplete", result=out, at=self.clock())
+            return await self._row(row.tenant_id, row.id)
+
     async def _refused(self, row: ExtractionRow, e: ModelRefusedError) -> ExtractionRow:
         code, message = REFUSALS.get(e.code or "", ("model_unavailable", str(e)))
         return await self._fail(row, code, message)
@@ -1265,10 +1538,13 @@ def default_extractor(files: Files, engine: Any, settings: Settings, *, readings
     if settings.models is not None and settings.models_key is not None:
         # Called with this service's model key, not a service token, so it is not a ServiceClient.
         http = httpx.AsyncClient(base_url=settings.models.base, timeout=settings.models.timeout_s)
-        models = ModelsService(http, settings.models_key.get_secret_value())
+        models = ModelsService(
+            http, settings.models_key.get_secret_value(), output_tokens=settings.extract_output_tokens
+        )
     floors: Floors | None = None
     pictures: PageImagePolicy | None = None
     masking: MaskingPolicy | None = None
+    no_answer: NoAnswerPolicy | None = None
     if (endpoint := settings.platform) is not None:
         # One HTTP client for every team's ServiceClient below; each names its own tenant and team.
         platform = httpx.AsyncClient(base_url=endpoint.base, timeout=endpoint.timeout_s)
@@ -1290,8 +1566,16 @@ def default_extractor(files: Files, engine: Any, settings: Settings, *, readings
             floors = PlatformFloors(client)
             pictures = PlatformPageImages(client)
             masking = PlatformMasking(client)
+            no_answer = PlatformNoAnswer(client)
         except ValueError as e:  # no service signing key outside dev
             log.warning("no service signing key; extractions cannot read the floor", extra={"error": str(e)})
     return Extractor(
-        files, ExtractionsStore(engine), models, floors, readings=readings, page_image_policy=pictures, masking=masking
+        files,
+        ExtractionsStore(engine),
+        models,
+        floors,
+        readings=readings,
+        page_image_policy=pictures,
+        masking=masking,
+        no_answer=no_answer,
     )

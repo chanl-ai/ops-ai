@@ -49,7 +49,7 @@ export function taskDecision(r: Review): TaskDecision {
   if (!['pending', 'in_review'].includes(r.status)) return 'decided';
   if (!r.canDecide) return 'open-only';
   // Options, a read to correct or conditions to attach need the task's own page.
-  if ((r.options && r.options.length > 0) || r.read?.editable || r.kind === 'model_validation') return 'open-only';
+  if ((r.options && r.options.length > 0) || r.read?.editable || r.read?.notRead || r.kind === 'model_validation') return 'open-only';
   return 'buttons';
 }
 

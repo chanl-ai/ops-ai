@@ -68,6 +68,10 @@ class CallLogRow(TypedDict):
     # Unset on a call refused before an alias version was chosen.
     alias_version: NotRequired[int | None]
     provider_model: NotRequired[str | None]
+    # How the reply ended and whether it was declined (an answered call only), and the image detail asked for.
+    ended: NotRequired[str | None]
+    declined: NotRequired[bool | None]
+    image_detail: NotRequired[str | None]
     # Set only by a replay or a test that places a call in the past; the table defaults it to now.
     created_at: NotRequired[datetime]
 
@@ -92,6 +96,11 @@ class CallRow(Out):
     request_hash: str | None
     created_at: datetime
     images: int
+    # The provider's word for how the reply ended, whether the model declined, and the image detail the request asked
+    # for; null where there was no reply or no image, and on calls logged before they were kept.
+    ended: str | None = None
+    declined: bool | None = None
+    image_detail: str | None = None
 
 
 class KeyTotal(Out):
@@ -127,6 +136,9 @@ LISTED = (
     t.c.request_hash,
     t.c.created_at,
     t.c.images,
+    t.c.ended,
+    t.c.declined,
+    t.c.image_detail,
 )
 
 

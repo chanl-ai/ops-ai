@@ -6,7 +6,8 @@ import Link from 'next/link';
 
 import { EvalSteps } from '@/components/agents/eval-problems';
 import { isOpen } from '@/components/reviews/review-columns';
-import { keyFieldsBlock, type ReadChecks } from '@/components/reviews/document-read';
+import { approveBlock, ONLY_REJECT, portHolds, type ReadEdits } from '@/lib/approve-block';
+import type { ReadChecks } from '@/components/reviews/document-read';
 import { ModelValidationDecisionForm } from '@/components/reviews/model-validation';
 import { OptionDecisionForm } from '@/components/reviews/option-decision-form';
 import { ReviewDecisionForm } from '@/components/reviews/review-detail';
@@ -33,6 +34,7 @@ export function TaskDecision({
   review,
   view,
   checks,
+  edits,
   decider,
   me,
   owners,
@@ -43,6 +45,8 @@ export function TaskDecision({
   review: Review;
   view: TaskView | null;
   checks: ReadChecks;
+  /** What the person typed over the read, which Approve waits on while a required field of a read with no answer is empty. */
+  edits: ReadEdits;
   decider: Decider;
   me: string[];
   owners: string[];
@@ -82,6 +86,9 @@ export function TaskDecision({
     );
   if (review.kind === 'model_validation')
     return <>{children({ choice: <ModelValidationDecisionForm review={review} currentUser={me} owners={owners} pending={pendingDecision} onDecide={onDecide} />, decide: null })}</>;
+  // The read's own refusal is said in full above the document; the button names the outcome.
+  const read = view?.read ?? review.read;
+  const held = read?.approveRefused ? ONLY_REJECT : approveBlock(read, checks.confirmed, edits);
   const actions = view?.actions;
   if (actions?.length)
     return (
@@ -89,7 +96,7 @@ export function TaskDecision({
       <OptionDecisionForm
         reviewId={review.id}
         options={actions.map((a) => ({ name: a.port, label: a.label, consequence: a.consequence, inputs: a.inputs, reason: a.reason, tone: a.tone, stepUp: a.port === 'approve' ? review.stepUp : undefined }))}
-        blocked={Object.fromEntries(actions.filter((a) => a.requires === 'key_fields_confirmed' || a.port === 'approve').map((a) => [a.port, keyFieldsBlock(view?.read, checks.confirmed)]))}
+        blocked={portHolds(read, checks.confirmed, edits, actions)}
         suggested={actions.find((a) => a.name === view?.suggested)?.port}
         pending={pendingOption}
         onDecide={onOption}
@@ -130,7 +137,7 @@ export function TaskDecision({
             currentUser={me}
             pending={pendingDecision}
             layout={panel ? 'footer' : 'sheet'}
-            approveBlocked={keyFieldsBlock(review.read, checks.confirmed)}
+            approveBlocked={held}
             consequence={panel ? view?.consequence || undefined : undefined}
             onDecide={(d, reason, addTestCase) => onDecide(d, reason, undefined, undefined, addTestCase)}
             platformTeam={platformTeam}

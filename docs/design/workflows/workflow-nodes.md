@@ -120,6 +120,7 @@ Status is read from the engine's type registry (`packages/ops_engine`). Types th
 | Action | Start workflow (`ops.action.workflow`) | Starts another workflow of the team once or for each item, keyed so a retry never starts a second; with Wait for them on, it pauses until every child has ended | started, error; done, timeout when waiting | write | built |
 | Action | Open case, Add to case (`ops.action.openCase`, `ops.action.addToCase`) | Opens a case or adds a note to one | opened or added, error | write | built |
 | Action | Save data on file (`ops.files.setData`) | Keeps a read on the file it came from | ok, error | write | built |
+| Action | Save typed values (`ops.documents.correct`) | Saves what a person typed in a Human Task over a read on its extraction, as the person who decided the task; the file follows the extraction | ok, error | write | built |
 | Action | Send a message (`ops.action.send`) | Reply on the channel that started the run through send_reply; one attempt | sent, error | write | built |
 | Flow | If (`ops.flow.if`) | Routes by rules over fields | true, false | none | built |
 | Flow | Switch (`ops.flow.switch`) | Named cases, with an otherwise port | one per case, otherwise | none | built |

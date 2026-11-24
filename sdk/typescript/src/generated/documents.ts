@@ -367,6 +367,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/documents/extractions/{extraction_id}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Correct Fields
+         * @description Values for several fields at once, each in its field's type's form, with one corrected event; a value equal
+         *     to the stored one is skipped, so a repeat adds no rows. A service saving what a person typed names them as
+         *     enteredBy, which is recorded as who corrected; a person is always recorded as themselves.
+         */
+        post: operations["documents_correct_fields"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/documents/extractions/{extraction_id}/fields/{key}": {
         parameters: {
             query?: never;
@@ -720,6 +742,21 @@ export interface components {
             record?: number | null;
             /** Value */
             value: unknown;
+        };
+        /**
+         * CorrectionsIn
+         * @description Values for several fields of one read, saved together (POST /v1/documents/extractions/{id}/corrections).
+         */
+        CorrectionsIn: {
+            /**
+             * Checked
+             * @default false
+             */
+            checked: boolean;
+            /** Corrections */
+            corrections: components["schemas"]["TypedValue"][];
+            /** Enteredby */
+            enteredBy?: string | null;
         };
         /** DocumentType */
         DocumentType: {
@@ -1180,10 +1217,11 @@ export interface components {
             imageCalls?: components["schemas"]["ImageCall"][] | null;
             /** Imagerefused */
             imageRefused?: string | null;
+            incomplete?: components["schemas"]["ReadIncomplete"] | null;
             /** Needsreview */
             needsReview?: (string | number)[] | null;
             /** Outcome */
-            outcome?: ("ok" | "review" | "unreadable" | "unknown") | null;
+            outcome?: ("ok" | "review" | "unreadable" | "unknown" | "incomplete") | null;
             /** Pages */
             pages?: number | {
                 [key: string]: components["schemas"]["JsonValue"];
@@ -1202,6 +1240,8 @@ export interface components {
             records?: {
                 [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
+            /** Rereadincomplete */
+            rereadIncomplete?: ("cut_off" | "empty" | "declined" | "filtered") | null;
             /** Rereadtokens */
             rereadTokens?: {
                 [key: string]: number;
@@ -1593,6 +1633,24 @@ export interface components {
             readings: number;
             /** Samples */
             samples: number;
+        };
+        /**
+         * ReadIncomplete
+         * @description A read no model reply answered: cut off at the output limit, empty of an answer, declined or filtered. A
+         *     declined reply's first words are kept, masked when the team masks personal data.
+         */
+        ReadIncomplete: {
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "cut_off" | "empty" | "declined" | "filtered";
+            /** Refusal */
+            refusal?: string | null;
+            /** Step */
+            step: string;
+            /** Tries */
+            tries: number;
         };
         /** ReadingBlock */
         ReadingBlock: {
@@ -2000,6 +2058,15 @@ export interface components {
             typeId: string;
             /** Version */
             version: number;
+        };
+        /** TypedValue */
+        TypedValue: {
+            /** Field */
+            field: string;
+            /** Record */
+            record?: number | null;
+            /** Value */
+            value: unknown;
         };
         /** UpdateExpect */
         UpdateExpect: {
@@ -4018,6 +4085,113 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_Extraction_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not ready or already in another state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    documents_correct_fields: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                extraction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CorrectionsIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

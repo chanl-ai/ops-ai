@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, cast
 
-from ops_documents_client import DocumentsClient
+from ops_documents_client import DocumentsClient, DocumentsRefused
 from ops_engine.ports import outside_call
 from ops_engine.store import RunStore
 from ops_files_client import FilesClient
@@ -34,6 +34,19 @@ class DocumentsExtractions:
         team = await _team(self.tx, run_id)
         with outside_call():
             return await self.client.purge(current_tenant(), team, file_id)
+
+    async def correct(self, run_id: str, extraction_id: str, corrections: list[Json], *, entered_by: str) -> Json:
+        team = await _team(self.tx, run_id)
+        try:
+            with outside_call():
+                return await self.client.correct(
+                    current_tenant(), team, extraction_id, corrections, entered_by=entered_by, checked=True
+                )
+        except DocumentsRefused as e:
+            if e.status >= 500:
+                raise
+            # A refusal a retry cannot change (a value its type cannot hold, a read that is gone) takes the error port.
+            return {"refused": {"code": e.code, "message": e.message}}
 
     async def fields(self, run_id: str, type_id: str, version: int | None) -> list[Json]:
         """The DocumentTypesPort: a document type's fields at `version`, the newest when None, read as the run's team

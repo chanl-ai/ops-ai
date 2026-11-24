@@ -4716,6 +4716,16 @@ export interface components {
             /** Stepuptoken */
             stepUpToken?: string | null;
         };
+        /** ApproveRefused */
+        ApproveRefused: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "not_editable" | "nothing_read";
+            /** Message */
+            message: string;
+        };
         /** AssetRef */
         AssetRef: {
             /** Href */
@@ -6326,6 +6336,7 @@ export interface components {
          *     with, None when no correction was sent.
          */
         DocumentRead: {
+            approveRefused?: components["schemas"]["ApproveRefused"] | null;
             /** Corrected */
             corrected: {
                 [key: string]: components["schemas"]["JsonValue"];
@@ -6338,6 +6349,10 @@ export interface components {
             fileName: string | null;
             /** Floor */
             floor: number | null;
+            /** Notread */
+            notRead?: ("cut_off" | "empty" | "declined" | "filtered") | null;
+            /** Notreadtries */
+            notReadTries?: number | null;
             /** Records */
             records: components["schemas"]["ReadRecord"][];
             /** Schema */
@@ -9865,6 +9880,8 @@ export interface components {
             /** Toversion */
             toVersion: number;
             validation: components["schemas"]["ValidationSummary"] | null;
+            /** Waitingtasks */
+            waitingTasks?: number | null;
             /** Workflowid */
             workflowId: string;
         };
@@ -14060,6 +14077,7 @@ export interface operations {
                 kind?: string[];
                 agentSlug?: string[];
                 status?: string[];
+                fileId?: string | null;
                 group?: string | null;
             };
             header?: never;

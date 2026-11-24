@@ -103,6 +103,34 @@ POLICIES: tuple[Policy, ...] = (
         title="Extraction confidence floor",
     ),
     Policy(
+        "extractionRetries",
+        # At least one more ask: a model's reasoning length varies between runs, so a one-record read cut off once is
+        # often whole the next time, and a value misread on the way (USD 100 read as GBP 100) gets a second reading.
+        "1",
+        "How many more times a one-record document read is asked when the model's reply is cut off or empty.",
+        kind="choice",
+        live=True,
+        title="Document read retries",
+        choices=(
+            ("1", "One more try", "The read is asked once more, unchanged; then the rule below decides."),
+            ("2", "Two more tries", "The read is asked up to twice more, unchanged; each try is billed."),
+        ),
+        note="A read of several records, a declined reply and a filtered reply are never asked again.",
+    ),
+    Policy(
+        "extractionNoAnswer",
+        "review",
+        "What happens to a document read that still has no answer after its retries.",
+        kind="choice",
+        live=True,
+        title="When a read still has no answer",
+        choices=(
+            ("review", "Send to review", "A person types the required fields in the workflow's Human Task."),
+            ("fail", "Fail the step", "The read fails with its reason and the workflow takes its error path."),
+        ),
+        note="Nothing from a cut-off, empty, declined or filtered reply is ever saved as a value.",
+    ),
+    Policy(
         "stepUp",
         False,
         "Every approver confirms their sign-in again before deciding. Off: only operations that ask for it.",

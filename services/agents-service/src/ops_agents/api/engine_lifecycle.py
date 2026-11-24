@@ -352,13 +352,26 @@ async def open_publish(
     return req
 
 
+# The shipped workflows whose update unlocks tasks that can only be rejected on the live version: a pending request
+# for one says how many (tasks_an_update_unlocks).
+UNLOCKS_TASKS = frozenset({"system_extract"})
+
+
 async def view(rt: Runtime, req: PublishRequestRow, *, name: str | None = None) -> ReviewView:
     """The request as the console's Review, named after the version it publishes; `name` when a list read the
     versions together (publish_reviews.all_views)."""
     if name is None:
         row = await definitions(rt).row(str(req.subject_id), int(req.version))
         name = row.name if row else str(req.subject_id)
-    return review_view(req, name=name, slug="", sla_hours=await sla_hours(rt))
+    v = review_view(req, name=name, slug="", sla_hours=await sla_hours(rt))
+    unlocks = req.status == "pending" and req.subject_id in UNLOCKS_TASKS
+    if unlocks and (live := await definitions(rt).serving(req.subject_id)):
+        # Read now, not kept on the request: the tasks waiting change after it opens.
+        from .engine_reviews import tasks_an_update_unlocks  # noqa: PLC0415 - engine_reviews imports this module
+
+        waiting = await tasks_an_update_unlocks(rt, live.workflow_id, live.version)
+        v["publish"] = {**v["publish"], "waitingTasks": waiting}  # pyright: ignore[reportTypedDictNotRequiredAccess]
+    return v
 
 
 async def approve(rt: Runtime, req: PublishRequestRow) -> None:

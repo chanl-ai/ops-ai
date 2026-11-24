@@ -141,6 +141,12 @@ def _call_columns() -> list[sa.Column[Any]]:
         sa.Column("step_id", sa.String(200)),
         sa.Column("thread_id", sa.String(64), index=True),
         sa.Column("request_hash", sa.String(64)),
+        # How the provider's reply ended, in its own word (stop, length, content_filter, ...), whether the model
+        # declined, and the image detail the request asked for (high, low, auto). None on calls with no reply, on
+        # calls with no image, and on rows from before migration 20261124_0600_call_endings. Never the reply's words.
+        sa.Column("ended", sa.String(32)),
+        sa.Column("declined", sa.Boolean),
+        sa.Column("image_detail", sa.String(8)),
     ]
 
 

@@ -68,7 +68,7 @@ from ops_store.database import Database
 from .connection_settings import azure_openai_problem
 from .key_check import EndpointRefused, KeyRefused, azure_host, listed_models
 from .provider_keys import ProviderKeys
-from .providers import AzureOpenAIProvider, ProviderError, StreamUsage, provider_for, region_mismatch
+from .providers import AzureOpenAIProvider, Completion, ProviderError, StreamUsage, provider_for, region_mismatch
 from .schemas import (
     Admission,
     AliasOut,
@@ -945,6 +945,9 @@ def create_models_app(
                 request_hash=r.request_hash,
                 created_at=_iso(r.created_at),
                 images=r.images,
+                ended=r.ended,
+                declined=r.declined,
+                image_detail=r.image_detail,
             )
             for r in page.data
         ]
@@ -1022,12 +1025,15 @@ def create_models_app(
         # After the provider answers, everything the call writes (the region it answered from, the spend, its row) is
         # one transaction of its own: none is open while the provider works, and the gate's committed before it.
 
-        async def settle(self, input_tokens: int, output_tokens: int) -> None:
+        async def settle(self, input_tokens: int, output_tokens: int, done: Completion | None = None) -> None:
             """Records what the provider charged, in a task of its own: a client gone or a cancel after the answer
             does not roll it back. When neither the write nor its fallback lands, the whole charge is logged at error
-            level, for `ops_models.recovery` to replay."""
+            level, for `ops_models.recovery` to replay. `done`, the whole reply, adds how it ended and whether it
+            was declined, never its words."""
             spend = cost(Usage(input_tokens=input_tokens, output_tokens=output_tokens), self.price)
-            charged = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost": spend}
+            charged: dict[str, Any] = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost": spend}
+            if done is not None:
+                charged |= {"ended": (done.ended or "")[:32] or None, "declined": done.refusal is not None}
             # One id for the call's row whichever attempt or replay writes it, so one after a write that committed
             # fails on the row and adds no spend again.
             row = self.row_of("error", "settle_failed", id=new_id("mc"), **charged, **self.version)
@@ -1224,6 +1230,7 @@ def create_models_app(
                 tenant=x_tenant_id,
                 images=images_in(request.messages),
                 run_cap=x_run_spend_cap,
+                image_detail=image_detail_in(request.messages),
                 run_id=x_run_id,
                 step_id=x_step_id,
                 thread_id=x_thread_id,
@@ -1276,13 +1283,14 @@ def create_models_app(
             done = await provider.complete(alias_row.model_id, body)
         except ProviderError as e:
             return await failed(e)
-        await settle(done.input_tokens, done.output_tokens)
+        await settle(done.input_tokens, done.output_tokens, done)
         # `tool_calls` is left unset, not None, when there are none: the route drops unset fields, so the key is absent.
-        message = (
-            ChatMessage(role="assistant", content=done.text, tool_calls=[_tool_call(c) for c in done.tool_calls])
-            if done.tool_calls
-            else ChatMessage(role="assistant", content=done.text)
-        )
+        said: dict[str, Any] = {"role": "assistant", "content": done.text}
+        if done.tool_calls:
+            said["tool_calls"] = [_tool_call(c) for c in done.tool_calls]
+        if done.refusal:
+            said["refusal"] = done.refusal
+        message = ChatMessage(**said)
         return ChatCompletion(
             id=call_id,
             object="chat.completion",
@@ -1381,6 +1389,22 @@ def _version_fields(body: AliasVersionIn) -> AliasFields:
 # The content part types that carry only text. Every other part (an image, a file, audio, or a kind no provider has
 # named yet) counts as carrying the page, so a new part type is refused by an alias not cleared rather than let through.
 TEXT_PARTS = frozenset({"text", "input_text", "output_text", "refusal"})
+
+
+DETAILS = ("high", "auto", "low")
+
+
+def image_detail_in(messages: list[Json]) -> str | None:
+    """The image detail the request's image parts ask for, the highest when they differ; None with no image part, and
+    "auto" for an image part that names none, which is what the provider then uses."""
+    asked: set[str] = set()
+    for m in messages:
+        content = m.get("content")
+        for part in content if isinstance(content, list) else []:
+            if isinstance(part, dict) and json_object(part).get("type") == "image_url":
+                detail = json_object(json_object(part).get("image_url")).get("detail")
+                asked.add(str(detail) if detail in DETAILS else "auto")
+    return next((d for d in DETAILS if d in asked), None)
 
 
 def images_in(messages: list[Json]) -> int:

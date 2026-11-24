@@ -24,6 +24,7 @@ Every registered node type and the Example that teaches it. Planned types have n
 | `ops.data.match` | `calculate-and-approve-a-hold` | Built |
 | `ops.data.set` | `normalize-a-request`, `calculate-and-approve-a-hold` | Built |
 | `ops.data.transform` | `transform-a-record` | Built |
+| `ops.documents.correct` | — | Partial |
 | `ops.documents.purge` | `purge-after-file-deleted` | Built |
 | `ops.files.setData` | `read-a-claim-and-open-a-case`, `one-child-per-record` | Built |
 | `ops.flow.ask` | `ask-a-person` | Built |

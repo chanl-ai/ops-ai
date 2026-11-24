@@ -153,6 +153,8 @@ class ReviewsQuery(BaseModel):
     kind: list[str] = Field(default_factory=list[str])
     agentSlug: list[str] = Field(default_factory=list[str])  # noqa: N815
     status: list[str] = Field(default_factory=list[str])
+    # Only the tasks about this file (the Files panel's link to the task a read opened).
+    fileId: str | None = None  # noqa: N815
     # "case" orders the view by case and names each row's case.
     group: str | None = None
 
@@ -168,7 +170,14 @@ async def list_reviews(rt: Rt, me: Reader, q: Annotated[ReviewsQuery, Query()]) 
     the rows kept. The route stays off `Tx`: building a review asks tools-service for its write policy, so it holds
     two transactions, 2 by design: one to read what the reviews name, then, once tools-service has answered with none
     open, one to build the list."""
-    filters = {"risk": q.risk, "workflowId": q.workflowId, "kind": q.kind, "agentSlug": q.agentSlug, "status": q.status}
+    filters = {
+        "risk": q.risk,
+        "workflowId": q.workflowId,
+        "kind": q.kind,
+        "agentSlug": q.agentSlug,
+        "status": q.status,
+        "sourceFile": [q.fileId] if q.fileId else [],
+    }
     with one_read_per_tool():
         reads = await hitl_facade.read_then_ask(rt)
         async with isolation.request_transaction():

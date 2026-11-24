@@ -310,6 +310,18 @@ async def test_an_email_with_no_attachments_and_a_step_that_started_none_say_so(
     assert story["reads"][0]["read"]["records"] == []
 
 
+async def test_a_read_no_reply_answered_says_so_rather_than_counting_fields_to_check(engine: AsyncEngine) -> None:
+    w = World(engine)
+    await w.publish(INTAKE)
+    parent = await w.run(INTAKE, EMAIL, status="waiting",
+                         waiting={"node": "check", "iteration": 1, "interruptId": "i", "payload": {}})  # fmt: skip
+    not_read = {"value": None, "confidence": 0.0, "needsReview": True, "notRead": "cut_off"}
+    read = READ | {"incomplete": {"reason": "cut_off"}, "records": [{"values": {}, "fields": {"name": not_read}}]}
+    await w.step(parent, "read", "review", read)
+    told = [x["text"] for x in (await w.read(parent))["story"]["lines"]]
+    assert "Nothing read from notice.pdf: the reply was cut off" in told, told
+
+
 def test_past_the_cap_the_rest_are_counted() -> None:
     nodes: dict[str, Json] = {"each": {"id": "each", "type": "ops.action.workflow", "typeVersion": 1}}
     runs: JsonList = [{"index": i, "runId": f"wfrun_{i:012d}"} for i in range(run_story.MAX_CHILDREN + 3)]

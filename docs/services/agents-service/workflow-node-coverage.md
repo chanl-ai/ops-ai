@@ -69,6 +69,7 @@ Run once each on 2026-10-19, with the same step paths as the isolated runs:
 | Send a message (`ops.action.send`), Filter (`ops.data.filter`), Transform (`ops.data.transform`), Ask (`ops.flow.ask`), Repeat (`ops.flow.repeat`), Wait for (`ops.flow.waitFor`) | No seeded workflow or use case runs them yet | `packages/ops_engine/tests/` |
 | Classify (`ops.ai.classify`), Draft (`ops.ai.draft`), Extract from text (`ops.ai.extractText`), Retrieve from knowledge (`ops.ai.knowledge`), Summarise (`ops.ai.summarise`), Schedule (`ops.trigger.schedule`) | No seeded workflow runs them; use cases do | `packages/ops_engine/tests/` and use cases under `docs/usecases/` |
 | Purge read data (`ops.documents.purge`) | Runs only in the file-deleted event handler | `file_deleted_purge` in `seed/event_workflows.json` |
+| Save typed values (`ops.documents.correct`) | Runs after the check in Extract a file, when a person approves a read with typed values | `system_extract` in `seed/event_workflows.json`, `tests/engine/test_required_fields_filled.py` |
 
 Ports not driven by these use cases: every node's `error` port, Call a tool's `refused`, Extract's `review` and
 `unreadable`, and Human review's `reject`. The engine's own tests cover them (`packages/ops_engine/tests/`).

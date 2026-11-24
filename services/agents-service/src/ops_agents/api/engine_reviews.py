@@ -14,7 +14,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Final, NotRequired, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Final, Literal, NotRequired, TypedDict, cast
 
 from ops_engine.store import RUN_PREFIX, DefinitionRow, DefinitionStore, RunStore
 from ops_policy import input_hash
@@ -23,6 +23,7 @@ from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.logging import get_logger
 from ops_service_kit.narrow import an_object, entries, json_list, json_object
 from ops_store.documents import stored
+from ops_store.team_scope import acting_as
 
 from ..store.cases import CaseNotFound, CaseStore
 from ..store.engine import DatabaseError, EngineTransactions
@@ -37,6 +38,7 @@ from .auth import (
     require_step_up,
     require_team_account_use,
     review_teams,
+    teams_holding,
     workspace_step_up,
 )
 from .deps import Runtime
@@ -230,6 +232,13 @@ class SchemaField(TypedDict):
     keyField: bool
 
 
+class ApproveRefused(TypedDict):
+    """Why a task's approve is refused whatever the person types, in the words the refusal gives."""
+
+    code: Literal["not_editable", "nothing_read"]
+    message: str
+
+
 class ReadView(TypedDict):
     """An Extract from file result as people read it (read_view)."""
 
@@ -241,6 +250,13 @@ class ReadView(TypedDict):
     sources: list[str]
     editable: bool
     corrected: list[Json] | None
+    # Why no model reply answered the read (cut_off, empty, declined, filtered); None for a read that was answered.
+    notRead: str | None
+    # How many times the model was asked before the read gave up (the first ask and its retries); None for a read
+    # that was answered or one saved before the count was kept.
+    notReadTries: int | None
+    # Set when the task can only be rejected (approve_refused); None while approve can go through.
+    approveRefused: ApproveRefused | None
 
 
 class ReplyCase(TypedDict):
@@ -282,6 +298,8 @@ class EngineRow(TypedDict):
     dueAt: str | None
     createdAt: JsonValue
     caseId: str | None
+    # The file the task is about, so a list can be cut to one file's tasks without building each review.
+    sourceFile: str | None
     _engine_review: tuple[Json, Json | None, str]
     decidedAt: NotRequired[JsonValue]
     assignee: NotRequired[JsonValue]
@@ -616,7 +634,15 @@ def read_view(read: Json, file_name: str | None, edited: JsonValue) -> ReadView:
         "corrected": [dict(cast(Json, an_object(r, "a corrected record").get("values") or {})) for r in edited]
         if isinstance(edited, list)
         else None,
+        "notRead": str(json_object(read.get("incomplete")).get("reason") or "") or None,
+        "notReadTries": _tries(read.get("incomplete")),
+        "approveRefused": None,
     }
+
+
+def _tries(incomplete: object) -> int | None:
+    n = json_object(incomplete).get("tries")
+    return n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else None
 
 
 def is_read(value: object) -> bool:
@@ -641,6 +667,7 @@ def document_read(draft: object, payload: ReviewPayload, resume: Decision | None
     if combined is not None and len(view["records"]) == 1:
         view["sources"] = _by_source(view["records"][0], combined)
     view["editable"] = isinstance(payload.get("editable"), dict)
+    view["approveRefused"] = approve_refused(view)
     return view
 
 
@@ -680,12 +707,33 @@ async def reply_preview(rt: Runtime, team: str, draft: object, call: ProposedCal
     }
 
 
+# A not-read read's reason as its task line says it.
+NOT_READ_SAID = {
+    "cut_off": "the reply was cut off",
+    "empty": "the reply held no answer",
+    "declined": "the model declined",
+    "filtered": "the provider's filter stopped the reply",
+}
+
+
+def _plural(n: int, one: str) -> str:
+    return f"{n} {one}{'s' if n != 1 else ''}"
+
+
 def _read_line(read: ReadView) -> tuple[str, str]:
-    """The row's customer and proposal for a document read: who it names and what a person is asked to check."""
+    """The row's customer and proposal for a document read: who it names and what a person is asked to check, or for
+    a read no reply answered, why and how many required fields there are to type."""
+    of = f" from {read['fileName']}" if read["fileName"] else ""
+    if why := read["notRead"]:
+        said = NOT_READ_SAID.get(why, "no reply answered")
+        if not read["records"]:
+            # A several-records read with no records has no row to type into; approve refuses it (nothing_read).
+            return "", f"Nothing read{of}: {said}; it can only be rejected"
+        required = sum(1 for f in read["schema"] if f["required"]) * len(read["records"])
+        return "", f"Nothing read{of}: {said}; {_plural(required, 'required field')} to type"
     names = [str(r["values"].get("name")) for r in read["records"] if r["values"].get("name")]
     doubtful = sum(1 for r in read["records"] for f in r["fields"].values() if f["needsReview"])
     count = len(read["records"])
-    of = f" from {read['fileName']}" if read["fileName"] else ""
     check = f"; {doubtful} field{'s' if doubtful != 1 else ''} to check" if doubtful else ""
     return ", ".join(names), f"Read {count} record{'s' if count != 1 else ''}{of}{check}"
 
@@ -1039,6 +1087,7 @@ async def build_rows(rt: Runtime, reads: RowReads | None) -> list[EngineRow]:
             "createdAt": run["updated_at"],
             # "" says "looked up, on no case", so expand does not ask again per row.
             "caseId": on_case.get(str(run["id"])) or None,
+            "sourceFile": source_file(payload.get("draft"), run.get("input")),
             BUILD: (run, decided, on_case.get(str(run["id"]), "")),
         }
         if decided is not None:
@@ -1160,6 +1209,75 @@ def _record_keys(row: JsonValue) -> set[str] | None:
     return {str(k) for k in values} if isinstance(values, dict) else None
 
 
+def _read_correction(read: Json, edited: JsonValue) -> None:
+    """A correction of a whole read: as many records as were read (exactly one for a one-record read), each keeping its
+    `values` to the fields of the read's type."""
+    if not isinstance(edited, list) or any(_record_keys(r) is None for r in edited):
+        raise ValidationFailed("A correction lists the records, each with its values.")
+    count = 1 if "fields" in read and "records" not in read else len(entries(read.get("records")))
+    if len(edited) != count:
+        raise ValidationFailed(f"A correction lists the {_plural(count, 'record')} that were read.")
+    allowed = {str(f.get("key")) for f in (x for x in entries(read.get("schema")) if isinstance(x, dict))}
+    found: set[str] = set()
+    for row in edited:
+        found |= _record_keys(row) or set()
+    if unknown := sorted(found - allowed):
+        raise ValidationFailed(f"A correction names fields the read does not have: {', '.join(unknown)}.")
+
+
+NOT_EDITABLE = (
+    "This version of Extract a file cannot take typed values, so this task can only be rejected. Your admin needs to "
+    "approve the extraction update in Reviews; then read the file again."
+)
+NOTHING_READ = "Nothing was read from this file, so this task can only be rejected."
+
+
+def approve_refused(read: ReadView) -> ApproveRefused | None:
+    """Why a read no reply answered can only be rejected: a several-records read with no records has nothing to
+    approve, and a step that takes no typed values (a version of Extract a file from before it did) cannot take the
+    required ones. The refusal of approve, the task's read view and the count of tasks an update unlocks all read it."""
+    if not read["notRead"]:
+        return None
+    if not read["records"]:
+        return {"code": "nothing_read", "message": NOTHING_READ}
+    if not read["editable"]:
+        return {"code": "not_editable", "message": NOT_EDITABLE}
+    return None
+
+
+async def tasks_an_update_unlocks(rt: Runtime, workflow_id: str, version: int) -> int:
+    """How many tasks on `version` of a workflow can only be rejected because its step takes no typed values
+    (approve_refused's not_editable), which a later version that does would let a person approve once read again.
+    Counted over every team: the shipped workflow's update is the workspace's, so its reviewer sees the whole wait;
+    only the number leaves this function. A task with nothing read stays reject-only after any update and is not one."""
+    with acting_as(None):
+        waiting = await _runs(rt).list(workflow_id=workflow_id, status="waiting", limit=None)
+    count = 0
+    for run in waiting:
+        if run.version != version:
+            continue
+        paused = PAYLOAD(WAITING(run.waiting or {}).get("payload") or {})
+        read = document_read(paused.get("draft"), paused, None)
+        count += bool(read and (refused := read["approveRefused"]) and refused["code"] == "not_editable")
+    return count
+
+
+def _refuse_unapprovable(paused: ReviewPayload) -> None:
+    read = document_read(paused.get("draft"), paused, None)
+    if read is not None and (refused := read["approveRefused"]):
+        raise ValidationFailed(refused["message"], code=refused["code"])
+
+
+def _require_documents_edit(approver: Principal, team: str) -> None:
+    """Typed values change a read, which is documents.edit in the run's team: reviews.decide alone changes none."""
+    if team not in teams_holding(approver, "documents", "edit"):
+        raise Forbidden(
+            f"Only someone who edits the documents of {team} changes the values of a read.",
+            code="role_required",
+            details={"teamId": team, "area": "documents", "action": "edit"},
+        )
+
+
 def correction(paused: ReviewPayload, inputs: Json | None) -> tuple[JsonValue | Nothing, Json | None]:
     """A reviewer's correction (`inputs.edited`) of the step's editable value, checked against it, and the inputs left
     for the option's call. A list of records keeps each record's `values` to the keys the read has; a dict keeps its own
@@ -1172,7 +1290,12 @@ def correction(paused: ReviewPayload, inputs: Json | None) -> tuple[JsonValue | 
     if not isinstance(editable, dict):
         raise ValidationFailed("This review has nothing to correct.")
     was = editable.get("value")
-    if isinstance(was, list):
+    if is_read(was):
+        # A whole read is corrected as the console shows it: the records list, one record for a one-record read.
+        read = cast(Json, was)
+        _read_correction(read, edited)
+        unknown = []
+    elif isinstance(was, list):
         allowed: set[str] = set()
         for row in was:
             allowed |= _record_keys(row) or set()
@@ -1237,8 +1360,13 @@ async def decide(
             "This run waits for an account: it goes on once its person connects theirs, or runs on the team account.",
             code="connect_wait",
         )
-    edited, inputs = correction(paused, inputs)
     options = _options(paused)
+    # Every option but reject approves, as below; a decision no option names is refused below.
+    if (decision != "reject") if options else DEFAULT_DECISIONS.get(decision) == "approve":
+        _refuse_unapprovable(paused)
+    edited, inputs = correction(paused, inputs)
+    if not isinstance(edited, Nothing):
+        _require_documents_edit(approver, str(run["team_id"]))
     call: Json | None = None
     if options:
         if decision not in options:
@@ -1261,11 +1389,13 @@ async def decide(
         confirmed = rest.pop("confirmed", None)
         action = await _typed_action(rt, run, paused, str(resume.get("option") or DEFAULT_DECISIONS[decision]))
         if action.get("requires"):
-            _check_requirement(str(action["requires"]), paused, confirmed)
+            _check_requirement(str(action["requires"]), paused, confirmed, edited)
             resume["confirmed"] = confirmed
         if call is None and rest:
             # A typed action's own inputs (a Reject's assignee) travel to the workflow with the decision.
             resume["inputs"] = _action_inputs(action, rest)
+    if resume.get("decision") == "approved":
+        _required_fields_filled(paused, None, edited)
     # An approval is checked against the call it sends; a rejection against every write the step holds.
     await _check_decider(rt, approver, run, [call] if call is not None else held_calls(json_object(paused)))
     resume["reason"] = reason
@@ -1401,25 +1531,59 @@ def _key_fields_left(paused: ReviewPayload, confirmed: JsonValue) -> int:
     return left
 
 
-def _key_fields_confirmed(paused: ReviewPayload, confirmed: JsonValue) -> None:
+def _key_fields_confirmed(paused: ReviewPayload, confirmed: JsonValue, edited: JsonValue | Nothing) -> None:
     if left := _key_fields_left(paused, confirmed):
         what = "1 key field" if left == 1 else f"{left} key fields"
         raise ValidationFailed(f"Confirm {what} before approving.", code="key_fields_unconfirmed")
 
 
+def _blank(value: JsonValue) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
+def _typed(value: JsonValue) -> JsonValue:
+    """A corrected field's value: a field object's `value`, or the value itself."""
+    return cast(Json, value).get("value") if isinstance(value, dict) else value
+
+
+def _required_fields_filled(paused: ReviewPayload, confirmed: JsonValue, edited: JsonValue | Nothing) -> None:
+    """A read no model reply answered is approved only once every required field has a value, typed by the person
+    (`inputs.edited`) over what was read; optional fields may stay empty. A several-records read with no records has
+    nothing to approve. A read that was answered passes: its empty fields are the model's answer."""
+    read = document_read(paused.get("draft"), paused, None)
+    if read is None or not read["notRead"]:
+        return
+    if not read["records"]:
+        raise ValidationFailed(NOTHING_READ, code="nothing_read")
+    required = [f["key"] for f in read["schema"] if f["required"]]
+    rows: list[Json] = [r["values"] for r in read["records"]]
+    if isinstance(edited, list):
+        rows = [json_object(json_object(r).get("values")) for r in edited]
+    elif isinstance(edited, dict):
+        rows = [{k: _typed(v) for k, v in edited.items()}]
+    if left := sum(_blank(row.get(k)) for row in rows for k in required):
+        what = _plural(left, "required field")
+        raise ValidationFailed(f"Type {what} before approving.", code="required_fields_empty")
+
+
 # What a task type's action can wait for (its `requires`), checked on the decision as the console blocks the button,
-# so a call that skips the console cannot approve values nobody checked.
-REQUIREMENTS: dict[str, Callable[[ReviewPayload, JsonValue], None]] = {"key_fields_confirmed": _key_fields_confirmed}
+# so a call that skips the console cannot approve values nobody checked. required_fields_filled also holds every
+# approve of a read with no answer, whatever its type names.
+Requirement = Callable[[ReviewPayload, JsonValue, JsonValue | Nothing], None]
+REQUIREMENTS: dict[str, Requirement] = {
+    "key_fields_confirmed": _key_fields_confirmed,
+    "required_fields_filled": _required_fields_filled,
+}
 
 
-def _check_requirement(name: str, paused: ReviewPayload, confirmed: JsonValue) -> None:
+def _check_requirement(name: str, paused: ReviewPayload, confirmed: JsonValue, edited: JsonValue | Nothing) -> None:
     check = REQUIREMENTS.get(name)
     if check is None:
         # A type naming a rule this service cannot check is refused rather than approved unchecked.
         raise ValidationFailed(
             f"This action waits for {name}, which cannot be checked here.", code="unknown_requirement"
         )
-    check(paused, confirmed)
+    check(paused, confirmed, edited)
 
 
 async def run_as_team_account(rt: Runtime, me: Principal, review_id: str) -> EngineReview:

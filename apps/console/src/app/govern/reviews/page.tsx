@@ -11,7 +11,7 @@ import { EvidenceExportButton } from '@/components/files/file-actions';
 import { isOpen, type ReviewRow, reviewColumns } from '@/components/reviews/review-columns';
 import { StepUpCancelled } from '@/components/auth/reauth-dialog';
 import { DecidedBy, ReviewDetailBody } from '@/components/reviews/review-detail';
-import { type ReadEdits, useReadConfirmations } from '@/components/reviews/document-read';
+import { type ReadEdits, RequiredToType, useReadConfirmations } from '@/components/reviews/document-read';
 import { BulkDecisionDialog } from '@/components/reviews/bulk-decision-dialog';
 import { ReviewsPageLayout } from '@/components/reviews/reviews-page-layout';
 import { TaskDecision } from '@/components/reviews/task-decision';
@@ -339,6 +339,7 @@ export default function AllTasksPage() {
                 </span>
               )}
               <ReviewStatusBadge status={active.status} />
+              <RequiredToType read={task?.read ?? active.read} edits={edits} open={isOpen(active)} />
               {active.assignee && <span className="text-xs text-muted-foreground">Assigned to {active.assignee}</span>}
               {active.decidingTeam && (
                 <span className="text-xs text-muted-foreground" data-testid="review-deciding-team">
@@ -394,7 +395,7 @@ export default function AllTasksPage() {
                 checks={isOpen(active) && active.canDecide !== false ? checks : undefined}
               />
             )}
-            <TaskDecision review={active} view={task} checks={checks} decider={decider} me={me} owners={lookups?.owners ?? []} platformTeam={team?.scope === 'all'} layout="sheet">
+            <TaskDecision review={active} view={task} checks={checks} edits={edits} decider={decider} me={me} owners={lookups?.owners ?? []} platformTeam={team?.scope === 'all'} layout="sheet">
               {({ choice, decide }) => (
                 <>
                   {choice}

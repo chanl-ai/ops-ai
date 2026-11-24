@@ -31,6 +31,11 @@ class Ports:
         self.purged.append(file_id)
         return {"extractions": 2, "samples": 1}
 
+    async def correct(
+        self, run_id: str, extraction_id: str, corrections: list[dict[str, Any]], *, entered_by: str
+    ) -> dict[str, Any]:
+        return {"id": extraction_id}
+
 
 def call(kind: str, ports: Ports, **params: Any) -> NodeCall:
     node = NodeInstance.model_validate({"id": "step", "type": kind, "typeVersion": 1})

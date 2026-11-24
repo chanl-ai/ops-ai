@@ -256,6 +256,13 @@ class Purged(TypedDict, closed=True):
     samples: int
 
 
+class ReadIncomplete(TypedDict, closed=True):
+    reason: Literal["cut_off", "empty", "declined", "filtered"]
+    refusal: NotRequired[str | None]
+    step: str
+    tries: int
+
+
 class ReadingCell(TypedDict, closed=True):
     box: NotRequired[list[float] | None]
     col: int
@@ -421,6 +428,12 @@ class TestRun(TypedDict, closed=True):
     version: int
 
 
+class TypedValue(TypedDict, closed=True):
+    field: str
+    record: NotRequired[int | None]
+    value: Any
+
+
 class UpdateExpect(TypedDict, closed=True):
     digest: NotRequired[str | None]
     recordDigest: NotRequired[str | None]
@@ -435,6 +448,12 @@ class UpdateInput(TypedDict, closed=True):
 
 class BackgroundHealthOut(TypedDict, closed=True):
     processes: list[BackgroundProcessOut]
+
+
+class CorrectionsIn(TypedDict, closed=True):
+    checked: NotRequired[bool]
+    corrections: list[TypedValue]
+    enteredBy: NotRequired[str | None]
 
 
 class DocumentTypeExample(TypedDict, closed=True):
@@ -640,14 +659,16 @@ class Extraction(TypedDict, closed=True):
     id: str
     imageCalls: NotRequired[list[ImageCall] | None]
     imageRefused: NotRequired[str | None]
+    incomplete: NotRequired[ReadIncomplete | None]
     needsReview: NotRequired[list[str | int] | None]
-    outcome: NotRequired[Literal["ok", "review", "unreadable", "unknown"] | None]
+    outcome: NotRequired[Literal["ok", "review", "unreadable", "unknown", "incomplete"] | None]
     pages: NotRequired[int | list[dict[str, JsonValue]] | None]
     partial: NotRequired[bool | None]
     path: NotRequired[Literal["template", "model"] | None]
     proposal: NotRequired[dict[str, JsonValue] | None]
     readPages: NotRequired[int | None]
     records: NotRequired[list[dict[str, JsonValue]] | None]
+    rereadIncomplete: NotRequired[Literal["cut_off", "empty", "declined", "filtered"] | None]
     rereadTokens: NotRequired[dict[str, int] | None]
     schema: NotRequired[list[dict[str, JsonValue]] | None]
     status: Literal["queued", "running", "done", "failed", "unreadable"]

@@ -1735,6 +1735,7 @@ export const agentsOperations = {
       "kind",
       "agentSlug",
       "status",
+      "fileId",
       "group"
     ],
     "stream": false

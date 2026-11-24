@@ -821,9 +821,10 @@ async def ai_extract(call: NodeCall) -> Outcome:
         )
     if status == "failed":
         error = cast(Json, answer.get("error") or {})
-        if error.get("code") == "schema_error":
+        # Held on its key by documents-service: raising would retry the step against the same failure.
+        if error.get("code") in ("schema_error", "reply_incomplete"):
             return Outcome(
-                "error", {"error": error.get("message"), "code": "schema_error", "details": error.get("details")}
+                "error", {"error": error.get("message"), "code": error.get("code"), "details": error.get("details")}
             )
         raise OutsideAnswerError(f"the extraction failed ({error.get('code')}): {error.get('message')}")
     # The extraction's id stays on the output: the run page links the read to it, and its model call is logged under it.
@@ -835,6 +836,9 @@ async def ai_extract(call: NodeCall) -> Outcome:
     if status == "done" and answer.get("outcome") == "unknown":
         # No kind of the team's fits, or the model is unsure: review, with no fields, so a person decides what the
         # file is; `classification` on the output says why.
+        return Outcome("review", out)
+    if status == "done" and answer.get("outcome") == "incomplete":
+        # No reply answered: every field is not read and `incomplete` says why, so a person types the values.
         return Outcome("review", out)
     if status != "done" or answer.get("outcome") not in ("ok", "review"):
         # A state this step does not know is raised, never turned into a port it does not have.
@@ -882,6 +886,49 @@ async def files_set_data(call: NodeCall) -> Outcome:
         return Outcome("error", {"error": "The read names no document type or extraction.", "code": "no_read"})
     saved = await call.ports.file_data.set_data(call.run_id, str(call.params.get("file") or ""), data)
     return Outcome("ok", {"data": saved.get("data", data)})
+
+
+def typed_values(read: Json, edited: Any) -> list[Json]:
+    """What a person typed over a read, as documents-service takes it: [{field, record?, value}] for each value that
+    differs from what was read. `edited` is the records list a Human Task approved; anything else (the read itself,
+    when nobody typed) is nothing typed."""
+    if not isinstance(edited, list):
+        return []
+    many = "records" in read
+    if many:
+        rows = [cast(Json, r) for r in cast(list[Any], read.get("records") or [])]
+        was: list[Json] = [cast(Json, r.get("values") or {}) for r in rows]
+    else:
+        fields = cast(Json, read.get("fields") or {})
+        was = [{k: cast(Json, f).get("value") if isinstance(f, dict) else f for k, f in fields.items()}]
+    typed: list[Json] = []
+    for i, row in enumerate(cast(list[Any], edited)):
+        values = cast(Json, cast(Json, row).get("values") or {}) if isinstance(row, dict) else {}
+        before = was[i] if i < len(was) else {}
+        for key, value in values.items():
+            if value != before.get(key):
+                typed.append({"field": key, "value": value, **({"record": i} if many else {})})
+    return typed
+
+
+async def documents_correct(call: NodeCall) -> Outcome:
+    """Save typed values: what a person typed in a Human Task over an Extract from file read, saved on its extraction
+    through documents-service as the run's team, recorded as the person who decided the task, with the read checked.
+    Nothing typed saves nothing; a value documents-service refuses takes the error port."""
+    if call.ports.documents is None:
+        raise RuntimeError("no documents port: this worker cannot run Save typed values")
+    read = cast(Json, call.params.get("read") or {})
+    typed = typed_values(read, call.params.get("edited"))
+    if not typed:
+        return Outcome("ok", {"saved": 0})
+    extraction = str(read.get("extractionId") or "")
+    by = str(call.params.get("by") or "")
+    if not extraction or not by:
+        return Outcome("error", {"error": "The read names no extraction or nobody typed it.", "code": "no_read"})
+    saved = await call.ports.documents.correct(call.run_id, extraction, typed, entered_by=by)
+    if refused := saved.get("refused"):
+        return Outcome("error", {"error": cast(Json, refused).get("message"), "code": cast(Json, refused).get("code")})
+    return Outcome("ok", {"saved": len(typed), "extractionId": extraction})
 
 
 async def documents_purge(call: NodeCall) -> Outcome:
@@ -1306,6 +1353,7 @@ EXECUTORS: dict[str, Executor] = {
     "ai.extract": ai_extract,
     "ai.prompt": ai_prompt,
     "files.setData": files_set_data,
+    "documents.correct": documents_correct,
     "documents.purge": documents_purge,
     "workflow.start": workflow_start,
     "case.open": case_open,

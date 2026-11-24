@@ -59,7 +59,11 @@ class FakeDocumentsService:
     # The team's document types, answered a page of `type_page_size` at a time as the real list is.
     types: list[FakeType] = field(default_factory=list[FakeType])
     type_page_size: int = 20
+    # Files whose read the model gave no answer for, by file id, with the reason: cut_off, empty, declined or filtered.
+    no_answer: dict[str, str] = field(default_factory=dict[str, str])
     _running: dict[str, HeldExtraction] = field(default_factory=dict[str, HeldExtraction])
+    # Each batch of typed values saved (POST .../corrections), with the extraction it was saved on.
+    corrected: list[Json] = field(default_factory=list[Json])
 
     def _reading(self, file_id: str, ocr: str) -> Json:
         texts = self.pages.get(file_id)
@@ -86,6 +90,15 @@ class FakeDocumentsService:
         texts = self.pages.get(file_id)
         if not texts:
             return {"id": extraction_id, "status": "unreadable", "outcome": "unreadable", "fileId": file_id}
+        if file_id in self.no_answer:
+            said: Json = {"reason": self.no_answer[file_id], "step": "extract", "tries": 1}
+            return {
+                "id": extraction_id,
+                "status": "done",
+                "outcome": "incomplete",
+                "fileId": file_id,
+                "incomplete": said,
+            }
         return {"id": extraction_id, "status": "done", "outcome": "ok", "fileId": file_id}
 
     def _types_page(self, page: int) -> FakeTypesPage:
@@ -130,6 +143,11 @@ class FakeDocumentsService:
                 self._running[held["id"]] = held
                 return httpx.Response(202, json={"data": {"id": held["id"], "status": "running"}})
             return httpx.Response(200, json={"data": self._answer(held["id"], body["fileId"])})
+        if request.method == "POST" and path.startswith("/v1/documents/extractions/") and path.endswith("/corrections"):
+            body = json.loads(request.content)
+            extraction_id = path.split("/")[-2]
+            self.corrected.append({"extractionId": extraction_id, **body})
+            return httpx.Response(200, json={"data": {"id": extraction_id, "status": "done"}})
         if request.method == "GET" and path.startswith("/v1/documents/extractions/"):
             held = self._running.get(path.rsplit("/", 1)[-1])
             if held is None:

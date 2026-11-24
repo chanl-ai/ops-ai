@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- models-service, stamped at 20261122_2017_list_sort_indexes
+-- models-service, stamped at 20261124_0600_call_endings
 CREATE TABLE provider_connections (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(120) NOT NULL, 
@@ -78,6 +78,9 @@ CREATE TABLE model_call_log (
 	step_id VARCHAR(200) NULL, 
 	thread_id VARCHAR(64) NULL, 
 	request_hash VARCHAR(64) NULL, 
+	ended VARCHAR(32) NULL, 
+	declined BIT NULL, 
+	image_detail VARCHAR(8) NULL, 
 	tenant_id VARCHAR(64) NULL, 
 	created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(), 
 	images INTEGER NOT NULL DEFAULT '0', 
@@ -115,6 +118,9 @@ CREATE TABLE model_calls_untenanted (
 	step_id VARCHAR(200) NULL, 
 	thread_id VARCHAR(64) NULL, 
 	request_hash VARCHAR(64) NULL, 
+	ended VARCHAR(32) NULL, 
+	declined BIT NULL, 
+	image_detail VARCHAR(8) NULL, 
 	created_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(), 
 	images INTEGER NOT NULL DEFAULT '0', 
 	CONSTRAINT model_calls_untenanted_pkey PRIMARY KEY (id)
@@ -188,5 +194,5 @@ CREATE TABLE alembic_version_models (
     CONSTRAINT alembic_version_models_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_models (version_num) VALUES ('20261122_2017_list_sort_indexes');
+INSERT INTO alembic_version_models (version_num) VALUES ('20261124_0600_call_endings');
 GO

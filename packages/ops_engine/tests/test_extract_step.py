@@ -88,10 +88,48 @@ async def test_an_unreadable_file_takes_the_unreadable_port() -> None:
     assert out.port == "unreadable" and out.out == {"fileId": "fil_1", "pages": 2, "extractionId": "ext_1"}, out
 
 
-async def test_a_schema_error_takes_the_error_port() -> None:
-    error = {"code": "schema_error", "message": "The answer did not match the fields asked for.", "details": ["x"]}
+@pytest.mark.parametrize("code", ["schema_error", "reply_incomplete"])
+async def test_a_failure_held_on_its_key_takes_the_error_port(code: str) -> None:
+    """A schema error, or a reply with no answer the workspace fails, is the answer for its key; raising it would
+    retry the step against the same held failure."""
+    error = {"code": code, "message": "The answer did not match the fields asked for.", "details": ["x"]}
     out = await ai_extract(call(Files({"id": "ext_1", "status": "failed", "fileId": "fil_1", "error": error})))
-    assert out.port == "error" and out.out["code"] == "schema_error" and out.out["details"] == ["x"], out
+    assert out.port == "error" and out.out["code"] == code and out.out["details"] == ["x"], out
+
+
+NOT_READ = {
+    "id": "ext_3",
+    "fileId": "fil_1",
+    "status": "done",
+    "outcome": "incomplete",
+    "incomplete": {"reason": "cut_off", "step": "extract:retry", "tries": 2},
+    "fields": {"invoice_no": {"value": None, "confidence": 0.0, "needsReview": True, "notRead": "cut_off"}},
+    "needsReview": ["invoice_no"],
+    "schema": SCORED["schema"],
+}
+
+
+async def test_a_read_with_no_answer_takes_review_at_once_and_after_parking(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A not-read read goes to a person by the review port with its reason, whether it answered at once or the step
+    parked on a background read and asked again under the same key when it woke."""
+
+    class Parked(Exception):
+        pass
+
+    def interrupt(payload: dict[str, Any]) -> dict[str, Any]:
+        raise Parked  # the pass ends here, as the graph's interrupt ends it, until extraction.finished wakes it
+
+    monkeypatch.setattr(compiler, "interrupt", interrupt)
+    at_once = await ai_extract(call(Files(NOT_READ)))
+    files = Files({"id": "ext_3", "fileId": "fil_1", "status": "running"})
+    with pytest.raises(Parked):
+        await ai_extract(call(files))
+    files.answer = NOT_READ  # the read finished not read; the woken step runs again from the top
+    woken = await ai_extract(call(files))
+    for out in (at_once, woken):
+        assert out.port == "review" and out.out["incomplete"]["reason"] == "cut_off", out
+        assert out.out["fields"]["invoice_no"]["notRead"] == "cut_off", out
+    assert len({key for _, _, key in files.asked}) == 1, files.asked
 
 
 async def test_a_floor_out_of_reach_is_raised_so_the_step_is_retried() -> None:

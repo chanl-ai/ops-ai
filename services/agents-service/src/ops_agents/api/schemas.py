@@ -646,6 +646,9 @@ class PublishRequestInfo(PublishDecisionFields):
     changes: list[str]
     validation: ValidationSummary | None
     digest: str
+    # On a pending update to a shipped workflow that unlocks tasks (system_extract): how many tasks on the live
+    # version can only be rejected until it is live, counted when read. None on every other request.
+    waiting_tasks: int | None = None
 
 
 class SkillPublishAgent(Out):
@@ -1182,6 +1185,11 @@ class ReadRecord(Out):
     fields: dict[str, FieldRead]
 
 
+class ApproveRefused(Out):
+    code: Literal["not_editable", "nothing_read"]
+    message: str
+
+
 class DocumentRead(Out):
     """A document read a review asks a person to check: the file, the floor, and each record's fields. Editable
     when the step takes a correction (`inputs.edited`); `corrected` holds the values a decided review was approved
@@ -1196,6 +1204,15 @@ class DocumentRead(Out):
     corrected: list[dict[str, JsonValue]] | None
     # The sources a Combine facts step weighed against this read, in order; empty for a read of one source.
     sources: list[str] = Field(default_factory=list[str])
+    # Why no model reply answered the read (cut_off, empty, declined or filtered): every field is not read and a
+    # person types the required ones. None for a read that was answered.
+    not_read: Literal["cut_off", "empty", "declined", "filtered"] | None = None
+    # How many times the model was asked before the read gave up, the first ask and its retries; None when the read
+    # was answered or was saved before the count was kept.
+    not_read_tries: int | None = None
+    # Set when the task can only be rejected, with the words approve is refused with: nothing_read for a
+    # several-records read with no records, not_editable for a step that takes no typed values.
+    approve_refused: ApproveRefused | None = None
 
 
 class ReplyCase(Out):

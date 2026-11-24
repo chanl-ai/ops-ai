@@ -279,8 +279,9 @@ export function OptionDecisionForm({
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">
         {options.map((option, i) => (
-          <LoadingButton key={option.name} size="sm" variant={i === 0 ? 'default' : 'outline'} isLoading={pending === option.name} disabled={!!pending} onClick={() => submit(option)} data-testid={`decide-${option.name}`} title={option.stepUp ? 'Asks you to confirm it is you' : undefined}>
+          <LoadingButton key={option.name} size="sm" variant={i === 0 ? 'default' : 'outline'} isLoading={pending === option.name} disabled={!!pending || !!blocked?.[option.name]} onClick={() => submit(option)} data-testid={`decide-${option.name}`} title={option.stepUp ? 'Asks you to confirm it is you' : undefined}>
             {option.label ?? label(option.name)}
+            {blocked?.[option.name] ? ` · ${blocked[option.name]}` : ''}
             {option.stepUp && <span className="text-[10px] opacity-70"> · confirm it's you</span>}
           </LoadingButton>
         ))}

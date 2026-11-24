@@ -39,8 +39,11 @@ def flow(review: dict[str, Any]) -> WorkflowDefinition:
     )
 
 
-async def paused(engine: AsyncEngine, first: WorkflowDefinition) -> tuple[str, str, Any, Any]:
-    """A run of `first` paused at its review, in a tenant of its own."""
+async def paused(
+    engine: AsyncEngine, first: WorkflowDefinition, *, ports: dict[str, Any] | None = None
+) -> tuple[str, str, Any, Any]:
+    """A run of `first` paused at its review, in a tenant of its own; `ports` sets the worker's outside ports (its
+    documents and file data) the review step's earlier steps call."""
     tenant, tx = f"t-{uuid4().hex[:8]}", EngineTransactions(engine)
     with tenant_scope(tenant):
         version, _ = await DefinitionStore(tx).publish(
@@ -48,10 +51,12 @@ async def paused(engine: AsyncEngine, first: WorkflowDefinition) -> tuple[str, s
         )
         run_id = new_id("wfrun")
         run = {"id": run_id, "team_id": "team_a", "workflow_id": first.id, "version": version, "digest": first.digest()}
-        given = {"name": "Marcus Bell", "amount": "3,250.00"}
+        given = {"name": "Marcus Bell", "amount": "3,250.00", "fileId": "fil_88213", "fileName": "NWF-88213.pdf"}
         await write_run(tx, run | {"run_key": run_id, "mode": "live", "input": given, "created_by": "a@x"})
     w = worker(engine, CountingTools(), InMemorySaver())
     w.host.ports.task_types = StoredTaskTypes(engine)
+    for name, port in (ports or {}).items():
+        setattr(w.host.ports, name, port)
     await drain(w)
     rt: Any = SimpleNamespace(db=engine, settings=SimpleNamespace(lease_ttl_seconds=6.0, review_sla_hours=24.0))
     return tenant, run_id, rt, w

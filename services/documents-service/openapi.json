@@ -328,6 +328,43 @@
         "title": "CorrectionIn",
         "type": "object"
       },
+      "CorrectionsIn": {
+        "additionalProperties": false,
+        "description": "Values for several fields of one read, saved together (POST /v1/documents/extractions/{id}/corrections).",
+        "properties": {
+          "checked": {
+            "default": false,
+            "title": "Checked",
+            "type": "boolean"
+          },
+          "corrections": {
+            "items": {
+              "$ref": "#/components/schemas/TypedValue"
+            },
+            "maxItems": 500,
+            "title": "Corrections",
+            "type": "array"
+          },
+          "enteredBy": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "minLength": 3,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enteredby"
+          }
+        },
+        "required": [
+          "corrections"
+        ],
+        "title": "CorrectionsIn",
+        "type": "object"
+      },
       "DocumentType": {
         "additionalProperties": false,
         "properties": {
@@ -1518,6 +1555,16 @@
             ],
             "title": "Imagerefused"
           },
+          "incomplete": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReadIncomplete"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "needsReview": {
             "anyOf": [
               {
@@ -1546,7 +1593,8 @@
                   "ok",
                   "review",
                   "unreadable",
-                  "unknown"
+                  "unknown",
+                  "incomplete"
                 ],
                 "type": "string"
               },
@@ -1643,6 +1691,23 @@
               }
             ],
             "title": "Records"
+          },
+          "rereadIncomplete": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cut_off",
+                  "empty",
+                  "declined",
+                  "filtered"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rereadincomplete"
           },
           "rereadTokens": {
             "anyOf": [
@@ -2804,6 +2869,48 @@
         "title": "Purged",
         "type": "object"
       },
+      "ReadIncomplete": {
+        "additionalProperties": false,
+        "description": "A read no model reply answered: cut off at the output limit, empty of an answer, declined or filtered. A\ndeclined reply's first words are kept, masked when the team masks personal data.",
+        "properties": {
+          "reason": {
+            "enum": [
+              "cut_off",
+              "empty",
+              "declined",
+              "filtered"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          },
+          "tries": {
+            "title": "Tries",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reason",
+          "step",
+          "tries"
+        ],
+        "title": "ReadIncomplete",
+        "type": "object"
+      },
       "ReadingBlock": {
         "additionalProperties": false,
         "properties": {
@@ -3915,6 +4022,37 @@
           "askedAt"
         ],
         "title": "TestRun",
+        "type": "object"
+      },
+      "TypedValue": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "minLength": 1,
+            "title": "Field",
+            "type": "string"
+          },
+          "record": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "field",
+          "value"
+        ],
+        "title": "TypedValue",
         "type": "object"
       },
       "UpdateExpect": {
@@ -7968,6 +8106,204 @@
           }
         },
         "summary": "Get Extraction",
+        "tags": [
+          "documents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/documents/extractions/{extraction_id}/corrections": {
+      "post": {
+        "description": "Values for several fields at once, each in its field's type's form, with one corrected event; a value equal\nto the stored one is skipped, so a repeat adds no rows. A service saving what a person typed names them as\nenteredBy, which is recorded as who corrected; a person is always recorded as themselves.",
+        "operationId": "documents_correct_fields",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "extraction_id",
+            "required": true,
+            "schema": {
+              "title": "Extraction Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectionsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_Extraction_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not ready or already in another state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Correct Fields",
         "tags": [
           "documents"
         ],

@@ -162,6 +162,11 @@ class ApprovalInput(TypedDict, closed=True):
     stepUpToken: NotRequired[str | None]
 
 
+class ApproveRefused(TypedDict, closed=True):
+    code: Literal["not_editable", "nothing_read"]
+    message: str
+
+
 class AssetRef(TypedDict, closed=True):
     href: str
     id: str
@@ -3889,6 +3894,7 @@ class PublishRequestInfo(TypedDict, closed=True):
     reviewRequired: NotRequired[bool | None]
     toVersion: int
     validation: ValidationSummary | None
+    waitingTasks: NotRequired[int | None]
     workflowId: str
 
 
@@ -4472,11 +4478,14 @@ class DefinitionDiffView(TypedDict, closed=True):
 
 
 class DocumentRead(TypedDict, closed=True):
+    approveRefused: NotRequired[ApproveRefused | None]
     corrected: list[dict[str, JsonValue]] | None
     editable: bool
     fileId: str
     fileName: str | None
     floor: float | None
+    notRead: NotRequired[Literal["cut_off", "empty", "declined", "filtered"] | None]
+    notReadTries: NotRequired[int | None]
     records: list[ReadRecord]
     schema: list[ReadField]
     sources: NotRequired[list[str]]

@@ -216,6 +216,12 @@ class DocumentsPort(Protocol):
         """Removes what documents-service read from a deleted file, as the run's team: {extractions, samples}."""
         ...
 
+    async def correct(self, run_id: str, extraction_id: str, corrections: list[Json], *, entered_by: str) -> Json:
+        """Saves what a person typed into a read ([{field, record?, value}]) on its extraction, as the run's team,
+        recorded as `entered_by`, with the whole read checked. A value documents-service refuses (one its field's type
+        cannot hold) is `{"refused": {code, message}}`; documents-service down is raised, so the wrapper retries."""
+        ...
+
 
 class DocumentTypesPort(Protocol):
     async def fields(self, run_id: str, type_id: str, version: int | None) -> list[Json]:

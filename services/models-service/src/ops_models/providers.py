@@ -13,7 +13,7 @@ import json
 import re
 from collections.abc import AsyncIterator, Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast, get_args
 from urllib.parse import quote
 
 import httpx
@@ -28,6 +28,11 @@ from .connection_settings import AZURE_OPENAI_V1
 from .schemas import ChatChunk, ChatUsage, ChunkChoice, ChunkDelta
 from .store.aliases import ServingAlias
 
+# The endings a caller can act on: a whole reply, a call for tools, a reply cut at its length limit, one a provider's
+# content filter stopped.
+Finish = Literal["stop", "tool_calls", "length", "content_filter"]
+FINISHES: frozenset[str] = frozenset(get_args(Finish))
+
 
 @dataclass(frozen=True)
 class Completion:
@@ -36,9 +41,17 @@ class Completion:
     output_tokens: int
     # The calls as the model wrote them (OpenAI's `tool_calls`); the reply keeps only the keys OpenAI's format names.
     tool_calls: list[dict[str, Any]] = field(default_factory=lambda: [])
+    # The provider's own word for how the reply ended, as it sent it (None when it sent none); the call log keeps it.
+    ended: str | None = None
+    # The model's words when it declined (OpenAI's `message.refusal`).
+    refusal: str | None = None
 
     @property
-    def finish_reason(self) -> Literal["stop", "tool_calls"]:
+    def finish_reason(self) -> Finish:
+        """How the reply ended, as callers read it: the provider's word when it is one OpenAI names, else read from the
+        reply's content, so a provider's own word never fails a good reply."""
+        if self.ended in FINISHES:
+            return cast(Finish, self.ended)
         return "tool_calls" if self.tool_calls else "stop"
 
 
@@ -217,7 +230,7 @@ def completion_chunks(done: Completion) -> Iterator[dict[str, Any]]:
     yield ChatChunk(object="chat.completion.chunk", choices=[], usage=totals).model_dump(exclude_unset=True)
 
 
-def _chunk(delta: ChunkDelta, finish_reason: Literal["stop", "tool_calls"] | None = None) -> Json:
+def _chunk(delta: ChunkDelta, finish_reason: Finish | None = None) -> Json:
     choice = ChunkChoice(index=0, delta=delta, finish_reason=finish_reason)
     # `exclude_unset` keeps the wire shape: a delta names only what it adds, and a chunk has no `usage` key.
     return ChatChunk(object="chat.completion.chunk", choices=[choice]).model_dump(exclude_unset=True)
@@ -242,11 +255,14 @@ def _completion(answer: JsonValue) -> Completion:
     if content is not None and not isinstance(content, str):
         raise Malformed("message content is not text")
     calls = message.get("tool_calls")
+    ended, refusal = an_object(choices[0], "choice").get("finish_reason"), message.get("refusal")
     return Completion(
         content,
         _count(usage.get("prompt_tokens", 0)),
         _count(usage.get("completion_tokens", 0)),
         [an_object(c, "tool call") for c in (a_list(calls, "tool_calls") if calls else [])],
+        ended=ended if isinstance(ended, str) else None,
+        refusal=refusal if isinstance(refusal, str) and refusal else None,
     )
 
 

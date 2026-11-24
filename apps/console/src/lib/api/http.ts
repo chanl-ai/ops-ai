@@ -47,13 +47,14 @@ import { createWikiHttp } from './wiki-http';
 import { fetchWithIdentity } from './request-identity';
 import { addSort } from './sort-query';
 
-function qs(params: ListParams & { view?: string; group?: string }) {
+function qs(params: ListParams & { view?: string; group?: string; fileId?: string }) {
   const q = new URLSearchParams({ page: String(params.page), pageSize: String(params.pageSize) });
   if (params.search) q.set('search', params.search);
   addSort(q, params);
   for (const id of params.ids ?? []) q.append('ids', id);
   if (params.view) q.set('view', params.view);
   if (params.group) q.set('group', params.group);
+  if (params.fileId) q.set('fileId', params.fileId);
   for (const [k, v] of Object.entries(params.filters ?? {})) v?.forEach((x) => q.append(k, x));
   return q.toString();
 }

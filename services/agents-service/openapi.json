@@ -2082,6 +2082,29 @@
         "title": "ApprovalInput",
         "type": "object"
       },
+      "ApproveRefused": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "not_editable",
+              "nothing_read"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ApproveRefused",
+        "type": "object"
+      },
       "AssetRef": {
         "additionalProperties": false,
         "properties": {
@@ -7295,6 +7318,16 @@
         "additionalProperties": false,
         "description": "A document read a review asks a person to check: the file, the floor, and each record's fields. Editable\nwhen the step takes a correction (`inputs.edited`); `corrected` holds the values a decided review was approved\nwith, None when no correction was sent.",
         "properties": {
+          "approveRefused": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApproveRefused"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "corrected": {
             "anyOf": [
               {
@@ -7341,6 +7374,34 @@
               }
             ],
             "title": "Floor"
+          },
+          "notRead": {
+            "anyOf": [
+              {
+                "enum": [
+                  "cut_off",
+                  "empty",
+                  "declined",
+                  "filtered"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notread"
+          },
+          "notReadTries": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notreadtries"
           },
           "records": {
             "items": {
@@ -16685,6 +16746,17 @@
                 "type": "null"
               }
             ]
+          },
+          "waitingTasks": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Waitingtasks"
           },
           "workflowId": {
             "title": "Workflowid",
@@ -29247,6 +29319,22 @@
               },
               "title": "Status",
               "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fileId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fileid"
             }
           },
           {

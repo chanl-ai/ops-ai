@@ -4,9 +4,12 @@ import * as React from 'react';
 import Link from 'next/link';
 import { Check, ChevronRight, FileText } from 'lucide-react';
 
+import { notReadSaid } from '@/lib/not-read-said';
+import { type ReadConfirmed, type ReadEdits, requiredFieldsLeft } from '@/lib/approve-block';
 import { EmailPreview } from '@/components/shared/email-preview';
 import { Row, Rows } from '@/components/shared/surface';
 import { ConfidenceBadge } from '@/components/status-badges';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -14,26 +17,12 @@ import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useCanInWorkspace } from '@/hooks/me-queries';
 import { pct } from '@/lib/format';
 import type { DocumentRead, FieldRead, ReadField, ReplyPreview } from '@/lib/types/domain';
 import { cn } from '@/lib/utils';
 
-/** A reviewer's corrections, by record index then field key, as typed. */
-export type ReadEdits = Record<number, Record<string, string>>;
-/** Key fields a reviewer has confirmed, by record index. */
-export type ReadConfirmed = Record<number, string[]>;
-
-/** How many key fields are still to confirm across the records; 0 when the type marks none. */
-export function keyFieldsLeft(read: DocumentRead, confirmed: ReadConfirmed): number {
-  const keys = read.schema.filter((f) => f.keyField).map((f) => f.key);
-  return read.records.reduce((n, _, i) => n + keys.filter((k) => !confirmed[i]?.includes(k)).length, 0);
-}
-
-/** What Approve waits for while key fields are unconfirmed ("confirm 2 key fields first"); undefined when nothing does. */
-export function keyFieldsBlock(read: DocumentRead | null | undefined, confirmed: ReadConfirmed): string | undefined {
-  const left = read ? keyFieldsLeft(read, confirmed) : 0;
-  return left ? `confirm ${left === 1 ? '1 key field' : `${left} key fields`} first` : undefined;
-}
+export { keyFieldsBlock, keyFieldsLeft, type ReadConfirmed, type ReadEdits } from '@/lib/approve-block';
 
 /** Key-field confirmations and the way to toggle one, passed together. */
 export interface ReadChecks {
@@ -131,6 +120,7 @@ function RecordTable({
   tabbed?: boolean }) {
   const record = read.records[index];
   const corrected = read.corrected?.[index];
+  const notRead = !!read.notRead;
   // Fields that need a check come first, then the rest in the workflow's own order.
   const fields = [...read.schema].sort((a, b) => Number(!!record.fields[b.key]?.needsReview) - Number(!!record.fields[a.key]?.needsReview));
   const title = shown(record.values.name) || `Record ${index + 1}`;
@@ -149,8 +139,10 @@ function RecordTable({
             const fixed = editing ? text !== asRead : corrected !== undefined && asText(f, corrected[f.key]) !== asRead;
             // Nothing read means nothing to be confident about: the row says so and shows no confidence.
             const missing = asRead === '';
-            // A person's correction settles the field, whatever the read thought of it.
-            const check = !!scored?.needsReview && !scored?.corrected;
+            // A person's correction settles the field, whatever the read thought of it. A read no reply answered marks
+            // every field for a check, which says nothing: its Status column says what is left to type.
+            const check = !notRead && !!scored?.needsReview && !scored?.corrected;
+            const hasValue = (fixed && !editing ? asText(f, corrected?.[f.key]) : text) !== '';
             return (
               <TableRow key={f.key} data-testid={`read-field-${index}-${f.key}`} data-needs-review={check ? 'true' : 'false'} className={cn(check && 'bg-warning/5')}>
                 <TableCell className="align-top text-sm whitespace-normal">
@@ -187,7 +179,7 @@ function RecordTable({
                       <Input value={text} onChange={(e) => onEdit(f.key, e.target.value)} inputMode={isMoney(f) ? 'decimal' : undefined} aria-label={`${f.label} for ${title}`} className={cn('h-8 min-w-36', isMoney(f) && 'tabular-nums')} data-testid={`read-input-${index}-${f.key}`} />
                     )
                   ) : (
-                    <span className="text-sm break-words">{fixed ? asText(f, corrected?.[f.key]) : asRead || <span className="text-muted-foreground">{scored?.rejected ? `Read but rejected: ${shown(scored.extractedValue)}` : 'Not on the page'}</span>}</span>
+                    <span className="text-sm break-words">{fixed ? asText(f, corrected?.[f.key]) : asRead || <span className="text-muted-foreground">{read.notRead ? 'Not read' : scored?.rejected ? `Read but rejected: ${shown(scored.extractedValue)}` : 'Not on the page'}</span>}</span>
                   )}
                   {fixed && (
                     <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-testid={`read-corrected-${index}-${f.key}`}>
@@ -195,13 +187,25 @@ function RecordTable({
                     </span>
                   )}
                   {/* On a phone the source sits under the value; from sm up it has its own column. */}
-                  <span className="mt-1.5 block sm:hidden">
+                  {!notRead && (
+                    <span className="mt-1.5 block sm:hidden">
+                      <SourceCell citation={scored?.citation ?? null} onOpen={onOpenSource ? () => onOpenSource(f.key) : undefined} />
+                    </span>
+                  )}
+                </TableCell>
+                {notRead ? (
+                  // A field nothing was read for cites no page; the column says whether it must be typed and whether it has been.
+                  <TableCell className="align-top text-sm" data-testid={`read-status-${index}-${f.key}`}>
+                    <span className="flex flex-col gap-1">
+                      <span className="text-muted-foreground">{f.keyField ? 'Key field' : f.required ? 'Required' : 'Optional'}</span>
+                      <span className={cn('text-xs', hasValue ? 'text-success-text' : 'text-muted-foreground')}>{hasValue ? 'Typed' : 'Not read'}</span>
+                    </span>
+                  </TableCell>
+                ) : (
+                  <TableCell className="hidden align-top whitespace-normal sm:table-cell">
                     <SourceCell citation={scored?.citation ?? null} onOpen={onOpenSource ? () => onOpenSource(f.key) : undefined} />
-                  </span>
-                </TableCell>
-                <TableCell className="hidden align-top whitespace-normal sm:table-cell">
-                  <SourceCell citation={scored?.citation ?? null} onOpen={onOpenSource ? () => onOpenSource(f.key) : undefined} />
-                </TableCell>
+                  </TableCell>
+                )}
                 {sources.map((name) => (
                   // Each source's own value beside the one the read kept, so a disagreement is read, not guessed.
                   <TableCell key={name} className="hidden align-top text-sm whitespace-normal sm:table-cell" data-testid={`read-source-${index}-${f.key}-${name}`}>
@@ -217,7 +221,7 @@ function RecordTable({
       <TableRow>
         <TableHead className="w-28">Field</TableHead>
         <TableHead>Value</TableHead>
-        <TableHead className="hidden sm:table-cell">Source</TableHead>
+        {notRead ? <TableHead className="w-28">Status</TableHead> : <TableHead className="hidden sm:table-cell">Source</TableHead>}
         {sources.map((name) => (
           <TableHead key={name} className="hidden sm:table-cell">
             {name.charAt(0).toUpperCase() + name.slice(1)}
@@ -284,7 +288,7 @@ function RecordTable({
       )}
       {others.length > 0 && (keyFields.length > 0 || onConfirm) ? (
         // Folded behind key fields, which carry the decision; open when nothing is marked key, so every value is seen.
-        <Collapsible defaultOpen={keyFields.length === 0} className="flex flex-col gap-1" data-testid={`read-other-fields-${index}`}>
+        <Collapsible defaultOpen={keyFields.length === 0 || notRead} className="flex flex-col gap-1" data-testid={`read-other-fields-${index}`}>
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <CollapsibleTrigger className="group flex items-center gap-1 font-medium" data-testid={`read-other-toggle-${index}`}>
               <ChevronRight className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
@@ -292,9 +296,9 @@ function RecordTable({
               {others.length === 1 ? '1 field' : `${others.length} fields`}
             </CollapsibleTrigger>
             <span className="text-xs text-muted-foreground" data-testid={`read-other-summary-${index}`}>
-              {keyFields.length ? `not marked key${toCheck ? ` · ${toCheck} to check` : ''}` : 'read with confidence'}
+              {notRead ? 'required ones are typed here too' : keyFields.length ? `not marked key${toCheck ? ` · ${toCheck} to check` : ''}` : 'read with confidence'}
             </span>
-            {onConfirm && (
+            {onConfirm && !notRead && (
               <Button type="button" size="sm" variant={accepted ? 'secondary' : 'outline'} className="ml-auto h-7" onClick={() => setAccepted((a) => !a)} aria-pressed={accepted} data-testid={`read-accept-others-${index}`}>
                 {accepted ? (
                   <>
@@ -353,6 +357,7 @@ export function DocumentReadSection({
   const doubtful = read.records.reduce((n, r) => n + Object.values(r.fields).filter((f) => f.needsReview && !f.corrected).length, 0);
   return (
     <div className="flex flex-col gap-3" data-testid="document-read">
+      {read.notRead && <NotReadAlert read={read} open={open} />}
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <Link href={`/data/files?file=${encodeURIComponent(read.fileId)}`} className="flex items-center gap-1.5 font-medium underline-offset-2 hover:underline" data-testid="read-file-link">
           <FileText className="size-4 text-muted-foreground" /> {read.fileName ?? read.fileId}
@@ -383,6 +388,44 @@ export function DocumentReadSection({
         record(0)
       )}
     </div>
+  );
+}
+
+/** What a header says of a task whose read no reply answered: the required fields still to type, or that nothing can be. */
+export function RequiredToType({ read, edits, open }: { read: DocumentRead | null | undefined; edits: ReadEdits; open: boolean }) {
+  if (!read?.notRead || !open) return null;
+  const left = requiredFieldsLeft(read, edits);
+  const text = read.approveRefused ? 'Nothing read' : left ? `${left} required to type` : null;
+  return text ? (
+    <Badge variant="outline" className="border-warning/50 text-warning-text" data-testid="required-to-type">
+      {text}
+    </Badge>
+  ) : null;
+}
+
+/**
+ * Why nothing was read, before the document: the reason, and what the person does. A task that can only be rejected
+ * says so in the server's words; an admin, who approves the extraction update, gets the way to Reviews.
+ */
+function NotReadAlert({ read, open }: { read: DocumentRead; open: boolean }) {
+  const admin = useCanInWorkspace('reviews', 'decide');
+  const refused = read.approveRefused;
+  const title = !read.records.length ? 'No records were read' : read.notRead === 'declined' ? 'The model declined to read this file' : 'Nothing was read from this file';
+  return (
+    <Alert variant={refused ? 'destructive' : 'default'} data-testid="read-not-read">
+      <AlertTitle>{title}</AlertTitle>
+      <AlertDescription>
+        <p data-testid="read-not-read-reason">
+          {notReadSaid(read.notRead, read.notReadTries)}{' '}
+          {refused ? refused.message : open && read.editable ? 'Type the required values from the document, or reject the task.' : ''}
+        </p>
+        {refused?.code === 'not_editable' && admin && (
+          <Link href="/govern/reviews" className="text-primary underline-offset-4 hover:underline" data-testid="read-not-editable-reviews">
+            Open Reviews to approve the update
+          </Link>
+        )}
+      </AlertDescription>
+    </Alert>
   );
 }
 
