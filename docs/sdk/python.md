@@ -114,6 +114,21 @@ start = ops.me.connectors.connect("Person desk")  # open start["authorizeUrl"] i
 ops.me.connectors.finish(state, code)             # the state and code in the address the browser returned to
 ```
 
+## Schedule a workflow
+
+```python
+step = "start"                                           # the Schedule trigger step's id
+ops.workflows.schedules.kinds()                          # each rule kind, its label and the JSON Schema of its fields
+ops.workflows.schedules.preview(kind="every", every=15, unit="minutes", tz="Europe/London")  # words and next runs
+ops.workflows.schedules.save("held_wires", step, kind="every", every=15, unit="minutes", start="07:00", tz="Europe/London")
+ops.workflows.schedules.show("held_wires", step)         # the rule, its words, next runs and last outcome
+ops.workflows.schedules.clear("held_wires", step)
+```
+
+A kind's own fields go in as keywords. A save applies at once to the live version and is refused (422, naming the
+field) for a rule under the install's shortest interval or a trigger whose input schema needs more than `dueAt`.
+`ops.workflows.schedule(id, due_at=...)` is separate: it starts one run at one time.
+
 ## The command line
 
 `opsai` ships with this package and uses the same saved sign-in as `OpsAI(profile=...)`. Every area and verb is on
