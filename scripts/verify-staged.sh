@@ -176,7 +176,33 @@ if [ "${#py[@]}" -gt 0 ]; then
   elif [ -x "$root/.venv/bin/pyright" ]; then
     # In the export, so the staged content is what is checked (a file staged in a private index is not in the checkout);
     # imports resolve through the checkout's interpreter.
-    (cd "$tmp" && "$root/.venv/bin/pyright" --venvpath "$root" "${typed[@]}") || { echo "verify-staged: pyright refused the staged files above"; exit 1; }
+    # The venv's editable installs name the checkout's sources, so an absolute `import ops_agents...` would read the
+    # checkout while a relative import reads the export, and one class then reads as two types. A project file for this
+    # run puts the export's own source folders first in every environment (extraPaths come before site-packages).
+    "$root/.venv/bin/python" - "$tmp" "$root" "$run/pyrightconfig.json" <<'PY'
+import json, sys, tomllib
+from pathlib import Path
+
+# Resolved: pyright reports real paths, and a root under a symlinked /var would not match them.
+tmp, root, out = Path(sys.argv[1]).resolve(), Path(sys.argv[2]), Path(sys.argv[3])
+cfg = tomllib.loads((tmp / "pyproject.toml").read_text())["tool"]["pyright"]
+src = [str(d) for pat in ("packages/*/src", "services/*/src") for d in sorted(tmp.glob(pat))]
+src += [str(tmp / "deploy/database")]
+absolute = lambda p: str(tmp / p)
+cfg.pop("include", None)  # the files are named on the command line; an absolute include is ignored with a warning
+cfg["exclude"] = [e if e.startswith("**") else absolute(e) for e in cfg.get("exclude", [])]
+envs = []
+for e in cfg.get("executionEnvironments", []):
+    e = dict(e)
+    e["root"] = absolute(e["root"])
+    e["extraPaths"] = [absolute(x) for x in e.get("extraPaths", [])] + src
+    envs.append(e)
+cfg["executionEnvironments"] = envs
+cfg["extraPaths"] = [absolute(x) for x in cfg.get("extraPaths", [])] + src
+cfg["venvPath"] = str(root)
+out.write_text(json.dumps(cfg))
+PY
+    (cd "$tmp" && "$root/.venv/bin/pyright" --project "$run/pyrightconfig.json" --venvpath "$root" "${typed[@]}") || { echo "verify-staged: pyright refused the staged files above"; exit 1; }
   else
     echo "verify-staged: WARNING pyright is not installed in $root/.venv, so the staged Python was not type-checked; run uv sync"
   fi

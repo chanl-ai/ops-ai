@@ -148,3 +148,22 @@ def test_a_worktree_without_a_venv_names_the_missing_install_not_a_home_path(tmp
     out = done.stdout + done.stderr
     assert done.returncode != 0 and "this worktree has no .venv" in out and "uv sync" in out, out
     assert "names a home path" not in out, out
+
+
+GUARDRAILS = "services/agents-service/src/ops_agents/api/guardrails.py"
+
+
+def test_a_comment_only_change_to_a_service_file_passes_pyright_in_the_export(tmp_path: Path) -> None:
+    # The venv's editable install points `ops_agents` at the checkout while the file's relative imports read the export,
+    # so one PublishRequestRow was two types and a comment-only commit was refused with 29 errors on an unchanged HEAD.
+    old = "from __future__ import annotations\n"
+    changed = at_head(GUARDRAILS).replace(old, "from __future__ import annotations  # probe\n", 1)
+    done = gate(tmp_path, {GUARDRAILS: changed})
+    out = done.stdout + done.stderr
+    assert done.returncode == 0, out[-2000:]
+
+
+def test_a_real_type_error_in_a_service_file_still_fails_pyright_in_the_export(tmp_path: Path) -> None:
+    done = gate(tmp_path, {GUARDRAILS: at_head(GUARDRAILS) + '\n\n_PROBE: int = "not a number"\n'})
+    out = done.stdout + done.stderr
+    assert done.returncode != 0 and "reportAssignmentType" in out and "pyright refused" in out, out[-2000:]
