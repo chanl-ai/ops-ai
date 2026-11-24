@@ -150,6 +150,8 @@ class NodeType:
     ui: Mapping[str, JsonValue] = field(default_factory=lambda: {"order": [], "fields": {}})
     # How a person starts a workflow this trigger begins by hand (starts.py); None for a trigger only its source starts.
     start: StartSpec | None = None
+    # A trigger a saved schedule may sit on: the schedule clock starts its runs with `dueAt` as the only input.
+    schedulable: bool = False
 
     @property
     def key(self) -> tuple[str, int]:
@@ -556,6 +558,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             via="schedule",
             form_parameter="inputSchema",
         ),
+        schedulable=True,
     ),
     NodeType(
         id="ops.data.combine",

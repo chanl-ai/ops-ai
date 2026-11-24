@@ -3094,6 +3094,7 @@ class DefinitionView(TypedDict, closed=True):
     paused: bool
     review: OpenPublishRequest | None
     saveBase: SaveBase
+    schedules: NotRequired[list[ScheduleView]]
     stage: Literal["draft", "in_review", "live", "paused", "superseded"]
     startForm: NotRequired[StartFormView | None]
     version: int

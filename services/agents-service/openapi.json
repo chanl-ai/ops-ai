@@ -6753,6 +6753,13 @@
           "saveBase": {
             "$ref": "#/components/schemas/SaveBase"
           },
+          "schedules": {
+            "items": {
+              "$ref": "#/components/schemas/ScheduleView"
+            },
+            "title": "Schedules",
+            "type": "array"
+          },
           "stage": {
             "enum": [
               "draft",

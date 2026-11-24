@@ -22,27 +22,23 @@ from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, Unprocessable
 from ops_service_kit.http import Envelope, In, Json, JsonValue
 from ops_service_kit.logging import get_logger
-from ops_store.schedule import InvalidSchedule, ScheduleKinds, UnknownKind, default_kinds
+from ops_store.schedule import InvalidSchedule, UnknownKind
 
-from ...store.schedules import ScheduleRow, WorkflowSchedules
+from ...store.schedules import WorkflowSchedules
 from ...store.tenancy import current_team
 from .. import engine_lifecycle
 from ..auth import caller_of, principal
 from ..deps import Runtime
 from ..envelope import ok
-from ..schedule_clock import SCHEDULE_TRIGGER, iso
+from ..schedule_clock import required_beyond_due
+from ..schedule_view import KINDS, ScheduleView, next_runs, schedule_view
 from ..schemas import Out  # pyright: ignore[reportPrivateImportUsage]
-from .engine import Me, Rt, definitions
+from .engine import REGISTRY, Me, Rt, definitions
 
 log = get_logger("ops_agents.api.routers.schedules")
 router = APIRouter(prefix="/v1/schedules", dependencies=[Depends(principal)])
 workflow_router = APIRouter(prefix="/v1/workflows", dependencies=[Depends(principal)])
 
-KINDS: ScheduleKinds = default_kinds()
-# The trigger node types a schedule may be saved on: each one's runs get `dueAt` from the clock.
-SCHEDULABLE = frozenset({SCHEDULE_TRIGGER})
-# The one input field the clock fills.
-CLOCK_FIELDS = frozenset({"dueAt"})
 NEXT_RUNS = 3
 
 
@@ -62,16 +58,17 @@ class PreviewView(Out):
     next_runs: list[str]
 
 
-class ScheduleView(Out):
-    workflow_id: str
-    trigger_step: str
-    rule: Json
-    words: str
-    next_runs: list[str]
-    changed_by: str
-    changed_at: str
-    last_slot_at: str | None = None
-    last_outcome: str | None = None
+def schedulable(node: Json) -> bool:
+    found = REGISTRY.find(str(node.get("type")), int(cast(int, node.get("typeVersion") or 1)))
+    return found is not None and found.schedulable
+
+
+def schedule_input_refused(field: str) -> Unprocessable:
+    return Unprocessable(
+        f"A scheduled run sends only dueAt, and this trigger's input schema requires {field}.",
+        code="schedule_input_required",
+        details={"field": field},
+    )
 
 
 def floor(rt: Runtime) -> timedelta:
@@ -90,22 +87,8 @@ def checked(rt: Runtime, raw: dict[str, JsonValue], now: datetime) -> Json:
 
 
 def preview(rule: Json, now: datetime) -> dict[str, Any]:
-    upcoming = [iso(t) for t in KINDS.next_slots(rule, now, NEXT_RUNS)]
+    upcoming = next_runs(rule, now)
     return PreviewView(rule=rule, words=KINDS.words(rule), next_runs=upcoming).model_dump(mode="json", by_alias=True)
-
-
-def view(row: ScheduleRow, now: datetime) -> dict[str, Any]:
-    return ScheduleView(
-        workflow_id=row.workflow_id,
-        trigger_step=row.trigger_step,
-        rule=row.rule,
-        words=KINDS.words(row.rule),
-        next_runs=[iso(t) for t in KINDS.next_slots(row.rule, now, NEXT_RUNS)],
-        changed_by=row.changed_by,
-        changed_at=row.changed_at,
-        last_slot_at=row.last_slot_at,
-        last_outcome=row.last_outcome,
-    ).model_dump(mode="json", by_alias=True)
 
 
 @router.get("/kinds", response_model=Envelope[list[KindView]])
@@ -143,16 +126,11 @@ async def _workflow(rt: Runtime, me: Any, workflow_id: str, step: str, *, writin
     working = await store.working_copy(workflow_id, team=current_team())
     versions = [v.definition for v in (live, row, working) if v]
     steps = [n for d in versions for n in cast(list[Json], d.get("nodes") or []) if n.get("id") == step]
-    if not steps or any(str(n.get("type")) not in SCHEDULABLE for n in steps):
+    if not steps or not all(schedulable(n) for n in steps):
         raise NotFound(f"Schedule trigger {step} on {workflow_id}")
-    for n in steps if writing else []:
-        schema = cast(Json, cast(Json, n.get("parameters") or {}).get("inputSchema") or {})
-        if extra := sorted(set(cast(list[str], schema.get("required") or [])) - CLOCK_FIELDS):
-            raise Unprocessable(
-                f"A scheduled run sends only dueAt, and this trigger's input schema requires {extra[0]}.",
-                code="schedule_input_required",
-                details={"field": extra[0]},
-            )
+    for d in versions if writing else []:
+        if field := required_beyond_due(d, step):
+            raise schedule_input_refused(field)
     return row
 
 
@@ -163,7 +141,7 @@ async def get_schedule(rt: Rt, me: Me, workflow_id: str, step: str) -> JSONRespo
     row = await WorkflowSchedules(rt.db).get(workflow_id, step)
     if row is None:
         raise NotFound(f"No schedule on {step} of {workflow_id}")
-    return ok(view(row, datetime.now(UTC)))
+    return ok(schedule_view(row, datetime.now(UTC)))
 
 
 @workflow_router.put("/definitions/{workflow_id}/triggers/{step}/schedule", response_model=Envelope[ScheduleView])
@@ -186,7 +164,7 @@ async def save_schedule(rt: Rt, me: Me, _: Tx, workflow_id: str, step: str, body
     )
     row = await store.get(workflow_id, step)
     assert row is not None
-    return ok(view(row, now))
+    return ok(schedule_view(row, now))
 
 
 @workflow_router.delete("/definitions/{workflow_id}/triggers/{step}/schedule", status_code=204, response_model=None)
