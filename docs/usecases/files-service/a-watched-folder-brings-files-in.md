@@ -36,14 +36,15 @@ and its Microsoft sign-in, which a fake Graph and a fake Microsoft sign-in serve
 | S4 | A builder watches a folder, presses Check now, sees it running, then the time, the count and the failed file with its size; the file's page names its source | ui | 12-15 | 14 |
 | S5 | A viewer sees the same list with no Watch folder or Check now, and a direct add or check is refused | ui | 16 | 16 |
 | S6 | Knowledge's Add source keeps its SharePoint step 2, and the list draws its loading, empty and error states at both widths | ui | 17-18, 20 | 17 |
-| S7 | A check in progress shows Checking, and a refused check says its actual reason, with Reconnect only for a refused sign-in | ui | 19 | 19 |
+| S7 | A check in progress shows Checking, a refused check says its actual reason, with Reconnect only for a refused sign-in, and a partial check says Partial with its reason, never a green tick | ui | 19 | 19 |
 
 ## Preconditions
 
 | Needs | How |
 |---|---|
 | PostgreSQL and OPA | `make db-up` |
-| The SharePoint plugin with `files: true` on its files source | the plugins checkout (`OPS_PLUGINS_REPO`; beside the main checkout by default) |
+| The SharePoint plugin with `files: true` on its files source | the built-in copy (`builtin-plugins/ops_plugin_sharepoint`, which every stack ships); both scripts pass `OPS_PLUGIN_PATHS=[]` so no working copy replaces it |
+| Its fake Graph | the plugins checkout's tests (`OPS_PLUGINS_REPO`; beside the main checkout by default) |
 | platform-service, tools-service, files-service, kb-service | api: started by the script; ui: by `withUiStack` with platform sign-in |
 | People | the dev seed; password `northfield-demo` |
 
@@ -69,7 +70,7 @@ Steps 1-7 are the api script (`test-uc-772-api.py`); steps 11-20 the ui script (
 | 16 | Ravi opens Watched folders | The row shows with its failed file; no Watch folder and no row menu; a direct add and Check now are 403 |
 | 17 | James opens Add source on a knowledge base and picks SharePoint | Step 2 shows the name, the sites and libraries pickers, Include and Exclude, and no preview (the SharePoint source declares none) |
 | 18 | The list's GET is held, emptied and refused | The skeleton, "No watched folders yet" with Watch folder, and "Couldn’t load watched folders" with Try again |
-| 19 | The list's GET answers the watch as checking, then refused for its sign-in, then refused as unreachable | Checking on the row; "refused the sign-in" with Reconnect; "could not be reached" with no Reconnect |
+| 19 | The list's GET answers the watch as checking, then refused for its sign-in, then refused as unreachable, then partial with `fetch_failed` | Checking on the row; "refused the sign-in" with Reconnect; "could not be reached" with no Reconnect; "Partial" with "some files could not be fetched" and no green tick |
 | 20 | Every screen | No sideways scroll and no page or console errors (the refused request's own console line is not counted) |
 
 ## Acceptance layers

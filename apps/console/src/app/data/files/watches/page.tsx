@@ -62,6 +62,22 @@ function refusal(code: string | undefined): { title: string; fallback: string; n
   }
 }
 
+/** Why a check stopped partial, by its code: what was left and what the next check does about it. */
+function partialReason(code: string | undefined, stopped: string | undefined): string {
+  switch (code) {
+    case 'fetch_failed':
+      return 'some files could not be fetched; the next check tries them again';
+    case 'rate_limited':
+      return "stopped at the app's rate limit; the next check continues";
+    case 'continues':
+      return 'the folder is long; the next check lists on from here';
+    case 'list_failed':
+      return 'the listing stopped part way; the next check lists the same changes again';
+    default:
+      return stopped || 'the next check continues from here';
+  }
+}
+
 function LastCheck({ w }: { w: Watch }) {
   if (w.checking)
     return (
@@ -74,12 +90,22 @@ function LastCheck({ w }: { w: Watch }) {
   const at = relativeTime(w.lastCheckAt);
   if (c.status === 'refused' || c.status === 'failed')
     return (
-      <span className="inline-flex items-center gap-1.5 text-sm text-destructive-text">
+      <span className="inline-flex items-center gap-1.5 text-sm text-destructive-text" data-testid={`watch-last-check-${w.id}`} data-status={c.status}>
         <CircleAlert className="size-4" /> {c.status === 'refused' ? 'Refused' : 'Failed'} {at}
       </span>
     );
+  if (c.status === 'partial')
+    return (
+      <span className="inline-flex items-start gap-1.5 text-sm text-warning-text" data-testid={`watch-last-check-${w.id}`} data-status="partial">
+        <CircleAlert className="mt-0.5 size-4 shrink-0" />
+        <span>
+          Partial {at}
+          {c.brought ? ` · ${plural(c.brought, 'file')} brought in` : ''} · {partialReason(c.code, c.stopped)}
+        </span>
+      </span>
+    );
   return (
-    <span className="inline-flex items-center gap-1.5 text-sm">
+    <span className="inline-flex items-center gap-1.5 text-sm" data-testid={`watch-last-check-${w.id}`} data-status={c.status}>
       <CircleCheck className="size-4 text-success" /> {at} · {c.brought ? `${plural(c.brought, 'file')} brought in` : 'nothing new'}
       {c.removed ? ` · ${c.removed} removed` : ''}
     </span>
