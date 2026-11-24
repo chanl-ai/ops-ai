@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.schedules import WorkflowSchedules
 from ops_agents.store.tenancy import tenant_scope
+from ops_agents.store.trigger_events import TriggerEvent, TriggerEvents
 from ops_engine.store import DefinitionStore
 from tests.engine.test_lifecycle_rights import (  # noqa: F401
     BUILDER,
@@ -72,6 +73,8 @@ async def test_a_bad_rule_is_refused_naming_it_and_kinds_preview_save_and_view_a
         res = await client.put(url(wid), json={"rule": bad}, headers=JAMES)
         assert res.status_code == 422, res.text
         assert res.json()["error"]["details"]["field"] == field, bad
+    floor = await client.put(url(wid), json={"rule": every | {"every": 2}}, headers=JAMES)
+    assert floor.json()["error"]["message"] == "At least 5 minutes on this install."
     unknown = await client.put(url(wid), json={"rule": {"kind": "cron", "line": "* * * * *"}}, headers=JAMES)
     assert unknown.status_code == 422 and "every" in unknown.json()["error"]["details"]["known"]
 
@@ -172,3 +175,55 @@ async def test_each_route_asks_its_rights_and_clear_needs_nothing_else(stack: tu
     assert (await c.delete("/v1/workflows/definitions/draft", headers=BUILDER)).status_code == 204
     with tenant_scope(TENANT):
         assert await WorkflowSchedules(engine).for_workflow("draft") == []
+
+
+async def test_a_schedule_view_names_who_changed_it_why_the_last_slot_did_not_run_and_why_it_is_idle(
+    stack: tuple[AsyncClient, AsyncEngine],  # noqa: F811
+) -> None:
+    c, engine = stack
+    res = await c.post("/v1/workflows/definitions", json={"definition": definition("viewed")}, headers=BUILDER)
+    assert res.status_code < 300, res.text
+    put = await c.put(url("viewed"), json={"rule": EVERY_15}, headers=BUILDER)
+    assert put.status_code == 200, put.text
+    saved_view = put.json()["data"]
+    assert saved_view["changedByName"] and saved_view["idleCode"] == "no_live_version"
+    assert saved_view["lastRunId"] is None and saved_view["lastOutcomeReason"] is None
+    # The clock skipped the slot at 10:00: its state is on the row, its reason in the trigger's log.
+    with tenant_scope(TENANT):
+        row = await WorkflowSchedules(engine).get("viewed", "start")
+        assert row is not None
+        await WorkflowSchedules(engine).record_slot(
+            "viewed", "start", expected=None, slot="2026-11-23T10:00:00Z", outcome="skipped", digest="d", run_id="run_1"
+        )
+        await TriggerEvents(engine).add(
+            TriggerEvent(
+                team_id=row.team_id,
+                workflow_id="viewed",
+                source="schedule:start",
+                event_key="schedule:viewed:2026-11-23T10:00Z",
+                sender="",
+                subject="Every 15 minutes",
+                received_at="2026-11-23T10:00:00Z",
+                outcome="skipped",
+                run_id=None,
+                detail={"reason": "The last scheduled run was still going."},
+            )
+        )
+    got = (await c.get(url("viewed"), headers=BUILDER)).json()["data"]
+    assert (got["lastOutcome"], got["lastOutcomeReason"], got["lastRunId"]) == (
+        "skipped",
+        "The last scheduled run was still going.",
+        "run_1",
+    )
+    shown = (await c.get("/v1/workflows/definitions/viewed", headers=BUILDER)).json()["data"]["schedules"]
+    assert shown[0]["lastOutcomeReason"] == got["lastOutcomeReason"]
+
+
+async def test_zones_are_searched_and_every_zone_listed_saves(client: AsyncClient) -> None:
+    first = (await client.get("/v1/schedules/zones", params={"limit": 25}, headers=JAMES)).json()["data"]
+    assert len(first["data"]) == 25 and first["nextCursor"] == "25"
+    london = (await client.get("/v1/schedules/zones", params={"search": "london"}, headers=JAMES)).json()["data"]
+    assert london["data"] == [{"id": "Europe/London", "label": "Europe/London"}] and london["nextCursor"] is None
+    wid = await saved(client)
+    rule = EVERY_15 | {"tz": london["data"][0]["id"]}
+    assert (await client.put(url(wid), json={"rule": rule}, headers=JAMES)).status_code == 200

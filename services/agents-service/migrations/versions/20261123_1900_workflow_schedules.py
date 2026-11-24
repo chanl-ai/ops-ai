@@ -32,6 +32,7 @@ def upgrade() -> None:
         sa.Column("team_id", sa.String(64), nullable=False),
         sa.Column("rule", sa.JSON, nullable=False),
         sa.Column("changed_by", sa.String(200), nullable=False),
+        sa.Column("changed_by_name", sa.String(200), nullable=True),
         sa.Column("changed_at", sa.String(32), nullable=False),
         sa.Column("rule_digest", sa.String(64), nullable=True),
         sa.Column("last_slot_at", sa.String(32), nullable=True),

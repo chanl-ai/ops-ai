@@ -85,10 +85,8 @@ class ScheduleKinds:
         rule = kind.check(raw, now)
         slots = [s for s in kind.next_slots(rule, now, _FLOOR_SLOTS) if s <= now + _FLOOR_LOOKAHEAD]
         gaps = [b - a for a, b in pairwise(slots)]
-        if gaps and (shortest := min(gaps)) < floor:
-            raise InvalidSchedule(
-                f"Runs {_span(shortest)} apart; the shortest interval here is {_span(floor)}.", kind.interval_field
-            )
+        if gaps and min(gaps) < floor:
+            raise InvalidSchedule(f"At least {_span(floor)} on this install.", kind.interval_field)
         return rule
 
     def last_slot(self, rule: Mapping[str, JsonValue], now: datetime) -> datetime | None:

@@ -1813,8 +1813,12 @@ class SavedCaseContext(TypedDict, closed=True):
 class ScheduleView(TypedDict, closed=True):
     changedAt: str
     changedBy: str
+    changedByName: NotRequired[str]
     idle: NotRequired[str | None]
+    idleCode: NotRequired[Literal["no_live_version", "paused", "step_missing", "not_schedulable"] | None]
     lastOutcome: NotRequired[str | None]
+    lastOutcomeReason: NotRequired[str | None]
+    lastRunId: NotRequired[str | None]
     lastSlotAt: NotRequired[str | None]
     nextRuns: list[str]
     rule: dict[str, JsonValue]

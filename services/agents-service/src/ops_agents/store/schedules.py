@@ -41,6 +41,8 @@ workflow_schedules = sa.Table(
     sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("rule", sa.JSON, nullable=False),
     sa.Column("changed_by", sa.String(200), nullable=False),
+    # The saver's name when saved, kept as written: the workflow view holds a connection and asks no other service.
+    sa.Column("changed_by_name", sa.String(200), nullable=True),
     sa.Column("changed_at", sa.String(32), nullable=False),
     sa.Column("rule_digest", sa.String(64), nullable=True),
     sa.Column("last_slot_at", sa.String(32), nullable=True),
@@ -58,6 +60,7 @@ class ScheduleRow:
     team_id: str
     rule: Rule
     changed_by: str
+    changed_by_name: str | None
     changed_at: str
     rule_digest: str | None
     last_slot_at: str | None
@@ -140,11 +143,19 @@ class WorkflowSchedules:
             )
         return done.rowcount == 1
 
-    async def save(self, workflow_id: str, trigger_step: str, team_id: str, rule: Rule, by: str) -> Rule | None:
+    async def save(
+        self, workflow_id: str, trigger_step: str, team_id: str, rule: Rule, by: str, *, by_name: str | None = None
+    ) -> Rule | None:
         """Saves the builder's rule and returns the one it replaced (None for a new schedule); the slot state stays,
         and the clock treats the changed rule as a first sighting."""
         t = workflow_schedules
-        values = {"team_id": team_id, "rule": rule, "changed_by": by, "changed_at": now_iso()}
+        values = {
+            "team_id": team_id,
+            "rule": rule,
+            "changed_by": by,
+            "changed_by_name": by_name,
+            "changed_at": now_iso(),
+        }
         before = await self.get(workflow_id, trigger_step)
         if before is None:
             try:

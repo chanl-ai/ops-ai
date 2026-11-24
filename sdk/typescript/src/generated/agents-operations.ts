@@ -1810,6 +1810,19 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "schedules_schedule_zones": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/schedules/zones",
+    "pathParams": [],
+    "query": [
+      "search",
+      "cursor",
+      "limit"
+    ],
+    "stream": false
+  },
   "templates_list_templates": {
     "body": null,
     "headers": [],

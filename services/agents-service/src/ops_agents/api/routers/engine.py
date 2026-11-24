@@ -96,7 +96,7 @@ from ..envelope import ok
 from ..file_names import named, names_asked_once
 from ..publish_policy import decide, team_document
 from ..run_story import Decision, decisions_in, files_in, steps_view
-from ..schedule_view import ScheduleView, schedule_view
+from ..schedule_view import ScheduleView, schedule_views
 from ..schemas import (  # pyright: ignore[reportPrivateImportUsage]
     SSE_RESPONSE,
     DocumentRead,
@@ -893,9 +893,9 @@ async def definition_view(rt: Runtime, me: Principal, workflow_id: str, version:
         "startForm": start_form(row.definition, REGISTRY),
         "workingCopy": copy and _copy_view(copy),
         "saveBase": _save_base(copy) if copy else {"version": newest["version"], "digest": newest["digest"]},
-        "schedules": [
-            schedule_view(s, now, served, REGISTRY) for s in await WorkflowSchedules(rt.db).for_workflow(workflow_id)
-        ],
+        "schedules": await schedule_views(
+            rt.db, await WorkflowSchedules(rt.db).for_workflow(workflow_id), now, served, REGISTRY
+        ),
         "outdatedCopy": outdated
         and _copy_view(outdated)
         | {"newerVersion": newest["version"], "newerBy": newest.get("createdBy"), "newerAt": newest.get("createdAt")},

@@ -53,7 +53,7 @@ def main() -> None:
         f_code, refused = ops_cli("builder", *sched, "save", WID, "--step", "start", *floor_args, options_first=True)
         check(
             "12 a rule under the floor exits non-zero and says why",
-            f_code != 0 and "shortest interval" in str(refused),
+            f_code != 0 and "At least" in str(refused),
             {"exit": f_code, "said": str(refused)[:300]},
         )
 
