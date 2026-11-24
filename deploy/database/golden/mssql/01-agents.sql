@@ -939,6 +939,7 @@ CREATE TABLE workflow_schedules (
 	team_id VARCHAR(64) NOT NULL, 
 	[rule] NVARCHAR(max) NOT NULL, 
 	changed_by VARCHAR(200) NOT NULL, 
+	changed_by_name VARCHAR(200) NULL, 
 	changed_at VARCHAR(32) NOT NULL, 
 	rule_digest VARCHAR(64) NULL, 
 	last_slot_at VARCHAR(32) NULL, 

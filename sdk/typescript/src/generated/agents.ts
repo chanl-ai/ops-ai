@@ -2396,6 +2396,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/schedules/zones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Schedule Zones
+         * @description The time zones a rule's `tz` may name, searched by a case-blind part of the name and paged: the same zone data
+         *     the save checks against, so a zone listed here is never refused.
+         */
+        get: operations["schedules_schedule_zones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/skills": {
         parameters: {
             query?: never;
@@ -10564,10 +10585,21 @@ export interface components {
             changedAt: string;
             /** Changedby */
             changedBy: string;
+            /**
+             * Changedbyname
+             * @default
+             */
+            changedByName: string;
             /** Idle */
             idle?: string | null;
+            /** Idlecode */
+            idleCode?: ("no_live_version" | "paused" | "step_missing" | "not_schedulable") | null;
             /** Lastoutcome */
             lastOutcome?: string | null;
+            /** Lastoutcomereason */
+            lastOutcomeReason?: string | null;
+            /** Lastrunid */
+            lastRunId?: string | null;
             /** Lastslotat */
             lastSlotAt?: string | null;
             /** Nextruns */
@@ -27453,6 +27485,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_PreviewView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    schedules_schedule_zones: {
+        parameters: {
+            query?: {
+                search?: string;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_OptionsPage_"];
                 };
             };
             /** @description Invalid request */

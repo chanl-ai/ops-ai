@@ -348,4 +348,7 @@ def _schedule(ns: argparse.Namespace, schedules: Any) -> int:
 def _schedule_text(view: dict[str, Any]) -> str:
     runs = ", ".join(view.get("nextRuns") or []) or "none"
     last = view.get("lastOutcome") or "not run yet"
-    return f"{view['words']}\nNext runs: {runs}\nLast: {last}; changed by {view['changedBy']} at {view['changedAt']}"
+    if view.get("lastOutcomeReason"):
+        last += f" ({view['lastOutcomeReason']})"
+    who = view.get("changedByName") or view["changedBy"]
+    return f"{view['words']}\nNext runs: {runs}\nLast: {last}; changed by {who} at {view['changedAt']}"

@@ -27,7 +27,7 @@ import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 
 from ops_engine.store import DefinitionRow, DefinitionStore, RunStore
 from ops_service_kit.errors import ApiError
@@ -141,20 +141,34 @@ class WorkflowStart:
         return run.id
 
 
-def idle_reason(step: str, definition: Json | None, stage: str | None, takes: Callable[[Json], bool]) -> str | None:
-    """Why a schedule on `step` starts nothing against the version serving its workflow, or None while it ticks. The
-    clock, the schedule view and the live places all ask this one rule. `stage` is the serving version's (live or
-    paused); `takes` says whether a step's node type is a trigger some target handles."""
+IdleCode = Literal["no_live_version", "paused", "step_missing", "not_schedulable"]
+
+
+def idle_state(
+    step: str, definition: Json | None, stage: str | None, takes: Callable[[Json], bool]
+) -> tuple[IdleCode, str] | None:
+    """Why a schedule on `step` starts nothing against the version serving its workflow, as a code and a sentence, or
+    None while it ticks. `stage` is the serving version's (live or paused); `takes` says whether a step's node type is
+    a trigger some target handles."""
     if definition is None:
-        return "No version is live yet; the schedule starts once one is."
+        return "no_live_version", "No version is live yet; the schedule starts once one is."
     if stage != "live":
-        return "The workflow is paused, so the schedule starts nothing until it is resumed."
+        return "paused", "The workflow is paused, so the schedule starts nothing until it is resumed."
     node = next((n for n in cast(list[Json], definition.get("nodes") or []) if n.get("id") == step), None)
     if node is None:
-        return f"The live version has no step {step}, so this schedule starts nothing until one does."
+        return "step_missing", f"The live version has no step {step}, so this schedule starts nothing until one does."
     if not takes(node):
-        return f"Step {step} is no longer a schedule trigger in the live version, so this schedule starts nothing."
+        return (
+            "not_schedulable",
+            f"Step {step} is no longer a schedule trigger in the live version, so this schedule starts nothing.",
+        )
     return None
+
+
+def idle_reason(step: str, definition: Json | None, stage: str | None, takes: Callable[[Json], bool]) -> str | None:
+    """The sentence of `idle_state`. The clock, the schedule view and the live places all ask this one rule."""
+    state = idle_state(step, definition, stage, takes)
+    return state[1] if state else None
 
 
 def first_sighting(s: ScheduleRow) -> bool:

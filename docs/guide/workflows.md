@@ -130,7 +130,7 @@ between 07:00 and 18:00 in a time zone. The schedule is saved on the trigger ste
 it applies to the live version at once with no publish. A tick whose last scheduled run is still going is skipped and
 shown in the trigger's log with the reason. Pause stops the ticks; Resume waits for the next slot. A scheduled run
 sends only `dueAt`, so the trigger's input schema may require nothing else (a save naming another field is refused with
-422), and the workflow needs a team. The shortest interval is the install's `schedule_floor_minutes`, 5 by default;
+422), and the workflow needs a team. The shortest interval is the install's `schedule_floor_minutes`, 5 by default, and a rule under it is refused with "At least 5 minutes on this install.";
 raising it leaves saved schedules running, and each is refused at its next save. After the clock was down, the latest
 slot runs once, marked late, if it is within half the smaller gap to the slot before or after it (and at least 90
 seconds); an older one is shown as missed. A rule saved just before its slot runs that slot. Reading a schedule needs the right to view the team's workflows; clearing one works even when a newer version

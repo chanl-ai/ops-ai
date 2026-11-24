@@ -1423,6 +1423,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "schedules_schedule_zones": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/schedules/zones",
+        "pathParams": [],
+        "query": ["search", "cursor", "limit"],
+        "stream": False,
+    },
     "templates_list_templates": {
         "body": None,
         "headers": [],
@@ -3085,6 +3094,19 @@ class Operations:
     def schedules_preview_schedule(self, body: PreviewIn) -> PreviewView:
         "Preview Schedule"
         return self._t.call(SERVICE, OPERATIONS["schedules_preview_schedule"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def schedules_schedule_zones(
+        self, *, search: str | None = None, cursor: str | None = None, limit: int | None = None
+    ) -> OptionsPage:
+        "Schedule Zones"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["schedules_schedule_zones"],
+            {},
+            {"search": search, "cursor": cursor, "limit": limit},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def agents_list_skills(
         self,
@@ -4838,6 +4860,19 @@ class AsyncOperations:
     async def schedules_preview_schedule(self, body: PreviewIn) -> PreviewView:
         "Preview Schedule"
         return await self._t.call(SERVICE, OPERATIONS["schedules_preview_schedule"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def schedules_schedule_zones(
+        self, *, search: str | None = None, cursor: str | None = None, limit: int | None = None
+    ) -> OptionsPage:
+        "Schedule Zones"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["schedules_schedule_zones"],
+            {},
+            {"search": search, "cursor": cursor, "limit": limit},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def agents_list_skills(
         self,

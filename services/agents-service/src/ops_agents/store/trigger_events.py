@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -197,6 +197,28 @@ class TriggerEvents:
                 )
                 .values(item=None)
             )
+
+    async def schedule_reasons(self, workflow_id: str, event_keys: list[str]) -> dict[str, str]:
+        """The clock's reason for each slot key (`schedule:{workflow}:{slot}`) it logged, one statement for all of a
+        workflow's schedules; a slot that ran or was only seen has none."""
+        if not event_keys:
+            return {}
+        t = trigger_events
+        q = sa.select(t.c.event_key, t.c.detail).where(
+            t.c.tenant_id == current_tenant(),
+            t.c.workflow_id == workflow_id,
+            t.c.source.like(f"{SCHEDULE_SOURCE}%"),
+            t.c.event_key.in_(event_keys),
+        )
+        async with tenant_tx(self.engine) as c:
+            found = (await c.execute(q.order_by(t.c.recorded_at))).all()
+        out: dict[str, str] = {}
+        for key, detail in found:
+            body = cast(dict[str, object], json.loads(detail) if detail else {})
+            reason = body.get("reason")
+            if isinstance(reason, str):
+                out[str(key)] = reason
+        return out
 
     async def forget_schedule_rows_before(self, workflow_id: str, before: str) -> None:
         """Deletes the schedule clock's rows for the workflow recorded before `before` (KEEP_SCHEDULE_DAYS)."""

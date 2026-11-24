@@ -275,6 +275,9 @@ query = { follow = "false" }
 ["GET /v1/schedules/kinds"]
 queries = 0
 
+["GET /v1/schedules/zones"]
+queries = 0
+
 ["GET /v1/skills"]
 queries = 7
 

@@ -13,9 +13,10 @@ The words and the next runs come from the server, so the panel, the lists and th
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Annotated, Any, cast
+from zoneinfo import available_timezones
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
@@ -23,7 +24,7 @@ from ops_access import can
 from ops_engine.store import DefinitionRow
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, Unprocessable
-from ops_service_kit.http import Envelope, In, Json, JsonValue
+from ops_service_kit.http import Envelope, In, Json, JsonValue, OptionsPage, options_page, options_window
 from ops_service_kit.logging import get_logger
 from ops_store.schedule import KINDS, InvalidSchedule, UnknownKind
 
@@ -34,7 +35,7 @@ from ..auth import caller_of, principal
 from ..deps import Runtime
 from ..envelope import ok
 from ..schedule_clock import required_beyond_due
-from ..schedule_view import ScheduleView, next_runs, schedulable, schedule_view
+from ..schedule_view import ScheduleView, next_runs, schedulable, schedule_views
 from ..schemas import Out  # pyright: ignore[reportPrivateImportUsage]
 from .engine import REGISTRY, Me, Reader, Rt, definitions
 
@@ -98,6 +99,18 @@ async def schedule_kinds(me: Me) -> JSONResponse:
     return ok([{"name": k.name, "label": k.label, "schema": k.schema} for k in KINDS.all()])
 
 
+@router.get("/zones", response_model=Envelope[OptionsPage])
+async def schedule_zones(
+    me: Me, search: str = "", cursor: str | None = None, limit: Annotated[int, Query(ge=1, le=50)] = 25
+) -> JSONResponse:
+    """The time zones a rule's `tz` may name, searched by a case-blind part of the name and paged: the same zone data
+    the save checks against, so a zone listed here is never refused."""
+    q = search.strip().lower()
+    zones = [z for z in sorted(available_timezones()) if q in z.lower()]
+    offset, window = options_window(cursor, limit)
+    return ok(options_page([{"id": z, "label": z} for z in zones[offset : offset + window]], offset, limit))
+
+
 @router.post("/preview", response_model=Envelope[PreviewView])
 async def preview_schedule(rt: Rt, me: Me, body: PreviewIn) -> JSONResponse:
     """The rule as it would be saved, in words, with its next three runs. 422 naming the field for a rule a save would
@@ -153,7 +166,8 @@ async def get_schedule(rt: Rt, me: Reader, workflow_id: str, step: str) -> JSONR
     row = await WorkflowSchedules(rt.db).get(workflow_id, step)
     if row is None:
         raise NotFound(f"No schedule on {step} of {workflow_id}")
-    return ok(schedule_view(row, datetime.now(UTC), await serving_definition(rt, workflow_id), REGISTRY))
+    now = datetime.now(UTC)
+    return ok((await schedule_views(rt.db, [row], now, await serving_definition(rt, workflow_id), REGISTRY))[0])
 
 
 @workflow_router.put("/definitions/{workflow_id}/triggers/{step}/schedule", response_model=Envelope[ScheduleView])
@@ -167,7 +181,7 @@ async def save_schedule(rt: Rt, me: Me, _: Tx, workflow_id: str, step: str, body
     # The floor is checked here, at each save: a schedule saved before the floor was raised keeps running until then.
     rule = checked(rt, body.rule, now)
     store = WorkflowSchedules(rt.db)
-    before = await store.save(workflow_id, step, wf.team_id, rule, me.sub)
+    before = await store.save(workflow_id, step, wf.team_id, rule, me.sub, by_name=me.name or me.email)
     log.info(
         "schedule_saved",
         workflow=workflow_id,
@@ -178,7 +192,7 @@ async def save_schedule(rt: Rt, me: Me, _: Tx, workflow_id: str, step: str, body
     )
     row = await store.get(workflow_id, step)
     assert row is not None
-    return ok(schedule_view(row, now, await serving_definition(rt, workflow_id), REGISTRY))
+    return ok((await schedule_views(rt.db, [row], now, await serving_definition(rt, workflow_id), REGISTRY))[0])
 
 
 @workflow_router.delete("/definitions/{workflow_id}/triggers/{step}/schedule", status_code=204, response_model=None)
