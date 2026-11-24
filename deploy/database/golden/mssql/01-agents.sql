@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 20261124_0257_skill_owner_ids
+-- agents-service, stamped at 20261124_2313_agent_instruction
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -817,6 +817,14 @@ CREATE TABLE registry_guardrails (
 GO
 CREATE INDEX ix_registry_guardrails_tenant_team ON registry_guardrails (tenant_id, team_id);
 GO
+CREATE TABLE agent_instruction_sections (
+	tenant_id VARCHAR(64) NOT NULL, 
+	document NVARCHAR(max) NOT NULL, 
+	updated_by VARCHAR(320) NOT NULL, 
+	updated_at DATETIMEOFFSET NOT NULL, 
+	CONSTRAINT agent_instruction_sections_pkey PRIMARY KEY (tenant_id)
+);
+GO
 CREATE TABLE agent_memories (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -1513,6 +1521,12 @@ CREATE SECURITY POLICY ops_security.registry_guardrails_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_guardrails AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.agent_instruction_sections_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.agent_instruction_sections,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.agent_instruction_sections AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.agent_instruction_sections AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.agent_memories_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.agent_memories,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.agent_memories AFTER INSERT,
@@ -1670,5 +1684,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('20261124_0257_skill_owner_ids');
+INSERT INTO alembic_version (version_num) VALUES ('20261124_2313_agent_instruction');
 GO
