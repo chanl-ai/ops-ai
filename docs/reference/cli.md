@@ -38,7 +38,7 @@ usage or setup problem.
 | Area | Verbs | For |
 |---|---|---|
 | `login` | | Sign in and keep the session in a profile |
-| `workflows` | `init`, `validate`, `plan`, `apply`, `export`, `publish`, `pause`, `archive`, `run`, `list`, `forms`, `batch-start`, `batch`, `watch`, `inspect`, `trace`, `test`, `retry`, `decide`, `schedule` | Author a workflow as a file, publish it and run it; `schedule show\|save\|clear\|kinds\|preview` sets when it runs by itself (`set` still works for `save`) |
+| `workflows` | `init`, `validate`, `plan`, `apply`, `export`, `publish`, `pause`, `archive`, `run`, `list`, `forms`, `batch-start`, `batch`, `watch`, `inspect`, `trace`, `test`, `retry`, `decide`, `schedule` | Author a workflow as a file, publish it and run it; `schedule show\|save\|clear\|kinds\|preview` sets when it runs by itself (`set` still works for `save`); `show` prints the saver's name, the last outcome with the clock's reason, and why it is idle |
 | `agents` | `validate`, `apply`, `export`, `publish`, `pause`, `chat`, `run`, `test`, `trace`, `list`, `tool-options`, `grant-tools` | Author an agent, grant it tools, test and publish it |
 | `chat` | `agents`, `threads`, `start`, `say`, `show`, `calls`, `approve`, `reject`, `submit`, `transcript`, `script`, `evals` | Chat as the chat screen does; script a conversation and score it |
 | `runs` | `list`, `start`, `show`, `events`, `cancel`, `retry` | Start and follow workflow runs |
