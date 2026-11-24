@@ -7,7 +7,8 @@ module names them for every reader and turns each answer into the shape the loop
 
 - Find places: the `scopes` tool (list_scopes) answers `{scopes: [{id, title, kind, parent, detail}], next_cursor}`.
 - Changes since a place: the `list` tool (list_items), or `changes` (list_changes) once a run has its cursor,
-  answers `{items: [{id, updated_at, marker?, ...}], next_cursor, watermark?, cursor?}`, read page by page.
+  answers `{items: [{id, updated_at, marker?, size?, skipped?, ...}], next_cursor, watermark?, cursor?}`, read page
+  by page; `size` is how a file refused for its size says how large it is.
 - Fetch a version: the `get` tool (get_item), sent `tag` when it takes one, answers the item with `content`, or
   `{unchanged: true}` when the tag still matches.
 - Access list: `allowed` on a fetched item, the ids that may see it at the source; absent when not known.
