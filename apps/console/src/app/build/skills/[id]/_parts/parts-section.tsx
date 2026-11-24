@@ -55,7 +55,7 @@ export function PartsList({ parts, ownerTeam, knowledgeBases, canSplit }: { part
     >
       {made.length > 0 && (
         <p className="border-b px-4 py-2 text-sm" data-testid="skill-parts-made">
-          Made {plural(made.length, 'skill')}: {made.join(', ')}. <Link href="/build/skills" className="underline">Open Skills</Link>
+          Made {plural(made.length, 'skill')}: {made.join(', ')}. This skill still has its own parts, so an agent that uses it is unchanged. <Link href="/build/skills" className="underline">Open Skills</Link>
         </p>
       )}
       <Rows testId="skill-parts">

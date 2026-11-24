@@ -16,6 +16,7 @@ import { LoadingButton } from '@/components/shared/loading-button';
 import { QueryError } from '@/components/shared/query-states';
 import { ReadableValue } from '@/components/shared/readable-value';
 import { Row, Rows, Section } from '@/components/shared/surface';
+import { useDocumentTitle } from '@/hooks/use-document-title';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ApiError } from '@/lib/api/contract';
 import { Button } from '@/components/ui/button';
@@ -62,6 +63,7 @@ export default function EngineRunPage() {
   const redrive = useRedriveEngineRun();
   const [retryError, setRetryError] = React.useState<string>();
   // The run that started it (`run:<id>`). The runs it started and the files it was given come with the run.
+  useDocumentTitle(run ? (run.workflowName ?? definition.data?.name ?? run.workflowId) : undefined);
   const parentRun = run?.createdBy.startsWith('run:') ? run.createdBy.slice(4) : undefined;
   const files = run?.files ?? [];
 
