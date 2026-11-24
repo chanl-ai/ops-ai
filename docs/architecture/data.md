@@ -45,6 +45,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.form_links` | `FormLinks` | none | `form_links` |
 | agents-service | `ops_agents.store.graphs` | `GraphStore` | CAS, TRANSACTION | `graph_runs`, `graph_threads`, `graph_versions` |
 | agents-service | `ops_agents.store.guardrails` | `GuardrailRegistry` | CAS, TRANSACTION | `registry_guardrail_versions`, `registry_guardrails` |
+| agents-service | `ops_agents.store.instruction_sections` | `InstructionSections` | CLOCK, TRANSACTION | `agent_instruction_sections` |
 | agents-service | `ops_agents.store.journal` | `GraphJournal` | none | none |
 | agents-service | `ops_agents.store.leases` | `Leases` | CAS, CLOCK, LOCK | `thread_leases` |
 | agents-service | `ops_agents.store.mailboxes` | `MailboxStore` | CAS | `mailboxes` |
