@@ -1792,6 +1792,24 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "schedules_preview_schedule": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/schedules/preview",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "schedules_schedule_kinds": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/schedules/kinds",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "templates_list_templates": {
     "body": null,
     "headers": [],
@@ -2008,6 +2026,18 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "workflows_clear_schedule": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule",
+    "pathParams": [
+      "workflow_id",
+      "step"
+    ],
+    "query": [],
+    "stream": false
+  },
   "workflows_create_definition": {
     "body": "json",
     "headers": [],
@@ -2132,6 +2162,18 @@ export const agentsOperations = {
     "path": "/v1/runs/{run_id}",
     "pathParams": [
       "run_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "workflows_get_schedule": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule",
+    "pathParams": [
+      "workflow_id",
+      "step"
     ],
     "query": [],
     "stream": false
@@ -2443,6 +2485,18 @@ export const agentsOperations = {
     "path": "/v1/workflows/{workflow_id}/draft",
     "pathParams": [
       "workflow_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "workflows_save_schedule": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule",
+    "pathParams": [
+      "workflow_id",
+      "step"
     ],
     "query": [],
     "stream": false

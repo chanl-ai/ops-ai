@@ -116,6 +116,7 @@ from .routers import memories as memory_routes
 from .routers import references as reference_routes
 from .routers import routing as routing_routes
 from .routers import run_resume as run_resume_routes
+from .routers import schedules as schedule_routes
 from .routers import skills as skill_routes
 from .routers import task_types as task_type_routes
 from .routers import tasks as task_routes
@@ -564,6 +565,8 @@ def create_app(
     mount(agents.router, "Agents")
     # Before workflows.router: its /v1/workflows/{workflow_id} would take /v1/workflows/node-types as an id.
     mount(engine_routes.router, "Workflows")
+    mount(schedule_routes.workflow_router, "Workflows")
+    mount(schedule_routes.router, "Schedules")
     mount(engine_routes.runs_router, "Workflows")
     mount(engine_routes.run_start_router, "Workflows")
     # An outside system resumes the step it was handed, by the step's own token; no person's.
