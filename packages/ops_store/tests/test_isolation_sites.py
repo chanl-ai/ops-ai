@@ -96,6 +96,7 @@ WIDENINGS: dict[str, set[str]] = {
     "SCHEDULE_CLOCK": {"services/agents-service/src/ops_agents/api/schedule_clock.py"},
     "CLAIM_THREAD": {"services/agents-service/src/ops_agents/store/graphs.py"},
     "RETENTION_TENANTS": {"services/agents-service/src/ops_agents/store/memories.py"},
+    "SCHEDULE_TENANTS": {"services/agents-service/src/ops_agents/store/schedules.py"},
     "ASSISTANT_TEAMS": {"services/agents-service/src/ops_agents/store/team_defaults.py"},
     "ASSISTANT_CATCH_UP": {"services/agents-service/src/ops_agents/api/ops_tools.py"},
     # The tool catalogue copy's resync applies one tenant's catalogue, every team's grants, as that tenant.

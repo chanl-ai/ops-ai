@@ -1,7 +1,9 @@
 """Saved schedules: one row per workflow and trigger step, outside the workflow's versions, so a save applies at once
 to whatever version is live and going live, archive and restore write nothing here. The builder writes the rule and
 who changed it; the schedule clock alone writes the slot state beside it (`rule_digest`, `last_slot_at`,
-`last_outcome`, `last_run_id`, `seen_at`). Deleting the workflow deletes its rows.
+`last_outcome`, `last_run_id`, `seen_at`). `seen_at` is when the clock first saw the schedule live with this rule, and
+is null while the workflow is not live or has lost the step, so a schedule's first sighting is read from the row, not
+from any one machine's memory. Deleting the workflow deletes its rows.
 
 The slot write names the last slot it read and changes the row only while that is still the stored one, so of two
 machines on one slot exactly one records its outcome; the run key (`schedule:{workflow}:{slot}`) keeps the runs to one
@@ -22,7 +24,7 @@ from ops_store import Guarantee, isolation
 from ops_store.schema import TENANT_SCOPED
 
 from .base import metadata
-from .tenancy import current_tenant, tenant_tx
+from .tenancy import SCHEDULE_TENANTS, current_tenant, system_tx, tenant_tx
 
 Rule = dict[str, JsonValue]
 # What the clock records for a slot.
@@ -103,10 +105,30 @@ class WorkflowSchedules:
         async with tenant_tx(self.engine) as c:
             return [_row(r) for r in await c.execute(q)]
 
-    async def seen(self, workflow_id: str, trigger_step: str, at: str) -> None:
-        """The clock saw the schedule live on its pass at `at` and its slot had not moved."""
+    async def tenants(self) -> list[str]:
+        """Every tenant holding a saved schedule, read past row-level security: the clock visits a tenant whose only
+        scheduled workflow is paused, to mark its schedule idle, and then works each tenant under its own."""
+        t = workflow_schedules
+        async with system_tx(self.engine, SCHEDULE_TENANTS) as c:
+            return list((await c.execute(sa.select(t.c.tenant_id).distinct())).scalars())
+
+    async def idle(self, workflow_id: str, trigger_step: str) -> None:
+        """The clock found the workflow not live, or its live version without the step: the next time it is seen live
+        is a first sighting."""
+        t = workflow_schedules
         async with tenant_tx(self.engine) as c:
-            await c.execute(workflow_schedules.update().where(self._key(workflow_id, trigger_step)).values(seen_at=at))
+            await c.execute(t.update().where(self._key(workflow_id, trigger_step)).values(seen_at=None))
+
+    async def sighted(self, workflow_id: str, trigger_step: str, *, expected: str | None, digest: str, at: str) -> bool:
+        """A first sighting with no slot yet (a rule whose first slot is ahead): the rule it was seen with and when,
+        with the last slot left as it was, only while that is still `expected`."""
+        t = workflow_schedules
+        same = t.c.last_slot_at.is_(None) if expected is None else t.c.last_slot_at == expected
+        async with tenant_tx(self.engine) as c:
+            done = await c.execute(
+                t.update().where(self._key(workflow_id, trigger_step), same).values(rule_digest=digest, seen_at=at)
+            )
+        return done.rowcount == 1
 
     async def save(self, workflow_id: str, trigger_step: str, team_id: str, rule: Rule, by: str) -> Rule | None:
         """Saves the builder's rule and returns the one it replaced (None for a new schedule); the slot state stays,

@@ -19,12 +19,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_agents.api.routers.engine import REGISTRY
 from ops_agents.api.schedule_clock import SCHEDULE_TRIGGER, ScheduleClock, Tick, WorkflowStart
-from ops_agents.api.schedule_view import KINDS
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.leases import Leases
 from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 from ops_engine.store import DefinitionStore, RunStore
 from ops_service_kit.settings import Settings
+from ops_store.schedule import KINDS
 from tests.conftest import SEED, empty_engine, started
 
 JAMES = {"X-Dev-User": "j.richardson@harborpine.example"}
@@ -129,7 +129,6 @@ async def test_a_rule_kind_and_a_target_kind_added_in_a_test_run_through_the_rea
     clock = ScheduleClock(
         engine,
         Leases(engine, owner="worker:a", ttl=30),
-        kinds=KINDS,
         handlers={SCHEDULE_TRIGGER: WorkflowStart(runs), FAST: ticks},
     )
     for minute in range(0, 6):

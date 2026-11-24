@@ -125,6 +125,7 @@ GRANT SELECT, UPDATE ON dbo.engine_work TO ops_runtime_system;
 GRANT SELECT ON dbo.engine_runs TO ops_runtime_system;
 GRANT SELECT ON dbo.engine_steps TO ops_runtime_system;
 GRANT SELECT ON dbo.agent_memories (tenant_id) TO ops_runtime_system;
+GRANT SELECT ON dbo.workflow_schedules (tenant_id) TO ops_runtime_system;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.background_heartbeats TO ops_runtime_system;
 GRANT SELECT ON dbo.background_jobs TO ops_runtime_system;
 GRANT SELECT ON dbo.run_batches TO ops_runtime_system;

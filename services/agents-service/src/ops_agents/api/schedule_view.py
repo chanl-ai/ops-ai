@@ -7,12 +7,11 @@ from __future__ import annotations
 from datetime import datetime
 
 from ops_service_kit.http import Json, Out
-from ops_store.schedule import ScheduleKinds, default_kinds
+from ops_store.schedule import KINDS
 
 from ..store.schedules import ScheduleRow
 from .schedule_clock import iso
 
-KINDS: ScheduleKinds = default_kinds()
 NEXT_RUNS = 3
 
 

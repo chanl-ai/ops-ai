@@ -21,6 +21,7 @@ from .kinds.every import Every
 from .kinds.legacy import Daily, Hourly, Manual, Weekly
 
 __all__ = [
+    "KINDS",
     "InvalidSchedule",
     "Rule",
     "RuleKind",
@@ -104,7 +105,9 @@ def default_kinds() -> ScheduleKinds:
     return ScheduleKinds([Manual(), Hourly(), Daily(), Weekly(), Every()])
 
 
-_KINDS = default_kinds()
+# The install's one registry: the clock, the schedule routes and every view read rules through it, so a kind registered
+# here (a plugin's, or a test's) is known to all of them at once.
+KINDS = default_kinds()
 # What a knowledge source may store: the kinds it has always had.
 _SOURCE_KINDS = ScheduleKinds([Manual(), Hourly(), Daily(), Weekly()])
 
@@ -116,12 +119,12 @@ def checked(schedule: Mapping[str, JsonValue]) -> Rule:
 
 def last_slot(schedule: Mapping[str, JsonValue], now: datetime) -> datetime | None:
     """The most recent time at or before `now` the schedule asked to run; None for manual."""
-    return _KINDS.last_slot(schedule, now)
+    return KINDS.last_slot(schedule, now)
 
 
 def next_slots(schedule: Mapping[str, JsonValue], after: datetime, n: int) -> list[datetime]:
     """Up to `n` slots strictly after `after`."""
-    return _KINDS.next_slots(schedule, after, n)
+    return KINDS.next_slots(schedule, after, n)
 
 
 def due(schedule: Mapping[str, JsonValue], last_run: datetime | None, now: datetime) -> bool:

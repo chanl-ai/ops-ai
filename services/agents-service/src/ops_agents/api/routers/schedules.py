@@ -22,7 +22,7 @@ from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, Unprocessable
 from ops_service_kit.http import Envelope, In, Json, JsonValue
 from ops_service_kit.logging import get_logger
-from ops_store.schedule import InvalidSchedule, UnknownKind
+from ops_store.schedule import KINDS, InvalidSchedule, UnknownKind
 
 from ...store.schedules import WorkflowSchedules
 from ...store.tenancy import current_team
@@ -31,7 +31,7 @@ from ..auth import caller_of, principal
 from ..deps import Runtime
 from ..envelope import ok
 from ..schedule_clock import required_beyond_due
-from ..schedule_view import KINDS, ScheduleView, next_runs, schedule_view
+from ..schedule_view import ScheduleView, next_runs, schedule_view
 from ..schemas import Out  # pyright: ignore[reportPrivateImportUsage]
 from .engine import REGISTRY, Me, Rt, definitions
 

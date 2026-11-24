@@ -25,6 +25,7 @@ from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListParams
 from ops_service_kit.names import Name
 from ops_store import isolation
+from ops_store.schedule import KINDS as RULE_KINDS
 
 from ...store.channel_list import (
     KEY_EXPIRY_WARNING,
@@ -43,7 +44,6 @@ from .. import deployment_reviews
 from ..auth import Principal, caller_in, caller_of, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..schedule_view import KINDS as RULE_KINDS
 from ..schedule_view import next_runs
 from ..team_names import PlatformTeamNames
 from ..widget_sessions import normal_origin
