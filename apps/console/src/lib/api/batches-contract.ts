@@ -1,4 +1,5 @@
-import type { BatchDryRun, BatchInput, BatchStarted, BatchView } from '@/lib/types/batches';
+import type { BatchDryRun, BatchInput, BatchLine, BatchStarted, BatchView } from '@/lib/types/batches';
+import type { ListParams, ListResult } from '@/lib/types/query';
 
 /**
  * Batches: a workflow started once per row of a CSV or Excel file, followed on its own page. The file is
@@ -10,8 +11,10 @@ export interface BatchesApi {
   /** Writes the batch; the workflow worker starts its rows a few at a time. Same refusals as the dry run. */
   start(workflowId: string, input: BatchInput): Promise<BatchStarted>;
   get(batchId: string): Promise<BatchView>;
-  /** A new attempt for each failed row only. */
-  retryFailed(batchId: string): Promise<{ retried: number }>;
+  /** A workflow's batches, newest first; 404 for a workflow the team does not hold. */
+  list(workflowId: string, params: ListParams): Promise<ListResult<BatchLine>>;
+  /** A new attempt for each failed run only (workflows.decide); `notRetryable` counts the files that never ran. */
+  retryFailed(batchId: string): Promise<{ retried: number; notRetryable: number }>;
   /** Every row as a CSV, fetched with the person's identity and handed back as a link the page can download. */
   resultsCsv(batchId: string): Promise<{ url: string; name: string }>;
 }

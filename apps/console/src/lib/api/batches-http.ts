@@ -1,17 +1,19 @@
 import type { BatchesApi } from './batches-contract';
 import { ApiError } from './contract';
 import { fetchWithIdentity } from './request-identity';
+import type { ListParams } from '@/lib/types/query';
 
 type Get = <T>(path: string) => Promise<T>;
 type Send = <T>(method: string, path: string, body?: unknown) => Promise<T>;
 
 /** agents-service's batch routes (routers/batches.py) under `baseUrl`. */
-export function createBatchesHttp(get: Get, send: Send, baseUrl: string): BatchesApi {
+export function createBatchesHttp(get: Get, send: Send, baseUrl: string, qs: (p: ListParams) => string): BatchesApi {
   const at = (s: string) => encodeURIComponent(s);
   return {
     dryRun: (workflowId, input) => send('POST', `/workflows/${at(workflowId)}/batches`, { ...input, dryRun: true }),
     start: (workflowId, input) => send('POST', `/workflows/${at(workflowId)}/batches`, { ...input, dryRun: false }),
     get: (batchId) => get(`/batches/${at(batchId)}`),
+    list: (workflowId, p) => get(`/workflows/${at(workflowId)}/batches?${qs(p)}`),
     retryFailed: (batchId) => send('POST', `/batches/${at(batchId)}/retry`),
     // The route needs the person's token, which a plain link cannot carry, so the bytes are fetched with it and
     // handed to the page as a blob link, as Files' downloads are on the local backend.

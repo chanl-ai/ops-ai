@@ -330,7 +330,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     skills: createSkillsHttp(get, send, qs, baseUrl),
     widgets: createWidgetsHttp(get, send, qs),
     widgetDeployments: createWidgetDeploymentsHttp(get, send, baseUrl),
-    batches: createBatchesHttp(get, send, baseUrl),
+    batches: createBatchesHttp(get, send, baseUrl, qs),
     caseRecords: createCaseRecordsHttp(get, send),
     activity: createActivityHttp(get),
     assurance: createAssuranceHttp(get, send, qs),

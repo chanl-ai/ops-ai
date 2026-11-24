@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { PageLayout } from '@/components/page-layout';
+import { CopyButton } from '@/components/shared/copy-button';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { QueryError } from '@/components/shared/query-states';
@@ -18,6 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { RunStatus } from '@/components/workflows/run-journal/run-status';
 import { useBatch, useBatchResultsCsv, useRetryBatch } from '@/hooks/batch-queries';
 import { useDefinition } from '@/hooks/engine-queries';
+import { agentsApiUrl } from '@/lib/api';
 import { plural } from '@/lib/format';
 import type { BatchRow, BatchView } from '@/lib/types/batches';
 import type { PaginationState } from '@/lib/types/pagination';
@@ -45,19 +47,28 @@ const inputLine = (r: BatchRow) =>
     .filter(Boolean)
     .join(' · ');
 
+/** The headline counts, as the server counted them; a run waiting for a person is never counted as failed. */
 function headline(b: BatchView): string {
-  return `${b.finished} of ${b.total} finished${b.failed ? `, ${b.failed} failed` : ''}`;
+  const unit = b.origin === 'check' ? 'file' : 'row';
+  const more = [b.failed ? `${b.failed} failed` : '', b.waiting ? `${b.waiting} waiting for a person` : '', b.removed ? `${b.removed} removed` : ''].filter(Boolean);
+  return `${b.finished} of ${plural(b.total, unit)} finished${more.length ? `, ${more.join(', ')}` : ''}`;
 }
 
 function underHeadline(b: BatchView): string {
+  const unit = b.origin === 'check' ? 'file' : 'row';
   if (b.running || b.pending) return `${[b.running ? `${b.running} running` : '', b.pending ? `${b.pending} waiting to start` : ''].filter(Boolean).join(', ')}. The counts change as each run ends.`;
-  if (b.failed) return `Retry failed rows starts only the ${plural(b.failed, 'row')} that failed; rows that succeeded do not run again.`;
+  if (b.retryable) {
+    const left = b.notRetryable ? ` ${plural(b.notRetryable, unit)} that never ran cannot be retried.` : '';
+    return `Retry starts only the ${plural(b.retryable, unit)} whose run failed; ${unit}s that succeeded do not run again.${left}`;
+  }
+  if (b.notRetryable) return `${plural(b.notRetryable, unit)} never ran, so a retry cannot change ${b.notRetryable === 1 ? 'it' : 'them'}.`;
   return 'No failures, so there is nothing to retry.';
 }
 
 function batchState(b: BatchView): { label: string; tone: string } {
   if (b.stopped) return { label: 'Stopped', tone: 'border-warning/40 bg-warning/10 text-warning-text' };
   if (b.running || b.pending) return { label: 'Running', tone: 'border-primary/40 bg-primary/10 text-primary' };
+  if (b.waiting) return { label: 'Waiting for a person', tone: 'border-primary/40 bg-primary/10 text-primary' };
   if (b.failed) return { label: 'Finished with failures', tone: 'border-warning/40 bg-warning/10 text-warning-text' };
   return { label: 'Finished', tone: 'border-success/40 bg-success/10 text-success-text' };
 }
@@ -116,6 +127,12 @@ function Batch({ id }: { id: string }) {
 
   const name = definition.data?.name || definition.data?.definition.name || batch.workflowId;
   const state = batchState(batch);
+  const check = batch.origin === 'check';
+  const unit = check ? 'file' : 'row';
+  const description = check
+    ? `${plural(batch.total, 'new or changed file')} from one check of a watched folder, one ${batch.mode === 'test' ? 'test run' : 'live run'} of ${name} each`
+    : `${plural(batch.total, 'row')} of ${batch.fileName}, one ${batch.mode === 'test' ? 'test run' : 'live run'} of ${name} each`;
+  const workflowHref = `/build/workflows/definitions/${encodeURIComponent(batch.workflowId)}`;
 
   const download = async () => {
     try {
@@ -135,32 +152,34 @@ function Batch({ id }: { id: string }) {
     <PageLayout
       icon={Layers}
       title={`${name} · ${batch.fileName}`}
-      description={`${plural(batch.total, 'row')} of ${batch.fileName}, one ${batch.mode === 'test' ? 'test run' : 'live run'} of ${name} each`}
+      description={description}
       badge={
         <Badge variant="outline" className={`font-normal ${state.tone}`} data-testid="batch-state">
           {state.label}
         </Badge>
       }
-      backHref={`/build/workflows/definitions/${encodeURIComponent(batch.workflowId)}`}
+      backHref={`${workflowHref}/batches`}
       actions={
         <>
-          <LoadingButton
-            isLoading={retry.isPending}
-            loadingText="Retrying…"
-            disabled={batch.failed === 0}
-            data-testid="batch-retry-failed"
-            onClick={async () => {
-              setRetryError(undefined);
-              try {
-                const { retried } = await retry.mutateAsync();
-                toast.success(`Starting ${plural(retried, 'row')} again`);
-              } catch (e) {
-                setRetryError(e instanceof Error ? e.message : 'The failed rows were not started again');
-              }
-            }}
-          >
-            <RotateCcw /> Retry failed rows{batch.failed ? ` (${batch.failed})` : ''}
-          </LoadingButton>
+          {batch.mayRetry && (
+            <LoadingButton
+              isLoading={retry.isPending}
+              loadingText="Retrying…"
+              disabled={batch.retryable === 0}
+              data-testid="batch-retry-failed"
+              onClick={async () => {
+                setRetryError(undefined);
+                try {
+                  const { retried, notRetryable } = await retry.mutateAsync();
+                  toast.success(`Starting ${plural(retried, unit)} again`, notRetryable ? { description: `${plural(notRetryable, unit)} never ran and cannot be retried.` } : undefined);
+                } catch (e) {
+                  setRetryError(e instanceof Error ? e.message : `The failed ${unit}s were not started again`);
+                }
+              }}
+            >
+              <RotateCcw /> Retry failed {unit}s{batch.retryable ? ` (${batch.retryable})` : ''}
+            </LoadingButton>
+          )}
           <LoadingButton variant="outline" isLoading={csv.isPending} loadingText="Preparing…" onClick={download} data-testid="batch-download">
             <Download /> Download as CSV
           </LoadingButton>
@@ -187,9 +206,25 @@ function Batch({ id }: { id: string }) {
           <BatchBar finished={batch.finished} failed={batch.failed} total={batch.total} />
           <p className="text-sm text-muted-foreground">{underHeadline(batch)}</p>
         </div>
-        <Section title="Results" description={`One line per row of ${batch.fileName}, with its status and output, failed first. Each opens its run.`} flush>
+        <Section
+          title="Results"
+          description={check ? 'One line per file, with its status and output, failed first. Each opens its run.' : `One line per row of ${batch.fileName}, with its status and output, failed first. Each opens its run.`}
+          flush
+        >
           <div className="min-w-0 p-2">
-            <BatchRows rows={batch.rows} />
+            <BatchRows rows={batch.rows} check={check} />
+          </div>
+        </Section>
+        <Section title="Use from a script" description="Read this batch from code or the command line.">
+          <div className="flex min-w-0 flex-col gap-2 text-sm" data-testid="batch-script">
+            {[`${agentsApiUrl}/batches/${batch.id}`, `opsai batches get ${batch.id} --json`].map((line) => (
+              <div key={line} className="flex min-w-0 items-center gap-2">
+                <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 font-mono text-xs" title={line}>
+                  {line}
+                </code>
+                <CopyButton text={line} />
+              </div>
+            ))}
           </div>
         </Section>
       </div>
@@ -205,7 +240,7 @@ const PAGE_SIZE = 50;
  * Every row of the batch, in the API's order (failed first), each opening its run. The batch holds at most 500 rows
  * and the API returns them all, so the pages here are slices of that one answer.
  */
-function BatchRows({ rows }: { rows: BatchRow[] }) {
+function BatchRows({ rows, check }: { rows: BatchRow[]; check: boolean }) {
   const router = useRouter();
   const [paging, setPaging] = React.useState<PaginationState>({ page: 1, pageSize: PAGE_SIZE });
   const lines: Line[] = React.useMemo(
@@ -221,15 +256,41 @@ function BatchRows({ rows }: { rows: BatchRow[] }) {
   const shown = lines.slice((page - 1) * paging.pageSize, page * paging.pageSize);
   const columns = React.useMemo<ColumnDef<Line>[]>(
     () => [
-      { id: 'input', header: 'Input', meta: { kind: 'name' }, cell: ({ row }) => <span title={inputLine(row.original)}>{inputLine(row.original) || `Row ${row.original.row}`}</span> },
-      { accessorKey: 'row', header: 'Row', meta: { kind: 'number' }, cell: ({ row }) => row.original.row },
+      check
+        ? {
+            id: 'file',
+            header: 'File',
+            meta: { kind: 'name' },
+            cell: ({ row }) => {
+              const r = row.original;
+              const file = text(r.input.name) || `File ${r.row}`;
+              return (
+                <div className="flex min-w-0 flex-col" title={[file, r.reason].filter(Boolean).join(' · ')}>
+                  <span className="truncate">{file}</span>
+                  {r.reason && (
+                    <span className="text-xs whitespace-normal text-destructive-text" data-testid="batch-row-reason">
+                      {r.reason}
+                    </span>
+                  )}
+                </div>
+              );
+            },
+          }
+        : { id: 'input', header: 'Input', meta: { kind: 'name' }, cell: ({ row }) => <span title={inputLine(row.original)}>{inputLine(row.original) || `Row ${row.original.row}`}</span> },
+      ...(check ? [] : [{ accessorKey: 'row', header: 'Row', meta: { kind: 'number' }, cell: ({ row }) => row.original.row } as ColumnDef<Line>]),
       {
         accessorKey: 'status',
         header: 'Status',
         meta: { kind: 'status' },
         cell: ({ row }) => (
           <span className="inline-flex items-center gap-1.5">
-            <RunStatus status={row.original.status} />
+            {row.original.status === 'removed' ? (
+              <span className="text-sm text-muted-foreground" data-testid="batch-row-removed">
+                Removed at the source
+              </span>
+            ) : (
+              <RunStatus status={row.original.status} />
+            )}
             {row.original.attempt > 1 && <span className="text-xs text-muted-foreground">attempt {row.original.attempt}</span>}
           </span>
         ),
@@ -243,7 +304,7 @@ function BatchRows({ rows }: { rows: BatchRow[] }) {
           const out = outputLine(r);
           return (
             <div title={[r.error, out].filter(Boolean).join(' · ')}>
-              {r.error ? <span className="text-destructive-text">{r.error}</span> : out || <span className="text-muted-foreground">{r.status === 'pending' ? 'Not started yet' : '—'}</span>}
+              {r.error ? <span className="text-destructive-text">{r.error}</span> : out || <span className="text-muted-foreground">{r.status === 'pending' ? 'Not started yet' : r.runId ? '—' : 'Never ran'}</span>}
               {r.error && out ? <span className="text-muted-foreground"> · {out}</span> : null}
             </div>
           );
@@ -261,7 +322,7 @@ function BatchRows({ rows }: { rows: BatchRow[] }) {
           ) : null,
       },
     ],
-    [],
+    [check],
   );
   return (
     <DataTableWithViews

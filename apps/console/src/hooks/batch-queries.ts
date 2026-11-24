@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import type { BatchInput } from '@/lib/types/batches';
+import type { ListParams } from '@/lib/types/query';
 import { useTeamQuery } from './team-query';
 
 const key = (batchId: string) => ['batches', batchId] as const;
@@ -22,6 +23,7 @@ export const useBatch = (batchId: string) =>
     refetchInterval: (q) => {
       const b = q.state.data;
       if (!b) return false;
+      // A run waiting for a person can wait for days, so it is not polled for.
       return b.pending > 0 || b.running > 0 ? 2_000 : false;
     },
     // A batch page left open in another tab still reaches the batch's end.
@@ -36,3 +38,7 @@ export function useRetryBatch(batchId: string) {
 
 /** The batch's results as a CSV link to download. */
 export const useBatchResultsCsv = (batchId: string) => useMutation({ mutationFn: () => api.batches.resultsCsv(batchId) });
+
+/** A workflow's batches for its Batches tab, newest first, counted by the API. */
+export const useWorkflowBatches = (workflowId: string, params: ListParams) =>
+  useTeamQuery({ queryKey: ['workflow-batches', workflowId, params], queryFn: () => api.batches.list(workflowId, params), enabled: Boolean(workflowId) });

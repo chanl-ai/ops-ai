@@ -1245,6 +1245,7 @@ export function createMockApi(): OpsApi {
       dryRun: () => Promise.reject(new ApiError('Starting from a file needs the agents service.', 501)),
       start: () => Promise.reject(new ApiError('Starting from a file needs the agents service.', 501)),
       get: () => Promise.reject(new ApiError('Batches need the agents service.', 501)),
+      list: () => Promise.reject(new ApiError('Batches need the agents service.', 501)),
       retryFailed: () => Promise.reject(new ApiError('Batches need the agents service.', 501)),
       resultsCsv: () => Promise.reject(new ApiError('Batches need the agents service.', 501)),
     },
