@@ -36,6 +36,8 @@ from .test_api import (  # pyright: ignore[reportPrivateUsage]
 )
 
 CARDS = {"X-Team-Id": "team_cards"}
+# A watch of a source that reads pages, not folders of files.
+PAGES: dict[str, JsonValue] = {"plugin": "confluence", "source": "pages", "values": {}}
 NOW = datetime(2026, 11, 24, 9, 0, tzinfo=UTC)
 WATCH = {
     "name": "Supplier invoices",
@@ -62,7 +64,17 @@ class Declaring:
                 "sites": {"type": "array", "required": False},
                 "libraries": {"type": "array", "required": False},
             },
-        }
+        },
+        # A knowledge source Files cannot watch: it reads pages, not folders of files.
+        {
+            "plugin": "confluence",
+            "source": "pages",
+            "title": "Confluence pages",
+            "connectionId": "con_1",
+            "connectionStatus": "healthy",
+            "signIn": "team",
+            "inputs": {},
+        },
     ]
 
     async def declared(self, tenant_id: str, team_id: str) -> list[dict[str, JsonValue]]:
@@ -223,11 +235,13 @@ async def test_the_list_names_a_watchs_folders_counts_its_files_and_keeps_its_co
         refused = [
             await builder.post("/v1/watches", json={**WATCH, "values": {"site": "Finance"}}, headers=OPS),
             await builder.post("/v1/watches", json={**WATCH, "plugin": "box"}, headers=OPS),
+            await builder.post("/v1/watches", json={**WATCH, **PAGES}, headers=OPS),
             await builder.post("/v1/watches", json={**WATCH, "connectionId": "con_other"}, headers=OPS),
             await builder.patch(f"/v1/watches/{made['id']}", json={"values": {"libraries": "Invoices"}}, headers=OPS),
         ]
         assert [(r.status_code, r.json()["error"]["code"]) for r in refused] == [
             (400, "invalid_source_values"),
+            (400, "source_not_offered"),
             (400, "source_not_offered"),
             (400, "connection_mismatch"),
             (400, "invalid_source_values"),
@@ -285,6 +299,10 @@ async def test_each_version_of_a_watched_file_is_scanned_read_held_and_deleted_o
         unnamed = {"fileId": file_id, "status": "clean", "engine": "clamav"}
         assert (await admin.post("/v1/files/scan-results", json=unnamed, headers=scanner)).status_code == 400
         digest = hashlib.sha256(paid).hexdigest()
+        # A verdict naming version 1 by number and version 2 by digest is refused, and clears neither.
+        mixed = {**unnamed, "version": 1, "digest": digest}
+        assert (await admin.post("/v1/files/scan-results", json=mixed, headers=scanner)).status_code == 400
+        assert (await admin.get(content, headers=OPS)).status_code == 423
         named = {**unnamed, "digest": digest}
         assert (await admin.post("/v1/files/scan-results", json=named, headers=scanner)).status_code == 200
         assert (await admin.get(content, headers=OPS)).content == paid
@@ -295,6 +313,13 @@ async def test_each_version_of_a_watched_file_is_scanned_read_held_and_deleted_o
         hold = {"ids": [file_id], "hold": True, "reason": "Supplier dispute"}
         assert _data(await admin.post("/v1/files/legal-hold", json=hold, headers=OPS))["updated"] == [file_id]
         assert [bool((info := objects.head(k)) and info.legal_hold) for k in keys] == [True, True]
+        # A version the check writes while the file is held is held too.
+        with isolation.scope(tenant, "team_ops"):
+            await files.put_source(tenant, "team_ops", _found(watch_id, "k1", "Invoices/a.pdf"), paid + b" refunded",
+                                   actor="watch:w")  # fmt: skip
+            held = await FilesStore(engine).get(file_id)
+        assert held is not None and len(held.versions) == 3
+        assert [bool((info := objects.head(v.storage_key)) and info.legal_hold) for v in held.versions] == [True] * 3
         release = {**hold, "hold": False, "reason": "Settled"}
         assert _data(await admin.post("/v1/files/legal-hold", json=release, headers=OPS))["updated"] == [file_id]
         assert (await admin.delete(f"/v1/files/{file_id}", headers=OPS)).status_code == 204

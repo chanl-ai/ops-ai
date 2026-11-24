@@ -1,15 +1,14 @@
 # The use case runner puts docs/usecases/lib (usecase_harness) on the path; pyright alone cannot see it.
 # pyright: basic, reportMissingImports=false
 """uc-772 a watched folder brings files in, api layer: docs/usecases/files-service/a-watched-folder-brings-files-in.md.
-The SharePoint plugin (from the plugins checkout, OPS_PLUGINS_REPO) runs in tools-service against its fake, served on
-https under graph.microsoft.com (docs/usecases/lib/fake_sharepoint_confluence.py), with one file in the library whose
-size Graph reports as 30 MB. Everyone signs in through platform-service, so the seeded roles decide: Priya (admin)
+The built-in SharePoint plugin (builtin-plugins/ops_plugin_sharepoint, the copy every stack ships) runs in tools-service
+against its fake from the plugins checkout (OPS_PLUGINS_REPO), served on https under graph.microsoft.com
+(docs/usecases/lib/fake_sharepoint_confluence.py), with one file in the library whose size Graph reports as 30 MB. Everyone signs in through platform-service, so the seeded roles decide: Priya (admin)
 connects SharePoint for team_ops, James (builder) watches a folder and presses Check now, Ravi (viewer) only reads.
 files-service checks the watch through tools-service. No model is called."""
 
 from __future__ import annotations
 
-import json
 import tempfile
 import time
 from contextlib import ExitStack
@@ -47,7 +46,8 @@ with ExitStack() as stack:
         tools(
             {
                 **systems.settings,
-                "OPS_PLUGIN_PATHS": json.dumps(systems.plugin_paths[:1]),
+                # No working copy replaces the built-in plugins, so the run reads the copy that ships.
+                "OPS_PLUGIN_PATHS": "[]",
                 "OPS_CONSOLE_URL": "https://console.harborpine.test",
                 "OPS_AUTH_MODE": "platform",
                 "OPS_PLATFORM_URL": platform_url,

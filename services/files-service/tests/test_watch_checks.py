@@ -353,3 +353,38 @@ async def test_each_check_says_why_it_stopped_and_keeps_the_place_until_it_bring
     assert (other_row.last_outcome or {}).get("status") == "success"
     assert (last.status, last.brought) == ("success", 1)
     assert await _entries(engine, tenant, watch_id) == {"drv!a": (2, False)}
+
+
+async def test_a_file_that_fails_every_fetch_is_one_failed_event_and_the_check_settles_and_removes(
+    engine: AsyncEngine, tmp_path: Path, tenant: str
+) -> None:
+    reader = Recorded(
+        {None: {"items": [_row("a", "e1"), _row("c", "e1")], "next_cursor": None}},
+        {"drv!a": _file("a", "e1", b"a"), "drv!c": _file("c", "e1", b"c")},
+    )
+    checks, watch_id = await _setup(engine, tmp_path, tenant, reader)
+    with isolation.scope(tenant, TEAM):
+        await checks.check(watch_id)
+        # A week on the folder is listed whole: c was deleted, and b is new but locked, so every fetch of it fails.
+        clock[0] = datetime(2026, 12, 2, 9, 0, tzinfo=UTC)
+        reader.pages = {None: {"items": [_row("a", "e1"), _row("b", "e1")], "next_cursor": None}}
+        reader.got["drv!b"] = Answer(False, code="ACCESS_DENIED", message="The file is locked for editing.")
+        said = [(o.status, o.code, o.removed) for o in [await checks.check(watch_id) for _ in range(4)]]
+        row = await WatchesStore(engine).get(watch_id)
+        # Its version changes at the source: fetched again, and brought in.
+        reader.pages = {None: {"items": [_row("a", "e1"), _row("b", "e2")], "next_cursor": None}}
+        reader.got["drv!b"] = _file("b", "e2", b"b")
+        clock[0] = datetime(2026, 12, 10, 9, 0, tzinfo=UTC)
+        last = await checks.check(watch_id)
+        events = await WatchesStore(engine).events(watch_id, after=2)
+    # Tried on three checks, then left until it changes: the third settles, so the full listing removes c.
+    assert said == [
+        ("partial", "fetch_failed", 0),
+        ("partial", "fetch_failed", 0),
+        ("success", "", 1),
+        ("success", "", 0),
+    ]
+    assert reader.fetched().count("drv!b") == 4
+    assert row is not None and row.place.get("last_full_at") == "2026-12-02T09:00:00+00:00"
+    assert [(e.kind, e.path) for e in events] == [("failed", "b.pdf"), ("removed", "c.pdf"), ("new", "Invoices/b.pdf")]
+    assert (last.status, last.brought) == ("success", 1)

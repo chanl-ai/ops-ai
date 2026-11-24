@@ -1,5 +1,5 @@
 // uc-772 a watched folder brings files in, ui layer: docs/usecases/files-service/a-watched-folder-brings-files-in.md.
-// The SharePoint plugin runs in the stack's tools-service against its fake (docs/usecases/lib/fake_sharepoint_confluence.py,
+// The built-in SharePoint plugin (the copy every stack ships) runs in the stack's tools-service against its fake (docs/usecases/lib/fake_sharepoint_confluence.py,
 // run as a script with --oversize: one file in the Policies folder Graph reports as 30 MB), and files-service checks the
 // watch through it. James (builder) watches a folder from Files › Watched folders before and after the team connects
 // SharePoint, presses Check now and opens a file it brought in; Ravi (viewer) reads the same list. Priya (admin) and Sam
@@ -61,7 +61,8 @@ async function shoot(page, name, show, wide) {
 }
 
 const fakes = await startFakes();
-const plugins = { OPS_PLUGIN_PATHS: JSON.stringify(fakes.info.pluginPaths.slice(0, 1)) };
+// No working copy replaces the built-in plugins, so the run reads the copy that ships.
+const plugins = { OPS_PLUGIN_PATHS: '[]' };
 
 try {
   await withUiStack(
@@ -257,6 +258,16 @@ try {
         await away.waitFor({ timeout: 60_000 });
         const awayText = await away.innerText();
         check('19 a check refused because apps could not be reached says that, with no Reconnect', /could not be reached/.test(awayText) && !/sign-in/.test(awayText) && (await away.getByTestId('watch-reconnect').count()) === 0, awayText);
+        await page.unroute((u) => isList(u.href));
+        // A check that stopped partial says so with its reason, never the green tick of a finished one.
+        const partialAs = (code, stopped) => (w) => ({ ...w, checking: false, lastCheckAt: new Date().toISOString(), lastCheck: { ...w.lastCheck, status: 'partial', code, stopped } });
+        await page.route((u) => isList(u.href), answered(partialAs('fetch_failed', 'Some files could not be fetched; the next check tries them again.')));
+        await page.goto(watches, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        const partial = page.locator(`[data-testid="watch-last-check-${watch.id}"][data-status="partial"]`);
+        const partialShown = await partial.waitFor({ timeout: 60_000 }).then(() => true, () => false);
+        const partialText = partialShown ? await partial.innerText() : await row.innerText();
+        check('19 a check that stopped partial says Partial with its reason and no green tick', partialShown && /Partial/.test(partialText) && /could not be fetched/.test(partialText) && (await partial.locator('.text-success').count()) === 0, partialText);
+        if (partialShown) await shoot(page, 'uc-772-partial', async () => partial.waitFor(), wide);
         await page.unroute((u) => isList(u.href));
 
         check('20 no sideways scroll at 1440 or 390 on any screen', wide.length === 0, wide);
