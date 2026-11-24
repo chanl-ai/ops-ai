@@ -120,10 +120,11 @@ def main(argv: list[str]) -> int:
     fork.add_argument("--from", dest="from_node", required=True)
     retry = sub.add_parser("retry", help="retry a stuck run")
     retry.add_argument("run_id")
-    sched = sub.add_parser("schedule", help="a trigger's saved schedule: show, set, clear, kinds, preview")
-    sched.add_argument("action", choices=("show", "set", "clear", "kinds", "preview"))
-    sched.add_argument("id", nargs="?", help="the workflow (show, set, clear)")
-    sched.add_argument("--step", help="the trigger step's id (show, set, clear)")
+    sched = sub.add_parser("schedule", help="a trigger's saved schedule: show, save, clear, kinds, preview")
+    # `set` is the verb's first name, kept so scripts written with it still run.
+    sched.add_argument("action", choices=("show", "save", "set", "clear", "kinds", "preview"))
+    sched.add_argument("id", nargs="?", help="the workflow (show, save, clear)")
+    sched.add_argument("--step", help="the trigger step's id (show, save, clear)")
     sched.add_argument("--kind", help="the rule kind (opsai workflows schedule kinds)")
     sched.add_argument(
         "--set",

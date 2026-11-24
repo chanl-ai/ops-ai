@@ -19,26 +19,19 @@ const client = (seen, status = 200, data = {}) =>
     },
   });
 
-test('save and preview send the kind and its own fields inside rule', async () => {
-  const seen = [];
-  const c = client(seen);
-  await c.workflows.schedules.save('held_wires', 'start', RULE);
-  await c.workflows.schedules.preview(RULE);
-  assert.deepEqual(seen.map((r) => [r.method, r.url.pathname.replace('/api/agents', ''), r.body]), [
-    ['PUT', STEP, { rule: RULE }],
-    ['POST', '/v1/schedules/preview', { rule: RULE }],
-  ]);
-});
-
-test('show, clear and kinds use their own paths', async () => {
+test('each verb sends the kind and its own fields inside rule, on its own path', async () => {
   const seen = [];
   const c = client(seen, 200, []);
+  await c.workflows.schedules.save('held_wires', 'start', RULE);
+  await c.workflows.schedules.preview(RULE);
   await c.workflows.schedules.kinds();
   await c.workflows.schedules.show('held_wires', 'start');
   await client(seen, 204).workflows.schedules.clear('held_wires', 'start');
-  assert.deepEqual(seen.map((r) => [r.method, r.url.pathname.replace('/api/agents', '')]), [
-    ['GET', '/v1/schedules/kinds'],
-    ['GET', STEP],
-    ['DELETE', STEP],
+  assert.deepEqual(seen.map((r) => [r.method, r.url.pathname.replace('/api/agents', ''), r.body]), [
+    ['PUT', STEP, { rule: RULE }],
+    ['POST', '/v1/schedules/preview', { rule: RULE }],
+    ['GET', '/v1/schedules/kinds', undefined],
+    ['GET', STEP, undefined],
+    ['DELETE', STEP, undefined],
   ]);
 });
