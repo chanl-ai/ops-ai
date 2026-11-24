@@ -11,7 +11,6 @@ agents-service GET /v1/eval-runs/{run_id}  # bounded: one kept eval run and its 
 agents-service GET /v1/graphs  # owed: every graph name, read by the workflow editor
 agents-service GET /v1/graphs/{name}/versions  # bounded: one graph's versions
 agents-service GET /v1/knowledge-usage  # owed: every agent using a knowledge base
-agents-service GET /v1/me/memories  # owed: every memory the person holds
 agents-service GET /v1/model-aliases  # bounded: the install's model aliases
 agents-service GET /v1/prompts/variables  # bounded: the fixed prompt variables
 agents-service GET /v1/threads/{thread_id}/inbox  # bounded: one thread's inbox
@@ -32,6 +31,7 @@ kb-service GET /v1/sources/from-plugin  # bounded: one plugin's knowledge source
 kb-service GET /v1/sources/{source_id}/tombstones  # owed: every removed item of a source
 models-service GET /v1/provider-keys/{name}/models  # bounded: the provider's model catalog, read upstream
 platform-service GET /v1/api-key-summaries  # owed: every API key of the team
+platform-service GET /v1/auth/sso/links  # bounded: the providers of the person's workspace their email's domain names
 platform-service GET /v1/oauth/grants  # owed: every OAuth grant of the person
 platform-service GET /v1/people-names  # owed: names of the people a page shows, by id
 platform-service GET /v1/policies  # bounded: the install's policies
@@ -40,7 +40,6 @@ platform-service GET /v1/settings/sign-in/providers  # bounded: the install's si
 platform-service GET /v1/settings/sign-in/secret-names  # bounded: the install's sign-in secret names
 platform-service GET /v1/settings/sign-in/secrets  # bounded: the install's sign-in secrets
 platform-service GET /v1/team-names  # owed: names of the teams a page shows, by id
-platform-service GET /v1/teams  # owed: every team of the person
 tools-service GET /v1/app-credentials  # owed: every credential of an app
 tools-service GET /v1/apps/{app_id}/accounts  # owed: every account of an app
 tools-service GET /v1/apps/{app_id}/resources  # bounded: one app's resources
@@ -50,4 +49,5 @@ tools-service GET /v1/me/accounts  # owed: every account the person holds
 tools-service GET /v1/me/connections  # owed: every connection the person holds
 tools-service GET /v1/plugin-templates  # bounded: one plugin's templates
 tools-service GET /v1/tool-catalog  # owed: keyset pages by after; no search
+tools-service GET /v1/tool-modules/discoveries/{discovery_id}/names  # owed: every operation name of one discovery for select-all; no cap on a discovery's size
 tools-service GET /v1/tool-modules/{module_id}  # bounded: one module and its operations

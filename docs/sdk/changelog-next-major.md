@@ -38,8 +38,8 @@ follow each route.
 ### platform-service
 
 - `GET /v1/team-names`: required parameter `ids`. Ask by the ids the page shows. Follow (done): agents-service `PlatformTeamNames`. Old form works: no.
-- `POST /v1/skills`: `ownerTeam` is a team id the caller may create skills in, or left out for the acting team. Reads add `ownerTeamName`; the list adds `teamNames`; `GET /v1/skills/options` adds `ownerTeams`. Follow (done): console, sample team, examples. Old form works: no, for a team name: 400 `unknown_owner_team`.
-- `GET /v1/runs`, a run, its events, `GET /v1/workflows` and every workflow read: who may read. Follow: none. Old form works: no, for a Chat user or Security admin: 403 `forbidden`.
+- `POST /v1/skills`, `GET /v1/skills`, `GET /v1/skills/{id}`, `GET /v1/skills/options`: `ownerTeam` is a team id. Send a team id from `ownerTeams`, or leave it out. Follow (done): console, sample team, examples. Old form works: no, for a team name: 400 `unknown_owner_team`.
+- `GET /v1/runs`, `GET /v1/runs/{id}`, `GET /v1/runs/{id}/events`, `GET /v1/workflows` and every workflow read: who may read. Nothing for any role but Chat user and Security admin, whose screens read none of these. Follow: none. Old form works: no, for those roles: 403 `forbidden`.
 - `GET /v1/people-names`: required parameter `emails`. Ask by the emails the page shows. Follow (done): agents-service `PlatformPeopleNames`. Old form works: no.
 - `GET /v1/settings/members`: paging. Follow `pagination.hasNext` in a team of more than 20 people. Follow: console `apps/console/src/lib/api/settings-http.ts:13` and `platform-access-http.ts:60` send the table's page, size, search and sort; CLI `sdk/python/src/ops_ai/_cli/people.py:41` pages with `page_items` past the first 20; `scripts/sample_team.py:223`, `:274`, `:313` and `scripts/sample_walk.py:117` read one page (their teams hold fewer than 20). Old form works: partly: a team of more than 20 answers its first 20.
 - `GET /v1/settings/members`: reply field `facets`. Nothing for an unfiltered list. Old form works: partly.
