@@ -26,7 +26,7 @@ from ops_kb.app import create_kb_app
 from ops_kb.files import KnowledgeFiles
 from ops_kb.tool_sources import Answer
 from ops_plugin_sdk import PluginError
-from ops_plugin_sdk.testing import Fake, call
+from ops_plugin_sdk.testing import Fake, call, knowledge_contract
 from ops_service_kit.settings import Settings
 
 from .readings_fake import LocalReadings
@@ -145,6 +145,20 @@ async def test_sharepoint_files_sync_once_change_by_delta_and_leave_when_deleted
     assert [i.split(":")[-1] for i in again] == ["p2"], (again, run["counts"])
     assert any("14 days" in p["text"] for p in await search(kb, kb_id, "claim expenses within days"))
     assert not any("Twenty days" in p["text"] for p in await search(kb, kb_id, "leave days a year"))
+
+
+def test_sharepoint_keeps_the_source_contract_files_and_knowledge_read_it_by() -> None:
+    # Every role ops_sources reads a source by, on the SharePoint plugin and its fake Graph: places found, every page
+    # of changes read, a version fetched (and `unchanged` for a matching tag), the access list, a delete found.
+    mod, fakes = load("sharepoint")
+    graph = fakes.FakeGraph()
+    fake = Fake(httpx.Client(transport=httpx.MockTransport(graph)), "tok")
+    found = knowledge_contract(
+        mod.plugin, "files", fake, settings={"sharepoint_url": fakes.SHAREPOINT}, values={"sites": [fakes.SITE_HR]},
+        change=lambda: graph.edit(fakes.LIB_POLICIES, "p2", b"Claim within 14 days.\n"),
+        delete=lambda: graph.remove(fakes.LIB_POLICIES, "p1"),
+    )  # fmt: skip
+    assert found == [], found
 
 
 async def test_sharepoint_pickers_reach_the_plugins_scopes_tool(sharepoint: Any) -> None:
