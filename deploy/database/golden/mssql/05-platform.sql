@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- platform-service, stamped at 20261123_2330_identity_per_user
+-- platform-service, stamped at 20261124_0100_watches_cells
 CREATE TABLE tenants (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -763,5 +763,5 @@ CREATE TABLE alembic_version_platform (
     CONSTRAINT alembic_version_platform_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_platform (version_num) VALUES ('20261123_2330_identity_per_user');
+INSERT INTO alembic_version_platform (version_num) VALUES ('20261124_0100_watches_cells');
 GO

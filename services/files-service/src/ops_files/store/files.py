@@ -909,7 +909,7 @@ class FilesStore(Store):
         f, v = files, file_versions
         tag = (
             sa.select(v.c.source_tag)
-            .where(v.c.tenant_id == f.c.tenant_id, v.c.file_id == f.c.id, v.c.current.is_(True))
+            .where(v.c.tenant_id == f.c.tenant_id, v.c.file_id == f.c.id, v.c.current == sa.true())
             .scalar_subquery()
         )
         q = sa.select(f.c.id, f.c.source_id, f.c.source_marker, tag, f.c.gone_count, f.c.name, f.c.removed_at).where(

@@ -6,7 +6,7 @@ catalogue grants). Reading a watch follows files.view, so no role is given watch
 raises each tenant's permission version; the downgrade removes the area's cells.
 
 Revision ID: 20261124_0100_watches_cells
-Revises: 20261122_2022_list_sort_indexes
+Revises: 20261124_0100_close_invites
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from __future__ import annotations
 from alembic import op
 
 revision = "20261124_0100_watches_cells"
-down_revision = "20261122_2022_list_sort_indexes"
+down_revision = "20261124_0100_close_invites"
 branch_labels = None
 depends_on = None
 

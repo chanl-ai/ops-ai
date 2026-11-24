@@ -279,6 +279,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.file_read_requests TO ops_files_runt
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.storage_settings TO ops_files_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.storage_credentials TO ops_files_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.storage_settings_audit TO ops_files_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.file_watches TO ops_files_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.file_watch_events TO ops_files_runtime;
 GRANT SELECT ON dbo.alembic_version_files TO ops_files_runtime;
 GO
 IF USER_ID(N'ops_files_system') IS NULL CREATE USER ops_files_system WITHOUT LOGIN;
