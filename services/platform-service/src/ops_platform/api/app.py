@@ -848,7 +848,7 @@ def create_public_app(
             )
         if body.person_id is None:
             raise ValidationFailed("Give the person's id.", code="person_required")
-        actor = await acting(await claims_of(request, token), x_team_id)
+        actor = await acting_as_person(request, token, x_team_id)
         return ok(
             await checker.check(
                 actor, body.person_id, body.area, body.action, owner=body.owner, requested_by=body.requested_by

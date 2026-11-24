@@ -250,6 +250,10 @@ async def test_an_old_console_saving_the_two_person_switch_is_told_it_moved_to_t
     r = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": {"reviews": True}}, headers=ana)
     assert (r.status_code, r.json()["error"]["code"]) == (409, "policy_retired"), r.text
     assert "Approvals" in r.json()["error"]["message"]
+    # Someone who may not change approval rules is refused for that first, so the retired key tells them nothing.
+    _, vic = await _team_admin(signin, "vic", role="viewer")
+    r = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": {"reviews": True}}, headers=vic)
+    assert r.status_code == 403, r.text
 
 
 async def test_only_the_security_team_lets_a_team_send_page_images(signin: SignInRig) -> None:
