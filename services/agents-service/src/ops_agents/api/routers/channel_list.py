@@ -44,10 +44,12 @@ from .. import deployment_reviews
 from ..auth import Principal, caller_in, caller_of, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..schedule_view import next_runs
+from ..schedule_clock import idle_reason
+from ..schedule_view import next_runs, schedulable
 from ..team_names import PlatformTeamNames
 from ..widget_sessions import normal_origin
 from .activity import _teams  # pyright: ignore[reportPrivateUsage]
+from .engine import REGISTRY
 from .widget import WidgetDeploymentInput, make_deployment, served_version
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -468,10 +470,10 @@ def _place(row: ChannelReply) -> PlaceReply:
 
 
 def _schedule_of(definition: Json, saved: list[ScheduleRow], now: datetime) -> ScheduleReply | None:
-    """The workflow's saved schedule on a trigger step its live version still has, in words with its next run."""
-    steps = {str(n.get("id")) for n in cast(list[Json], definition.get("nodes") or [])}
+    """The workflow's saved schedule on a trigger step its live version still ticks (`idle_reason`), in words with its
+    next run."""
     for row in saved:
-        if row.trigger_step in steps:
+        if idle_reason(row.trigger_step, definition, "live", lambda n: schedulable(REGISTRY, n)) is None:
             upcoming = next_runs(row.rule, now, 1)
             return {
                 "words": RULE_KINDS.words(row.rule),
@@ -481,48 +483,51 @@ def _schedule_of(definition: Json, saved: list[ScheduleRow], now: datetime) -> S
     return None
 
 
-def _steps(
+async def _steps(
+    rt: Runtime,
     live: list[LiveDefinition],
     node_type: str,
     param: str,
+    *,
     target: str,
     version: int | None,
-    *,
-    schedules: dict[str, list[ScheduleRow]],
+    teams: tuple[str, ...],
     now: datetime,
 ) -> list[PlaceReply]:
     """Each live workflow step that names `target`: it runs the published version, so it is never pinned. A step of a
-    scheduled workflow carries the schedule and its next run."""
-    out: list[PlaceReply] = []
-    for d in live:
-        definition = cast(Json, d.definition or {})
-        for n in cast(list[Json], definition.get("nodes") or []):
-            params = cast(Json, n.get("parameters") or {})
-            if n.get("type") == node_type and params.get(param) == target:
-                out.append(
-                    {
-                        "where": {
-                            "kind": "workflow_step",
-                            "id": str(n.get("id")),
-                            "name": f"{d.name or d.workflow_id}: {n.get('name') or n.get('id')}",
-                            "workflowId": d.workflow_id,
-                        },
-                        "version": version,
-                        "pinned": False,
-                        "behind": 0,
-                        "health": None,
-                        "traffic24h": None,
-                        "errors24h": None,
-                        "lastActivityAt": None,
-                        "schedule": _schedule_of(definition, schedules.get(d.workflow_id, []), now),
-                    }
-                )
-    return out
+    scheduled workflow carries the schedule and its next run, read for the matched workflows only and only where the
+    caller may view the workflow's team."""
+    found = [
+        (d, n)
+        for d in live
+        for n in cast(list[Json], cast(Json, d.definition or {}).get("nodes") or [])
+        if n.get("type") == node_type and cast(Json, n.get("parameters") or {}).get(param) == target
+    ]
+    schedules = await _saved(rt, sorted({d.workflow_id for d, _ in found if d.team_id in teams}))
+    return [
+        {
+            "where": {
+                "kind": "workflow_step",
+                "id": str(n.get("id")),
+                "name": f"{d.name or d.workflow_id}: {n.get('name') or n.get('id')}",
+                "workflowId": d.workflow_id,
+            },
+            "version": version,
+            "pinned": False,
+            "behind": 0,
+            "health": None,
+            "traffic24h": None,
+            "errors24h": None,
+            "lastActivityAt": None,
+            "schedule": _schedule_of(cast(Json, d.definition or {}), schedules.get(d.workflow_id, []), now),
+        }
+        for d, n in found
+    ]
 
 
-async def _saved(rt: Runtime) -> dict[str, list[ScheduleRow]]:
+async def _saved(rt: Runtime, workflow_ids: list[str]) -> dict[str, list[ScheduleRow]]:
     out: dict[str, list[ScheduleRow]] = {}
-    for row in await WorkflowSchedules(rt.db).everything():
+    for row in await WorkflowSchedules(rt.db).for_workflows(workflow_ids):
         out.setdefault(row.workflow_id, []).append(row)
     return out
 
@@ -549,8 +554,8 @@ async def agent_live(rt: Rt, me: Me, agent_id: str) -> JSONResponse:
         serving = await ChannelList(rt.db).rows(teams, now=now, agent_id=agent_id, types=["chat"])
         live = await ChannelList(rt.db).live_definitions()
     rows = [_place(r) for r in await replies(rt, me, serving, now)]
-    rows += _steps(
-        live, "ops.ai.agent", "agent", agent_id, cast(int | None, latest), schedules=await _saved(rt), now=now
+    rows += await _steps(
+        rt, live, "ops.ai.agent", "agent", target=agent_id, version=cast(int | None, latest), teams=teams, now=now
     )
     return ok({"latestVersion": latest, "versions": _versions(rows, cast(int | None, latest)), "rows": rows})
 
@@ -569,7 +574,9 @@ async def workflow_live(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
     now = datetime.now(UTC)
     watching = await ChannelList(rt.db).rows(teams, now=now, mailbox=(str(mine.team_id), address)) if address else []
     rows = [_place(r) for r in await replies(rt, me, watching, now)]
-    rows += _steps(live, "ops.action.workflow", "workflow", workflow_id, latest, schedules=await _saved(rt), now=now)
+    rows += await _steps(
+        rt, live, "ops.action.workflow", "workflow", target=workflow_id, version=latest, teams=teams, now=now
+    )
     return ok({"latestVersion": latest, "versions": _versions(rows, latest), "rows": rows})
 
 

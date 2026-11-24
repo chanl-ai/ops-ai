@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
 from ops_access import can
+from ops_engine.store import DefinitionRow
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, Unprocessable
 from ops_service_kit.http import Envelope, In, Json, JsonValue
@@ -33,15 +34,13 @@ from ..auth import caller_of, principal
 from ..deps import Runtime
 from ..envelope import ok
 from ..schedule_clock import required_beyond_due
-from ..schedule_view import ScheduleView, next_runs, schedule_view
+from ..schedule_view import ScheduleView, next_runs, schedulable, schedule_view
 from ..schemas import Out  # pyright: ignore[reportPrivateImportUsage]
 from .engine import REGISTRY, Me, Reader, Rt, definitions
 
 log = get_logger("ops_agents.api.routers.schedules")
 router = APIRouter(prefix="/v1/schedules", dependencies=[Depends(principal)])
 workflow_router = APIRouter(prefix="/v1/workflows", dependencies=[Depends(principal)])
-
-NEXT_RUNS = 3
 
 
 class KindView(Out):
@@ -58,11 +57,6 @@ class PreviewView(Out):
     rule: Json
     words: str
     next_runs: list[str]
-
-
-def schedulable(node: Json) -> bool:
-    found = REGISTRY.find(str(node.get("type")), int(cast(int, node.get("typeVersion") or 1)))
-    return found is not None and found.schedulable
 
 
 def schedule_input_refused(field: str) -> Unprocessable:
@@ -134,16 +128,15 @@ async def _saveable(rt: Runtime, row: Any, step: str) -> None:
     working = await store.working_copy(wid, team=current_team())
     versions = [v.definition for v in (live, row, working) if v]
     steps = [n for d in versions for n in cast(list[Json], d.get("nodes") or []) if n.get("id") == step]
-    if not steps or not all(schedulable(n) for n in steps):
+    if not steps or not all(schedulable(REGISTRY, n) for n in steps):
         raise NotFound(f"Schedule trigger {step} on {wid}")
     for d in versions:
         if field := required_beyond_due(d, step):
             raise schedule_input_refused(field)
 
 
-async def serving_definition(rt: Runtime, workflow_id: str) -> Json | None:
-    served = await definitions(rt).serving(workflow_id, team=current_team())
-    return served.definition if served else None
+async def serving_definition(rt: Runtime, workflow_id: str) -> DefinitionRow | None:
+    return await definitions(rt).serving(workflow_id, team=current_team())
 
 
 @workflow_router.get("/definitions/{workflow_id}/triggers/{step}/schedule", response_model=Envelope[ScheduleView])
@@ -155,7 +148,7 @@ async def get_schedule(rt: Rt, me: Reader, workflow_id: str, step: str) -> JSONR
     row = await WorkflowSchedules(rt.db).get(workflow_id, step)
     if row is None:
         raise NotFound(f"No schedule on {step} of {workflow_id}")
-    return ok(schedule_view(row, datetime.now(UTC), await serving_definition(rt, workflow_id)))
+    return ok(schedule_view(row, datetime.now(UTC), await serving_definition(rt, workflow_id), REGISTRY))
 
 
 @workflow_router.put("/definitions/{workflow_id}/triggers/{step}/schedule", response_model=Envelope[ScheduleView])
@@ -180,7 +173,7 @@ async def save_schedule(rt: Rt, me: Me, _: Tx, workflow_id: str, step: str, body
     )
     row = await store.get(workflow_id, step)
     assert row is not None
-    return ok(schedule_view(row, now, await serving_definition(rt, workflow_id)))
+    return ok(schedule_view(row, now, await serving_definition(rt, workflow_id), REGISTRY))
 
 
 @workflow_router.delete("/definitions/{workflow_id}/triggers/{step}/schedule", status_code=204, response_model=None)

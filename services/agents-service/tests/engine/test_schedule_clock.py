@@ -81,6 +81,13 @@ class Env:
         with tenant_scope(TENANT):
             await WorkflowSchedules(self.db).save(wid, "start", TEAM, stored, "user_ana")
 
+    async def saved_at(self, wid: str, when: str) -> None:
+        """The rule was saved at `when`: the store stamps the real time, a test drives the clock in 2026-11-23."""
+        async with self.db.begin() as c:
+            await c.execute(
+                sa.text("UPDATE workflow_schedules SET changed_at = :w WHERE workflow_id = :i"), {"w": when, "i": wid}
+            )
+
     async def runs(self, wid: str = "held_wires") -> list[dict[str, Any]]:
         with tenant_scope(TENANT):
             rows = await RunStore(EngineTransactions(self.db)).list(workflow_id=wid)
@@ -122,7 +129,9 @@ async def env() -> AsyncIterator[Env]:
     await db.dispose()
 
 
-async def test_every_15_minutes_starts_four_runs_an_hour_in_the_workflows_team(env: Env) -> None:
+async def test_every_15_minutes_starts_four_runs_an_hour_in_the_workflows_team_and_a_running_one_skips(
+    env: Env,
+) -> None:
     await env.publish()
     await env.save(EVERY_15, at("09:50"))
     clock = env.clock()
@@ -135,6 +144,21 @@ async def test_every_15_minutes_starts_four_runs_an_hour_in_the_workflows_team(e
     with tenant_scope(TENANT):
         mine = await RunStore(EngineTransactions(env.db)).list(workflow_id="held_wires", team_id=OTHER)
     assert mine == []
+
+    # A run still going skips the next tick; a stuck one does not.
+    await env.publish("busy")
+    await env.save(EVERY_15, at("09:50"), "busy")
+    await clock.pass_once(at("09:59"))
+    await clock.pass_once(at("10:00"))
+    [first] = await env.runs("busy")
+    await env.set_status(first["id"], "running")
+    await clock.pass_once(at("10:15"))
+    assert len(await env.runs("busy")) == 1
+    [skipped] = await env.events("busy")
+    assert skipped["outcome"] == "skipped" and "still going" in skipped["detail"]["reason"]
+    await env.set_status(first["id"], "stuck")
+    await clock.pass_once(at("10:30"))
+    assert len(await env.runs("busy")) == 2
 
 
 async def test_a_new_schedule_waits_for_its_next_slot_and_runs_a_first_slot_ahead(env: Env) -> None:
@@ -152,6 +176,13 @@ async def test_a_new_schedule_waits_for_its_next_slot_and_runs_a_first_slot_ahea
     await clock.pass_once(at("17:59"))
     await clock.pass_once(at("18:00"))
     assert [r["run_key"] for r in await env.runs("evening")] == ["schedule:evening:2026-11-23T18:00Z"]
+
+    # Saved 20 seconds before its slot, first seen 10 seconds after it: that slot is the rule's own first, so it runs.
+    await env.publish("last_minute")
+    await env.save(EVERY_15, at("11:59:40"), "last_minute")
+    await env.saved_at("last_minute", "2026-11-23T11:59:40.000Z")
+    await clock.pass_once(at("12:00:10"))
+    assert [r["run_key"] for r in await env.runs("last_minute")] == ["schedule:last_minute:2026-11-23T12:00Z"]
 
 
 async def test_pause_rule_change_archive_and_restore_each_wait_for_the_next_slot(env: Env) -> None:
@@ -186,23 +217,6 @@ async def test_pause_rule_change_archive_and_restore_each_wait_for_the_next_slot
     assert len(await env.runs()) == 4
 
 
-async def test_a_running_run_skips_the_tick_and_a_stuck_one_does_not(env: Env) -> None:
-    await env.publish()
-    await env.save(EVERY_15, at("09:50"))
-    clock = env.clock()
-    await clock.pass_once(at("09:59"))
-    await clock.pass_once(at("10:00"))
-    [first] = await env.runs()
-    await env.set_status(first["id"], "running")
-    await clock.pass_once(at("10:15"))
-    assert len(await env.runs()) == 1
-    [skipped] = await env.events()
-    assert skipped["outcome"] == "skipped" and "still going" in skipped["detail"]["reason"]
-    await env.set_status(first["id"], "stuck")
-    await clock.pass_once(at("10:30"))
-    assert len(await env.runs()) == 2
-
-
 async def test_after_an_outage_one_catch_up_run_starts_marked_late_and_an_older_slot_is_missed(env: Env) -> None:
     await env.publish()
     await env.save(EVERY_15, at("06:50"))
@@ -227,6 +241,22 @@ async def test_after_an_outage_one_catch_up_run_starts_marked_late_and_an_older_
     await clock.pass_once(at("10:50:45"))
     await clock.pass_once(at("10:51:45"))
     assert [r["input"]["dueAt"] for r in await env.runs("each_minute")] == ["2026-11-23T10:51:00Z"]
+
+    # Friday's slot of a weekday rule is 24 hours after Thursday's and 72 before Monday's: Saturday evening is past half
+    # the smaller gap, so it is missed, not run late.
+    weekdays: dict[str, JsonValue] = {
+        "kind": "every",
+        "every": 1,
+        "unit": "days",
+        "start": "18:00",
+        "days": ["mon", "tue", "wed", "thu", "fri"],
+    }
+    await env.publish("weekdays")
+    await env.save(weekdays, at("17:00", "2026-11-26"), "weekdays")
+    await env.clock().pass_once(at("17:30", "2026-11-26"))
+    await env.clock().pass_once(at("20:00", "2026-11-28"))
+    assert await env.runs("weekdays") == []
+    assert [e["outcome"] for e in await env.events("weekdays")] == ["missed"]
 
 
 class Explodes(WorkflowStart):

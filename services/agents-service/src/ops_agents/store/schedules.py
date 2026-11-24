@@ -97,6 +97,16 @@ class WorkflowSchedules:
         async with tenant_tx(self.engine) as c:
             return [_row(r) for r in await c.execute(q.order_by(t.c.trigger_step))]
 
+    async def for_workflows(self, workflow_ids: list[str]) -> list[ScheduleRow]:
+        """The saved schedules of these workflows only, for a page that shows the ones it lists."""
+        if not workflow_ids:
+            return []
+        t = workflow_schedules
+        cols = [c for c in t.c if c.name != "tenant_id"]
+        q = sa.select(*cols).where(t.c.tenant_id == current_tenant(), t.c.workflow_id.in_(workflow_ids))
+        async with tenant_tx(self.engine) as c:
+            return [_row(r) for r in await c.execute(q.order_by(t.c.workflow_id, t.c.trigger_step))]
+
     async def everything(self) -> list[ScheduleRow]:
         """Every saved schedule of the acting tenant, for the clock, which reads them beside the live versions."""
         t = workflow_schedules

@@ -812,7 +812,6 @@ async def definition_view(rt: Runtime, me: Principal, workflow_id: str, version:
     outdated = held if held is not None and copy is None else None
     now = datetime.now(UTC)
     served = await store.serving(workflow_id, team=current_team())
-    serving = served.definition if served else None
     return {
         "workflowId": workflow_id,
         "name": row.name,
@@ -828,7 +827,9 @@ async def definition_view(rt: Runtime, me: Principal, workflow_id: str, version:
         "startForm": start_form(row.definition, REGISTRY),
         "workingCopy": copy and _copy_view(copy),
         "saveBase": _save_base(copy) if copy else {"version": newest["version"], "digest": newest["digest"]},
-        "schedules": [schedule_view(s, now, serving) for s in await WorkflowSchedules(rt.db).for_workflow(workflow_id)],
+        "schedules": [
+            schedule_view(s, now, served, REGISTRY) for s in await WorkflowSchedules(rt.db).for_workflow(workflow_id)
+        ],
         "outdatedCopy": outdated
         and _copy_view(outdated)
         | {"newerVersion": newest["version"], "newerBy": newest.get("createdBy"), "newerAt": newest.get("createdAt")},

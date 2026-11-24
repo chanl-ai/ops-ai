@@ -59,7 +59,7 @@ def url(wid: str) -> str:
     return f"/v1/workflows/definitions/{wid}/triggers/start/schedule"
 
 
-async def test_a_bad_rule_or_a_field_the_clock_cannot_fill_is_refused_naming_it(client: AsyncClient) -> None:
+async def test_a_bad_rule_is_refused_naming_it_and_kinds_preview_save_and_view_agree(client: AsyncClient) -> None:
     wid = await saved(client)
     every: dict[str, Any] = {"kind": "every", "unit": "minutes", "every": 15}
     cases: list[tuple[dict[str, Any], str]] = [
@@ -80,10 +80,6 @@ async def test_a_bad_rule_or_a_field_the_clock_cannot_fill_is_refused_naming_it(
     assert refused.status_code == 422 and refused.json()["error"]["details"]["field"] == "day", refused.text
     assert (await client.get(url(needs_day), headers=JAMES)).status_code == 404
 
-
-async def test_kinds_preview_save_and_view_agree_and_a_version_the_schedule_cannot_fill_is_refused(
-    client: AsyncClient,
-) -> None:
     kinds = (await client.get("/v1/schedules/kinds", headers=JAMES)).json()["data"]
     every = next(k for k in kinds if k["name"] == "every")
     assert every["schema"]["properties"]["kind"] == {"const": "every"}
@@ -154,6 +150,10 @@ async def test_each_route_asks_its_rights_and_clear_needs_nothing_else(stack: tu
     assert [s["idle"] for s in shown] == [
         "The live version has no step start, so this schedule starts nothing until one does."
     ]
+    with tenant_scope(TENANT):
+        await DefinitionStore(EngineTransactions(engine)).set_paused("dropped", True)
+    shown = (await c.get("/v1/workflows/definitions/dropped", headers=VIEWER)).json()["data"]["schedules"]
+    assert [s["idle"] for s in shown] == ["The workflow is paused, so the schedule starts nothing until it is resumed."]
     assert (await c.delete(url("dropped"), headers=BUILDER)).status_code == 204
 
     # A workflow no team owns cannot carry one: its runs would have no team.
