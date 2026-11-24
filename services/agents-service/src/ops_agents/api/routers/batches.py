@@ -27,12 +27,12 @@ from ops_service_kit.http import Envelope, In, Json, JsonValue, ListResult, Out
 from ops_service_kit.listing import ListQuery
 
 from ...store.batches import MAX_ROWS, Batches, BatchOut, BatchRowOut
-from ...store.tenancy import current_tenant
+from ...store.tenancy import current_team, current_tenant
 from ..auth import ACCESS, Principal, caller_of, principal, reader_of, require_builder, started_by
 from ..deps import Runtime, runtime
 from ..engine_runs import checked_input
 from ..envelope import ok
-from .engine import startable
+from .engine import definitions, startable
 
 router = APIRouter(tags=["batches"])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -221,7 +221,10 @@ def _status(r: BatchRowOut) -> str:
 
 @router.get("/v1/workflows/{workflow_id}/batches", response_model=Envelope[ListResult[BatchLine]])
 async def list_batches(rt: Rt, _: Reader, __: Tx, workflow_id: str, q: ListQuery) -> JSONResponse:
-    """The workflow's batches, newest first, uploads and checks alike, each with its rows counted where they stand."""
+    """The workflow's batches, newest first unless `sortOrder` says otherwise, uploads and checks alike, each with its
+    rows counted where they stand. 404 for a workflow the team does not hold."""
+    if await definitions(rt).row(workflow_id, team=current_team()) is None:
+        raise NotFound(f"Workflow {workflow_id}")
     page = await Batches(rt.db).of_workflow(workflow_id, q)
     lines = [
         {

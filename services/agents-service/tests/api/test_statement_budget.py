@@ -195,6 +195,7 @@ def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> See
             ids["request_id"] = str(live.json()["data"]["id"])
             # The live-workflow route names the engine definition, which the shared `{workflow_id}` cannot carry.
             swaps[f"/v1/workflows/{REGISTRY_WORKFLOW}/live"] = f"/v1/workflows/{DEFINITION}/live"
+            swaps[f"/v1/workflows/{REGISTRY_WORKFLOW}/batches"] = f"/v1/workflows/{DEFINITION}/batches"
             made = await client.post("/v1/chat/threads", json={"kbIds": []}, headers=DEV)
             assert made.status_code in (200, 201), made.text
             chat = str(made.json()["data"]["id"])

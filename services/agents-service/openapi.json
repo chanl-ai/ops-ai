@@ -69932,7 +69932,7 @@
     },
     "/v1/workflows/{workflow_id}/batches": {
       "get": {
-        "description": "The workflow's batches, newest first, uploads and checks alike, each with its rows counted where they stand.",
+        "description": "The workflow's batches, newest first unless `sortOrder` says otherwise, uploads and checks alike, each with its\nrows counted where they stand. 404 for a workflow the team does not hold.",
         "operationId": "batches_list_batches",
         "parameters": [
           {

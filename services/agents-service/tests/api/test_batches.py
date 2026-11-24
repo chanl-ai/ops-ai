@@ -239,3 +239,11 @@ async def test_a_workflows_batches_count_a_check_file_that_never_ran_and_a_waiti
     assert (too_large["failureCode"], too_large["reason"]) == ("too_large", "Larger than 25 MB"), page["rows"]
     first = (await c.get(f"/v1/batches/{upload}", headers=BUILDER)).json()["data"]
     assert (first["waiting"], first["running"]) == (1, 1), first
+    oldest = await c.get(
+        f"/v1/workflows/{WID}/batches", params={"sortBy": "createdAt", "sortOrder": "asc"}, headers=BUILDER
+    )
+    assert [x["id"] for x in oldest.json()["data"]["data"]] == [upload, check.id], oldest.text
+    newest = await c.get(f"/v1/workflows/{WID}/batches", headers=BUILDER)
+    assert [x["id"] for x in newest.json()["data"]["data"]] == [check.id, upload], newest.text
+    unknown = await c.get("/v1/workflows/no_such_flow/batches", headers=BUILDER)
+    assert unknown.status_code == 404, unknown.text

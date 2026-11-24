@@ -18,7 +18,7 @@ from ops_service_kit.http import Json, ListPage, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
-from ops_store.listing import list_page
+from ops_store.listing import LISTED, list_page
 from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
@@ -52,11 +52,13 @@ run_batches = sa.Table(
     sa.Column("checked_at", sa.String(32)),
     sa.Column("total", sa.Integer, nullable=False),
     sa.Column("created_by", sa.String(320), nullable=False),
-    sa.Column("created_at", sa.String(32), nullable=False),
+    sa.Column("created_at", sa.String(32), nullable=False, info=LISTED),
     # Why the batch stopped starting rows, and when (a model budget refusal); cleared when its failed rows are retried.
     sa.Column("stopped_reason", sa.String(500)),
     sa.Column("stopped_at", sa.String(32)),
     sa.Index("ix_run_batches_workflow", "tenant_id", "workflow_id", "created_at"),
+    # The batch list sorts on created_at (the listing gate's index, after the tenant and team every read names).
+    sa.Index("ix_run_batches_created", "tenant_id", "team_id", "created_at"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -235,8 +237,9 @@ class Batches(RuntimeStore):
             .where(b.c.tenant_id == current_tenant(), b.c.workflow_id == workflow_id, team_visible(b))
         )  # fmt: skip
         async with self.tx() as c:
-            # Newest first only: always one workflow's list, which `ix_run_batches_workflow` serves in this order.
-            return await list_page(c, q, params, default_sort=b.c.created_at.desc())
+            return await list_page(
+                c, q, params, sortable={"createdAt": b.c.created_at}, default_sort=b.c.created_at.desc()
+            )
 
     async def rows(self, batch_id: str) -> list[BatchRowOut]:
         """Every row with its run's status, outcome, output and error, failed rows first, then in file order."""

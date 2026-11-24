@@ -3685,7 +3685,8 @@ export interface paths {
         };
         /**
          * List Batches
-         * @description The workflow's batches, newest first, uploads and checks alike, each with its rows counted where they stand.
+         * @description The workflow's batches, newest first unless `sortOrder` says otherwise, uploads and checks alike, each with its
+         *     rows counted where they stand. 404 for a workflow the team does not hold.
          */
         get: operations["batches_list_batches"];
         put?: never;

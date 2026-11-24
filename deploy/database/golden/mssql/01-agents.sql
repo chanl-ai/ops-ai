@@ -650,6 +650,8 @@ CREATE TABLE run_batches (
 	CONSTRAINT run_batches_pkey PRIMARY KEY (id)
 );
 GO
+CREATE INDEX ix_run_batches_created ON run_batches (tenant_id, team_id, created_at);
+GO
 CREATE INDEX ix_run_batches_workflow ON run_batches (tenant_id, workflow_id, created_at);
 GO
 CREATE TABLE run_batch_rows (

@@ -8,8 +8,9 @@ A Files changed trigger turns one check of a watched folder into one batch: `ori
 nullable and `file_name` holds the check's label. A row gains its workflow and an `item_key` with a unique index per
 workflow, so one file version is one row however many checks read it; spreadsheet rows are backfilled as
 `<batch>:<row>`, which both databases build by string concatenation. `failure_code` and `reason` say why a row that
-never ran (removed at the source, too large) did not. The backfill runs as the tables' owner with the row policies
-set aside for it (`backfill_ddl`). The downgrade deletes check batches, which the earlier shape cannot hold.
+never ran (removed at the source, too large) did not. `ix_run_batches_created` serves the batch list's sort. The
+backfill runs as the tables' owner with the row policies set aside for it (`backfill_ddl`). The downgrade deletes
+check batches, which the earlier shape cannot hold.
 """
 
 from __future__ import annotations
@@ -66,6 +67,7 @@ def upgrade() -> None:
         b.alter_column("workflow_id", existing_type=sa.String(200), nullable=False)
         b.alter_column("item_key", existing_type=sa.String(96), nullable=False)
     op.create_index("ux_run_batch_rows_item", "run_batch_rows", ["tenant_id", "workflow_id", "item_key"], unique=True)
+    op.create_index("ix_run_batches_created", "run_batches", ["tenant_id", "team_id", "created_at"])
 
 
 def downgrade() -> None:
@@ -78,6 +80,7 @@ def downgrade() -> None:
     )
     op.execute("DELETE FROM run_batches WHERE origin = 'check'")
     _aside(after)
+    op.drop_index("ix_run_batches_created", table_name="run_batches")
     op.drop_index("ux_run_batch_rows_item", table_name="run_batch_rows")
     with op.batch_alter_table("run_batch_rows") as b:
         for name in ("reason", "failure_code", "item_key", "workflow_id"):
