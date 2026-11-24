@@ -59,6 +59,8 @@ class FakeDocumentsService:
     # The team's document types, answered a page of `type_page_size` at a time as the real list is.
     types: list[FakeType] = field(default_factory=list[FakeType])
     type_page_size: int = 20
+    # Files whose read the model gave no answer for, by file id, with the reason: cut_off, empty, declined or filtered.
+    no_answer: dict[str, str] = field(default_factory=dict[str, str])
     _running: dict[str, HeldExtraction] = field(default_factory=dict[str, HeldExtraction])
 
     def _reading(self, file_id: str, ocr: str) -> Json:
@@ -86,6 +88,15 @@ class FakeDocumentsService:
         texts = self.pages.get(file_id)
         if not texts:
             return {"id": extraction_id, "status": "unreadable", "outcome": "unreadable", "fileId": file_id}
+        if file_id in self.no_answer:
+            said: Json = {"reason": self.no_answer[file_id], "step": "extract", "tries": 1}
+            return {
+                "id": extraction_id,
+                "status": "done",
+                "outcome": "incomplete",
+                "fileId": file_id,
+                "incomplete": said,
+            }
         return {"id": extraction_id, "status": "done", "outcome": "ok", "fileId": file_id}
 
     def _types_page(self, page: int) -> FakeTypesPage:

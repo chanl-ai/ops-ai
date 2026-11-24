@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 from pydantic import ConfigDict, Field
 
+from ops_extract.result import Outcome
 from ops_ingest.reading import OcrMode
 from ops_service_kit.http import In, JsonValue, ListResult, Out
 from ops_service_kit.names import Name
@@ -124,7 +125,7 @@ class Extraction(Out):
     id: str
     file_id: str
     status: Literal["queued", "running", "done", "failed", "unreadable"]
-    outcome: Literal["ok", "review", "unreadable", "unknown", "incomplete"] | None = None
+    outcome: Outcome | None = None
     # Why a read with outcome incomplete has no answer, the step whose reply ended it and how many asks were made.
     incomplete: ReadIncomplete | None = None
     # Why the one re-read of doubtful fields had no answer; the first values stand, under review.

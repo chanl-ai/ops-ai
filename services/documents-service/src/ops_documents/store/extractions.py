@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_documents.store.columns import JSON_TEXT
 from ops_documents.store.document_types import EXAMPLES_KEPT_PER_FIELD, document_type_examples
 from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
+from ops_extract.result import Outcome
 from ops_service_kit.http import Json, JsonValue, Out
 from ops_service_kit.listing import ListParams
 from ops_service_kit.narrow import a_list, an_object
@@ -304,7 +305,7 @@ class ExtractionsStore(Store):
         *,
         status: Status,
         at: datetime,
-        outcome: str | None = None,
+        outcome: Outcome | None = None,
         result: Json | None = None,
         error_code: str | None = None,
         error: str | None = None,

@@ -274,3 +274,8 @@ async def test_a_read_with_no_answer_names_its_reason_and_counts_required_fields
     review: Any = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": payload}}, case_id="", titles=TITLES)
     assert review["read"]["notRead"] == "declined", review["read"]
     assert review["proposal"] == "Nothing read from claim_form.pdf: the model declined; 1 required field to type"
+    # A several-records read with no records has nothing to type into, so its line says it can only be rejected.
+    many: dict[str, Any] = {**read, "fields": None, "records": [], "count": 0, "needsReview": []}
+    payload = {**payload, "draft": {"document": "statement.pdf", "read": many}}
+    review = await engine_reviews.view(RT, {**RUN, "waiting": {"payload": payload}}, case_id="", titles=TITLES)
+    assert review["proposal"] == "Nothing read from statement.pdf: the model declined; it can only be rejected"

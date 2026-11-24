@@ -701,8 +701,11 @@ def _read_line(read: ReadView) -> tuple[str, str]:
     a read no reply answered, why and how many required fields there are to type."""
     of = f" from {read['fileName']}" if read["fileName"] else ""
     if why := read["notRead"]:
-        required = sum(1 for f in read["schema"] if f["required"]) * max(1, len(read["records"]))
         said = NOT_READ_SAID.get(why, "no reply answered")
+        if not read["records"]:
+            # A several-records read with no records has no row to type into; approve refuses it (nothing_read).
+            return "", f"Nothing read{of}: {said}; it can only be rejected"
+        required = sum(1 for f in read["schema"] if f["required"]) * len(read["records"])
         return "", f"Nothing read{of}: {said}; {_plural(required, 'required field')} to type"
     names = [str(r["values"].get("name")) for r in read["records"] if r["values"].get("name")]
     doubtful = sum(1 for r in read["records"] for f in r["fields"].values() if f["needsReview"])

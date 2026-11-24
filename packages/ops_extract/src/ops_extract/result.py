@@ -11,6 +11,9 @@ from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.narrow import an_object, entries, json_object
 
 Status = Literal["ok", "review"]
+# Every outcome a finished read can carry: a scored Status, a file with no text, a detected kind no type fits, or a
+# model reply with no answer (cut off, empty, declined or filtered), which leaves every field not read.
+Outcome = Literal["ok", "review", "unreadable", "unknown", "incomplete"]
 
 
 def asked(fields: list[FieldDefinition]) -> list[Json]:
