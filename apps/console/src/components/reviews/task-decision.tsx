@@ -78,7 +78,7 @@ export function TaskDecision({
           choice: null,
           decide: (
             <p className="text-sm text-muted-foreground" data-testid="review-decided-by">
-              A reviewer or admin of the team that reviews this decides it.
+              Only a reviewer or admin of the team that reviews this can decide it. Ask one of them, or ask a team admin for the reviewer role.
             </p>
           ),
         })}

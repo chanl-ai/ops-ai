@@ -19,6 +19,8 @@ const files = `http://127.0.0.1:${FILES_PORT}`;
 const PASSWORD = 'northfield-demo';
 const JAMES = 'j.richardson@harborpine.example';
 const MAYA = 'm.okafor@harborpine.example';
+const PRIYA = 'p.shah@harborpine.example';
+const RAVI = 'r.menon@harborpine.example';
 const SHOTS = evidenceDir('562', 'uc');
 const LISTS = ['/agents', '/cases', '/tools', '/files', '/knowledge', '/skills'];
 
@@ -82,11 +84,14 @@ await withUiStack(
     const start = async () => (await json(await fetch(`${agents}/v1/runs`, { method: 'POST', headers: james, body: JSON.stringify({ workflowId: 'uc562_credit', input: { amount: 250 } }) })))?.runId;
     const runId = await start();
     const queuedRun = await start();
+    // A third, left unassigned: step 14 is a person who may decide it finding the way to.
+    const freeRun = await start();
     const stateOf = async (id) => (await json(await fetch(`${agents}/v1/runs/${id}`, { headers: james })))?.status;
     const runState = () => stateOf(runId);
-    const waiting = await until(async () => ((await stateOf(runId)) === 'waiting' && (await stateOf(queuedRun)) === 'waiting' ? 'waiting' : null));
+    const waiting = await until(async () => ((await stateOf(runId)) === 'waiting' && (await stateOf(queuedRun)) === 'waiting' && (await stateOf(freeRun)) === 'waiting' ? 'waiting' : null));
     const reviewId = `${runId}:review:1`;
     const queuedId = `${queuedRun}:review:1`;
+    const freeId = `${freeRun}:review:1`;
     const assigned = await json(await fetch(`${agents}/reviews/assign`, { method: 'POST', headers: maya, body: JSON.stringify({ ids: [reviewId, queuedId], assignee: MAYA }) }));
     // A tool set whose call reads a secret no one has set, so Tools names it with a link to Secrets (step 5).
     const unset = await json(await fetch(`${toolsApi}/v1/tool-modules/blank`, { method: 'POST', headers: james, body: JSON.stringify({ displayName: 'Statements (uc-562)', name: `uc562-statements-${Date.now() % 100000}`, type: 'http' }) }));
@@ -128,7 +133,7 @@ await withUiStack(
           const picked = (await page.getByTestId('option-reject').locator('span.font-medium').first().innerText()).split('\n')[0].trim();
           after = { picked, label: (await decide.innerText()).trim(), disabled: await decide.isDisabled() };
         }
-        check('1 a Human Task opens with no option picked and Decide waiting for a pick', checked === 0 && before.label === 'Pick a decision' && before.disabled && stillWaiting && !!after?.picked && after.label === after.picked && !after.disabled, { checked, before, stillWaiting, after });
+        check('1 a Human Task opens with no option picked and Decide waiting for a pick', checked === 0 && /^Pick .+ above$/.test(before.label) && before.disabled && stillWaiting && !!after?.picked && after.label === after.picked && !after.disabled, { checked, before, stillWaiting, after });
       });
 
       await step('2 a phone list shows the name, no Id, and a fade while more columns sit past the edge', async () => {
@@ -386,6 +391,66 @@ await withUiStack(
         const extra = sent.flat().filter((k) => !STORED.includes(k));
         // Every setting is stored since source settings save and apply (schedule included): a save sends only the field changed.
         check('13 an admin changes a source\'s collection and the save sends only that field', sent.length === 1 && !extra.length && /saved/i.test(toast) && !claims && /keyword/i.test(presets), { notice, scheduleOff, sent, extra, toast: toast.slice(0, 120), claims });
+      });
+
+      await step('14 a person who may decide an unassigned task is shown where the choices are and how to take it, and a person who may not is told why', async () => {
+        const seen = {};
+        const open = async (email, width) => {
+          const p = await consoleSignIn(browser, consoleUrl, email, PASSWORD, errors);
+          p.setDefaultTimeout(60_000);
+          await p.setViewportSize({ width, height: width < 500 ? 844 : 900 });
+          await p.goto(`${consoleUrl}/reviews?review=${encodeURIComponent(freeId)}`, { waitUntil: 'load' });
+          await p.getByTestId('decision-panel').waitFor();
+          await p.waitForTimeout(1200);
+          return p;
+        };
+        const probe = (p) =>
+          p.evaluate(() => {
+            const q = (id) => document.querySelector(`[data-testid="${id}"]`);
+            const radio = q('option-decision-form');
+            const toggle = q('task-details-toggle');
+            const decide = q('decide');
+            const vh = window.innerHeight;
+            return {
+              label: decide?.innerText.trim() ?? null,
+              disabled: decide?.disabled ?? null,
+              why: q('decide-why')?.innerText.trim() ?? null,
+              assign: !!q('assign-to-me'),
+              radioAbove: !toggle || (!!radio && radio.getBoundingClientRect().top < toggle.getBoundingClientRect().top),
+              radioInView: !!radio && radio.getBoundingClientRect().top < vh,
+              notice: q('review-decided-by')?.innerText.trim() ?? null,
+            };
+          });
+        for (const [who, email] of [['approver', MAYA], ['admin', PRIYA]]) {
+          for (const width of [1440, 390]) {
+            const p = await open(email, width);
+            seen[`${who}-${width}`] = await probe(p);
+            await p.screenshot({ path: join(SHOTS, `decide-${who}-${width}.png`) });
+            await p.context().close();
+          }
+        }
+        for (const [who, email] of [['viewer', RAVI], ['builder', JAMES]]) {
+          for (const width of [1440, 390]) {
+            const p = await open(email, width);
+            seen[`${who}-${width}`] = await probe(p);
+            await p.screenshot({ path: join(SHOTS, `decide-${who}-${width}.png`) });
+            await p.context().close();
+          }
+        }
+        // Two clicks: Assign to me, then pick and decide; the run goes on.
+        const maya1 = await open(MAYA, 1440);
+        await maya1.getByTestId('assign-to-me').click();
+        await maya1.getByTestId('assign-to-me').waitFor({ state: 'hidden', timeout: 30_000 });
+        const assignee = (await json(await fetch(`${agents}/reviews/${encodeURIComponent(freeId)}`, { headers: as(await tokenFor(MAYA)) })))?.assignee;
+        await maya1.getByTestId('option-decision-form').locator('[role=radio]').first().click();
+        await maya1.getByTestId('decide').click();
+        const moved = await until(async () => ((await stateOf(freeRun)) !== 'waiting' ? 'moved' : null), 60_000);
+        await maya1.context().close();
+        seen.viewer = seen['viewer-1440'];
+        // A builder either holds the cell (and is shown the way) or is told plainly who decides; never a bare disabled button.
+        const told = (r) => (r.assign && !!r.why) || /reviewer or admin/.test(r.notice ?? '');
+        const ok = (r) => /^Pick .+ above$/.test(r.label) && r.disabled && !!r.why && r.assign && r.radioAbove && r.radioInView;
+        check('14 an approver and an admin see Decide point at the choices, the choices in view above Details, and Assign to me, at 1440 and 390; Assign then pick then Decide moves the run on; a viewer sees no controls and is told who decides', ok(seen['approver-1440']) && ok(seen['approver-390']) && ok(seen['admin-1440']) && ok(seen['admin-390']) && !!assignee && moved === 'moved' && ['viewer-1440', 'viewer-390'].every((k) => !seen[k].assign && seen[k].label === null && /reviewer or admin/.test(seen[k].notice ?? '')) && told(seen['builder-1440']) && told(seen['builder-390']), { seen, assignee, moved });
       });
 
       check('9 no page error', !errors.length, errors.slice(0, 5));

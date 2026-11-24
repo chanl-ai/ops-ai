@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { UserRoundPlus } from 'lucide-react';
+import { UserPlus, UserRoundPlus } from 'lucide-react';
 
 import { EvidenceExportButton } from '@/components/files/file-actions';
 import { type ReadChecks, type ReadEdits, RequiredToType } from '@/components/reviews/document-read';
@@ -35,6 +35,7 @@ export function DecisionPanel({
   reviewers,
   platformTeam,
   onReassign,
+  onAssignToMe,
   className,
 }: {
   review: Review;
@@ -49,6 +50,8 @@ export function DecisionPanel({
   reviewers: string[];
   platformTeam: boolean;
   onReassign: (to: string) => void;
+  /** Takes the task for the person; offered to a decider while it is not already theirs. */
+  onAssignToMe: () => void;
   className?: string;
 }) {
   const open = isOpen(review);
@@ -103,14 +106,18 @@ export function DecisionPanel({
         {({ choice, decide }) => (
           <>
             <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4" data-testid="decision-body">
-              <TaskDecide review={review} view={view} edits={edits} onEdit={canDecide && review.read?.editable ? onEdit : undefined} checks={canDecide ? checks : undefined} />
-              {choice}
+              <TaskDecide review={review} view={view} edits={edits} onEdit={canDecide && review.read?.editable ? onEdit : undefined} checks={canDecide ? checks : undefined} between={choice} />
             </div>
             {/* Sticky for the one-pane phone view, where the page scrolls; beside the evidence the panel is bounded and never moves. */}
             <footer className="sticky bottom-0 flex flex-col gap-2 rounded-b-lg border-t bg-card p-4 [&_[data-layout=footer]]:border-t-0 [&_[data-layout=footer]]:p-0" data-testid="decision-footer">
               {decide}
               <div className="flex flex-wrap gap-2">
                 {/* Reassigning is the deciders' (the API refuses anyone else), so only they see it. */}
+                {canDecide && !me.includes(review.assignee ?? '') && (
+                  <Button type="button" variant="outline" size="sm" className="flex-1" onClick={onAssignToMe} aria-label="Assign to me" title="Assign to me" data-testid="assign-to-me">
+                    <UserPlus /> Assign
+                  </Button>
+                )}
                 {canDecide && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
