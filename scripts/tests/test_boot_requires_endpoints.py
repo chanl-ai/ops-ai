@@ -19,7 +19,7 @@ PROCESSES: dict[str, tuple[dict[str, str], list[str]]] = {
     "ops_agents.api": (SIGNED_IN, ["OPS_PLATFORM_INTERNAL_URL"]),
     "ops_agents.api.worker": (SIGNED_IN, ["OPS_PLATFORM_INTERNAL_URL"]),
     "ops_documents": (SIGNED_IN, ["OPS_AGENTS_URL", "OPS_FILES_URL", "OPS_PLATFORM_INTERNAL_URL"]),
-    "ops_files": (SIGNED_IN, ["OPS_AGENTS_URL", "OPS_PLATFORM_INTERNAL_URL"]),
+    "ops_files": (SIGNED_IN, ["OPS_AGENTS_URL", "OPS_PLATFORM_INTERNAL_URL", "OPS_TOOLS_URL"]),
     "ops_kb": (DEV, ["OPS_AGENTS_URL"]),
     "ops_models": (SIGNED_IN, ["OPS_PLATFORM_INTERNAL_URL"]),
     "ops_platform": (DEV, ["OPS_AGENTS_URL"]),
