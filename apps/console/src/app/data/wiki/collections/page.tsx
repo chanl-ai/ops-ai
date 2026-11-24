@@ -7,6 +7,7 @@ import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { PageLayout } from '@/components/page-layout';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
+import { ListCell } from '@/components/shared/table-cells';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { GATE_LABEL } from '@/components/wiki/wiki-meta';
 import { Badge } from '@/components/ui/badge';
@@ -38,7 +39,7 @@ const columns: ColumnDef<WikiCollection>[] = [
       </Badge>
     ),
   },
-  { id: 'kbs', header: 'Read by knowledge bases', cell: ({ row }) => <span className="text-sm">{row.original.knowledgeBases.length ? row.original.knowledgeBases.join(', ') : <span className="text-muted-foreground">None</span>}</span> },
+  { id: 'kbs', header: 'Read by knowledge bases', cell: ({ row }) => <span className="text-sm"><ListCell values={row.original.knowledgeBases} empty="None" label="Knowledge bases" /></span> },
 ];
 
 /** Collections decide who may read a group of pages; knowledge bases decide how those pages are searched. */

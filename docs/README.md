@@ -657,6 +657,7 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/console/chat-only-person-my-apps.md` | uc-767: A person who only chats sees My apps in the sidebar and can chat |
 | `usecases/console/name-limits-on-a-form.md` | uc-768: One create form holds a name to the same rule the server keeps |
 | `usecases/console/my-apps-page.md` | uc-769: My apps is a page of its own, the same for an admin and a member |
+| `usecases/console/long-values-in-tables.md` | uc-780: A long list or text in a table cell stays inside its column |
 | `usecases/tools-service/admins-see-people-s-app-sign.md` | uc-770: Admins see people's app sign-ins and end one |
 | `usecases/agents-service/a-builder-takes-a-new-skill.md` | uc-771: A builder takes a new skill to its first publish in under ten minutes |
 | `usecases/kb-service/search-a-long-document-s-pieces.md` | uc-772: Search a long document's pieces on the server |
