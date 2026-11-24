@@ -44,6 +44,7 @@ import { createMockWorkspaceTeams } from './workspace-teams';
 import { createToolModulesMock } from './tool-modules';
 import { createEgressMock } from './egress';
 import { createChannelsMock } from './channels';
+import { createSchedulesMock } from './schedules';
 import { createEngineMock } from './engine';
 import { createConnectionsMock } from './connections';
 import { createWidgetsMock } from './widgets';
@@ -1214,6 +1215,7 @@ export function createMockApi(): OpsApi {
     connections: createConnectionsMock({ me: F.CURRENT_USER.name }),
     engine: createEngineMock(),
     channels: createChannelsMock(),
+    schedules: createSchedulesMock(),
     integrations: integrationsApi,
     files: files.api,
     skills: skills.api,
