@@ -25,7 +25,7 @@ from ops_identity import ServiceClient, dev_service_signer
 from ops_service_kit.settings import Settings
 from tests.conftest import fixture_knowledge
 
-from ..conftest import SEED, FakeGraphModels, scripted_model, sse_events
+from ..conftest import SEED, FakeGraphModels, scripted_model, sse_events, with_sign_in
 from ..contract import response_checker
 from ..saves import save_agent
 
@@ -45,13 +45,15 @@ async def _app(db: str, **settings: Any) -> AsyncGenerator[AsyncClient]:
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
         await c.run_sync(engine_metadata.create_all)
+    config = Settings(database_url=url, seed_dir=SEED, **settings)
     app = create_app(
-        Settings(database_url=url, seed_dir=SEED, **settings),
+        config,
         model=scripted_model(),
         engine=engine,
         checkpointer=InMemorySaver(),
         graph_models=FakeGraphModels(),
         knowledge=fixture_knowledge(),
+        auth=with_sign_in(config),
     )
     async with (
         app.router.lifespan_context(app),

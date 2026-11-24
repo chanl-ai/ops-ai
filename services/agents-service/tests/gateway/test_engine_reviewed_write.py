@@ -31,7 +31,7 @@ from ops_engine.store import RunStore
 from ops_engine.worker import Worker, WorkerHost
 from ops_identity import ServiceClient, dev_service_signer
 from ops_service_kit.settings import Settings
-from tests.conftest import FakeGraphModels, fixture_knowledge, scripted_model
+from tests.conftest import FakeGraphModels, fixture_knowledge, scripted_model, signed_in, with_sign_in
 
 from .conftest import REVIEW_KEY, SEED, Gateway
 
@@ -89,13 +89,7 @@ def definition(wid: str, *, reviewed: bool) -> dict[str, Any]:
 
 @pytest.fixture
 async def stack(engine: AsyncEngine, gateway: Gateway) -> AsyncIterator[tuple[httpx.AsyncClient, Worker]]:
-    # A workspace that switched requesterMayDecide off: the starter does not decide their own run.
-    settings = Settings(
-        database_url=str(engine.url),
-        seed_dir=SEED,
-        review_key=SecretStr(REVIEW_KEY),
-        dev_policies={"requesterMayDecide": False},
-    )
+    settings = Settings(database_url=str(engine.url), seed_dir=SEED, review_key=SecretStr(REVIEW_KEY))
     app: FastAPI = create_app(
         settings,
         model=scripted_model(),
@@ -104,6 +98,7 @@ async def stack(engine: AsyncEngine, gateway: Gateway) -> AsyncIterator[tuple[ht
         graph_models=FakeGraphModels(),
         gateway=gateway.client,
         knowledge=fixture_knowledge(),
+        auth=with_sign_in(settings),
     )
     owner = f"test-{uuid4().hex[:6]}"
     host = WorkerHost(
@@ -189,8 +184,10 @@ async def test_the_decision_mints_the_token_for_the_edited_call_and_the_write_ru
         f"/reviews/{run_id}/decision", json={"decision": "write", "inputs": {"amount": 5}}, headers=REVIEWER
     )
     assert bad.status_code == 400, "an input the option does not declare is refused"
-    own = await client.post(f"/reviews/{run_id}/decision", json={"decision": "write"}, headers=STARTER)
-    assert own.status_code == 403, "the starter cannot decide their own run"
+    # The starter signed in as a Reviewer, without Approvals decide, does not decide their own run.
+    mine = signed_in(STARTER["X-Dev-User"])
+    own = await client.post(f"/reviews/{run_id}/decision", json={"decision": "write"}, headers=mine)
+    assert (own.status_code, own.json()["error"]["code"]) == (403, "own_request"), own.text
     ok = await client.post(
         f"/reviews/{run_id}/decision", json={"decision": "write", "inputs": {"text": "Reviewed note"}}, headers=REVIEWER
     )

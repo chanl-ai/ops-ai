@@ -4,8 +4,8 @@
 - an app set to ask a reviewer (appChangesByApp) holds its writes for a token;
 - an app set to don't ask runs its write where the team asks a reviewer, and a team policy that cannot be read refuses
   the write (approval_rules_unavailable);
-- a person who decides the team's reviews approves their own write only while requesterMayDecide is on (off by
-  default), and one who does not is never let through (an imported write starts waiting, test_import).
+- a person approves their own write only while they hold Approvals decide in the team (Admin only by default), and
+  one who does not is never let through (an imported write starts waiting, test_import).
 
 Decided by the real Rego in OPA, on a seeded tenant's registry.
 """
@@ -136,7 +136,7 @@ async def test_a_workflows_write_is_asked_as_a_workflow_and_goes_to_a_reviewer_w
     assert team.asked == [("workflow", "reviewer")], team.asked
 
 
-def _person(role: str, policies: dict[str, Any] | None = None) -> Principal:
+def _person(role: str) -> Principal:
     return Principal(
         kind="person",
         sub="usr_x",
@@ -148,18 +148,12 @@ def _person(role: str, policies: dict[str, Any] | None = None) -> Principal:
         roles={"team_ops": role},
         scopes=[],
         auth_method="session",
-        policies=policies or {},
     )
 
 
-def test_only_a_person_who_decides_the_teams_reviews_approves_their_own_write() -> None:
+def test_only_a_person_holding_approvals_decide_approves_their_own_write() -> None:
     access = Access(security_team="team_security")
-    loose = {"requesterMayDecide": True}
-    assert approves_own_writes(access, _person("admin", loose)) and approves_own_writes(
-        access, _person("approver", loose)
-    )
-    assert not approves_own_writes(access, _person("viewer", loose)), "a viewer is asked like anyone else"
-    # The two-person rule on: someone else decides a reviewer's write; an Admin of the team still approves her own.
-    strict = {"requesterMayDecide": False}
-    assert not approves_own_writes(access, _person("approver", strict))
-    assert approves_own_writes(access, _person("admin", strict))
+    assert approves_own_writes(access, _person("admin")), "an Admin holds Approvals decide by default"
+    # A Reviewer decides the team's reviews but not their own request: someone else decides a reviewer's write.
+    assert not approves_own_writes(access, _person("reviewer"))
+    assert not approves_own_writes(access, _person("viewer")), "a viewer is asked like anyone else"

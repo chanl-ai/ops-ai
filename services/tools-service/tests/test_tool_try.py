@@ -23,8 +23,7 @@ async def _team_saved_nothing(self: Any, tenant_id: str, team_id: str | None) ->
 @pytest.fixture(autouse=True)
 def the_test_run_rule_asks_the_person(monkeypatch: pytest.MonkeyPatch) -> None:
     """The team saved no approval answer, so a test run's write asks the person who tried it, and their confirm is the
-    whole approval; an approver does not approve their own write by role."""
-    monkeypatch.setenv("OPS_DEV_POLICIES", '{"requesterMayDecide": false}')
+    whole approval."""
     monkeypatch.setattr(TeamAsksReviewer, "levels", _team_saved_nothing)
 
 

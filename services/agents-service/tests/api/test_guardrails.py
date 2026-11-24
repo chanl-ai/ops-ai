@@ -17,6 +17,7 @@ from httpx import AsyncClient
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
+from ..conftest import signed_in
 from ..saves import save_agent
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 
@@ -124,17 +125,16 @@ async def test_a_pinned_guardrail_cannot_be_deleted(tmp_path: Path) -> None:
         assert (await c.delete(f"/v1/guardrails/{g['id']}")).status_code == 204
 
 
-async def test_with_the_policy_off_the_requester_cannot_decide_a_guardrail_publish(tmp_path: Path) -> None:
-    async with _app(
-        str(tmp_path / "db.sqlite"), registry_auto_approve=False, dev_policies={"requesterMayDecide": False}
-    ) as c:
+async def test_a_requester_without_approvals_decide_cannot_decide_a_guardrail_publish(tmp_path: Path) -> None:
+    async with _app(str(tmp_path / "db.sqlite"), registry_auto_approve=False) as c:
         g = _ok(await c.post("/v1/guardrails", json=RULE, headers=LEE), 201)
         g = _ok(await c.post(f"/v1/guardrails/{g['id']}/publish-requests", json={"version": 1}, headers=LEE), 201)
         rid = g["pendingRequestId"]
         assert rid.startswith("GRP-")
         decide = f"/v1/guardrails/{g['id']}/publish-requests/{rid}/decision"
-        r = await c.post(decide, json={"decision": "approved"}, headers=LEE)
-        assert r.status_code == 403
+        # Lee signed in as a Reviewer, who decides the team's reviews but not her own request.
+        r = await c.post(decide, json={"decision": "approved"}, headers=signed_in(LEE["X-Dev-User"]))
+        assert (r.status_code, r.json()["error"]["code"]) == (403, "own_request"), r.text
         assert _ok(await c.get(f"/v1/guardrails/{g['id']}"))["publishedVersion"] is None
         _ok(await c.post(decide, json={"decision": "approved"}, headers=KIM))
         assert _ok(await c.get(f"/v1/guardrails/{g['id']}"))["publishedVersion"] == 1

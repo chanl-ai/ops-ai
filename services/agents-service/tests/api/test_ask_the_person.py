@@ -25,7 +25,6 @@ from tests.api.test_write_approval_policy import _client, person  # pyright: ign
 from tests.conftest import SEED
 from tests.unit.test_tool_directory import Clock, Tools
 
-NO_SELF = {"requesterMayDecide": False}
 _CATALOG = CatalogTools.operations
 
 
@@ -75,8 +74,8 @@ async def test_ask_the_person_is_answered_by_the_asker_alone_with_no_approve_cel
     answered: Chat,
 ) -> None:
     async for chat in answered({"answer": "person", "reviewerRole": None, "source": "team"}):
-        vera = person("usr_vera", ["team_ops"], role="viewer", policies=NO_SELF)
-        maya = person("usr_maya", ["team_ops"], role="admin", policies=NO_SELF)
+        vera = person("usr_vera", ["team_ops"], role="viewer")
+        maya = person("usr_maya", ["team_ops"], role="admin")
         thread, card, message = await _ask(chat, vera)
         assert card is not None and card["canDecide"] is True, card
         own = await chat.post(_act(thread, message, card), json={"type": "approve"}, headers=vera)
@@ -89,8 +88,8 @@ async def test_ask_the_person_is_answered_by_the_asker_alone_with_no_approve_cel
 
 async def test_ask_a_reviewer_is_decided_by_the_role_and_never_by_the_asker(answered: Chat) -> None:
     async for chat in answered({"answer": "reviewer", "reviewerRole": "compliance", "source": "team"}):
-        james = person("usr_james", ["team_ops"], role="approver", policies=NO_SELF)
-        maya = person("usr_maya", ["team_ops"], role="admin", policies=NO_SELF)
+        james = person("usr_james", ["team_ops"], role="approver")
+        maya = person("usr_maya", ["team_ops"], role="admin")
         thread, card, message = await _ask(chat, james)
         assert card is not None and card["askFirst"] is False and card["canDecide"] is False, card
         outside = await chat.post(_act(thread, message, card), json={"type": "approve"}, headers=maya)
@@ -102,15 +101,15 @@ async def test_the_approvals_route_holds_the_same_deciders_as_the_chat_card(answ
     """POST /v1/threads/{id}/approvals records an approval without the chat or review routes in front of it: a viewer
     teammate answering an ask-the-person card, and an admin outside the reviewer role, are both refused there too."""
     async for chat in answered({"answer": "person", "reviewerRole": None, "source": "team"}):
-        vera = person("usr_vera", ["team_ops"], role="viewer", policies=NO_SELF)
+        vera = person("usr_vera", ["team_ops"], role="viewer")
         thread, card, _ = await _ask(chat, vera)
         assert card is not None
-        other = person("usr_ben", ["team_ops"], role="viewer", policies=NO_SELF)
+        other = person("usr_ben", ["team_ops"], role="viewer")
         refused = await chat.post(f"/v1/threads/{thread}/approvals", json={}, headers=other)
         assert refused.status_code == 403, refused.text
     async for chat in answered({"answer": "reviewer", "reviewerRole": "compliance", "source": "team"}):
-        james = person("usr_james", ["team_ops"], role="approver", policies=NO_SELF)
-        maya = person("usr_maya", ["team_ops"], role="admin", policies=NO_SELF)
+        james = person("usr_james", ["team_ops"], role="approver")
+        maya = person("usr_maya", ["team_ops"], role="admin")
         thread, card, _ = await _ask(chat, james)
         assert card is not None
         outside = await chat.post(f"/v1/threads/{thread}/approvals", json={}, headers=maya)

@@ -4,10 +4,11 @@ is checked on the upstream's side. Needs OPA from the compose stack (`make db-up
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import httpx
@@ -22,7 +23,7 @@ from ops_tools.modules.seed import blank, load, open_connection
 from ops_tools.store import CallLog
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.egress import EgressStore
-from ops_tools.store.modules import ModuleStore
+from ops_tools.store.modules import Module, ModuleStore, Operation
 from ops_tools.tokens import Binding, mint
 
 from .conftest import REVIEW_KEY, build_app, opa_client, service_headers
@@ -75,23 +76,26 @@ def bank_module(tenant: str, suffix: str) -> dict[str, Any]:
         status="published",
         egress_hosts=[HOST],
         version="1.0.0",
-        operations=[
-            _op(
-                1,
-                f"get_account_{suffix}",
-                "read",
-                method="GET",
-                path="/accounts/{accountId}",
-                fields=[account],
-                masked_output=["holder.sin"],
-            ),
-            _op(2, f"place_hold_{suffix}", "write", method="POST", path="/holds", fields=hold),
-            _op(3, f"limited_{suffix}", "read", method="GET", path="/limited", fields=[]),
-            _op(4, f"broken_{suffix}", "read", method="GET", path="/broken", fields=[]),
-            _op(5, f"elsewhere_{suffix}", "read", method="GET", path="/accounts/{accountId}", fields=[account]),
-        ],
+        operations=cast(
+            list[Operation],
+            [
+                _op(
+                    1,
+                    f"get_account_{suffix}",
+                    "read",
+                    method="GET",
+                    path="/accounts/{accountId}",
+                    fields=[account],
+                    masked_output=["holder.sin"],
+                ),
+                _op(2, f"place_hold_{suffix}", "write", method="POST", path="/holds", fields=hold),
+                _op(3, f"limited_{suffix}", "read", method="GET", path="/limited", fields=[]),
+                _op(4, f"broken_{suffix}", "read", method="GET", path="/broken", fields=[]),
+                _op(5, f"elsewhere_{suffix}", "read", method="GET", path="/accounts/{accountId}", fields=[account]),
+            ],
+        ),
     )
-    return m
+    return cast(dict[str, Any], m)
 
 
 async def on_its_connection(engine: AsyncEngine, module: dict[str, Any], base: str) -> dict[str, Any]:
@@ -142,18 +146,27 @@ class Gateway:
 async def gateway(
     engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]
 ) -> AsyncIterator[Gateway]:
+    async with serve_gateway(engine, seed, tenant, catalog_tools) as g:
+        yield g
+
+
+@asynccontextmanager
+async def serve_gateway(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]], **app_kw: Any
+) -> AsyncGenerator[Gateway]:
+    """The `gateway` fixture's rig; `app_kw` goes to `build_app` (a live access check, say)."""
     await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
     suffix = new_id("x")[2:8].lower()
     module = await on_its_connection(engine, bank_module(tenant, suffix), ENDPOINT)
     await EgressStore(engine).add(tenant, "host", HOST, actor="test", note="", at=datetime.now(UTC))
-    await ModuleStore(engine).put(module, expected_revision=None)
+    await ModuleStore(engine).put(cast(Module, module), expected_revision=None)
     bank, received = fake_bank()
     async with (
         opa_client() as opa,
         httpx.AsyncClient(transport=SlowAware(httpx.ASGITransport(app=bank))) as upstream,
     ):
         # The team asks a reviewer, so a write waits for a token: a stored requires_approval alone no longer holds it.
-        app = build_app(engine, seed, tenant, opa=opa, upstream=upstream, write_approvals=TeamAsksReviewer())
+        app = build_app(engine, seed, tenant, opa=opa, upstream=upstream, write_approvals=TeamAsksReviewer(), **app_kw)
         hooks = {"response": [response_checker(app)]}
         async with (
             app.router.lifespan_context(app),

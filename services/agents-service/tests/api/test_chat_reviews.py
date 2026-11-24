@@ -17,17 +17,16 @@ from ops_agents.api.app import create_app
 from ops_agents.store.base import metadata
 from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.settings import Settings
-from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events
+from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, signed_in, sse_events, with_sign_in
 
-ASKER, APPROVER = {"X-Dev-User": "dana@harborpine.example"}, {"X-Dev-User": "lee@harborpine.example"}
+# Dana asks signed in as a Reviewer, without Approvals decide, so her own write waits in Reviews; Lee decides it.
+ASKER, APPROVER = signed_in("dana@harborpine.example"), {"X-Dev-User": "lee@harborpine.example"}
 WRITE = 'call request_document {"customerId": "C-1042", "document": "proof of address", "reason": "Moved"}'
 
 
 @pytest.fixture
 async def client(graph_models: FakeGraphModels) -> AsyncIterator[AsyncClient]:
-    """The four-eyes rule on (requesterMayDecide off): the dev asker passes every role rule, so with the rule open
-    their own write is decided as theirs and never waits in Reviews."""
-    settings = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies={"requesterMayDecide": False})
+    settings = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED)
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
@@ -39,6 +38,7 @@ async def client(graph_models: FakeGraphModels) -> AsyncIterator[AsyncClient]:
         checkpointer=InMemorySaver(),
         graph_models=graph_models,
         knowledge=fixture_knowledge(),
+        auth=with_sign_in(settings),
     )
     async with (
         app.router.lifespan_context(app),

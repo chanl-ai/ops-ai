@@ -1,6 +1,7 @@
 """An app's "Ask before changes" in chat, through the real routes, by failure mode:
 
-- the asker answers their own card whatever requesterMayDecide says, since it is a confirmation (test_ask_the_person);
+- the asker answers their own card whether or not they hold Approvals decide, since it is a confirmation
+  (test_ask_the_person);
 - an admin's own write is asked too, and waits like anyone's;
 - Deny needs a reason, or runs the write anyway;
 - "Allow for this chat" asks again in the same chat, or stops the asking in other chats too.
@@ -85,11 +86,8 @@ def _act(thread: str, message: str, card: dict[str, Any]) -> str:
     return f"/chat/threads/{thread}/messages/{message}/widgets/{card['id']}/actions"
 
 
-LOOSE = {"requesterMayDecide": True}
-
-
-async def test_with_requester_may_decide_on_the_asker_allows_their_own_write(chat: AsyncClient) -> None:
-    james = person("usr_james", ["team_ops"], role="approver", policies=LOOSE)
+async def test_the_asker_without_approvals_decide_allows_their_own_write(chat: AsyncClient) -> None:
+    james = person("usr_james", ["team_ops"], role="approver")
     thread, card, message = await _ask(chat, james)
     assert card is not None and card["askFirst"] is True and card["canDecide"] is True, card
     allowed = await chat.post(_act(thread, message, card), json={"type": "approve"}, headers=james)
@@ -98,7 +96,7 @@ async def test_with_requester_may_decide_on_the_asker_allows_their_own_write(cha
 
 
 async def test_an_admin_is_asked_too(chat: AsyncClient) -> None:
-    maya = person("usr_maya", ["team_ops"], role="admin", policies=LOOSE)
+    maya = person("usr_maya", ["team_ops"], role="admin")
     thread, card, _ = await _ask(chat, maya)
     assert card is not None and card["askFirst"] is True, card
     states = [w["state"] for w in await _parts(chat, maya, thread, "widgets") if w["kind"] == "approval"]
@@ -106,7 +104,7 @@ async def test_an_admin_is_asked_too(chat: AsyncClient) -> None:
 
 
 async def test_deny_needs_no_reason_and_runs_nothing(chat: AsyncClient) -> None:
-    james = person("usr_james", ["team_ops"], role="approver", policies=LOOSE)
+    james = person("usr_james", ["team_ops"], role="approver")
     thread, card, message = await _ask(chat, james)
     assert card is not None
     denied = await chat.post(_act(thread, message, card), json={"type": "reject", "reason": ""}, headers=james)
@@ -117,7 +115,7 @@ async def test_deny_needs_no_reason_and_runs_nothing(chat: AsyncClient) -> None:
 
 
 async def test_allow_for_this_chat_stops_asking_here_only(chat: AsyncClient) -> None:
-    james = person("usr_james", ["team_ops"], role="approver", policies=LOOSE)
+    james = person("usr_james", ["team_ops"], role="approver")
     thread, card, message = await _ask(chat, james)
     assert card is not None
     body = {"type": "approve", "forChat": True}

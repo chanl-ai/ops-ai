@@ -36,11 +36,12 @@ from .fake_upstream import ENDPOINT, HOST, fake_bank
 
 TEAM = "team_lending"
 RUN: list[Grant] = [("tools", "run", "all"), ("tools", "view", "all")]
-# Each person's grid in the team: who may run tools, read skills, create skills and decide reviews.
+# Each person's grid in the team: who may run tools, read skills, create skills, and decide reviews and their own
+# requests.
 GRIDS: dict[str, list[Grant]] = {
     "viewer": [("tools", "view", "all"), ("skills", "view", "all")],
     # Their own approver, so an install passes the gateway and reaches agents-service.
-    "runner": [*RUN, ("skills", "view", "all"), ("reviews", "decide", "all")],
+    "runner": [*RUN, ("skills", "view", "all"), ("reviews", "decide", "all"), ("approvals", "decide", "all")],
     "maker": [*RUN, ("skills", "view", "all"), ("skills", "create", "all")],
     "blind": RUN,
 }
@@ -61,20 +62,12 @@ def _person(who: str, tenant: str) -> Principal:
         auth_method="session",
         access={TEAM: [who]},
         grids={who: encode_grid(GRIDS[who])},
-        policies={"requesterMayDecide": True},
     )
 
 
 def _content(result: Any) -> dict[str, Any]:
     content: dict[str, Any] = result.structured_content or {}
     return content
-
-
-class AskerMayDecide:
-    """The tenant's requesterMayDecide, on: a person holding reviews.decide approves their own write."""
-
-    async def allowed(self, _tenant: str, _team: str | None = None) -> bool:
-        return True
 
 
 async def _nobody(_key: str) -> None:
@@ -191,7 +184,6 @@ async def _stack(
             upstream=upstream,
             auth=Auth(identity, dev.services),
             mcp=True,
-            requester_policy=AskerMayDecide(),
         )
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tools") as rest:
             api = Api(rest, tenant)

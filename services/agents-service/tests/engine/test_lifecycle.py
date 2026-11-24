@@ -28,7 +28,7 @@ from ops_engine.ports import Access, EnginePorts, ToolResult
 from ops_engine.store import NotLiveError, RunStore
 from ops_engine.worker import Worker, WorkerHost
 from ops_service_kit.settings import Settings
-from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
+from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, signed_in, with_sign_in
 from tests.run_rows import write_run
 
 JAMES = {"X-Dev-User": "j.richardson@harborpine.example"}
@@ -95,13 +95,8 @@ async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
 
 @pytest.fixture
 async def stack(engine: AsyncEngine) -> AsyncIterator[tuple[httpx.AsyncClient, Worker]]:
-    # Publishing waits for a second person here: a workspace that switched requesterMayDecide off.
-    settings = Settings(
-        database_url=str(engine.url),
-        seed_dir=SEED,
-        registry_auto_approve=False,
-        dev_policies={"requesterMayDecide": False},
-    )
+    # Publishing waits for a reviewer here; who may decide their own request is the Approvals decide cell.
+    settings = Settings(database_url=str(engine.url), seed_dir=SEED, registry_auto_approve=False)
     app: FastAPI = create_app(
         settings,
         model=scripted_model(),
@@ -109,6 +104,7 @@ async def stack(engine: AsyncEngine) -> AsyncIterator[tuple[httpx.AsyncClient, W
         checkpointer=InMemorySaver(),
         graph_models=FakeGraphModels(),
         knowledge=fixture_knowledge(),
+        auth=with_sign_in(settings),
     )
     async with (
         app.router.lifespan_context(app),
@@ -174,8 +170,10 @@ async def test_a_draft_starts_only_test_runs_until_a_second_person_approves_it(
     assert req["status"] == "pending" and req["id"].startswith("WFP-")
     view = data(await c.get(f"/v1/workflows/definitions/{wid}", headers=JAMES))
     assert view["stage"] == "in_review" and view["liveVersion"] is None and view["review"]["id"] == req["id"]
-    own = await c.post(f"/v1/publish-requests/{req['id']}/decision", json={"decision": "approved"}, headers=JAMES)
-    assert own.status_code == 403
+    # James signed in as a Reviewer, without Approvals decide, does not decide his own request.
+    mine = signed_in(JAMES["X-Dev-User"])
+    own = await c.post(f"/v1/publish-requests/{req['id']}/decision", json={"decision": "approved"}, headers=mine)
+    assert (own.status_code, own.json()["error"]["code"]) == (403, "own_request"), own.text
     assert (await start(c, wid, 50)).status_code == 409
 
     assert (

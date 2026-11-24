@@ -41,7 +41,7 @@ async def test_can_decide_matches_the_decision_route(stack: tuple[AsyncClient, A
         name: await flag(c, url, "canDecide", who)
         for name, who in (("viewer", VIEWER), ("asker", BUILDER), ("reviewer", REVIEWER))
     }
-    # The asker, a builder, decides too once requesterMayDecide is on (off by default; D59 gave builders decide).
+    # D59 gave builders decide.
     assert flags == {"viewer": False, "asker": True, "reviewer": True}, flags
     body = {"decision": "rejected", "reason": "not this one"}
     refused = await c.post(f"{url}/decision", json=body, headers=VIEWER)
@@ -57,8 +57,8 @@ async def test_can_decide_on_a_publish_matches_its_route(stack: tuple[AsyncClien
         f"/v1/agents/{made['id']}/publish-requests", json={"version": made["version"], "note": "go"}, headers=BUILDER
     )
     rid = req.json()["data"]["id"]
-    # The asker does not decide their own publish while the team's two-person rule is on (requesterMayDecide off).
-    strict_asker = person("james", "team_ops", "builder", policies={"requesterMayDecide": False})
+    # The asker, a builder, does not hold Approvals decide, so they do not decide their own publish.
+    strict_asker = person("james", "team_ops", "builder")
     flags = {
         name: await flag(c, f"/reviews/{rid}", "canDecide", who)
         for name, who in (("asker", strict_asker), ("viewer", VIEWER), ("reviewer", REVIEWER))
@@ -118,7 +118,7 @@ async def test_can_decide_is_no_for_whoever_saved_the_version_of_any_saved_kind(
     stack: tuple[AsyncClient, AsyncEngine],  # noqa: F811
 ) -> None:
     """A tool module review the reviewer saved: the flag and the decision route read one list of saved kinds, and
-    both refuse the saver while the team's two-person rule is on (requesterMayDecide off)."""
+    both refuse the saver unless they hold Approvals decide (an Admin of the team)."""
     c, engine = stack
     body: dict[str, Any] = {
         "moduleId": "mod_x",
@@ -137,10 +137,10 @@ async def test_can_decide_is_no_for_whoever_saved_the_version_of_any_saved_kind(
             body={**body, "teamId": "team_ops", "savedBy": "maya@harborpine.example"},
             approved=False,
         )
-    loose = person("maya", "team_ops", "approver", policies={"requesterMayDecide": True})
-    assert await flag(c, f"/reviews/{req.id}", "canDecide", loose) is True
-    strict = person("maya", "team_ops", "approver", policies={"requesterMayDecide": False})
-    assert await flag(c, f"/reviews/{req.id}", "canDecide", strict) is False, "refused with the rule on"
+    admin = person("maya", "team_ops", "admin")
+    assert await flag(c, f"/reviews/{req.id}", "canDecide", admin) is True
+    strict = person("maya", "team_ops", "approver")
+    assert await flag(c, f"/reviews/{req.id}", "canDecide", strict) is False, "refused without the cell"
     decided = await c.post(f"/v1/publish-requests/{req.id}/decision", json={"decision": "approved"}, headers=strict)
     assert decided.status_code == 403, decided.text
 

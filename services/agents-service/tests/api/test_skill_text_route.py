@@ -104,9 +104,7 @@ async def test_a_text_past_the_step_cap_saves_but_cannot_publish_and_a_plain_tex
 async def test_a_reviewer_reads_the_draft_against_the_published_text_and_the_version_keeps_who_approved(
     tmp_path: Path,
 ) -> None:
-    async with _app(
-        str(tmp_path / "db.sqlite"), registry_auto_approve=False, dev_policies={"requesterMayDecide": False}
-    ) as c:
+    async with _app(str(tmp_path / "db.sqlite"), registry_auto_approve=False) as c:
         sid = _ok(await c.post("/v1/skills", json=SKILL, headers=LEE), 201)["id"]
         first = "Look the customer up with @tool:lookup_customer\n"
         _ok(await save_skill_draft(c, sid, {"source": first}, headers=LEE))

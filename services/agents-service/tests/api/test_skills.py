@@ -11,6 +11,7 @@ from typing import Any, cast
 
 from httpx import AsyncClient
 
+from ..conftest import signed_in
 from ..saves import save_agent
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 
@@ -89,16 +90,16 @@ async def test_a_published_version_never_changes_and_a_draft_edits_in_place(tmp_
         assert (r.status_code, r.json()["error"]["code"]) == (409, "stale_base")
 
 
-async def test_with_the_policy_off_the_requester_cannot_decide_a_skill_publish(tmp_path: Path) -> None:
-    async with _app(
-        str(tmp_path / "db.sqlite"), registry_auto_approve=False, dev_policies={"requesterMayDecide": False}
-    ) as c:
+async def test_a_requester_without_approvals_decide_cannot_decide_a_skill_publish(tmp_path: Path) -> None:
+    async with _app(str(tmp_path / "db.sqlite"), registry_auto_approve=False) as c:
         s = _ok(await c.post("/v1/skills", json=HARDSHIP, headers=LEE), 201)
         s = _ok(await c.post(f"/v1/skills/{s['id']}/publish-requests", json={"note": ""}, headers=LEE), 201)
         rid = s["pendingReviewId"]
         assert rid.startswith("SKP-") and s["status"] == "in_review"
-        r = await c.post(f"/v1/publish-requests/{rid}/decision", json={"decision": "approved"}, headers=LEE)
-        assert r.status_code == 403
+        # Lee signed in as a Reviewer, who decides the team's reviews but not her own request.
+        mine = signed_in(LEE["X-Dev-User"])
+        r = await c.post(f"/v1/publish-requests/{rid}/decision", json={"decision": "approved"}, headers=mine)
+        assert (r.status_code, r.json()["error"]["code"]) == (403, "own_request"), r.text
         _ok(await c.post(f"/v1/publish-requests/{rid}/decision", json={"decision": "approved"}, headers=KIM))
         assert _ok(await c.get(f"/v1/skills/{s['id']}"))["publishedVersion"] == 1
 

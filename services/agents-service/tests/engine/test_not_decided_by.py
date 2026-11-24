@@ -15,7 +15,6 @@ from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.api import engine_reviews
-from ops_agents.api.auth import caller_of
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
@@ -81,8 +80,8 @@ async def test_a_person_the_step_names_cannot_decide_and_another_reviewer_can(en
     assert (ended["status"], ended["outcome"]) == ("succeeded", "approved"), ended
 
 
-async def test_whoever_the_step_names_as_asking_decides_while_the_requester_policy_is_on(engine: AsyncEngine) -> None:
-    """requestedBy follows requesterMayDecide: in a workspace that turned it on (off by default), the asker decides."""
+async def test_whoever_the_step_names_as_asking_decides_while_they_hold_approvals_decide(engine: AsyncEngine) -> None:
+    """requestedBy is refused unless the asker holds Approvals decide in the deciding team, which M does."""
     asked = parse(
         {
             **FLOW.wire(),
@@ -110,8 +109,7 @@ async def test_whoever_the_step_names_as_asking_decides_while_the_requester_poli
     await drain(w)
     rt: Any = SimpleNamespace(db=engine, settings=SimpleNamespace(lease_ttl_seconds=6.0))
     with tenant_scope(tenant):
-        loose = replace(M, identity=caller_of(M).model_copy(update={"policies": {"requesterMayDecide": True}}))
-        await engine_reviews.decide(rt, loose, run_id, decision="approved", reason=None)
+        await engine_reviews.decide(rt, M, run_id, decision="approved", reason=None)
     await drain(w)
     with tenant_scope(tenant):
         assert ((await RunStore(tx).get(run_id)) or {}).get("outcome") == "approved"

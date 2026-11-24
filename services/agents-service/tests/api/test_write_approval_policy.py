@@ -1,6 +1,6 @@
 """The review service applies each operation's write approval policy, by failure mode: the person who
-asked approving their own write after the tenant switched requesterMayDecide off, read from the platform
-token, or refused while it is open; the workspace's stepUp policy not asking for a step-up on a write whose operation
+asked approving their own write without Approvals decide in the team, read from the platform token, or refused while
+they hold it; the workspace's stepUp policy not asking for a step-up on a write whose operation
 asks for none. Who decides is the thread's team: test_approval_in_the_runs_team.py. tools-service's
 side (the policy, and OPA counting approvers) is tested there; here the policy is what tools-service would answer."""
 
@@ -142,12 +142,12 @@ async def drafted(client: AsyncClient, asker: dict[str, str]) -> str:
     return f"/chat/threads/{thread}/messages/{events[0]['messageId']}/widgets/{widget['id']}/actions"
 
 
-async def test_an_asker_who_decides_reviews_is_not_asked_until_the_tenant_switches_it_off(
+async def test_an_asker_who_holds_approvals_decide_is_not_asked_and_one_who_does_not_waits_for_another(
     production: AsyncClient,
 ) -> None:
-    """Roles decide: James decides Operations' reviews, so in a workspace that turned requesterMayDecide on his own
-    write is decided as his at once and the card is no longer waiting; with it off, the default, Maya decides it."""
-    james = person("usr_james", ["team_ops"], policies={"requesterMayDecide": True})
+    """Roles decide: as an Admin of Operations James holds Approvals decide, so his own write is decided as his at once
+    and the card is no longer waiting; as a Reviewer he decides others' reviews only, and Maya decides it."""
+    james = person("usr_james", ["team_ops"], role="admin")
     url = await drafted(production, james)
     again = await production.post(url, json={"type": "approve"}, headers=james)
     assert (again.status_code, again.json()["error"]["message"]) == (409, "This approval was already decided."), (
@@ -165,8 +165,7 @@ async def test_an_asker_who_decides_reviews_is_not_asked_until_the_tenant_switch
     ]
     assert calls and calls[-1]["status"] == "success", calls
 
-    strict = {"requesterMayDecide": False}
-    james, maya = person("usr_james", ["team_ops"], policies=strict), person("usr_maya", ["team_ops"], policies=strict)
+    james, maya = person("usr_james", ["team_ops"]), person("usr_maya", ["team_ops"])
     url = await drafted(production, james)
     own = await production.post(url, json={"type": "approve"}, headers=james)
     assert (own.status_code, own.json()["error"]["code"]) == (403, "own_request"), own.text
@@ -205,16 +204,13 @@ async def test_a_person_signed_in_with_the_dev_password_approves_only_in_the_thr
 
 async def test_the_workspace_step_up_policy_asks_every_approver_to_step_up() -> None:
     dana = {"X-Dev-User": "dana@harborpine.example"}
-    # The asker may decide here (requesterMayDecide on), so the step-up policy is what each run tests.
-    loose = {"requesterMayDecide": True}
-    async for c in _client(
-        Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies=loose), platform=False
-    ):
+    # The dev asker holds every cell, Approvals decide among them, so the step-up policy is what each run tests.
+    async for c in _client(Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED), platform=False):
         # The operation asks for no step-up and step-up is off: the dev asker, who passes every role rule, is not
         # asked, so the card is decided as theirs.
         own = await c.post(await drafted(c, dana), json={"type": "approve"}, headers=dana)
         assert own.status_code == 409, own.text
-    strict = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies={"stepUp": True, **loose})
+    strict = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies={"stepUp": True})
     async for c in _client(strict, platform=False):
         url = await drafted(c, dana)
         bare = await c.post(url, json={"type": "approve"}, headers=dana)
