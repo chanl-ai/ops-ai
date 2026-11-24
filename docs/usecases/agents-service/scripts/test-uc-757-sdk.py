@@ -84,8 +84,9 @@ with bank_stack() as s:
         agent["promptMode"] == "brief"
         and agent["instructions"].startswith(f"# Who you are\nYou are {name}.")
         and [p["id"] for p in before["problems"]] == [f"tool:{read}"]
+        and [(b["code"], b["field"]) for b in before.get("blockers") or []] == [("missing_reference", "brief.howToAnswer")]
         and len(added["added"]) == 3
-        and after == {"canRequest": True, "problems": []}
+        and (after["canRequest"], after["problems"], after.get("blockers")) == (True, [], [])
         and live["publishedVersion"] == live["version"],
         (agent.get("promptMode"), before, added, after, live.get("publishedVersion"), live.get("version")),
     )

@@ -251,13 +251,23 @@ await withUiStack(
       // The document editor draws after the page's own fields, so its headings are waited for before they are counted.
       await brief.getByRole('group').nth(4).waitFor({ timeout: 60_000 }).catch(() => undefined);
       check('11 the brief has its headings and the uses line is a link', (await brief.getByRole('group').count()) >= 5 && /^Uses /.test(await page.getByTestId('agent-uses-link').innerText()), await page.getByTestId('agent-uses-link').innerText());
-      // An empty block's hint takes its own height at phone width, so a wrapped hint never runs under the next line.
+      // An empty block that is drawn takes its hint's height at phone width, so a wrapped hint never runs under the
+      // next line. An optional block with nothing in it is one line instead: its text and hint are not drawn, and an
+      // Add link stands beside its heading. Non-vacuous: a block drawn open again fails the second check, and a hint
+      // that floats out of its block fails the first.
       const bare = await made('/v1/agents', { name: `Bare desk ${RUN}`, role: 'Has an empty brief' });
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(`${consoleUrl}/build/agents/${bare.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await brief.locator('.is-empty').first().waitFor({ timeout: 120_000 });
-      const hints = await brief.locator('.is-empty').evaluateAll((els) => els.map((el) => ({ hint: parseFloat(getComputedStyle(el, '::before').height), box: el.getBoundingClientRect().height })));
-      check('11 at 390 wide an empty block is as tall as its hint', hints.length > 0 && hints.every((h) => h.box >= h.hint - 1) && hints.some((h) => h.hint > 30), hints);
+      const hints = (await brief.locator('.is-empty').evaluateAll((els) => els.map((el) => ({ hint: parseFloat(getComputedStyle(el, '::before').height), box: el.getBoundingClientRect().height })))).filter((h) => h.box > 0);
+      check('11 at 390 wide an empty block that is drawn is as tall as its hint', hints.length > 0 && hints.every((h) => h.box >= h.hint - 1) && hints.some((h) => h.hint > 30), hints);
+      const folded = await brief.locator('[data-collapsed="yes"]').evaluateAll((els) => els.map((el) => ({ field: el.getAttribute('data-field'), text: [...el.querySelectorAll('.is-empty')].reduce((sum, line) => sum + line.getBoundingClientRect().height, 0), add: (el.querySelector('[data-testid^="brief-add-"]')?.getBoundingClientRect().height ?? 0) > 0 })));
+      const drawnFields = await brief.locator('[data-field]:not([data-collapsed])').evaluateAll((els) => els.map((el) => el.getAttribute('data-field')));
+      check(
+        '11 at 390 wide an empty optional block is one line with an Add link, and the Job and How to answer blocks stay drawn',
+        folded.length > 0 && folded.every((f) => f.text === 0 && f.add) && folded.some((f) => f.field === 'brief.examples') && ['brief.purpose', 'brief.howToAnswer'].every((k) => drawnFields.includes(k)),
+        { folded, drawnFields },
+      );
       await page.screenshot({ path: evidenceDir('media', AREA, 'uc-757-empty-brief-admin-390.png'), fullPage: true });
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.goto(`${consoleUrl}/build/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
