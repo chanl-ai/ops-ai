@@ -76,8 +76,10 @@ async def test_a_reinvite_signs_an_active_member_in_through_the_provider_once(si
     assert made.status_code == 200, made.text
     data = made.json()["data"]
     # Omitting ids reinvites every affected member of the team: the rig's own people with no password row too.
-    assert member in data["updated"] and data["skipped"] == [], data
-    token = next(i["token"] for i in data["invites"] if i["memberId"] == member)
+    # The rig's admin cannot sign in either, but a link invite never opens an admin's account.
+    assert member in data["updated"] and {x["reason"] for x in data["skipped"]} <= {"links_own_session"}, data
+    assert "token" not in made.text and "invites" not in data
+    token = signin.mailed_invite(email)
     seen = (await signin.public.get(f"/v1/invites/{token}")).json()["data"]
     assert seen["state"] == "pending" and seen["existingAccount"] is True, seen
     # The link alone never sets a password on an existing account.
@@ -93,35 +95,49 @@ async def test_a_reinvite_signs_an_active_member_in_through_the_provider_once(si
     assert again.json()["data"]["skipped"] == [{"id": member, "reason": "not_affected"}], again.text
 
 
-async def test_a_used_invite_never_links_another_account(signin: SignInRig) -> None:
+async def test_a_link_invite_works_once_for_its_own_person_and_never_for_an_admin(signin: SignInRig) -> None:
     domain = f"used.{signin.zone}"
-    await signin.oidc(domain, jit=False)
+    await signin.saml(domain)
     email = f"di@{domain}"
     person = await signin.person(email)
-    h = {**signin.admin, "X-Team-Id": signin.ops_team}
-    made = await signin.public.post(
-        "/v1/settings/members/invite", headers=h, json={"emails": [email], "role": "viewer"}
-    )
-    token = made.json()["data"]["invites"][0]["token"]
-    first = await signin.sign_in_sso(email, invite=token, at_idp={"subject": "first"})
+    boss = await signin.person(f"boss@{domain}", role="admin")
+    team, member = await _team_of(signin, person)
+    _, boss_member = await _team_of(signin, boss)
+    h = {**signin.admin, "X-Team-Id": team}
+    shown = (await signin.public.get("/v1/settings/members", headers=h)).json()["data"]["data"]
+    flags = {m["email"]: (m["needsInvite"], m["linksOwnSession"]) for m in shown}
+    assert flags[email] == (True, False) and flags[f"boss@{domain}"] == (False, True), flags
+    made = await signin.public.post("/v1/settings/members/reinvite", headers=h, json={"ids": [member, boss_member]})
+    assert made.json()["data"]["skipped"] == [{"id": boss_member, "reason": "links_own_session"}], made.text
+    token = signin.mailed_invite(email)
+    # Another address at the provider holding the link opens nothing.
+    eve = await signin.sign_in_sso(f"eve@{domain}", invite=token)
+    assert eve.completed is None or _claims(eve.completed.json()["data"]["token"])["sub"] != person
+    first = await signin.sign_in_sso(email, invite=token)
     assert first.completed is not None and first.completed.status_code == 200, first.location
+    assert _claims(first.completed.json()["data"]["token"])["roles"] == {team: "viewer"}
     async with signin.engine.begin() as c:  # the person's link is gone, as after an admin removes it
         await c.execute(signin_identities.delete().where(signin_identities.c.user_id == person))
-    other = await signin.sign_in_sso(email, invite=token, at_idp={"subject": "other"})
-    assert other.query == {"error": "link_required"} and await _links(signin, person) == 0
+    used = await signin.sign_in_sso(email, invite=token)
+    assert used.query == {"error": "link_required"} and await _links(signin, person) == 0
+    # An expired link invite links nobody either.
+    await signin.public.post("/v1/settings/members/reinvite", headers=h, json={"ids": [member]})
+    async with signin.engine.begin() as c:
+        await c.execute(members.update().where(members.c.id == member).values(invite_expires_at=now_iso()))
+    late = await signin.sign_in_sso(email, invite=signin.mailed_invite(email))
+    assert late.query == {"error": "link_required"} and await _links(signin, person) == 0
 
 
 async def test_sso_links_name_the_workspace_provider_and_whether_it_is_linked(signin: SignInRig) -> None:
     domain = f"mine.{signin.zone}"
     email = f"ed@{domain}"
     await signin.person(email)
-    signed = await signin.public.post("/v1/auth/sign-in", json={"email": email, "password": DEMO_PASSWORD})
-    auth = {"Authorization": f"Bearer {signed.json()['data']['token']}"}
+    auth, step_up = await signin.stepped_up(email)
     assert (await signin.public.get("/v1/auth/sso/links", headers=auth)).json()["data"] == []
     await signin.oidc(domain, jit=False)
     before = (await signin.public.get("/v1/auth/sso/links", headers=auth)).json()["data"]
     assert [(x["kind"], x["linked"], x["linkedAt"]) for x in before] == [("oidc", False, None)], before
-    start = (await signin.public.post("/v1/auth/sso/link/start", json={}, headers=auth)).json()["data"]
+    start = (await signin.public.post("/v1/auth/sso/link/start", json={"stepUp": step_up}, headers=auth)).json()["data"]
     location = await signin.answer(start["redirectUrl"], user=email, at_idp={"subject": "ed-1"})
     body = {"code": dict(httpx.URL(location).params)["code"], "flowKey": start["flowKey"]}
     assert (await signin.public.post("/v1/auth/sso/link/complete", json=body, headers=auth)).status_code == 200

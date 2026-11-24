@@ -2,20 +2,25 @@
 
 A first sign-in linked a new provider subject to whichever person had the email, so one person could collect several
 subjects at the same provider, each a way into their account. `uq_signin_identities_person` allows one subject per
-person per provider. Where a person already holds more than one, the oldest link is kept (earliest `created_at`, then
-the lowest id) and the later ones are deleted: a subject attached by email after the person's own is the one this
-rule exists to remove. The person whose later subject goes signs in with the kept one. A single link made by email
-before this rule stays as it is. The delete runs with the table's isolation policy set aside (`backfill_ddl`), so it
-sees every tenant's rows, not none.
+person per provider. Where a person already holds more than one, the most recently used link is kept (latest
+`last_used_at`, then `created_at`, then the highest id) and the others are deleted. Each deleted link is recorded
+first as a `signin.unlink` audit entry naming the tenant, the person and the subject (and logged when the upgrade runs
+online), and every session those people hold is ended, since any of them may have been opened through a link that is
+now gone. A single link made by email before this rule stays as it is. The writes run with each table's isolation
+policy set aside (`backfill_ddl`), so they see every tenant's rows, not none.
 
 `signin_flows.subject` keeps a link flow's provider subject until the session that started it completes the link;
-`signin_flows.invite_hash` names the invite a sign-in started from. The downgrade drops all three.
+`signin_flows.invite_hash` names the invite a sign-in started from. The downgrade drops all three; deleted links and
+ended sessions stay gone.
 
 Revision ID: 20261123_2330_identity_per_user
 Revises: 20261122_2022_list_sort_indexes
 """
 
 from __future__ import annotations
+
+import logging
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 from alembic import op
@@ -28,22 +33,52 @@ branch_labels = None
 depends_on = None
 
 CHAIN = "platform"
+log = logging.getLogger("alembic.runtime.migration")
 
-# Every link with an older link for the same person at the same provider; the same statement on both dialects.
-LATER_LINKS = (
-    "DELETE FROM signin_identities WHERE id IN ("
-    " SELECT s.id FROM signin_identities s WHERE EXISTS ("
-    "  SELECT 1 FROM signin_identities o"
-    "  WHERE o.tenant_id = s.tenant_id AND o.provider_id = s.provider_id AND o.user_id = s.user_id"
-    "  AND (o.created_at < s.created_at OR (o.created_at = s.created_at AND o.id < s.id))))"
+# A link that is not its person's most recently used one at that provider; the same text on both dialects.
+LATER = (
+    "EXISTS (SELECT 1 FROM signin_identities o"
+    " WHERE o.tenant_id = s.tenant_id AND o.provider_id = s.provider_id AND o.user_id = s.user_id"
+    " AND (o.last_used_at > s.last_used_at"
+    "  OR (o.last_used_at = s.last_used_at AND o.created_at > s.created_at)"
+    "  OR (o.last_used_at = s.last_used_at AND o.created_at = s.created_at AND o.id > s.id)))"
 )
+# A JSON string's characters: a backslash and a double quote escaped, as a subject may hold either.
+_SUBJECT = "REPLACE(REPLACE(s.subject, '\\', '\\\\'), '\"', '\\\"')"
+
+
+def _audit(dialect: str, at: str) -> str:
+    detail = f'CONCAT(\'{{"provider": "\', s.provider_id, \'", "subject": "\', {_SUBJECT}, \'", "how": "migration"}}\')'
+    if dialect == "postgresql":
+        detail = f"CAST({detail} AS JSON)"
+    return (
+        "INSERT INTO audit_entries (id, tenant_id, team_id, actor, action, target_kind, target_id, request_id, at,"
+        f" detail) SELECT CONCAT('aud_', s.id), s.tenant_id, NULL, 'migration', 'signin.unlink', 'user', s.user_id,"
+        f" '{revision[:64]}', '{at}', {detail} FROM signin_identities s WHERE {LATER}"
+    )
 
 
 def upgrade() -> None:
     dialect = op.get_bind().dialect.name
-    table = sa.Table("signin_identities", sa.MetaData(), sa.Column("tenant_id", sa.String(64)), info=TENANT_SCOPED)
-    before, after = backfill_ddl([table], dialect, chain=CHAIN, kind="tenant")
-    for statement in (*before, LATER_LINKS, *after):
+    at = datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    policed = [
+        sa.Table(name, sa.MetaData(), sa.Column("tenant_id", sa.String(64)), info=TENANT_SCOPED)
+        for name in ("signin_identities", "sessions", "audit_entries")
+    ]
+    before, after = backfill_ddl(policed, dialect, chain=CHAIN, kind="tenant")
+    for statement in before:
+        op.execute(statement)
+    if not op.get_context().as_sql:
+        later = sa.text(f"SELECT s.tenant_id, s.user_id, s.subject FROM signin_identities s WHERE {LATER}")
+        for tenant, person, subject in op.get_bind().execute(later).all():
+            log.warning("signin link removed: tenant=%s person=%s subject=%s", tenant, person, subject)
+    op.execute(_audit(dialect, at))
+    op.execute(
+        f"UPDATE sessions SET revoked_at = '{at}' WHERE revoked_at IS NULL AND user_id IN"
+        f" (SELECT s.user_id FROM signin_identities s WHERE {LATER})"
+    )
+    op.execute(f"DELETE FROM signin_identities WHERE id IN (SELECT s.id FROM signin_identities s WHERE {LATER})")
+    for statement in after:
         op.execute(statement)
     op.create_unique_constraint(
         "uq_signin_identities_person", "signin_identities", ["tenant_id", "provider_id", "user_id"]

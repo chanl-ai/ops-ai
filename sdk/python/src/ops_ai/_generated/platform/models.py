@@ -308,6 +308,11 @@ class KeyTargetIn(TypedDict, closed=True):
     version: NotRequired[int | None]
 
 
+class Mailed(TypedDict, closed=True):
+    email: str
+    memberId: str
+
+
 class MeTeam(TypedDict, closed=True):
     id: str
     name: str
@@ -324,6 +329,7 @@ class MemberOut(TypedDict, closed=True):
     email: str
     id: str
     invitedAt: NotRequired[str | None]
+    linksOwnSession: NotRequired[bool]
     name: str
     needsInvite: NotRequired[bool]
     role: str
@@ -636,6 +642,11 @@ class SsoLink(TypedDict, closed=True):
     linked: bool
     linkedAt: str | None
     providerId: str
+
+
+class SsoLinkStartIn(TypedDict, closed=True):
+    next: NotRequired[str | None]
+    stepUp: str
 
 
 class SsoLinked(TypedDict, closed=True):
@@ -1128,6 +1139,12 @@ class ProviderOut(TypedDict, closed=True):
     verification: list[DomainCheckOut]
 
 
+class ReinviteBulkOut(TypedDict, closed=True):
+    mailed: list[Mailed]
+    skipped: list[Skip]
+    updated: list[str]
+
+
 class SessionOut(TypedDict, closed=True):
     expiresAt: str
     principal: Principal
@@ -1208,6 +1225,11 @@ class EnvelopePrincipal(TypedDict, closed=True):
 
 class EnvelopeProviderOut(TypedDict, closed=True):
     data: ProviderOut
+    success: Literal[True]
+
+
+class EnvelopeReinviteBulkOut(TypedDict, closed=True):
+    data: ReinviteBulkOut
     success: Literal[True]
 
 

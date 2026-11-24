@@ -520,6 +520,23 @@ class SignInRig:
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
 
+    async def stepped_up(self, email: str) -> tuple[dict[str, str], str]:
+        """A password session for `email` and its fresh step-up token; taken before a provider turns password off."""
+        r = await self.public.post("/v1/auth/sign-in", json={"email": email, "password": DEMO_PASSWORD})
+        assert r.status_code == 200, r.text
+        auth = {"Authorization": f"Bearer {r.json()['data']['token']}"}
+        up = await self.public.post("/v1/auth/step-up", json={"password": DEMO_PASSWORD}, headers=auth)
+        assert up.status_code == 200, up.text
+        return auth, up.json()["data"]["token"]
+
+    def mailed_invite(self, email: str) -> str:
+        """The newest link invite token mailed to `email`."""
+        found = [m for k, m in self.mail.sent.items() if k.startswith("link-invite:") and email in m.to]
+        assert found, f"no link invite mailed to {email}"
+        match = re.search(r"/invite/(inv_[A-Za-z0-9_-]+)", found[-1].body)
+        assert match is not None
+        return match.group(1)
+
     async def sign_in_sso(
         self,
         email: str,

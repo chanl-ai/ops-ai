@@ -45,8 +45,8 @@ from .lookups import (
     Lookup,
     lookup,
 )
-from .members import Actor, end_membership
-from .roles import live_in, mirror_membership
+from .members import Actor, accept_invite_on, end_membership, use_link_invite_on
+from .roles import holds_admin, mirror_membership
 from .tables import (
     members,
     password_credentials,
@@ -971,26 +971,34 @@ class SignInStore(TenantDb):
         created = False
         how = "jit"
         jit_team = (p.jit_team_id or await default_team_in(c, p.tenant_id)) if p.jit_role else None
-        invite = await _invite(c, invite_hash, email, at) if invite_hash and vouched else None
+        invite = await _invite(c, invite_hash, email, at) if invite_hash else None
         if existing is not None:
-            if existing[1] != "active" or await _holds_admin(c, p.tenant_id, str(existing[0])):
+            if existing[1] != "active" or await holds_admin(c, p.tenant_id, str(existing[0])):
                 # An admin links from their own signed-in session, never by an email the provider asserts: whoever
                 # controls the provider could otherwise sign in as any admin on a verified domain.
                 return None
-            if invite is None:
-                # The email alone never opens an existing person's account: anyone who can be given that address at
-                # the provider, or a provider that never checked it, would sign in as them.
-                raise LinkRequired
             user_id, how = str(existing[0]), "invite"
-            await self._accept_invite(c, p, invite, user_id, email, at=at, request_id=request_id)
-        elif invite is not None:
+            # The email alone never opens an existing person's account: anyone who can be given that address at the
+            # provider, or a provider that never checked it, would sign in as them. Only a link invite on their own
+            # membership does, mailed to that address, so it needs no email_verified; it changes no role.
+            actor = Actor(p.tenant_id, invite.team_id, user_id, request_id) if invite else None
+            if (
+                invite is None
+                or actor is None
+                or invite.user_id != user_id
+                or not await use_link_invite_on(c, actor, invite.member_id, email, at=at, via=p.id)
+            ):
+                raise LinkRequired
+        elif invite is not None and invite.user_id is None and vouched:
             user_id, created, how = new_id("usr"), True, "invite"
             await c.execute(
                 users.insert().values(
                     id=user_id, tenant_id=p.tenant_id, email=email, name=name, status="active", created_at=at
                 )
             )
-            await self._accept_invite(c, p, invite, user_id, email, at=at, request_id=request_id)
+            actor = Actor(p.tenant_id, invite.team_id, user_id, request_id)
+            if not await accept_invite_on(c, actor, invite.member_id, invite.role, email, at=at, via=p.id):
+                raise LinkRequired  # rolls back the person made above
         elif jit_team and p.jit_role:
             user_id, created = new_id("usr"), True
             await c.execute(
@@ -1003,10 +1011,57 @@ class SignInStore(TenantDb):
             )
         else:
             return None
-        await _link(c, p, user_id, subject, how=how, at=at, request_id=request_id)
+        await _link(c, p, user_id, subject, email=email, how=how, at=at, request_id=request_id)
         return SsoPerson(user_id, created)
 
-    async def link(self, p: Provider, user_id: str, subject: str, *, at: str, request_id: str) -> None:
+    async def unlink(
+        self,
+        tenant_id: str,
+        user_id: str,
+        *,
+        actor: str,
+        team_id: str | None,
+        at: str,
+        request_id: str,
+        provider_id: str | None = None,
+    ) -> int:
+        """Removes the person's provider links (one provider's, or all), each audited with its subject, and ends the
+        sessions they signed in with through those providers, so a link removed after a takeover stops working at once.
+        Returns how many links went."""
+        q = sa.select(signin_identities.c.id, signin_identities.c.provider_id, signin_identities.c.subject).where(
+            signin_identities.c.user_id == user_id
+        )
+        if provider_id is not None:
+            q = q.where(signin_identities.c.provider_id == provider_id)
+        async with self.tenant_tx(tenant_id) as c:
+            gone = (await c.execute(q)).all()
+            if not gone:
+                return 0
+            await c.execute(signin_identities.delete().where(signin_identities.c.id.in_([str(r[0]) for r in gone])))
+            await c.execute(
+                sessions.update()
+                .where(
+                    sessions.c.user_id == user_id,
+                    sessions.c.provider_id.in_({str(r[1]) for r in gone}),
+                    sessions.c.revoked_at.is_(None),
+                )
+                .values(revoked_at=at)
+            )
+            for _, provider, subject in gone:
+                await record(
+                    c,
+                    tenant_id=tenant_id,
+                    team_id=team_id,
+                    actor=actor,
+                    action="signin.unlink",
+                    target_kind="user",
+                    target_id=user_id,
+                    request_id=request_id,
+                    detail={"provider": str(provider), "subject": str(subject)},
+                )
+        return len(gone)
+
+    async def link(self, p: Provider, user_id: str, subject: str, *, email: str, at: str, request_id: str) -> None:
         """Links the provider subject to `user_id`, the person of the signed-in session that started the link.
         Raises AlreadyLinked when the subject is someone's, or the person already has one at this provider."""
         async with self.tenant_tx(p.tenant_id) as c:
@@ -1015,77 +1070,9 @@ class SignInStore(TenantDb):
                 raise AlreadyLinked
             try:
                 async with self.attempt(c):
-                    await _link(c, p, user_id, subject, how="session", at=at, request_id=request_id)
+                    await _link(c, p, user_id, subject, email=email, how="session", at=at, request_id=request_id)
             except IntegrityError as e:
                 raise AlreadyLinked from e
-
-    async def _accept_invite(
-        self,
-        c: AsyncConnection,
-        p: Provider,
-        invite: tuple[str, str, str],
-        user_id: str,
-        email: str,
-        *,
-        at: str,
-        request_id: str,
-    ) -> None:
-        """The invited member becomes `user_id`'s, active, with the invite's role, in the sign-in's transaction."""
-        member_id, team_id, role = invite
-        done = await c.execute(
-            members.update()
-            .where(members.c.id == member_id, members.c.status == "invited")
-            .values(status="active", user_id=user_id, invite_expires_at=None, updated_at=at)
-        )
-        if done.rowcount != 1:
-            # A new invite to a member who is active already and cannot sign in (`TeamStore.reinvite`): it is
-            # consumed for that same person only, the expiry still set, so a used or someone else's invite links
-            # nobody. Their membership and roles stand as they are.
-            again = await c.execute(
-                members.update()
-                .where(
-                    members.c.id == member_id,
-                    members.c.status == "active",
-                    members.c.user_id == user_id,
-                    members.c.invite_expires_at > at,
-                )
-                .values(invite_expires_at=None, updated_at=at)
-            )
-            if again.rowcount != 1:
-                raise LinkRequired
-            await record(
-                c,
-                tenant_id=p.tenant_id,
-                team_id=team_id,
-                actor=user_id,
-                action="member.reinvite_accept",
-                target_kind="member",
-                target_id=member_id,
-                request_id=request_id,
-                detail={"email": email, "provider": p.id},
-            )
-            return
-        await mirror_membership(
-            c,
-            tenant_id=p.tenant_id,
-            team_id=team_id,
-            user_id=user_id,
-            member_role=role,
-            security_team=await security_team_in(c, p.tenant_id),
-            granted_by=f"signin:{p.id}",
-            at=at,
-        )
-        await record(
-            c,
-            tenant_id=p.tenant_id,
-            team_id=team_id,
-            actor=user_id,
-            action="member.accept",
-            target_kind="member",
-            target_id=member_id,
-            request_id=request_id,
-            detail={"email": email, "provider": p.id},
-        )
 
     async def _join_groups(
         self,
@@ -1249,12 +1236,27 @@ class SignInStore(TenantDb):
         return member_id
 
 
-async def _invite(c: AsyncConnection, invite_hash: str, email: str, at: str) -> tuple[str, str, str] | None:
-    """The pending, unexpired invite with this token hash, when it is to `email` on a domain the workspace accepts:
-    its member id, team and role."""
+@dataclass(frozen=True)
+class PendingInvite:
+    member_id: str
+    team_id: str
+    role: str
+    # Set on a link invite (`TeamStore.reinvite`): the active member's own person.
+    user_id: str | None
+
+
+async def _invite(c: AsyncConnection, invite_hash: str, email: str, at: str) -> PendingInvite | None:
+    """The pending, unexpired invite with this token hash, when it is to `email` on a domain the workspace accepts."""
     found = (
         await c.execute(
-            sa.select(members.c.id, members.c.team_id, members.c.role, members.c.email, tenants.c.allowed_domains)
+            sa.select(
+                members.c.id,
+                members.c.team_id,
+                members.c.role,
+                members.c.email,
+                members.c.user_id,
+                tenants.c.allowed_domains,
+            )
             .join(tenants, tenants.c.id == members.c.tenant_id)
             .where(
                 members.c.invite_token_hash == invite_hash,
@@ -1266,15 +1268,15 @@ async def _invite(c: AsyncConnection, invite_hash: str, email: str, at: str) -> 
     ).first()
     if found is None or str(found[3]).lower() != email:
         return None
-    domains: list[Any] = list(found[4] or [])
+    domains: list[Any] = list(found[5] or [])
     allowed = {str(d).lower() for d in domains}
     if allowed and email.rpartition("@")[2] not in allowed:
         return None
-    return str(found[0]), str(found[1]), str(found[2])
+    return PendingInvite(str(found[0]), str(found[1]), str(found[2]), str(found[4]) if found[4] else None)
 
 
 async def _link(
-    c: AsyncConnection, p: Provider, user_id: str, subject: str, *, how: str, at: str, request_id: str
+    c: AsyncConnection, p: Provider, user_id: str, subject: str, *, email: str, how: str, at: str, request_id: str
 ) -> None:
     """The provider subject's link to the person, and its audit entry, in the caller's transaction. The unique
     constraints refuse a subject that is someone's and a second subject for the same person at this provider."""
@@ -1298,7 +1300,7 @@ async def _link(
         target_kind="user",
         target_id=user_id,
         request_id=request_id,
-        detail={"provider": p.id, "how": how},
+        detail={"provider": p.id, "how": how, "subject": subject, "email": email},
     )
 
 
@@ -1392,18 +1394,6 @@ async def _record_break_glass(
         request_id=request_id,
         detail={},
     )
-
-
-async def _holds_admin(c: AsyncConnection, tenant_id: str, user_id: str) -> bool:
-    """Whether the person may manage access in any team they hold a role in, or in every team, or is on the break-glass
-    list: none of them is ever linked to a provider by the email it asserts. Decided by the cell through `can`, so a
-    custom role holding `access.manage` counts as Admin does."""
-    listed = sa.select(signin_break_glass.c.user_id).where(signin_break_glass.c.user_id == user_id)
-    if (await c.execute(listed)).first() is not None:
-        return True
-    p, access = await live_in(c, tenant_id, user_id)
-    held = {*p.team_ids, *p.access}
-    return any(access.may(p, "access", "manage", team=t, from_any_team=True) for t in held)
 
 
 async def _add_certificates(

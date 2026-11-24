@@ -261,6 +261,17 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "auth_sso_unlink": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/auth/sso/links/{provider_id}",
+    "pathParams": [
+      "provider_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "auth_step_up": {
     "body": "json",
     "headers": [],
@@ -428,6 +439,17 @@ export const platformOperations = {
     "headers": [],
     "method": "POST",
     "path": "/v1/settings/members/delete",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "members_unlink_members": {
+    "body": "json",
+    "headers": [
+      "x-acting-for"
+    ],
+    "method": "POST",
+    "path": "/v1/settings/members/unlink",
     "pathParams": [],
     "query": [],
     "stream": false

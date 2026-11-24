@@ -311,6 +311,9 @@ class MemberOut(Out):
     # Active, but with no provider link and no password in a workspace that signs in only through a provider: they
     # cannot sign in until a new invite (`/v1/settings/members/reinvite`) links them.
     needs_invite: bool = False
+    # Would need an invite, but manages access or is on the break-glass list: a link invite never opens their
+    # account, so they link from their own session after a password reset.
+    links_own_session: bool = False
 
 
 class InviteIn(In):
@@ -369,6 +372,17 @@ class InviteLink(Out):
 
 class InviteBulkOut(BulkOut):
     invites: list[InviteLink]
+
+
+class Mailed(Out):
+    member_id: str
+    email: str
+
+
+class ReinviteBulkOut(BulkOut):
+    """Who a link invite was mailed to; the link itself goes only to their mailbox."""
+
+    mailed: list[Mailed]
 
 
 class ReinviteIn(In):
@@ -687,6 +701,13 @@ class SsoLink(Out):
     label: str
     linked: bool
     linked_at: str | None
+
+
+class SsoLinkStartIn(In):
+    """The step-up token this session took in the last minutes (`/v1/auth/step-up` or its SSO form)."""
+
+    step_up: str = Field(min_length=20, max_length=4000)
+    next: str | None = Field(default=None, pattern=NEXT_PATH)
 
 
 class SsoLinked(Out):

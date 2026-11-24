@@ -13,10 +13,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TypedDict
 
-from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unauthorized
+from ops_email import MailSender, OutboundMessage
+from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, Unauthorized
 
 from .store.members import Actor, Bulk, Invite, NotTheInvitee, TeamArchivedError, TeamStore
 from .store.roles import RoleStore
+from .store.signin import SignInStore
 
 INVITE_TTL = timedelta(days=7)
 
@@ -38,6 +40,12 @@ class InvitedView(BulkView):
     """The invites made, each with its token, shown once."""
 
     invites: list[dict[str, str]]
+
+
+class ReinvitedView(BulkView):
+    """The link invites mailed: to whom, never their tokens."""
+
+    mailed: list[dict[str, str]]
 
 
 class InvitePreviewView(TypedDict):
@@ -62,6 +70,11 @@ class Members:
     store: TeamStore
     # Where a caller's role assignments are read for `require_admin`; the tenant's RoleStore unless a test gives one.
     roles: RoleStore | None = None
+    # Where link invites are mailed and the console address they open; unset, a reinvite is refused.
+    mail: MailSender | None = None
+    console_url: str | None = None
+    # The provider links an admin removes; unset, the unlink route is refused.
+    signin: SignInStore | None = None
 
     async def require_admin(
         self, actor: Actor, area: str = "access", action: str = "manage", *, in_team: bool = False
@@ -90,11 +103,14 @@ class Members:
         done = _bulk(bulk)
         return {"updated": done["updated"], "skipped": done["skipped"], "invites": invites}
 
-    async def reinvite(self, actor: Actor, ids: list[str] | None) -> InvitedView:
-        """A new invite for each active member who has no provider link and no password in a workspace that signs in
-        only through a provider; the member stays active, and an SSO sign-in from the invite links their person.
-        Same right and token handling as `invite`."""
+    async def reinvite(self, actor: Actor, ids: list[str] | None) -> ReinvitedView:
+        """A link invite for each active member who has no provider link and no password in a workspace that signs in
+        only through a provider; the member stays active, and an SSO sign-in from the invite links their person and
+        changes no role. The link is mailed to the member's own address only and never returned: holding it is the
+        proof that the mailbox is theirs. Single use, for `INVITE_TTL`."""
         await self.require_admin(actor, "access", "create")
+        if self.mail is None or self.console_url is None:
+            raise ServiceUnavailable("Invites cannot be mailed on this installation.", code="mail_not_configured")
         now = datetime.now(UTC)
         wanted = ids if ids is not None else await self.store.affected(actor.tenant_id, actor.team_id)
         tokens = {m: f"inv_{secrets.token_urlsafe(24)}" for m in wanted}
@@ -105,9 +121,44 @@ class Members:
             expires_at=_iso(now + INVITE_TTL),
             at=_iso(now),
         )
+        console = self.console_url.rstrip("/")
+        for m in made:
+            token = tokens[m["memberId"]]
+            body = (
+                f"Your workspace admin asked you to sign in to Ops AI with your company account.\n\n"
+                f"Sign in: {console}/invite/{token}\n\n"
+                f"The link works once, for {INVITE_TTL.days} days, and only for {m['email']}."
+            )
+            await self.mail.send(
+                OutboundMessage(
+                    key=f"link-invite:{_hash(token)}", to=(m["email"],), subject="Sign in with your company", body=body
+                )
+            )
         done = _bulk(bulk)
-        invites = [{**m, "token": tokens[m["memberId"]]} for m in made]
-        return {"updated": done["updated"], "skipped": done["skipped"], "invites": invites}
+        return {"updated": done["updated"], "skipped": done["skipped"], "mailed": made}
+
+    async def unlink(self, actor: Actor, ids: list[str]) -> BulkView:
+        """Removes the provider links of each member's person, and ends the sessions they made, audited; a member with
+        none is skipped `not_linked`. For an account taken over at the provider, or a person who must link again."""
+        await self.require_admin(actor, "access", "edit")
+        if self.signin is None:
+            raise ServiceUnavailable("Sign-in links cannot be changed here.", code="sso_not_configured")
+        bulk = Bulk()
+        people = await self.store.people_of(actor.tenant_id, actor.team_id, ids)
+        at = _iso(datetime.now(UTC))
+        for member_id in ids:
+            user_id = people.get(member_id)
+            if user_id is None:
+                bulk.skip(member_id, "not_found")
+                continue
+            gone = await self.signin.unlink(
+                actor.tenant_id, user_id, actor=actor.user_id, team_id=actor.team_id, at=at, request_id=actor.request_id
+            )
+            if gone:
+                bulk.updated.append(member_id)
+            else:
+                bulk.skip(member_id, "not_linked")
+        return _bulk(bulk)
 
     async def set_role(self, actor: Actor, ids: list[str], role: str) -> BulkView:
         await self.require_admin(actor, "access", "edit")

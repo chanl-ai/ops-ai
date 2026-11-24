@@ -149,50 +149,65 @@ async def test_a_person_links_a_provider_from_their_own_session_once(signin: Sig
     domain = f"link.{signin.zone}"
     email = f"ana@{domain}"
     person = await signin.person(email, role="builder")
-    signed = await signin.public.post("/v1/auth/sign-in", json={"email": email, "password": DEMO_PASSWORD})
-    auth = {"Authorization": f"Bearer {signed.json()['data']['token']}"}
+    await signin.person(f"bob@{domain}", role="builder")
+    auth, step_up = await signin.stepped_up(email)
+    bob, _ = await signin.stepped_up(f"bob@{domain}")
     await signin.oidc(domain, jit=False)
 
-    async def link(subject: str) -> httpx.Response:
-        start = await signin.public.post("/v1/auth/sso/link/start", json={}, headers=auth)
+    async def link(
+        subject: str, *, user: str = email, finish: dict[str, str] = auth
+    ) -> httpx.Response | dict[str, str]:
+        start = await signin.public.post("/v1/auth/sso/link/start", json={"stepUp": step_up}, headers=auth)
         assert start.status_code == 200, start.text
         data = start.json()["data"]
-        location = await signin.answer(data["redirectUrl"], user=email, at_idp={"subject": subject})
-        code = dict(httpx.URL(location).params)["code"]
-        body = {"code": code, "flowKey": data["flowKey"]}
-        return await signin.public.post("/v1/auth/sso/link/complete", json=body, headers=auth)
+        query = dict(httpx.URL(await signin.answer(data["redirectUrl"], user=user, at_idp={"subject": subject})).params)
+        if "code" not in query:
+            return query
+        body = {"code": query["code"], "flowKey": data["flowKey"]}
+        return await signin.public.post("/v1/auth/sso/link/complete", json=body, headers=finish)
 
+    no_step_up = await signin.public.post("/v1/auth/sso/link/start", json={"stepUp": "x" * 40}, headers=auth)
+    assert no_step_up.status_code == 401 and no_step_up.json()["error"]["code"] == "step_up_required"
+    # The provider answers as another account; then another session tries to finish this person's round trip.
+    assert (await link("mallory", user=f"mallory@{domain}")) == {"error": "sign_in_refused", "link": "1"}
+    other = await link("first-account", finish=bob)
+    assert isinstance(other, httpx.Response) and other.status_code == 401, other
+    assert await _links(signin, person) == 0
     done = await link("first-account")
-    assert done.status_code == 200, done.text
+    assert isinstance(done, httpx.Response) and done.status_code == 200, done
     back = await signin.sign_in_sso(email, at_idp={"subject": "first-account"})
     assert back.completed is not None and _claims(back.completed.json()["data"]["token"])["sub"] == person
     # A second account at the same provider never becomes another way into the same person.
     second = await link("second-account")
-    assert second.status_code == 409 and second.json()["error"]["code"] == "already_linked", second.text
+    assert isinstance(second, httpx.Response) and second.status_code == 409, second
+    assert second.json()["error"]["code"] == "already_linked"
     assert await _links(signin, person) == 1 and await _audited(signin, person, "signin.link") == 1
 
 
-@pytest.mark.parametrize("verified", [True, False])
-async def test_an_invite_links_the_invited_person_at_their_first_sign_in(signin: SignInRig, verified: bool) -> None:
-    domain = f"inv{int(verified)}.{signin.zone}"
-    await signin.oidc(domain, jit=False)
-    email = f"bo@{domain}"
-    person = await signin.person(email)
+@pytest.mark.parametrize("kind", ["oidc", "saml"])
+async def test_an_invite_links_only_who_it_was_made_for(signin: SignInRig, kind: str) -> None:
+    domain = f"inv{kind}.{signin.zone}"
+    await (signin.oidc(domain, jit=False) if kind == "oidc" else signin.saml(domain))
     h = {**signin.admin, "X-Team-Id": signin.ops_team}
-    made = await signin.public.post(
-        "/v1/settings/members/invite", headers=h, json={"emails": [email], "role": "viewer"}
-    )
-    assert made.status_code == 200, made.text
+    # A new person: the invite's role, once the provider vouches for the invited email.
+    new = f"new@{domain}"
+    made = await signin.public.post("/v1/settings/members/invite", headers=h, json={"emails": [new], "role": "viewer"})
     token = made.json()["data"]["invites"][0]["token"]
-    r = await signin.sign_in_sso(email, invite=token, at_idp=None if verified else {"verified": "0"})
-    if not verified:
-        # An invite matches the provider's email, so the provider has to vouch for that email.
-        assert r.query == {"error": "link_required"} and await _links(signin, person) == 0
-        return
-    assert r.completed is not None and r.completed.status_code == 200, r.location
-    claims = _claims(r.completed.json()["data"]["token"])
-    assert claims["sub"] == person and claims["roles"][signin.ops_team] == "viewer"  # type: ignore[index]
-    assert await _links(signin, person) == 1 and await _audited(signin, person, "signin.link") == 1
+    if kind == "oidc":
+        unsaid = await signin.sign_in_sso(new, invite=token, at_idp={"verified": "0"})
+        assert unsaid.query == {"error": "no_access"}, unsaid.query
+    # Another address holding the link is not the invitee: SAML makes them a first-sign-in member of their own.
+    wrong = await signin.sign_in_sso(f"other@{domain}", invite=token)
+    assert wrong.completed is None or kind == "saml"
+    joined = await signin.sign_in_sso(new, invite=token)
+    assert joined.completed is not None, joined.location
+    assert _claims(joined.completed.json()["data"]["token"])["roles"][signin.ops_team] == "viewer"  # type: ignore[index]
+    # An existing viewer's admin invite never opens their account or raises their role.
+    viewer = await signin.person(f"vic@{domain}", role="viewer")
+    body = {"emails": [f"vic@{domain}"], "role": "admin"}
+    raised = (await signin.public.post("/v1/settings/members/invite", headers=h, json=body)).json()["data"]
+    r = await signin.sign_in_sso(f"vic@{domain}", invite=raised["invites"][0]["token"])
+    assert r.query == {"error": "link_required"} and await _links(signin, viewer) == 0
 
 
 async def test_the_handoff_works_once_and_only_for_the_browser_that_started(signin: SignInRig) -> None:

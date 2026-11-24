@@ -1744,6 +1744,25 @@
         "title": "Envelope[ProviderOut]",
         "type": "object"
       },
+      "Envelope_ReinviteBulkOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ReinviteBulkOut"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ReinviteBulkOut]",
+        "type": "object"
+      },
       "Envelope_RoleCreatedOut_": {
         "additionalProperties": false,
         "properties": {
@@ -3364,6 +3383,25 @@
         "title": "ListResult[WorkspaceTeamOut]",
         "type": "object"
       },
+      "Mailed": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "memberId": {
+            "title": "Memberid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memberId",
+          "email"
+        ],
+        "title": "Mailed",
+        "type": "object"
+      },
       "Me": {
         "additionalProperties": false,
         "properties": {
@@ -3505,6 +3543,11 @@
               }
             ],
             "title": "Invitedat"
+          },
+          "linksOwnSession": {
+            "default": false,
+            "title": "Linksownsession",
+            "type": "boolean"
           },
           "name": {
             "title": "Name",
@@ -4521,6 +4564,40 @@
           "refreshToken"
         ],
         "title": "Refresh",
+        "type": "object"
+      },
+      "ReinviteBulkOut": {
+        "additionalProperties": false,
+        "description": "Who a link invite was mailed to; the link itself goes only to their mailbox.",
+        "properties": {
+          "mailed": {
+            "items": {
+              "$ref": "#/components/schemas/Mailed"
+            },
+            "title": "Mailed",
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/Skip"
+            },
+            "title": "Skipped",
+            "type": "array"
+          },
+          "updated": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Updated",
+            "type": "array"
+          }
+        },
+        "required": [
+          "updated",
+          "skipped",
+          "mailed"
+        ],
+        "title": "ReinviteBulkOut",
         "type": "object"
       },
       "ReinviteIn": {
@@ -5602,6 +5679,35 @@
           "linkedAt"
         ],
         "title": "SsoLink",
+        "type": "object"
+      },
+      "SsoLinkStartIn": {
+        "additionalProperties": false,
+        "description": "The step-up token this session took in the last minutes (`/v1/auth/step-up` or its SSO form).",
+        "properties": {
+          "next": {
+            "anyOf": [
+              {
+                "pattern": "^/([^/\\\\\\s][^\\s]{0,498})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          },
+          "stepUp": {
+            "maxLength": 4000,
+            "minLength": 20,
+            "title": "Stepup",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stepUp"
+        ],
+        "title": "SsoLinkStartIn",
         "type": "object"
       },
       "SsoLinked": {
@@ -9808,7 +9914,7 @@
     },
     "/v1/auth/sso/link/start": {
       "post": {
-        "description": "A signed-in person's round trip to their workspace's provider, to sign in with their account there.",
+        "description": "A signed-in person's round trip to their workspace's provider, to sign in with their account there. It\nneeds this session's step-up, the provider asks for credentials again, and it must answer with the person's\nown email: 401 `step_up_required` without one.",
         "operationId": "auth_sso_link_start",
         "parameters": [
           {
@@ -9832,7 +9938,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/StepUpSsoStartIn"
+                "$ref": "#/components/schemas/SsoLinkStartIn"
               }
             }
           },
@@ -10072,6 +10178,140 @@
           }
         },
         "summary": "Sso Links",
+        "tags": [
+          "auth"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/auth/sso/links/{provider_id}": {
+      "delete": {
+        "description": "Removes the signed-in person's own link to this provider, audited, and ends the sessions it opened.",
+        "operationId": "auth_sso_unlink",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,64}$",
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Sso Unlink",
         "tags": [
           "auth"
         ],
@@ -15971,7 +16211,7 @@
     },
     "/v1/settings/members/reinvite": {
       "post": {
-        "description": "A new invite for each member who `needsInvite`, every such member of the team when `ids` is omitted; the\nmember stays active, others are skipped `not_affected`. Signing in through the provider from it links them.",
+        "description": "A link invite for each member who `needsInvite`, every such member of the team when `ids` is omitted,\nmailed to the member's own address and never returned; the member stays active, others are skipped\n`not_affected`, admins `links_own_session`. Signing in through the provider from it links them, once.",
         "operationId": "members_reinvite_members",
         "parameters": [
           {
@@ -16038,7 +16278,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_InviteBulkOut_"
+                  "$ref": "#/components/schemas/Envelope_ReinviteBulkOut_"
                 }
               }
             },
@@ -16309,6 +16549,179 @@
           }
         },
         "summary": "Change Roles",
+        "tags": [
+          "members"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/settings/members/unlink": {
+      "post": {
+        "description": "Removes each member's company sign-in links and ends the sessions they opened, audited; `not_linked` for a\nmember with none.",
+        "operationId": "members_unlink_members",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-acting-for",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Acting-For"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_BulkOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Unlink Members",
         "tags": [
           "members"
         ],
