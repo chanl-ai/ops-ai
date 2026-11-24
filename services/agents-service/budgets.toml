@@ -133,6 +133,10 @@ connections = 2
 ["GET /v1/batches/{batch_id}"]
 queries = 2
 
+["GET /v1/workflows/{workflow_id}/batches"]
+# The workflow (404 when the team holds none), the count and the page, rows counted in the page's own query.
+queries = 3
+
 ["GET /v1/batches/{batch_id}/results.csv"]
 queries = 2
 
@@ -184,6 +188,13 @@ queries = 2
 ["GET /v1/document-type-uses"]
 queries = 1
 query = { types = "dt_budget" }
+
+["GET /v1/watch-uses"]
+# Files asks as a service; this check signs in as a person, refused before any read. tests/api/test_tool_uses.py
+# drives the service path.
+queries = 0
+query = { watchIds = "wat_budget" }
+status = 403       # listed: only files-service may ask
 
 ["GET /v1/eval-runs/{run_id}"]
 queries = 1

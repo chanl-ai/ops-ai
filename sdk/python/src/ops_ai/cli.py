@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 from . import __version__
 from ._cli.agents import main as agents_main
 from ._cli.apps import main as apps_main
+from ._cli.batches import main as batches_main
 from ._cli.catalog import guardrails_main, threads_main, widgets_main
 from ._cli.chat import main as chat_main
 from ._cli.connectors import main as connectors_main
@@ -75,6 +76,7 @@ AREAS: dict[str, tuple[Area, str]] = {
     "documents": (documents_main, "document types and extractions"),
     "people": (people_main, "members, invites (printed unless --send), roles, me"),
     "models": (models_main, "model aliases, providers, keys, and a test turn (--confirm)"),
+    "batches": (batches_main, "a workflow's batch: get, retry, csv"),
     "memories": (memories_main, "your memories: list, forget, forget-agent, export"),
     "test-data": (testdata_main, "list what test runs made ([test] prefix); clean --confirm removes it"),
 }

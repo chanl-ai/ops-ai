@@ -24,7 +24,7 @@ from ops_engine.store.tables import engine_runs
 from tests.api.test_engine_transactions import checkouts
 from tests.api.test_forms import flow, runs_of
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
-from tests.engine.test_lifecycle_rights import BUILDER, TENANT
+from tests.engine.test_lifecycle_rights import ADMIN, BUILDER, TENANT, person
 from tests.engine.test_run_starts import Files, files_client
 
 WID = "claim_follow_up"
@@ -185,3 +185,135 @@ async def test_the_results_download_lists_every_row_with_its_status(stack: Stack
     # The page and the download each read the batch and its rows on one connection.
     seen = await checkouts(c, [("get", f"/v1/batches/{bid}"), ("get", f"/v1/batches/{bid}/results.csv")], BUILDER)
     assert [(code, k) for _, code, k in seen] == [(200, 1), (200, 1)], seen
+
+
+async def test_a_workflows_batches_count_a_check_file_that_never_ran_and_a_waiting_run_apart(stack: Stack) -> None:  # noqa: F811
+    """A check's removed or too-large file has no run: the page and the list must not call it pending, and a run
+    paused on a person must not read as running."""
+    from ops_agents.store.check_batches import CheckBatch, CheckRow, write_check  # noqa: PLC0415
+
+    c, _ = stack
+    rt, files = wired(c)
+    upload = (await batch(c, await ready(c, files, csv(2)))).json()["data"]["id"]
+    assert await tick(rt) == 2
+    [paused, _] = await runs_of(c, WID)
+    async with rt.db.begin() as conn:
+        await conn.execute(
+            engine_runs.update()
+            .where(engine_runs.c.id == (paused.get("runId") or paused["id"]))
+            .values(status="waiting")
+        )
+    with tenant_scope(TENANT):
+        check = await write_check(
+            rt.db, binding_id=f"files:{WID}", watch_id="wat_inv", expected=None, to="3",
+            batch=CheckBatch(team_id="team_ops", workflow_id=WID, version=1, mode="live", watch_id="wat_inv",
+                             label="Invoices, 2 Dec 09:00", checked_at="2026-12-02T09:00:00Z", created_by="trigger"),
+            rows=[
+                CheckRow("f1:1", {"claim_ref": "a.pdf"}, "pending"),
+                CheckRow("f2:1", {"claim_ref": "b.pdf"}, "removed"),
+                CheckRow("f3:1", {"claim_ref": "c.zip"}, "failed", "too_large", "Larger than 25 MB"),
+            ],
+        )  # fmt: skip
+    assert check is not None
+    listed = await c.get(f"/v1/workflows/{WID}/batches", headers=BUILDER)
+    assert listed.status_code == 200, listed.text
+    lines = {b["id"]: b for b in listed.json()["data"]["data"]}
+    assert set(lines) == {upload, check.id}
+    counts = ("finished", "waiting", "failed", "removed", "running", "pending")
+    assert {k: lines[check.id][k] for k in counts} == dict.fromkeys(counts, 0) | {
+        "failed": 1,
+        "removed": 1,
+        "pending": 1,
+    }
+    assert lines[check.id]["origin"] == "check" and lines[check.id]["label"] == "Invoices, 2 Dec 09:00"
+    assert (lines[upload]["waiting"], lines[upload]["running"]) == (1, 1), lines[upload]
+    page = (await c.get(f"/v1/batches/{check.id}", headers=BUILDER)).json()["data"]
+    assert (page["pending"], page["removed"], page["failed"], page["retryable"], page["notRetryable"]) == (
+        1,
+        1,
+        1,
+        0,
+        1,
+    )
+    too_large = next(r for r in page["rows"] if r["status"] == "failed")
+    assert (too_large["failureCode"], too_large["reason"]) == ("too_large", "Larger than 25 MB"), page["rows"]
+    first = (await c.get(f"/v1/batches/{upload}", headers=BUILDER)).json()["data"]
+    assert (first["waiting"], first["running"]) == (1, 1), first
+    oldest = await c.get(
+        f"/v1/workflows/{WID}/batches", params={"sortBy": "createdAt", "sortOrder": "asc"}, headers=BUILDER
+    )
+    assert [x["id"] for x in oldest.json()["data"]["data"]] == [upload, check.id], oldest.text
+    newest = await c.get(f"/v1/workflows/{WID}/batches", headers=BUILDER)
+    assert [x["id"] for x in newest.json()["data"]["data"]] == [check.id, upload], newest.text
+    unknown = await c.get("/v1/workflows/no_such_flow/batches", headers=BUILDER)
+    assert unknown.status_code == 404, unknown.text
+
+
+async def test_retry_asks_workflows_decide_and_says_how_many_files_it_cannot_run_again(stack: Stack) -> None:  # noqa: F811
+    """A builder whose role an admin took workflows.decide off still edits the workflow but does not start its runs
+    again; a check's file that never ran (removed, too large) has no run to start again, so a retry leaves it and
+    counts it."""
+    no_decide = person("dee", "team_ops", "builder", unticked=(("workflows", "decide"),))
+    from ops_agents.store.check_batches import CheckBatch, CheckRow, write_check  # noqa: PLC0415
+
+    c, _ = stack
+    rt, files = wired(c)
+    await ready(c, files, csv(1))
+    with tenant_scope(TENANT):
+        check = await write_check(
+            rt.db, binding_id=f"files:{WID}", watch_id="wat_inv", expected=None, to="2",
+            batch=CheckBatch(team_id="team_ops", workflow_id=WID, version=1, mode="live", watch_id="wat_inv",
+                             label="Invoices", checked_at="2026-12-02T09:00:00Z", created_by="trigger"),
+            rows=[CheckRow("f2:1", {"claim_ref": "b.pdf"}, "removed"),
+                  CheckRow("f3:1", {"claim_ref": "c.zip"}, "failed", "too_large", "Larger than 25 MB")],
+        )  # fmt: skip
+    assert check is not None
+    as_builder = (await c.get(f"/v1/batches/{check.id}", headers=no_decide)).json()["data"]
+    as_admin = (await c.get(f"/v1/batches/{check.id}", headers=ADMIN)).json()["data"]
+    assert (as_builder["mayRetry"], as_admin["mayRetry"]) == (False, True)
+    refused = await c.post(f"/v1/batches/{check.id}/retry", headers=no_decide)
+    assert refused.status_code == 403, refused.text
+    retried = await c.post(f"/v1/batches/{check.id}/retry", headers=ADMIN)
+    assert retried.status_code == 202, retried.text
+    assert retried.json()["data"] == {"retried": 0, "notRetryable": 2}
+    assert await tick(rt) == 0, "a file that never ran is not started by a retry"
+
+
+async def test_a_check_csv_has_field_columns_failures_and_text_cells(stack: Stack) -> None:  # noqa: F811
+    """A check's CSV names each file and puts each output field in its own column. A value a spreadsheet would run
+    as a formula is written as text, and a list stays one cell."""
+    from ops_agents.store.check_batches import CheckBatch, CheckRow, write_check  # noqa: PLC0415
+
+    c, _ = stack
+    rt, files = wired(c)
+    await ready(c, files, csv(1))
+    read: dict[str, Any] = {
+        "claim_ref": "HM-1",
+        "name": "a.pdf",
+        "path": "/Invoices/a.pdf",
+        "version": 2,
+        "previousVersion": 1,
+    }
+    with tenant_scope(TENANT):
+        check = await write_check(
+            rt.db, binding_id=f"files:{WID}", watch_id="wat_inv", expected=None, to="3",
+            batch=CheckBatch(team_id="team_ops", workflow_id=WID, version=1, mode="live", watch_id="wat_inv",
+                             label="Invoices", checked_at="2026-12-02T09:00:00Z", created_by="trigger"),
+            rows=[CheckRow("f1:2", read, "pending"),
+                  CheckRow("f3:1", {"name": "c.zip", "path": "/Invoices/c.zip", "version": 1}, "failed", "too_large",
+                           "Larger than 25 MB")],
+        )  # fmt: skip
+    assert check is not None
+    assert await tick(rt) == 1
+    output = {"total": "=1+1", "lines": [1, 2], "note": 'net, "30"\nday'}
+    async with rt.db.begin() as conn:
+        await conn.execute(engine_runs.update().where(engine_runs.c.workflow_id == WID).values(output=output))
+    r = await c.get(f"/v1/batches/{check.id}/results.csv", headers=BUILDER)
+    assert r.status_code == 200, r.text
+    rows = list(DictReader(io.StringIO(r.text)))
+    assert list(rows[0]) == ["file", "path", "version", "previousVersion", "status", "reason", "total", "lines", "note"]
+    by_file = {x["file"]: x for x in rows}
+    a, failed = by_file["a.pdf"], by_file["c.zip"]
+    assert (a["path"], a["version"], a["previousVersion"]) == ("/Invoices/a.pdf", "2", "1")
+    assert (a["total"], json.loads(a["lines"]), a["note"]) == ("'=1+1", [1, 2], 'net, "30"\nday'), a
+    assert (failed["status"], failed["reason"], failed["total"]) == ("failed", "Larger than 25 MB", ""), failed

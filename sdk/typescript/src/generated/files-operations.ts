@@ -314,7 +314,7 @@ export const filesOperations = {
     "stream": false
   },
   "watches_check_watch": {
-    "body": null,
+    "body": "json",
     "headers": [],
     "method": "POST",
     "path": "/v1/watches/{watch_id}/check",

@@ -2802,6 +2802,91 @@
         "title": "BatchIn",
         "type": "object"
       },
+      "BatchLine": {
+        "additionalProperties": false,
+        "properties": {
+          "checkedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkedat"
+          },
+          "createdAt": {
+            "title": "Createdat",
+            "type": "string"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "finished": {
+            "title": "Finished",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "removed": {
+            "title": "Removed",
+            "type": "integer"
+          },
+          "running": {
+            "title": "Running",
+            "type": "integer"
+          },
+          "stopped": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stopped"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "waiting": {
+            "title": "Waiting",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "origin",
+          "label",
+          "createdAt",
+          "total",
+          "finished",
+          "waiting",
+          "failed",
+          "removed",
+          "running",
+          "pending"
+        ],
+        "title": "BatchLine",
+        "type": "object"
+      },
       "BatchRow": {
         "additionalProperties": false,
         "properties": {
@@ -2819,6 +2904,17 @@
               }
             ],
             "title": "Error"
+          },
+          "failureCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failurecode"
           },
           "input": {
             "additionalProperties": {
@@ -2840,6 +2936,17 @@
           },
           "output": {
             "$ref": "#/components/schemas/JsonValue"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           },
           "row": {
             "title": "Row",
@@ -2892,6 +2999,17 @@
       "BatchView": {
         "additionalProperties": false,
         "properties": {
+          "checkedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkedat"
+          },
           "failed": {
             "title": "Failed",
             "type": "integer"
@@ -2908,12 +3026,32 @@
             "title": "Id",
             "type": "string"
           },
+          "mayRetry": {
+            "title": "Mayretry",
+            "type": "boolean"
+          },
           "mode": {
             "title": "Mode",
             "type": "string"
           },
+          "notRetryable": {
+            "title": "Notretryable",
+            "type": "integer"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          },
           "pending": {
             "title": "Pending",
+            "type": "integer"
+          },
+          "removed": {
+            "title": "Removed",
+            "type": "integer"
+          },
+          "retryable": {
+            "title": "Retryable",
             "type": "integer"
           },
           "rows": {
@@ -2941,6 +3079,21 @@
             "title": "Total",
             "type": "integer"
           },
+          "waiting": {
+            "title": "Waiting",
+            "type": "integer"
+          },
+          "watchId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watchid"
+          },
           "workflowId": {
             "title": "Workflowid",
             "type": "string"
@@ -2949,13 +3102,19 @@
         "required": [
           "id",
           "workflowId",
+          "origin",
           "fileName",
           "mode",
           "total",
           "finished",
           "failed",
           "running",
+          "waiting",
           "pending",
+          "removed",
+          "retryable",
+          "notRetryable",
+          "mayRetry",
           "rows"
         ],
         "title": "BatchView",
@@ -8454,6 +8613,25 @@
         "title": "Envelope[ListResult[Agent]]",
         "type": "object"
       },
+      "Envelope_ListResult_BatchLine__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_BatchLine_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[BatchLine]]",
+        "type": "object"
+      },
       "Envelope_ListResult_CaseRow__": {
         "additionalProperties": false,
         "properties": {
@@ -9954,6 +10132,32 @@
           "data"
         ],
         "title": "Envelope[dict[str, list[ToolUser]]]",
+        "type": "object"
+      },
+      "Envelope_dict_str__list_WatchUser___": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/WatchUser"
+              },
+              "type": "array"
+            },
+            "title": "Data",
+            "type": "object"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[dict[str, list[WatchUser]]]",
         "type": "object"
       },
       "Envelope_list_AgentRun__": {
@@ -13229,6 +13433,38 @@
           "facets"
         ],
         "title": "ListResult[Agent]",
+        "type": "object"
+      },
+      "ListResult_BatchLine_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/BatchLine"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[BatchLine]",
         "type": "object"
       },
       "ListResult_CaseRow_": {
@@ -17328,13 +17564,18 @@
       "Retried": {
         "additionalProperties": false,
         "properties": {
+          "notRetryable": {
+            "title": "Notretryable",
+            "type": "integer"
+          },
           "retried": {
             "title": "Retried",
             "type": "integer"
           }
         },
         "required": [
-          "retried"
+          "retried",
+          "notRetryable"
         ],
         "title": "Retried",
         "type": "object"
@@ -26705,6 +26946,30 @@
           "href"
         ],
         "title": "WaitingTask",
+        "type": "object"
+      },
+      "WatchUser": {
+        "additionalProperties": false,
+        "properties": {
+          "live": {
+            "title": "Live",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "workflowId": {
+            "title": "Workflowid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflowId",
+          "name",
+          "live"
+        ],
+        "title": "WatchUser",
         "type": "object"
       },
       "WhatsLeft": {
@@ -64315,6 +64580,199 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/watch-uses": {
+      "get": {
+        "description": "Files' question before it lists or stops watching folders: a service holding `workflows:view` for the team\nits token names. A person reads a workflow's trigger on the workflow itself.",
+        "operationId": "workflows_list_watch_uses",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "watchIds",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "title": "Watchids",
+              "type": "array"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_dict_str__list_WatchUser___"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "List Watch Uses",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/widgets": {
       "get": {
         "description": "One page of the seeded library, then the caller's teams' widgets, newest version each, by name, on the shared\nlist contract: `search` matches the name and `ids` names widgets exactly. The seeded library is a fixed handful\nheld in memory (seed/widgets.json), so its matches are cut to the page here; the registry's page and count are\nqueried, not sliced.",
@@ -71401,6 +71859,287 @@
       }
     },
     "/v1/workflows/{workflow_id}/batches": {
+      "get": {
+        "description": "The workflow's batches, newest first unless `sortOrder` says otherwise, uploads and checks alike, each with its\nrows counted where they stand. 404 for a workflow the team does not hold.",
+        "operationId": "batches_list_batches",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ListResult_BatchLine__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "List Batches",
+        "tags": [
+          "Batches",
+          "batches"
+        ],
+        "x-ops-public": "sdk"
+      },
       "post": {
         "description": "Reads the file's rows and either shows how they map (dryRun) or writes the batch, whose rows the workflow\nworker starts a few at a time (202). No request transaction: the file is read from Files between the workflow\nread and the batch write, with none open.",
         "operationId": "batches_start_batch",

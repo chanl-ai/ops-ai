@@ -911,6 +911,24 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "batches_list_batches": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/workflows/{workflow_id}/batches",
+    "pathParams": [
+      "workflow_id"
+    ],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
+    "stream": false
+  },
   "batches_retry_batch": {
     "body": null,
     "headers": [],
@@ -2301,6 +2319,17 @@ export const agentsOperations = {
       "workflow_id"
     ],
     "query": [],
+    "stream": false
+  },
+  "workflows_list_watch_uses": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/watch-uses",
+    "pathParams": [],
+    "query": [
+      "watchIds"
+    ],
     "stream": false
   },
   "workflows_list_workflows": {

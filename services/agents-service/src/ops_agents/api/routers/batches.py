@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
+from ops_access import can
 from ops_engine import default_registry
 from ops_engine.node_types import start_form
 from ops_engine.store import DefinitionRow
@@ -23,15 +24,16 @@ from ops_files_client import FileNotFound, FilesClient
 from ops_identity.fastapi import Tx
 from ops_ingest.parsers.spreadsheet import spreadsheet_rows
 from ops_service_kit.errors import NotFound, ServiceUnavailable, Unprocessable
-from ops_service_kit.http import Envelope, In, Json, JsonValue, Out
+from ops_service_kit.http import Envelope, In, Json, JsonValue, ListResult, Out
+from ops_service_kit.listing import ListQuery
 
 from ...store.batches import MAX_ROWS, Batches, BatchOut, BatchRowOut
-from ...store.tenancy import current_tenant
-from ..auth import Principal, principal, reader_of, require_builder, started_by
+from ...store.tenancy import current_team, current_tenant
+from ..auth import ACCESS, Principal, caller_of, principal, reader_of, started_by
 from ..deps import Runtime, runtime
 from ..engine_runs import checked_input
 from ..envelope import ok
-from .engine import startable
+from .engine import definitions, startable
 
 router = APIRouter(tags=["batches"])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -39,6 +41,8 @@ Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 # A batch's page and results show every row's input and output, so they are read with workflows.view.
 Reader: TypeAlias = Annotated[Principal, Depends(reader_of("workflows"))]  # noqa: UP040
 SAMPLE = 5
+# Every status a row can hold that is not a run under way.
+NOT_RUNNING = ("succeeded", "failed", "cancelled", "pending", "waiting", "removed")
 
 
 class BatchIn(In):
@@ -64,8 +68,10 @@ class BatchStarted(Out):
 class BatchRow(Out):
     row: int
     attempt: int
-    # pending until its run starts, then the run's own status.
+    # pending until its run starts, then the run's own status; removed or failed for a check's file that never ran.
     status: str
+    failure_code: str | None = None
+    reason: str | None = None
     outcome: str | None = None
     output: JsonValue = None
     error: str | None = None
@@ -81,19 +87,48 @@ class Stopped(Out):
 class BatchView(Out):
     id: str
     workflow_id: str
+    # upload: a spreadsheet's rows; check: one check of a watched folder, whose label is the file name.
+    origin: str
     file_name: str
+    watch_id: str | None = None
+    checked_at: str | None = None
     mode: str
     total: int
     finished: int
     failed: int
     running: int
+    # Runs paused on a person or a timer, counted apart from running.
+    waiting: int
     pending: int
+    removed: int
+    # Failed rows whose run failed, which retry starts again; a file that never ran is not retried.
+    retryable: int
+    not_retryable: int
+    may_retry: bool
     stopped: Stopped | None = None
     rows: list[BatchRow]
 
 
+class BatchLine(Out):
+    id: str
+    origin: str
+    label: str
+    created_at: str
+    checked_at: str | None = None
+    total: int
+    finished: int
+    waiting: int
+    failed: int
+    removed: int
+    running: int
+    pending: int
+    stopped: Stopped | None = None
+
+
 class Retried(Out):
     retried: int
+    # Rows a retry cannot change: a check's file that never ran.
+    not_retryable: int
 
 
 def _inputs(stored: DefinitionRow) -> Json:
@@ -182,7 +217,29 @@ async def _batch(rt: Runtime, me: Principal, batch_id: str) -> BatchOut:
 
 
 def _status(r: BatchRowOut) -> str:
-    return r.run_status or "pending"
+    if r.run_status:
+        return r.run_status
+    return r.row_status if r.row_status in ("failed", "removed") else "pending"
+
+
+@router.get("/v1/workflows/{workflow_id}/batches", response_model=Envelope[ListResult[BatchLine]])
+async def list_batches(rt: Rt, _: Reader, __: Tx, workflow_id: str, q: ListQuery) -> JSONResponse:
+    """The workflow's batches, newest first unless `sortOrder` says otherwise, uploads and checks alike, each with its
+    rows counted where they stand. 404 for a workflow the team does not hold."""
+    if await definitions(rt).row(workflow_id, team=current_team()) is None:
+        raise NotFound(f"Workflow {workflow_id}")
+    page = await Batches(rt.db).of_workflow(workflow_id, q)
+    lines = [
+        {
+            "id": b["id"], "origin": b["origin"], "label": b["file_name"], "createdAt": b["created_at"],
+            "checkedAt": b["checked_at"], "total": b["total"], "finished": int(b["finished"]),
+            "waiting": int(b["waiting"]), "failed": int(b["failed"]), "removed": int(b["removed"]),
+            "running": int(b["running"]), "pending": int(b["pending"]),
+            "stopped": {"reason": b["stopped_reason"], "at": b["stopped_at"]} if b["stopped_at"] else None,
+        }
+        for b in page["data"]
+    ]  # fmt: skip
+    return ok({**page, "data": lines})
 
 
 @router.get("/v1/batches/{batch_id}", response_model=Envelope[BatchView])
@@ -191,20 +248,31 @@ async def batch_page(rt: Rt, me: Reader, _: Tx, batch_id: str) -> JSONResponse:
     batch = await _batch(rt, me, batch_id)
     rows = await Batches(rt.db).rows(batch_id)
     statuses = [_status(r) for r in rows]
+    retryable = sum(r.run_status in ("failed", "cancelled") for r in rows)
+    failed = sum(s in ("failed", "cancelled") for s in statuses)
     view = {
         "id": batch.id,
         "workflowId": batch.workflow_id,
+        "origin": batch.origin,
         "fileName": batch.file_name,
+        "watchId": batch.watch_id,
+        "checkedAt": batch.checked_at,
         "mode": batch.mode,
         "total": batch.total,
         "finished": statuses.count("succeeded"),
-        "failed": sum(s in ("failed", "cancelled") for s in statuses),
+        "failed": failed,
         "pending": statuses.count("pending"),
-        "running": sum(s not in ("succeeded", "failed", "cancelled", "pending") for s in statuses),
+        "waiting": statuses.count("waiting"),
+        "removed": statuses.count("removed"),
+        "running": sum(s not in NOT_RUNNING for s in statuses),
+        "retryable": retryable,
+        "notRetryable": failed - retryable,
+        "mayRetry": ACCESS.may(caller_of(me), "workflows", "decide", team=batch.team_id),
         "stopped": {"reason": batch.stopped_reason, "at": batch.stopped_at} if batch.stopped_at else None,
         "rows": [
             {
-                "row": r.row, "attempt": r.attempt, "status": _status(r), "outcome": r.outcome,
+                "row": r.row, "attempt": r.attempt, "status": _status(r), "failureCode": r.failure_code,
+                "reason": r.reason, "outcome": r.outcome,
                 "output": r.output, "error": r.error, "runId": r.run_id, "input": r.input,
             }
             for r in rows
@@ -219,8 +287,10 @@ async def retry_batch(rt: Rt, me: Me, batch_id: str) -> JSONResponse:
     No request transaction: the rows are queued for the workflow worker, and committing them with the request's reads
     would change when the worker sees them."""
     batch = await _batch(rt, me, batch_id)
-    require_builder(me, area="workflows", team_id=batch.team_id, action="edit", what=f"batch {batch_id}")
-    return ok({"retried": await Batches(rt.db).retry_failed(batch_id)}, 202)
+    # Starting runs again is a decision on the workflow's runs, as a reviewer or admin makes, not an edit.
+    can(caller_of(me), "workflows", "decide", team=batch.team_id or None, what=f"batch {batch_id}")
+    retried, left = await Batches(rt.db).retry_failed(batch_id)
+    return ok({"retried": retried, "notRetryable": left}, 202)
 
 
 @router.get(
@@ -231,9 +301,12 @@ async def retry_batch(rt: Rt, me: Me, batch_id: str) -> JSONResponse:
 async def batch_results(rt: Rt, me: Reader, _: Tx, batch_id: str) -> Response:
     """Every row as the page shows it, one line each: row, input, status, outcome, run, error and output. Input and
     output are JSON, so a value holding a comma or a quote reads back as it was."""
-    await _batch(rt, me, batch_id)
+    found = await _batch(rt, me, batch_id)
     out = io.StringIO()
     writer = csv.writer(out)
+    if found.origin == "check":
+        writer.writerows(check_csv(await Batches(rt.db).rows(batch_id)))
+        return _csv(out.getvalue(), batch_id)
     writer.writerow(["row", "input", "status", "outcome", "runId", "error", "output"])
 
     def as_json(value: Any) -> str:
@@ -244,7 +317,50 @@ async def batch_results(rt: Rt, me: Reader, _: Tx, batch_id: str) -> Response:
             [r.row, as_json(r.input), _status(r), r.outcome or "", r.run_id or "", r.error or "",
              as_json(r.output)]
         )  # fmt: skip
+    return _csv(out.getvalue(), batch_id)
+
+
+def _csv(text: str, batch_id: str) -> Response:
     name = f"results-{batch_id}.csv"
-    return Response(
-        out.getvalue(), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{name}"'}
-    )
+    return Response(text, media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+# A spreadsheet runs a cell starting with one of these as a formula.
+_FORMULA = ("=", "+", "-", "@")
+CHECK_COLUMNS = ["file", "path", "version", "previousVersion", "status", "reason"]
+
+
+def cell(value: Any) -> str:
+    """One CSV cell: a list or object as JSON, nothing as empty, and text a spreadsheet would run as a formula kept
+    as text by a leading apostrophe."""
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    text = str(value).lower() if isinstance(value, bool) else str(value)
+    return "'" + text if text.startswith(_FORMULA) else text
+
+
+def field_columns(rows: list[BatchRowOut]) -> list[str]:
+    """Every top-level key of the rows' run outputs, in the order first seen."""
+    seen: dict[str, None] = {}
+    for r in rows:
+        output: Any = r.output
+        if isinstance(output, dict):
+            seen.update(dict.fromkeys(str(k) for k in cast(Json, output)))
+    return list(seen)
+
+
+def check_csv(rows: list[BatchRowOut]) -> list[list[str]]:
+    """A check's results: one line per file with its place, version and status, the reason a file did not run, and
+    one column per field the runs returned."""
+    fields = field_columns(rows)
+    lines = [CHECK_COLUMNS + fields]
+    for r in sorted(rows, key=lambda x: x.row):
+        given = r.input
+        returned: Any = r.output
+        output = cast(Json, returned) if isinstance(returned, dict) else {}
+        place = [given.get("name"), given.get("path"), given.get("version"), given.get("previousVersion")]
+        why = r.reason or r.error
+        lines.append([cell(v) for v in (*place, _status(r), why)] + [cell(output.get(f)) for f in fields])
+    return lines

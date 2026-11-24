@@ -23,6 +23,7 @@ from ops_files.models import RetentionClass
 from ops_files.service import FilesConfig
 from ops_files.store import AsyncEngine, FilesStore
 from ops_files.tenant_files import ScanningMode, TenantFiles
+from ops_files.watch_uses import WatchUses
 from ops_identity import Auth, Principal, dev_service_signer, mint_service_token
 from ops_identity.fastapi import current_caller, current_principal
 from ops_service_kit.contract import response_checker
@@ -58,6 +59,7 @@ def client(engine: AsyncEngine, tenant: str, tmp_path: Path) -> Client:
         store: StreamingObjectStore | None = None,
         role: str | None = None,
         reader: Reader | None = None,
+        watch_uses: WatchUses | None = None,
     ) -> httpx.AsyncClient:
         files = TenantFiles(
             store or LocalObjectStore(tmp_path / "objects", signing_key=b"k" * 32),
@@ -68,7 +70,7 @@ def client(engine: AsyncEngine, tenant: str, tmp_path: Path) -> Client:
         auth = Auth.for_dev(
             Settings(), audience="files", name="james", email="james@harborpine.example", tenant_id=tenant
         )
-        app = create_files_app(files, engine=engine, auth=auth, reader=reader)
+        app = create_files_app(files, engine=engine, auth=auth, reader=reader, watch_uses=watch_uses)
 
         sign_in(app, tenant, role or ("admin" if admin else "builder"))
         hooks = {"response": [response_checker(app)]}

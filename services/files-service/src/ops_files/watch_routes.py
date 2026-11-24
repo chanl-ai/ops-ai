@@ -24,9 +24,10 @@ from ops_files.app import Caller, service_scope
 from ops_files.store import WatchesStore, WatchRow
 from ops_files.store.watches import Audit, EventRow
 from ops_files.tenant_files import Who
-from ops_identity import CurrentPrincipal
+from ops_files.watch_uses import Used, WatchUses
+from ops_identity import CurrentCaller, CurrentPrincipal
 from ops_identity.fastapi import Tx
-from ops_service_kit.errors import Conflict, Forbidden, NotFound, ValidationFailed
+from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, In, ListResult, Option, OptionsPage, Out, ok, options_window
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListQuery
@@ -53,6 +54,30 @@ async def watch_manager(p: CurrentPrincipal) -> Who:
 
 
 Manager = Annotated[Who, Depends(watch_manager)]
+
+# The scope a service holds to ask a check: agents-service's Files changed trigger, on its schedule.
+CHECK_SCOPE = "files:check"
+
+
+async def check_asker(p: CurrentCaller) -> Who:
+    """A person with watches.manage, or a service holding files:check for the team its token names. files:check is a
+    service scope with no cell, so it is read from the token here rather than through `can()`."""
+    if p.kind != "service":
+        return await watch_manager(p)
+    if CHECK_SCOPE not in p.scopes:
+        raise Forbidden(f"This service token does not hold the {CHECK_SCOPE} scope.", code="scope_required")
+    if not p.tenant_id or not p.team_id:
+        raise Forbidden("A service token asking a check names its tenant and team.", code="team_required")
+    return Who(tenant_id=p.tenant_id, team=p.team_id, actor=p.sub)
+
+
+Asker = Annotated[Who, Depends(check_asker)]
+
+
+class CheckIn(In):
+    # Who asked, as the audit entry names it; read only from a service (a trigger names itself), a person is named
+    # by their sign-in.
+    by: str | None = Field(default=None, max_length=200)
 
 
 class WatchIn(In):
@@ -105,6 +130,12 @@ class Folder(Out):
     name: str
 
 
+class UsedBy(Out):
+    workflow_id: str
+    name: str
+    live: bool
+
+
 class WatchView(Out):
     id: str
     name: str
@@ -117,8 +148,12 @@ class WatchView(Out):
     folders: list[Folder]
     # The watch's files in Files now (entries not removed at the source).
     files_in_files: int
-    # A workflow's Files changed trigger uses it, so Delete is refused. Always false until that trigger exists.
+    # The newest event's number, 0 when none, so a reader of the events knows where they end.
+    last_event: int
+    # A workflow's Files changed trigger names it, so Stop watching is refused; false when agents-service could
+    # not be asked.
     in_use: bool
+    used_by: list[UsedBy]
     created_by: str
     created_at: datetime
     updated_at: datetime
@@ -152,7 +187,8 @@ class CheckAsked(Out):
     status: Literal["asked"]
 
 
-def _view(w: WatchRow, now: datetime) -> WatchView:
+def _view(w: WatchRow, now: datetime, used: Used | None = None) -> WatchView:
+    by = [UsedBy.model_validate(u) for u in (used or {}).get(w.id, [])]
     running = w.lease_until is not None and w.lease_until.replace(tzinfo=w.lease_until.tzinfo or UTC) > now
     return WatchView(
         id=w.id,
@@ -163,7 +199,9 @@ def _view(w: WatchRow, now: datetime) -> WatchView:
         values=w.values,
         folders=_named(w.values, w.value_names or {}),
         files_in_files=w.files_in_files,
-        in_use=False,
+        last_event=w.next_event - 1,
+        in_use=bool(by),
+        used_by=by,
         created_by=w.created_by,
         created_at=w.created_at,
         updated_at=w.updated_at,
@@ -201,7 +239,11 @@ def _folders(values: dict[str, JsonValue]) -> JsonValue:
 
 
 def watches_router(
-    store: WatchesStore, *, reader: Reader | None, clock: Callable[[], datetime] = lambda: datetime.now(UTC)
+    store: WatchesStore,
+    *,
+    reader: Reader | None,
+    uses: WatchUses | None = None,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> APIRouter:
     """Mounted by `create_files_app`, which imports this module when it builds the app (this one reads its `who`).
     `reader` reads the sources the team's apps declare, which a watch's plugin, source and folders are checked
@@ -227,6 +269,12 @@ def watches_router(
             raise ValidationFailed(refusal[1], code=refusal[0])
         return found
 
+    async def used(who: Who, ids: list[str]) -> Used | None:
+        """Which workflows name each watch; {} with no agents-service, None when it could not be asked."""
+        if uses is None or not ids:
+            return {}
+        return await uses.of(who.tenant_id, who.team, ids)
+
     # Read routes are open to services holding files:view, for the team their token names.
     view_scope = service_scope("view")
 
@@ -241,7 +289,8 @@ def watches_router(
         """The team's watched folders by name, each with its last check and whether one is running."""
         now = clock()
         rows, page = await store.list(who.team, q)
-        data = [_view(w, now).model_dump(mode="json", by_alias=True) for w in rows]
+        named = await used(who, [w.id for w in rows])
+        data = [_view(w, now, named).model_dump(mode="json", by_alias=True) for w in rows]
         return ok({"data": data, "pagination": page["pagination"], "facets": page["facets"]})
 
     @router.get("/options", response_model=Envelope[OptionsPage], dependencies=[view_scope])
@@ -299,8 +348,8 @@ def watches_router(
 
     @router.get("/{watch_id}", response_model=Envelope[WatchView], dependencies=[view_scope])
     async def get_watch(watch_id: str, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        del who
-        return ok(_view(await found(watch_id), clock()).model_dump(mode="json", by_alias=True))
+        w = await found(watch_id)
+        return ok(_view(w, clock(), await used(who, [w.id])).model_dump(mode="json", by_alias=True))
 
     @router.patch("/{watch_id}", response_model=Envelope[WatchView])
     async def change_watch(watch_id: str, body: WatchChange, who: Manager) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -326,8 +375,19 @@ def watches_router(
 
     @router.delete("/{watch_id}", status_code=204, response_class=Response)
     async def delete_watch(watch_id: str, who: Manager) -> Response:  # pyright: ignore[reportUnusedFunction]
-        """Stops watching; the files already brought in stay in Files under their own retention."""
+        """Stops watching; the files already brought in stay in Files under their own retention. Refused while a
+        workflow's Files changed trigger names the watch, and when agents-service cannot say whether one does."""
         before = await found(watch_id)
+        named = await used(who, [watch_id])
+        if named is None:
+            raise ServiceUnavailable("Files could not ask which workflows use this folder; try again shortly.")
+        if by := named.get(watch_id):
+            names = ", ".join(str(u.get("name")) for u in by[:3])
+            raise Conflict(
+                f"A workflow uses this folder: {names}. Remove its Files changed trigger first.",
+                code="watch_in_use",
+                details={"usedBy": [dict(u) for u in by]},
+            )
         audit: Audit = {
             "actor": who.actor,
             "action": "files.watch.deleted",
@@ -339,12 +399,15 @@ def watches_router(
         return Response(status_code=204)
 
     @router.post("/{watch_id}/check", status_code=202, response_model=Envelope[CheckAsked])
-    async def check_watch(watch_id: str, who: Manager) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """Check now: the background process checks the watch within seconds. 409 `already_checking` while a check
-        is asked for or running."""
+    async def check_watch(  # pyright: ignore[reportUnusedFunction]
+        watch_id: str, who: Asker, p: CurrentCaller, body: CheckIn | None = None
+    ) -> JSONResponse:
+        """Check now, by a person or a Files changed trigger's schedule: the background process checks the watch
+        within seconds. 409 `already_checking` while a check is asked for or running."""
         w = await found(watch_id)
+        actor = (body.by if body and body.by and p.kind == "service" else None) or who.actor
         audit: Audit = {
-            "actor": who.actor,
+            "actor": actor,
             "action": "files.watch.checked",
             "summary": f"Asked for a check of {w.name}",
             "detail": {"folders": _folders(w.values)},

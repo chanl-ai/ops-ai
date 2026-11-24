@@ -70,6 +70,7 @@ from ops_files.settings import (
 )
 from ops_files.store import StaleVersionError, reachable
 from ops_files.tenant_files import HoldRefusedError, TenantFiles, Who
+from ops_files.watch_uses import WatchUses
 from ops_identity import Auth, CurrentCaller, CurrentPrincipal, CurrentService, install_auth
 from ops_identity.fastapi import Tx
 from ops_service_kit.background import BackgroundHealthOut
@@ -259,11 +260,13 @@ def create_files_app(
     settings: StorageSettings | None = None,
     background: Sequence[Callable[[], Coroutine[Any, Any, None]]] = (),
     reader: Reader | None = None,
+    watch_uses: WatchUses | None = None,
 ) -> FastAPI:
     """`files` holds the storage backend and tables; `auth` resolves callers through ops_identity, by default from
     Settings for audience "files": platform tokens are verified locally against platform-service's key set.
     `settings` serves the storage settings routes; without it they are not mounted. `reader` reads the sources the
-    team's apps declare, which a watched folder is checked against; without it a watch cannot be added."""
+    team's apps declare, which a watched folder is checked against; without it a watch cannot be added. `watch_uses`
+    asks agents-service which workflows use a watch; without it no workflow can, so none is in use."""
 
     async def kept(start: Callable[[], Coroutine[Any, Any, None]]) -> None:
         # Each process reports its own failures on /health/background; one that still escapes is logged here, so it
@@ -565,7 +568,7 @@ def create_files_app(
     from ops_files.store import WatchesStore  # noqa: PLC0415
     from ops_files.watch_routes import watches_router  # noqa: PLC0415
 
-    app.include_router(watches_router(WatchesStore(engine), reader=reader), responses=errors)
+    app.include_router(watches_router(WatchesStore(engine), reader=reader, uses=watch_uses), responses=errors)
     if settings is not None:
         app.include_router(_settings_router(settings))
     return app

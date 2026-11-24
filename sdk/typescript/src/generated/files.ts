@@ -518,7 +518,8 @@ export interface paths {
         post?: never;
         /**
          * Delete Watch
-         * @description Stops watching; the files already brought in stay in Files under their own retention.
+         * @description Stops watching; the files already brought in stay in Files under their own retention. Refused while a
+         *     workflow's Files changed trigger names the watch, and when agents-service cannot say whether one does.
          */
         delete: operations["watches_delete_watch"];
         options?: never;
@@ -541,8 +542,8 @@ export interface paths {
         put?: never;
         /**
          * Check Watch
-         * @description Check now: the background process checks the watch within seconds. 409 `already_checking` while a check
-         *     is asked for or running.
+         * @description Check now, by a person or a Files changed trigger's schedule: the background process checks the watch
+         *     within seconds. 409 `already_checking` while a check is asked for or running.
          */
         post: operations["watches_check_watch"];
         delete?: never;
@@ -631,6 +632,11 @@ export interface components {
              * @constant
              */
             status: "asked";
+        };
+        /** CheckIn */
+        CheckIn: {
+            /** By */
+            by?: string | null;
         };
         /** CompletedUpload */
         CompletedUpload: {
@@ -1662,6 +1668,15 @@ export interface components {
             /** Uploadurl */
             uploadUrl: string;
         };
+        /** UsedBy */
+        UsedBy: {
+            /** Live */
+            live: boolean;
+            /** Name */
+            name: string;
+            /** Workflowid */
+            workflowId: string;
+        };
         /** WatchChange */
         WatchChange: {
             /** Name */
@@ -1756,6 +1771,8 @@ export interface components {
             lastCheck: components["schemas"]["LastCheck"] | null;
             /** Lastcheckat */
             lastCheckAt: string | null;
+            /** Lastevent */
+            lastEvent: number;
             /** Name */
             name: string;
             /** Plugin */
@@ -1767,6 +1784,8 @@ export interface components {
              * Format: date-time
              */
             updatedAt: string;
+            /** Usedby */
+            usedBy: components["schemas"]["UsedBy"][];
             /** Values */
             values: {
                 [key: string]: components["schemas"]["JsonValue"];
@@ -5644,7 +5663,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CheckIn"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {

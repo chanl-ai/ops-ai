@@ -246,7 +246,7 @@ function columns(onCheck: ((w: Watch) => void) | undefined, onChange: (w: Watch)
             actions={[
               { label: 'Check now', icon: RefreshCw, onClick: (r) => onCheck(r.original), disabledReason: row.original.checking ? 'A check of this folder is running' : undefined },
               { label: 'Change folders', icon: Pencil, onClick: (r) => onChange(r.original) },
-              { label: 'Stop watching', icon: Unplug, variant: 'destructive', onClick: (r) => onStop(r.original), disabledReason: row.original.inUse ? 'A workflow starts from this folder; remove it there first' : undefined },
+              { label: 'Stop watching', icon: Unplug, variant: 'destructive', onClick: (r) => onStop(r.original), disabledReason: row.original.inUse ? stopBlocked(row.original) : undefined },
             ]}
           />
         </StopRowClick>
@@ -257,6 +257,13 @@ function columns(onCheck: ((w: Watch) => void) | undefined, onChange: (w: Watch)
 }
 
 /** Files › Watched folders: the folders of an app whose files arrive in Files, and what each check found. */
+/** Why Stop watching is off: the workflows whose Files changed trigger names this folder, by name. */
+function stopBlocked(w: Watch): string {
+  const names = (w.usedBy ?? []).map((u) => u.name);
+  const which = names.length ? names.slice(0, 2).join(' and ') + (names.length > 2 ? ` and ${names.length - 2} more` : '') : 'A workflow';
+  return `${which} ${names.length > 1 ? 'start' : 'starts'} from this folder; remove the Files changed trigger there first`;
+}
+
 export default function WatchedFoldersPage() {
   const list = useListParams('name');
   const query = useWatches(list.params);

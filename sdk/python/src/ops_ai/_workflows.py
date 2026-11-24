@@ -153,6 +153,22 @@ class Workflows:
         """Starts a batch over the rows of an uploaded file. The API refuses a field it does not name."""
         return self._raw.agents.batches_start_batch(workflow_id, _batch_body(file_id, mode, dry_run))
 
+    def batches(self, workflow_id: str, **query: Any) -> Iterator[Any]:
+        """The workflow's batches, uploads and checks of a watched folder, newest first, every page (`sort_order`)."""
+        return iter_pages(lambda **q: self._raw.agents.batches_list_batches(workflow_id, **q), **query)
+
+    def get_batch(self, batch_id: str) -> Any:
+        """One batch with its counts and every row, failed first."""
+        return self._raw.agents.batches_batch_page(batch_id)
+
+    def retry_batch(self, batch_id: str) -> Any:
+        """Starts each failed run again (workflows.decide); `notRetryable` counts the files that never ran."""
+        return self._raw.agents.batches_retry_batch(batch_id)
+
+    def batch_csv(self, batch_id: str) -> str:
+        """The batch's results as CSV text, one line per row."""
+        return str(self._raw.agents.batches_batch_results(batch_id))
+
     def get(self, id: str, version: int | None = None) -> Any:
         return self.get_definition(id, version=version)
 
@@ -314,6 +330,18 @@ class AsyncWorkflows:
         self, workflow_id: str, file_id: str, *, mode: str | None = None, dry_run: bool | None = None
     ) -> Any:
         return await self._raw.agents.batches_start_batch(workflow_id, _batch_body(file_id, mode, dry_run))
+
+    def batches(self, workflow_id: str, **query: Any) -> AsyncIterator[Any]:
+        return iter_pages_async(lambda **q: self._raw.agents.batches_list_batches(workflow_id, **q), **query)
+
+    async def get_batch(self, batch_id: str) -> Any:
+        return await self._raw.agents.batches_batch_page(batch_id)
+
+    async def retry_batch(self, batch_id: str) -> Any:
+        return await self._raw.agents.batches_retry_batch(batch_id)
+
+    async def batch_csv(self, batch_id: str) -> str:
+        return str(await self._raw.agents.batches_batch_results(batch_id))
 
     async def get(self, id: str, version: int | None = None) -> Any:
         return await self.get_definition(id, version=version)

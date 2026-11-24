@@ -91,6 +91,8 @@ def main(argv: list[str]) -> int:
     forms = sub.add_parser("forms", help="a workflow's hosted forms")
     forms.add_argument("id")
     forms.add_argument("--search")
+    batches = sub.add_parser("batches", help="a workflow's batches, newest first")
+    batches.add_argument("id")
     start = sub.add_parser("batch-start", help="start a batch over an uploaded file's rows")
     start.add_argument("id")
     start.add_argument("--file-id", required=True, help="the uploaded file (opsai files upload)")
@@ -204,6 +206,9 @@ def _dispatch(ns: argparse.Namespace) -> int:
         return table(ns, wf.list(search=ns.search, status=ns.status), "workflowId", "name", "status", "version")
     if ns.verb == "forms":
         return table(ns, wf.forms(ns.id, search=ns.search), "id", "title", "slug", "paused")
+    if ns.verb == "batches":
+        rows = wf.batches(ns.id)
+        return table(ns, rows, "id", "origin", "label", "total", "finished", "failed", "pending", "createdAt")
     if ns.verb == "batch-start":
         mode = "live" if ns.live else "test"
         return emit(ns, wf.start_batch(ns.id, ns.file_id, mode=mode, dry_run=ns.dry_run or None))

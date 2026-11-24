@@ -40,6 +40,7 @@ LISTS = [
     ("/v1/runs", lambda c: c.runs.list(workflow_id="wf", status=["failed"])),
     ("/v1/workflows/definitions", lambda c: c.workflows.list(status=["live"])),
     ("/v1/workflows/wf/forms", lambda c: c.workflows.forms("wf", search="x")),
+    ("/v1/workflows/wf/batches", lambda c: c.workflows.batches("wf", sort_order="asc")),
 ]
 
 
@@ -67,6 +68,17 @@ def test_a_batch_start_sends_only_the_declared_fields() -> None:
     client(handler).workflows.start_batch("wf", "file1", mode="test", dry_run=True)
     client(handler).workflows.start_batch("wf", "file1")
     assert bodies == [{"fileId": "file1", "mode": "test", "dryRun": True}, {"fileId": "file1"}]
+
+
+def test_a_batch_csv_comes_back_as_its_text() -> None:
+    """The results route answers CSV, not JSON; the client hands back the text, never None."""
+    body = 'file,path,status\r\n"a, b.pdf",/x,failed\r\n'
+
+    def handler(r: httpx.Request) -> httpx.Response:
+        assert r.url.path.endswith("/v1/batches/b1/results.csv")
+        return httpx.Response(200, text=body, headers={"content-type": "text/csv"})
+
+    assert client(handler).workflows.batch_csv("b1") == body
 
 
 def test_an_inbox_refused_to_a_teammate_raises_not_found() -> None:

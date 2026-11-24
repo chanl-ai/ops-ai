@@ -45,6 +45,7 @@ export function workflowHeader(id: string, view: DefinitionView | undefined, { l
       <RouteTabs
         tabs={[
           { href: base, label: 'Canvas', testId: 'workflow-tab-canvas' },
+          { href: `${base}/batches`, label: 'Batches', testId: 'workflow-tab-batches' },
           { href: `${base}/versions`, label: 'Versions', testId: 'workflow-tab-versions' },
         ]}
       />

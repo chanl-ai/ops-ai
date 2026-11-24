@@ -520,10 +520,12 @@ class Settings(BaseSettings):
             # workflow save pins its document type versions there.
             # documents:delete: the system workflow on the file-deleted trigger purges what was derived from the file.
             # files:edit: a Save data on file step records what was read on the file.
+            # files:check: a Files changed trigger asks its watched folder's check on the workflow's schedule.
             "agents": [
                 "files:view",
                 "files:create",
                 "files:edit",
+                "files:check",
                 "knowledge:view",
                 "tools:view",
                 # connections:view: the Tools page's app state for the person it lists for, claimed only on that read.
@@ -577,7 +579,8 @@ class Settings(BaseSettings):
             # watched folder's finished check. tools:view, tools:run: a watched folder's check reads the source
             # through tools-service with the team's sign-in, as kb-service does. audit:create: its relay writes
             # changes to watched folders to the account's audit log.
-            "files": ["events:emit", "tools:view", "tools:run", "audit:create"],
+            # workflows:view: the Watched folders list and Stop watching ask which workflows use a watch.
+            "files": ["events:emit", "tools:view", "tools:run", "audit:create", "workflows:view"],
             # files:view, files:edit: documents-service reads the bytes it reads from as the caller's team and keeps a
             # sample's file with a reference; settings:view: the extractionFloor policy.
             # events:emit: it reports a person's correction as a service event, which saves it on the file.

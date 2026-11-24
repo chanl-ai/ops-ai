@@ -62,6 +62,28 @@ folder is long. The next check carries on from there.
 Stopping is in the folder's row menu. Files never deletes a brought-in file because you stopped watching; delete a file
 from **All files** if you want it gone.
 
+## Open a check's batch
+
+Not built yet: a workflow starts from a watched folder once the Files changed trigger ships. What is built today is
+the batch's own page and the workflow's Batches tab, which spreadsheet batches already use.
+
+Open the workflow and choose **Batches**, between Canvas and Versions. Each line is one batch, newest first: a
+spreadsheet's rows, or the new and changed files of one check. It counts the files read, waiting for a person, failed
+and removed. Open a line to see its files, failed first. A failed file shows its reason under its name; a file removed
+at the source shows "Removed at the source".
+
+**Download as CSV** gives one line per file: file, path, version, previous version, status and reason, then one
+column per field the runs returned, in the order first seen. A list stays one cell, as JSON. A value starting with
+`=`, `+`, `-` or `@` is written as text, so a spreadsheet does not run it as a formula.
+
+**Retry failed files** starts again each file whose run failed. A file that never ran (too large, removed) has no run
+to start again; the reply says how many were left. Retry shows only to people who may decide on workflows: Admin,
+Builder and Reviewer by default. To let a clerk retry, give them a role that may decide on workflows
+([Teams and access](teams-and-access.md)).
+
+**Use from a script** shows the batch's address and `opsai batches get <batch> --json`. `opsai batches retry <batch>`
+and `opsai batches csv <batch> --out results.csv` do the rest.
+
 ## Who may do what
 
 | Who | Can |

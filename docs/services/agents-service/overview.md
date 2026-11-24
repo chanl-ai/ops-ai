@@ -288,6 +288,18 @@ delayed work. `RunPort.children` reads the children in one query by run key pref
 `outputsUnless` (`started` goes when `wait` is on); `"*"` in `optionalOutputs` means any value set. Tests:
 `ops_engine/tests/test_wait_for_children.py`, `tests/engine/test_parent_wakes_on_children.py`; uc-402.
 
+## Batches
+
+A batch starts one workflow once per row: the rows of an uploaded spreadsheet (`origin` `upload`), or the new and
+changed files of one check of a watched folder (`check`, written by `store/check_batches.write_check`). The check
+trigger that writes check batches is not built yet.
+
+| Route | What it answers |
+|---|---|
+| `GET /v1/workflows/{id}/batches` | The workflow's batches on the shared list contract, newest first. Each line counts its rows in the page's own query (`Batches.of_workflow`): finished, waiting (a run paused on a person or a timer), running, pending, failed and removed |
+| `GET /v1/batches/{id}` | One batch and every row, failed first. A row with no run is `pending`, unless a check wrote it `removed` or `failed` (with `failureCode` and `reason`, such as a file too large); those never run. `retryable` counts failed runs, which Retry starts again; `notRetryable` counts the rest; `mayRetry` is the caller's right to retry |
+| `GET /v1/watch-uses?watchIds=` | Files' question before it lists watched folders or stops one: the workflows whose Files changed trigger names each watch, with `live` when the live version does. Service only (`workflows:view`); a person is refused |
+
 ## Wait and reminders
 
 `ops.flow.wait` pauses a run for `seconds`, or with `mode: until` until an ISO date or date and time read from

@@ -637,8 +637,11 @@ CREATE TABLE run_batches (
 	workflow_id VARCHAR(200) NOT NULL, 
 	version INTEGER NOT NULL, 
 	mode VARCHAR(8) NOT NULL, 
-	file_id VARCHAR(64) NOT NULL, 
+	origin VARCHAR(8) NOT NULL DEFAULT 'upload', 
+	file_id VARCHAR(64) NULL, 
 	file_name VARCHAR(300) NOT NULL, 
+	watch_id VARCHAR(64) NULL, 
+	checked_at VARCHAR(32) NULL, 
 	total INTEGER NOT NULL, 
 	created_by VARCHAR(320) NOT NULL, 
 	created_at VARCHAR(32) NOT NULL, 
@@ -647,6 +650,8 @@ CREATE TABLE run_batches (
 	CONSTRAINT run_batches_pkey PRIMARY KEY (id)
 );
 GO
+CREATE INDEX ix_run_batches_created ON run_batches (tenant_id, team_id, created_at);
+GO
 CREATE INDEX ix_run_batches_workflow ON run_batches (tenant_id, workflow_id, created_at);
 GO
 CREATE TABLE run_batch_rows (
@@ -654,14 +659,20 @@ CREATE TABLE run_batch_rows (
 	batch_id VARCHAR(64) NOT NULL, 
 	row INTEGER NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
+	workflow_id VARCHAR(200) NOT NULL, 
+	item_key VARCHAR(96) NOT NULL, 
 	attempt INTEGER NOT NULL DEFAULT '1', 
 	input NVARCHAR(max) NOT NULL, 
 	status VARCHAR(16) NOT NULL DEFAULT 'pending', 
 	run_id VARCHAR(64) NULL, 
+	failure_code VARCHAR(32) NULL, 
+	reason VARCHAR(500) NULL, 
 	CONSTRAINT run_batch_rows_pkey PRIMARY KEY (tenant_id, batch_id, row)
 );
 GO
 CREATE INDEX ix_run_batch_rows_pending ON run_batch_rows (status, tenant_id, batch_id, row);
+GO
+CREATE UNIQUE INDEX ux_run_batch_rows_item ON run_batch_rows (tenant_id, workflow_id, item_key);
 GO
 CREATE TABLE case_types (
 	tenant_id VARCHAR(64) NOT NULL, 

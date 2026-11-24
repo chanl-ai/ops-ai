@@ -199,6 +199,25 @@
         "title": "CheckAsked",
         "type": "object"
       },
+      "CheckIn": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By"
+          }
+        },
+        "title": "CheckIn",
+        "type": "object"
+      },
       "CompletedUpload": {
         "additionalProperties": false,
         "properties": {
@@ -2975,6 +2994,30 @@
         "title": "UploadTicket",
         "type": "object"
       },
+      "UsedBy": {
+        "additionalProperties": false,
+        "properties": {
+          "live": {
+            "title": "Live",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "workflowId": {
+            "title": "Workflowid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflowId",
+          "name",
+          "live"
+        ],
+        "title": "UsedBy",
+        "type": "object"
+      },
       "WatchChange": {
         "additionalProperties": false,
         "properties": {
@@ -3288,6 +3331,10 @@
             ],
             "title": "Lastcheckat"
           },
+          "lastEvent": {
+            "title": "Lastevent",
+            "type": "integer"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -3304,6 +3351,13 @@
             "format": "date-time",
             "title": "Updatedat",
             "type": "string"
+          },
+          "usedBy": {
+            "items": {
+              "$ref": "#/components/schemas/UsedBy"
+            },
+            "title": "Usedby",
+            "type": "array"
           },
           "values": {
             "additionalProperties": {
@@ -3322,7 +3376,9 @@
           "values",
           "folders",
           "filesInFiles",
+          "lastEvent",
           "inUse",
+          "usedBy",
           "createdBy",
           "createdAt",
           "updatedAt",
@@ -9926,7 +9982,7 @@
     },
     "/v1/watches/{watch_id}": {
       "delete": {
-        "description": "Stops watching; the files already brought in stay in Files under their own retention.",
+        "description": "Stops watching; the files already brought in stay in Files under their own retention. Refused while a\nworkflow's Files changed trigger names the watch, and when agents-service cannot say whether one does.",
         "operationId": "watches_delete_watch",
         "parameters": [
           {
@@ -10578,7 +10634,7 @@
     },
     "/v1/watches/{watch_id}/check": {
       "post": {
-        "description": "Check now: the background process checks the watch within seconds. 409 `already_checking` while a check\nis asked for or running.",
+        "description": "Check now, by a person or a Files changed trigger's schedule: the background process checks the watch\nwithin seconds. 409 `already_checking` while a check is asked for or running.",
         "operationId": "watches_check_watch",
         "parameters": [
           {
@@ -10655,6 +10711,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CheckIn"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
