@@ -69,6 +69,7 @@ from .fencing import ToolsFence
 from .mailbox_gateway import mailbox_client, mailbox_source
 from .platform_policies import PlatformPolicies
 from .review_sla import PlatformReviewSla
+from .schedule_clock import ScheduleClock, keep_schedules_ticking
 from .service_events import reminders
 from .sweeper import reconcile_forever
 from .task_type_seeds import StoredTaskTypes
@@ -223,6 +224,10 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
                 key=KEY_RESYNC_KEY,
                 store=heartbeats(db),
             )
+        # The schedule clock: each minute, every saved schedule on a live workflow (schedule_clock.py).
+        clock = ScheduleClock(db, Leases(db, owner=owner, ttl=settings.lease_ttl_seconds))
+        ticking = asyncio.create_task(keep_schedules_ticking(clock, stop, heartbeats(db)))
+        stack.push_async_callback(lambda: asyncio.wait_for(ticking, None))
         listener = email_listener(settings, db, owner, stack)
         if listener is not None:
             listening = asyncio.create_task(keep_mail_listening(listener, stop, settings.email_poll_seconds))

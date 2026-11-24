@@ -140,6 +140,14 @@ PROCESSES: list[Process] = [
         "Every team's live mailbox workflows are read; each run starts in its workflow's team.",
     ),
     Process(
+        "schedule_clock",
+        "agents",
+        "Schedule clock",
+        "Starts each live workflow's scheduled runs at their times, and records a tick it skipped or could not start.",
+        60.0,
+        "Every team's saved schedules are read beside their live workflows; each run starts in its workflow's team.",
+    ),
+    Process(
         "event_workflows",
         "agents",
         "Event workflows",

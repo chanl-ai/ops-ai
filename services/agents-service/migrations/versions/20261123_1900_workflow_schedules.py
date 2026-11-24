@@ -3,8 +3,11 @@
 Revision ID: 20261123_1900_workflow_schedules
 Revises: 0120_model_call_reservations
 
-Outside the workflow's versions, so a save applies at once (store/schedules.py). Tenant RLS as on poll_cursors (0045);
-the runtime role may delete, because clearing a schedule and deleting its workflow remove the row.
+Outside the workflow's versions, so a save applies at once (store/schedules.py). Tenant RLS as on poll_cursors (0045),
+with team_id a plain column: a schedule is read and written through its workflow's own rights, which cover shared
+workflows the team policy has no branch for. The runtime role may delete, because clearing a schedule and deleting its
+workflow remove the row, and may delete trigger_events, because the schedule clock drops its own rows after
+KEEP_SCHEDULE_DAYS (store/trigger_events.py).
 """
 
 from __future__ import annotations
@@ -47,9 +50,11 @@ def upgrade() -> None:
         "USING (tenant_id = current_setting('app.tenant_id', true)) "
         "WITH CHECK (tenant_id = current_setting('app.tenant_id', true))"
     )
+    op.execute(f"GRANT DELETE ON trigger_events TO {TENANT_ROLE}")
 
 
 def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
+        op.execute(f"REVOKE DELETE ON trigger_events FROM {TENANT_ROLE}")
         op.execute("DROP POLICY IF EXISTS workflow_schedules_tenant ON workflow_schedules")
     op.drop_table("workflow_schedules")

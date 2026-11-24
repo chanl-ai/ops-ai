@@ -23,10 +23,28 @@ from .tenancy import current_tenant, tenant_tx
 # skipped and reading starts again at the folder's end.
 # start_failed: starting the message's run raised; the next read tries it again. set_aside: it failed SET_ASIDE_AFTER
 # reads, so reading went on past it and the row keeps the message for Run again.
-Outcome = Literal["started", "duplicate", "filtered", "daily_cap", "cursor_reset", "start_failed", "set_aside"]
+# The schedule clock's rows (source schedule:<trigger step>): skipped, the last run was still going; refused, the start
+# was refused and is not tried again before the next slot; missed, the clock was down past half the interval; late, a
+# catch-up run started after its slot. A slot that ran on time writes no row: the run is the record.
+Outcome = Literal[
+    "started",
+    "duplicate",
+    "filtered",
+    "daily_cap",
+    "cursor_reset",
+    "start_failed",
+    "set_aside",
+    "skipped",
+    "refused",
+    "missed",
+    "late",
+]
+SCHEDULE_SOURCE = "schedule:"
 SET_ASIDE_AFTER = 3
 # How long a set-aside message is kept for Run again: raw mail is not held for ever.
 KEEP_SET_ASIDE_DAYS = 30
+# How long the schedule clock's rows are kept: a schedule every 5 minutes skipping all day writes 288 a day.
+KEEP_SCHEDULE_DAYS = 30
 
 trigger_events = sa.Table(
     "trigger_events",
@@ -178,4 +196,17 @@ class TriggerEvents:
                     team_visible(t),
                 )
                 .values(item=None)
+            )
+
+    async def forget_schedule_rows_before(self, workflow_id: str, before: str) -> None:
+        """Deletes the schedule clock's rows for the workflow recorded before `before` (KEEP_SCHEDULE_DAYS)."""
+        t = trigger_events
+        async with tenant_tx(self.engine) as c:
+            await c.execute(
+                t.delete().where(
+                    t.c.tenant_id == current_tenant(),
+                    t.c.workflow_id == workflow_id,
+                    t.c.source.like(f"{SCHEDULE_SOURCE}%"),
+                    t.c.recorded_at < before,
+                )
             )
