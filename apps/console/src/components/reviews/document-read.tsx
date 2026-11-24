@@ -4,9 +4,11 @@ import * as React from 'react';
 import Link from 'next/link';
 import { Check, ChevronRight, FileText } from 'lucide-react';
 
+import type { ReadConfirmed, ReadEdits } from '@/lib/approve-block';
 import { EmailPreview } from '@/components/shared/email-preview';
 import { Row, Rows } from '@/components/shared/surface';
 import { ConfidenceBadge } from '@/components/status-badges';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -14,26 +16,12 @@ import { Input } from '@/components/ui/input';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useCanInWorkspace } from '@/hooks/me-queries';
 import { pct } from '@/lib/format';
 import type { DocumentRead, FieldRead, ReadField, ReplyPreview } from '@/lib/types/domain';
 import { cn } from '@/lib/utils';
 
-/** A reviewer's corrections, by record index then field key, as typed. */
-export type ReadEdits = Record<number, Record<string, string>>;
-/** Key fields a reviewer has confirmed, by record index. */
-export type ReadConfirmed = Record<number, string[]>;
-
-/** How many key fields are still to confirm across the records; 0 when the type marks none. */
-export function keyFieldsLeft(read: DocumentRead, confirmed: ReadConfirmed): number {
-  const keys = read.schema.filter((f) => f.keyField).map((f) => f.key);
-  return read.records.reduce((n, _, i) => n + keys.filter((k) => !confirmed[i]?.includes(k)).length, 0);
-}
-
-/** What Approve waits for while key fields are unconfirmed ("confirm 2 key fields first"); undefined when nothing does. */
-export function keyFieldsBlock(read: DocumentRead | null | undefined, confirmed: ReadConfirmed): string | undefined {
-  const left = read ? keyFieldsLeft(read, confirmed) : 0;
-  return left ? `confirm ${left === 1 ? '1 key field' : `${left} key fields`} first` : undefined;
-}
+export { keyFieldsBlock, keyFieldsLeft, type ReadConfirmed, type ReadEdits } from '@/lib/approve-block';
 
 /** Key-field confirmations and the way to toggle one, passed together. */
 export interface ReadChecks {
@@ -187,7 +175,7 @@ function RecordTable({
                       <Input value={text} onChange={(e) => onEdit(f.key, e.target.value)} inputMode={isMoney(f) ? 'decimal' : undefined} aria-label={`${f.label} for ${title}`} className={cn('h-8 min-w-36', isMoney(f) && 'tabular-nums')} data-testid={`read-input-${index}-${f.key}`} />
                     )
                   ) : (
-                    <span className="text-sm break-words">{fixed ? asText(f, corrected?.[f.key]) : asRead || <span className="text-muted-foreground">{scored?.rejected ? `Read but rejected: ${shown(scored.extractedValue)}` : 'Not on the page'}</span>}</span>
+                    <span className="text-sm break-words">{fixed ? asText(f, corrected?.[f.key]) : asRead || <span className="text-muted-foreground">{read.notRead ? 'Not read' : scored?.rejected ? `Read but rejected: ${shown(scored.extractedValue)}` : 'Not on the page'}</span>}</span>
                   )}
                   {fixed && (
                     <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground" data-testid={`read-corrected-${index}-${f.key}`}>
@@ -353,6 +341,7 @@ export function DocumentReadSection({
   const doubtful = read.records.reduce((n, r) => n + Object.values(r.fields).filter((f) => f.needsReview && !f.corrected).length, 0);
   return (
     <div className="flex flex-col gap-3" data-testid="document-read">
+      {read.notRead && <NotReadAlert read={read} open={open} />}
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <Link href={`/data/files?file=${encodeURIComponent(read.fileId)}`} className="flex items-center gap-1.5 font-medium underline-offset-2 hover:underline" data-testid="read-file-link">
           <FileText className="size-4 text-muted-foreground" /> {read.fileName ?? read.fileId}
@@ -383,6 +372,40 @@ export function DocumentReadSection({
         record(0)
       )}
     </div>
+  );
+}
+
+/** A reason's words, as the task line says them (engine_reviews.NOT_READ_SAID). */
+const NOT_READ_SAID: Record<string, string> = {
+  cut_off: 'The reply was cut off',
+  empty: 'The reply held no answer',
+  declined: 'The model declined',
+  filtered: "The provider's filter stopped the reply",
+};
+
+/**
+ * Why nothing was read, before the document: the reason, and what the person does. A task that can only be rejected
+ * says so in the server's words; an admin, who approves the extraction update, gets the way to Reviews.
+ */
+function NotReadAlert({ read, open }: { read: DocumentRead; open: boolean }) {
+  const admin = useCanInWorkspace('reviews', 'decide');
+  const refused = read.approveRefused;
+  const said = NOT_READ_SAID[read.notRead ?? ''] ?? 'No reply answered';
+  return (
+    <Alert variant={refused ? 'destructive' : 'default'} data-testid="read-not-read">
+      <AlertTitle>Nothing was read from this file</AlertTitle>
+      <AlertDescription>
+        <p data-testid="read-not-read-reason">
+          {said}.{' '}
+          {refused ? refused.message : open && read.editable ? 'Type the required fields, then approve.' : ''}
+        </p>
+        {refused?.code === 'not_editable' && admin && (
+          <Link href="/govern/reviews" className="text-primary underline-offset-4 hover:underline" data-testid="read-not-editable-reviews">
+            Open Reviews to approve the update
+          </Link>
+        )}
+      </AlertDescription>
+    </Alert>
   );
 }
 

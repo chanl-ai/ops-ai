@@ -14,7 +14,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Final, NotRequired, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Final, Literal, NotRequired, TypedDict, cast
 
 from ops_engine.store import RUN_PREFIX, DefinitionRow, DefinitionStore, RunStore
 from ops_policy import input_hash
@@ -231,6 +231,13 @@ class SchemaField(TypedDict):
     keyField: bool
 
 
+class ApproveRefused(TypedDict):
+    """Why a task's approve is refused whatever the person types, in the words the refusal gives."""
+
+    code: Literal["not_editable", "nothing_read"]
+    message: str
+
+
 class ReadView(TypedDict):
     """An Extract from file result as people read it (read_view)."""
 
@@ -244,6 +251,8 @@ class ReadView(TypedDict):
     corrected: list[Json] | None
     # Why no model reply answered the read (cut_off, empty, declined, filtered); None for a read that was answered.
     notRead: str | None
+    # Set when the task can only be rejected (approve_refused); None while approve can go through.
+    approveRefused: ApproveRefused | None
 
 
 class ReplyCase(TypedDict):
@@ -620,6 +629,7 @@ def read_view(read: Json, file_name: str | None, edited: JsonValue) -> ReadView:
         if isinstance(edited, list)
         else None,
         "notRead": str(json_object(read.get("incomplete")).get("reason") or "") or None,
+        "approveRefused": None,
     }
 
 
@@ -645,6 +655,7 @@ def document_read(draft: object, payload: ReviewPayload, resume: Decision | None
     if combined is not None and len(view["records"]) == 1:
         view["sources"] = _by_source(view["records"][0], combined)
     view["editable"] = isinstance(payload.get("editable"), dict)
+    view["approveRefused"] = approve_refused(view)
     return view
 
 
@@ -1205,16 +1216,26 @@ NOT_EDITABLE = (
     "This version of Extract a file cannot take typed values, so this task can only be rejected. Your admin needs to "
     "approve the extraction update in Reviews; then read the file again."
 )
+NOTHING_READ = "Nothing was read from this file, so this task can only be rejected."
 
 
-def _refuse_not_editable(paused: ReviewPayload) -> None:
-    """An approve of a read no reply answered needs a step that takes typed values; on one that takes none (a version
-    of Extract a file from before it did) the task can only be rejected, and says why."""
-    if "editable" in paused:
-        return
+def approve_refused(read: ReadView) -> ApproveRefused | None:
+    """Why a read no reply answered can only be rejected: a several-records read with no records has nothing to
+    approve, and a step that takes no typed values (a version of Extract a file from before it did) cannot take the
+    required ones. The refusal of approve, the task's read view and the count of tasks an update unlocks all read it."""
+    if not read["notRead"]:
+        return None
+    if not read["records"]:
+        return {"code": "nothing_read", "message": NOTHING_READ}
+    if not read["editable"]:
+        return {"code": "not_editable", "message": NOT_EDITABLE}
+    return None
+
+
+def _refuse_unapprovable(paused: ReviewPayload) -> None:
     read = document_read(paused.get("draft"), paused, None)
-    if read is not None and read["notRead"] and read["records"]:
-        raise ValidationFailed(NOT_EDITABLE, code="not_editable")
+    if read is not None and (refused := read["approveRefused"]):
+        raise ValidationFailed(refused["message"], code=refused["code"])
 
 
 def _require_documents_edit(approver: Principal, team: str) -> None:
@@ -1312,7 +1333,7 @@ async def decide(
     options = _options(paused)
     # Every option but reject approves, as below; a decision no option names is refused below.
     if (decision != "reject") if options else DEFAULT_DECISIONS.get(decision) == "approve":
-        _refuse_not_editable(paused)
+        _refuse_unapprovable(paused)
     edited, inputs = correction(paused, inputs)
     if not isinstance(edited, Nothing):
         _require_documents_edit(approver, str(run["team_id"]))
@@ -1503,9 +1524,7 @@ def _required_fields_filled(paused: ReviewPayload, confirmed: JsonValue, edited:
     if read is None or not read["notRead"]:
         return
     if not read["records"]:
-        raise ValidationFailed(
-            "Nothing was read from this file, so this task can only be rejected.", code="nothing_read"
-        )
+        raise ValidationFailed(NOTHING_READ, code="nothing_read")
     required = [f["key"] for f in read["schema"] if f["required"]]
     rows: list[Json] = [r["values"] for r in read["records"]]
     if isinstance(edited, list):

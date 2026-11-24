@@ -162,6 +162,11 @@ class ApprovalInput(TypedDict, closed=True):
     stepUpToken: NotRequired[str | None]
 
 
+class ApproveRefused(TypedDict, closed=True):
+    code: Literal["not_editable", "nothing_read"]
+    message: str
+
+
 class AssetRef(TypedDict, closed=True):
     href: str
     id: str
@@ -4306,6 +4311,7 @@ class DefinitionDiffView(TypedDict, closed=True):
 
 
 class DocumentRead(TypedDict, closed=True):
+    approveRefused: NotRequired[ApproveRefused | None]
     corrected: list[dict[str, JsonValue]] | None
     editable: bool
     fileId: str

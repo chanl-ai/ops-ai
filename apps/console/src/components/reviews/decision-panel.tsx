@@ -98,7 +98,7 @@ export function DecisionPanel({
       {review.kind === 'connect_account' ? (
         <ConnectWait review={review} />
       ) : (
-      <TaskDecision review={review} view={view} checks={checks} decider={decider} me={me} owners={owners} platformTeam={platformTeam} layout="panel">
+      <TaskDecision review={review} view={view} checks={checks} edits={edits} decider={decider} me={me} owners={owners} platformTeam={platformTeam} layout="panel">
         {({ choice, decide }) => (
           <>
             <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4" data-testid="decision-body">

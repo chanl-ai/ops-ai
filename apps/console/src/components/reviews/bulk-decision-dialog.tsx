@@ -22,6 +22,7 @@ export function bulkEligibility(r: Review, decision: ReviewDecision): string | n
   if (decision !== 'approved') return null;
   if (r.risk === 'critical' || r.risk === 'high') return `${r.risk[0].toUpperCase()}${r.risk.slice(1)} risk needs an individual decision`;
   if (r.policy.fourEyes) return 'Needs two approvers';
+  if (r.read?.notRead) return 'Nothing was read; the task is decided on its own page';
   return null;
 }
 

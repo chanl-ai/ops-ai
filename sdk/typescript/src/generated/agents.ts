@@ -4545,6 +4545,16 @@ export interface components {
             /** Stepuptoken */
             stepUpToken?: string | null;
         };
+        /** ApproveRefused */
+        ApproveRefused: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "not_editable" | "nothing_read";
+            /** Message */
+            message: string;
+        };
         /** AssetRef */
         AssetRef: {
             /** Href */
@@ -6074,6 +6084,7 @@ export interface components {
          *     with, None when no correction was sent.
          */
         DocumentRead: {
+            approveRefused?: components["schemas"]["ApproveRefused"] | null;
             /** Corrected */
             corrected: {
                 [key: string]: components["schemas"]["JsonValue"];

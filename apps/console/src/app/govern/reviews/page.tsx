@@ -394,7 +394,7 @@ export default function AllTasksPage() {
                 checks={isOpen(active) && active.canDecide !== false ? checks : undefined}
               />
             )}
-            <TaskDecision review={active} view={task} checks={checks} decider={decider} me={me} owners={lookups?.owners ?? []} platformTeam={team?.scope === 'all'} layout="sheet">
+            <TaskDecision review={active} view={task} checks={checks} edits={edits} decider={decider} me={me} owners={lookups?.owners ?? []} platformTeam={team?.scope === 'all'} layout="sheet">
               {({ choice, decide }) => (
                 <>
                   {choice}

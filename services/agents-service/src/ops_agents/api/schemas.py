@@ -1182,6 +1182,11 @@ class ReadRecord(Out):
     fields: dict[str, FieldRead]
 
 
+class ApproveRefused(Out):
+    code: Literal["not_editable", "nothing_read"]
+    message: str
+
+
 class DocumentRead(Out):
     """A document read a review asks a person to check: the file, the floor, and each record's fields. Editable
     when the step takes a correction (`inputs.edited`); `corrected` holds the values a decided review was approved
@@ -1199,6 +1204,9 @@ class DocumentRead(Out):
     # Why no model reply answered the read (cut_off, empty, declined or filtered): every field is not read and a
     # person types the required ones. None for a read that was answered.
     not_read: Literal["cut_off", "empty", "declined", "filtered"] | None = None
+    # Set when the task can only be rejected, with the words approve is refused with: nothing_read for a
+    # several-records read with no records, not_editable for a step that takes no typed values.
+    approve_refused: ApproveRefused | None = None
 
 
 class ReplyCase(Out):
