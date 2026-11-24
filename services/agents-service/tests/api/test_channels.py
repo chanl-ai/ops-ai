@@ -235,7 +235,7 @@ async def test_an_agents_live_places_are_its_channels_and_the_steps_that_run_it(
     assert step["schedule"]["triggerStep"] == trigger
     assert datetime.fromisoformat(step["schedule"]["nextRun"]) > datetime.now(UTC)
     assert next(p for p in again if p["where"]["kind"] == "channel")["schedule"] is None
-    # Another team's workflow runs the same agent on a schedule: its step is listed, its schedule words are not.
+    # Another team's workflow runs the same agent on a schedule: neither its step nor its schedule is listed.
     theirs = {**d, "id": "fraud_summary", "name": "Fraud summary"}
     digest = hashlib.sha256(json.dumps(theirs, sort_keys=True).encode()).hexdigest()
     with tenant_scope(TENANT):
@@ -247,7 +247,8 @@ async def test_an_agents_live_places_are_its_channels_and_the_steps_that_run_it(
         await WorkflowSchedules(rt.db).save("fraud_summary", trigger, "team_fraud", rule, "user_omar")
     both = (await c.get("/v1/agents/ag_branch/live", headers=BUILDER)).json()["data"]["rows"]
     steps = {p["where"]["workflowId"]: p["schedule"] for p in both if p["where"]["kind"] == "workflow_step"}
-    assert steps["customer_summary"] is not None and steps["fraud_summary"] is None, steps
+    assert steps["customer_summary"] is not None and "fraud_summary" not in steps, steps
+    assert (await c.get("/v1/workflows/fraud_summary/live", headers=BUILDER)).status_code == 404
     assert (await c.get("/v1/agents/ag_nobody/live", headers=BUILDER)).status_code == 404
 
 
