@@ -6,25 +6,37 @@ the team's sign-in and sends it through the egress policy, and every page and fe
 the changed items page by page from the last watermark, saving the cursor after each page, fetches only those whose
 marker moved, and decides unchanged or next version by the content's digest. A full listing (the first, and weekly)
 removes items the system no longer lists. Salesforce's rate limit ends the run partial and the next run resumes from
-the saved page; a refused sign-in pauses the source until Test connection passes again."""
+the saved page; a refused sign-in pauses the source until Test connection passes again. The listing and the paced
+fetch are `ops_sources`, shared with every service that reads a source; this module is its knowledge state (the place
+in the source's config, the held items as knowledge items) and what a fetched item becomes."""
 
 from __future__ import annotations
 
-import asyncio
 import base64
-import time
 from collections.abc import Callable
-from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, TypedDict, cast
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
-from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
-from ops_service_kit.errors import Conflict, ValidationFailed
+from ops_service_kit.errors import ValidationFailed
 from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import new_id
-from ops_service_kit.narrow import a_list, an_object, as_json, json_list, json_object
+from ops_service_kit.narrow import a_list, an_object, as_json, json_object
+from ops_sources import (
+    AT_ONCE,
+    FULL_EVERY,
+    MAX_PAGES,
+    Answer,
+    Fetcher,
+    Held,
+    Place,
+    SourceTools,
+    ToolReader,
+    access_list,
+    places_of,
+    read_changes,
+)
 from ops_store import documents
 
 from .ai import spent_on
@@ -37,30 +49,10 @@ from .store.knowledge import ItemFetched, ItemRow, RunError, RunWrite, SourceRow
 if TYPE_CHECKING:
     from .service import KnowledgeService, Who
 
-# A sign-in the system refused: the source waits for a reconnect instead of retrying every schedule.
-RECONNECT = {"AUTH_EXPIRED", "CONNECTION_REVOKED", "SIGN_IN_NOT_FOUND", "CONNECTION_NOT_LINKED", "SECRET_MISSING"}
-# Items fetched at once from the system; the knowledge tools' rate window is the gateway's.
-AT_ONCE = 4
-# Pages one run reads before it stops partial and saves its place, so a listing that never ends cannot hold a run.
-MAX_PAGES = 200
-# A listing refused for its saved page: the system dropped it (a query locator expires), or the gateway's seal no
-# longer opens it. The run starts the listing again from the watermark instead of failing every run on it.
-STALE_CURSOR = {"INVALID_INPUT", "INVALID_ARGUMENTS"}
-FULL_EVERY = timedelta(days=7)
-# Syncs in a row an item must answer gone (404 or 410) before it is removed: one miss may be the site's hiccup.
-GONE_TWICE = 2
-# A tool that gives no watermark: the next run lists from the newest change seen, less this, so a record saved during
-# a run is listed again rather than missed.
-OVERLAP = timedelta(minutes=5)
+# The listing, its pacing and gone-twice live in ops_sources; kb-service reads them through its knowledge state.
+# MAX_PAGES and FULL_EVERY are named here and read at each sync, so a test can shorten them for this service.
+__all__ = ["FULL_EVERY", "MAX_PAGES", "Answer", "ToolReader"]
 TEAM_SIGN_IN = ("team",)
-
-
-@dataclass(frozen=True)
-class Answer:
-    ok: bool
-    output: JsonValue = None
-    code: str = ""
-    message: str = ""
 
 
 class Declared(BaseModel):
@@ -179,78 +171,9 @@ def preview_of(output: JsonValue) -> SourcePreview:
 def scopes_of(output: JsonValue) -> ScopesPage:
     """What a plugin's scopes tool answered, as the page a picker shows."""
     out = _ScopesOut.model_validate(output or {})
-    scopes = [
-        Scope(
-            id=str(r["id"]),
-            title=str(r.get("title") or r["id"]),
-            kind=str(r.get("kind") or ""),
-            parent=str(r["parent"]) if r.get("parent") else None,
-            detail=str(r["detail"]) if r.get("detail") else None,
-        )
-        for r in out.scopes
-        if isinstance(r, dict) and r.get("id")
-    ]
-    return ScopesPage(scopes=scopes, next_cursor=str(out.next_cursor) if out.next_cursor else None)
-
-
-class ToolReader:
-    """tools-service, as this service calls it: the sources a team can create, and one gateway call."""
-
-    def __init__(self, tools: ServiceClient) -> None:
-        self.tools = tools
-
-    async def declared(self, tenant_id: str, team_id: str) -> list[dict[str, JsonValue]]:
-        return list(await self.tools.get("/v1/knowledge-sources", tenant=tenant_id, team=team_id) or [])
-
-    async def source_hosts(
-        self,
-        tenant_id: str,
-        team_id: str,
-        cfg: dict[str, JsonValue],
-        *,
-        credentials: dict[str, str] | None = None,
-    ) -> list[dict[str, JsonValue]]:
-        """Each host the source's values would have its sync reach, decided by the account's egress rule as any new
-        outside address is (tools-service `/v1/knowledge-sources/hosts`): asked as the person adding or changing the
-        source (`credentials`), it lists the host where they may, asks the Security team, or is refused; asked as
-        this service, it only reads whether each host passes now."""
-        body: dict[str, JsonValue] = {
-            "plugin": cfg.get("plugin"),
-            "source": cfg.get("source"),
-            "values": cfg.get("values") or {},
-        }
-        # The person's own credentials decide when given; this service's token rides beside them.
-        answer = await self.tools.post(
-            "/v1/knowledge-sources/hosts",
-            json=body,
-            tenant=tenant_id,
-            team=team_id,
-            headers=credentials or None,
-            token_header="X-Service-Authorization" if credentials else "Authorization",
-        )
-        return list(answer or [])
-
-    async def call(
-        self, tenant_id: str, team_id: str, tool: str | None, args: dict[str, JsonValue], *, act: str
-    ) -> Answer:
-        body = {
-            "tool": tool,
-            "input": args,
-            "key": new_id("kbcall"),
-            # A sync acts on the source as it is: a live run (tools-service takes test or live).
-            "runContext": {"act": act, "environment": "live"},
-        }
-        try:
-            data = await self.tools.post("/v1/calls", json=body, tenant=tenant_id, team=team_id)
-        except ServiceCallError as e:
-            return Answer(False, code=str(e.code or "refused"), message=e.message)
-        except ServiceUnreachable as e:
-            return Answer(False, code="UPSTREAM_UNREACHABLE", message=str(e))
-        answer = json_object(data)
-        if not answer.get("ok"):
-            error = json_object(json_object(answer.get("output")).get("error"))
-            return Answer(False, code=str(error.get("code") or "TOOL_FAILED"), message=str(error.get("message") or ""))
-        return Answer(True, answer.get("output"))
+    places, following = places_of({"scopes": out.scopes, "next_cursor": out.next_cursor})
+    scopes = [Scope(id=p.id, title=p.title, kind=p.kind, parent=p.parent, detail=p.detail) for p in places]
+    return ScopesPage(scopes=scopes, next_cursor=following)
 
 
 async def declared_sources(reader: ToolReader, tenant_id: str, team_id: str) -> list[Declared]:
@@ -389,42 +312,61 @@ def _filename(item: Json) -> str:
     return title if title.endswith(suffix) else f"{title}{suffix}"
 
 
-class Pacer:
-    """One turn every `pace` seconds, shared by a sync's fetches whatever their concurrency."""
-
-    def __init__(self, pace: float) -> None:
-        self.pace = pace
-        self.next = 0.0
-        self.lock = asyncio.Lock()
-
-    async def turn(self) -> None:
-        if self.pace <= 0:
-            return
-        async with self.lock:
-            now = time.monotonic()
-            if self.next > now:
-                await asyncio.sleep(self.next - now)
-            self.next = max(now, self.next) + self.pace
+def _place(cfg: SourceConfig) -> Place:
+    """Where the source's listing got to, as its config holds it."""
+    return Place(
+        cursor=cfg.get("cursor"),
+        watermark=cfg.get("watermark"),
+        changes_cursor=cfg.get("changesCursor"),
+        last_full_at=cfg.get("lastFullAt"),
+        seen_so_far=list(cfg.get("seenSoFar") or []) if "seenSoFar" in cfg else None,
+        tombstones=an_object(cfg.setdefault("tombstones", {}), "tombstones"),
+        paused=cfg.get("paused"),
+    )
 
 
-def _listing(out: JsonValue) -> list[Json] | None:
-    """The page's items when the answer is a knowledge listing, else None."""
-    if not isinstance(out, dict):
-        return None
-    items = out.get("items")
-    if not isinstance(items, list):
-        return None
-    if not all(isinstance(r, dict) and {"id", "updated_at"} <= set(r) for r in items):
-        return None
-    return [json_object(r) for r in items]
+def _keep(cfg: SourceConfig, place: Place) -> None:
+    """The place written back into the source's config; a key with nothing to hold is left out."""
+    cfg["tombstones"] = place.tombstones
+    for key, value in (
+        ("cursor", place.cursor),
+        ("watermark", place.watermark),
+        ("changesCursor", place.changes_cursor),
+        ("lastFullAt", place.last_full_at),
+        ("seenSoFar", place.seen_so_far),
+        ("paused", place.paused),
+    ):
+        if value is None:
+            cfg.pop(key, None)
+        else:
+            cfg[key] = value  # pyright: ignore[reportGeneralTypeIssues] - each key's value is its own declared type
 
 
-def _less_overlap(stamp: str) -> str:
-    try:
-        when = datetime.fromisoformat(stamp.replace("Z", "+00:00").replace("+0000", "+00:00"))
-    except ValueError:
-        return stamp
-    return f"{(when - OVERLAP).astimezone(UTC):%Y-%m-%dT%H:%M:%SZ}"
+class _KnowledgeState:
+    """ops_sources' state port on a knowledge source: the place in the source's config, saved whole, and the held
+    items as the source's knowledge items, read live so an item written earlier in the run answers as written."""
+
+    def __init__(
+        self, service: KnowledgeService, tenant: str, source_id: str, cfg: SourceConfig, known: dict[str, ItemRow]
+    ) -> None:
+        self.service, self.tenant, self.source_id, self.cfg, self.known = service, tenant, source_id, cfg, known
+
+    def held(self, item_id: str) -> Held | None:
+        i = self.known.get(item_id)
+        if i is None:
+            return None
+        return Held(marker=i.marker, tag=i.tag, current=i.status == "indexed", gone_count=i.gone_count, title=i.title)
+
+    async def save(self, place: Place) -> None:
+        _keep(self.cfg, place)
+        config = an_object(as_json(self.cfg), "source config")
+        await self.service.store.update_source(self.tenant, self.source_id, {"config": config})
+
+    async def mark(self, item_id: str, marker: str) -> None:
+        await self.service.store.update_item(self.tenant, self.known[item_id].id, {"marker": marker})
+
+    async def gone(self, item_id: str, count: int) -> None:
+        await self.service.store.update_item(self.tenant, self.known[item_id].id, {"gone_count": count})
 
 
 async def sync_tool_source(
@@ -440,216 +382,49 @@ async def sync_tool_source(
     cfg = SOURCE_CONFIG(s.config or {})
     tenant, team, source_id = who.tenant_id, str(s.team_id), str(s.id)
     act = f"kb-sync:{source_id}"
-    if cfg.get("paused") == "needs_reconnect":
-        healthy = any(
-            d.get("connectionId") == cfg.get("connectionId") and d.get("connectionStatus") == "healthy"
-            for d in await reader.declared(tenant, team)
-        )
-        if not healthy:
-            raise Conflict(
-                "The connection refused its sign-in. Reconnect it and run Test connection, then sync again.",
-                code="needs_reconnect",
-            )
-        cfg.pop("paused", None)
-    started = clock()
-    last_full = cfg.get("lastFullAt")
-    full = (
-        full
-        or bool(cfg.get("listsWhole"))
-        or not cfg.get("watermark")
-        or not last_full
-        or started - datetime.fromisoformat(last_full) > FULL_EVERY
-    )
-    since = None if full else cfg.get("watermark")
-    cursor = cfg.get("cursor") if trigger != "full" else None
-    # The source's own settings go to every call; an incremental run lists only what changed when the plugin has a
-    # changes tool and a cursor from the last run, else lists from the watermark.
-    given: Json = {"source": values} if (values := cfg.get("values")) else {}
-    by_changes = bool(not full and cfg.get("changesTool") and cfg.get("changesCursor"))
-    if by_changes:
-        list_tool = str(cfg.get("changesTool"))
-    elif "listTool" in cfg:
-        list_tool = str(cfg["listTool"])
-    else:
-        raise KeyError("listTool")
-    if by_changes and not cursor:
-        cursor = cfg.get("changesCursor")
-    removed_at_source: list[str] = []
-    tombstones = an_object(cfg.setdefault("tombstones", {}), "tombstones")
-    gone_now: list[str] = []
-    # Only a listing read from its first page sees every item, so only then is an unseen item removed. One longer than a
-    # run's pages carries what it listed so far (`seenSoFar`) into the run that finishes it.
-    from_start = cursor is None
-    carried = set(cfg.get("seenSoFar") or []) if cursor else set[str]()
-    whole = from_start or "seenSoFar" in cfg
-    if from_start:
-        cfg.pop("seenSoFar", None)
+    place = _place(cfg)
     known = {i.path: i for i in await service.store.items(tenant, source_ids=[source_id])}
+    state = _KnowledgeState(service, tenant, source_id, cfg, known)
+    tools = SourceTools(
+        list=str(cfg["listTool"]) if "listTool" in cfg else None,
+        get=str(cfg["getTool"]) if "getTool" in cfg else None,
+        changes=cfg.get("changesTool"),
+        lists_whole=bool(cfg.get("listsWhole")),
+        fetch_at_once=int(cfg.get("fetchAtOnce") or AT_ONCE),
+        get_takes_tag=bool(cfg.get("getTakesTag")),
+    )
     counts = {"listed": 0, "unchanged": 0, "upserted": 0, "deleted": 0, "failed": 0, "skipped": 0}
-    errors: list[RunError] = []
-    log: list[str] = []
-    status, stopped = "success", ""
-    seen: set[str] = set()
-    changed: list[Json] = []
-    newest: str | None = None
-    watermark: str | None = None
+    listing = await read_changes(
+        reader,
+        state,
+        place,
+        tools,
+        tenant=tenant,
+        team=team,
+        values=cfg.get("values"),
+        connection_id=cfg.get("connectionId"),
+        full=full,
+        trigger=trigger,
+        act=act,
+        counts=counts,
+        clock=clock,
+        max_pages=MAX_PAGES,
+        full_every=FULL_EVERY,
+    )
+    started, full, seen, log = listing.started, listing.full, listing.seen, listing.log
+    errors = cast(list[RunError], listing.errors)
+    status, stopped = listing.status, listing.stopped
+    removed_at_source = listing.removed_at_source
+    tombstones = place.tombstones
+    gone = [i.path for i in known.values() if not i.parent_id] if full and listing.whole else []
+    if status == "success" or listing.resumes:
+        fetcher = Fetcher(reader, state, tools, listing, tenant=tenant, team=team, act=act)
 
-    async def save() -> None:
-        await service.store.update_source(tenant, source_id, {"config": an_object(as_json(cfg), "source config")})
+        async def listed(r: Json, item: Json) -> None:
+            # An item the listing already read (a crawl following links) is not fetched again.
+            await _put(service, who, s, known, item, marker=str(r["marker"]), parent=None, counts=counts, errors=errors)
 
-    pages, restarted, resumes = 0, False, False
-    # The seconds between two fetches of this source's items: the source's own rate, or the slower pace its listing
-    # names (a site's robots.txt Crawl-delay). Each fetch is its own call, so the plugin cannot pace them itself.
-    rate = json_object(cfg.get("values")).get("rate")
-    pace = 1.0 / float(rate) if isinstance(rate, int | float) and rate > 0 else 0.0
-    while True:
-        if pages >= MAX_PAGES:
-            # The items listed so far are fetched now; the next run lists on from the saved cursor.
-            status, stopped = "partial", f"Listed {MAX_PAGES} pages; the next run continues the listing from here."
-            resumes = True
-            if whole:
-                cfg["seenSoFar"] = sorted(carried | seen)
-            break
-        asked = {k: v for k, v in (("since", None if by_changes else since), ("cursor", cursor)) if v}
-        page = await reader.call(tenant, team, list_tool, {**given, **asked}, act=act)
-        pages += 1
-        if not page.ok and cursor and not restarted and page.code in STALE_CURSOR:
-            restarted, cursor = True, None
-            cfg.pop("cursor", None)
-            cfg.pop("seenSoFar", None)
-            carried, whole = set[str](), True
-            await save()
-            continue
-        if not page.ok:
-            if page.code == "RATE_LIMITED":
-                status, stopped = "partial", "Stopped at the system's rate limit; the next run continues from here."
-            elif page.code in RECONNECT:
-                status, stopped = "failed", "The connection refused its sign-in; reconnect it."
-                cfg["paused"] = "needs_reconnect"
-            elif page.code == "APP_OFF_FOR_TEAM":
-                status, stopped = "skipped", "The plugin is off for this team."
-            elif page.code == "PLUGIN_DISABLED":
-                status, stopped = "skipped", "The plugin is not installed on this system."
-            else:
-                status, stopped = "failed", page.message or page.code
-            errors.append({"phase": "list", "errorClass": page.code, "message": page.message or page.code})
-            break
-        rows = _listing(page.output)
-        if rows is None:
-            status, stopped = "failed", "The tool's answer is not a knowledge listing."
-            errors.append({"phase": "list", "errorClass": "contract", "message": stopped})
-            break
-        out = json_object(page.output)
-        named = out.get("pace_s")
-        if isinstance(named, int | float):
-            pace = max(pace, float(named))
-        for r in rows:
-            item_id = str(r["id"])
-            counts["listed"] += 1
-            seen.add(item_id)
-            newest = max(newest or "", str(r["updated_at"]))
-            marker = str(r.get("marker") or r["updated_at"])
-            if r.get("deleted"):
-                removed_at_source.append(item_id)
-                continue
-            if item_id in tombstones:
-                # Removed after answering gone twice: a link elsewhere does not bring it back until it is lifted.
-                seen.discard(item_id)
-                counts["skipped"] += 1
-                continue
-            if r.get("skipped"):
-                # Listed but not to be taken in (refused by robots.txt, excluded by a rule): not seen, so an indexed
-                # copy leaves search.
-                seen.discard(item_id)
-                counts["skipped"] += 1
-                log.append(f"{r.get('title') or item_id}: {r['skipped']}")
-                continue
-            ex = known.get(item_id)
-            if ex is not None and ex.marker == marker and ex.status == "indexed":
-                counts["unchanged"] += 1
-            else:
-                changed.append({**r, "marker": marker})
-        if out.get("next_cursor") and out.get("next_cursor") == cursor:
-            status, stopped = "partial", "The system named the same page again; the next run starts the listing again."
-            errors.append({"phase": "list", "errorClass": "contract", "message": stopped})
-            cfg.pop("cursor", None)
-            await save()
-            break
-        cursor = out.get("next_cursor")
-        # Saved after every page, so a run stopped by a limit or a restart resumes from here.
-        cfg["cursor"] = cursor
-        await save()
-        if not cursor:
-            watermark = str(out.get("watermark") or (_less_overlap(newest) if newest else since or ""))
-            # The last page of a listing or of changes names where the next run's changes start.
-            if out.get("cursor"):
-                cfg["changesCursor"] = out["cursor"]
-            break
-
-    if not resumes:
-        seen |= carried
-        cfg.pop("seenSoFar", None)
-    gone = [i.path for i in known.values() if not i.parent_id] if full and whole else []
-    if status == "success" or resumes:
-        lock = asyncio.Semaphore(int(cfg.get("fetchAtOnce") or AT_ONCE))
-        paced = Pacer(pace)
-
-        async def fetch(item_id: str) -> Answer:
-            # The version tag held for the item lets the system answer `unchanged` without sending it again.
-            held = known.get(item_id)
-            tag = {"tag": held.tag} if cfg.get("getTakesTag") and held and held.tag else {}
-            async with lock:
-                await paced.turn()
-                if "getTool" not in cfg:
-                    raise KeyError("getTool")
-                return await reader.call(tenant, team, cfg["getTool"], {**given, "id": item_id, **tag}, act=act)
-
-        # An item the listing already read (a crawl following links) is not fetched again.
-        listed_whole = [r for r in changed if "content" in r]
-        changed = [r for r in changed if "content" not in r]
-        for r in listed_whole:
-            await _put(service, who, s, known, r, marker=str(r["marker"]), parent=None, counts=counts, errors=errors)
-        try:
-            async with asyncio.TaskGroup() as group:
-                fetches = [group.create_task(fetch(str(r["id"]))) for r in changed]
-        except ExceptionGroup as failed:
-            # The run fails on the first fetch that raised, as it did before the fetches shared a group.
-            raise failed.exceptions[0] from None
-        answers = [f.result() for f in fetches]
-        for r, got in zip(changed, answers, strict=True):
-            if not got.ok and got.code == "NOT_FOUND" and (held := known.get(str(r["id"]))) is not None:
-                # Gone at the source: removed on the second sync in a row that finds it gone, then tombstoned.
-                count = held.gone_count + 1
-                await service.store.update_item(tenant, held.id, {"gone_count": count})
-                if count >= GONE_TWICE:
-                    gone_now.append(str(r["id"]))
-                    tombstones[str(r["id"])] = {
-                        "at": started.isoformat(),
-                        "reason": got.message or "Gone at the source",
-                    }
-                else:
-                    log.append(f"{held.title}: answered gone once; removed if it answers so again")
-                continue
-            if not got.ok:
-                counts["failed"] += 1
-                errors.append(
-                    {
-                        "itemTitle": _as_given(r.get("title")),
-                        "phase": "get",
-                        "errorClass": got.code,
-                        "message": got.message,
-                    }
-                )
-                if got.code == "RATE_LIMITED":
-                    status = "partial"
-                continue
-            item = an_object(got.output, "fetched item")
-            if item.get("unchanged") is True:
-                held = known.get(str(r["id"]))
-                if held is not None:
-                    await service.store.update_item(tenant, held.id, {"marker": str(r["marker"])})
-                counts["unchanged"] += 1
-                continue
+        async def fetched(r: Json, item: Json) -> None:
             await _put(service, who, s, known, item, marker=str(r["marker"]), parent=None, counts=counts, errors=errors)
             children = item.get("children")
             for child in (an_object(c, "child item") for c in (a_list(children, "children") if children else [])):
@@ -661,7 +436,7 @@ async def sync_tool_source(
                 if marker and ex is not None and ex.marker == marker and ex.status == "indexed":
                     counts["unchanged"] += 1
                     continue
-                kid = await fetch(kid_id)
+                kid = await fetcher.fetch(kid_id)
                 if kid.ok:
                     await _put(
                         service,
@@ -676,6 +451,11 @@ async def sync_tool_source(
                     )
                 else:
                     counts["failed"] += 1
+
+        done = await fetcher.fetch_changed(place, counts, listing.errors, log, on_listed=listed, on_fetched=fetched)
+        if done.rate_limited:
+            status = "partial"
+        gone_now = done.gone_now
         # A base this source feeds may keep what its source removed: then it stays searchable and says so.
         keep = (await service.sync_rules(tenant, str(s.id)))["removedAtSource"] == "keep"
         if gone_now:
@@ -688,8 +468,8 @@ async def sync_tool_source(
             else:
                 counts["deleted"] += await service.store.remove_items(tenant, gone_ids)
                 await release_snapshots(service, who, s, gone_files)
-            done = "kept and flagged" if keep else "removed and tombstoned"
-            log += [f"{known[p].title}: gone at the source twice, {done}" for p in gone_now]
+            done_with = "kept and flagged" if keep else "removed and tombstoned"
+            log += [f"{known[p].title}: gone at the source twice, {done_with}" for p in gone_now]
         if removed_at_source:
             # Items the system says it deleted (in a changes listing) leave search at once, with their attachments.
             out_ids = [known[p].id for p in removed_at_source if p in known]
@@ -700,9 +480,9 @@ async def sync_tool_source(
             else:
                 counts["deleted"] += await service.store.remove_items(tenant, out_ids)
                 await release_snapshots(service, who, s, files_out)
-            done = "kept and flagged" if keep else "removed"
-            log += [f"{known[p].title}: deleted at the source, {done}" for p in removed_at_source if p in known]
-        if full and not resumes:
+            done_with = "kept and flagged" if keep else "removed"
+            log += [f"{known[p].title}: deleted at the source, {done_with}" for p in removed_at_source if p in known]
+        if full and not listing.resumes:
             dropped = [p for p in gone if p not in seen]
             removed_ids = [known[p].id for p in dropped]
             # Attachments go with their parent (parent_id holds the parent document's id).
@@ -717,14 +497,10 @@ async def sync_tool_source(
                 log.append(
                     f"{known[p].title}: no longer listed by the system, {'kept and flagged' if keep else 'removed'}"
                 )
-        if status == "success":
-            cfg["watermark"] = watermark
-            cfg["cursor"] = None
-            if full:
-                cfg["lastFullAt"] = started.isoformat()
+        listing.settle(place, status)
     if stopped:
         log.append(stopped)
-    await save()
+    await state.save(place)
     run_status = "partial" if status == "partial" else "failed" if status == "failed" else "success"
     if status == "skipped":
         run_status = "skipped"
@@ -802,8 +578,7 @@ async def _put(
         )
         extra["parent_id"] = parent_row.id if parent_row else None
     found = Stored(stored.file_id, name, stored.mime, stored.size, stored.digest, stored.deduplicated)
-    allowed = json_list(item["allowed"]) if isinstance(item.get("allowed"), list) else None
-    origin = Origin(item_id, str(item.get("title") or item_id), extra, allowed=[str(a) for a in allowed or []] or None)
+    origin = Origin(item_id, str(item.get("title") or item_id), extra, allowed=access_list(item))
     done = await service._read_file(who, s, ex, name=name, found=found, rebuild=False, origin=origin)  # pyright: ignore[reportPrivateUsage]
     # The row as written, so a later look at this item in the run (its attachments, gone or removed) reads it.
     known[item_id] = (await service.store.items(tenant, item_id=done.id))[0]
