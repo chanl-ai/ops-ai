@@ -49,6 +49,7 @@ KIND = {
     "workspace.restore": "edited",
     "workspace.purge": "deleted",
     "policy.set": "edited",
+    "policy.reset": "edited",
     "access.check": "checked",
     "role.edit": "edited",
     "role.self_approval": "edited",

@@ -47,6 +47,9 @@ from .tenancy import TenantDb
 
 MEMBERSHIP = "membership"
 
+# Approvals · decide is "approve own requests" (Admin only by default).
+SELF_APPROVAL = "approvals.decide"
+
 
 class RoleNameTakenError(Exception):
     """Another role of the workspace has that name."""
@@ -327,6 +330,24 @@ class RoleStore(TenantDb):
                     "after": {k: after.get(tuple(k.split(".", 1))) for k in changed},  # type: ignore[arg-type]
                 },
             )
+            if SELF_APPROVAL in changed:
+                # Its own action, so a risk officer filters the log for who may approve their own requests (L14).
+                cell = tuple(SELF_APPROVAL.split(".", 1))
+                await record(
+                    c,
+                    tenant_id=tenant_id,
+                    team_id=None,
+                    actor=by,
+                    action="role.self_approval",
+                    target_kind="role",
+                    target_id=role_id,
+                    request_id=request_id,
+                    detail={
+                        "changed": [SELF_APPROVAL],
+                        "before": {SELF_APPROVAL: before.get(cell)},  # type: ignore[arg-type]
+                        "after": {SELF_APPROVAL: after.get(cell)},  # type: ignore[arg-type]
+                    },
+                )
         return True
 
     async def grids(self, tenant_id: str, role_ids: list[str]) -> dict[str, list[Grant]]:

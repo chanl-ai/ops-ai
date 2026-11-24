@@ -337,3 +337,16 @@ async def test_a_copy_of_admin_leaves_approve_own_requests_out(platform: Platfor
     data = copied.json()["data"]
     assert ("approvals", "decide") not in {(p["area"], p["action"]) for p in data["permissions"]}
     assert "approvals.decide" in data["leftOut"]
+
+
+async def test_ticking_approve_own_requests_on_a_role_writes_its_own_audit_action(platform: Platform) -> None:
+    owner, ah = await _admin(platform)
+    made = await platform.public.post("/v1/roles", headers=ah, json={"name": "Loan officer", "permissions": CASE_DESK})
+    rid = made.json()["data"]["id"]
+    ticked = [*CASE_DESK, {"area": "approvals", "action": "decide", "scope": "all"}]
+    put = await platform.public.put(f"/v1/roles/{rid}/permissions", headers=ah, json={"permissions": ticked})
+    assert put.status_code == 200, put.text
+    mine = next(iter(owner.teams))
+    audit = (await platform.public.get("/v1/audit", headers={**ah, "X-Team-Id": mine})).json()["data"]["data"]
+    actions = [e.get("platformAction") or e.get("action") for e in audit if e.get("targetId") == rid]
+    assert "role.edit" in actions and "role.self_approval" in actions, audit[:4]
