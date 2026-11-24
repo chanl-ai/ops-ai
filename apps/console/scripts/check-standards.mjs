@@ -433,6 +433,16 @@ function headerHits(rel, text) {
   if (!RECORD_PAGE.test(rel) || /<RecordActions\b/.test(text)) return [];
   return openings(text, ['PageLayout']).filter((o) => /(?<![\w?])actions=\{(?!\s*\w+\s*\})/.test(o.attrs)).map((o) => ({ index: o.index }));
 }
+/** Rule 27: a bordered card with a heading is `Section` (one header, one padding scale), not a hand-built `<section>`. */
+function sectionHits(text) {
+  return openings(text, ['section'])
+    .filter((o) => {
+      const cls = /className=(?:"([^"]*)"|\{`([^`]*)`\}|\{'([^']*)'\})/.exec(o.attrs);
+      const c = cls ? cls[1] ?? cls[2] ?? cls[3] ?? '' : '';
+      return /(^|\s)rounded-lg(\s|$)/.test(c) && /(^|\s)border(\s|$)/.test(c) && /(^|\s)bg-card(\s|$)/.test(c);
+    })
+    .map((o) => ({ index: o.index }));
+}
 /** Rule 28: one save wording, from SaveState. */
 function saveWordHits(text) {
   return [...text.matchAll(/Saving soon|Draft v[^`'"\n]*saved/g)].map((m) => ({ index: m.index }));
@@ -460,6 +470,8 @@ if (process.argv.includes('--self-test')) {
     ['header: raw actions on a record page', headerHits('src/app/build/agents/[id]/page.tsx', '<PageLayout title="a" actions={<Button>Go</Button>}>'), 1],
     ['header: RecordActions', headerHits('src/app/build/agents/[id]/page.tsx', '<PageLayout title="a" actions={<RecordActions />}>'), 0],
     ['save: Saving soon', saveWordHits('<span>Saving soon…</span>'), 1],
+    ['section: a hand-built bordered card', sectionHits('<section className="flex flex-col rounded-lg border bg-card">x</section>'), 1],
+    ['section: a plain grouping section', sectionHits('<section className="flex flex-col gap-3">x</section>'), 0],
     ['name: a slug regex by hand', [nameRuleAt("const s = n.toLowerCase().replace(/[^a-z0-9]+/g, '-');")].filter((i) => i >= 0), 1],
     ['name: a blank check by hand', [nameRuleAt("const e = { name: name.trim() ? undefined : 'Name the role.' };")].filter((i) => i >= 0), 1],
     ['name: nameError', [nameRuleAt("const e = { name: nameError(name, 'Name the role.') };")].filter((i) => i >= 0), 0],
@@ -514,17 +526,17 @@ if (reuseWrite) {
 // Rules 24-28 over the files.
 const rulesPath = join(root, 'scripts/rules-baseline.json');
 const rulesBaseline = readJson(rulesPath);
-const rulesNow = { labels: {}, sizes: {} };
+const rulesNow = { labels: {}, sizes: {}, sections: {} };
 for (const f of files) {
   if (!/^src\/(app|components)\/.*\.tsx$/.test(f.rel) || /^src\/components\/(ui|shared)\//.test(f.rel) || /\.test\./.test(f.rel)) continue;
   for (const h of headerHits(f.rel, f.text)) report(f, h.index, 'rule 24: a record page gives its header actions through RecordActions (save state, Save, Test, primary, menu)');
   for (const h of saveWordHits(f.text)) report(f, h.index, 'rule 28: save wording comes from SaveState (Saved, Unsaved, Saving…, Not saved)');
-  for (const [key, hitsOf] of [['labels', labelHits], ['sizes', sizeHits]]) {
+  for (const [key, hitsOf] of [['labels', labelHits], ['sizes', sizeHits], ['sections', sectionHits]]) {
     const hits = hitsOf(f.text);
     if (hits.length) rulesNow[key][f.rel] = hits.length;
     const allowed = rulesBaseline[key]?.[f.rel] ?? 0;
     if (hits.length > allowed && !process.argv.includes('--write-baseline'))
-      report(f, hits[allowed].index, key === 'labels' ? 'rule 25: a button label is one or two words, verb first (put detail in a tooltip)' : 'rule 26: size comes from the size prop, not h-*, size-*, px-*, py-*, text-xs or a link button with p-0');
+      report(f, hits[allowed].index, key === 'labels' ? 'rule 25: a button label is one or two words, verb first (put detail in a tooltip)' : key === 'sections' ? 'rule 27: a bordered card with a heading is Section (components/shared/surface), not a hand-built <section>' : 'rule 26: size comes from the size prop, not h-*, size-*, px-*, py-*, text-xs or a link button with p-0');
   }
 }
 if (process.argv.includes('--write-baseline')) {

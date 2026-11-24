@@ -439,6 +439,30 @@ await withUiStack(
         }
         await p.setViewportSize({ width: 1440, height: 1000 });
       }
+      // 24. A skill with parts is split into one skill per part on the page, for a builder at both widths; a reviewer, who
+      // may not create skills, sees the parts and no Split skills button.
+      const partOf = (tag, n, name) => ({ slug: `part-${tag}-${n}-${RUN}`, name: `${name} ${tag} ${RUN}`, useWhen: `Use it for ${name.toLowerCase()}.`, instructions: `Say what ${name.toLowerCase()} means here.`, inputs: [], toolIds: [] });
+      const splits = [];
+      for (const width of [1440, 390]) {
+        const parted = await made('/v1/skills', { name: `Disputes in parts ${width} ${RUN}`, ownerTeam: 'team_ops', useWhen: 'The cardholder asks about a dispute.', instructions: 'Pick the part that fits.', parts: [partOf(width, 1, 'Charge look-up'), partOf(width, 2, 'Dispute timing')] });
+        await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+        await page.goto(`${consoleUrl}/build/skills/${parted.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.getByTestId('skill-parts').waitFor({ timeout: 60_000 });
+        await page.getByTestId('skill-parts-split').click();
+        const text = await page.getByTestId('skill-parts-made').innerText({ timeout: 60_000 }).catch(() => '');
+        const sideways = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+        await maya.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+        await maya.goto(`${consoleUrl}/build/skills/${parted.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await maya.getByTestId('skill-parts').waitFor({ timeout: 60_000 });
+        splits.push({ width, text, sideways, reviewerSees: await maya.getByTestId('skill-parts-split').count() });
+      }
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await maya.setViewportSize({ width: 1440, height: 1000 });
+      check(
+        '24 Split skills makes one skill per part at 1440 and 390, naming them, with no sideways scroll; a reviewer sees no Split skills',
+        splits.every((x) => /Made 2 skills/.test(x.text) && x.text.includes(`Charge look-up ${x.width} ${RUN}`) && !x.sideways && x.reviewerSees === 0),
+        splits,
+      );
       // A skill publish waiting on Maya, the way the walk made one: the team's skill publishes always need a review.
       const policy = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/publishReview`, { method: 'PUT', headers: as(await tokenFor(PRIYA)), body: JSON.stringify({ value: { skills: 'always' } }) });
       // A policy change ends the tokens issued before it.

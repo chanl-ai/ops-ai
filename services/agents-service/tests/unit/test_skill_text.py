@@ -8,9 +8,6 @@ reaches done early skipping the results the skill owes; and a write on a path th
 
 from __future__ import annotations
 
-import ast
-import re
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -271,18 +268,24 @@ def test_a_procedure_pasted_from_a_document_reads_as_its_paths() -> None:
     ], "a list marker is not part of the step the agent reads"
 
 
-def _starter() -> str:
-    """The console's starter text (`WORKED_EXAMPLE`), read from its source so the check follows what a builder sees."""
-    meta = Path(__file__).parents[4] / "apps/console/src/components/skills/skill-meta.tsx"
-    block = re.search(r"WORKED_EXAMPLE = \[(.*?)\]\.join", meta.read_text(), re.S)
-    assert block, meta
-    return "\n".join(ast.literal_eval(f"[{block.group(1)}]"))
+# The text a new skill starts with in the console, held here as a copy so this test reads nothing outside the service;
+# the console's own test (lib/skill-starter.test.ts) holds the shape it must keep.
+STARTER = "\n".join(
+    [
+        "Greet them, ask for their order number and look the order up: type @ at the end of this line to pick "
+        "the tool.",
+        "if they want a refund:",
+        "    Explain the refund policy and ask them to confirm.",
+        "else:",
+        "    Answer their question from what you found.",
+    ]
+)
 
 
 def test_the_starter_text_runs_as_the_steps_it_shows() -> None:
     # With its tool picked: the starter says to type @ at the end of the line that looks the order up.
     starter = "\n".join(
-        f"{line} @tool:find_order" if "Type @" in line or "type @" in line else line for line in _starter().split("\n")
+        f"{line} @tool:find_order" if "Type @" in line or "type @" in line else line for line in STARTER.split("\n")
     )
     r = read(starter)
     assert r.program is not None
