@@ -57,8 +57,40 @@ _OPEN_LABELLED = re.compile(
 )
 
 
-# The words of a field's name: camelCase, snake_case, spaced or upper case ("ssnLast4", "account_id", "Account id").
-_NAME_WORDS = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+")
+def _name_words(name: str) -> list[str]:
+    """The words of a field's name: camelCase, snake_case, spaced or upper case ("ssnLast4", "account_id", "Account
+    id", "IBANNumber" as IBAN and Number). One pass over the name: a regex with a run of capitals before a lookahead
+    backtracks over every capital, quadratic in a name of many."""
+    out: list[str] = []
+    i, n = 0, len(name)
+    while i < n:
+        c = name[i]
+        j = i + 1
+        if c.isdecimal():
+            while j < n and name[j].isdecimal():
+                j += 1
+        elif "A" <= c <= "Z":
+            while j < n and "A" <= name[j] <= "Z":
+                j += 1
+            if j < n and "a" <= name[j] <= "z":
+                if j - i > 1:
+                    # The last capital starts the next word ("IBANNumber").
+                    out.append(name[i : j - 1])
+                    i = j - 1
+                    continue
+                while j < n and "a" <= name[j] <= "z":
+                    j += 1
+        elif "a" <= c <= "z":
+            while j < n and "a" <= name[j] <= "z":
+                j += 1
+        else:
+            i = j
+            continue
+        out.append(name[i:j])
+        i = j
+    return out
+
+
 # The word a name starts its identifier with, and what is shown in place of the value.
 _KINDS = {
     "account": "[account]", "acct": "[account]", "iban": "[account]", "card": "[card]", "tax": "[tax ID]",
@@ -109,7 +141,7 @@ _LABELLED = re.compile(r"(?i)\b(" + _LABEL + r")(\s*(?:[:#|]|->|=>|→)?\s*)([A-
 def _words(name: str) -> list[str]:
     """The words of a field name, a lower case word with no break read by the words it is made of ("accountid")."""
     words: list[str] = []
-    for word in (w.lower() for w in _NAME_WORDS.findall(name)):
+    for word in (w.lower() for w in _name_words(name)):
         parts: list[str] = []
         rest = word
         while rest:

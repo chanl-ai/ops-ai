@@ -40,8 +40,18 @@ _HANDLER = "ops-json"
 # -key or _key). Numbers stay (input_tokens is a count, not a token).
 _SECRET_KEY = re.compile(r"token|secret|passw|authorization|api[-_]?key|[-_]key$|cookie", re.IGNORECASE)
 REDACTED = "[redacted]"
-# A query string (it can carry an API key): from `?` to the next space or quote, when it holds a `name=value`.
-_QUERY = re.compile(r"\?[^\s\"'<>#]*=[^\s\"'<>#]*")
+# A query string (it can carry an API key): from `?` to the next space or quote, when it holds a `name=value`. Read
+# per run of such characters (_drop_query): a pattern from each `?` scanning for a later `=` is quadratic in a run of
+# many `?`.
+_RUN = re.compile(r"[^\s\"'<>#]+")
+
+
+def _drop_query(run: re.Match[str]) -> str:
+    text = run.group()
+    start = text.find("?")
+    return text[:start] if start >= 0 and "=" in text[start + 1 :] else text
+
+
 # A bearer token written into text: a message, a detail, an exception.
 _BEARER = re.compile(r"(?i)\b(bearer)\s+[^\s\"',;]+")
 # Fields this module writes: ids and names, never personal data, so they are not masked.
@@ -103,7 +113,7 @@ def _add_trace(_: WrappedLogger, __: str, event: EventDict) -> EventDict:
 
 
 def _text(value: str) -> str:
-    return mask(_BEARER.sub(rf"\1 {REDACTED}", _QUERY.sub("", value)))
+    return mask(_BEARER.sub(rf"\1 {REDACTED}", _RUN.sub(_drop_query, value)))
 
 
 def _scrub(value: Any, key: str | None = None) -> Any:
