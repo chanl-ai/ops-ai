@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { useInstructionSections, useResetInstructionSections, useSaveInstructionSections } from '@/hooks/instruction-sections';
-import { useCan } from '@/hooks/me-queries';
+import { useCanInTeam } from '@/hooks/me-queries';
 import { inOrder } from '@/lib/brief-sections';
 import type { InstructionSection, InstructionSectionList, PresetIcon } from '@/lib/types/domain';
 
@@ -69,12 +69,8 @@ const renumbered = (items: InstructionSection[]) => items.map((s, order) => ({ .
  * shared schema form over `itemSchema`.
  */
 export function AgentInstructionsEditor() {
-  // The service lets a team's Admin change the list (settings.manage in the team the request acts in), but the grid
-  // /v1/me serves holds settings.manage only in the Security team. Until the grid has a cell for this list, access.manage,
-  // which a team's Admin holds, stands in; a person the service refuses sees its message when saving.
-  const manages = useCan('settings', 'manage');
-  const admin = useCan('access', 'manage');
-  const may = manages === true || admin === true;
+  // The service checks settings.manage in the team the request acts in, which a team's Admin holds.
+  const may = useCanInTeam('settings', 'manage') === true;
   const query = useInstructionSections();
   const save = useSaveInstructionSections();
   const reset = useResetInstructionSections();
