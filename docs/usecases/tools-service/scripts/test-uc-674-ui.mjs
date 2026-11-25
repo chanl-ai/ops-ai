@@ -253,7 +253,7 @@ await withUiStack(
         check('10 Each role reads its own words: the picker, who to ask, whose state, and a missing app’s page',
           adminPicker.action === 1 && !/ask an admin/i.test(adminPicker.text) && viewerPicker.action === 0 && /ask an admin/i.test(viewerPicker.text) &&
             /Ask an admin: (James Richardson|Priya Shah)/.test(ask) && !/Dev Admin/.test(ask) &&
-            /^You:/.test(whose) && /Team account:/.test(row) && errs().length === 0 &&
+            /^You:/.test(whose) && /Team login:/.test(row) && errs().length === 0 &&
             /isn’t installed/.test(line) && how === 1 && viewerHow === 0 && gone().length === 0,
           { adminPicker, viewerPicker, ask, whose, row, line, how, viewerHow, errors: [...errs(), ...gone()] });
       }, priyaPage);

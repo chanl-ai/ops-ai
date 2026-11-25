@@ -11,7 +11,7 @@ documents into Ops AI.
 <!-- site: steps -->
 1. **Turn on.** A team admin opens **Data Gateway › Apps**, finds SharePoint and OneDrive, and presses **Turn on**.
    Enter your Microsoft 365 tenant ID, or leave the default to let any work account sign in.
-2. **Connect the team account** and sign in with a Microsoft 365 account that can read the libraries. The first
+2. **Sign in the team login** and sign in with a Microsoft 365 account that can read the libraries. The first
    sign-in in a tenant may need a Microsoft 365 admin's approval.
 3. **Add a source.** In **Knowledge**, open a knowledge base, press **Add source** and pick SharePoint and OneDrive.
    Search for sites, then pick whole sites or single document libraries.

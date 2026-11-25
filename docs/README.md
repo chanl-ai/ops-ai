@@ -506,6 +506,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `usecases/tools-service/a-team-admin-sets-its-own.md` | uc-615: A team admin sets its own app credential and tests it with their account |
 | `usecases/tools-service/usage-shows-only-this-team-s.md` | uc-616: Usage shows only this team's tool calls and whom each ran as |
 | `usecases/tools-service/an-app-that-fails-says-why.md` | uc-617: An app that fails says why: an expired account, a run waiting for a person's account, an unknown host |
+| `usecases/tools-service/chat-never-asks-whose-login.md` | uc-790: A chat user never chooses between their own login and the team's |
 | `usecases/tools-service/turning-an-app-off-names-its.md` | uc-618: Turning an app off names its users, a leaver loses their accounts, and Replace rotates a key |
 | `usecases/agents-service/a-new-team-s-assistant-answers.md` | uc-619: A new team's assistant answers from its knowledge and files |
 | `packages/README.md` | Index of the shared libraries that have a page |

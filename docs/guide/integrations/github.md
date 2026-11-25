@@ -13,7 +13,7 @@ on your own GitHub Enterprise Server.
 2. **Pick whose account calls use**: each person's own (comments then show under their name), the team's, or each
    person's with the team's for runs nobody started.
 3. **For GitHub Enterprise Server**, set the web and API addresses to your server's.
-4. **Connect.** Press **Connect my account** or **Connect the team account** and authorize on GitHub's page.
+4. **Connect.** Press **Sign in with my login** or **Sign in the team login** and authorize on GitHub's page.
 
 ```bash
 opsai apps on plugin:opsai.github --whose person   # prints the sign-in link

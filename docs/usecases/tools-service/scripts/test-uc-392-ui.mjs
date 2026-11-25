@@ -21,7 +21,7 @@ await withUiStack(
     try {
       const page = await consoleSignIn(browser, consoleUrl, PRIYA, PASSWORD, errors);
       const r = await testTeamAccount(page, consoleUrl, right);
-      check('4 the live account tests Working with the team account, answered 200', r.status === 'ok' && /\b200\b/.test(r.said) && /team account/.test(r.said), r.said);
+      check('4 the live account tests Working with the team account, answered 200', r.status === 'ok' && /\b200\b/.test(r.said) && /team login/.test(r.said), r.said);
       check('4 neither token shows on its page', !r.page.includes('test-bearer-token') && !r.page.includes('prod-bearer-token'), r.page.slice(0, 300));
       const w = await testTeamAccount(page, consoleUrl, wrong);
       check("5 a token the bank does not know tests Failed with the bank's 401", w.status !== 'ok' && /Failed/.test(w.said) && /\b401\b/.test(w.said), w.said);

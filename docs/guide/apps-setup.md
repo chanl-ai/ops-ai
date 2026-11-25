@@ -40,7 +40,7 @@ setting and opens no sign-in; connecting is its own button, and it is optional f
 | 3. Pick whose account Tools use: each person's, the team's, or each person's with the team's for runs nobody started | Asked once, when the App is first turned on |
 | 4. Keep **Give the team's assistant this app's read tools** ticked, or untick it | The assistant gets the read Tools when the App is saved |
 | 5. Press **Turn on** | The team's setting is saved and no sign-in window opens. The window reads, for example, **Saved. Salesforce is on for Operations**, how many read Tools were added, and **Members connect their own account from Apps › Mine** |
-| 6. Optional: press **Connect my account**, or **Connect the team account** when Tools run as the team's account | The App's own sign-in page opens; allow access there, and the window names the account that signed in |
+| 6. Optional: press **Sign in with my login**, or **Sign in the team login** when everyone uses the team's login | The App's own sign-in page opens; allow access there, and the window names the account that signed in |
 
 A template pack (Core, Starter skills) is not listed on Apps, because nobody connects an account to it. Open its page to turn it on or off: the empty template list on a page such as Skills links to it, and **Turn off** there opens the same window as for any App.
 
@@ -92,12 +92,13 @@ again, and removed from whatever an App answers. A Security admin adds, rotates 
 
 ## A run waiting for a person
 
-When a workflow acts for a person who has not connected their own Account of an App, the run waits instead of failing.
-**Human Tasks** shows a task, **Connect your <App> account to continue**:
+When a workflow acts for a person who has not signed in to an App each person signs in to, the run waits instead of
+failing. **Human Tasks** shows a task, **Sign in to <App> to continue**:
 
-- The person it waits for presses **Connect my account**. Once they have connected, the run goes on by itself.
-- Where the App has a team Account, someone allowed to run as it (team admins by default) can press **Run as the team
-  account**, and the step goes on as the team Account.
+- The person it waits for presses **Sign in to <App>**. Once they have signed in, the run goes on by itself. They are
+  never asked to choose between their own login and the team's: that is the App's setting.
+- Where the App has a team login, someone else allowed to run as it (team admins by default) can press **Run with the
+  team login**, and the step goes on with it.
 
 ## Turn an app off
 

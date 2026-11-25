@@ -10,7 +10,7 @@ to an agent, and works a case in chat. The same steps fit any App.
 
 | Who | Needs |
 |---|---|
-| A team admin | To turn the App on and connect the team account |
+| A team admin | To turn the App on and sign in the team login |
 | A builder | To add tools to an agent and publish it |
 | A Salesforce user | Access to Ops AI's connected app in your org (see [Salesforce](../integrations/salesforce.md#if-sign-in-fails)) |
 
@@ -20,7 +20,7 @@ to an agent, and works a case in chat. The same steps fit any App.
 1. **Turn Salesforce on.** A team admin opens **Data Gateway › Apps**, presses **Turn on** on Salesforce, picks where
    the team signs in and whose account calls use, and keeps **Give the team's assistant this app's read tools** ticked.
    The window reads **Saved. Salesforce is on for** your team and how many read tools were added.
-2. **Connect.** Press **Connect the team account** and allow access on Salesforce's page. The App reads **Connected**.
+2. **Connect.** Press **Sign in the team login** and allow access on Salesforce's page. The App reads **Connected**.
 3. **Try a tool.** On the App's **Tools** tab, open Run a query, enter `SELECT Id, CaseNumber, Status FROM Case LIMIT 1`
    and press **Run** in **Mock**: nothing leaves Ops AI. Then **Real**: you see your org's answer and the request sent,
    with the token hidden.

@@ -190,7 +190,7 @@ try {
           await card.waitFor({ timeout: 90_000 });
           await page.screenshot({ path: join(SHOTS, 'chat-connect-1280.png') });
           const connect = await page.getByTestId('connection-connect').textContent();
-          check('12 James asks to move a case and the chat asks him to connect Salesforce, with nothing sent to it', (await card.getAttribute('data-state')) === 'open' && /Connect Salesforce/.test(connect ?? '') && (await edits()).length === 0, { connect, edits: await edits() });
+          check('12 James asks to move a case and the chat asks him to connect Salesforce, with nothing sent to it', (await card.getAttribute('data-state')) === 'open' && /Sign in to Salesforce/.test(connect ?? '') && (await edits()).length === 0, { connect, edits: await edits() });
         }, page);
 
         await step('13 he signs in through the pop-up and the chat goes on: Salesforce records exactly one edit, his', async () => {
@@ -247,18 +247,19 @@ try {
         await step('17 Priya reads People can connect their own account on the app’s Settings, turns it off and back on', async () => {
           await admin.goto(`${consoleUrl}/data/connectors/${encodeURIComponent(conn.appId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await admin.getByTestId('app-tab-settings').click();
+          // Who signs in: the app page's two answers, Everyone uses the team's login or Each person signs in.
           const everyone = admin.getByTestId('app-everyone');
           await everyone.waitFor({ timeout: 30_000 });
-          const first = await everyone.getAttribute('data-state');
+          const first = await everyone.locator('#who-each').getAttribute('data-state');
           const read = async () => required(await call(tools, 'GET', `/v1/apps/${conn.appId}/accounts/${conn.id}`, priya), 'read the account');
           const until = async (want) => {
             let now = await read();
             for (let i = 0; i < 20 && now.signIn !== want; i++) await admin.waitForTimeout(500), (now = await read());
             return now;
           };
-          await everyone.click();
+          await everyone.locator('label[for="who-shared"]').click();
           const off = await until('team');
-          await admin.getByTestId('app-everyone').click();
+          await everyone.locator('label[for="who-each"]').click();
           // On saves person_or_team: each person's own account first, the team account for runs nobody started.
           const on = await until('person_or_team');
           check('17 Priya reads People can connect their own account on the app’s Settings, turns it off and back on', first === 'checked' && off.signIn === 'team' && on.signIn === 'person_or_team', { first, off: off.signIn, on: on.signIn });

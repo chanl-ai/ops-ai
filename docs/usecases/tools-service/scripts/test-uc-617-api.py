@@ -79,7 +79,7 @@ with (
         "3 a run James started waits for his own Person key desk account instead of failing",
         paused.get("status") == "waiting"
         and wait.get("event") == "app_account.connected"
-        and wait.get("title") == "Connect your Person key desk account to continue",
+        and wait.get("title") == "Sign in to Person key desk to continue",
         (live.status_code, started.text[:200], paused.get("status"), paused.get("error"), wait),
     )
     # 3b. Human Tasks lists the wait for James as a connect_account task naming the app.
@@ -110,7 +110,7 @@ with (
         and "role_required" in by_james.text
         and "an Admin can" in by_james.text
         and by_priya.status_code == 409
-        and "no team account" in by_priya.text
+        and "no team login" in by_priya.text
         and decided.status_code == 409
         and "connect_wait" in decided.text,
         (by_james.status_code, by_james.text[:160], by_priya.text[:200], decided.text[:200]),

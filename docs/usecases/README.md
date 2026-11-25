@@ -402,3 +402,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-770 | tools-service | Admins see people's app sign-ins and end one | ui | current |
 | uc-771 | agents-service | A builder takes a new skill to its first publish in under ten minutes | ui | current |
 | uc-772 | kb-service | Search a long document's pieces on the server | api | draft |
+| uc-790 | tools-service | A chat user never chooses between their own login and the team's | api, ui | current |

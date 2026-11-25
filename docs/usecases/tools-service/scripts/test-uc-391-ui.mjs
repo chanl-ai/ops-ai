@@ -22,7 +22,7 @@ await withUiStack(
     try {
       const page = await consoleSignIn(browser, consoleUrl, PRIYA, PASSWORD, errors);
       const r = await testTeamAccount(page, consoleUrl, right);
-      check('5 the live account tests Working with the team account, answered 200', r.status === 'ok' && /\b200\b/.test(r.said) && /team account/.test(r.said), r.said);
+      check('5 the live account tests Working with the team account, answered 200', r.status === 'ok' && /\b200\b/.test(r.said) && /team login/.test(r.said), r.said);
       check('5 neither password shows on its page', !r.page.includes('test-pass') && !r.page.includes('prod-pass'), r.page.slice(0, 300));
       const w = await testTeamAccount(page, consoleUrl, wrong);
       check("6 a wrong live password tests Failed with the bank's 401", w.status !== 'ok' && /Failed/.test(w.said) && /\b401\b/.test(w.said), w.said);

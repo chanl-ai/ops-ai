@@ -682,7 +682,7 @@ try {
           await shoot(page, 'app-auth-configs');
           await page.getByTestId('app-tab-settings').click();
           await page.getByTestId('app-settings').waitFor({ timeout: 30_000 });
-          const everyone = await page.getByTestId('app-everyone').getAttribute('aria-checked');
+          const everyone = await page.getByTestId('app-everyone').locator('#who-each').getAttribute('aria-checked');
           await shoot(page, 'app-settings');
           const html = await page.content();
           check(
@@ -870,7 +870,7 @@ try {
           const reads = (await fakeState()).calls.slice(before).filter((c) => c.method === 'person' && c.accepted).map((c) => c.as);
           check(
             '13c a run Priya starts waits on a Human Task with Connect my account, and goes on as her once she connects from it',
-            personal.status === 200 && task.kind === 'connect_account' && /Connect your Person desk account to continue/.test(said) && me && run.status === 'succeeded' && reads.includes('priya.person'),
+            personal.status === 200 && task.kind === 'connect_account' && /Sign in to Person desk to continue/.test(said) && me && run.status === 'succeeded' && reads.includes('priya.person'),
             { personal: personal.status, started: started.status, runStatus: run.status, runError: run.error, task: { id: task.id, kind: task.kind, connect: task.connect }, said: said.slice(0, 200), me, reads },
           );
         }, page);
