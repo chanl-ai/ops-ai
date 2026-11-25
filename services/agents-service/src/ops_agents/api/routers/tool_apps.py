@@ -29,6 +29,7 @@ from ..auth import Principal, reader_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..schemas import AgentToolAppsPage, AppToolsPage
+from .agents import stale_tool_ids
 from .tool_catalog import (
     SIGN_IN_WORDS,
     ToolEntry,
@@ -46,6 +47,8 @@ Reader: TypeAlias = Annotated[Principal, Depends(reader_of("agents"))]  # noqa: 
 
 # The groups of tools that belong to no app: this service's own workflows and agents.
 OWN_GROUPS = {"Workflows": ("workflows", "workflows"), "Agents": ("agents", "agents")}
+# The group of the agent's grants that nothing offers now, and that the agent's page does not list as stale.
+OTHER = "other"
 # How many of an app's matching tools a search lists under it.
 MATCHES = 5
 
@@ -84,16 +87,16 @@ async def _read(rt: Runtime, p: Principal, agent_id: str) -> tuple[dict[str, Gro
             cards = await rt.app_states.cards(person_of(p), team)
         except ToolsUnavailable:
             cards = []
-    listed: ToolRows
+    listed: ToolRows | None
     try:
         listed = await directory_tools(rt, fresh=True)
     except ToolsUnavailable:
-        listed = []
+        listed = None
     async with isolation.request_transaction():
         reg = registry(rt)
         row = await reg.row(agent_id)
         spec = (await reg.version(agent_id, row.version)).spec
-        tools = await team_tools(rt, team, listed=listed)
+        tools = await team_tools(rt, team, listed=listed or [])
     held = {str(t) for t in cast(list[object], spec.get("toolIds") or [])}
 
     groups: dict[str, Group] = {}
@@ -111,7 +114,29 @@ async def _read(rt: Runtime, p: Principal, agent_id: str) -> tuple[dict[str, Gro
             key, kind = OWN_GROUPS.get(t["server"], (f"server:{t['server']}", "custom"))
             name = t["server"]
         groups.setdefault(key, Group(key, name, kind, None)).tools.append(t)
+    # Every grant is named somewhere: the agent's page lists an operation tools-service stopped offering as stale, and
+    # this group holds the rest nothing offers (a paused agent's, or every operation while tools-service is down).
+    offered = {t["id"] for t in tools}
+    gone = [i for i in sorted(held) if i not in offered]
+    shown_stale = set(stale_tool_ids(gone, offered if listed is not None else None))
+    if other := [i for i in gone if i not in shown_stale]:
+        groups[OTHER] = Group(OTHER, "Other", OTHER, None, [_unoffered(i) for i in other])
     return groups, held
+
+
+def _unoffered(tool_id: str) -> ToolEntry:
+    """A grant nothing offers now, by its id: what it does cannot be read, only that the agent holds it."""
+    return {
+        "id": tool_id,
+        "name": tool_id,
+        "server": "Other",
+        "moduleId": None,
+        "description": "",
+        "access": "unknown",
+        "inputSchema": {},
+        "requiresApproval": False,
+        "approval": None,
+    }
 
 
 def _connected(g: Group) -> bool:
@@ -121,21 +146,25 @@ def _connected(g: Group) -> bool:
 
 def _app(g: Group, held: set[str], q: str) -> Json:
     granted = sum(1 for t in g.tools if t["id"] in held)
-    matches = [t for t in g.tools if q in _text(t)][:MATCHES] if q else []
+    matches = sorted((t for t in g.tools if q in _text(t)), key=lambda t: (_label(t).lower(), t["id"])) if q else []
     card = g.card or {}
+    total = _int(card["toolsCount"]) if card.get("toolsCount") is not None else len(g.tools)
     return {
         "id": g.id,
         "name": g.name,
-        "kind": g.kind if g.kind in ("plugin", "builtin", "custom", "workflows", "agents") else "custom",
+        "kind": g.kind if g.kind in ("plugin", "builtin", "custom", "workflows", "agents", OTHER) else "custom",
         "connected": _connected(g),
+        "appState": card.get("appState"),
         "appGroup": card.get("appGroup"),
         "signIn": SIGN_IN_WORDS.get(str(card.get("signIn") or "")),
         # Every tool the app has, by its card; with no card the team's tools are all that is known of it.
-        "toolsTotal": _int(card["toolsCount"]) if card.get("toolsCount") is not None else len(g.tools),
+        "toolsTotal": total,
         "toolsOffered": len(g.tools),
         "toolsGranted": granted,
+        "notAdded": max(0, total - len(g.tools)),
         "matches": [
-            {"id": t["id"], "label": _label(t), "access": t["access"], "granted": t["id"] in held} for t in matches
+            {"id": t["id"], "label": _label(t), "access": t["access"], "granted": t["id"] in held}
+            for t in matches[:MATCHES]
         ],
     }
 
@@ -169,7 +198,8 @@ async def tool_apps(
     return ok(options_page(options_cut(apps, offset, limit), offset, limit))
 
 
-@router.get("/{agent_id}/tool-apps/{app_id}/tools", response_model=Envelope[AppToolsPage])
+# `path`: a group named after its server (`server:<name>`) may hold a slash, which a caller sends encoded.
+@router.get("/{agent_id}/tool-apps/{app_id:path}/tools", response_model=Envelope[AppToolsPage])
 async def app_tools(
     rt: Rt,
     p: Reader,

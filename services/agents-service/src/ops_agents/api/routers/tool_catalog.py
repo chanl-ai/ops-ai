@@ -352,15 +352,16 @@ async def sign_in_by_module(rt: Runtime, team: str | None) -> dict[str, str]:
 
 
 async def team_tools(rt: Runtime, team: str | None, *, fresh: bool = False, listed: ToolRows | None = None) -> ToolRows:
-    """`known_tools` less another team's v1 workflows: what an agent of `team` may be granted. v2 workflows come
-    scoped to the selected team already; v1 registry workflows carry a team. Operations are tenant-wide, as the grant
-    check offers them."""
+    """`known_tools` less another team's v1 workflows and agents: what an agent of `team` may be granted. v2
+    workflows come scoped to the selected team already; v1 registry workflows and agents carry a team. Operations are
+    tenant-wide, as the grant check offers them."""
     known = await (known_tools(rt, fresh=fresh) if listed is None else known_tools(rt, listed=listed))
-    others = {
-        f"workflow:{w['id']}"
-        for w in await published_workflows(rt)
-        if team and w.get("team_id") not in (None, "", team)
-    }
+    if not team:
+        return known
+    others = {f"workflow:{w['id']}" for w in await published_workflows(rt) if w.get("team_id") not in (None, "", team)}
+    agents = {str(t["id"]).removeprefix("agent:") for t in known if str(t["id"]).startswith("agent:")}
+    owners = await registry(rt).tenant_owners(agents)
+    others |= {f"agent:{a}" for a, owner in owners.items() if owner not in ("", team)}
     return [t for t in known if t["id"] not in others]
 
 

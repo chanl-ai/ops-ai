@@ -285,7 +285,7 @@ async def _offered(rt: Runtime, directory: ToolRows | None) -> set[str] | None:
     return {t["id"] for t in await known_tools(rt, listed=directory)}
 
 
-def _stale(tool_ids: list[str], offered: set[str] | None) -> list[str]:
+def stale_tool_ids(tool_ids: list[str], offered: set[str] | None) -> list[str]:
     """Granted ids the directory no longer offers (unpublished, hidden, drifted or deleted). `workflow:` grants are
     judged by the workflow runner. Unknown when tools-service cannot answer: an agent page should not fail on it, so
     nothing is reported stale then."""
@@ -382,7 +382,7 @@ async def _view(rt: Runtime, agent_id: str, *, directory: ToolRows | Literal["as
 def _decorated(row: Json, offered: set[str] | None, uses: list[WorkflowUse]) -> AgentView:
     """An agent's reply from its row joined to its newest version's `spec` and its `tasks_24h`."""
     view = agent_view(row, cast(Json, row["spec"]), int(cast(int | str | float, row["tasks_24h"])))
-    view["staleToolIds"] = _stale(view["toolIds"], offered)
+    view["staleToolIds"] = stale_tool_ids(view["toolIds"], offered)
     view["usedIn"] = sorted(uses, key=lambda u: u["workflowName"])
     view["workflowIds"] = sorted({u["workflowId"] for u in uses if not u.get("own")})
     view["templateId"], view["protection"] = row.get("template_id"), row.get("protection")

@@ -573,8 +573,12 @@ class AgentToolApp(Out):
 
     id: str
     name: str
-    kind: Literal["plugin", "builtin", "custom", "workflows", "agents"]
+    # `other` holds the agent's grants that nothing offers now (a paused agent, or any tool while tools-service is
+    # down), so each can still be removed.
+    kind: Literal["plugin", "builtin", "custom", "workflows", "agents", "other"]
     connected: bool
+    # The app card's state as tools-service sends it, which the console's app state badge draws; none with no card.
+    app_state: str | None = None
     # tools-service's group for the app (`on`, `needs_you`, `needs_admin`, ...); none for a group with no app card.
     app_group: str | None = None
     sign_in: str | None = None
@@ -582,7 +586,9 @@ class AgentToolApp(Out):
     tools_total: int
     tools_offered: int
     tools_granted: int
-    # At most five, and only when the search matched a tool's words.
+    # The app's tools the team has not added, which the agent cannot be granted here: total less offered, at least 0.
+    not_added: int
+    # At most five, the first by label, and only when the search matched a tool's words.
     matches: list[AgentToolAppMatch]
 
 
