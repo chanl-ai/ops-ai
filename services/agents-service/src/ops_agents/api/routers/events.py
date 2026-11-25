@@ -16,7 +16,6 @@ from fastapi import APIRouter, Depends
 from sse_starlette import EventSourceResponse
 
 from ops_service_kit.errors import NotFound
-from ops_service_kit.http import Json
 
 from ...store.events import EventLog
 from .. import hitl_facade
@@ -33,15 +32,6 @@ Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 POLL_SECONDS = 0.25
 
 
-def _seen(me: Principal, team: str | None, wire: Json) -> Json:
-    """An event as `me` reads it: a waiting step's payload is a task's data, real only to who may decide it."""
-    data = wire.get("data")
-    if not isinstance(data, dict) or "payload" not in data:
-        return wire
-    asker = hitl_facade.asker_of(data.get("payload"))
-    return {**wire, "data": hitl_facade.as_seen_in(me, team, data, asker=asker)}
-
-
 async def run_frames(
     rt: Runtime, me: Principal, thread: tuple[str, str | None], run_id: str, after: int, *, follow: bool
 ) -> AsyncGenerator[dict[str, str]]:
@@ -52,7 +42,11 @@ async def run_frames(
         batch = await EventLog(store.engine).run_events(thread_id, run_id, cursor)
         for e in batch:
             cursor = e.seq
-            yield {"id": str(e.seq), "event": e.type, "data": json.dumps(_seen(me, team, e.wire()), ensure_ascii=False)}
+            yield {
+                "id": str(e.seq),
+                "event": e.type,
+                "data": json.dumps(hitl_facade.event_as_seen_in(me, team, e.wire()), ensure_ascii=False),
+            }
         if not follow:
             return
         # Ends when the run has, not at the first terminal type: the paused node's own end event follows `waiting`.
@@ -82,7 +76,7 @@ async def team_frames(
             thread_id = e.thread_id
             if not readable[thread_id]:
                 continue
-            wire = _seen(me, team_id, e.wire())
+            wire = hitl_facade.event_as_seen_in(me, team_id, e.wire())
             yield {"id": str(position), "event": f"thread.{e.type}", "data": json.dumps(wire, ensure_ascii=False)}
         if not follow:
             return

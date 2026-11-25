@@ -343,10 +343,12 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
         if existing.thread_id != thread_id or existing.status == "running":
             raise Conflict("That run id is already in use.", code="run_active")
         replay = existing.events
+        team = str(row["team_id"] or "") or None
 
         async def replayed() -> AsyncIterator[dict[str, str]]:
+            # A waiting step's payload in a replayed frame is a task's data, as the run's events show it.
             for e in replay:
-                yield _frame(e)
+                yield _frame(hitl_facade.event_as_seen_in(me, team, e))
 
         return EventSourceResponse(replayed(), sep="\n", ping=15)
 

@@ -196,6 +196,16 @@ def as_seen_in[T](reader: Principal, team: str | None, value: T, *, asker: str |
     return value if sees_real_values_in(reader, team, asker=asker) else cast(T, masked(value))
 
 
+def event_as_seen_in(reader: Principal, team: str | None, wire: Json) -> Json:
+    """A run's event as `reader` reads it: a waiting step's payload (`{id, payload}`) is a task's data, real only to who
+    may decide it (`as_seen_in`); any other event as it is."""
+    data = wire.get("data")
+    if not isinstance(data, dict) or "payload" not in data:
+        return wire
+    asker = asker_of(cast(Json, data).get("payload"))
+    return {**wire, "data": as_seen_in(reader, team, cast(Json, data), asker=asker)}
+
+
 def as_seen_by(reader: Principal, review: Listed) -> Listed:
     """A task as `reader` reads it (`sees_real_values`): its real values, or its personal data masked by the same rule
     as a run's page (`ops_pii.masked`), its ids, state and team kept at its top so it still opens, links and sorts; a

@@ -175,6 +175,13 @@ async def test_a_task_waiting_in_a_thread_reaches_no_one_but_its_deciders_with_r
             f"run events {r}": await c.get(f"/v1/threads/{task}/runs/{r}/events?follow=false", headers=james)
             for r in run_ids
         },
+        # A run id sent again replays the run's frames, the waiting step's included.
+        **{
+            f"run replayed {r}": await c.post(
+                f"/v1/threads/{task}/runs/stream", json={"input": {}, "runId": r}, headers=james
+            )
+            for r in run_ids
+        },
     }
     approve = person("usr_amy", ["team_ops"], role="approver")
     decided = await c.post(f"/reviews/{task}/decision", json={"decision": "approved"}, headers=approve)
