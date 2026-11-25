@@ -21,7 +21,7 @@ const KINDS = join(ROOT, 'services/tools-service/tests/plugin_kinds');
 const FOLDERS = readdirSync(KINDS).filter((n) => n.startsWith('kinds_')).map((n) => join(KINDS, n));
 const TEAM_APP = 'plugin:test.header-key';
 const OWN_APP = 'plugin:test.person-key';
-// Person desk offers both answers (team, person, person_or_team), so its Settings shows the whole question.
+// Person desk offers both answers (team, person), so its Settings shows the whole question.
 const BOTH_APP = 'plugin:test.person';
 
 // The fake model: a team record is read on the header key desk, the person's own on the person key desk, and the ask

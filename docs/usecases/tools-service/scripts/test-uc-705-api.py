@@ -10,7 +10,7 @@ from usecase_harness import check, data, finish
 
 with rig("uc-705") as r:
     sf = r.sf
-    retail_on(r, sign_in="person_or_team")
+    retail_on(r, sign_in="person")
     add_org(r, "EU org", sf["eu_login_url"], "kestrel.eu")
     # 1. The older single string still names the account, and the map wins over it when both are sent.
     before = r.calls_so_far()

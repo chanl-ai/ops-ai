@@ -72,7 +72,7 @@ await withUiStack(
   async (consoleUrl) => {
     mkdirSync(SHOTS, { recursive: true });
     const priya = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
-    const on = await fetch(`${tools}/v1/apps/${encodeURIComponent(SF)}/team`, { method: 'PUT', headers: priya, body: JSON.stringify({ enabled: true, signIn: 'person_or_team', settings: { login_url: 'https://login.salesforce.com/services/oauth2' } }) });
+    const on = await fetch(`${tools}/v1/apps/${encodeURIComponent(SF)}/team`, { method: 'PUT', headers: priya, body: JSON.stringify({ enabled: true, signIn: 'person', settings: { login_url: 'https://login.salesforce.com/services/oauth2' } }) });
     const turnedOn = await on.json();
     // The team's assistant gets Salesforce's read tools, as the Turn on window's box gives them, so the chat picker
     // lists Salesforce once it is on.

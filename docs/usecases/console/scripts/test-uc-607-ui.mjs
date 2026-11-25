@@ -252,9 +252,9 @@ try {
           let early = 0;
           const count = () => (early += 1);
           page.on('popup', count);
-          // Turning on starts with the shared team login; Person desk is the app each person signs in to, with the team
-          // account for runs nobody started, so Priya picks Each person signs in.
-          await page.getByTestId('connect-window-whose').locator('label[for="who-each"]').click();
+          // Who signs in has two answers. Priya keeps Everyone uses the team's login so the team's login signs in now;
+          // 13c turns Person desk to Each person signs in for the run that waits on her own login.
+          await page.getByTestId('connect-window-whose').locator('label[for="who-shared"]').click();
           await page.getByTestId('connect-window-authorize').click();
           const saved = ((await page.getByTestId('connect-window-result').innerText({ timeout: 60_000 })) ?? '').replace(/\s+/g, ' ');
           await page.waitForTimeout(1500);
@@ -289,8 +289,7 @@ try {
           await page.waitForURL((u) => u.pathname.startsWith('/data/connectors/'), { timeout: 60_000 });
           // The app's page opens on its Accounts tab, the one list of every account that signs in to it.
           await page.getByTestId('account-state-Person desk').waitFor({ timeout: 60_000 });
-          // Person desk signs each person in, so the header badge is Priya's own ("You: Needs sign-in") and the team row says
-          // the team's account is Connected.
+          // The team row says the team's login is Connected.
           await page.getByTestId('account-state-Person desk').filter({ hasText: 'Connected' }).waitFor({ timeout: 30_000 });
           const accounts = (await page.getByRole('tabpanel').innerText()).replace(/\s+/g, ' ');
           await shoot(page, 'app-connected-team');
@@ -301,6 +300,34 @@ try {
             suggested === 'Person desk · Operations' && /Cancel/.test(said) && /Person desk/.test(accounts) && /Default/.test(accounts) && detail.signedIn?.account === 'harbor.ops' && popups.length === 2,
             { said, accounts, signedIn: detail.signedIn, signIn: detail.signIn, windows: popups.length },
           );
+        }, page);
+
+        // Who signs in has two answers per account, so the walk sets the one each step is about: the team's login for
+        // the calls that name a team account (11-12), each person's own for the steps where people sign in (6-9, 13).
+        const setWho = async (signIn) => {
+          const app = required(await call(tools, 'GET', `/v1/apps/${encodeURIComponent(APP)}`, priya), 'read the app');
+          const out = [];
+          for (const a of (app.accounts ?? []).filter((x) => x.kind === 'team')) {
+            const held = required(await call(tools, 'GET', `/v1/apps/${encodeURIComponent(APP)}/accounts/${a.id}`, priya), 'read the account');
+            out.push((await call(tools, 'PATCH', `/v1/apps/${encodeURIComponent(APP)}/accounts/${a.id}`, priya, { revision: held.revision, signIn })).status);
+          }
+          return out;
+        };
+
+        await step('4b Priya picks Each person signs in on the app’s Settings; it saves each person with no team backup', async () => {
+          await page.goto(`${consoleUrl}/data/connectors/${encodeURIComponent(APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await page.getByTestId('app-tab-settings').click();
+          await page.getByTestId('app-everyone').locator('label[for="who-each"]').click();
+          const conn = (await cardOf(tools, priya, APP));
+          let detail = {};
+          for (let i = 0; i < 20 && detail.signIn !== 'person'; i++) {
+            await page.waitForTimeout(500);
+            detail = (await call(tools, 'GET', `/v1/apps/${APP}/accounts/${conn?.connectionId}`, priya)).data ?? {};
+          }
+          const offered = await page.getByTestId('app-everyone').locator('[role=radio]').count();
+          await shoot(page, 'app-each-person');
+          check('4b Priya picks Each person signs in on the app’s Settings; it saves each person with no team backup',
+            detail.signIn === 'person' && detail.teamBackup === false && offered === 2, { signIn: detail.signIn, teamBackup: detail.teamBackup, offered });
         }, page);
 
         // The window closes once access is allowed and the account's first test runs after it. A test call that then
@@ -715,6 +742,7 @@ try {
         }, page);
 
         await step('11 Priya connects another account named EU desk and allows it as the EU team account; both are listed, the first the default', async () => {
+          await setWho('team');
           await openAccounts(page, consoleUrl, APP);
           // Another team account is added from the Accounts tab; the header offers each person their own sign-in.
           await page.getByTestId('app-add-account').click();
@@ -753,6 +781,7 @@ try {
         }, page);
 
         await step('13 James connects his own EU desk account; his chat asks which, his pick becomes his default and the next call does not ask, and Make my default puts it back on Person desk', async () => {
+          await setWho('person');
           // A second account of his own is added from the card's menu on My connectors, under a name he picks.
           await james.goto(`${consoleUrl}/work/apps`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await james.getByTestId(`connector-menu-${APP}`).click();
@@ -816,8 +845,8 @@ try {
         // Task, not a failure. Priya may run it as the team account (connections.run), and it goes on.
         await step('13c a run Priya starts waits on a Human Task with Connect my account, and goes on as her once she connects from it', async () => {
           await stack.startWorker();
-          // A run acting for a person waits only while no team account stands in for them: each person signs in, with
-          // no team backup (Settings' switch keeps the team's as backup, so the API sets this one).
+          // A run acting for a person waits for their own login once each person signs in; the team's login is never a
+          // backup for it.
           const teamAccount = (await cardOf(tools, priya, APP))?.connectionId;
           const held = required(await call(tools, 'GET', `/v1/apps/${encodeURIComponent(APP)}/accounts/${teamAccount}`, priya), 'read the team account');
           const personal = await call(tools, 'PATCH', `/v1/apps/${encodeURIComponent(APP)}/accounts/${teamAccount}`, priya, { revision: held.revision, signIn: 'person', teamBackup: false });

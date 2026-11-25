@@ -61,8 +61,8 @@ list shows the same answer beside each tool's app.
 | **Each person signs in** | The first time, one card: **Sign in to <app> to continue**. After signing in the chat carries on, and later actions in that app ask nothing | The person's own login |
 
 Nobody is asked in a chat or a Human Task to choose between their own login and the team's. Each person manages their
-own sign-ins in **My apps**. On an app each person signs in to, runs nobody started, such as schedules, use the team's
-login where the app allows it. Changing the answer takes the `connections.manage` permission (team admins by default).
+own sign-ins in **My apps**. On an app each person signs in to, a run nobody started, such as a schedule, cannot call
+it: there is no person to act as, and the team's login is not used as a backup. Changing the answer takes the `connections.manage` permission (team admins by default).
 
 | Login | Used by | How to add it |
 |---|---|---|

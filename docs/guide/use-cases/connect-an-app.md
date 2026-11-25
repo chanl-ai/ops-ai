@@ -46,7 +46,7 @@ opsai chat say --agent "Case helper" -m "What is the status of case 00044818?"
 
 | Choice | Options | Default |
 |---|---|---|
-| Whose account calls use | The team's; each person's; each person's with the team's for runs nobody started | Asked when the App is first turned on |
+| Who signs in | Everyone uses the team's login; Each person signs in | Asked when the App is first turned on |
 | Give the assistant the read tools | On or off, when turning the App on | On |
 | Writes wait for a person | Don't ask, ask the person in the chat, ask a reviewer; per team, App or Tool | Don't ask |
 | Which tools the team uses | Each tool on or off on the App's **Tools** tab | All on |

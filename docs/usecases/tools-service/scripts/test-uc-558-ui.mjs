@@ -27,7 +27,7 @@ const LOGIN_HOST = 'login.salesforce.test';
 const OURS = [
   {"when": "\\bmove case (?P<case>\\S+) to (?P<status>[^.\\n]+)", "tool": "uc558_update_case", "arguments": {"status": "{status}"}},
   {"when": "\\bI connected (?P<system>[^.\\n]+)\\. Please go ahead", "tool": "uc558_update_case", "arguments": {"status": "Awaiting documents"}},
-  {"after": "uc558_update_case", "result": "has not connected their own", "text": "I did not change the case: Salesforce needs your own account for that. Connect it from the card above and I will go ahead."},
+  {"after": "uc558_update_case", "result": "has not signed in to", "text": "I did not change the case: Salesforce needs your own login for that. Sign in from the card above and I will go ahead."},
   {"after": "uc558_update_case", "text": "The case is now Awaiting documents, changed with your Salesforce account."},
 ];
 const RULES = evidenceDir('558', 'model');
@@ -260,9 +260,9 @@ try {
           await everyone.locator('label[for="who-shared"]').click();
           const off = await until('team');
           await everyone.locator('label[for="who-each"]').click();
-          // On saves person_or_team: each person's own account first, the team account for runs nobody started.
-          const on = await until('person_or_team');
-          check('17 Priya reads People can connect their own account on the app’s Settings, turns it off and back on', first === 'checked' && off.signIn === 'team' && on.signIn === 'person_or_team', { first, off: off.signIn, on: on.signIn });
+          // Each person signs in saves person: the team's login is never a backup for a person's run.
+          const on = await until('person');
+          check('17 Priya reads People can connect their own account on the app’s Settings, turns it off and back on', first === 'checked' && off.signIn === 'team' && on.signIn === 'person' && on.teamBackup === false, { first, off: off.signIn, on: on.signIn });
         }, admin);
 
         await step('18 she connects her own account from My connectors', async () => {

@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory() as tmp, rig("uc-705s") as r:
     services = {"platform": f"http://127.0.0.1:{PLATFORM_PORT}", "tools": f"http://127.0.0.1:{TOOLS_PORT}",
                 "agents": f"http://127.0.0.1:{AGENTS_PORT}"}  # fmt: skip
     sf = r.sf
-    retail_on(r, sign_in="person_or_team")
+    retail_on(r, sign_in="person")
     add_org(r, "EU org", sf["eu_login_url"], "kestrel.eu")
     priya = OpsAI.sign_in(PRIYA, "northfield-demo", team="team_ops", base_url="http://127.0.0.1", services=services)
     page = priya.apps.get(SF)

@@ -68,7 +68,7 @@ with ExitStack() as stack:
 
     # 1. S1: the window's answer turns Salesforce on: each person's own account with the team account for runs
     # nobody started, the sign-in address kept as a default on Ops AI's auth config, and every tool added.
-    body = {"enabled": True, "signIn": "person_or_team", "settings": {"login_url": sf["login_url"]}}
+    body = {"enabled": True, "signIn": "person", "settings": {"login_url": sf["login_url"]}}
     on = gw.put(f"/v1/apps/{SF}/team", json=body, headers=priya)
     card = data(on) or {}
     page = data(gw.get(f"/v1/apps/{SF}", headers=priya)) or {}
@@ -80,7 +80,7 @@ with ExitStack() as stack:
         "account for unattended runs, and every tool added",
         on.status_code == 200 and (place.get("value"), place.get("mode")) == (sf["login_url"], "default")
         and card.get("toolsAdded") == len(page.get("tools") or []) and every_read_added(page)
-        and account.get("signIn") == "person_or_team",
+        and account.get("signIn") == "person",
         {"place": (place.get("value"), place.get("mode")), "added": card.get("toolsAdded"), "reads": len(reads(page)),
          "signIn": account.get("signIn"), "configs": [(c.get("type"), c.get("fields")) for c in page.get("authConfigs") or []]},
     )  # fmt: skip
@@ -97,7 +97,7 @@ with ExitStack() as stack:
     )  # fmt: skip
 
     # 3. S1: the same for GitHub, whose read tools are its own.
-    gh_on = gw.put(f"/v1/apps/{GH}/team", json={"enabled": True, "signIn": "person_or_team"}, headers=priya)
+    gh_on = gw.put(f"/v1/apps/{GH}/team", json={"enabled": True, "signIn": "person"}, headers=priya)
     gh_page = data(gw.get(f"/v1/apps/{GH}", headers=priya)) or {}
     gh_gave = data(runtime.post("/v1/team-assistant/app-tools", json={"moduleIds": (data(gh_on) or {}).get("moduleIds")}, headers=priya))  # fmt: skip
     check(

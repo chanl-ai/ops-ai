@@ -56,7 +56,8 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | 1 | Priya opens Connections | a card for Person desk with 1 tool, Plugin and Connect; the page read `GET /v1/apps` and no other list |
 | 2 | She searches "person" | the count reads 1 of N and only Person desk shows |
 | 3 | She presses Connect on Person desk, then Connect in the window, and the system sends her back refused (error=access_denied) | the window offers the auth config, Add your own app, Test account, Team account and More options folded; the sign-in window opens on the console's connect page; both windows say access was not given, and Connect works again |
-| 4 | She picks Each person signs in (turning on starts with the shared team login), opens More options, names the account Person desk, presses Connect and allows access as harbor.ops in the system's window | the window closes, the app's page opens on Accounts reading Connected, with Person desk as Default |
+| 4 | She keeps Everyone uses the team’s login, opens More options, names the account Person desk, presses Connect and allows access as harbor.ops in the system's window | the window closes, the app's page opens on Accounts reading Connected, with Person desk as Default |
+| 4b | She opens Settings and picks Each person signs in | The account saves `person` with no team backup; the question offers two answers. Who signs in has two answers per account, so the walk sets the team's login before 11 and each person before 13 through the API |
 | 5 | James opens My accounts | Person desk with Connect |
 | 6 | He presses Connect and allows access as james.person | the row reads Connected as james.person |
 | 7 | He asks the agent in chat for a record, then opens the app's Logs tab | the chat answers with the record read as james.person; Logs lists Read a record as James, Succeeded |
@@ -101,7 +102,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | api | `console/scripts/test-uc-607-api.py` | target: 21 and 23 wait on S1 and D2 |
 | sdk | `console/scripts/test-uc-607-sdk.py` | target: waits on K1 |
 | cli | `console/scripts/test-uc-607-cli.py` | target: waits on L1 |
-| ui | `console/scripts/test-uc-607-ui.mjs` | passing (2026-11-12): 41 of 41 checks. Step 19 follows the console's Add account and its required account name |
+| ui | `console/scripts/test-uc-607-ui.mjs` | passing (2026-11-25): 42 of 42 checks. Step 19 follows the console's Add account and its required account name |
 
 ## Non-vacuous check
 

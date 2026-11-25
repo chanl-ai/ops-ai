@@ -408,7 +408,7 @@ with ExitStack() as stack:
     )
     backup = gw.patch(
         f"/v1/apps/{conn.get('id')}/accounts/{conn.get('id')}",
-        json={"revision": revision, "signIn": "person_or_team", "teamBackup": True},
+        json={"revision": revision, "teamBackup": True},
         headers=priya,
     )
     team = gw.post(
@@ -438,15 +438,15 @@ with ExitStack() as stack:
         timeout=30,
     )
     check(
-        "9 a call with nobody behind it is refused while the backup is off, and uses the team account once it is on",
+        "9 a call with nobody behind it is refused, the team login cannot be made a backup, and the call stays refused",
         "CONNECTION_NOT_LINKED" in nobody.text
-        and backup.status_code == 200
-        and behind.status_code == 200
-        and editors(sf)[2:] == ["svc-claims@kestrel.example"],
+        and backup.status_code == 400
+        and "CONNECTION_NOT_LINKED" in behind.text
+        and editors(sf)[2:] == [],
         (nobody.text[:200], backup.text[:200], behind.text[:200], editors(sf)),
     )
 
-    # 9b. An operation marked needsPerson never takes the team backup, even with it on.
+    # 9b. An operation marked needsPerson is refused with nobody behind it.
     module_id = str(published.get("id"))
     marked = gw.patch(f"/v1/tool-modules/{module_id}/operations/{op.get('id')}", json={"needsPerson": True})
     asked = required(gw.post(f"/v1/tool-modules/{module_id}/versions", json={"note": "uc-558 needs a person"}), "request a security review")
@@ -464,8 +464,8 @@ with ExitStack() as stack:
         timeout=30,
     )
     check(
-        "9b an operation that needs a person is refused with nobody behind it, though the team backup is on",
-        marked.status_code == 200 and "needs_person" in person_only.text,
+        "9b an operation that needs a person is refused with nobody behind it",
+        marked.status_code == 200 and "CONNECTION_NOT_LINKED" in person_only.text,
         (marked.text[:200], person_only.text[:300]),
     )
 

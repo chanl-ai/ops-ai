@@ -24,16 +24,16 @@ Design: the several accounts per app design.
 | # | Step | Expected |
 |---|---|---|
 | 1 | Retail org and EU org, both on the shared team login; a call names EU org for Maya | The fake sees the team's login at EU org |
-| 2 | Priya changes EU org to each person, with the team's login kept for runs nobody started; Maya signs in | The row reads `person_or_team` and counts one person signed in |
+| 2 | Priya changes EU org to Each person signs in; Maya signs in | The row reads `person` and counts one person signed in |
 | 3 | A call names EU org for Maya | The fake sees Maya's own login, at EU org |
-| 4 | A call names EU org for nobody, as a schedule's does | The fake sees the team's login |
+| 4 | A call names EU org for nobody, as a schedule's does | Refused `CONNECTION_NOT_LINKED`; the fake sees no call |
 
 ## What would make a step pass with the code broken
 
 | Step | Guard against a vacuous pass |
 |---|---|
 | 3 | With `PluginHost` ignoring the account's `sign_in` and always using the team login, the fake sees the team's login |
-| 4 | With the team's backup dropped on the change, the call acting for nobody is refused |
+| 4 | With the team login used as a backup for each person, the fake sees the team's login |
 
 ## Scripts
 

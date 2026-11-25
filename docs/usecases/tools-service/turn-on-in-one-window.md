@@ -46,7 +46,7 @@ Design: the app set-up design (one Turn on window, two questions and one choice)
 |---|---|
 | 1 | The run starts on a fresh database, so the turn-on is a first one; the count of tools added is compared with the read tools on the app's page |
 | 2 | The second call must answer `already` and leave the assistant's version as it was |
-| 10 | The turn-on is repeated per person (`signIn: person_or_team`) before James asks, so the card can only come from the per-person rule; the card must name Salesforce and the chat must not answer from the team account. Left on the window's default, James's chat runs as the team, ends in an error and shows no card, and the step fails |
+| 10 | The turn-on is repeated per person (`signIn: person`) before James asks, so the card can only come from the per-person rule; the card must name Salesforce and the chat must not answer from the team account. Left on the window's default, James's chat runs as the team, ends in an error and shows no card, and the step fails |
 | 8 | Popups are counted from before Turn on is pressed until the saved state shows, and the app's account must exist after it |
 | 11-12 | The admin's page is checked for the app's own Turn on button and the member's for the absence of any link to the app's page |
 
