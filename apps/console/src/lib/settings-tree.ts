@@ -38,7 +38,7 @@ export interface SettingsEntry {
 export const SETTINGS_NAV: SettingsEntry[] = [
   { id: 'workspace-general', title: 'General', href: '/settings/workspace', icon: IconAdjustmentsHorizontal, description: 'The workspace’s name, address and logo', group: 'Workspace' },
   { id: 'storage', title: 'Storage', href: '/settings/workspace/storage', icon: IconServer, description: 'Where files are kept, upload limits, scanning and retention', group: 'Workspace', needs: STORAGE_SETTINGS },
-  { id: 'model-connections', title: 'Connections', href: '/settings/workspace/model-providers', icon: IconCpu, description: 'Where the workspace’s AI models are called, and the key each one signs in with', group: 'Workspace', section: 'Models', needs: MODELS_MANAGE },
+  { id: 'model-connections', title: 'Connections', href: '/settings/workspace/model-providers', icon: IconCpu, description: 'Model providers: where the workspace’s AI models are called, and the key each one signs in with', group: 'Workspace', section: 'Models', needs: MODELS_MANAGE },
   { id: 'model-aliases', title: 'Aliases', href: '/settings/workspace/model-aliases', icon: IconTag, description: 'The names builders pick on an agent, and the model each one calls', group: 'Workspace', section: 'Models', needs: MODELS_MANAGE },
   { id: 'agent-instructions', title: 'Agent instructions', href: '/settings/agent-instructions', icon: IconBrain, description: 'The sections an agent’s brief may hold, their order and their presets', group: 'Workspace' },
   { id: 'usage', title: 'Usage and cost', href: '/settings/workspace/usage', icon: IconChartBar, description: 'Tokens, model cost and tool calls for chargeback', group: 'Workspace', needs: USAGE },

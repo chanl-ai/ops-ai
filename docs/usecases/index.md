@@ -318,4 +318,4 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-782 | agents-service | Only a person who may decide a review decides, resumes or replays it | api | `agents-service/only-a-person-who-may-decide.md` |
 | uc-790 | tools-service | A chat user never chooses between their own login and the team's | api, ui | `tools-service/chat-never-asks-whose-login.md` |
 | uc-791 | models-service | A provider type added as a file shows in the add list | api | `models-service/a-provider-type-added-as-a.md` |
-| uc-792 | models-service | An admin connects Anthropic and an agent's model settings reach its chat | api | `models-service/an-admin-connects-anthropic-and-an.md` |
+| uc-792 | models-service | An admin connects Anthropic and an agent's model settings reach its chat | api, ui | `models-service/an-admin-connects-anthropic-and-an.md` |

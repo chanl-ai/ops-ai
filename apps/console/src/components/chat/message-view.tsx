@@ -310,7 +310,7 @@ export function AssistantMessage({
             <div className="flex flex-wrap gap-2">
               {refusal?.fixAt && (
                 <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" asChild>
-                  <Link href={refusal.fixAt}>Open Connections</Link>
+                  <Link href={refusal.fixAt}>Open Model providers</Link>
                 </Button>
               )}
               {onRegenerate && !readOnly && mayRetry && (
