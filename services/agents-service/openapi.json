@@ -28721,6 +28721,7 @@
     },
     "/reviews/bulk-decision": {
       "post": {
+        "description": "Decides each review as one decision would. Someone whose role decides no reviews in the team they act in is\nrefused outright (403), as `assign` refuses them; anyone else gets a result per id.",
         "operationId": "reviews_bulk_decide",
         "parameters": [
           {

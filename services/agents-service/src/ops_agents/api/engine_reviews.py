@@ -1119,13 +1119,17 @@ async def get(rt: Runtime, review_id: str) -> EngineReview:
     raise NotFound("Review")
 
 
-async def _check_decider(rt: Runtime, approver: Principal, run: Json, calls: list[Json]) -> None:
+async def _check_decider(
+    rt: Runtime, approver: Principal, run: Json, calls: list[Json], paused: ReviewPayload | None = None
+) -> None:
     """Who may decide a run's review: a reviewer or admin of the run's team, whatever the writes it decides (`calls`)
     are, and not who started the run or whom the step names in requestedBy while requesterMayDecide is off.
     Anyone the step names in notDecidedBy is refused whatever the policy, such as whoever saved the version it
     approves."""
     del calls
-    paused = PAYLOAD(WAITING(run.get("waiting") or {}).get("payload") or {})
+    # `paused`: the step a decision was recorded on, once the run no longer waits on it.
+    if paused is None:
+        paused = PAYLOAD(WAITING(run.get("waiting") or {}).get("payload") or {})
     # `entries` iterates as `or []` did: a number in either list still fails the check rather than passing it.
     barred = {str(x).lower() for x in entries(paused.get("notDecidedBy"))}
     if approver.email.lower() in barred:
@@ -1224,6 +1228,10 @@ async def decide(
     if not waiting:
         earlier = await _decisions(rt, run_id)
         if earlier:
+            # A repeat is answered only to someone who may decide the step it was recorded on, before it says what was
+            # decided.
+            decided = PAYLOAD(RESUME_ROW(earlier[-1]).get("payload") or {})
+            await _check_decider(rt, approver, run, held_calls(json_object(decided)), decided)
             was = DECISION(RESUME_ROW(earlier[-1]).get("resume") or {})
             if decision in (was.get("decision"), was.get("option")):
                 return await view(rt, run, earlier[-1])

@@ -101,7 +101,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Bulk Decide */
+        /**
+         * Bulk Decide
+         * @description Decides each review as one decision would. Someone whose role decides no reviews in the team they act in is
+         *     refused outright (403), as `assign` refuses them; anyone else gets a result per id.
+         */
         post: operations["reviews_bulk_decide"];
         delete?: never;
         options?: never;

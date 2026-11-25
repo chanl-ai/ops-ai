@@ -23,3 +23,15 @@ async def test_a_viewer_is_refused_and_a_builder_gets_a_result_per_id(
     assert (viewer.status_code, viewer.json()["error"]["code"]) == (403, "role_required"), viewer.text
     builder = await client.post("/reviews/assign", json={"ids": ["rev_missing"]}, headers=BUILDER)
     assert builder.status_code == 200 and builder.json()["data"]["skipped"][0]["id"] == "rev_missing", builder.text
+
+
+async def test_a_viewers_bulk_decision_is_refused_outright(
+    stack: tuple[AsyncClient, AsyncEngine],  # noqa: F811
+) -> None:
+    """A viewer's bulk decision answered 200 with every id skipped, where one decision by them is refused 403."""
+    client, _ = stack
+    body = {"ids": ["rev_missing"], "decision": "approved"}
+    viewer = await client.post("/reviews/bulk-decision", json=body, headers=VIEWER)
+    assert (viewer.status_code, viewer.json()["error"]["code"]) == (403, "role_required"), viewer.text
+    builder = await client.post("/reviews/bulk-decision", json=body, headers=BUILDER)
+    assert builder.status_code == 200 and builder.json()["data"]["skipped"][0]["id"] == "rev_missing", builder.text
