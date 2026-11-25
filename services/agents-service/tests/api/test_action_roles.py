@@ -146,6 +146,18 @@ async def test_a_v1_thread_and_its_run_need_the_run_start_rule(stack: tuple[Asyn
     assert refused(viewer) and key.status_code == 201 and refused(run), (viewer.text, key.text, run.text)
 
 
+async def test_a_v1_thread_with_an_agent_needs_the_chat_rule(stack: tuple[AsyncClient, AsyncEngine]) -> None:
+    c, _ = stack
+    body: dict[str, Any] = {"graph": "agent:ag_fraud", "metadata": {}}
+    made = [await c.post("/v1/threads", json=body, headers=h) for h in (VIEWER, KEY)]
+    outsider = await c.post("/v1/threads", json=body, headers=OUTSIDER)
+    assert [r.status_code for r in made] == [201, 201], [r.text for r in made]
+    assert refused(outsider, "team_forbidden"), outsider.text
+    tid = made[0].json()["data"]["threadId"]
+    run = await c.post(f"/v1/threads/{tid}/runs/stream", json={"input": {"message": "Hello"}}, headers=VIEWER)
+    assert run.status_code == 200 and sse_events(run.text)[-1]["event"] == "end", run.text
+
+
 async def paused_case(c: AsyncClient, budget: dict[str, Any] | None = None) -> str:
     body: dict[str, Any] = {"graph": "complex_workflow", "metadata": {}, **({"budget": budget} if budget else {})}
     tid = (await c.post("/v1/threads", json=body, headers=BUILDER)).json()["data"]["threadId"]

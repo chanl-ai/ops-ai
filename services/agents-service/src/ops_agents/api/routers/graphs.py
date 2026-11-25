@@ -47,6 +47,7 @@ from ..auth import (
     graph_target,
     principal,
     require_builder,
+    require_chat_use,
     require_key_reaches,
     require_runs_start,
     require_step_up,
@@ -166,8 +167,17 @@ def _thread_view(row: Json) -> Json:
 async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONResponse:
     """A thread and its budget, written in the request transaction, so a failure between the two leaves no thread
     without its budget. Nothing here calls another service: the key admission port answers in this process."""
-    # A thread is made to run: the run-start rule, in the team it is made in.
-    require_runs_start(me, team_id=None, what=f"graph {body.graph}")
+    agent_id = body.graph.removeprefix("agent:") if body.graph.startswith("agent:") else None
+    owners = await registry(rt).tenant_owners({agent_id}) if agent_id is not None else {}
+    if agent_id is not None and agent_id not in owners:
+        # A deleted agent and another tenant's read the same: the catalogue holds every tenant's.
+        raise ValidationFailed(f"Unknown graph {body.graph}: no such agent.")
+    if agent_id is not None and not me.is_key:
+        # A person's thread with an agent is a chat, open to every role of the agent's team (chat.run).
+        require_chat_use(me, team_id=owners[agent_id] or None)
+    else:
+        # A workflow thread, or a key's, is made to run: the run-start rule, in the team it is made in.
+        require_runs_start(me, team_id=None, what=f"graph {body.graph}")
     key_pin = require_key_reaches(me, *graph_target(body.graph))
     if key_pin is not None and body.version not in (None, key_pin):
         raise Forbidden(f"This API key starts version {key_pin} of {body.graph} only.", code="key_target")
@@ -179,11 +189,6 @@ async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONRespons
     thread_id = new_id("gth")
     version: int | None = None
     digest: str | None = None
-    if body.graph.startswith("agent:") and body.graph.removeprefix("agent:") not in await registry(rt).tenant_owners(
-        {body.graph.removeprefix("agent:")}
-    ):
-        # A deleted agent and another tenant's read the same: the catalogue holds every tenant's.
-        raise ValidationFailed(f"Unknown graph {body.graph}: no such agent.")
     if body.graph.startswith("agent:") and rt.catalog.agent(body.graph.removeprefix("agent:")) is None:
         # Its graph stays compiled while turns under way drain; no new thread starts on it.
         await refuse_new_turns(rt, body.graph.removeprefix("agent:"))
@@ -409,7 +414,11 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
     else:
         if waiting:
             raise Conflict("This thread is waiting for a decision; resume it instead.", code="run_waiting")
-        require_runs_start(me, team_id=str(row["team_id"] or "") or None, what=f"thread {thread_id}")
+        if row["graph"].startswith("agent:") and not me.is_key:
+            # A person's turn with an agent is a chat message: chat.run in the agent's team, as opening the thread.
+            require_chat_use(me, team_id=await agent_team(rt, row["graph"].removeprefix("agent:")))
+        else:
+            require_runs_start(me, team_id=str(row["team_id"] or "") or None, what=f"thread {thread_id}")
         # A paused agent takes no new turn on its own graph or the shared wrapper; a turn already under way finishes.
         agent_id = None
         if row["graph"].startswith("agent:"):
