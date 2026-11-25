@@ -457,7 +457,10 @@ class Authenticator:
         message = (
             f"This operation signs in to {name} as a person only, and this call acts for nobody."
             if backed
-            else f"{name} signs in as each person, and this call acts for nobody."
+            else (
+                f"{name} signs in as each person, and a run nobody started acts for no one. Set {name} to Everyone "
+                "uses the team's login, or have a person start the run."
+            )
         )
         reason: NotLinkedReason = "needs_person" if backed else "no_person"
         details: Json = {
