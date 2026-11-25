@@ -31,6 +31,7 @@ from .case_type_seeds import seeded_case_types
 from .deps import Runtime
 from .engine_reviews import Titles, ask_policies, titles_by_run, tools_of, view
 from .file_names import named
+from .hitl_facade import as_seen_by
 from .review_sla import sla_hours
 from .review_text import operations
 from .run_story import FileRef, files_in, masked_story
@@ -367,7 +368,8 @@ async def assembled(
     now = datetime.now(UTC)
     case_id, team = str(row.id), str(row.team_id)
     runs, case_type, typed, deadline = reads.runs, reads.case_type, reads.typed, reads.deadline
-    reviews = await _reviews(rt, case_id, reads)
+    # As the task's own page shows each one: real values only to whoever may decide it.
+    reviews = [cast(Json, as_seen_by(me, r)) for r in await _reviews(rt, case_id, reads)]
     waiting = waiting_of(reviews)
     clock = timer(row, deadline, an_object(sla(row, now)["resolution"], "the resolution clock"), now)
     emails, related = reads.emails, reads.related

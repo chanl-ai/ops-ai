@@ -519,6 +519,8 @@ async def get_thread(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     for w in (w for m in messages for w in m.widgets or [] if isinstance(w, ApprovalWidget)):
         if w.state in ("pending", "awaiting_second"):
             w.can_decide = await hitl_facade.can_decide(rt, me, thread_id)
+    # An approval card's values as its task shows them to this reader: real only to whoever may decide it.
+    messages = [hitl_facade.message_as_seen_by(me, m, row.team_id) for m in messages]
     # Ops cards are drawn from their records as this reader sees them now.
     await fill_cards(rt, me, messages)
     return ok(thread_view(rt, row, messages).wire())
@@ -937,11 +939,14 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
                 async for e in run:
                     for out in builder.apply_run_event(e):
                         # The live card says whether this reader may decide it, as the thread read does: the
-                        # person who asked for a write never sees Approve on it.
+                        # person who asked for a write never sees Approve on it; its values are as its task shows them.
                         w = getattr(out, "widget", None)
-                        if isinstance(w, ApprovalWidget) and w.state in ("pending", "awaiting_second"):
-                            w.can_decide = await hitl_facade.can_decide(rt, me, thread_id)
-                        yield _frame(out)
+                        shown = out
+                        if isinstance(w, ApprovalWidget):
+                            if w.state in ("pending", "awaiting_second"):
+                                w.can_decide = await hitl_facade.can_decide(rt, me, thread_id)
+                            shown = out.model_copy(update={"widget": hitl_facade.card_as_seen_by(me, w, row.team_id)})
+                        yield _frame(shown)
             # Roles decide approvals: a person who may decide this write themselves is not
             # asked. It is decided as theirs through the path the Approve button takes, so the token, the record and
             # the four-eyes rule are the same; a write that needs a step-up still asks them. The thread read after
@@ -971,11 +976,12 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
             err = run_error(assistant.error_code or "internal_error", assistant.error)
             said = assistant.error if assistant.error_code else err.user_message
             partial = assistant if assistant.error_code else assistant.model_copy(update={"error": said})
+            partial = hitl_facade.message_as_seen_by(me, partial, row.team_id)
             yield _frame(
                 ErrorEvent(message=said, partial=partial, code=err.code, kind=err.kind, retryable=err.retryable)
             )
         else:
-            yield _frame(DoneEvent(message=assistant))
+            yield _frame(DoneEvent(message=hitl_facade.message_as_seen_by(me, assistant, row.team_id)))
 
     # `sep="\n"`: the console splits frames on a blank line made of "\n\n", not "\r\n\r\n".
     return EventSourceResponse(stream(), sep="\n", ping=15)
@@ -1032,7 +1038,7 @@ async def widget_action(
     step-up for money, the approval token, then the resume, whose reply is a new assistant message. An approver who is
     not the chat's owner decides here too, so the owner rule is left to the review policy; the team rule holds. Off
     the request transaction: the resume runs the model."""
-    await _thread_row(rt, None, thread_id)
+    row = await _thread_row(rt, None, thread_id)
     message = next(
         (m for m in (await messages_of(rt, [thread_id], reader=person_of(me)))[thread_id] if m.id == message_id), None
     )
@@ -1066,4 +1072,5 @@ async def widget_action(
     decided = next(
         m for m in (await messages_of(rt, [thread_id], reader=person_of(me)))[thread_id] if m.id == message_id
     )
-    return ok(next(w for w in decided.widgets or [] if w.id == widget_id).wire())
+    card = next(w for w in decided.widgets or [] if w.id == widget_id)
+    return ok((hitl_facade.card_as_seen_by(me, card, row.team_id) if isinstance(card, ApprovalWidget) else card).wire())

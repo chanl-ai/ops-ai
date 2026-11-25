@@ -22,7 +22,7 @@ import hashlib
 import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import replace
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Literal, cast, get_args
 
 from fastapi import Header, Request
 
@@ -42,6 +42,15 @@ Introspect = Callable[[str], Awaitable[Json | None]]
 # or policy change.
 CurrentVersion = Callable[[str], Awaitable[int | None]]
 READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+# An API key's scopes, in the order a key lists them, and what each lets it call: a key without `write` may only send
+# READ_METHODS (`Identity.__call__`). platform-service creates keys with these and lists them on
+# GET /v1/settings/lookups.
+KeyScope = Literal["read", "write"]
+KEY_SCOPES: dict[KeyScope, str] = {
+    "read": "Read: look things up, never change them",
+    "write": "Write: start runs and change records",
+}
+assert tuple(KEY_SCOPES) == get_args(KeyScope), "every key scope needs its label, in order"
 KEY_PREFIX = "ok_"
 log = get_logger(__name__)
 

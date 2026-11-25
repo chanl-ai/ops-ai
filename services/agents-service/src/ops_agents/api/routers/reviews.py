@@ -185,6 +185,7 @@ async def list_reviews(rt: Rt, me: Reader, q: Annotated[ReviewsQuery, Query()]) 
                 approver=me,
                 reads=reads,
             )
+    rows["data"] = [hitl_facade.as_seen_by(me, r) for r in rows["data"]]
     return ok(rows)
 
 
@@ -208,7 +209,7 @@ async def get_review_by_run_key(rt: Rt, me: Reader, run_key: str) -> JSONRespons
         raise NotFound("Review")
     latest = max(runs, key=lambda r: (r["created_at"], r["run_key"]))
     review = await hitl_facade.with_assignee(rt, await hitl_facade.get_review(rt, str(latest["id"])))
-    return ok(await _with_can_decide(rt, me, review))
+    return ok(hitl_facade.as_seen_by(me, await _with_can_decide(rt, me, review)))
 
 
 class QueuePlace(Out):
@@ -240,7 +241,7 @@ async def get_queue_place(
 @console_router.get("/{thread_id}", response_model=Envelope[Review])
 async def get_review(rt: Rt, me: Reader, thread_id: str) -> JSONResponse:
     with one_read_per_tool():
-        return ok(await hitl_facade.review_for(rt, me, thread_id))
+        return ok(hitl_facade.as_seen_by(me, await hitl_facade.review_for(rt, me, thread_id)))
 
 
 @console_router.post("/{thread_id}/decision", response_model=Envelope[Review])
@@ -255,14 +256,15 @@ async def decide(rt: Rt, me: Me, thread_id: str, body: ReviewDecisionInput) -> J
         amount=body.amount,
         inputs=body.inputs,
     )
-    return ok(review)
+    # A decision posted again reaches here only for someone who may decide the task (hitl_facade.decide).
+    return ok(hitl_facade.as_seen_by(me, review))
 
 
 @console_router.post("/{thread_id}/team-account", response_model=Envelope[Review])
 async def run_as_team_account(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     """Run as the team account: a run waiting for a person's own account of an app goes on with the app's team account,
     for a person who may use it (connections.run), on an app that has one."""
-    return ok(await engine_reviews.run_as_team_account(rt, me, thread_id))
+    return ok(hitl_facade.as_seen_by(me, await engine_reviews.run_as_team_account(rt, me, thread_id)))
 
 
 class BulkDecisionInput(In):

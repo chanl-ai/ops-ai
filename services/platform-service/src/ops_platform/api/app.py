@@ -17,8 +17,8 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from ops_access import ACTIONS, ANY_TEAM, AREAS, SECURITY_TEAM_ACTIONS
 from ops_access.catalogue import ADMIN, FIXED_ROLES, Grant
+from ops_identity import KEY_SCOPES, ServiceAuth, ServiceClient, service_verifiers
 from ops_identity import Principal as Caller
-from ops_identity import ServiceAuth, ServiceClient, service_verifiers
 from ops_identity.acting_for import person_of as acting_person_of
 from ops_identity.acting_for import refused as acting_for_refused
 from ops_identity.fastapi import Tx
@@ -147,6 +147,7 @@ from .schemas import (
     RoleOut,
     RolePatchIn,
     SessionOut,
+    SettingsLookups,
     SignIn,
     SignInSecretIn,
     SignInSecretOut,
@@ -1670,6 +1671,12 @@ def create_public_app(
         return Response(status_code=204)
 
     keys = ApiKeys(KeyStore(store.db), people)
+
+    @app.get("/v1/settings/lookups", tags=["api-keys"], response_model=Envelope[SettingsLookups], responses=ERRORS)
+    async def settings_lookups(_: Tx, __: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """The scopes an API key is created with, each with what it lets the key call: the list the key check
+        enforces (`ops_identity.KEY_SCOPES`), so the keys screen never offers one the service refuses."""
+        return ok({"apiScopes": [{"value": v, "label": label} for v, label in KEY_SCOPES.items()]})
 
     @app.get("/v1/api-keys", tags=["api-keys"], response_model=Envelope[ListResult[ApiKeyOut]], responses=ERRORS)
     async def list_api_keys(  # pyright: ignore[reportUnusedFunction]

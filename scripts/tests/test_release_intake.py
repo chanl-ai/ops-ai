@@ -260,7 +260,9 @@ def test_rerun_runs_only_the_jobs_the_earlier_report_marked_red(tmp_path: Path) 
         '#!/bin/sh\necho "make $*" >> "$FAKE_LOG"\necho "FAILED tests/t.py::test_x - boom"\nexit 1\n'
     )
     (bin_dir / "make").chmod(0o755)
-    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "FAKE_LOG": str(tmp_path / "calls.log")}
+    # A release or hotfix branch's CI run plans every job, which asks make for the pool; this test is about the rerun.
+    plain = {k: v for k, v in os.environ.items() if k not in ("GITHUB_REF", "CI_FULL")}
+    env = {**plain, "PATH": f"{bin_dir}:{os.environ['PATH']}", "FAKE_LOG": str(tmp_path / "calls.log")}
     done = subprocess.run(
         [sys.executable, str(SCRIPTS / "ci_local.py"), "--base", "HEAD", "--rerun", str(tmp_path / "earlier.json"),
          "--out", str(tmp_path / "now.json")],

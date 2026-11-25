@@ -1,4 +1,4 @@
-import type { AccessCheck, ApiKey, Holders, Me, PersonPermissions, RoleCreated, RoleDetail, RoleGrant, RoleHolder, RoleSummary, WhyNot } from '@/lib/types/settings';
+import type { AccessCheck, ApiKey, ApiScope, Holders, Me, PersonPermissions, RoleCreated, RoleDetail, RoleGrant, RoleHolder, RoleSummary, WhyNot } from '@/lib/types/settings';
 import type { ListResult } from '@/lib/types/query';
 import type { Team } from '@/lib/types/team';
 
@@ -72,7 +72,7 @@ export function createPlatformWorkspaceTeamsHttp(baseUrl: string): OpsApi['works
 /**
  * The team's API keys (/v1/api-keys), the one list every keys screen reads (Settings › Team › API keys, an MCP link's
  * Keys tab), one page at a time with its search and total. A key's
- * scopes there are `read` and `write`; a console scope that changes anything (`runs:write`) asks for write.
+ * scopes there are `read` and `write` (GET /v1/settings/lookups lists them); `write` always carries `read`.
  */
 export function createPlatformApiKeysHttp(baseUrl: string): OpsApi['settings']['apiKeys'] {
   const { get, send, qs } = createTransport(`${baseUrl}/v1`);
@@ -95,5 +95,6 @@ export function createPlatformApiKeysHttp(baseUrl: string): OpsApi['settings']['
     revoke: async (id) => {
       await send('POST', `/api-keys/${encodeURIComponent(id)}/revoke`);
     },
+    scopes: async () => (await get<{ apiScopes: ApiScope[] }>('/settings/lookups')).apiScopes,
   };
 }

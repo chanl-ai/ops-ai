@@ -20,7 +20,7 @@ import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useApiKeys, useCreateApiKey, useRevokeApiKey, useSettingsLookups } from '@/hooks/settings-queries';
+import { useApiKeys, useApiScopes, useCreateApiKey, useRevokeApiKey } from '@/hooks/settings-queries';
 import { useApiKeysAreSample } from '@/hooks/use-preview';
 import { useCreatedRows } from '@/hooks/use-created-rows';
 import { useListParams } from '@/hooks/use-list-params';
@@ -112,7 +112,7 @@ export default function ApiKeysPage() {
   const keyTeams = covered === 'all' ? undefined : covered;
   const params = React.useMemo(() => (showTeam && keyTeams ? { ...list.params, filters: { ...list.params.filters, teamId: keyTeams } } : list.params), [showTeam, keyTeams, list.params]);
   const query = useApiKeys(params, may === true && (!showTeam || !!covered));
-  const lookups = useSettingsLookups();
+  const scopes = useApiScopes();
   const create = useCreateApiKey();
   const created = useCreatedRows<ApiKey>();
   const revoke = useRevokeApiKey();
@@ -158,7 +158,7 @@ export default function ApiKeysPage() {
       <ApiKeyDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        scopes={lookups.data?.apiScopes ?? []}
+        scopes={scopes.data ?? []}
         pickTeam={team?.scope === 'all' ? { allowed: creatable === 'all' ? undefined : creatable } : undefined}
         defaultTeam={team ? { id: team.id, label: team.name } : undefined}
         isPending={create.isPending}

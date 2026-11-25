@@ -17,6 +17,7 @@ export const sk = {
   keys: (p: unknown) => ['settings', 'keys', p] as const,
   usage: (days: number) => ['settings', 'usage', days] as const,
   lookups: ['settings', 'lookups'] as const,
+  scopes: ['settings', 'scopes'] as const,
 };
 
 export const useMembers = (p: ListParams<MemberFilters>) => usePagedQuery({ queryKey: sk.members(p), queryFn: () => api.settings.members.list(p) });
@@ -27,6 +28,7 @@ export const useWebhookDeliveries = (id: string | null, p: ListParams<DeliveryFi
   usePagedQuery({ queryKey: sk.deliveries(id ?? '', p), queryFn: () => api.settings.webhooks.deliveries(id!, p), enabled: !!id });
 export const useApiKeys = (p: ListParams, enabled = true) => usePagedQuery({ queryKey: sk.keys(p), queryFn: () => api.settings.apiKeys.list(p), enabled });
 export const useUsage = (days: UsageDays, enabled = true) => usePagedQuery({ queryKey: sk.usage(days), queryFn: () => api.settings.usage.get(days), enabled });
+export const useApiScopes = () => useTeamQuery({ queryKey: sk.scopes, queryFn: api.settings.apiKeys.scopes, staleTime: 5 * 60_000 });
 export const useSettingsLookups = () => useTeamQuery({ queryKey: sk.lookups, queryFn: api.settings.lookups, staleTime: 5 * 60_000 });
 
 function useSettingsWrite<A, R>(fn: (a: A) => Promise<R>) {

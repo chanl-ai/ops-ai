@@ -1,4 +1,5 @@
 import type { ListParams } from '@/lib/types/query';
+import type { ApiScope } from '@/lib/types/settings';
 
 import { optionsQs } from './options';
 import type { SettingsApi } from './settings-contract';
@@ -34,8 +35,10 @@ export function createSettingsHttp(get: Get, send: Send, qs: (p: ListParams & { 
       list: (p) => get(`/settings/api-keys?${qs(p)}`),
       create: (i) => send('POST', '/settings/api-keys', i),
       revoke: (id) => send('DELETE', `/settings/api-keys/${id}`),
+      scopes: async () => (await get<{ apiScopes: ApiScope[] }>('/settings/lookups')).apiScopes,
     },
     usage: { get: (days) => get(`/settings/usage?days=${days}`) },
-    lookups: () => get('/settings/lookups'),
+    // No service serves the member roles or webhook events; /settings/lookups holds only the key scopes above.
+    lookups: async () => ({ roles: [], webhookEvents: [] }),
   };
 }
