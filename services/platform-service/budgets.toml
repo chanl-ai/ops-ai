@@ -109,6 +109,9 @@ queries = 9
 ["GET /v1/roles/{role_id}/holders"]
 queries = 9
 
+["GET /v1/settings/lookups"]
+queries = 2
+
 ["GET /v1/settings/members"]
 queries = 17   # listed: which shown members who need a new invite manage access (linksOwnSession), read once for the page
 

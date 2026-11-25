@@ -1673,7 +1673,7 @@ def create_public_app(
     keys = ApiKeys(KeyStore(store.db), people)
 
     @app.get("/v1/settings/lookups", tags=["api-keys"], response_model=Envelope[SettingsLookups], responses=ERRORS)
-    async def settings_lookups(_: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def settings_lookups(_: Tx, __: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The scopes an API key is created with, each with what it lets the key call: the list the key check
         enforces (`ops_identity.KEY_SCOPES`), so the keys screen never offers one the service refuses."""
         return ok({"apiScopes": [{"value": v, "label": label} for v, label in KEY_SCOPES.items()]})
