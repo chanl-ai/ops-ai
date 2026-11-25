@@ -156,6 +156,9 @@ async def test_a_v1_thread_with_an_agent_needs_the_chat_rule(stack: tuple[AsyncC
     tid = made[0].json()["data"]["threadId"]
     run = await c.post(f"/v1/threads/{tid}/runs/stream", json={"input": {"message": "Hello"}}, headers=VIEWER)
     assert run.status_code == 200 and sse_events(run.text)[-1]["event"] == "end", run.text
+    theirs = (await c.post("/v1/threads", json=body, headers=BUILDER)).json()["data"]["threadId"]
+    other = await c.post(f"/v1/threads/{theirs}/runs/stream", json={"input": {"message": "Hi"}}, headers=VIEWER)
+    assert refused(other), other.text
 
 
 async def paused_case(c: AsyncClient, budget: dict[str, Any] | None = None) -> str:

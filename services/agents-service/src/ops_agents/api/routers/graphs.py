@@ -414,8 +414,10 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
     else:
         if waiting:
             raise Conflict("This thread is waiting for a decision; resume it instead.", code="run_waiting")
-        if row["graph"].startswith("agent:") and not me.is_key:
-            # A person's turn with an agent is a chat message: chat.run in the agent's team, as opening the thread.
+        owner = str(an_object(row["meta"] or {}, "thread meta").get("ownerEmail") or "")
+        if row["graph"].startswith("agent:") and not me.is_key and owner.lower() == me.email.lower():
+            # A person's turn in their own thread with an agent is a chat message: chat.run in the agent's team, as
+            # chat checks it; anyone else's thread keeps the run-start rule.
             require_chat_use(me, team_id=await agent_team(rt, row["graph"].removeprefix("agent:")))
         else:
             require_runs_start(me, team_id=str(row["team_id"] or "") or None, what=f"thread {thread_id}")
