@@ -38,6 +38,7 @@ import { createOAuthMock } from './oauth';
 import { currentMockUser, registerMockUser, setMockPassword, verifyMockStepUp } from './auth';
 import { createAccountMock } from './sessions';
 import { createMockWorkspacePolicies } from './workspace-policies';
+import { createMockModelAliases, mockKnobs } from './model-aliases';
 import { createMockProviderConnections } from './provider-connections';
 import { createMockProviderKeys } from './provider-keys';
 import { createMockSignInProviders } from './sign-in-providers';
@@ -86,6 +87,8 @@ function pushVersion(list: Version[], version: number, note: string, changes: st
 
 /** In-memory implementation of OpsApi for demos and UI review. Transport behaviour lives in ./runtime. */
 export function createMockApi(): OpsApi {
+  const mockAliases = createMockModelAliases();
+  const mockKeys = createMockProviderKeys();
   // The workspace's saved agent instruction list; none means the default.
   let savedSections: InstructionSectionList | null = null;
   const policies: GatePolicy[] = F.POLICIES.map((p) => ({ ...p, workflowName: '' }));
@@ -893,6 +896,7 @@ export function createMockApi(): OpsApi {
       // The mock's apps have no catalog to add from, so nothing waits on a Tools tab.
       toolOptions: (p) => respond(() => ({ ...pageOptions(tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, label: t.name, hint: t.module ?? t.system })), p), notAdded: [] })),
       modelAliases: () => respond(() => F.MODEL_ALIASES.map((a) => ({ ...a }))),
+      modelAliasKnobs: (name) => respond(() => mockKnobs(mockAliases.rows(), name)),
       test: (aid, message) => respond(() => ({ reply: `${agents.find((a) => a.id === aid)?.name ?? 'The agent'} would answer “${message}” here.`, tookMs: 0, citations: [], toolCalls: [] })),
       bulkUpdate: (ids, patch) =>
         respond(() =>
@@ -1228,8 +1232,9 @@ export function createMockApi(): OpsApi {
     workspacePolicies: createMockWorkspacePolicies(),
     workspaceTeams: createMockWorkspaceTeams(),
     signInProviders: createMockSignInProviders(),
-    providerKeys: createMockProviderKeys(),
-    providerConnections: createMockProviderConnections(),
+    providerKeys: mockKeys,
+    providerConnections: createMockProviderConnections(mockKeys),
+    modelAliases: mockAliases,
     toolModules: toolModules.api,
     egress: createEgressMock({ me: F.CURRENT_USER.name, inUse: toolModules.hostsInUse }),
     connections: createConnectionsMock({ me: F.CURRENT_USER.name }),

@@ -14,9 +14,9 @@ test('every way a provider fails has its own sentence, never the generic refusal
 test('a refused key tells an admin to fix it there and anyone else to ask an admin', () => {
   const admin = modelRefusal('provider_auth_failed', true);
   const member = modelRefusal('provider_auth_failed', false);
-  assert.match(admin!.text, /^The model provider refused the account’?'?s key\. Check or replace the key on Settings > Model providers\.$/);
+  assert.match(admin!.text, /^The model provider refused the account’?'?s key\. Check or replace the key on Settings > Models > Connections\.$/);
   assert.equal(admin!.fixAt, MODEL_PROVIDERS_HREF);
-  assert.match(member!.text, /Ask an admin to check the key on Settings > Model providers\./);
+  assert.match(member!.text, /Ask an admin to check the key on Settings > Models > Connections\./);
   assert.equal(member!.fixAt, undefined, 'a member is not sent to a page they cannot change');
 });
 

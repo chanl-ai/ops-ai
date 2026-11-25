@@ -1,5 +1,5 @@
 import type { ListParams, ListResult } from '@/lib/types/query';
-import type { ChatModelChoice, KeyCheck, KeyWhere, ProviderModel, ProviderKey } from '@/lib/types/provider-keys';
+import type { KeyCheck, KeyWhere, ProviderModel, ProviderKey } from '@/lib/types/provider-keys';
 
 /**
  * The account's model provider keys on models-service: account admins (settings.manage, held in
@@ -16,6 +16,4 @@ export interface ProviderKeysApi {
   check(name: string, where: KeyWhere): Promise<KeyCheck>;
   /** The models (Azure OpenAI: deployments) the saved key reaches; 422 `key_refused` when the provider refuses it. */
   models(name: string, where: KeyWhere): Promise<ProviderModel[]>;
-  /** Points chat (the default and assistant aliases) at a model the saved key lists. */
-  setChatModel(choice: ChatModelChoice): Promise<{ providerId: string; model: string; aliases: string[] }>;
 }

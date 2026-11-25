@@ -1,9 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, RotateCcw, X } from 'lucide-react';
 
 import { FormField } from '@/components/shared/form-field';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -19,6 +20,8 @@ export interface Schema {
   oneOf?: { const?: unknown; title?: string }[];
   anyOf?: Schema[];
   default?: unknown;
+  minimum?: number;
+  maximum?: number;
   properties?: Record<string, Schema>;
   items?: Schema;
   required?: string[];
@@ -38,6 +41,10 @@ export interface FieldSpec {
   help?: string;
   placeholder?: string;
   item?: FormSpec;
+  /** A number's bounds and the value used while it is left empty, from the schema's `minimum`, `maximum` and `default`. */
+  min?: number;
+  max?: number;
+  fallback?: number | string;
 }
 
 /** A form: one field per property, in order. */
@@ -67,7 +74,15 @@ export function formFromSchema(schema: Schema): FormSpec {
     const widget =
       prop['x-widget'] ??
       (prop.enum || prop.oneOf ? 'select' : prop.type === 'boolean' ? 'switch' : prop.type === 'integer' || prop.type === 'number' ? 'number' : prop.type === 'array' ? 'list' : prop.format === 'textarea' ? 'textarea' : 'text');
-    fields[name] = { label: prop.title ?? words(name), widget, help: prop.description, item: widget === 'list' && prop.items?.properties ? formFromSchema(prop.items) : undefined };
+    fields[name] = {
+      label: prop.title ?? words(name),
+      widget,
+      help: prop.description,
+      item: widget === 'list' && prop.items?.properties ? formFromSchema(prop.items) : undefined,
+      min: prop.minimum,
+      max: prop.maximum,
+      fallback: typeof prop.default === 'number' || typeof prop.default === 'string' ? prop.default : undefined,
+    };
   }
   return { order: Object.keys(fields), fields };
 }
@@ -113,6 +128,7 @@ export function SchemaForm({
   testIds,
   renderers,
   readOnly,
+  defaults,
   testId = 'schema-form',
 }: {
   schema: Schema;
@@ -128,6 +144,11 @@ export function SchemaForm({
   renderers?: Record<string, FieldRenderer>;
   /** Draws every control disabled and no add or remove buttons. */
   readOnly?: boolean;
+  /**
+   * Treats a field left out of `value` as holding its schema default: each field says `Default` or `Changed` and a
+   * changed one has its own Reset, which removes its key.
+   */
+  defaults?: boolean;
   testId?: string;
 }) {
   const spec = form ?? formFromSchema(schema);
@@ -141,7 +162,15 @@ export function SchemaForm({
         const ctx: FieldContext = { id, spec: field, schema: prop, value: value[name], onChange: (v) => onChange(without(value, name, v)), testId: testIds?.[name], readOnly };
         const custom = (prop['x-secret'] ? renderers?.secret : undefined) ?? renderers?.[field.widget];
         return (
-          <FormField key={name} id={id} label={field.label} optional={!required.has(name)} hint={field.help} error={errors?.[name]}>
+          <FormField
+            key={name}
+            id={id}
+            label={field.label}
+            optional={defaults ? false : !required.has(name)}
+            hint={fieldHint(field)}
+            error={errors?.[name]}
+            action={defaults ? <DefaultState changed={value[name] !== undefined} readOnly={readOnly} onReset={() => onChange(without(value, name, undefined))} id={id} /> : undefined}
+          >
             {custom?.(ctx) ?? <BasicControl {...ctx} renderers={renderers} />}
           </FormField>
         );
@@ -150,14 +179,51 @@ export function SchemaForm({
   );
 }
 
+/** A field's help, with the range its schema sets on a number. */
+function fieldHint(field: FieldSpec): React.ReactNode {
+  const range = field.min !== undefined && field.max !== undefined ? `From ${field.min} to ${field.max}.` : field.min !== undefined ? `At least ${field.min}.` : field.max !== undefined ? `At most ${field.max}.` : '';
+  return [field.help, range].filter(Boolean).join(' ') || undefined;
+}
+
+function DefaultState({ changed, readOnly, onReset, id }: { changed: boolean; readOnly?: boolean; onReset: () => void; id: string }) {
+  return changed ? (
+    <>
+      <Badge variant="secondary">Changed</Badge>
+      {!readOnly && (
+        <Button type="button" variant="ghost" size="sm" onClick={onReset} data-testid={`${id}-reset`}>
+          <RotateCcw /> Reset
+        </Button>
+      )}
+    </>
+  ) : (
+    <Badge variant="outline">Default</Badge>
+  );
+}
+
 function BasicControl({ id, spec, schema, value, onChange, testId, readOnly, renderers }: FieldContext & { renderers?: Record<string, FieldRenderer> }) {
   switch (spec.widget) {
     case 'text':
-      return <Input id={id} value={typeof value === 'string' ? value : ''} disabled={readOnly} placeholder={spec.placeholder ?? (typeof schema.default === 'string' ? `e.g. ${schema.default}` : undefined)} onChange={(e) => onChange(e.target.value || undefined)} data-field={id} />;
+      // A field the schema marks secret is never drawn as readable text, whatever renderers a page gives.
+      return <Input id={id} type={schema['x-secret'] ? 'password' : 'text'} autoComplete={schema['x-secret'] ? 'off' : undefined} value={typeof value === 'string' ? value : ''} disabled={readOnly} placeholder={spec.placeholder ?? (typeof schema.default === 'string' ? `e.g. ${schema.default}` : undefined)} onChange={(e) => onChange(e.target.value || undefined)} data-field={id} />;
     case 'textarea':
       return <Textarea id={id} value={typeof value === 'string' ? value : ''} disabled={readOnly} rows={4} onChange={(e) => onChange(e.target.value || undefined)} data-field={id} />;
     case 'number':
-      return <Input id={id} type="number" inputMode="decimal" disabled={readOnly} value={typeof value === 'number' ? String(value) : ''} onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))} data-field={id} />;
+      return (
+        <Input
+          id={id}
+          type="number"
+          inputMode="decimal"
+          step={schema.type === 'integer' ? 1 : 'any'}
+          min={spec.min}
+          max={spec.max}
+          placeholder={spec.fallback !== undefined ? String(spec.fallback) : undefined}
+          disabled={readOnly}
+          value={typeof value === 'number' ? String(value) : ''}
+          data-testid={testId}
+          data-field={id}
+          onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+        />
+      );
     case 'date':
       return <Input id={id} type="date" disabled={readOnly} value={typeof value === 'string' ? value : ''} onChange={(e) => onChange(e.target.value || undefined)} data-field={id} />;
     case 'switch':

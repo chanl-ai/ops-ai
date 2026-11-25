@@ -15,6 +15,8 @@ import type { InvitesApi } from './invites-contract';
 import type { OAuthApi } from './oauth-contract';
 import type { AccountApi } from './account-contract';
 import type { WorkspacePoliciesApi } from './workspace-policies-contract';
+import type { AliasKnobs } from '@/lib/types/models';
+import type { ModelAliasesApi } from './model-aliases-contract';
 import type { ProviderConnectionsApi } from './provider-connections-contract';
 import type { ProviderKeysApi } from './provider-keys-contract';
 import type { SignInProvidersApi } from './sign-in-providers-contract';
@@ -147,6 +149,8 @@ export interface OpsApi {
     toolOptions(p: OptionsParams & { agents?: boolean }): Promise<ToolOptionsPage>;
     /** The model aliases an agent may name; a publish naming any other is refused (422 unknown_model_alias). */
     modelAliases(): Promise<ModelAlias[]>;
+    /** Only the settings the alias's model takes, each with its range and catalog default; 422 `unknown_model_alias` for another name. */
+    modelAliasKnobs(name: string): Promise<AliasKnobs>;
     /** One kernel turn on the agent's newest version, nothing kept; a write tool stops at its gate. */
     test(id: string, message: string): Promise<AgentTestTurn>;
     /** Absent when the backend has no bulk route (the agents-service registry); the list then offers no bulk actions. */
@@ -222,6 +226,7 @@ export interface OpsApi {
   providerKeys: ProviderKeysApi;
   /** The account's model provider connections (models-service): type, endpoint, region and key name. */
   providerConnections: ProviderConnectionsApi;
+  modelAliases: ModelAliasesApi;
   evals: EvalsApi;
   modelRisk: ModelRiskApi;
   toolModules: ToolModulesApi;
