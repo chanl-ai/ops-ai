@@ -7,10 +7,10 @@ import { Activity, Route } from 'lucide-react';
 
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { QueryError } from '@/components/shared/query-states';
+import { Section } from '@/components/shared/surface';
 import { StatusDot } from '@/components/shared/setting/status-dot';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useLivePlaces } from '@/hooks/channel-queries';
@@ -104,21 +104,21 @@ export function LivePlacesPanel({ kind, id, name, between }: { kind: 'agent' | '
   const latest = q.data.latestVersion;
   return (
     <div className="flex flex-col gap-4">
-      <Card className="gap-3" data-testid="versions-live">
-        <CardHeader>
-          <CardTitle>Versions live</CardTitle>
-          <CardDescription>Published v{latest}. A place follows the latest published version or pins one; publishing never moves a pinned one.</CardDescription>
-          {readsActivity && (
-            <CardAction>
-              <Button asChild variant="outline" size="sm">
-                <Link href={`/govern/activity?${new URLSearchParams([...sources.map((s) => ['source', s] as [string, string]), ['name', name]])}`}>
-                  <Activity className="size-4" /> View activity{count.data != null ? ` · ${count.data.toLocaleString('en-CA')}` : ''}
-                </Link>
-              </Button>
-            </CardAction>
-          )}
-        </CardHeader>
-        <CardContent>
+      <Section
+        title="Versions live"
+        description={`Published v${latest}. A place follows the latest published version or pins one; publishing never moves a pinned one.`}
+        actions={
+          readsActivity && (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/govern/activity?${new URLSearchParams([...sources.map((s) => ['source', s] as [string, string]), ['name', name]])}`}>
+                <Activity className="size-4" /> View activity{count.data != null ? ` · ${count.data.toLocaleString('en-CA')}` : ''}
+              </Link>
+            </Button>
+          )
+        }
+        className="gap-0"
+      >
+        <div data-testid="versions-live">
           {q.data.versions.length ? (
             <ItemGroup className="gap-2">
               {[...q.data.versions]
@@ -137,8 +137,8 @@ export function LivePlacesPanel({ kind, id, name, between }: { kind: 'agent' | '
           ) : (
             <p className="text-sm text-muted-foreground">Not live anywhere yet. Embed it on a page, or add it as a step on a workflow’s canvas.</p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </Section>
       {between}
       {rows.length > 0 && (
         <DataTableWithViews

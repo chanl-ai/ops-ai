@@ -313,4 +313,5 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-769 | console | My apps is a page of its own, the same for an admin and a member | ui | `console/my-apps-page.md` |
 | uc-770 | tools-service | Admins see people's app sign-ins and end one | ui | `tools-service/admins-see-people-s-app-sign.md` |
 | uc-771 | agents-service | A builder takes a new skill to its first publish in under ten minutes | ui | `agents-service/a-builder-takes-a-new-skill.md` |
+| uc-781 | console | Record editors and list pages share one header, one tab strip and one section style | ui | `console/editor-page-layout.md` |
 | uc-790 | tools-service | A chat user never chooses between their own login and the team's | api, ui | `tools-service/chat-never-asks-whose-login.md` |

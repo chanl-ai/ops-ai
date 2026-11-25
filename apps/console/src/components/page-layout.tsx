@@ -1,6 +1,6 @@
 import type React from 'react';
 import type { ReactNode } from 'react';
-import { createElement, isValidElement, useCallback, useState } from 'react';
+import { createElement, isValidElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
@@ -13,6 +13,8 @@ import { PreviewBadge } from '@/components/shared/preview-badge';
 import { SectionTabs, TitleSwitcher } from '@/components/shared/title-switcher';
 import { SampleNoteOnPage, SampleOnPage } from '@/components/shared/sample-data';
 import { SampleDataBanner } from '@/components/shared/sample-data-banner';
+import { InPageLayout } from '@/components/shared/page-title-context';
+import { useSetRecordCrumb } from '@/components/shared/record-crumb';
 import { WholeTokens } from '@/components/shared/whole-tokens';
 import { PageSaveSlot } from '@/components/shared/page-save-actions';
 import { usePreview, useSampleReads } from '@/hooks/use-preview';
@@ -56,6 +58,8 @@ interface PageLayoutProps {
 
   // Navigation
   backHref?: string;
+  /** The record's name for the breadcrumb, when the title is not plain text (an editable name). */
+  recordName?: string;
 
   // Interaction
   onTitleClick?: () => void;
@@ -66,6 +70,68 @@ interface PageLayoutProps {
   // Outer wrapper override — use className="px-0 py-0" when nested inside a
   // section layout that already provides its own outer padding (e.g. settings).
   className?: string;
+}
+
+/**
+ * On a phone, actions that wrap leave a button alone on its row (Pause under Start run). When that would happen the row
+ * becomes two equal columns so the buttons wrap as one group; an odd last one spans the row. Measured, because how many
+ * actions there are depends on the page, the person and the record's state.
+ */
+function useGroupedActions(ref: React.RefObject<HTMLDivElement | null>) {
+  useLayoutEffect(() => {
+    const wrap = ref.current;
+    if (!wrap) return;
+    let busy = false;
+    const items = () => [...wrap.children].flatMap((c) => (getComputedStyle(c).display === 'contents' ? [...c.children] : [c])).filter((c): c is HTMLElement => c instanceof HTMLElement && c.getBoundingClientRect().width > 0);
+    const fit = () => {
+      if (busy) return;
+      busy = true;
+      wrap.removeAttribute('data-grouped');
+      items().forEach((i) => i.style.removeProperty('grid-column'));
+      if (window.innerWidth < 640) {
+        const els = items();
+        // Items share a row when their vertical ranges overlap (a tall item beside a short one is one row).
+        const rows: { top: number; bottom: number; n: number }[] = [];
+        for (const el of els) {
+          const r = el.getBoundingClientRect();
+          const row = rows.find((q) => r.top < q.bottom - 4 && q.top < r.bottom - 4);
+          if (row) (row.n++, (row.top = Math.min(row.top, r.top)), (row.bottom = Math.max(row.bottom, r.bottom)));
+          else rows.push({ top: r.top, bottom: r.bottom, n: 1 });
+        }
+        if (rows.length > 1 && rows.some((q) => q.n === 1)) {
+          wrap.setAttribute('data-grouped', 'yes');
+          if (els.length % 2 === 1) els[els.length - 1].style.gridColumn = '1 / -1';
+        }
+      }
+      busy = false;
+    };
+    fit();
+    const resized = new ResizeObserver(fit);
+    resized.observe(wrap);
+    const changed = new MutationObserver(fit);
+    changed.observe(wrap, { childList: true, subtree: true, characterData: true });
+    return () => (resized.disconnect(), changed.disconnect());
+  }, [ref]);
+}
+
+/** The page's tab row: scrolls sideways when the tabs outgrow it, and brings the current tab into view. */
+function TabStrip({ children }: { children: ReactNode }) {
+  const row = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = row.current;
+    if (!el) return;
+    const show = () => el.querySelector<HTMLElement>('[aria-selected=true], [aria-current=page], [data-state=active]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    show();
+    // Only a change of the current tab moves the row, so scrolling it by hand is left alone.
+    const watch = new MutationObserver(show);
+    watch.observe(el, { subtree: true, attributes: true, attributeFilter: ['aria-selected', 'aria-current', 'data-state'] });
+    return () => watch.disconnect();
+  }, []);
+  return (
+    <div ref={row} className="scroll-edge-x max-w-full shrink-0 overflow-x-auto pt-2 page-tabs-row" data-testid="page-tabs-row">
+      {children}
+    </div>
+  );
 }
 
 export function PageLayout({
@@ -83,11 +149,16 @@ export function PageLayout({
   preview: previewProp,
   switcher,
   backHref,
+  recordName,
   onTitleClick,
   children,
   className,
 }: PageLayoutProps) {
   const { bulkState, ctxValue } = useBulkSelectionProvider();
+  const actionsRef = useRef<HTMLDivElement>(null);
+  useGroupedActions(actionsRef);
+  // A record page (it has a way back) names its record in the breadcrumb.
+  useSetRecordCrumb(backHref ? recordName ?? (typeof title === 'string' ? title : null) : null);
   const previewOfArea = usePreview();
   // A sample section anywhere on the page counts too: its area may be live while that section is not.
   const [samples, setSamples] = useState(0);
@@ -140,7 +211,7 @@ export function PageLayout({
 
     if (bulkState) {
       return (
-        <div className="flex items-center gap-2" data-testid="bulk-selection-bar">
+        <div className="flex flex-wrap items-center gap-2" data-testid="bulk-selection-bar">
           <Badge
             variant="secondary"
             className="h-8 px-3 rounded-md font-normal"
@@ -178,10 +249,11 @@ export function PageLayout({
       );
     }
 
-    return actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null;
+    return actions ? <>{actions}</> : null;
   };
 
   return (
+    <InPageLayout.Provider value={true}>
     <PageSaveSlot.Provider value={saveSlot}>
     <SampleOnPage.Provider value={reportSample}>
     <SampleNoteOnPage.Provider value={reportNote}>
@@ -215,7 +287,7 @@ export function PageLayout({
           )}
           data-testid="page-header"
         >
-          <div className="flex items-center gap-3 min-w-0 basis-full sm:flex-1 sm:basis-auto">
+          <div className="flex items-start gap-3 min-w-0 basis-full sm:flex-1 sm:basis-auto">
             {icon &&
               (backHref ? (
                 <Link
@@ -247,7 +319,7 @@ export function PageLayout({
             )}
             <div className="min-w-0 flex-1">
               {typeof title === 'string' ? (
-                <h2
+                <h1
                   className={cn(
                     // Balanced lines, and a reference in the title (NS-2026-GN-01187) is never split across them.
                     'text-xl font-semibold line-clamp-2 wrap-break-word text-balance sm:text-2xl',
@@ -258,14 +330,11 @@ export function PageLayout({
                   title={switcher ? undefined : title}
                 >
                   {switcher ? <TitleSwitcher title={title} /> : <WholeTokens text={title} />}
-                </h2>
+                </h1>
               ) : (
-                <div
-                  className="text-xl font-semibold min-w-0 wrap-break-word line-clamp-2 sm:text-2xl"
-                  data-testid="page-title"
-                >
+                <h1 className="text-xl font-semibold min-w-0 wrap-break-word line-clamp-2 sm:text-2xl" data-testid="page-title">
                   {title}
-                </div>
+                </h1>
               )}
               {description && (
                 <div
@@ -289,8 +358,10 @@ export function PageLayout({
           </div>
 
           {/* Actions area — bulk selection overrides normal actions; wraps to own row on narrow */}
-          <div className="flex max-w-full flex-wrap items-center gap-2 sm:shrink-0">
-            <span ref={setSaveSlot} className="flex items-center gap-2 empty:hidden" data-testid="page-save-actions" />
+          {/* One wrapper: the save state, Save, the page's actions and a bulk selection bar are its direct children
+              (the inner wrapper is `contents`), so they wrap as one group and never leave a button alone. */}
+          <div ref={actionsRef} className="flex w-full max-w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:justify-end" data-testid="page-actions">
+            <span ref={setSaveSlot} className="contents" data-testid="page-save-actions" />
             {renderActions()}
           </div>
         </div>
@@ -298,10 +369,14 @@ export function PageLayout({
         {/* Tabs (if provided). shrink-0: the layout is a full-height column, and a scroll container may shrink to its
             padding in one, so on a page taller than the window the tab row collapsed to 8px and its tabs were clipped. */}
         {/* A page's sibling pages as tabs when the one sidebar lists only the page itself; drawn nothing otherwise. */}
-        <div className="scroll-edge-x max-w-full shrink-0 overflow-x-auto pt-2 empty:hidden [&_[data-slot=tabs-list]]:w-max">
-          <SectionTabs />
-        </div>
-        {tabs && <div className="scroll-edge-x max-w-full shrink-0 overflow-x-auto pt-2 [&_[data-slot=tabs-list]]:w-max">{tabs}</div>}
+        {/* One tab slot: a page that brings its own tabs (a record's Canvas | Versions) never also shows the section's
+            sibling pages, and a record page has its back link instead. */}
+        {!tabs && !backHref && (
+          <div className="scroll-edge-x max-w-full shrink-0 overflow-x-auto pt-2 empty:hidden page-tabs-row">
+            <SectionTabs />
+          </div>
+        )}
+        {tabs && <TabStrip>{tabs}</TabStrip>}
 
         {/* The reason in words, not only on the badge's hover: a touch screen never shows a title. A sample note in the
             page names its own section, so the page's banner is not drawn twice. */}
@@ -321,5 +396,6 @@ export function PageLayout({
     </SampleNoteOnPage.Provider>
     </SampleOnPage.Provider>
     </PageSaveSlot.Provider>
+    </InPageLayout.Provider>
   );
 }

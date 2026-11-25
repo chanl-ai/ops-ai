@@ -29,6 +29,7 @@ from ops_engine.definition import parse
 from ops_engine.ports import Access, EnginePorts, ToolResult
 from ops_engine.store import DefinitionStore, RunStore, WorkQueue
 from ops_engine.worker import Worker, WorkerHost
+from ops_service_kit.errors import Forbidden
 from ops_service_kit.ids import new_id
 from ops_store import isolation
 from tests.run_rows import write_run
@@ -144,6 +145,35 @@ async def test_a_queued_run_waits_for_a_worker_then_reaches_its_review_and_ends_
     types = [e.type for e in events]
     assert types[0] == "started" and "waiting_review" in types and "decided" in types and types[-1] == "finished"
     assert [e.seq for e in events] == sorted(e.seq for e in events)
+
+
+VIEWER = Principal(
+    name="v@x",
+    email="v@x",
+    team_id="team_a",
+    tenant_id="local",
+    team_ids=("team_a",),
+    role="viewer",
+    roles={"team_a": "viewer"},
+)
+
+
+async def test_a_decided_review_is_replayed_for_its_decider_and_refused_to_a_viewer(engine: AsyncEngine) -> None:
+    """The repeat of a decision was answered from the resume row before the decider check, so a viewer read the
+    decided review back as a 200 from the decision route."""
+    tenant, tools, saver = f"t-{uuid4().hex[:8]}", CountingTools(), InMemorySaver()
+    run_id = await start(engine, tenant, {"customerId": "C-1", "amount": 250})
+    runs = RunStore(EngineTransactions(engine))
+    await drain(worker(engine, tools, saver))
+    with tenant_scope(tenant):
+        rt: Any = SimpleNamespace(db=engine, settings=SimpleNamespace(lease_ttl_seconds=6.0))
+        await engine_reviews.decide(rt, M, run_id, decision="approved", reason=None)
+        for decision in ("approved", "rejected"):
+            with pytest.raises(Forbidden):
+                await engine_reviews.decide(rt, VIEWER, run_id, decision=decision, reason=None)
+        again = await engine_reviews.decide(rt, M, run_id, decision="approved", reason=None)
+        assert again["status"] == "approved"
+        assert len([x for x in await runs.work(run_id) if x["kind"] == "resume"]) == 1
 
 
 async def test_two_workers_never_claim_one_row(engine: AsyncEngine) -> None:

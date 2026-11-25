@@ -17,9 +17,9 @@ export function EditableTitle({ value, onChange, label, error, disabled }: { val
         aria-label={label}
         aria-invalid={!!error}
         data-testid="page-title-input"
-        className={cn('h-auto min-w-0 truncate rounded-md border-transparent bg-transparent px-1 py-0 text-xl font-semibold shadow-none hover:border-input focus-visible:border-ring disabled:opacity-100 sm:text-2xl md:text-2xl', error && 'border-destructive')}
+        className={cn('-ml-[5px] h-auto w-[calc(100%+5px)] min-w-0 truncate rounded-md border-transparent bg-transparent px-1 py-0 text-xl font-semibold shadow-none hover:border-input focus-visible:border-ring disabled:opacity-100 sm:text-2xl md:text-2xl', error && 'border-destructive')}
       />
-      {error && <p className="px-1 text-xs text-destructive-text">{error}</p>}
+      {error && <p className="text-xs text-destructive-text">{error}</p>}
     </div>
   );
 }

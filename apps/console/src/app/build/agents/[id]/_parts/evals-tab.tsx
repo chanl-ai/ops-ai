@@ -206,14 +206,13 @@ export function EvalsTab({ agent }: { agent: Agent }) {
 
   return (
     <div className="flex flex-col gap-6" data-testid="agent-evals-tab">
-      <section className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="min-w-0">
-            <h2 className="text-base font-semibold">Latest run</h2>
-            <p className="text-sm text-muted-foreground">Runs the saved cases on the newest version, and on the live one when that is another. A run happens when someone presses Run evals or runs opsai agents eval.</p>
-          </div>
-          {mayRun && (
-            <div className="ml-auto flex flex-wrap gap-2">
+      <Section
+        title="Latest run"
+        description="Runs the saved cases on the newest version, and on the live one when that is another. A run happens when someone presses Run evals or runs opsai agents eval."
+        bodyClassName="flex flex-col gap-3 p-4"
+        actions={
+          mayRun && (
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
                 <Upload className="size-3.5" /> Import CSV
               </Button>
@@ -224,8 +223,9 @@ export function EvalsTab({ agent }: { agent: Agent }) {
                 <Play className="size-3.5" /> Run evals
               </LoadingButton>
             </div>
-          )}
-        </div>
+          )
+        }
+      >
         {latest.isPending || cases.isPending ? (
           <Skeleton className="h-40 w-full rounded-lg" />
         ) : latest.isError ? (
@@ -249,7 +249,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
             <EvalResultsTable results={latest.data.results} liveVersion={latest.data.liveVersion} />
           </>
         )}
-      </section>
+      </Section>
 
       {mayRun && successChecks.length > 0 && (
         <Section title="Success checks from the brief" description="Written on an earlier version of the brief. Make each a case so a run grades it." flush>

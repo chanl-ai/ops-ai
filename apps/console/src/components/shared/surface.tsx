@@ -27,12 +27,13 @@ export function Section({
   return (
     <section id={id} className={cn('min-w-0 rounded-lg border bg-card', className)}>
       {(title || actions) && (
-        <header className="flex flex-wrap items-start justify-between gap-2 border-b px-4 py-3">
-          <div className="min-w-0">
-            {title && <h2 className="text-sm font-semibold">{title}</h2>}
-            {description && <p className="text-xs text-muted-foreground">{description}</p>}
+        <header className="border-b px-4 py-3">
+          {/* The actions sit on the heading's row; the description runs the card's full width under both. */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {title && <h2 className="min-w-0 text-sm font-semibold">{title}</h2>}
+            {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
           </div>
-          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+          {description && <p className="text-xs text-muted-foreground">{description}</p>}
         </header>
       )}
       <div className={cn(!flush && 'p-4', bodyClassName)}>{children}</div>
