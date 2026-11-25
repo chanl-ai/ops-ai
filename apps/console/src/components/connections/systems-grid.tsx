@@ -29,6 +29,7 @@ import { appStateFor } from '@/lib/app-state';
 import { APP_STATE_LOOK, AppStateBadge } from '@/components/connections/app-state-badge';
 import { AddAuthConfigButton, TurnOnButton } from '@/components/connections/app-actions';
 import { AppsTabs } from '@/components/connections/apps-tabs';
+import { signInChoiceWords } from '@/lib/login-words';
 
 export type { ConnectMode };
 
@@ -120,9 +121,9 @@ function SystemAppCard({ system, onConnect }: { system: SystemCard; onConnect: (
 
 /** How people sign in to an app, in the words of its Turn on window. */
 const SIGN_IN_WORDS: Record<NonNullable<SystemCard['signIn']>, string> = {
-  team: 'One shared login',
-  person: 'Each person',
-  person_or_team: 'Each person, team account for runs',
+  team: signInChoiceWords('team'),
+  person: signInChoiceWords('person'),
+  person_or_team: signInChoiceWords('person_or_team'),
 };
 
 /**

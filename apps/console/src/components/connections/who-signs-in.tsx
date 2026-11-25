@@ -1,6 +1,7 @@
 'use client';
 
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { signInChoiceWords } from '@/lib/login-words';
 import { cn } from '@/lib/utils';
 
 export type SignIn = 'team' | 'person' | 'person_or_team';
@@ -8,7 +9,7 @@ export type SignIn = 'team' | 'person' | 'person_or_team';
 type Choice = 'shared' | 'each';
 
 /**
- * The value "Each person signs in" saves: with the team account for runs nobody started where the app allows it,
+ * The value "Each person signs in" saves: with the team's login for runs nobody started where the app allows it,
  * else each person only. tools-service keeps its three values; the screen asks one question with two answers.
  */
 export function eachPersonValue(offered?: readonly string[]): SignIn {
@@ -35,17 +36,17 @@ export function WhoSignsIn({
   const choices: { value: Choice; label: string; hint: string; allowed: boolean }[] = [
     {
       value: 'shared',
-      label: 'Shared team login',
-      hint: 'Every call signs in as one login the team connects.',
+      label: signInChoiceWords('team'),
+      hint: 'Every call acts as one login the team signs in, and records who asked.',
       allowed: !offered || offered.includes('team'),
     },
     {
       value: 'each',
-      label: 'Each person signs in',
+      label: signInChoiceWords('person'),
       hint:
         each === 'person_or_team'
-          ? 'Calls act as the person who asked; runs nobody started, such as schedules, use the shared login.'
-          : 'Calls act as the person who asked. Anyone who has not signed in is asked to.',
+          ? 'Calls act as the person who asked, who signs in once; runs nobody started, such as schedules, use the team’s login.'
+          : 'Calls act as the person who asked. Anyone who has not signed in is asked to, once.',
       allowed: !offered || offered.includes('person') || offered.includes('person_or_team'),
     },
   ];

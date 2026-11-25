@@ -137,6 +137,8 @@ export interface ToolCall {
   durationMs: number;
   /** Write tools stop at a gate: the call drafts the action and a person decides. */
   gated?: { gate: string; reviewers: string };
+  /** Whose login of the app the call ran as: the team's (said under the reply) or the person's own. */
+  signedIn?: { whose: 'team' | 'person'; login: string; app: string } | null;
 }
 
 export interface MessageFeedback {

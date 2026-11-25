@@ -112,7 +112,7 @@ export function whoseState(card: { ownSignIn?: string | null; appGroup: AppGroup
 }
 
 /** An account row's owner, said beside its state when the page's own badge is the person's. */
-export const accountOwnerWords = (owner: 'team' | 'person' | 'each'): string | null => (owner === 'team' ? 'Team account' : null);
+export const accountOwnerWords = (owner: 'team' | 'person' | 'each'): string | null => (owner === 'team' ? 'Team login' : null);
 
 /**
  * Why Add account cannot sign anything in yet, from the card's state, or null when it can: an app with no auth config,

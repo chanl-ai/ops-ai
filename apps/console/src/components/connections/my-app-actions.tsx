@@ -141,7 +141,7 @@ export function MyAppActions({ children, onDisconnected }: { children: (controls
         entityName={ending?.name}
         verb="Disconnect"
         testIdPrefix="my-connection"
-        description={`Chat and agents working for you lose ${ending?.name ?? 'this app'} as you until you connect it again. The team account does not act for you; it serves only runs nobody started.`}
+        description={`Chat and agents working for you lose ${ending?.name ?? 'this app'} as you until you connect it again. The team login does not act for you; it serves only runs nobody started.`}
         isLoading={remove.isPending}
         onConfirm={async () => {
           if (!ending?.primaryAccountId) return;

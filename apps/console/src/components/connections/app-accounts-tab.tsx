@@ -351,7 +351,7 @@ function AccountActions({
               onSuccess: (r) => {
                 // What the test read, as one line: the status it answered, what it said, and whose sign-in it used.
                 const h = r.health;
-                const said = [h?.httpStatus ? `HTTP ${h.httpStatus}` : null, h?.status === 'ok' ? null : h?.message, `with ${own ? 'your own account' : 'the team account'}`].filter(Boolean).join(' · ');
+                const said = [h?.httpStatus ? `HTTP ${h.httpStatus}` : null, h?.status === 'ok' ? null : h?.message, `with ${own ? 'your own login' : 'the team login'}`].filter(Boolean).join(' · ');
                 if (h?.status === 'ok') toast.success(`${shownAs(a)} works`, { description: said });
                 else toast.error(`${shownAs(a)}’s test failed`, { description: said });
               },

@@ -412,7 +412,7 @@ export function ConnectWindow({
                 data-testid="connect-window-connect-mine"
               >
                 <ExternalLink />
-                {waiting ? 'Connecting…' : closedOn ? 'Try again' : done.whose === 'person' ? 'Connect my account' : 'Connect the team account'}
+                {waiting ? 'Connecting…' : closedOn ? 'Try again' : done.whose === 'person' ? 'Sign in with my login' : 'Sign in the team login'}
               </LoadingButton>
             )}
             <Button onClick={() => (onOpenChange(false), router.push(appHref(card)))} data-testid="connect-window-done">
@@ -485,7 +485,7 @@ export function ConnectWindow({
           <label className="flex items-start gap-2" data-testid="connect-window-team">
             <Checkbox checked={team || !ownAllowed} disabled={!ownAllowed} onCheckedChange={(v) => setTeam(v === true)} className="mt-0.5" data-testid="connect-window-team-account" />
             <span className="grid gap-1">
-              <span className="text-sm">Team account</span>
+              <span className="text-sm">Team login</span>
               <span className="text-xs text-muted-foreground">
                 {ownAllowed && plugin?.signIn.includes('person_or_team') ? `Runs nobody started, such as schedules and mailboxes, use this account; each person in ${current?.name ?? 'the team'} connects their own for what they run. Off, it is yours alone.` : ownAllowed ? `Anyone in ${current?.name ?? 'the team'} can run tools as this account. Off, it is yours alone.` : `Anyone in ${current?.name ?? 'the team'} can run tools as this account. Personal accounts are off for ${card.name} in its Settings.`}
               </span>

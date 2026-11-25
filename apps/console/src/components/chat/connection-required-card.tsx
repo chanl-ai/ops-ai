@@ -23,6 +23,7 @@ import type { ToolCall } from '@/lib/types/chat';
 import { actsAs } from '@/lib/failure-words';
 import type { ConnectionRequired, ConnectionRequiredReason } from '@/lib/types/connections';
 import { appPageHref } from '@/lib/app-links';
+import { signInTitle } from '@/lib/login-words';
 
 /**
  * What a tool call refused with `CONNECTION_NOT_LINKED` carries: the gateway's error, as the agent's tool output
@@ -57,10 +58,10 @@ const appOf = (need: Need) => need.app ?? need.connection;
 const acts = (need: Need) => actsAs({ app: appOf(need), access: need.access });
 
 const WHY: Record<ConnectionRequiredReason, (need: Need, keyed: boolean) => string> = {
-  not_connected: (need) => `${acts(need)}. Connect your account once for this team.`,
-  insufficient_scope: (need) => `Your ${appOf(need)} sign-in does not allow this yet. Connect again and allow the extra access it asks for.`,
-  needs_person: (need) => `${acts(need)}, never as the team. Connect your account once for this team.`,
-  no_person: (need) => `${appOf(need)} signs in as each person, and this call ran for nobody. Connect your own account, then ask again.`,
+  not_connected: (need) => `${acts(need)}. Sign in once; it stays connected for you.`,
+  insufficient_scope: (need) => `Your ${appOf(need)} sign-in does not allow this yet. Sign in again and allow the extra access it asks for.`,
+  needs_person: (need) => `${acts(need)}, never as the team’s login. Sign in once; it stays connected for you.`,
+  no_person: (need) => `${appOf(need)} signs in as each person, and this call ran for nobody. Sign in with your own login, then ask again.`,
   refused: (need, keyed) => (keyed ? `${appOf(need)} no longer accepts what you gave it. Give it again to go on.` : `Your ${appOf(need)} sign-in has ended. Sign in again to go on.`),
 };
 // A reason a newer service sends that this console does not know reads as a plain request to connect.
@@ -144,11 +145,11 @@ export function ConnectionRequiredCard({ call, need, onReply }: { call: ToolCall
                 ? keyed
                   ? `${appOf(need)} refused your ${method}`
                   : `${appOf(need)} needs you to sign in again`
-                : `${appOf(need)} needs your account to continue`}
+                : signInTitle(appOf(need))}
           {status}
         </AlertTitle>
         <AlertDescription>
-          <p>{connected ? 'Calls that need your account now act as you.' : why(need, keyed)}</p>
+          <p>{connected ? `Calls in ${appOf(need)} now act as you.` : why(need, keyed)}</p>
           {!connected && !dismissed && onReply && keyed && (
             <OwnCredentialsForm
               connectionId={need.connectionId}
@@ -156,7 +157,7 @@ export function ConnectionRequiredCard({ call, need, onReply }: { call: ToolCall
               authKind={need.authKind}
               personFields={need.personFields ?? []}
               docsUrl={offered?.docsUrl}
-              submitLabel={`Connect ${appOf(need)}`}
+              submitLabel={`Sign in to ${appOf(need)}`}
               onCancel={() => setDismissed(true)}
               onDone={() => {
                 setConnectedNow(need.connection);
@@ -169,14 +170,14 @@ export function ConnectionRequiredCard({ call, need, onReply }: { call: ToolCall
             <div className="mt-2 flex flex-wrap gap-2">
               <Button size="sm" onClick={connect} disabled={!need.connectUrl} data-testid="connection-connect">
                 <ExternalLink />
-                {need.reason === 'insufficient_scope' ? `Connect ${appOf(need)} again` : need.reason === 'refused' ? `Sign in to ${appOf(need)} again` : `Connect ${appOf(need)}`}
+                {need.reason === 'insufficient_scope' || need.reason === 'refused' ? `Sign in to ${appOf(need)} again` : `Sign in to ${appOf(need)}`}
               </Button>
               <Button size="sm" variant="outline" onClick={() => setDismissed(true)} data-testid="connection-not-now">
                 Not now
               </Button>
             </div>
           )}
-          {!keyed && !need.connectUrl && !connected && <p className="mt-1">Ask again in the chat for a new link, or connect from Connectors.</p>}
+          {!keyed && !need.connectUrl && !connected && <p className="mt-1">Ask again in the chat for a new link, or sign in from My apps.</p>}
         </AlertDescription>
       </Alert>
     </div>
@@ -234,7 +235,7 @@ export function AppOffCard({ call, off, readOnly }: { call: ToolCall; off: AppOf
     : off.again
     ? `${off.app} needs signing in again`
     : signIn
-      ? `${off.app} is on for ${teamName}, but its team account is not signed in`
+      ? `${off.app} is on for ${teamName}, but its team login is not signed in`
       : `${off.app} is off for ${teamName}`;
   const said = toolOff
     ? manages
@@ -246,10 +247,10 @@ export function AppOffCard({ call, off, readOnly }: { call: ToolCall; off: AppOf
       : 'Its sign-in ended. Only a team admin can sign it in again.'
     : manages
     ? signIn
-      ? `Connect the team account; its tools then work in chat.`
+      ? `Sign in the team login; its tools then work in chat.`
       : `You can turn it on for ${teamName}; its tools then work in chat.`
     : signIn
-      ? 'Only a team admin can connect the team account.'
+      ? 'Only a team admin can sign in the team login.'
       : 'Only a team admin can turn it on.';
   return (
     <div className="flex flex-col gap-2" data-testid="app-off-card" data-app={off.appId} data-state={off.again ? 'sign_in_ended' : off.appState}>
@@ -278,7 +279,7 @@ export function AppOffCard({ call, off, readOnly }: { call: ToolCall; off: AppOf
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {manages ? (
                 <Button size="sm" asChild data-testid="app-off-turn-on">
-                  <Link href={toolOff ? appPageHref(off.appId, 'tools') : appPageHref(off.appId)}>{toolOff ? `Turn on ${tool}` : off.again ? 'Sign in' : signIn ? 'Connect the team account' : `Turn on ${off.app}`}</Link>
+                  <Link href={toolOff ? appPageHref(off.appId, 'tools') : appPageHref(off.appId)}>{toolOff ? `Turn on ${tool}` : off.again ? 'Sign in' : signIn ? 'Sign in the team login' : `Turn on ${off.app}`}</Link>
                 </Button>
               ) : (
                 <AskAnAdmin testId="app-off-ask" />
