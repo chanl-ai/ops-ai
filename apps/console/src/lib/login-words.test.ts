@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { test } from 'node:test';
 
@@ -40,9 +40,10 @@ test('a Human Task never offers the person it waits for a choice between their l
 /** Every line of the console's source a person can read: comments and test files left out. */
 function shownLines(dir: string): { file: string; line: string }[] {
   const out: { file: string; line: string }[] = [];
-  for (const name of readdirSync(dir)) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const name = entry.name;
     const path = join(dir, name);
-    if (statSync(path).isDirectory()) {
+    if (entry.isDirectory()) {
       if (name !== 'mock' && name !== 'node_modules') out.push(...shownLines(path));
       continue;
     }

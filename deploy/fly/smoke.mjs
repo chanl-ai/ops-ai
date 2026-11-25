@@ -11,6 +11,7 @@
 // Outside dev a publish waits for a second person: the walk invites one as approver (an admin's invite) to decide it.
 // The agent and the document read answer on whatever model the alias is bound to: run it against a fake model unless
 // real spend is intended. The read's fields match the fake's committed rules (services/models-service/seed/demo-fake-openai).
+import { randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
 
 // The SDK's own renewal (sdk/typescript/src/transport.ts): a 401 renews the session once from its refresh token. Needs
@@ -100,7 +101,7 @@ async function walk() {
       await fetch(`${origin}/api/platform/v1/invites/${invited.invites[0].token}/accept`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: `Smoke Approver ${TAG}`, password: `smoke approver password ${TAG}` }),
+        body: JSON.stringify({ name: `Smoke Approver ${TAG}`, password: `smoke approver ${randomBytes(18).toString('base64url')}` }),
       }),
     );
     approver = { ...as, Authorization: `Bearer ${accepted.token}` };
