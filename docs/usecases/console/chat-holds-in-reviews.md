@@ -30,6 +30,12 @@ The chat card and the Reviews row decide the same review through the same decide
 |---|---|---|
 | ui | `console/scripts/test-uc-057-ui.mjs` | passing |
 
+## Known red
+
+| Step | Since | Why | Fix |
+|---|---|---|---|
+| Hold and list (ui) | release 1.1.0, 2026-11-24 | The write whose operation asks a reviewer runs at once (status success, no approval part), so no hold reaches Human Tasks | Filed for after 1.1.0 |
+
 ## Non-vacuous check
 
 Step 3 fails on agents-service before the fix, whose review list skipped chat-agent threads.
