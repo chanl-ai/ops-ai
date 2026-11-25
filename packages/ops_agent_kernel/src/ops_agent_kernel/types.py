@@ -365,6 +365,8 @@ class ToolCallRecord:
     view: Json | None = None
     # Answered from what this conversation already read (tool_cache.py); the system was not called.
     cached: bool = False
+    # Whose login of the app the call ran as, from the tool's outcome; None for a call with no account.
+    signed_in: Json | None = None
 
 
 @dataclass(frozen=True)

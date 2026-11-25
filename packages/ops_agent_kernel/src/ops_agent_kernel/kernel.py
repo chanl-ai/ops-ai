@@ -812,6 +812,7 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
                     cache.wrote(grant.server)
             rec.output = outcome.output
             rec.view = outcome.view
+            rec.signed_in = outcome.signed_in
             part = (outcome.view or {}).get("part")
             drawn = [
                 p for r in state.records.values() if r is not rec and isinstance(p := (r.view or {}).get("part"), dict)

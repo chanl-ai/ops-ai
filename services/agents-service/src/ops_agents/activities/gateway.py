@@ -14,7 +14,7 @@ from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
-from typing import NotRequired, Protocol, TypedDict, cast
+from typing import Any, NotRequired, Protocol, TypedDict, cast
 
 import httpx
 
@@ -400,14 +400,17 @@ class GatewayToolExecutor:
             refused = {"error": gateway_error(e)}
             return ToolOutcome(False, refused, for_model=carded(refused))
         view = data.get("view")
+        # Whose login the call ran as: kept beside the view, which a chat validates as a widget when it has no part.
+        signed = data.get("signedIn")
+        signed_in = cast(dict[str, Any], signed) if isinstance(signed, dict) else None
         if not data["ok"]:
-            return ToolOutcome(False, data["output"], for_model=carded(data["output"]))
+            return ToolOutcome(False, data["output"], for_model=carded(data["output"]), signed_in=signed_in)
         if data["ok"] and view is None:
             # A shaped result is drawn by the console's widget registry; the chat names it after the call (wp_<id>).
             op = await self._operation(tool)
             if op is not None and op.output_shape == NO_CARD:
                 # The tool draws no card of its own: a save the agent reports with its own card, for one.
-                return ToolOutcome(True, data["output"], None)
+                return ToolOutcome(True, data["output"], None, signed_in=signed_in)
             part = shape_part(
                 data["output"],
                 part_id="",
@@ -415,7 +418,7 @@ class GatewayToolExecutor:
                 title=(op.title or None) if op else None,
             )
             view = {"part": part} if part is not None else None
-        return ToolOutcome(bool(data["ok"]), data["output"], view)
+        return ToolOutcome(bool(data["ok"]), data["output"], view, signed_in=signed_in)
 
     async def _operation(self, tool: str) -> OperationRef | None:
         """The operation's declared result shape and title, or None without a directory or when it is down."""

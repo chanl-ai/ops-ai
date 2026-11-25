@@ -248,6 +248,14 @@ class ToolGate(WireModel):
     reviewers: str
 
 
+class SignedIn(WireModel):
+    """Whose login of an app a call ran as: the team's or the person's own, the login's name and the app's account."""
+
+    whose: Literal["team", "person"]
+    login: str
+    app: str
+
+
 class ToolCall(WireModel):
     id: str
     name: str
@@ -259,6 +267,8 @@ class ToolCall(WireModel):
     status: Literal["running", "success", "failed"]
     duration_ms: int
     gated: ToolGate | None = None
+    # Set on a call an app's login signed: the chat card says who acted in the app and that the person asked.
+    signed_in: SignedIn | None = None
 
 
 class MessageFeedback(WireModel):
