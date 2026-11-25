@@ -566,6 +566,13 @@ class TokenWrite(TypedDict, total=False):
 RETIRED_SIGN_IN = "person_or_team"
 
 
+class _SignInColumns(TypedDict):
+    """The two `connections` columns that say who signs in, the ones `_AccountFields` rewrites on a retired row."""
+
+    sign_in: str
+    team_backup: bool
+
+
 class _AccountFields(Out):
     """The `connections` columns every account read carries but its settings and secret names."""
 
@@ -607,7 +614,7 @@ class _AccountFields(Out):
         # backup) reads as each person, so no call with nobody behind it is signed with the team's login.
         if not isinstance(data, Mapping):
             return data
-        row = cast(Mapping[str, Any], data)
+        row = cast(_SignInColumns, data)
         return {**row, "sign_in": "person", "team_backup": False} if row.get("sign_in") == RETIRED_SIGN_IN else row
 
 
