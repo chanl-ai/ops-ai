@@ -3,7 +3,7 @@
 A watched folder copies an app's folders into the team's Files for every member, so adding, changing, checking and
 deleting one has a cell of its own, watches.manage, held by Admin and Builder (each holds every cell of its kind, as the
 catalogue grants). Reading a watch follows files.view, so no role is given watches.view. Adds each missing cell and
-raises each tenant's permission version, with the isolation policy of roles and role_permissions set aside
+raises each tenant's permission version, with the isolation policy of roles, role_permissions and tenants set aside
 (`backfill_ddl`) so the writes see every tenant's rows; the downgrade removes the area's cells the same way.
 
 Revision ID: 20261124_0100_watches_cells
@@ -31,7 +31,7 @@ RAISE = "UPDATE tenants SET permission_version = permission_version + 1"
 def _set_aside() -> tuple[list[str], list[str]]:
     tables = [
         sa.Table(n, sa.MetaData(), sa.Column("tenant_id", sa.String(64)), info=TENANT_SCOPED)
-        for n in ("roles", "role_permissions")
+        for n in ("roles", "role_permissions", "tenants")
     ]
     return backfill_ddl(tables, op.get_bind().dialect.name, chain=CHAIN, kind="tenant")
 
@@ -46,11 +46,11 @@ def upgrade() -> None:
         for action in actions
     ]
     before, after = _set_aside()
-    for statement in (*before, *inserts, *after, RAISE):
+    for statement in (*before, *inserts, RAISE, *after):
         op.execute(statement)
 
 
 def downgrade() -> None:
     before, after = _set_aside()
-    for statement in (*before, "DELETE FROM role_permissions WHERE area = 'watches'", *after, RAISE):
+    for statement in (*before, "DELETE FROM role_permissions WHERE area = 'watches'", RAISE, *after):
         op.execute(statement)
