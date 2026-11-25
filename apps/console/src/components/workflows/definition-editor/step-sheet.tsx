@@ -15,7 +15,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { useStepSample } from '@/hooks/engine-queries';
+import { useDefinition, useStepSample } from '@/hooks/engine-queries';
 import type { DefinitionCheck, EngineNode, EngineNodeType, SampleStep } from '@/lib/types/engine';
 
 import { groupLook } from './definition-node';
@@ -161,8 +161,9 @@ export function StepSheet({ node, type, workflowId, steps, checks, order, readOn
                 </AlertDescription>
               </Alert>
             )}
+            {/* A schedule saves on its own and is valid on a copy the editor locks, so its panel decides what a person may do. */}
             {trigger && (
-              <fieldset disabled={locked} className="min-w-0">
+              <fieldset disabled={locked && node.type !== 'ops.trigger.schedule'} className="min-w-0">
                 <HowItStarts node={node} workflowId={workflowId} readOnly={locked} onChange={(parameters) => onChange({ parameters })} />
               </fieldset>
             )}
@@ -171,7 +172,7 @@ export function StepSheet({ node, type, workflowId, steps, checks, order, readOn
               <Section title="Settings">
                 {/* Keyed by node id so moving to another step resets the field drafts. */}
                 <fieldset disabled={locked} className="flex min-w-0 flex-col gap-4">
-                  <StepFields key={node.id} node={node} type={type} steps={steps} errors={byField} onChange={onChange} />
+                  <StepFields key={node.id} node={node} type={type} steps={steps} errors={byField} onChange={onChange} workflowId={workflowId} />
                 </fieldset>
               </Section>
             </div>
@@ -303,13 +304,17 @@ function StepFields({
   steps,
   errors,
   onChange,
+  workflowId,
 }: {
   node: EngineNode;
   type: EngineNodeType | undefined;
   steps: StepRefs;
   errors: Record<string, string>;
   onChange: (patch: Partial<Pick<EngineNode, 'name' | 'parameters'>>) => void;
+  workflowId: string;
 }) {
+  // Once a schedule is set, the trigger's Key is a detail: the clock names each run by its time.
+  const scheduled = useDefinition(workflowId).data?.schedules?.some((s) => s.triggerStep === node.id) ?? false;
   const [text, setText] = React.useState(() => pretty(node.parameters));
   const [parseError, setParseError] = React.useState<string | undefined>();
   const lastSent = React.useRef(text);
@@ -352,6 +357,7 @@ function StepFields({
       {type?.ui?.order.length ? (
         <NodeSettingsForm form={type.ui} schema={type.parameters} value={node.parameters ?? {}} steps={steps} idPrefix={`node-${node.id}`}
           errors={errors}
+          advanced={scheduled && node.type === 'ops.trigger.schedule' ? ['key'] : undefined}
           onChange={(parameters) => onChange({ parameters })}
           testIds={node.type === EXTRACT ? { read: 'step-what-to-read' } : undefined}
         />

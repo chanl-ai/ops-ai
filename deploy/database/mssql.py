@@ -67,6 +67,10 @@ SYSTEM_READS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "engine_steps": (("SELECT",), ()),
     # The retention sweep lists the tenants holding memories; it never reads what an agent remembers.
     "agent_memories": (("SELECT",), ("tenant_id",)),
+    # The schedule clock lists the tenants holding a schedule (agents 20261123_2000); it reads no rule there.
+    "workflow_schedules": (("SELECT",), ("tenant_id",)),
+    # The relay delivers every tenant's audit entries of schedule changes (agents 20261124_1100).
+    "agents_outbox": (("SELECT", "UPDATE", "DELETE"), ()),
     # Every background process writes its heartbeat; the Background page reads every team's jobs.
     "background_heartbeats": (("SELECT", "INSERT", "UPDATE", "DELETE"), ()),
     "background_jobs": (("SELECT",), ()),
@@ -215,9 +219,13 @@ RUNTIME_GRANTS: dict[str, Grants] = {
         "thread_budgets_unattributed": ((), ()),
         "thread_leases": (_SIU, ()),
         "timers": (_SIU, ()),
-        # A trigger event is settled in place (agents 0089, 0091); what fired it is never rewritten.
-        "trigger_events": (_SI, ("detail", "item", "outcome", "run_id")),
+        # A trigger event is settled in place (agents 0089, 0091); what fired it is never rewritten. The schedule
+        # clock deletes its own rows after KEEP_SCHEDULE_DAYS (agents 20261123_1900).
+        "trigger_events": (_SID, ("detail", "item", "outcome", "run_id")),
         "widget_deployments": (_SIU, ()),
+        # Clearing a schedule and deleting its workflow remove the row (agents 20261123_1900).
+        "workflow_schedules": ((*_SIU, "DELETE"), ()),
+        "agents_outbox": (("INSERT",), ()),
         "widget_mint_key_audit": (_SI, ()),
         "widget_mint_keys": (_SIU, ()),
     },

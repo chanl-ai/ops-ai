@@ -155,5 +155,7 @@ export interface LivePlaces {
     traffic24h: number | null;
     errors24h: number | null;
     lastActivityAt: string | null;
+    /** A workflow step's schedule in words with its next run; null for a channel or an unscheduled step. */
+    schedule: { words: string; nextRun: string | null; triggerStep: string } | null;
   }[];
 }

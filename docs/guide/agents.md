@@ -90,6 +90,10 @@ are planned.
 When an agent drafts a write that needs approval, the chat shows Approve and Reject, and approving may ask for your
 password again ([Human tasks and approvals](human-tasks.md)).
 
+## Run an agent on a schedule
+
+An agent runs on a schedule through a workflow with the agent as its step: from the agent's Channels tab, Schedule (Run on a schedule) makes that workflow and saves its schedule, and publishing it starts the runs. There is no separate schedule route for an agent, so a script makes the same workflow. The steps are in [Schedule a workflow or an agent](schedule-a-workflow.md#run-an-agent-on-a-schedule).
+
 ## Next
 
 <!-- site: cards -->

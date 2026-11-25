@@ -14,6 +14,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { useMailboxes } from '@/hooks/channels-queries';
 import type { EngineNode } from '@/lib/types/engine';
 
+import { SchedulePanel } from './schedule-panel';
 import { ShareAsForm } from './share-as-form';
 
 /**
@@ -32,6 +33,7 @@ export interface TriggerPanelProps {
 
 const EMAIL_TRIGGER = 'ops.trigger.email';
 const REQUEST_TRIGGER = 'ops.trigger.request';
+const SCHEDULE_TRIGGER = 'ops.trigger.schedule';
 
 type InputSchema = { properties?: Record<string, { type?: string; description?: string }>; required?: string[] };
 
@@ -58,6 +60,7 @@ function DefaultPanel({ node, workflowId }: TriggerPanelProps) {
 export const TRIGGER_PANELS: Record<string, React.ComponentType<TriggerPanelProps>> = {
   [EMAIL_TRIGGER]: EmailPanel,
   [REQUEST_TRIGGER]: RequestPanel,
+  [SCHEDULE_TRIGGER]: SchedulePanel,
 };
 
 /** The slot itself: the trigger type's own panel, or the default one. */

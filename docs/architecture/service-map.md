@@ -50,7 +50,7 @@ Every call goes through a typed client with a service token and the caller's tea
 | documents-service | platform-service | Reads the workspace floor and the team's `pageImages` policy live on each read; an unreadable policy counts as off | service token | `settings:view` |
 | `file_deleted_purge` on `file.deleted` | documents-service | Retention and legal-hold deletes remove the derived layout, extractions and samples. files-service emits the event and calls nobody | service event | `documents:delete` |
 | any service | agents-service | Reports a service event; the tenant's handler for it runs (below) | `POST /v1/events`, through the `ops_store.outbox` relay | `events:emit` |
-| kb-service, files-service (and any service with changes to audit) | platform-service | Delivers the audit entry it wrote with a settings change to the account's one audit log | `POST /v1/audit-events` on the internal port, through the `ops_store.audit` outbox relay | `audit:create` |
+| kb-service, files-service, agents-service (and any service with changes to audit) | platform-service | Delivers the audit entry it wrote with a settings change to the account's one audit log | `POST /v1/audit-events` on the internal port, through the `ops_store.audit` outbox relay | `audit:create` |
 | kb-service | files-service | Knowledge uploads are stored as files | `ops_files_client` | `files:write` |
 | files-service (`files_watch_checks`) | tools-service | A watched folder's check lists and fetches the source's changed files with the team's sign-in, as knowledge does. When tools-service is down the check ends refused, its place kept, and the outcome shows on the watch | `POST /v1/calls` through `ops_sources.ToolReader` | `tools:view`, `tools:run` |
 | agents-service (Files changed trigger) | files-service | Reads a watch's events after its place and the watches a trigger's picker offers | `GET /v1/watches/options`, `GET /v1/watches/{id}/events` | `files:view` |
@@ -100,7 +100,7 @@ heartbeat at most every 10 s and on every error; `test_background_registry.py` f
 
 | Process | Service | Heartbeat kept in | Jobs logged |
 |---|---|---|---|
-| Workflow worker, sweeper, timer poller, memory clean-up, mail listener, event workflows | agents-service | `background_heartbeats` (one row per process instance) | `background_jobs`, in the job's team (memory clean-up: none) |
+| Workflow worker, sweeper, timer poller, memory clean-up, mail listener, schedule clock, event workflows, and the audit hand-off (`agents_relay`, an outbox relay) | agents-service | `background_heartbeats` (one row per process instance) | `background_jobs`, in the job's team (memory clean-up: none) |
 | File hand-off, document hand-off, tool events (outbox relays), document reading | files, documents, tools | the process's memory | none: a failed hand-off shows as the heartbeat's last error and on its outbox row |
 
 Each service answers `GET /health/background` (states and counts, no record's data), which `make health` and the

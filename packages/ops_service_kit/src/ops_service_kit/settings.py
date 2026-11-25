@@ -206,6 +206,10 @@ class Settings(BaseSettings):
     mailboxes_seed_file: Path | None = None
     # How often the workflow worker reads each bound mailbox.
     email_poll_seconds: float = 30.0
+    # The shortest gap between two runs a saved schedule may ask for, every rule kind alike. Only a save checks it (a
+    # save applies at once, outside versions), so raising it leaves saved schedules running and refuses each at its
+    # next save (docs/architecture/roles-and-permissions.md).
+    schedule_floor_minutes: int = 5
     # Mail out (packages/ops_email): "none" fails every send with that reason; "smtp", "resend" and "graph" send from
     # `mail_from`; "fake" is dev only and writes each message to `mail_fake_out_dir`.
     mail_provider: Literal["none", "fake", "smtp", "resend", "graph"] = "none"
@@ -532,6 +536,8 @@ class Settings(BaseSettings):
                 # secrets_egress:manage: an approved held host joins the tenant's allow-list in tools-service;
                 # claimed only on that call (GatewayClient.egress_host_decision).
                 "secrets_egress:manage",
+                # audit:create: its relay writes a schedule's save and clear to the account's audit log.
+                "audit:create",
             ],
             # deployments:view: it reads a mailbox's reply sender when a send_reply names the mailbox.
             # settings:view: a tool module publish reads the team's publishReview live.
