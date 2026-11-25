@@ -407,3 +407,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-790 | tools-service | A chat user never chooses between their own login and the team's | api, ui | current |
 | uc-791 | models-service | A provider type added as a file shows in the add list | api, ui | current |
 | uc-792 | models-service | An admin connects Anthropic and an agent's model settings reach its chat | api, ui | current |
+| uc-agents-1 | agents-service | An agent's tools are chosen by app: searched, opened, all of an app's tools added in one save, and listed by app with counts | api, ui | draft |
