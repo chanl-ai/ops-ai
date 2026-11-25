@@ -50,6 +50,8 @@ export interface FieldBlock {
   removable?: boolean;
   /** A short label beside the heading, e.g. what the section is for. */
   note?: string;
+  /** Sentences offered as chips above the text; picking one calls the page's `onChip`, which decides what it writes. */
+  chips?: { id: string; label: string; icon?: string; text: string }[];
 }
 
 export interface ListBlock {
@@ -161,7 +163,7 @@ export function toEditorDoc(value: DocumentValue): DocNode {
   return {
     type: 'doc',
     content: value.blocks.map((b): DocNode => {
-      if (b.kind === 'field') return { type: 'field', attrs: { key: b.key, label: b.label, placeholder: b.placeholder ?? null, optional: b.optional ? true : null, removable: b.removable ? true : null, note: b.note ?? null }, content: b.text.split('\n').map((p) => textNode('paragraph', p)) };
+      if (b.kind === 'field') return { type: 'field', attrs: { key: b.key, label: b.label, placeholder: b.placeholder ?? null, optional: b.optional ? true : null, removable: b.removable ? true : null, note: b.note ?? null, chips: b.chips?.length ? b.chips : null }, content: b.text.split('\n').map((p) => textNode('paragraph', p)) };
       if (b.kind === 'list') return { type: 'list', attrs: { key: b.key, label: b.label, placeholder: b.placeholder ?? null, optional: b.optional ? true : null }, content: (b.items.length ? b.items : ['']).map((i) => textNode('item', i)) };
       return { type: 'steps', attrs: { placeholder: b.placeholder ?? null }, content: (b.steps.length ? b.steps : [{ do: '' }]).map(stepNode) };
     }),
@@ -192,7 +194,7 @@ const blank = (s: StepValue) => !s.do && !s.use && !s.check && !s.ifNot;
 export function fromEditorDoc(doc: DocNode): DocumentValue {
   return {
     blocks: (doc.content ?? []).map((n): Block => {
-      const placeholder = { ...(n.attrs?.placeholder ? { placeholder: n.attrs.placeholder as string } : {}), ...(n.attrs?.optional ? { optional: true } : {}), ...(n.attrs?.removable ? { removable: true } : {}), ...(n.attrs?.note ? { note: n.attrs.note as string } : {}) };
+      const placeholder = { ...(n.attrs?.placeholder ? { placeholder: n.attrs.placeholder as string } : {}), ...(n.attrs?.optional ? { optional: true } : {}), ...(n.attrs?.removable ? { removable: true } : {}), ...(n.attrs?.note ? { note: n.attrs.note as string } : {}), ...(n.attrs?.chips ? { chips: n.attrs.chips as NonNullable<FieldBlock['chips']> } : {}) };
       if (n.type === 'field') return { kind: 'field', key: n.attrs!.key as string, label: n.attrs!.label as string, locked: true, text: (n.content ?? []).map(textOf).join('\n'), ...placeholder };
       if (n.type === 'list') return { kind: 'list', key: n.attrs!.key as string, label: n.attrs!.label as string, items: (n.content ?? []).map(textOf).filter((t) => t.trim()), ...placeholder };
       const steps = (n.content ?? []).map(stepValue);

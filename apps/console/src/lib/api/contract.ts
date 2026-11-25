@@ -76,6 +76,7 @@ import type {
   RouteFields,
   WorkflowInput,
   ReviewPlace,
+  InstructionSectionList,
 } from '@/lib/types/domain';
 import type {
   AgentFilters,
@@ -127,6 +128,12 @@ export interface OpsApi {
     promptView(id: string, version?: number): Promise<AgentPrompt>;
     /** A proposed text per brief heading from a description of the job; saves nothing. */
     draftBrief(id: string, description: string): Promise<BriefDraft>;
+    /** The workspace's list of sections an agent's brief may add (the stored list, or the default). */
+    instructionSections(): Promise<InstructionSectionList>;
+    /** Replaces the list; 403 without settings: manage, 422 `validation_failed` naming `sections` for a list that breaks a rule. */
+    saveInstructionSections(list: InstructionSectionList): Promise<InstructionSectionList>;
+    /** Deletes the saved list and returns the default. */
+    resetInstructionSections(): Promise<InstructionSectionList>;
     /** What stops the newest draft from publishing, each with the field it is in; opens and changes nothing. */
     publishCheck(id: string, version: number): Promise<AgentPublishCheck>;
     /** Whether publishing the newest draft would wait for review, and why; opens and changes nothing. */
