@@ -317,3 +317,4 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-771 | agents-service | A builder takes a new skill to its first publish in under ten minutes | ui | `agents-service/a-builder-takes-a-new-skill.md` |
 | uc-781 | console | Record editors and list pages share one header, one tab strip and one section style | ui | `console/editor-page-layout.md` |
 | uc-790 | tools-service | A chat user never chooses between their own login and the team's | api, ui | `tools-service/chat-never-asks-whose-login.md` |
+| uc-780 | console | A long list or text in a table cell stays inside its column | ui | `console/long-values-in-tables.md` |

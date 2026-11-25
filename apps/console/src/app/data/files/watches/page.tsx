@@ -209,7 +209,7 @@ function columns(onCheck: ((w: Watch) => void) | undefined, onChange: (w: Watch)
           <span className="truncate text-xs text-muted-foreground">
             <AppName plugin={row.original.plugin} /> · {scopeSummary(row.original.folders, row.original.values)}
           </span>
-          <span className="mt-1 whitespace-normal sm:hidden">
+          <span className="mt-1 sm:hidden">
             <LastCheck w={row.original} stacked />
           </span>
           <span className="mt-1 text-xs tabular-nums text-muted-foreground sm:hidden">{plural(row.original.filesInFiles, 'file')} in Files</span>

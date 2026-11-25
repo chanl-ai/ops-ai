@@ -408,3 +408,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-782 | agents-service | Only a person who may decide a review decides, resumes or replays it | api | current |
 | uc-790 | tools-service | A chat user never chooses between their own login and the team's | api, ui | current |
 | uc-779 | files-service | A watched folder brings files in | api, ui | draft |
+| uc-780 | console | A long list or text in a table cell stays inside its column | ui | draft |
