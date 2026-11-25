@@ -8,6 +8,8 @@ import { Selection } from '@tiptap/pm/state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { PRESET_ICONS } from '@/components/shared/preset-icons';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { PublishBlocker, Ref, RefKind, ReferenceItem } from '@/lib/types/references';
 
@@ -36,6 +38,8 @@ export interface DocumentContextValue {
   readOnly: boolean;
   /** Removes the block a Remove control on its heading names; left out, no block draws one. */
   removeBlock?: (key: string) => void;
+  /** Called with a block's key and the chip picked above its text; left out, no block draws chips. */
+  pickChip?: (key: string, text: string) => void;
   /** Set where a missing reference can be given back (the agent page). */
   addBack?: (ref: Ref) => void;
   chooseAnother: (ref: Ref) => void;
@@ -96,8 +100,12 @@ function WarningLine({ message }: { message: string }) {
  * A locked heading with the text or the list under it. An optional section with nothing in it is one line, its heading
  * and an Add link, until the person adds to it (or the cursor is in it); read-only, the line says None.
  */
+type Chip = { id: string; label: string; icon?: string; text: string };
+/** The chip whose sentence is the section's whole text, which draws pressed. */
+const chipOn = (chips: Chip[], text: string) => chips.find((c) => c.text.trim() === text.trim())?.id ?? '';
+
 export function BlockView({ node, editor, getPos }: ReactNodeViewProps) {
-  const { missing, invalid, warnings, readOnly, removeBlock } = React.useContext(DocumentContext);
+  const { missing, invalid, warnings, readOnly, removeBlock, pickChip } = React.useContext(DocumentContext);
   const key = node.attrs.key as string;
   const error = invalid.find((i) => i.field === key);
   const errorId = `${React.useId()}-error`;
@@ -144,6 +152,19 @@ export function BlockView({ node, editor, getPos }: ReactNodeViewProps) {
           </Button>
         ))}
       </div>
+      {!readOnly && pickChip && Array.isArray(node.attrs.chips) && (
+        <ToggleGroup type="single" variant="outline" size="sm" value={chipOn(node.attrs.chips as Chip[], node.textContent)} onValueChange={() => {}} contentEditable={false} aria-label={`${label} presets`} className="w-full flex-wrap gap-1 select-none" data-testid={`brief-chips-${key}`}>
+          {(node.attrs.chips as Chip[]).map((c) => {
+            const Icon = c.icon ? PRESET_ICONS[c.icon] : undefined;
+            return (
+              <ToggleGroupItem key={c.id} value={c.id} className="min-w-fit flex-none rounded-md border-l" onClick={() => pickChip(key, c.text)} title={c.text}>
+                {Icon && <Icon aria-hidden />}
+                {c.label}
+              </ToggleGroupItem>
+            );
+          })}
+        </ToggleGroup>
+      )}
       <NodeViewContent className={cn(collapsed && 'hidden', error && 'rounded-sm ring-2 ring-destructive/40')} />
       {error && (
         <p id={errorId} contentEditable={false} className="text-xs text-destructive-text">

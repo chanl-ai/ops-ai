@@ -37,6 +37,7 @@ export const SETTINGS_NAV: SettingsEntry[] = [
   { id: 'workspace-general', title: 'General', href: '/settings/workspace', icon: IconAdjustmentsHorizontal, description: 'The workspace’s name, address and logo', group: 'Workspace' },
   { id: 'storage', title: 'Storage', href: '/settings/workspace/storage', icon: IconServer, description: 'Where files are kept, upload limits, scanning and retention', group: 'Workspace', needs: STORAGE_SETTINGS },
   { id: 'model-providers', title: 'Model providers', href: '/settings/workspace/model-providers', icon: IconCpu, description: 'Keys the account’s AI models sign in with, never shown again', group: 'Workspace' },
+  { id: 'agent-instructions', title: 'Agent instructions', href: '/settings/agent-instructions', icon: IconBrain, description: 'The sections an agent’s brief may hold, their order and their presets', group: 'Workspace' },
   { id: 'usage', title: 'Usage and cost', href: '/settings/workspace/usage', icon: IconChartBar, description: 'Tokens, model cost and tool calls for chargeback', group: 'Workspace', needs: USAGE },
   { id: 'team-general', title: 'General', href: '/settings/team', icon: IconAdjustmentsHorizontal, description: 'The team’s name, owner and the agent new chats start on', group: 'Team' },
   { id: 'notifications', title: 'Notifications', href: '/settings/team/notifications', icon: IconBell, description: 'Where approvals, SLA warnings and alerts go', group: 'Team' },

@@ -59,6 +59,8 @@ export interface InstructionDocumentProps {
   hint?: string;
   /** Removes the block whose Remove control was used, by its key; only blocks marked `removable` draw one. */
   onRemoveBlock?: (key: string) => void;
+  /** Called with a block's key and the text of the chip picked above it. */
+  onChip?: (key: string, text: string) => void;
   /** A row between the text and the footer, shown to a person who can edit (the brief's Add section). */
   belowSlot?: React.ReactNode;
   /** What the document is, for a screen reader: "Dispute desk instructions". */
@@ -95,13 +97,13 @@ const MENU_COPY: Record<Trigger, { label: string; empty: (q: string) => string }
  * skills, agents and workflows as chips. `@` opens the grouped picker under the caret, `{{` the variables, `/` adds a
  * step, a check or an if-not line. The agent page and the skill page draw the same component with different blocks.
  */
-export function InstructionDocument({ value, onChange, searchReferences, onInsertReference, resolved, missing = [], onMissingChange, invalid = [], warnings = [], variables, readOnly = false, footer, footerSlot, headerSlot, onRemoveBlock, belowSlot, showHint = true, hint = 'Type @ to add a tool, knowledge or skill', label, controls }: InstructionDocumentProps) {
+export function InstructionDocument({ value, onChange, searchReferences, onInsertReference, resolved, missing = [], onMissingChange, invalid = [], warnings = [], variables, readOnly = false, footer, footerSlot, headerSlot, onRemoveBlock, onChip, belowSlot, showHint = true, hint = 'Type @ to add a tool, knowledge or skill', label, controls }: InstructionDocumentProps) {
   const bridge = React.useRef<MenuBridge | null>(null);
   const [extensions] = React.useState(() => instructionExtensions(() => bridge.current));
   // What the page last saw, so a value it hands back unchanged does not reload the document and move the caret.
   const seen = React.useRef(normal(value));
-  const latest = React.useRef({ onChange, onInsertReference, searchReferences, onRemoveBlock });
-  latest.current = { onChange, onInsertReference, searchReferences, onRemoveBlock };
+  const latest = React.useRef({ onChange, onInsertReference, searchReferences, onRemoveBlock, onChip });
+  latest.current = { onChange, onInsertReference, searchReferences, onRemoveBlock, onChip };
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -309,6 +311,7 @@ export function InstructionDocument({ value, onChange, searchReferences, onInser
       invalid,
       warnings,
       readOnly,
+      pickChip: onChip ? (key, text) => latest.current.onChip?.(key, text) : undefined,
       removeBlock: onRemoveBlock ? (key) => latest.current.onRemoveBlock?.(key) : undefined,
       chooseAnother,
       canMarkRuns: (pos) => !!editor && canMarkRuns(editor, pos),
@@ -318,7 +321,7 @@ export function InstructionDocument({ value, onChange, searchReferences, onInser
     }),
     // `onInsertReference` only decides whether Add it back is offered.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [known, missing, invalid, warnings, readOnly, !onRemoveBlock, chooseAnother, editor, !onInsertReference],
+    [known, missing, invalid, warnings, readOnly, !onRemoveBlock, !onChip, chooseAnother, editor, !onInsertReference],
   );
 
   React.useImperativeHandle(

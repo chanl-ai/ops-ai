@@ -1,11 +1,11 @@
 import { composeHead } from '@/lib/brief-sections';
-import type { Agent, AgentBrief } from '@/lib/types/domain';
+import type { Agent, AgentBrief, InstructionSection } from '@/lib/types/domain';
 import type { AgentPublishCheck, PublishBlocker } from '@/lib/types/references';
 
 import { isOffered } from './index';
 
 /** The prompt the service writes from a brief, for the all-mock console only: its headings in order, Never last. */
-export const composeBrief = (name: string, b: AgentBrief): string => composeHead(name, b);
+export const composeBrief = (name: string, b: AgentBrief, list: InstructionSection[]): string => composeHead(name, b, list);
 
 /** The Never section the service writes after everything else, on every reply. */
 export const neverSection = (b: AgentBrief | null | undefined): string => (b?.never.length ? `\n\n# Never\n${b.never.map((r) => `- ${r}`).join('\n')}` : '');

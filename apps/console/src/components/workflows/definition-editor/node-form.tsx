@@ -3,20 +3,20 @@
 import * as React from 'react';
 import { Plus, X } from 'lucide-react';
 
-import { FormField } from '@/components/shared/form-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
 import { useEngineOptions } from '@/hooks/engine-queries';
 import { AccountSelect } from '@/components/connections/account-select';
 import { JsonInput } from '@/components/shared/json-input';
 
+import { SchemaForm, asList, asObject, schemaChoices, NONE, type FieldContext, type FieldRenderer, type Schema } from '@/components/shared/schema-form';
 import type { EngineOption, NodeForm, NodeFormField, OptionSource } from '@/lib/types/engine';
 
+export { schemaChoices };
+
 type Params = Record<string, unknown>;
-type Schema = { type?: string; enum?: unknown[]; oneOf?: { const?: unknown; title?: string }[]; anyOf?: Schema[]; default?: unknown; properties?: Record<string, Schema>; items?: Schema; required?: string[] };
 
 export interface StepRef {
   id: string;
@@ -31,38 +31,24 @@ export interface StepRefs {
   earlier: StepRef[];
 }
 
-const NONE = '__none__';
+/** The widgets only a workflow step has: a step or platform pick, a mapped value, review options, raw JSON, an account. */
+const nodeRenderers = (steps: StepRefs): Record<string, FieldRenderer> => ({
+  source: ({ id, spec, value, onChange }: FieldContext) => <SourceSelect id={id} source={(spec as NodeFormField).source} value={value} steps={steps} onChange={onChange} />,
+  mapping: ({ id, value, onChange }) => <MappingInput id={id} value={value} steps={steps} onChange={onChange} />,
+  mappings: ({ id, value, onChange }) => <MappingsInput id={id} value={asObject(value)} steps={steps} onChange={(v) => onChange(Object.keys(v).length ? v : undefined)} />,
+  options: ({ id, value, onChange }) => <OptionsInput id={id} value={asList(value)} steps={steps} onChange={(v) => onChange(v.length ? v : undefined)} />,
+  json: ({ id, value, onChange }) => <JsonInput id={id} value={value} onChange={onChange} />,
+  account: ({ id, value, onChange }) => <AccountSelect id={id} value={asObject(value)} onChange={(v) => onChange(Object.keys(v).length ? v : undefined)} />,
+});
 
 /**
- * A field's choices with the words to show for each: JSON Schema's `oneOf` of `{ const, title }` names each option,
- * and a plain `enum` value shows as written with a capital first letter. A setting that also takes a path (`anyOf`
- * of the choices and `$.…`) lists the choices.
- */
-export function schemaChoices(schema: { enum?: unknown[]; oneOf?: { const?: unknown; title?: string }[]; anyOf?: { enum?: unknown[] }[] }): { value: string; label: string }[] {
-  const upper = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
-  const titled = (schema.oneOf ?? []).filter((o) => o.const !== undefined);
-  if (titled.length) return titled.map((o) => ({ value: String(o.const), label: o.title ?? upper(String(o.const)) }));
-  return (schema.enum ?? schema.anyOf?.find((s) => s.enum)?.enum ?? []).map((v) => ({ value: String(v), label: upper(String(v)) }));
-}
-
-const asObject = (v: unknown): Params => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Params) : {});
-const asList = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-/** Drops a cleared setting rather than storing an empty value the schema may refuse. */
-const without = (p: Params, key: string, value: unknown): Params => {
-  const next = { ...p };
-  if (value === undefined || value === '') delete next[key];
-  else next[key] = value;
-  return next;
-};
-
-/**
- * A node's settings as the form its type declares (`ui`): one control per parameter, in the type's order. The form
- * reads and writes the same parameter object a JSON edit would, and the server checks every save against the
- * type's schema whatever produced it.
+ * A node's settings as the form its type declares (`ui`): the shared schema form with the widgets only a step has.
+ * The form reads and writes the same parameter object a JSON edit would, and the server checks every save against
+ * the type's schema whatever produced it.
  */
 export function NodeSettingsForm({
   form,
-  schema: raw,
+  schema,
   value,
   steps,
   idPrefix,
@@ -81,75 +67,8 @@ export function NodeSettingsForm({
   /** A control's test id, by parameter name. */
   testIds?: Record<string, string>;
 }) {
-  const schema = raw as Schema;
-  const required = new Set(schema.required ?? []);
-  return (
-    <div className="flex flex-col gap-4" data-testid="node-settings-form">
-      {form.order.map((name) => {
-        const spec = form.fields[name];
-        const field = schema.properties?.[name] ?? {};
-        const id = `${idPrefix}-${name}`;
-        return (
-          <FormField key={name} id={id} label={spec.label} optional={!required.has(name)} hint={spec.help} error={errors?.[name]}>
-            <FieldControl id={id} spec={spec} schema={field} value={value[name]} steps={steps} onChange={(v) => onChange(without(value, name, v))} testId={testIds?.[name]} />
-          </FormField>
-        );
-      })}
-    </div>
-  );
-}
-
-function FieldControl({ id, spec, schema, value, steps, onChange, testId }: { id: string; spec: NodeFormField; schema: Schema; value: unknown; steps: StepRefs; onChange: (v: unknown) => void; testId?: string }) {
-  switch (spec.widget) {
-    case 'text':
-      return <Input id={id} value={typeof value === 'string' ? value : ''} placeholder={spec.placeholder ?? (typeof schema.default === 'string' ? `e.g. ${schema.default}` : undefined)} onChange={(e) => onChange(e.target.value || undefined)} data-field={id} />;
-    case 'textarea':
-      return <Textarea id={id} value={typeof value === 'string' ? value : ''} rows={4} onChange={(e) => onChange(e.target.value || undefined)} data-field={id} />;
-    case 'number':
-      return <Input id={id} type="number" inputMode="decimal" value={typeof value === 'number' ? String(value) : ''} onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))} data-field={id} />;
-    case 'date':
-      return <Input id={id} type="date" value={typeof value === 'string' ? value : ''} onChange={(e) => onChange(e.target.value || undefined)} data-field={id} />;
-    case 'switch':
-      return <Switch id={id} checked={value === true} onCheckedChange={(c) => onChange(c)} />;
-    case 'select':
-      return <EnumSelect id={id} schema={schema} value={value} onChange={onChange} testId={testId} />;
-    case 'source':
-      return <SourceSelect id={id} source={spec.source} value={value} steps={steps} onChange={onChange} />;
-    case 'mapping':
-      return <MappingInput id={id} value={value} steps={steps} onChange={onChange} />;
-    case 'mappings':
-      return <MappingsInput id={id} value={asObject(value)} steps={steps} onChange={(v) => onChange(Object.keys(v).length ? v : undefined)} />;
-    case 'list':
-      return spec.item ? <ListInput id={id} item={spec.item} schema={schema.items ?? {}} value={asList(value)} steps={steps} onChange={(v) => onChange(v.length ? v : undefined)} /> : null;
-    case 'options':
-      return <OptionsInput id={id} value={asList(value)} steps={steps} onChange={(v) => onChange(v.length ? v : undefined)} />;
-    case 'json':
-      return <JsonInput id={id} value={value} onChange={onChange} />;
-    case 'account':
-      return <AccountSelect id={id} value={asObject(value)} onChange={(v) => onChange(Object.keys(v).length ? v : undefined)} />;
-  }
-}
-
-function EnumSelect({ id, schema, value, onChange, testId }: { id: string; schema: Schema; value: unknown; onChange: (v: unknown) => void; testId?: string }) {
-  // A saved value the choices do not list (a path) stays shown as itself.
-  const listed = schemaChoices(schema);
-  const options = typeof value === 'string' && value && !listed.some((o) => o.value === value) ? [...listed, { value, label: value }] : listed;
-  const fallback = schema.default !== undefined ? `Default (${String(schema.default)})` : 'Not set';
-  return (
-    <Select value={typeof value === 'string' ? value : NONE} onValueChange={(v) => onChange(v === NONE ? undefined : v)}>
-      <SelectTrigger id={id} className="w-full" data-field={id} data-testid={testId}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={NONE}>{fallback}</SelectItem>
-        {options.map((o) => (
-          <SelectItem key={o.value} value={o.value}>
-            {o.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
+  const renderers = React.useMemo(() => nodeRenderers(steps), [steps]);
+  return <SchemaForm schema={schema as Schema} form={form} value={value} idPrefix={idPrefix} onChange={onChange} errors={errors} testIds={testIds} renderers={renderers} testId="node-settings-form" />;
 }
 
 /** A choice from a platform list (agents, tools, workflows) or from this workflow's own steps. */
@@ -280,28 +199,6 @@ function MappingsInput({ id, value, steps, onChange }: { id: string; value: Para
       ))}
       <Button type="button" variant="outline" size="sm" className="self-start" onClick={add}>
         <Plus /> Add field
-      </Button>
-    </div>
-  );
-}
-
-/** A list of objects, each edited with the item form its type declares. */
-function ListInput({ id, item, schema, value, steps, onChange }: { id: string; item: NodeForm; schema: Schema; value: unknown[]; steps: StepRefs; onChange: (v: unknown[]) => void }) {
-  return (
-    <div className="flex flex-col gap-2" data-testid={`${id}-rows`}>
-      {value.map((entry, i) => (
-        <div key={i} className="flex flex-col gap-2 rounded-md border p-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">{i + 1}</span>
-            <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${i + 1}`} onClick={() => onChange(value.filter((_, j) => j !== i))}>
-              <X />
-            </Button>
-          </div>
-          <NodeSettingsForm form={item} schema={schema} value={asObject(entry)} steps={steps} idPrefix={`${id}-${i}`} onChange={(next) => onChange(value.map((e, j) => (j === i ? next : e)))} />
-        </div>
-      ))}
-      <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => onChange([...value, {}])}>
-        <Plus /> Add
       </Button>
     </div>
   );

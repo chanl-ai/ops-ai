@@ -264,6 +264,9 @@ export function createHttpApi(baseUrl: string): OpsApi {
       publishCheck: (id, version) => get(`/agents/${id}/publish-check?version=${version}`),
       promptView: (id, version) => get(`/agents/${id}/prompt${version === undefined ? '' : `?version=${version}`}`),
       draftBrief: (id, description) => send('POST', `/agents/${id}/brief-draft`, { description }),
+      instructionSections: () => get('/agent-instruction-sections'),
+      saveInstructionSections: (list) => send('PUT', '/agent-instruction-sections', list),
+      resetInstructionSections: () => send('DELETE', '/agent-instruction-sections'),
       setPaused: (id, paused) => send('POST', `/agents/${id}/paused`, { paused }),
       // GET /tools answers one page of the Tools page's rows (each a grantable tool with its app and users): the agent
       // page reads the largest page the route serves.
