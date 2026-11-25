@@ -405,3 +405,5 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-772 | kb-service | Search a long document's pieces on the server | api | draft |
 | uc-782 | agents-service | Only a person who may decide a review decides, resumes or replays it | api | current |
 | uc-790 | tools-service | A chat user never chooses between their own login and the team's | api, ui | current |
+| uc-791 | models-service | A provider type added as a file shows in the add list | api | current |
+| uc-792 | models-service | An admin connects Anthropic and an agent's model settings reach its chat | api | current |

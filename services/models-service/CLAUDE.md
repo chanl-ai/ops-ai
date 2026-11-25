@@ -18,7 +18,10 @@ runs it with `OPS_MODELS_FAKE_OPENAI_URL` pointing at the fake OpenAI (`scripts/
 | Path | Holds |
 |---|---|
 | `src/ops_models/app.py` | Every route (`create_models_app`): admin and admission routes on the service token, provider keys and connections for account admins, completions on the model key |
-| `src/ops_models/providers.py`, `connection_settings.py` | Provider adapters (openai-compatible, Azure OpenAI, scripted) and the rules a connection's settings must meet |
+| `registry/providers/*.json`, `src/ops_models/registry.py` | One entry per provider type, read and checked at start-up; `OPS_MODELS_PROVIDER_REGISTRY_EXTRA` names a folder of more |
+| `src/ops_models/providers.py`, `sigv4.py`, `connection_settings.py` | The adapters an entry names (`ADAPTERS`: openai-compatible, Azure OpenAI, Bedrock, scripted) and the rules a connection's settings must meet |
+| `catalog/models.json`, `catalog/knobs.json`, `src/ops_models/catalog.py` | The pinned model catalog and each provider's knob ranges; `fit` holds every call to the alias's model |
+| `scripts/sync_catalog.py` | Refreshes the catalog snapshot from models.dev and LiteLLM (`make catalog-sync`); review and commit the diff |
 | `src/ops_models/provider_keys.py` | Account provider keys, sealed, never returned |
 | `src/ops_models/seed.py` | The dev seed: scripted connection, `bank-*` aliases, model keys `mk_dev_agents`, `mk_dev_extract`, `mk_dev_tools_check` and one per agent |
 | `src/ops_models/store/` | All database code; `store/provider_keys.py:20` names the tenant role `ops_models_tenant` |
@@ -38,6 +41,7 @@ From this folder (`make help` lists every target):
 | Its tests | `make test`, or from the root `make test PKG=services/models-service` |
 | One test file | `PYTEST_ADDOPTS=tests/test_dev_seed.py make test`: this Makefile ignores `T=` |
 | Lint, types, OpenAPI | `make lint`, `make typecheck`, `make openapi-check` (`make openapi` to regenerate) |
+| Refresh the model catalog | `make catalog-sync` (network), then review and commit `catalog/models.json` |
 | Apply the chain | `make migrate` |
 | Logs and health | from the root: `make logs SVC=models FOLLOW=0`, `make health` |
 
@@ -46,10 +50,11 @@ From this folder (`make help` lists every target):
 ```bash
 make api GET /v1/models/providers AS=admin SVC=models
 make api GET /v1/provider-keys AS=admin SVC=models
+make api GET /v1/models/provider-types AS=admin SVC=models
 ```
 
-Aliases, keys and the call log (`/v1/models/aliases`, `/v1/models/keys`, `/v1/models/calls`) answer service tokens
-only, so `make api` as a person gets 401 there. Reference:
+Keys and the call log (`/v1/models/keys`, `/v1/models/calls`) answer service tokens only, so `make api` as a person
+gets 401 there; aliases also answer an account admin. Reference:
 [make/CLAUDE.md](../../make/CLAUDE.md).
 
 ## Rules for this service
@@ -61,6 +66,8 @@ only, so `make api` as a person gets 401 there. Reference:
 | Order of checks | Key status, expiry and budget, rate limit, alias, cleared sensitivity, then image clearance, then the provider call |
 | Refusals | In the platform error envelope, which OpenAI clients read as `error.code` (`key_budget_exhausted`, `images_not_cleared`, `provider_key_missing`, ...). A provider's failure is classified once, in `providers.py` `PROVIDER_FAILURES` (`provider_unreachable`, `provider_timeout`, `provider_auth_failed`, `provider_rate_limited`, `provider_bad_request`, `provider_error`); its message never quotes the provider's body |
 | Versions are immutable | A change to an alias is a new version; the newest current one serves |
+| A provider is data first | A new provider type is a registry entry; an adapter is added only when no existing one speaks its API, registered by name in `ADAPTERS`. No route branches on a type |
+| Knobs | One rule, `catalog.fit`, on every completion: unsupported knobs left out, numbers clamped to the model's range. The runtime reads the catalog only from the committed snapshot |
 | Real calls | Tests and use cases use the scripted provider or the fake OpenAI; real calls are capped per experiment |
 
 ## Reference docs
@@ -69,7 +76,7 @@ only, so `make api` as a person gets 401 there. Reference:
 |---|---|
 | [docs/services/models-service/overview.md](../../docs/services/models-service/overview.md) | Connections, aliases, keys, admission, completions, Azure OpenAI |
 | [docs/guide/models.md](../../docs/guide/models.md) | Setting up models on an install |
-| [docs/usecases/models-service/](../../docs/usecases/README.md) | 3 use cases |
+| [docs/usecases/models-service/](../../docs/usecases/README.md) | 6 use cases |
 | [openapi.json](openapi.json) | The API |
 
 Known differences: the overview's status line says `make up` does not start this service; `make up` starts it

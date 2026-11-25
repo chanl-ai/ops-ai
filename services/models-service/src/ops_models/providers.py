@@ -1,7 +1,10 @@
-"""Provider connections a completion is forwarded to. `scripted` answers deterministically with no network, for tests
-and use cases; `openai-compatible` forwards to the connection's base URL with the credential its `key_ref` names;
-`azure-openai` forwards to an Azure OpenAI resource in Azure's own header and paths. `anthropic` connections can be
-registered but are not served in this slice. Each connection also embeds text for an alias of kind embedding.
+"""The adapters a completion is forwarded through, registered by name in `ADAPTERS`; each provider type in the
+registry (`registry.py`) names one. `scripted` answers deterministically with no network, for tests and use cases;
+`openai-compatible` forwards to the connection's base URL (or its type's, as OpenAI, Anthropic and Google Gemini
+serve OpenAI's chat API) with the credential its `key_ref` names as a bearer token; `azure-openai` forwards to an
+Azure OpenAI resource in Azure's own header and paths; `bedrock` forwards to Amazon Bedrock's OpenAI-compatible chat
+API, each request signed with the connection's access key pair. Each connection also embeds text for an alias of kind
+embedding.
 
 Both shapes carry tools: the request's `tools` reach the provider and its `tool_calls` come back, whole or as stream
 deltas, in OpenAI's chunk shape.
@@ -25,7 +28,9 @@ from ops_service_kit.narrow import Malformed, a_list, an_object, json_list, json
 from ops_service_kit.scripted_vectors import SCRIPTED_WIDTH, scripted_vector
 
 from .connection_settings import AZURE_OPENAI_V1
+from .registry import ProviderEntry, Registry
 from .schemas import ChatChunk, ChatUsage, ChunkChoice, ChunkDelta
+from .sigv4 import signed_headers
 from .store.aliases import ServingAlias
 
 
@@ -263,6 +268,10 @@ class OpenAICompatibleProvider:
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
 
+    def _signed(self, method: str, url: str, payload: bytes) -> dict[str, str]:
+        """The headers one request goes with; an adapter that signs each request (Bedrock) reads its body here."""
+        return {**self._headers, "content-type": "application/json"}
+
     def _url(self, model_id: str) -> str:
         return f"{self.base_url}/chat/completions"
 
@@ -282,10 +291,9 @@ class OpenAICompatibleProvider:
         return chunk
 
     async def complete(self, model_id: str, body: Json) -> Completion:
+        url, payload = self._url(model_id), json.dumps({**body, "model": model_id, "stream": False}).encode()
         try:
-            r = await self.client.post(
-                self._url(model_id), json={**body, "model": model_id, "stream": False}, headers=self._headers
-            )
+            r = await self.client.post(url, content=payload, headers=self._signed("POST", url, payload))
         except httpx.HTTPError as e:
             # An unreachable endpoint is the provider's failure (502), not this service's (500).
             raise unreached(e) from e
@@ -299,8 +307,9 @@ class OpenAICompatibleProvider:
         body: Json = {"model": model_id, "input": list[JsonValue](inputs)}
         if dimensions is not None:
             body["dimensions"] = dimensions
+        url, payload = self._embeddings_url(model_id), json.dumps(body).encode()
         try:
-            r = await self.client.post(self._embeddings_url(model_id), json=body, headers=self._headers)
+            r = await self.client.post(url, content=payload, headers=self._signed("POST", url, payload))
         except httpx.HTTPError as e:
             raise unreached(e) from e
         self._answered(r)
@@ -323,8 +332,10 @@ class OpenAICompatibleProvider:
     async def stream(self, model_id: str, body: Json, usage: StreamUsage) -> AsyncIterator[Json]:
         # include_usage puts the totals on a last chunk with no choices; metering needs them.
         sent = {**body, "model": model_id, "stream": True, "stream_options": {"include_usage": True}}
+        url, payload = self._url(model_id), json.dumps(sent).encode()
         try:
-            async with self.client.stream("POST", self._url(model_id), json=sent, headers=self._headers) as r:
+            headers = self._signed("POST", url, payload)
+            async with self.client.stream("POST", url, content=payload, headers=headers) as r:
                 self._answered(r)
                 async for line in r.aiter_lines():
                     if not line.startswith("data:"):
@@ -419,15 +430,96 @@ class AzureOpenAIProvider(OpenAICompatibleProvider):
         return {**{k: v for k, v in chunk.items() if k not in _AZURE_ANNOTATIONS}, "choices": choices}
 
 
-def provider_for(connection: ServingAlias, secrets: Mapping[str, str], client: httpx.AsyncClient) -> Provider:
-    kind = connection.type
-    if kind == "scripted":
-        return ScriptedProvider()
+class BedrockProvider(OpenAICompatibleProvider):
+    """Amazon Bedrock's OpenAI-compatible chat API at `{base_url}/chat/completions`, each request signed (SigV4, service
+    `bedrock`) with the connection's access key pair, saved as one provider key holding `accessKeyId` and
+    `secretAccessKey`. **Unverified** against a real account."""
+
+    def __init__(self, base_url: str, region: str, secret: str | None, client: httpx.AsyncClient) -> None:
+        super().__init__(base_url, None, client)
+        self.region = region
+        pair = bedrock_pair(secret)
+        self.access_key, self.secret_key = pair if pair else ("", "")
+
+    def _signed(self, method: str, url: str, payload: bytes) -> dict[str, str]:
+        if not self.access_key:
+            raise ProviderError("provider_auth_failed", why="bedrock connection has no saved access key pair")
+        signed = signed_headers(
+            method,
+            url,
+            payload,
+            access_key=self.access_key,
+            secret_key=self.secret_key,
+            region=self.region,
+            service="bedrock",
+        )
+        return {**signed, "content-type": "application/json"}
+
+
+def bedrock_pair(secret: str | None) -> tuple[str, str] | None:
+    """(access key id, secret access key) from a saved Bedrock key; None when it is not that JSON object."""
+    try:
+        held = json_object(json.loads(secret or ""))
+    except ValueError:
+        return None
+    key_id, key = held.get("accessKeyId"), held.get("secretAccessKey")
+    return (key_id, key) if isinstance(key_id, str) and isinstance(key, str) and key_id and key else None
+
+
+class Adapter(Protocol):
+    def __call__(
+        self, entry: ProviderEntry, connection: ServingAlias, api_key: str | None, client: httpx.AsyncClient
+    ) -> Provider: ...
+
+
+def _unserved(why: str) -> ProviderError:
+    return ProviderError("provider_bad_request", why=why)
+
+
+def _openai_compatible(
+    entry: ProviderEntry, connection: ServingAlias, api_key: str | None, client: httpx.AsyncClient
+) -> Provider:
+    base = entry.base_for(connection.base_url, connection.region)
+    if not base:
+        raise _unserved(f"{entry.id} connection has no base URL")
+    return OpenAICompatibleProvider(base, api_key, client)
+
+
+def _azure(entry: ProviderEntry, connection: ServingAlias, api_key: str | None, client: httpx.AsyncClient) -> Provider:
+    version, region = str(connection.api_version), connection.region
+    return AzureOpenAIProvider(str(connection.base_url), version, region, api_key, client)
+
+
+def _bedrock(
+    entry: ProviderEntry, connection: ServingAlias, api_key: str | None, client: httpx.AsyncClient
+) -> Provider:
+    base = entry.base_for(connection.base_url, connection.region)
+    if not base or not connection.region:
+        raise _unserved("bedrock connection has no region")
+    return BedrockProvider(base, connection.region, api_key, client)
+
+
+def _scripted(
+    entry: ProviderEntry, connection: ServingAlias, api_key: str | None, client: httpx.AsyncClient
+) -> Provider:
+    return ScriptedProvider()
+
+
+# Every adapter a registry entry may name. A new provider that speaks one of these APIs is a registry entry only.
+ADAPTERS: dict[str, Adapter] = {
+    "openai-compatible": _openai_compatible,
+    "azure-openai": _azure,
+    "bedrock": _bedrock,
+    "scripted": _scripted,
+}
+
+
+def provider_for(
+    connection: ServingAlias, secrets: Mapping[str, str], client: httpx.AsyncClient, registry: Registry
+) -> Provider:
+    entry = registry.get(connection.type)
+    if entry is None:
+        raise _unserved(f"provider type {connection.type} is not in the registry")
     key_ref = connection.key_ref
     api_key = secrets.get(key_ref) if key_ref else None
-    if kind == "openai-compatible":
-        return OpenAICompatibleProvider(str(connection.base_url), api_key, client)
-    if kind == "azure-openai":
-        version, region = str(connection.api_version), connection.region
-        return AzureOpenAIProvider(str(connection.base_url), version, region, api_key, client)
-    raise ProviderError("provider_bad_request", why=f"provider type {kind} is not served yet")
+    return ADAPTERS[entry.adapter](entry, connection, api_key, client)

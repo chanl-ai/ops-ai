@@ -292,6 +292,18 @@ _DENIED = {
 _STREAM_USAGE_SINCE = "2024-09-01"
 
 
+_SETTINGS = (
+    "model",
+    "temperature",
+    "top_p",
+    "top_k",
+    "max_tokens",
+    "max_completion_tokens",
+    "reasoning_effort",
+    "thinking",
+)
+
+
 def create_app(script: Script, api_key: str | None = None, azure_region: str = "Sweden Central") -> FastAPI:
     """With `api_key`, a request that sends a credential must send that one, or it is refused as OpenAI refuses a wrong
     key; a request with none is still answered, for the connections in the same stack that name no key.
@@ -301,6 +313,9 @@ def create_app(script: Script, api_key: str | None = None, azure_region: str = "
     `/openai/v1/chat/completions` takes the deployment as `model` and the key as `api-key` or a bearer token. Both
     answer with Azure's `x-ms-region` header (`azure_region`) and its filter annotations."""
     app = FastAPI(title="Fake OpenAI", version="1.0.0")
+    # The sampling and thinking settings of each chat request, newest last, never its messages: a use case reads them
+    # to see that settings saved on an agent reached the provider as models-service fitted them.
+    received: list[dict[str, Any]] = []
 
     def wrong_key(request: Request) -> JSONResponse | None:
         sent = request.headers.get("authorization")
@@ -379,7 +394,12 @@ def create_app(script: Script, api_key: str | None = None, azure_region: str = "
         if (refused := wrong_key(request)) is not None:
             return refused
         body: dict[str, Any] = await request.json()
+        received.append({k: body[k] for k in _SETTINGS if k in body})
         return await reply(body, str(body.get("model") or "unknown"), azure=False)
+
+    @app.get("/received")
+    async def settings_received() -> list[dict[str, Any]]:  # pyright: ignore[reportUnusedFunction]
+        return received[-20:]
 
     @app.post("/openai/deployments/{deployment}/chat/completions")
     async def azure_deployment(request: Request, deployment: str) -> Response:  # pyright: ignore[reportUnusedFunction]

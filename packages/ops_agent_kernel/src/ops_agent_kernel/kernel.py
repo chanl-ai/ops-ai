@@ -964,14 +964,37 @@ def _names(req: TurnRequest) -> dict[str, str]:
 
 
 def _model_settings(req: TurnRequest) -> ModelSettings | None:
-    """The settings sent with each model request; None when the agent sets none, so the model's defaults hold."""
+    """The settings sent with each model request; None when the agent sets none, so the model's defaults hold.
+
+    One order: the agent version's saved knobs, then a caller's temperature within the agent's limits over the saved
+    one. The older `thinking` pattern applies only when the version saved neither a thinking budget nor an effort.
+    A knob name this does not map is not sent."""
     sent = ModelSettings()
+    saved = req.settings.model_settings
+    body: dict[str, Any] = {}
+    # temperature, top_p and max_tokens go as the OpenAI client's own settings; the others in the request body under
+    # the names models-service reads (`thinking` in Anthropic's form for a budget).
+    for name, value in saved.items():
+        if name == "temperature" and not isinstance(value, str):
+            sent["temperature"] = float(value)
+        elif name == "top_p" and not isinstance(value, str):
+            sent["top_p"] = float(value)
+        elif name == "max_tokens" and isinstance(value, int):
+            sent["max_tokens"] = value
+        elif name == "reasoning_effort":
+            body["reasoning_effort"] = value
+        elif name == "top_k":
+            body["top_k"] = value
+        elif name == "thinking_budget" and isinstance(value, int) and value > 0:
+            body["thinking"] = {"type": "enabled", "budget_tokens": value}
     if req.settings.temperature is not None:
         sent["temperature"] = req.settings.temperature
-    if req.settings.thinking in ("low", "medium", "high"):
+    if req.settings.thinking in ("low", "medium", "high") and not {"thinking_budget", "reasoning_effort"} & set(saved):
         sent["thinking"] = req.settings.thinking
     if not req.settings.parallel_reads:
         sent["parallel_tool_calls"] = False
+    if body:
+        sent["extra_body"] = body
     return sent or None
 
 

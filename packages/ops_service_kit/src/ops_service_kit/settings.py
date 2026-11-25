@@ -398,6 +398,9 @@ class Settings(BaseSettings):
     # it seeds connection openai-local at that URL and binds alias default to it. The row is the switch afterwards:
     # PUT the connection's baseUrl to https://api.openai.com/v1 to make the same alias real.
     models_fake_openai_url: str | None = None
+    # models-service: a folder of extra provider type entries (one JSON file each) loaded after the built-in registry,
+    # so an install or a test adds a provider type with no code change. An entry that fails validation stops start-up.
+    models_provider_registry_extra: Path | None = None
     # How long a rotated model key's previous secret keeps working, so callers can pick up the new one.
     model_key_overlap_seconds: int = 900
     # platform-service: the identity issuer. The public port serves sign-in and the key set; the internal port serves
