@@ -5,7 +5,7 @@
 import { AGENTS_PORT, check, chromium, consoleSignIn, finish, shootBothWidths, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { PASSWORD, publishAgent, signInAs } from '@ops-ai/usecase-runner/steps';
 import { JAMES, agents, as } from '../../lib/workflow_ui.mjs';
-import { addFirstToolOfFirstApp } from '../../lib/tools_picker.mjs';
+import { addFirstToolOfFirstApp, showHeldTools } from '../../lib/tools_picker.mjs';
 
 const TAG = Math.random().toString(36).slice(2, 6);
 
@@ -104,9 +104,14 @@ await withUiStack(
       await step('4 a tool picked on the page is granted to the agent', async () => {
         await page.locator('[data-testid="save-state"][data-state="saved"]').first().waitFor({ timeout: 30_000 });
         const label = await addFirstToolOfFirstApp(page);
-        await page.waitForTimeout(1500);
+        // The grant is its own save; the app's row is drawn once the server lists it, and opens to the tool by its label.
+        const rows = page.getByTestId('agent-tools-rows');
+        await rows.waitFor({ timeout: 30_000 }).catch(() => undefined);
+        await showHeldTools(page).catch(() => undefined);
+        const named = rows.getByText(label, { exact: true });
+        await named.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
         const stored = await get(`/v1/agents/${agentId}`);
-        check('4 a tool picked on the page is granted to the agent', stored.toolIds.length === 1 && (await page.locator('[data-testid^="agent-tools-app-"]').count()) > 0, { label, toolIds: stored.toolIds });
+        check('4 a tool picked on the page is granted to the agent', stored.toolIds.length === 1 && label.length > 0 && (await named.count()) === 1 && (await page.getByTestId('agent-tools-count').first().innerText()).trim() === '1', { label, toolIds: stored.toolIds });
       });
 
       await step('5 a published skill attached on the page is pinned to the agent', async () => {

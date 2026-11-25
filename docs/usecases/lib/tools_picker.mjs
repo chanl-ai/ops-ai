@@ -18,7 +18,9 @@ export async function findMatchedTool(page, search, toolId) {
 export async function searchMatchedTool(page, search, toolId) {
   const box = page.getByTestId('tools-picker-search');
   await box.fill(search);
-  const matches = toolId ? page.getByTestId(`tools-match-${toolId}`) : page.locator('[data-testid^="tools-match-"]:not([disabled])');
+  // Under the app cards only, and by the whole id: `tools-match-get` must not find `tools-match-get_account`.
+  const cards = page.getByTestId('tools-picker-apps');
+  const matches = toolId ? cards.getByTestId(`tools-match-${toolId}`) : cards.locator('button[data-testid^="tools-match-"]:not([disabled])');
   return matches.first();
 }
 
@@ -36,9 +38,11 @@ export async function addMatchedTool(page, search, toolId) {
 
 /** Opens the first app, ticks its first tool not yet held and adds it; returns that tool's label. */
 export async function addFirstToolOfFirstApp(page) {
-  await page.getByTestId('agent-tools-picker').first().click({ timeout: 120_000 });
-  await page.locator('[data-testid^="tools-app-"]').first().click({ timeout: 60_000 });
-  const box = page.locator('[data-testid^="tools-app-tool-"]:not([disabled])').first();
+  await openToolsPicker(page);
+  // An app's card is the button in the cards list; the app step's own controls share the `tools-app-` prefix
+  // (select-all, add, connect, list), so neither lookup is by prefix alone.
+  await page.getByTestId('tools-picker-apps').locator('button[data-testid^="tools-app-"]').first().click({ timeout: 60_000 });
+  const box = page.getByTestId('tools-app-list').locator('button[role="checkbox"][data-testid^="tools-app-tool-"]:not([disabled])').first();
   await box.waitFor({ timeout: 30_000 });
   const label = (await page.locator(`label[for="${await box.getAttribute('id')}"]`).innerText()).split('\n')[0];
   await box.click();

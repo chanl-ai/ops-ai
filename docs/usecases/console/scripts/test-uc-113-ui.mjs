@@ -29,7 +29,8 @@ await withUiStack(
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
       const asked = [];
-      page.on('request', (r) => /\/(options|tool-apps)\?/.test(r.url()) && asked.push(r.url()));
+      page.on('request', (r) => /\/(options|tool-apps(\/[^?]+\/tools)?)\?/.test(r.url()) && asked.push(r.url()));
+      const param = (u, key) => new URL(u).searchParams.get(key);
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
@@ -53,7 +54,10 @@ await withUiStack(
       // Step 3: a tool through agents-service's search.
       const tool = await findMatchedTool(page, 'lookup_acc', 'lookup_account');
       await tool.waitFor({ timeout: 30_000 }).catch(() => undefined);
-      check('the tools picker searches agents-service', (await tool.count()) >= 1 && asked.some((u) => u.startsWith(agents) && u.includes('/tool-apps')), { asked: asked.slice(-3) });
+      // The typed words themselves go to agents-service, which names the tool under its app.
+      const searches = asked.filter((u) => u.startsWith(agents) && /\/tool-apps\?/.test(u) && param(u, 'search') === 'lookup_acc');
+      const offeredTools = await page.locator('[data-testid^="tools-match-"]').count();
+      check('the tools picker searches agents-service', (await tool.count()) === 1 && offeredTools >= 1 && searches.length >= 1, { offeredTools, asked: asked.slice(-3) });
       // The draft saves itself a second after a change: there is no Save button, so the save is awaited.
       const saved = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes(`/v1/agents/${agent.id}`), { timeout: 60_000 }));
       await chooseMatchedTool(page, tool);
@@ -65,12 +69,16 @@ await withUiStack(
       check('the version stores the base id and the tool id', stored.collections?.includes(target.id) && stored.toolIds?.includes('lookup_account'), { collections: stored.collections, toolIds: stored.toolIds });
 
       // Step 5: chips resolve by id after a reload.
+      const before = asked.length;
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.getByTestId('agent-knowledge-rows').getByText(name(117)).waitFor({ timeout: 60_000 }).catch(() => undefined);
       await showHeldTools(page);
       const held = page.getByTestId('agent-tools-rows').getByText(/^lookup[_ ]account$/i);
       await held.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
-      check('after a reload the chips show names resolved by id', (await page.getByTestId('agent-knowledge-rows').getByText(name(117)).count()) === 1 && (await held.count()) === 1 && asked.some((u) => u.includes('ids=')));
+      // The base's name comes from the options route by id; the tool's from the agent's own grants, read per app.
+      const again = asked.slice(before);
+      const toolsRead = again.some((u) => /\/tool-apps\?/.test(u) && param(u, 'granted') === 'true') && again.some((u) => /\/tool-apps\/[^?]+\/tools\?/.test(u) && param(u, 'granted') === 'true');
+      check('after a reload the chips show names resolved by id', (await page.getByTestId('agent-knowledge-rows').getByText(name(117)).count()) === 1 && (await held.count()) === 1 && again.some((u) => u.includes('ids=')) && toolsRead, { again: again.slice(-6) });
 
       check('no page errors', errors.length === 0, errors);
     } finally {

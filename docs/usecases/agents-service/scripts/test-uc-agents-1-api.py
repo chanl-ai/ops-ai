@@ -1,12 +1,14 @@
 # The use case runner puts docs/usecases/lib (usecase_harness) on the path; pyright alone cannot see it.
 # pyright: basic, reportMissingImports=false
 """uc-agents-1 an agent's tools are chosen by app, api layer:
-docs/usecases/agents-service/an-agents-tools-are-chosen-by-app.md, steps 1 to 5.
+docs/usecases/agents-service/an-agents-tools-are-chosen-by-app.md, steps 1 to 7.
 
 agents-service on the scripted model with its fixture tools, which belong to several systems. A builder's new agent
 holds no tool. The builder finds an app by the name of one of its tools, lists that app's tools, grants all of them in
-one save, and reads the app back with every tool counted and marked as granted. An app id nobody has answers 404. No
-model is called."""
+one save, and reads the app back with every tool counted and marked as granted. An app id nobody has answers 404.
+The agent is then granted a second agent, which is paused, and agents-service is started again with a tools-service
+nothing answers: both times every tool the agent holds is still named by its lists, so a person can remove it. No model
+is called."""
 
 from __future__ import annotations
 
@@ -14,7 +16,22 @@ import secrets
 from collections import Counter
 from typing import Any
 
-from usecase_harness import TEAM, agents, check, data, finish, save_agent
+import httpx
+from usecase_harness import TEAM, agents, check, data, finish, free_port, save_agent
+
+
+def listed_grants(api: httpx.Client, agent_id: str) -> tuple[list[str], list[str]]:
+    """The tools the agent holds, and the ones its page can draw: each app's granted tools, then the grants the agent's
+    own read says are no longer offered."""
+    seen: dict[str, Any] = data(api.get(f"/v1/agents/{agent_id}", headers=TEAM)) or {}
+    path = f"/v1/agents/{agent_id}/tool-apps"
+    apps = (data(api.get(path, params={"granted": "true", "limit": 100}, headers=TEAM)) or {}).get("data") or []
+    drawn = [str(t) for t in seen.get("staleToolIds") or []]
+    for a in apps:
+        tools = api.get(f"{path}/{a['id']}/tools", params={"granted": "true", "limit": 100}, headers=TEAM)
+        drawn += [str(t["id"]) for t in (data(tools) or {}).get("data") or []]
+    return sorted(str(t) for t in seen.get("toolIds") or []), sorted(drawn)
+
 
 with agents() as api:
     made = api.post("/v1/agents", json={"name": f"Tools by app {secrets.token_hex(2)}", "role": "Reads"}, headers=TEAM)
@@ -75,6 +92,35 @@ with agents() as api:
         and (unknown.json().get("error") or {}).get("code") == "not_found"
         and offered.status_code == 200,
         f"{unknown.status_code} {unknown.text[:200]}",
+    )
+
+    # A second agent, live, granted to the first as a tool and then paused: it is no longer offered.
+    helper = data(api.post("/v1/agents", json={"name": f"Helper {secrets.token_hex(2)}", "role": "Helps"}, headers=TEAM))
+    live = api.post(
+        f"/v1/agents/{helper['id']}/publish-requests", json={"version": helper["version"], "note": "x"}, headers=TEAM
+    )
+    assert live.status_code == 201, live.text[:300]
+    grant = f"agent:{helper['id']}"
+    both = save_agent(api, agent, {"toolIds": [*wanted, grant]}, headers=TEAM)
+    assert both.status_code == 200, both.text[:300]
+    paused = api.post(f"/v1/agents/{helper['id']}/paused", json={"paused": True}, headers=TEAM)
+    assert paused.status_code == 200, paused.text[:300]
+    options = data(api.get("/v1/tools/options", params={"ids": [grant]}, headers=TEAM)) or {}
+    held, drawn = listed_grants(api, agent)
+    check(
+        "6 a granted agent that was paused is no longer offered, and is still listed among the tools the agent holds",
+        not options.get("data") and grant in held and drawn == held,
+        {"offered": options.get("data"), "held": held, "listed": drawn},
+    )
+
+# The same database, with a tools-service nothing answers: the agent's operations cannot be named by tools-service.
+with agents(gateway_url=f"http://127.0.0.1:{free_port()}") as api:
+    apps_read = api.get(f"/v1/agents/{agent}/tool-apps", params={"granted": "true"}, headers=TEAM)
+    held, drawn = listed_grants(api, agent)
+    check(
+        "7 with tools-service out of reach, every tool the agent holds is still listed",
+        apps_read.status_code == 200 and len(held) == len(wanted) + 1 and drawn == held,
+        {"http": apps_read.status_code, "held": held, "listed": drawn},
     )
 
 finish()
