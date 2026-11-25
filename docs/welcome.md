@@ -2,38 +2,63 @@
 
 Status: current.
 
-**Ops AI runs agents and workflows for regulated operations teams, with a person approving every change that
-matters.** Each run records who approved it, which version ran, what it could reach and where the record is, so a
-workflow built once can pass a risk review.
+**Put agents and workflows to work on your team's operations, with a person approving every change that matters.**
+You build the agent once, and every run keeps the record a risk review asks for: who approved it, which version ran
+and what it could reach.
 
-## The problem it solves
+## You have a queue AI could clear
 
-A bank's card team works through hundreds of disputes a week. An insurer's claims team reads the same policy wording
-fifty times a day. AI can already do much of this work, and pilots go well until the risk review asks who approved
-the change to the customer's account, which version of the agent ran, and what data it could reach. Most agent tools
-cannot answer, so the pilot stays a pilot, or the team builds approvals, versions and audit by hand for each use case.
+You run or build for an operations team. A card team works through hundreds of disputes a week. A claims team reads
+the same policy wording fifty times a day. A lending servicing team answers payoff and hardship requests that follow
+the same few paths. A model can already draft most of this work.
 
-## How Ops AI helps
+The pilot goes well. Then the risk review asks who approved the change to the customer's account, which version of the
+agent ran, and what data it could reach. Most agent tools have no answer, so the team either stops at the pilot or
+builds approvals, versions and audit by hand for each new use case.
 
-| You need | Ops AI gives you |
+## What waiting costs
+
+Every week the pilot stays a pilot, the queue is still worked by hand. Each use case that gets its own hand-built
+approvals and audit makes the next one slower, and a single unreviewed write to a customer's account can end the
+programme.
+
+## Ops AI is built for that review
+
+We built Ops AI for teams that answer to a risk function, and the controls a reviewer asks about ship with it:
+
+| A reviewer asks | Ops AI records |
 |---|---|
-| A person in charge of the steps that matter | Human Tasks: the workflow waits, a person decides with the facts in front of them, and the approved call carries a token bound to exactly what they saw |
-| The same result every time where it counts | Fixed steps for lookups, branches and system calls, with an AI step only where judgement is needed |
-| Control over what agents can reach | One gateway for every tool and data call and one for every model call, with per-team access and a call log |
-| A record a reviewer accepts | Versioned agents and workflows, each run kept on the version it started with, and every decision on the case |
-| Your own infrastructure | Docker Compose on one machine or Kubernetes, on PostgreSQL, with a built-in test model that needs no key or network |
+| Who approved this change? | The workflow waits on a Human Task; the person decides with the facts in front of them, and the approved call is bound to exactly what they saw |
+| Which version ran? | Agents and workflows are published as versions that do not change; each run keeps the version it started on |
+| What could it reach? | Every tool and data call goes through one gateway and every model call through another, with per-team access and a call log |
+| Where does it run? | On your own machines: Docker Compose on one server or Kubernetes, on PostgreSQL, with a built-in test model that needs no key or network |
 
-## Start here
+The full answers, with their limits, are on the [Security](security/README.md) pages.
+
+## How you get there
+
+<!-- site: steps -->
+1. **Install it on one machine.** One command, about ten minutes, no model key needed.
+2. **Build an agent.** Write its instructions, try the draft, and publish it once a second person has reviewed it.
+3. **Connect your apps and documents.** Give the agent tools for your systems and a knowledge base to answer from.
+4. **Put a person on the steps that matter.** Writes wait for a yes, and the workflow keeps the record.
+
+## Start now
 
 <!-- site: cards -->
-1. **[Quickstart](guide/quickstart.md)**: install Ops AI on one machine and run a first workflow in about ten minutes.
-2. **[How work flows](guide/how-work-flows.md)**: how a request becomes a run, a task for a person and a record.
-3. **[Agents](guide/agents.md)** and **[Workflows](guide/workflows.md)**: the two ways Ops AI runs work.
-4. **[Human tasks and approvals](guide/human-tasks.md)**: how a person stays in charge of the steps that matter.
+- **[Install Ops AI](guide/quickstart.md)**: One machine, about ten minutes, and a first workflow run at the end.
 
-## For a security or architecture review
+## What changes when it works
 
-Isolation, sign-in, approvals and audit, data handling and model calls are answered in one place for a reviewer.
+A dispute arrives and the workflow finds the cardholder and their accounts, and an agent checks the dispute against
+the handbook, citing the sections it used, before anyone opens it. A person reads one screen and approves the credit.
+When the risk team asks about that credit, the answer is already on the case: who approved it, on which version, with
+what data ([Card disputes](guide/use-cases/card-disputes.md) walks through it).
 
-<!-- site: cards -->
-- **[Security](security/README.md)**: how Ops AI keeps teams, data and model calls under control, with the limits stated.
+Without it, the same request is retyped across three systems, the approval lives in an email thread, and the audit
+answer is rebuilt by hand each time someone asks.
+
+## Read next
+
+- [Build an agent](guide/use-cases/build-an-agent.md): from a first draft to a published agent your team chats with.
+- [How work flows](guide/how-work-flows.md): how a request becomes a run, a task for a person and a record.
