@@ -54,7 +54,7 @@ $C run --rm --no-deps agents python /app/deploy/fly/connect_model.py --models-ur
 $C up -d
 ```
 
-Save the provider's key in the console under Settings > Model providers, with the name you gave `--key-ref`. Outside
+Save the provider's key in the console under Settings > Models > Connections, with the name you gave `--key-ref`. Outside
 development, Ops AI refuses a provider key in the settings file. The agents service reports unhealthy until a model is
 connected.
 
