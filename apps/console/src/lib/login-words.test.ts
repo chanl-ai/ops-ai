@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { test } from 'node:test';
 
-import { connectWaitActions, signInChoiceWords, signInTitle, teamLoginLines } from './login-words.ts';
+import { connectWaitActions, signInFor, signInChoiceWords, signInTitle, teamLoginLines } from './login-words.ts';
 
 // How a chat user meets an app's login, by failure mode: a team-login action that does not say who acted, a sign-in
 // card in other words than the app setting, a Human Task that offers the person both their own login and the team's,
@@ -23,8 +23,12 @@ test('a team-login action says once per app which login acted and that the perso
 test('the app setting has two answers in the words the chat and the guide use', () => {
   assert.equal(signInChoiceWords('team'), 'Everyone uses the team’s login');
   assert.equal(signInChoiceWords('person'), 'Each person signs in');
-  assert.equal(signInChoiceWords('person_or_team'), 'Each person signs in');
   assert.equal(signInTitle('Salesforce'), 'Sign in to Salesforce to continue');
+});
+
+test('Each person signs in saves each person only, never the team login as a backup', () => {
+  assert.equal(signInFor('each'), 'person');
+  assert.equal(signInFor('shared'), 'team');
 });
 
 test('a Human Task never offers the person it waits for a choice between their login and the team’s', () => {

@@ -226,7 +226,7 @@ export interface PluginSpec {
   settings: { name: string; label: string; default?: string | null; secret: boolean; perAccount: boolean; locked: boolean }[];
   /** The kind's fields the plugin fixes itself. */
   fixed: string[];
-  /** Whose account the plugin lets calls sign in with: team, person, person_or_team. */
+  /** Whose login the plugin lets calls sign in with: team or person. */
   signIn?: string[];
 }
 
@@ -284,9 +284,9 @@ export function pluginKeys(kind: Kind, plugin: PluginSpec, client: Client, draft
  * Whose account a first turn-on preselects: the team's wherever the app offers it, so nobody is asked for their own
  * sign-in before their first call; each person signing in stays a choice in the window and on the app's settings.
  */
-export function firstSignIn(offered: readonly string[]): 'team' | 'person' | 'person_or_team' {
+export function firstSignIn(offered: readonly string[]): 'team' | 'person' {
   const first = offered.includes('team') ? 'team' : offered[0];
-  return first === 'person' || first === 'person_or_team' ? first : 'team';
+  return first === 'person' ? first : 'team';
 }
 
 export function turnOnBody(

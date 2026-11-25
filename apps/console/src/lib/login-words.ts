@@ -2,11 +2,14 @@
 // line a team-login action shows, and what a Human Task waiting for a sign-in offers. The user guide uses the same
 // words ("Everyone uses the team's login", "Each person signs in").
 
-/** The values tools-service stores for an app's sign-in; the screen asks one question with two answers. */
-export type SignInSetting = 'team' | 'person' | 'person_or_team';
+/** The two answers tools-service takes for who signs in to an app. */
+export type SignInSetting = 'team' | 'person';
+
+/** The value each answer saves: the team's login, or each person's own; the team's login is never a backup. */
+export const signInFor = (answer: 'shared' | 'each'): SignInSetting => (answer === 'shared' ? 'team' : 'person');
 
 /** The admin's answer for an app, as the app page, the agent's tools row and the Apps grid say it. */
-export const signInChoiceWords = (value: SignInSetting): string => (value === 'team' ? 'Everyone uses the team’s login' : 'Each person signs in');
+export const signInChoiceWords = (value: string): string => (value === 'team' ? 'Everyone uses the team’s login' : 'Each person signs in');
 
 /** The chat card's title for an app each person signs in to, when the person has no login of their own yet. */
 export const signInTitle = (app: string): string => `Sign in to ${app} to continue`;

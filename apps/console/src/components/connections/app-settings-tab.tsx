@@ -63,7 +63,7 @@ export function SettingsTab({
   // in. "Each person" keeps the team's login for runs nobody started where the app allows it (eachPersonValue).
   const choose = (who: SignIn) =>
     change.mutate(
-      { appId: app.card.id, accountId: conn.id, body: { revision: conn.revision, signIn: who, teamBackup: who === 'person_or_team' } },
+      { appId: app.card.id, accountId: conn.id, body: { revision: conn.revision, signIn: who } },
       { onError: (e) => toast.error('Couldn’t change who signs in', { description: e.message }) },
     );
   return (

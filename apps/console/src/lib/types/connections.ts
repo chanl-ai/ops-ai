@@ -7,7 +7,7 @@ export interface AccountRef {
 }
 
 /** Whose account a connection's calls sign in with: the team's, each person's own, or theirs with the team's as backup. */
-export type SignInSetting = 'team' | 'person' | 'person_or_team';
+export type SignInSetting = 'team' | 'person';
 
 export type ConnectionStatus = 'draft' | 'healthy' | 'needs_reconnect' | 'expiring' | 'revoked' | 'error';
 

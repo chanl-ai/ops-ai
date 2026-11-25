@@ -165,8 +165,8 @@ test('an account signed in through the dialog is remembered, so Save opens no se
 // The Turn on window sends its choice, so its preselection is the default a first turn-on gets: the team's account
 // wherever the app offers it, else the first way the app signs in.
 test('the Turn on window preselects the team account where the app offers it', () => {
-  assert.equal(firstSignIn(['team', 'person', 'person_or_team']), 'team');
-  assert.equal(firstSignIn(['person_or_team', 'person']), 'person_or_team');
+  assert.equal(firstSignIn(['team', 'person']), 'team');
+  assert.equal(firstSignIn(['person']), 'person');
 });
 
 test('a plugin with no sign-in and nothing to set turns on without a form; one with a key or a setting asks', () => {

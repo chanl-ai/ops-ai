@@ -283,7 +283,7 @@ function ConnectForm({
       const a = await ensure();
       if (ready) await save(a);
       if (detail && kind.perPerson && who !== detail.signIn) {
-        keep(await change.mutateAsync({ ...a, body: { revision: revision.current, signIn: who, teamBackup: who === 'person_or_team' } }));
+        keep(await change.mutateAsync({ ...a, body: { revision: revision.current, signIn: who } }));
       }
       if (w) {
         const begin = async () => {

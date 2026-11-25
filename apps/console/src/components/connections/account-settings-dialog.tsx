@@ -59,7 +59,7 @@ export function AccountSettingsDialog({
   const save = async () => {
     const body: Parameters<typeof change.mutateAsync>[0]['body'] = { revision: a.revision };
     if (renamed) body.name = next;
-    if (whoChanged) Object.assign(body, { signIn: who, teamBackup: who === 'person_or_team' });
+    if (whoChanged) Object.assign(body, { signIn: who });
     // Ops AI's own app is no credential of the team's: null puts the account on it.
     if (moved) body.credentialId = choices.find((c) => c.id === config)?.type === 'ops_ai' ? null : config;
     try {

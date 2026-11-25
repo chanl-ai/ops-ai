@@ -123,7 +123,6 @@ function SystemAppCard({ system, onConnect }: { system: SystemCard; onConnect: (
 const SIGN_IN_WORDS: Record<NonNullable<SystemCard['signIn']>, string> = {
   team: signInChoiceWords('team'),
   person: signInChoiceWords('person'),
-  person_or_team: signInChoiceWords('person_or_team'),
 };
 
 /**
