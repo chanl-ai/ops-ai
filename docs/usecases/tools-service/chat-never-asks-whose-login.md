@@ -21,7 +21,6 @@ console with the same plugins and a scripted model.
 | S5 | In chat, a team-login action says who acted under the reply, with no sign-in card | ui | 5 | 5 |
 | S6 | In chat, an each-person app shows one sign-in card, the chat carries on after it, the next ask shows none, and nothing offers the team login | ui | 6 | 6 |
 | S7 | The app page asks Who signs in with two answers, and the agent's tools row shows the app's answer | ui | 7 | 7 |
-| S8 | A Human Task waiting for the person's sign-in offers them only Sign in | ui | 8 | 8 |
 
 ## Preconditions
 
@@ -41,7 +40,9 @@ console with the same plugins and a scripted model.
 | 5 | James asks the assistant for a record on the header key desk | The reply shows "Runs in Header key desk as … (team login). You are recorded as the person who asked." and no sign-in card |
 | 6 | James asks for a record on the person key desk, gives his key in the card, then asks again | One card titled "Sign in to Person key desk to continue"; after his key the chat carries on with the record; the second ask shows no card; no text offers the team login |
 | 7 | Priya opens the header key desk's Settings and an agent's tools | "Who signs in" reads Everyone uses the team's login and Each person signs in; the tools row names the app's answer |
-| 8 | A run James started waits for his sign-in; he opens its Human Task | Only **Sign in to Person key desk**; no **Run with the team login** |
+
+A Human Task waiting for a person's sign-in offers that person only **Sign in to <app>**: uc-607 ui step 45 reads the
+task Priya's run waits on and checks that no **Run with the team login** is offered to her.
 
 ## Acceptance layers
 
