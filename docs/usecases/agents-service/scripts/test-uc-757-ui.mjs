@@ -653,6 +653,91 @@ await withUiStack(
       const presetPrompt = storedTone ? await promptShown(page) : '';
       check('33 View prompt shows the edited sentence under Tone', storedTone.length > 0 && presetPrompt.includes(`# Tone\n${storedTone}`), { tone: presetPrompt.split('# Tone')[1]?.slice(0, 200) ?? null });
 
+      // 34. Connectors is on the test panel from the start. James opens an agent he has never tested: the panel has no
+      // test yet and already shows Connectors; pressing it makes the test chat and opens the list. Non-vacuous: the
+      // button is looked for before any message is sent, and a panel that makes a chat as it opens fails the count.
+      const tall = Array.from({ length: 60 }, (_, n) => `Rule ${n + 1}: keep the answer short.`).join('\n');
+      const panelDesk = await made('/v1/agents', { name: `Panel desk ${RUN}`, role: 'Helps cardholders with disputes' });
+      await made(`/v1/agents/${panelDesk.id}`, { brief: { purpose: 'Help cardholders dispute a charge.', howToAnswer: tall, handOff: ['The cardholder asks for a person.'], never: [NEVER_RULE] }, ...(await agentBase(agents, J, panelDesk.id)) }, 'PATCH');
+      const testsMade = [];
+      const onRequest = (r) => {
+        if (r.method() === 'POST' && r.url() === `${agents}/chat/threads`) testsMade.push(r.postDataJSON() ?? {});
+      };
+      page.on('request', onRequest);
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(`${consoleUrl}/build/agents/${panelDesk.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      const panel = page.getByTestId('agent-test-panel');
+      await panel.waitFor({ timeout: 120_000 }).catch(() => undefined);
+      await brief.waitFor({ timeout: 120_000 }).catch(() => undefined);
+      const connectors = panel.getByTestId('connectors-picker');
+      const shownAtStart = await tried(connectors.waitFor({ timeout: 15_000 }));
+      check(
+        '34 a test panel with no test yet shows Connectors, and no test chat has been made',
+        shownAtStart && testsMade.length === 0 && (await panel.getByTestId('new-test').count()) === 0,
+        { shownAtStart, testsMade: testsMade.length, newTest: await panel.getByTestId('new-test').count() },
+      );
+      const threadMade = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${agents}/chat/threads`, { timeout: 30_000 }));
+      if (shownAtStart) await connectors.click({ timeout: 10_000 }).catch(() => undefined);
+      const madeThread = shownAtStart ? ((await (await threadMade.catch(() => null))?.json().catch(() => ({})))?.data ?? {}) : {};
+      const listOpen = await tried(page.getByTestId('connectors-picker-list').waitFor({ timeout: 15_000 }));
+      const threadRead = madeThread.id ? (await fetch(`${agents}/chat/threads/${madeThread.id}`, { headers: J })).status : 0;
+      check(
+        '34 pressing Connectors makes one test chat for this agent and opens the list',
+        listOpen && threadRead === 200 && testsMade.length === 1 && testsMade[0].agentId === panelDesk.id && testsMade[0].test === true,
+        { listOpen, threadRead, testsMade },
+      );
+      page.off('request', onRequest);
+      await page.keyboard.press('Escape').catch(() => undefined);
+
+      // 35. At 1440 the test panel is as tall as the room under the header and stays there while the settings beside it
+      // scroll; at 390 it is in the page's flow, as before. Room below the panel is the page's own padding, taken as at
+      // most 32px; the Connectors row is the composer's last, taken as within 48px of the panel's end. Non-vacuous: the
+      // settings must move more than 100px for the 1440 check to count, and at 390 the panel must move as far as they do.
+      const placed = () =>
+        page.evaluate(() => {
+          const el = document.querySelector('[data-testid="agent-test-panel"]');
+          const r = el.getBoundingClientRect();
+          const b = document.querySelector('[data-testid="agent-brief"]').getBoundingClientRect();
+          const foot = el.querySelector('[data-testid="connectors-picker"]')?.getBoundingClientRect();
+          const over = document.elementFromPoint(r.left + r.width / 2, r.top + 2);
+          return { top: Math.round(r.top), bottom: Math.round(r.bottom), below: Math.round(window.innerHeight - r.bottom), underComposer: foot ? Math.round(r.bottom - foot.bottom) : -1, brief: Math.round(b.top), uncovered: !!over && el.contains(over) };
+        });
+      const wheelOver = async (locator, dy) => {
+        const at = await locator.boundingBox();
+        if (at) await page.mouse.move(at.x + Math.min(at.width / 2, 200), Math.max(at.y, 0) + 40);
+        const was = await page.evaluate(() => document.querySelector('[data-testid="agent-brief"]').getBoundingClientRect().top).catch(() => 0);
+        await page.mouse.wheel(0, dy);
+        // The wheel is applied a frame later: wait for the settings to have moved, or for 5 seconds when they cannot.
+        await page.waitForFunction((y) => document.querySelector('[data-testid="agent-brief"]').getBoundingClientRect().top !== y, was, { timeout: 5_000 }).catch(() => undefined);
+      };
+      const atRest = await placed().catch(() => ({}));
+      check(
+        '35 at 1440 the test panel reaches the end of the page, with no room under the composer',
+        atRest.below >= 0 && atRest.below <= 32 && atRest.underComposer >= 0 && atRest.underComposer <= 48,
+        atRest,
+      );
+      await wheelOver(brief, 900);
+      const scrolled = await placed().catch(() => ({}));
+      check(
+        '35 at 1440 the test panel stays in view, whole and uncovered, while the settings scroll past it',
+        atRest.brief - scrolled.brief > 100 && scrolled.top >= 0 && scrolled.top <= atRest.top && scrolled.below >= 0 && scrolled.below <= 32 && scrolled.uncovered,
+        { atRest, scrolled },
+      );
+      await page.screenshot({ path: evidenceDir('media', AREA, 'uc-757-test-panel-scrolled-admin-1440.png') });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await panel.scrollIntoViewIfNeeded().catch(() => undefined);
+      const narrowBefore = await placed().catch(() => ({}));
+      await wheelOver(panel, -300);
+      const narrowAfter = await placed().catch(() => ({}));
+      const briefMoved = narrowAfter.brief - narrowBefore.brief;
+      check(
+        '35 at 390 the test panel is in the flow under the settings and scrolls with them',
+        briefMoved > 50 && Math.abs(narrowAfter.top - narrowBefore.top - briefMoved) <= 2 && narrowBefore.top > narrowBefore.brief,
+        { narrowBefore, narrowAfter },
+      );
+      await page.screenshot({ path: evidenceDir('media', AREA, 'uc-757-test-panel-admin-390.png') });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+
       // 23. Pages reached by the sidebar's links, not by loading their URL: a client navigation keeps the shell mounted,
       // and the walks saw update loops only that way, at both widths.
       const viaSidebar = async (p, href) => {
