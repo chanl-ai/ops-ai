@@ -758,8 +758,18 @@ def _reasoning(payload: ThreadPayload | Json) -> list[str]:
     return out
 
 
+# What a recorded decision keeps of its step for check_thread_decider, so a repeat after the resume is checked by the
+# same rule as the decision; never part of the review a reader is sent.
+DECIDED_STEP = "decidedStep"
+
+
+def _decider_fields(payload: Json) -> Json:
+    return {k: payload[k] for k in ("ask_first", "requested_by", "reviewer_role") if payload.get(k) is not None}
+
+
 def _decided(d: DecisionOut) -> Json:
     review: Json = dict(d.review)
+    review.pop(DECIDED_STEP, None)
     # A decision recorded before reviews named their origin was a workflow's: chat approvals were not listed then.
     review.setdefault("origin", {"kind": "workflow"})
     resume: Json = dict(cast(Json, review.get("resume") or {}))
@@ -1204,6 +1214,10 @@ async def decide(
     if not waiting or (recorded and recorded.decision_id == waiting[0]["id"]):
         if recorded is None:
             raise Conflict("This thread is not waiting for a decision.", code="run_not_waiting")
+        # A repeat is answered, and a decision left waiting resumed, only for someone who may decide the step: the
+        # paused step while it waits, else what the decision recorded of it (none on older decisions: the team rule).
+        step = cast(Json, waiting[0]["payload"]) if waiting else cast(Json, recorded.review.get(DECIDED_STEP) or {})
+        await check_thread_decider(rt, approver, row, step, [])
         earlier: Json = dict(cast(Json, recorded.review.get("resume") or {}))
         same = recorded.decision == decision or (earlier.get("option") and earlier["option"] == decision)
         if not same:
@@ -1270,7 +1284,7 @@ async def decide(
         decision=recorded_as,
         reason=reason,
         by=approver.email,
-        review=cast(Json, review | {"resume": resume}),
+        review=cast(Json, review | {"resume": resume, DECIDED_STEP: _decider_fields(cast(Json, payload))}),
         step_up_ref=verified_step_up,
     )
     recorded = (await _decisions(rt, [thread_id]))[thread_id]

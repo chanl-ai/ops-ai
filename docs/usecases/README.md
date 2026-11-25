@@ -403,3 +403,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-771 | agents-service | A builder takes a new skill to its first publish in under ten minutes | ui | current |
 | uc-781 | console | Record editors and list pages share one header, one tab strip and one section style | ui | draft |
 | uc-772 | kb-service | Search a long document's pieces on the server | api | draft |
+| uc-782 | agents-service | Only a person who may decide a review decides, resumes or replays it | api | current |
