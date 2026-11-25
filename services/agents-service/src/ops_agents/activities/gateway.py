@@ -14,11 +14,12 @@ from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
-from typing import Any, NotRequired, Protocol, TypedDict, cast
+from typing import NotRequired, Protocol, TypedDict, cast
 
 import httpx
 
 from ops_agent_kernel.ports import ToolOutcome
+from ops_contracts.chat import SignedIn
 from ops_identity import ServiceCallError, ServiceClient, segment
 from ops_service_kit.http import Json, JsonValue
 
@@ -133,11 +134,12 @@ class ActingForHeaders(Protocol):
 
 class GatewayAnswer(TypedDict):
     """tools-service's answer to a call (POST /v1/calls): whether it ran, the tool's own output, and a view when the
-    tool drew one."""
+    tool drew one, and whose login of the app it ran as."""
 
     ok: bool
     output: JsonValue
     view: NotRequired[Json | None]
+    signedIn: NotRequired[Json | None]
 
 
 class Fence(TypedDict):
@@ -403,7 +405,7 @@ class GatewayToolExecutor:
         view = data.get("view")
         # Whose login the call ran as: kept beside the view, which a chat validates as a widget when it has no part.
         signed = data.get("signedIn")
-        signed_in = cast(dict[str, Any], signed) if isinstance(signed, dict) else None
+        signed_in = SignedIn.model_validate(signed) if isinstance(signed, dict) else None
         if not data["ok"]:
             return ToolOutcome(False, data["output"], for_model=carded(data["output"]), signed_in=signed_in)
         if data["ok"] and view is None:

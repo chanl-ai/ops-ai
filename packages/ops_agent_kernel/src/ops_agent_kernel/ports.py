@@ -10,6 +10,7 @@ from typing import Any, Protocol
 
 from pydantic_ai.models import Model
 
+from ops_contracts.chat import SignedIn
 from ops_service_kit.http import Json
 
 from .tool_cache import ToolCaches
@@ -29,7 +30,7 @@ class ToolOutcome:
     # a plain line with no code, link or address to repeat. `output` stays on the call record for the card.
     for_model: Any = None
     # Whose login of the app the call ran as (the gateway's `signedIn`: the team's or the person's), for the chat card.
-    signed_in: dict[str, Any] | None = None
+    signed_in: SignedIn | None = None
 
 
 class ToolExecutor(Protocol):
