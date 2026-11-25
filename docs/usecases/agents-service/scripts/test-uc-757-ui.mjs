@@ -710,6 +710,21 @@ await withUiStack(
         // The wheel is applied a frame later: wait for the settings to have moved, or for 5 seconds when they cannot.
         await page.waitForFunction((y) => document.querySelector('[data-testid="agent-brief"]').getBoundingClientRect().top !== y, was, { timeout: 5_000 }).catch(() => undefined);
       };
+      // A scroll settles over several frames, so the place is read frame by frame until it meets `met` on two frames
+      // running, for at most 10 seconds; the last reading is returned either way, so a panel that never gets there
+      // fails the check on what was last seen.
+      const settled = async (met) => {
+        const until = Date.now() + 10_000;
+        let last = await placed().catch(() => ({}));
+        let held = 0;
+        while (Date.now() < until) {
+          held = met(last) ? held + 1 : 0;
+          if (held >= 2) break;
+          await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => done(null)))).catch(() => undefined);
+          last = await placed().catch(() => ({}));
+        }
+        return last;
+      };
       const atRest = await placed().catch(() => ({}));
       check(
         '35 at 1440 the test panel reaches the end of the page, with no room under the composer',
@@ -717,24 +732,19 @@ await withUiStack(
         atRest,
       );
       await wheelOver(brief, 900);
-      const scrolled = await placed().catch(() => ({}));
-      check(
-        '35 at 1440 the test panel stays in view, whole and uncovered, while the settings scroll past it',
-        atRest.brief - scrolled.brief > 100 && scrolled.top >= 0 && scrolled.top <= atRest.top && scrolled.below >= 0 && scrolled.below <= 32 && scrolled.uncovered,
-        { atRest, scrolled },
-      );
+      // Fails when the settings cannot scroll 100px, or the panel leaves with them, is cut off or is covered.
+      const stuck = (at) => atRest.brief - at.brief > 100 && at.top >= 0 && at.top <= atRest.top && at.below >= 0 && at.below <= 32 && at.uncovered === true;
+      const scrolled = await settled(stuck);
+      check('35 at 1440 the test panel stays in view, whole and uncovered, while the settings scroll past it', stuck(scrolled), { atRest, scrolled });
       await page.screenshot({ path: evidenceDir('media', AREA, 'uc-757-test-panel-scrolled-admin-1440.png') });
       await page.setViewportSize({ width: 390, height: 844 });
       await panel.scrollIntoViewIfNeeded().catch(() => undefined);
       const narrowBefore = await placed().catch(() => ({}));
       await wheelOver(panel, -300);
-      const narrowAfter = await placed().catch(() => ({}));
-      const briefMoved = narrowAfter.brief - narrowBefore.brief;
-      check(
-        '35 at 390 the test panel is in the flow under the settings and scrolls with them',
-        briefMoved > 50 && Math.abs(narrowAfter.top - narrowBefore.top - briefMoved) <= 2 && narrowBefore.top > narrowBefore.brief,
-        { narrowBefore, narrowAfter },
-      );
+      // Fails when the page cannot scroll 50px, or the panel stays put (sticky) while the settings move.
+      const flowed = (at) => at.brief - narrowBefore.brief > 50 && Math.abs(at.top - narrowBefore.top - (at.brief - narrowBefore.brief)) <= 2 && narrowBefore.top > narrowBefore.brief;
+      const narrowAfter = await settled(flowed);
+      check('35 at 390 the test panel is in the flow under the settings and scrolls with them', flowed(narrowAfter), { narrowBefore, narrowAfter });
       await page.screenshot({ path: evidenceDir('media', AREA, 'uc-757-test-panel-admin-390.png') });
       await page.setViewportSize({ width: 1440, height: 1000 });
 
