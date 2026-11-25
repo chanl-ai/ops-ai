@@ -579,6 +579,16 @@ def create_models_app(
 
     connections_guard = Depends(connections_caller)
 
+    async def alias_writer(p: CurrentTenantCaller) -> Principal:
+        """Aliases are install-wide (one install serves one account): every team's agents run on them, so a person
+        creates or re-points one only with `install.manage`, which Owner holds and a workspace Admin does not. An
+        install's own scripts (a service token) write them as before."""
+        if p.kind != "service":
+            access.can(p, "install", "manage", what="the install's model aliases", code="install_admin_only")
+        return p
+
+    alias_write_guard = Depends(alias_writer)
+
     @app.get("/health", tags=["health"], response_model=Health)
     async def health() -> Health:  # pyright: ignore[reportUnusedFunction]
         return Health(status="ok")
@@ -835,8 +845,10 @@ def create_models_app(
     async def set_chat_model(body: ChatModelIn, p: CurrentPrincipal, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Points chat (the runtime's `default` alias and the team assistant's) at `model` on the provider the saved key
         belongs to. One connection per provider is kept and moved on a later choice; each alias gets a new version, or
-        version 1 on a fresh install, where no chat alias exists yet."""
+        version 1 on a fresh install, where no chat alias exists yet. The chat aliases are the install's, so this
+        also needs `install.manage` (403 `install_admin_only`)."""
         await saved_key(p, body.key_name)
+        await alias_writer(p)
         if body.provider == "azure-openai":
             try:
                 base = azure_host(body.endpoint)
@@ -933,7 +945,7 @@ def create_models_app(
 
     @app.post(
         "/v1/models/aliases",
-        dependencies=[connections_guard],
+        dependencies=[alias_write_guard],
         tags=["aliases"],
         status_code=201,
         response_model=Envelope[AliasRef],
@@ -989,7 +1001,7 @@ def create_models_app(
 
     @app.post(
         "/v1/models/aliases/{name}/versions",
-        dependencies=[connections_guard],
+        dependencies=[alias_write_guard],
         tags=["aliases"],
         status_code=201,
         response_model=Envelope[AliasRef],

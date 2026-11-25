@@ -84,10 +84,10 @@ attached by rule, never picked: Security admin and Owner.
 | Viewer | `viewer` | Reads the team's work, chats with its agents | Team viewers; every invite starts here |
 | Chat user | `chat_user` | Chats with the team's published agents and reads only their own threads | A first SSO sign-in; a grant; an invite or a role change (E31) |
 | Security admin (attached) | (none; given with Admin in the Security team) | Egress, any team's secrets (naming the team), storage settings, module security reviews | Admins of the Security team (`builtin_roles_for`, `catalogue.py`); a Security admin is an Admin of the Security team |
-| Owner (attached) | (none) | Transfers, closes and restores the workspace | The workspace's one owner, moved only by a transfer (E42) |
+| Owner (attached) | (none) | Transfers, closes and restores the workspace (`workspace.manage`); creates and re-points the install's model aliases (`install.manage`) | The workspace's one owner, moved only by a transfer (E42). One install serves one account, so the owner is the install admin: the install's first admin becomes it |
 
 Privileged cells (`PRIVILEGED`, `privileged_cells` in `catalogue.py`) are never given through a group: every `access`
-cell but `access.view` (which every member holds), `workspace.manage`, `secrets_egress` create, edit and delete, and the four Security-team actions. A module's
+cell but `access.view` (which every member holds), `workspace.manage`, `install.manage`, `secrets_egress` create, edit and delete, and the four Security-team actions. A module's
 security review (`secrets_egress.decide`) counts only where it grants something, in the Security team or in every
 team, so a group may give Reviewer in an ordinary team. Giving a group a role that holds one is refused
 (`PrivilegedForGroupError`, `RoleStore.assign`; 409 `privileged_for_group` on `POST /v1/roles/{id}/holders`); a group's assignment whose role gains one later counts for nothing
@@ -303,12 +303,13 @@ role holds are left out.
 | usage | decide | all | no | no | no | no | no | no |
 | usage | manage | all | no | no | no | no | no | no |
 | workspace | manage | no | no | no | no | no | no | all |
+| install | manage | no | no | no | no | no | no | all |
 
 <!-- roles-matrix:end -->
 
 Some cells are listed so the matrix is complete but no code checks them: `settings` create, edit, publish, delete,
-run and decide; every `activity` action but view; `access` publish, run and decide; every `workspace` action but
-manage. Ticking or clearing one has no effect. `memory.view` is unserved as well: no route returns another person's
+run and decide; every `activity` action but view; `access` publish, run and decide; every `workspace` and
+`install` action but manage. Ticking or clearing one has no effect. `memory.view` is unserved as well: no route returns another person's
 memories (`GET /v1/me/memories` returns the caller's own), so the Admin and Builder cell grants nothing today.
 
 Every role's cells, built-in or custom, are the `role_permissions` rows platform-service stores. The grid above is
@@ -318,8 +319,8 @@ A workspace admin edits any role but Admin, Owner and Security admin on Access �
 every cell (409 `admin_holds_every_cell`). Owner and Security admin come by rule, with the workspace's owner and the
 Security team's admins, and hold privileged cells, so an edit to either is refused whatever it sends, an empty list
 included (409 `role_set_by_rule`, `FIXED_ROLES` in `catalogue.py`); reset still puts them back to the seed. Only
-Owner holds `workspace.manage` (row E42): a custom role refuses it (400 `not_for_custom_roles`) and an edited
-built-in role refuses it (400 `owner_only`). An empty list on any other built-in role is refused (400
+Owner holds `workspace.manage` (row E42) and `install.manage`: a custom role refuses either (400
+`not_for_custom_roles`) and an edited built-in role refuses either (400 `owner_only`). An empty list on any other built-in role is refused (400
 `builtin_role_empty`): a built-in role with no rows reads as its seed, so clearing it would remove nothing; reset is
 the way back to the seed. `can()` decides from the token's `grids` claim, and platform-service from
 the rows it reads at the moment of the check. Every reader of a role's cells (the token's claim, the live check, the
@@ -446,7 +447,7 @@ answered here. Defaults follow the grid above for that cell.
 | Workflow runs and their steps (`/build/runs`, `GET /v1/runs`, a run's page and its `events`; `GET /v1/workflows`, a workflow's page, versions, last validation, runs, forms and `live`; the node types and route fields the canvas reads) | `workflows.view` where the request acts (`Reader` in `routers/engine.py`, `routers/workflows.py`, `routers/forms.py`, `routers/channel_list.py`); a scoped API key is not asked and reads only its own workflow's runs | Read by every role but Security admin and Chat user | `services/agents-service/src/ops_agents/api/routers/engine.py`; every GET on those routers is walked by `services/agents-service/tests/engine/test_lifecycle_rights.py` |
 | Batches (`/build/runs/batches`) | Read (a batch's page and its results file): `workflows.view`; started: `workflows.run`; retried: `workflows.edit` | Read by every role but Security admin and Chat user | `services/agents-service/src/ops_agents/api/routers/batches.py` |
 | Evals (`/govern/evals`, `POST /v1/agents/{id}/eval-runs`) | Run: `agents.edit` (E32); the console's menu entry asks `agents.decide` | Run by Admin and Builder; the page is offered to Admin, Builder and Reviewer | `services/agents-service/src/ops_agents/api/routers/agents.py`; `apps/console/src/lib/nav.ts` |
-| Models (`/govern/models`, Settings › Model providers) | Alias list: `agents.view`; providers and provider keys: `settings.manage` in the Security team; alias versions, model keys and the call log: the install's service token only (E24) | Alias list: every role but Security admin and Chat user; providers: Security admin and Admin of the Security team | `services/agents-service/src/ops_agents/api/routers/model_alias_catalog.py`; `services/models-service/src/ops_models/app.py` |
+| Models (`/govern/models`, Settings › Model providers) | Alias list for agents: `agents.view`; providers, provider keys and reading aliases and their versions: `settings.manage` in the Security team; creating an alias, adding a version and choosing the chat model (`PUT /v1/models/chat-model`): `install.manage` as well (403 `install_admin_only`), since one install serves one account and its aliases apply to every team; model keys and the call log: the install's service token only (E24) | Alias list: every role but Security admin and Chat user; providers and alias reads: Security admin and Admin of the Security team; alias writes: Owner (the install admin) | `services/agents-service/src/ops_agents/api/routers/model_alias_catalog.py`; `services/models-service/src/ops_models/app.py` |
 | Agent instructions (Settings › Agent instructions, `GET`/`PUT`/`DELETE /v1/agent-instruction-sections`) | Read: `agents.view`; replace and reset: `settings.manage` held in the acting team (`can(in_team=True)`), not the Security team (E57) | Read by every role but Security admin and Chat user; changed by the team's Admin | `services/agents-service/src/ops_agents/api/routers/instruction_sections.py`; the console reads the cell from the acting team's `heldInTeam` in `GET /v1/me` (`permissions_view`, `services/platform-service/src/ops_platform/roles.py`) |
 | Templates (`GET /v1/templates`, install, MCP `list_templates` and `install_template`, CLI `templates`) | List: `agents.view`; install: `<area>.create` for the template's kind | List: every role but Security admin and Chat user; install: Admin and Builder | `services/agents-service/src/ops_agents/api/routers/templates.py` |
 | Task and case types (`GET /v1/task-types`, case types) | Read: `workflows.view` where the request acts, then every type in the workspace, a team's own included; created with `workflows.create`, changed with `workflows.edit` and `workflows.publish` | Read by every role but Security admin and Chat user; changed by Admin and Builder | `services/agents-service/src/ops_agents/api/routers/task_types.py`, `case_types.py`; a team's own types reading tenant-wide is to fix |
@@ -492,7 +493,7 @@ decision fails the script, so a row is decided here before code rests on it.
 | E21 | `GET /v1/api-key-summaries` refused every person, workspace admins included | `services/platform-service/src/ops_platform/api/app.py` | Resolved 2026-10-19: a person with `can('access', 'manage')` in every team reads it; a service still needs `settings:view` (test_workspace_admin) | | **resolved** |
 | E22 | The console maps team roles to a session role `admin`, `member` or `viewer` | `apps/console/src/lib/auth/providers/platform.ts:70` | Owner, 2026-11-15: the three-valued session role is retired; each console screen asks `useCan` for the cell it needs. The console's code changes in its own step of the migration, and the two lines go with it | 2026-11-15 | **resolved** |
 | E23 | A tool write runs without approval unless the team turns approval on: every write (`toolWritesNeedApproval`), the apps it lists (`appWritesNeedApproval`) or one tool (its operation's switch); when on, a person holding reviews.decide in the team is not asked | `services/tools-service/src/ops_tools/gateway_calls.py` (`self_approved`); `modules/policy.py` `approves_own_writes` | Owner, 2026-11-01: approvals are off by default and role-based when on; superseded the 2026-10-17 default where every write waited. Superseded 2026-11-10 by E49 | 2026-11-01 | superseded |
-| E24 | Models-service alias versions, model keys and the call log take a service token only; no person reaches them. Providers and provider keys take a person with `settings.manage` in the Security team | `services/models-service/src/ops_models/app.py` | A prototype shortcut until the Govern models page | 2026-10-16 | to fix |
+| E24 | Models-service model keys and the call log take a service token only; no person reaches them. Providers, provider keys and alias reads take a person with `settings.manage` in the Security team; alias writes take `install.manage` (Owner) through `can()` since 2026-11-25 | `services/models-service/src/ops_models/app.py` | A prototype shortcut until the Govern models page | 2026-10-16 | to fix |
 | E25 | Writes before a first publish: a draft test uses the draft, a live run needs the live version | `services/agents-service/src/ops_agents/api/auth.py:256-262` | A test run is a draft activity (`workflows.edit`); a live run is `workflows.run` | 2026-10-17 | decided |
 | E26 | A team admin outside the Security team does not change egress, another team's secrets, storage settings or security reviews | `SECURITY_TEAM_ACTIONS` `catalogue.py:55` | These decide what every team may reach, so they are held in the Security team | 2026-10-17 | decided |
 | E27 | An admin edits only their own memory (`memory.edit` own) | `catalogue.py:135` | What agents remember about a person is that person's to correct or forget | 2026-10-17 | decided |

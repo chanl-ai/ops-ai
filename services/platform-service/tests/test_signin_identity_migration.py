@@ -20,8 +20,11 @@ from ops_service_kit.ids import new_id
 from .conftest import alembic_config
 
 BEFORE = "20261122_2022_list_sort_indexes"
-# The tables the chain from BEFORE to head writes: this migration and the next (members).
-OWNED = ("signin_identities", "sessions", "audit_entries", "signin_flows", "members")
+# The tables the chain from BEFORE to head writes: this migration and the next two (members; roles, their cells and
+# the tenants' permission versions).
+OWNED = (
+    "signin_identities", "sessions", "audit_entries", "signin_flows", "members", "roles", "role_permissions", "tenants"
+)  # fmt: skip
 T0 = "2026-01-01T00:00:00.000Z"
 
 

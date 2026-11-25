@@ -64,6 +64,9 @@ AREAS = (
     # The workspace itself: `manage` transfers, closes and restores it. Only Owner holds it, one person per
     # workspace, moved only by a transfer; Admin's every-cell grid leaves it out.
     "workspace",
+    # What applies to the whole install, which serves one account: `manage` creates and re-points model aliases (every
+    # team's agents run on them). Only Owner holds it, the install's first admin; a workspace Admin reads them only.
+    "install",
 )
 ACTIONS = ("view", "create", "edit", "publish", "delete", "run", "decide", "manage")
 Scope = Literal["all", "own"]
@@ -98,7 +101,8 @@ def _all(area: str, *actions: str) -> list[Grant]:
 _READS: list[Grant] = [
     (area, "view", "all")
     for area in AREAS
-    if area not in ("settings", "audit", "activity", "mcp", "webhooks", "usage", "chat", "memory", "workspace")
+    if area
+    not in ("settings", "audit", "activity", "mcp", "webhooks", "usage", "chat", "memory", "workspace", "install")
 ]
 _DEFINITIONS = ("agents", "workflows", "skills", "guardrails", "widgets", "tools")
 # Decided by a reviewer or admin of the reviewing team; a module access approval by an approver or admin of the
@@ -124,7 +128,7 @@ _MEMBER: list[Grant] = [
 # usage, which stay team-admin data (D59): connections, secrets and auth configs included, which builders read
 # (`_READS`) and admins change. What agents remember about a person stays that person's to edit.
 _NOT_BUILDERS = (
-    "access", "settings", "workspace", "webhooks", "usage", "connections", "secrets_egress", "approvals"
+    "access", "settings", "workspace", "install", "webhooks", "usage", "connections", "secrets_egress", "approvals"
 )  # fmt: skip
 _BUILDS: list[Grant] = [
     (area, action, "own" if (area, action) == ("memory", "edit") else "all")
@@ -152,6 +156,11 @@ def _merge(*parts: Iterable[Grant]) -> tuple[Grant, ...]:
     return tuple((a, x, s) for (a, x), s in sorted(best.items(), key=lambda kv: order[kv[0]]))
 
 
+# The areas only Owner holds, left out of Admin's every-cell grid: the workspace itself and the install it runs on.
+OWNER_AREAS = ("workspace", "install")
+# The cells only Owner holds; a custom role or another built-in role is refused them.
+OWNER_CELLS = frozenset({("workspace", "manage"), ("install", "manage")})
+
 ADMIN = BuiltinRole(
     "admin",
     "Admin",
@@ -162,7 +171,7 @@ ADMIN = BuiltinRole(
     tuple(
         (area, action, "own" if (area, action) == ("memory", "edit") else "all")
         for area in AREAS
-        if area != "workspace"
+        if area not in OWNER_AREAS
         for action in ACTIONS
     ),
 )
@@ -206,12 +215,14 @@ CHAT_USER = BuiltinRole(
     _merge([("chat", "view", "own"), ("chat", "run", "all"), ("memory", "edit", "own")]),
 )
 # The workspace's one owner, assigned in every team (`ANY_TEAM`) to its first admin
-# and moved only by a transfer. It holds the workspace cell and nothing else; the owner is an account admin as well.
+# and moved only by a transfer. It holds the workspace and install cells and nothing else; the owner is an account
+# admin as well. One install serves one account, so its owner is the install admin.
 OWNER = BuiltinRole(
     "owner",
     "Owner",
-    "Transfers, closes and restores the workspace. One person holds it, and only a transfer moves it.",
-    (("workspace", "manage", "all"),),
+    "Transfers, closes and restores the workspace, and changes the model aliases every team runs on. One person holds "
+    "it, and only a transfer moves it.",
+    (("workspace", "manage", "all"), ("install", "manage", "all")),
 )
 BUILTIN_ROLES = (ADMIN, BUILDER, REVIEWER, VIEWER, SECURITY_ADMIN, CHAT_USER, OWNER)
 BUILTIN_IDS = frozenset(r.id for r in BUILTIN_ROLES)
@@ -232,7 +243,7 @@ FIXED_ROLES = frozenset({ADMIN.id, SECURITY_ADMIN.id, OWNER.id})
 PRIVILEGED = frozenset(
     {
         *(("access", action) for action in ACTIONS if action != "view"),
-        ("workspace", "manage"),
+        *OWNER_CELLS,
         ("secrets_egress", "create"),
         ("secrets_egress", "edit"),
         ("secrets_egress", "delete"),

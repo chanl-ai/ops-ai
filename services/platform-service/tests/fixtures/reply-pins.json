@@ -10763,6 +10763,7 @@
             "memory": "E"
           },
           "owner": {
+            "install": "m",
             "workspace": "m"
           },
           "reviewer": {
@@ -11190,6 +11191,19 @@
           "view": null
         },
         "area": "workspace"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "install"
       }
     ],
     "id": "builder",
@@ -12283,6 +12297,19 @@
           "view": null
         },
         "area": "workspace"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "install"
       }
     ],
     "id": "<role>",
@@ -12299,7 +12326,8 @@
       "secrets_egress.manage",
       "settings.view",
       "settings.manage",
-      "workspace.manage"
+      "workspace.manage",
+      "install.manage"
     ],
     "permissionCount": 1,
     "permissions": [
@@ -12407,10 +12435,10 @@
       {
         "assignmentCount": 0,
         "builtin": true,
-        "description": "Transfers, closes and restores the workspace. One person holds it, and only a transfer moves it.",
+        "description": "Transfers, closes and restores the workspace, and changes the model aliases every team runs on. One person holds it, and only a transfer moves it.",
         "id": "owner",
         "name": "Owner",
-        "permissionCount": 1
+        "permissionCount": 2
       }
     ],
     "facets": {},
@@ -12575,6 +12603,7 @@
             "memory": "E"
           },
           "owner": {
+            "install": "m",
             "workspace": "m"
           },
           "reviewer": {

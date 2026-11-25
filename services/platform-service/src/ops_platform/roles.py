@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import NotRequired, TypedDict
 
 from ops_access import ACTIONS, ANY_TEAM, AREAS, BUILTIN_GRIDS, SECURITY_TEAM_ACTIONS, Grant, Granted, effective
-from ops_access.catalogue import ADMIN, FIXED_ROLES
+from ops_access.catalogue import ADMIN, FIXED_ROLES, OWNER_CELLS
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Json
 from ops_service_kit.ids import now_iso
@@ -75,10 +75,6 @@ class TeamCells(TypedDict):
     heldInTeam: list[EffectiveCell]
 
 
-# Transfers, closes and restores the workspace: on Owner and no other role, moved only by a transfer (E42).
-OWNER_CELL = ("workspace", "manage")
-
-
 class PermissionsView(TypedDict):
     """What a person may do, as `PermissionsOut` sends it; the person route adds their name and address."""
 
@@ -92,8 +88,8 @@ class PermissionsView(TypedDict):
 
 def custom_role_refuses(area: str, action: str) -> bool:
     """D40: a custom role holds no secrets or egress cell and no Security-team cell, which only the built-in roles
-    give; nor `workspace.manage`, which only Owner holds (E42)."""
-    return area == "secrets_egress" or (area, action) in SECURITY_TEAM_ACTIONS or (area, action) == OWNER_CELL
+    give; nor `workspace.manage` or `install.manage`, which only Owner holds (E42)."""
+    return area == "secrets_egress" or (area, action) in SECURITY_TEAM_ACTIONS or (area, action) in OWNER_CELLS
 
 
 def _checked(cells: list[Grant]) -> None:
@@ -136,8 +132,8 @@ class Roles:
     async def edit(self, tenant_id: str, role_id: str, cells: list[Grant], *, by: str, request_id: str) -> RoleView:
         """Sets a role's cells, built-in or custom. Admin keeps every cell: 409 `admin_holds_every_cell`; Owner and
         Security admin are not edited either (`FIXED_ROLES`), 409 `role_set_by_rule`, refused before the cells are
-        read so an empty list is refused too. A cell outside the catalogue is 400 `unknown_cell`; `workspace.manage`
-        on another built-in role is 400 `owner_only`; an empty list on any other built-in role is 400
+        read so an empty list is refused too. A cell outside the catalogue is 400 `unknown_cell`; `workspace.manage` or
+        `install.manage` on another built-in role is 400 `owner_only`; an empty list on any other built-in role is 400
         `builtin_role_empty` (reset puts it back to its seed).
         The caller's right to change roles is checked by the route."""
         if role_id == ADMIN.id:
@@ -158,11 +154,11 @@ class Roles:
             )
         if role is not None and not role.builtin:
             self._custom_cells(cells)
-        elif any((a, x) == OWNER_CELL for a, x, _ in cells):
+        elif owner_held := sorted({f"{a}.{x}" for a, x, _ in cells if (a, x) in OWNER_CELLS}):
             raise ValidationFailed(
-                "Only Owner holds workspace.manage; it moves from person to person by a transfer.",
+                f"Only Owner holds {', '.join(owner_held)}; it moves from person to person by a transfer.",
                 code="owner_only",
-                details={"cells": ["workspace.manage"]},
+                details={"cells": owner_held},
             )
         if not await self.store.set_grid(tenant_id, role_id, cells, by=by, request_id=request_id, action="role.edit"):
             raise NotFound("No role with that id.")
@@ -173,7 +169,7 @@ class Roles:
         if refused:
             raise ValidationFailed(
                 f"A custom role cannot hold {', '.join(refused)}: secrets, egress and Security-team permissions come "
-                "only with a built-in role, and workspace.manage only with Owner.",
+                "only with a built-in role, and workspace.manage and install.manage only with Owner.",
                 code="not_for_custom_roles",
                 details={"cells": refused},
             )
