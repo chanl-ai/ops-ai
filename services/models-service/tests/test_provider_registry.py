@@ -19,7 +19,7 @@ from ops_models.registry import RegistryInvalid
 from ops_service_kit.contract import response_checker
 from ops_service_kit.public_address import PublicFetch
 
-from .conftest import Models
+from .conftest import SERVICE, Models
 from .test_provider_key_check import Resolver
 from .test_provider_keys import people
 
@@ -131,3 +131,33 @@ async def test_a_key_a_registry_type_refuses_reads_as_refused(models: Models) ->
     assert asked == ("api.anthropic.com", "/v1/models", "sk-ant-wrong"), asked
     assert "sk-ant-wr" not in check.text, check.text
     assert seen[1].headers["host"] == "api.openai.com", "an OpenAI key goes only to OpenAI's own address"
+
+
+async def test_a_connection_the_registry_refuses_is_refused(models: Models) -> None:
+    app = create_models_app(models.engine)
+    person = people(f"t_{uuid4().hex[:8]}")
+    app.dependency_overrides[current_principal] = app.dependency_overrides[current_tenant_caller] = person
+    tag = uuid4().hex[:6]
+    async with _client(app) as c:
+        not_a_url = await c.post(
+            "/v1/models/providers", json={"name": f"vllm-{tag}", "type": "openai-compatible", "baseUrl": "not a url"}
+        )
+    # A service token as the install's scripts send it, through the real caller resolution.
+    async with _client(create_models_app(models.engine)) as c:
+        body = {"name": f"oa-{tag}", "type": "openai", "keyRef": f"OA_{tag}", "secrets": {"apiKey": "sk-1"}}
+        by_service = await c.post("/v1/models/providers", json=body, headers=SERVICE)
+    assert not_a_url.status_code == 400 and "baseUrl" in not_a_url.text, not_a_url.text
+    assert by_service.status_code == 403 and by_service.json()["error"]["code"] == "scope_required", by_service.text
+
+
+async def test_secrets_never_replace_the_key_another_connection_signs_in_with(models: Models) -> None:
+    app = create_models_app(models.engine)
+    person = people(f"t_{uuid4().hex[:8]}")
+    app.dependency_overrides[current_principal] = app.dependency_overrides[current_tenant_caller] = person
+    tag = uuid4().hex[:6]
+    async with _client(app) as c:
+        first = {"name": f"oa-{tag}", "type": "openai", "keyRef": f"SHARED_{tag}", "secrets": {"apiKey": "sk-team-a"}}
+        assert (await c.post("/v1/models/providers", json=first)).status_code == 201
+        second = {**first, "name": f"oa2-{tag}", "secrets": {"apiKey": "sk-team-b"}}
+        again = await c.post("/v1/models/providers", json=second)
+    assert again.status_code == 409 and again.json()["error"]["code"] == "key_ref_in_use", again.text

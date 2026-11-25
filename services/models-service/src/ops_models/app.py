@@ -65,7 +65,7 @@ from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
 from ops_store.database import Database
 
-from .catalog import Catalog
+from .catalog import Catalog, CatalogModel
 from .connection_settings import azure_openai_problem
 from .key_check import EndpointRefused, KeyRefused, azure_host, listed_models
 from .provider_keys import ProviderKeys
@@ -373,17 +373,17 @@ def _type_view(e: ProviderEntry) -> ProviderTypeOut:
     )
 
 
-def _catalog_view(model_id: str, m: dict[str, Any]) -> CatalogModelOut:
+def _catalog_view(model_id: str, m: CatalogModel) -> CatalogModelOut:
     return CatalogModelOut(
         id=model_id,
-        name=str(m["name"]),
-        context=m.get("context"),
-        output=m.get("output"),
-        reasoning=bool(m.get("reasoning")),
-        images=bool(m.get("images")),
-        input_per_million=m.get("inputPerMillion"),
-        output_per_million=m.get("outputPerMillion"),
-        knobs=sorted(m.get("knobs") or {}),
+        name=m.name,
+        context=m.context,
+        output=m.output,
+        reasoning=m.reasoning,
+        images=m.images,
+        input_per_million=m.input_per_million,
+        output_per_million=m.output_per_million,
+        knobs=sorted(m.knobs),
     )
 
 
@@ -624,6 +624,14 @@ def create_models_app(
         if body.secrets is not None:
             # Saving a key value is an account admin's, whoever calls: the rule PUT /v1/provider-keys/{name} holds to.
             account_admin(p)
+            # New secrets under a name another connection signs in with would change that connection's key unseen.
+            using = [r.name for r in (await providers.page(ListParams(), key_ref=body.key_ref)).data]
+            if using:
+                raise Conflict(
+                    f"Provider connection {', '.join(using)} signs in with key {body.key_ref}; name another key, or "
+                    "leave secrets out to share it.",
+                    code="key_ref_in_use",
+                )
             wanted = entry.secret_fields
             if set(body.secrets) != set(wanted):
                 raise ValidationFailed(f"secrets are {', '.join(wanted) or 'none'} for {entry.label} connections")
@@ -902,6 +910,13 @@ def create_models_app(
         keys.forget(p.tenant_id, name)
         return Response(status_code=204)
 
+    async def named(rows: Sequence[AliasRow]) -> list[AliasOut]:
+        """Each alias version with its connection's name, read in one page of connections by id."""
+        ids = sorted({r.provider_id for r in rows})
+        held = (await providers.page(ListParams(ids=ids, page_size=len(ids)))).data if ids else []
+        names = {c.id: c.name for c in held}
+        return [_alias_view(r).model_copy(update={"provider_name": names.get(r.provider_id)}) for r in rows]
+
     @app.get(
         "/v1/models/aliases",
         dependencies=[connections_guard],
@@ -913,7 +928,7 @@ def create_models_app(
         """Each alias's serving version, by name. `search` matches the name, the kind or the model; `ids` names
         aliases by name."""
         page = await aliases.page(q)
-        views = [_alias_view(r) for r in page.data]
+        views = await named(page.data)
         return typed(ListResult[AliasOut](data=views, pagination=page.pagination, facets=page.facets))
 
     @app.post(
@@ -942,7 +957,7 @@ def create_models_app(
         page = await aliases.version_page(name, q)
         if page is None:
             raise refusal(404, "alias_not_found", f"No alias {name}.")
-        views = [_alias_view(r) for r in page.data]
+        views = await named(page.data)
         return typed(ListResult[AliasOut](data=views, pagination=page.pagination, facets=page.facets))
 
     @app.get(

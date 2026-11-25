@@ -99,6 +99,8 @@ class AliasOut(Out):
     status: str
     reasoning_effort: str | None = None
     images: bool = False
+    # The connection's name, for the aliases page; None when the connection is gone.
+    provider_name: str | None = None
 
 
 class AliasRef(Out):

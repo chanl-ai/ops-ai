@@ -36,8 +36,9 @@ def _litellm_row(table: dict[str, Any], provider: str, model_id: str) -> dict[st
     return {}
 
 
-def _knobs(provider: dict[str, Any], model: dict[str, Any], output: int | None) -> dict[str, Any]:
-    takes: list[str] = provider["takes"]
+def _knobs(table: dict[str, Any], model: dict[str, Any], output: int | None) -> dict[str, Any]:
+    takes: list[str] = table["takes"]
+    provider: dict[str, Any] = table["ranges"]
     out: dict[str, Any] = {}
     sampling = bool(model.get("temperature"))
     for name in ("temperature", "top_p", "top_k"):

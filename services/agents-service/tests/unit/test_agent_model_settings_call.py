@@ -1,6 +1,6 @@
 """An agent version's saved model settings reach the model call: through the version's spec, the catalogue's turn
-settings and the kernel, into the OpenAI-shaped request models-service receives. The models-service end is faked at
-the HTTP edge, so the assertion reads the body as it would arrive."""
+settings and the kernel, into the OpenAI-shaped request models-service receives, each under its knob name. The
+models-service end is faked at the HTTP edge, so the assertion reads the body as it would arrive."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ async def test_saved_model_settings_reach_the_request_models_service_receives() 
         sent.append(json.loads(request.content))
         return httpx.Response(200, json=ANSWER)
 
-    saved: Json = {"temperature": 0.3, "top_k": 40, "thinking_budget": 2048, "max_tokens": 512, "unknown_knob": 1}
+    saved: Json = {"temperature": 0.3, "top_k": 40, "thinking_budget": 2048, "max_tokens": 512}
     spec: Json = {**LEGACY_SPEC, "skillPins": [], "modelSettings": saved}
     settings = load_catalog(SEED).settings_for(definition_of("ag_branch", 4, spec), "bank-standard")
     client = AsyncOpenAI(
@@ -54,11 +54,5 @@ async def test_saved_model_settings_reach_the_request_models_service_receives() 
     assert isinstance(events[-1], TurnFinished), events[-1]
 
     body = sent[0]
-    got = {k: body.get(k) for k in ("temperature", "top_k", "thinking", "max_completion_tokens", "unknown_knob")}
-    assert got == {
-        "temperature": 0.3,
-        "top_k": 40,
-        "thinking": {"type": "enabled", "budget_tokens": 2048},
-        "max_completion_tokens": 512,
-        "unknown_knob": None,
-    }, body
+    # By knob name: models-service maps each to its provider's field (tests/test_model_knobs.py there).
+    assert {k: body.get(k) for k in saved} == saved, body

@@ -21,6 +21,8 @@ from pydantic import Field, ValidationError, model_validator
 from ops_service_kit.http import In, Json
 from ops_service_kit.names import Name80
 
+from .connection_settings import is_url
+
 BUILTIN = Path(__file__).resolve().parents[2] / "registry" / "providers"
 
 # The connection columns a field may be stored in, under the wire name the connection routes use.
@@ -125,6 +127,8 @@ class ProviderEntry(In):
                 if name in self.connection.required and not field.default:
                     return f"{name} is missing: {field.description or field.title}"
                 continue
+            if field.format == "uri" and not is_url(value):
+                return f"{name} {value!r} is not a URL: {field.description or field.title}"
             if field.pattern and not re.fullmatch(field.pattern, value):
                 return f"{name} {value!r} is not {field.description or 'in the form ' + field.pattern}"
             if field.enum and value not in field.enum:

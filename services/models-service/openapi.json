@@ -173,6 +173,17 @@
             "title": "Providerid",
             "type": "string"
           },
+          "providerName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providername"
+          },
           "reasoningEffort": {
             "anyOf": [
               {

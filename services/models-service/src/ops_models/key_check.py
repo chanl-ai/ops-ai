@@ -81,8 +81,10 @@ def _request(
         own = endpoint if "baseUrl" in entry.connection.properties else None
         base = listing.base or own or entry.base_url
         if base and "{region}" in base:
-            if not region or not re.fullmatch(r"[a-z]{2}(-[a-z]+)+-[0-9]", region):
-                raise EndpointRefused("region is an AWS region name, such as us-east-1")
+            # The region's form is the entry's (its connection field's pattern), so it cannot change the host.
+            field = entry.connection.properties.get("region")
+            if not region or field is None or field.pattern is None or not re.fullmatch(field.pattern, region):
+                raise EndpointRefused(f"region is {field.description if field else 'not a field of this type'}")
             base = base.replace("{region}", region)
     if not base:
         raise EndpointRefused(f"endpoint is missing: the base URL of the {entry.label} endpoint")

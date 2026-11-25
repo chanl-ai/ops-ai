@@ -49,6 +49,8 @@ async def test_the_knobs_reply_lists_only_what_the_model_takes_with_its_catalog_
     custom = await _alias(c, "openai-compatible", "llama-3-70b", baseUrl="http://vllm.internal/v1")
     catalogued = (await c.get(f"/v1/models/aliases/{haiku}/knobs", headers=SERVICE)).json()["data"]
     unknown = (await c.get(f"/v1/models/aliases/{custom}/knobs", headers=SERVICE)).json()["data"]
+    listed = (await c.get("/v1/models/aliases", params={"ids": haiku}, headers=SERVICE)).json()["data"]["data"]
+    assert [a["providerName"] for a in listed] == [haiku], "an alias names its connection, made under the same tag"
 
     knobs = catalogued["knobs"]["properties"]
     assert set(knobs) == {"temperature", "top_p", "top_k", "thinking_budget", "max_tokens"}, knobs
@@ -73,7 +75,8 @@ async def test_a_call_reaches_the_provider_fitted_to_the_model(models: Models) -
             "top_k": 40,
             "max_tokens": 999999,
             "reasoning_effort": "max",
-            "thinking": {"type": "enabled", "budget_tokens": 100},
+            # By knob name, as agents-service sends a saved setting.
+            "thinking_budget": 100,
             "parallel_tool_calls": False,
         }
         r = await c.post(

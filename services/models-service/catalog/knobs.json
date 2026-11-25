@@ -1,5 +1,5 @@
 {
-  "about": "The knobs a model can be given, how each reaches the provider, and each catalogued provider's ranges and defaults. Read by models-service (catalog.py) and by scripts/sync_catalog.py, which writes models.json from models.dev and LiteLLM using the `takes` list of each provider here.",
+  "about": "The knobs a model can be given, the request field each reaches the provider as (`wire`, with any fields it sets alongside, `with`, and the value at or below which it is off, `offAt`), and each catalogued provider's knobs (`takes`) with their ranges and defaults; a range's own `wire` sends that knob under another field for that provider. Read by models-service (catalog.py) and by scripts/sync_catalog.py.",
   "knobs": {
     "temperature": {
       "type": "number",
@@ -32,7 +32,11 @@
       "type": "integer",
       "title": "Thinking budget (tokens)",
       "description": "How many tokens the model may think for before it answers. 0 turns thinking off.",
-      "wire": "thinking.budget_tokens"
+      "wire": "thinking.budget_tokens",
+      "with": {
+        "thinking.type": "enabled"
+      },
+      "offAt": 0
     },
     "reasoning_effort": {
       "type": "string",
@@ -49,22 +53,24 @@
         "max_tokens",
         "reasoning_effort"
       ],
-      "temperature": {
-        "minimum": 0,
-        "maximum": 2,
-        "default": 1
-      },
-      "top_p": {
-        "minimum": 0,
-        "maximum": 1,
-        "default": 1
-      },
-      "max_tokens": {
-        "minimum": 1,
-        "default": 16384
-      },
-      "reasoning_effort": {
-        "default": "medium"
+      "ranges": {
+        "temperature": {
+          "minimum": 0,
+          "maximum": 2,
+          "default": 1
+        },
+        "top_p": {
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        },
+        "max_tokens": {
+          "minimum": 1,
+          "default": 16384
+        },
+        "reasoning_effort": {
+          "default": "medium"
+        }
       }
     },
     "azure": {
@@ -74,22 +80,24 @@
         "max_tokens",
         "reasoning_effort"
       ],
-      "temperature": {
-        "minimum": 0,
-        "maximum": 2,
-        "default": 1
-      },
-      "top_p": {
-        "minimum": 0,
-        "maximum": 1,
-        "default": 1
-      },
-      "max_tokens": {
-        "minimum": 1,
-        "default": 16384
-      },
-      "reasoning_effort": {
-        "default": "medium"
+      "ranges": {
+        "temperature": {
+          "minimum": 0,
+          "maximum": 2,
+          "default": 1
+        },
+        "top_p": {
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        },
+        "max_tokens": {
+          "minimum": 1,
+          "default": 16384
+        },
+        "reasoning_effort": {
+          "default": "medium"
+        }
       }
     },
     "anthropic": {
@@ -101,32 +109,34 @@
         "thinking_budget",
         "reasoning_effort"
       ],
-      "temperature": {
-        "minimum": 0,
-        "maximum": 1,
-        "default": 1
-      },
-      "top_p": {
-        "minimum": 0,
-        "maximum": 1,
-        "default": 1
-      },
-      "top_k": {
-        "minimum": 1,
-        "maximum": 500,
-        "default": 250
-      },
-      "max_tokens": {
-        "minimum": 1,
-        "default": 8192
-      },
-      "thinking_budget": {
-        "minimum": 0,
-        "default": 8000,
-        "x-minimum-on": 1024
-      },
-      "reasoning_effort": {
-        "default": "medium"
+      "ranges": {
+        "temperature": {
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        },
+        "top_p": {
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        },
+        "top_k": {
+          "minimum": 1,
+          "maximum": 500,
+          "default": 250
+        },
+        "max_tokens": {
+          "minimum": 1,
+          "default": 8192
+        },
+        "thinking_budget": {
+          "minimum": 0,
+          "default": 8000,
+          "x-minimum-on": 1024
+        },
+        "reasoning_effort": {
+          "default": "medium"
+        }
       }
     },
     "google": {
@@ -138,32 +148,34 @@
         "thinking_budget",
         "reasoning_effort"
       ],
-      "temperature": {
-        "minimum": 0,
-        "maximum": 2,
-        "default": 1
-      },
-      "top_p": {
-        "minimum": 0,
-        "maximum": 1,
-        "default": 0.95
-      },
-      "top_k": {
-        "minimum": 1,
-        "maximum": 100,
-        "default": 40
-      },
-      "max_tokens": {
-        "minimum": 1,
-        "default": 8192
-      },
-      "thinking_budget": {
-        "minimum": 0,
-        "default": 8192,
-        "wire": "extra_body.google.thinking_config.thinking_budget"
-      },
-      "reasoning_effort": {
-        "default": "medium"
+      "ranges": {
+        "temperature": {
+          "minimum": 0,
+          "maximum": 2,
+          "default": 1
+        },
+        "top_p": {
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.95
+        },
+        "top_k": {
+          "minimum": 1,
+          "maximum": 100,
+          "default": 40
+        },
+        "max_tokens": {
+          "minimum": 1,
+          "default": 8192
+        },
+        "thinking_budget": {
+          "minimum": 0,
+          "default": 8192,
+          "wire": "extra_body.google.thinking_config.thinking_budget"
+        },
+        "reasoning_effort": {
+          "default": "medium"
+        }
       }
     },
     "amazon-bedrock": {
@@ -173,22 +185,24 @@
         "max_tokens",
         "reasoning_effort"
       ],
-      "temperature": {
-        "minimum": 0,
-        "maximum": 1,
-        "default": 0.7
-      },
-      "top_p": {
-        "minimum": 0,
-        "maximum": 1,
-        "default": 0.9
-      },
-      "max_tokens": {
-        "minimum": 1,
-        "default": 4096
-      },
-      "reasoning_effort": {
-        "default": "medium"
+      "ranges": {
+        "temperature": {
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.7
+        },
+        "top_p": {
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.9
+        },
+        "max_tokens": {
+          "minimum": 1,
+          "default": 4096
+        },
+        "reasoning_effort": {
+          "default": "medium"
+        }
       }
     }
   },
