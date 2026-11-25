@@ -230,7 +230,7 @@ await withUiStack(
         // agents-service keeps each tenant's tool directory for 30 s (activities/tool_directory.py, ttl_s), so the hidden
         // operation is offered until that answer expires; the page is reopened until it is not, for at most 45 s.
         // Grants no longer offered are listed under the tools picker, not inside a dialog.
-        const grant = james.getByTestId('stale-grants');
+        const grant = james.getByTestId('agent-tools-rows');
         let stale = false;
         for (const until = Date.now() + 45_000; !stale && Date.now() < until; ) {
           await james.goto(`${consoleUrl}/agents/${AGENT}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });

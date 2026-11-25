@@ -40,7 +40,7 @@ export async function addMatchedTool(page, search, toolId) {
 export async function addFirstToolOfFirstApp(page) {
   await openToolsPicker(page);
   // An app's card is the button in the cards list; the app step's own controls share the `tools-app-` prefix
-  // (select-all, add, connect, list), so neither lookup is by prefix alone.
+  // (add, connect, list), so neither lookup is by prefix alone.
   await page.getByTestId('tools-picker-apps').locator('button[data-testid^="tools-app-"]').first().click({ timeout: 60_000 });
   const box = page.getByTestId('tools-app-list').locator('button[role="checkbox"][data-testid^="tools-app-tool-"]:not([disabled])').first();
   await box.waitFor({ timeout: 30_000 });

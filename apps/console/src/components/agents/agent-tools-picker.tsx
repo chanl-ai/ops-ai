@@ -204,7 +204,6 @@ function ToolRow({ tool, picked, onToggle }: { tool: AppTool; picked: boolean; o
 
 function ToolsStep({ app, search, tools, picked, setPicked }: { app: AgentToolApp; search: string; tools: ToolsQuery; picked: Set<string>; setPicked: (s: Set<string>) => void }) {
   const rows = (tools.data?.pages ?? []).flatMap((p) => p.data);
-  const [loadingAll, setLoadingAll] = React.useState(false);
   if (tools.isPending)
     return (
       <div className="flex flex-col gap-2" data-testid="tools-app-loading">
@@ -220,24 +219,6 @@ function ToolsStep({ app, search, tools, picked, setPicked }: { app: AgentToolAp
         {search.trim() ? `No ${app.name} tool matches “${search.trim()}”.` : `No ${app.name} tools are added yet.`}
       </p>
     );
-  const everyPicked = !tools.hasNextPage && rows.every((t) => t.granted || picked.has(t.id));
-  // Select all means every tool the search finds, so the pages not yet loaded are read first.
-  const selectAll = async () => {
-    if (everyPicked) return setPicked(new Set());
-    setLoadingAll(true);
-    try {
-      let pages = tools.data?.pages ?? [];
-      let more = tools.hasNextPage;
-      while (more) {
-        const next = await tools.fetchNextPage();
-        pages = next.data?.pages ?? pages;
-        more = next.hasNextPage && !next.isError;
-      }
-      setPicked(new Set([...picked, ...pages.flatMap((p) => p.data).filter((t) => !t.granted).map((t) => t.id)]));
-    } finally {
-      setLoadingAll(false);
-    }
-  };
   const toggle = (id: string) => {
     const next = new Set(picked);
     if (!next.delete(id)) next.add(id);
@@ -246,12 +227,6 @@ function ToolsStep({ app, search, tools, picked, setPicked }: { app: AgentToolAp
   return (
     <div className="flex flex-col gap-2">
       <ul className="divide-y rounded-lg border bg-card" data-testid="tools-app-list">
-        <li className="flex items-center gap-3 bg-muted/40 px-3 py-2.5">
-          <Checkbox id="pick-all" data-testid="tools-app-select-all" checked={everyPicked} disabled={loadingAll} onCheckedChange={() => void selectAll()} />
-          <Label htmlFor="pick-all" className="font-medium">
-            {loadingAll ? 'Selecting…' : 'Select all'}
-          </Label>
-        </li>
         {rows.map((t) => (
           <ToolRow key={t.id} tool={t} picked={picked.has(t.id)} onToggle={() => toggle(t.id)} />
         ))}
@@ -355,7 +330,7 @@ export function usePickerOpen(agentId: string): [boolean, (open: boolean) => voi
 
 /**
  * Add tools to an agent: step one lists the apps (searched on the server, connected first, a search also names the
- * tools it matched), step two lists one app's tools with Select all and one Add. A grant is the page's own save of the
+ * tools it matched), step two lists one app's tools to tick and one Add. A grant is the page's own save of the
  * stored tool list (`onGrant`), never part of the autosaved draft.
  */
 export function AgentToolsPicker({ agentId, agentName, disabled, hidden, open, onOpenChange, onGrant }: { agentId: string; agentName: string; disabled?: boolean; hidden?: boolean; open: boolean; onOpenChange: (open: boolean) => void; onGrant: (ids: string[]) => void }) {

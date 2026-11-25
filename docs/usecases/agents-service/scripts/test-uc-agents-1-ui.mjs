@@ -80,18 +80,18 @@ await withUiStack(async (consoleUrl) => {
     const named = !!match && (await seen(page.getByRole('dialog').getByText(shownAs), 15_000));
     check('9 searching a tool finds its app on the server, lists the tool under it and drops the other apps', kept && gone && named, { hits: hits.map((a) => a.id), kept, gone, named, match });
 
-    // 10 Opening the app lists its tools; Select all offers to add every one of them.
+    // 10 Opening the app lists its tools; ticking each one offers to add them all.
     const toolsRead = armed(page.waitForResponse((r) => r.request().method() === 'GET' && decodeURIComponent(new URL(r.url()).pathname) === `${appsPath}/${app?.id}/tools` && !new URL(r.url()).searchParams.get('search'), { timeout: 60_000 }));
     await card.first().click();
     // The app's whole list is wanted: a search field that still holds the typed word is cleared.
     if (await search.first().inputValue({ timeout: 5_000 }).catch(() => '')) await search.first().fill('');
     const offered = ((await (await toolsRead)?.json())?.data?.data ?? []).map((t) => t.id).sort();
-    await page.getByTestId('tools-app-select-all').click({ timeout: 30_000 });
+    for (const id of offered) await page.getByTestId(`tools-app-tool-${id}`).click({ timeout: 30_000 });
     const add = page.getByTestId('tools-app-add');
     const label = (await add.innerText({ timeout: 15_000 }).catch(() => '')).trim();
     // One width here: a run that resized to 390 and back at this point found the picker without its Add button.
     await page.screenshot({ path: join(SHOTS, 'app-tools-selected-1440.png') });
-    check('10 the app lists its own tools, and Select all offers to add all of them', JSON.stringify(offered) === JSON.stringify(wanted) && label === `Add ${wanted.length} tools`, { offered, wanted, label });
+    check('10 the app lists its own tools, and ticking each offers to add all of them', JSON.stringify(offered) === JSON.stringify(wanted) && label === `Add ${wanted.length} tools`, { offered, wanted, label });
 
     // 11 Add grants them in one save of the agent's stored tools.
     const saved = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${agent.id}`, { timeout: 60_000 }));
