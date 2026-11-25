@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at 20261123_0141_sign_in_last_used
+-- tools-service, stamped at 20261125_0039_call_signed_in_as
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -31,6 +31,7 @@ CREATE TABLE gateway_calls (
 	connection_id VARCHAR(64) NULL, 
 	acting_for VARCHAR(320) NULL, 
 	credential VARCHAR(16) NULL, 
+	signed_in_as VARCHAR(320) NULL, 
 	channel VARCHAR(16) NULL, 
 	client_name VARCHAR(120) NULL, 
 	client_id VARCHAR(64) NULL, 
@@ -793,5 +794,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('20261123_0141_sign_in_last_used');
+INSERT INTO alembic_version_tools (version_num) VALUES ('20261125_0039_call_signed_in_as');
 GO
