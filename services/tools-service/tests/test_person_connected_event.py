@@ -6,6 +6,7 @@ event's key is the one the refusal named, so the run wakes for its person only."
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import ANY
 
 import httpx
 import pytest
@@ -36,7 +37,8 @@ async def test_a_person_without_their_account_is_told_the_event_that_means_they_
     conn = await keys._connection(store, tenant, "basic")  # pyright: ignore[reportPrivateUsage]
     with pytest.raises(AuthFailed) as e:
         await keys._call(auth, tenant, conn, keys.JAMES)  # pyright: ignore[reportPrivateUsage]
-    assert e.value.details["connectedEvent"] == {"name": CONNECTED, "key": f"{conn}:{keys.JAMES.sub}"}
+    # `after`: when it refused, so a sign-in from before it leaves a run waiting.
+    assert e.value.details["connectedEvent"] == {"name": CONNECTED, "key": f"{conn}:{keys.JAMES.sub}", "after": ANY}
     assert e.value.details["teamAccount"] is False, "a connection each person signs in to has no team account"
 
 
@@ -50,7 +52,7 @@ async def test_giving_your_key_reports_that_you_connected_under_the_refusals_key
     assert given.status_code == 200, given.text
     [event] = await connected(engine, tenant)
     assert (event["event_key"], event["team_id"]) == (f"{conn}:{keys.JAMES.sub}", keys.TEAM), event
-    assert event["payload"] == {"connectionId": conn, "app": "Ledger"}, event
+    assert event["payload"] == {"connectionId": conn, "app": "Ledger", "at": ANY}, event
     assert "key-james" not in str(event)
 
 

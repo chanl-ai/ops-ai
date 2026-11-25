@@ -44,6 +44,7 @@ from ops_contracts.chat import (
     RememberedItem,
     ReplaceEvent,
     ReplyUsage,
+    SignedIn,
     StatusEvent,
     TextEvent,
     ToolCall,
@@ -144,6 +145,7 @@ class AssistantBuilder:
             status="running" if status == "running" else "failed" if status == "error" else "success",
             duration_ms=int(cast(float | str, c.get("durationMs") or 0)),
             gated=gated,
+            signed_in=SignedIn.model_validate(c["signedIn"]) if isinstance(c.get("signedIn"), dict) else None,
         )
 
     def _worded(self, text: str, tool: str) -> str:

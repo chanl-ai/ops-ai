@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "Chat never asks whose login an app uses",
+  "description": "An admin sets each app once to Everyone uses the team's login or Each person signs in, and chat actions say which login acted and who asked. An app each person signs in to shows one Sign in card the first time, then the chat carries on, and since the team login is no longer a backup a schedule cannot call such an app.",
+  "tag": "improved"
+}

@@ -12,7 +12,7 @@ import hashlib
 import json
 from collections.abc import AsyncIterator, Awaitable, Iterable
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -26,7 +26,7 @@ from ops_tools.auth.tokens import Tokens
 from ops_tools.connections.connect_links import ConnectLinks
 from ops_tools.modules.seed import load
 from ops_tools.store.connections import SHARED, ConnectionStore, LinkRow, NewAccount
-from ops_tools.store.modules import ModuleStore
+from ops_tools.store.modules import ModuleRef, ModuleStore
 
 from .conftest import CONSOLE_URL, build_app, credentials, response_checker
 from .test_review_decisions import introspect, jwks, person
@@ -81,8 +81,8 @@ async def connection(store: ConnectionStore, tenant: str, sign_in: str, *, backu
     return f"con_{sign_in}"
 
 
-def module(tenant: str, connection_id: str) -> dict[str, Any]:
-    return {"tenant_id": tenant, "team_id": TEAM, "connection_id": connection_id, "endpoint": BASE}
+def module(tenant: str, connection_id: str) -> ModuleRef:
+    return cast(ModuleRef, {"tenant_id": tenant, "team_id": TEAM, "connection_id": connection_id, "endpoint": BASE})
 
 
 def rig(
@@ -130,18 +130,30 @@ async def test_a_person_with_no_sign_in_gets_a_link_made_for_them_not_the_teams_
     assert row is not None and (row.person_id, row.team_id, row.connection_id) == (JAMES.sub, TEAM, conn)
 
 
-async def test_a_call_with_nobody_behind_it_uses_the_team_account_only_where_the_backup_is_on(
-    engine: AsyncEngine, tenant: str
-) -> None:
+async def test_a_team_login_call_for_a_person_names_the_login_it_ran_as(engine: AsyncEngine, tenant: str) -> None:
+    # A chat card says "Runs in CRM as <login> (team login)": the call must report the team's login, not the person.
     store, tokens, auth = rig(engine)
-    personal = await connection(store, tenant, "person")
+    conn = await connection(store, tenant, "team")
+    claims = base64.urlsafe_b64encode(json.dumps({"email": "ops@bank.example"}).encode()).decode().rstrip("=")
+    answer = {"access_token": "at-team", "expires_in": 3600, "id_token": f"e30.{claims}.sig"}
+    await tokens.store_answer(tenant, conn, answer)
+    prepared = await auth.prepare(module(tenant, conn), "test", tool="crm_read", actor="t", acting_for=JAMES)
+    assert prepared is not None and prepared.headers["Authorization"] == "Bearer at-team"
+    assert prepared.signed_as == {"whose": "team", "login": "ops@bank.example", "app": "CRM"}, prepared.signed_as
+
+
+async def test_an_app_stored_as_both_answers_reads_and_signs_as_each_person(engine: AsyncEngine, tenant: str) -> None:
+    """An app has two answers, the team's login or each person's. A row stored with the old third answer (each person,
+    the team's login as backup) reads as each person, and a call with nobody behind it is not signed with the team's
+    login, which would act with more access than anyone asked for."""
+    store, tokens, auth = rig(engine)
     backed = await connection(store, tenant, "person_or_team", backup=True)
-    for conn in (personal, backed):
-        await tokens.store_answer(tenant, conn, {"access_token": "at-team", "expires_in": 3600})
+    await tokens.store_answer(tenant, backed, {"access_token": "at-team", "expires_in": 3600})
+    found = await store.get(tenant, backed)
+    assert found is not None and (found.sign_in, found.team_backup) == ("person", False), found
     with pytest.raises(AuthFailed) as e:
-        await bearer(auth, tenant, personal, None)
-    assert e.value.code == "CONNECTION_NOT_LINKED" and e.value.details["reason"] == "no_person"
-    assert await bearer(auth, tenant, backed, None) == "Bearer at-team"
+        await bearer(auth, tenant, backed, None)
+    assert e.value.code == "CONNECTION_NOT_LINKED" and e.value.details["reason"] == "no_person", e.value.details
 
 
 async def test_one_persons_refused_refresh_leaves_the_connection_and_everyone_else_working(

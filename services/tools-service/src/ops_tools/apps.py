@@ -272,8 +272,8 @@ class SystemCard(Out):
     app_group: AppGroup
     # Whose OAuth app the card's account signs in with; none for an app that signs in without one.
     credential: CardCredential | None = None
-    # Who signs in on the card's account: the team account, each person, or each person with the team's as backup.
-    sign_in: Literal["team", "person", "person_or_team"] | None = None
+    # Who signs in on the card's account: the team's login or each person.
+    sign_in: Literal["team", "person"] | None = None
     # The caller's own sign-in on an app each person signs in to; None where the team's account always signs in.
     own_sign_in: Literal["connected", "expired", "none"] | None = None
     # The sign-in health on the Apps list: people's own sign-ins on the app counted by state; None outside the list.
@@ -337,8 +337,8 @@ class CredentialAccount(Out):
     state: AccountState
     status: str
     state_reason: str | None = None
-    # Who signs in on it: the team account, each person, or each person with the team's as backup.
-    sign_in: Literal["team", "person", "person_or_team"]
+    # Who signs in on it: the team's login or each person.
+    sign_in: Literal["team", "person"]
     # When the team account last signed in; none before it has.
     connected_at: str | None = None
 
@@ -580,8 +580,8 @@ class AppAccount(Out):
     # Why it is refused or expired: the system's words, or the day the sign-in ended.
     state_reason: str | None = None
     owner: AccountOwner
-    # Whose login its calls use: the team's (`team`), each person's (`person`), or each person's with the team's for
-    # runs nobody started (`person_or_team`). Optional so older readers keep parsing.
+    # Whose login its calls use: the team's (`team`) or each person's (`person`). Optional so older readers keep
+    # parsing.
     sign_in: SignIn | None = None
     # How many people hold their own sign-in on this account: the "3 of 12" under "Each person signs in". Optional so
     # older readers keep parsing.
@@ -1420,9 +1420,7 @@ def app_state(
         test = an_object(t, "the sign-in's test") if (t := own.test) is not None else None
     else:
         if card.get("state") != CONNECTED:
-            return "needs_sign_in", state_reason(
-                conn, team_token, str(card.get("state"))
-            ) or "Sign in the team account."
+            return "needs_sign_in", state_reason(conn, team_token, str(card.get("state"))) or "Sign in the team login."
         test = team_test(conn, team_token)
     if test is not None and test.get("status") == "failed":
         return "test_failed", str(test.get("message") or "The test after the sign-in failed.")

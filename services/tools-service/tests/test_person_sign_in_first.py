@@ -1,8 +1,8 @@
-"""A call a person started on an app each person signs in to, with the team account as backup, by failure mode: a
-person with no sign-in of their own is quietly served by the team account instead of being asked to connect; once
-connected their call still goes out as the team; a run nobody started loses the team account; a team-only app starts
-asking people to connect; and a person whose own sign-in was refused or has ended is served by the team instead of
-being asked to reconnect. Rig: test_personal_sign_in's connections and tokens."""
+"""A call a person started on an app each person signs in to, where the team's login is also signed in (rows stored
+with the retired team-as-backup answer read as each person), by failure mode: a person with no sign-in of their own is
+quietly served by the team's login instead of being asked to sign in; once signed in their call still goes out as the
+team; a team-only app starts asking people to sign in; and a person whose own sign-in was refused or has ended is
+served by the team instead of being asked to sign in again. Rig: test_personal_sign_in's connections and tokens."""
 
 from __future__ import annotations
 
@@ -37,15 +37,6 @@ async def test_once_connected_the_same_call_is_signed_as_the_person(engine: Asyn
     prepared = await auth.prepare(module(tenant, conn), "test", tool="crm_update", actor="t", acting_for=JAMES)
     assert prepared is not None
     assert (prepared.headers["Authorization"], prepared.credential) == ("Bearer at-james", "person")
-
-
-async def test_a_run_nobody_started_still_uses_the_team_account(engine: AsyncEngine, tenant: str) -> None:
-    store, tokens, auth = rig(engine)
-    conn = await connection(store, tenant, "person_or_team", backup=True)
-    await tokens.store_answer(tenant, conn, {"access_token": "at-team", "expires_in": 3600})
-    prepared = await auth.prepare(module(tenant, conn), "test", tool="crm_update", actor="t", acting_for=None)
-    assert prepared is not None
-    assert (prepared.headers["Authorization"], prepared.credential) == ("Bearer at-team", "team")
 
 
 async def test_a_team_only_app_signs_a_persons_call_with_the_team_account(engine: AsyncEngine, tenant: str) -> None:

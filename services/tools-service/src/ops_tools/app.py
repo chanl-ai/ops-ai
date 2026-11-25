@@ -165,6 +165,14 @@ class GrantableOperation(Out):
     added: bool = True
 
 
+class SignedIn(Out):
+    """Whose login of the app a call ran as: the team's or the person's own, the login's name and the account."""
+
+    whose: Literal["team", "person"]
+    login: str
+    app: str
+
+
 class CallResult(Out):
     call_id: str
     decision: str
@@ -172,6 +180,7 @@ class CallResult(Out):
     output: JsonValue
     view: JsonValue = None
     replay_of: str | None = None
+    signed_in: SignedIn | None = None
 
 
 class ToolApproval(Out):
@@ -215,6 +224,9 @@ def as_response(outcome: Outcome) -> JSONResponse:
     }
     if outcome.replay_of:
         data["replayOf"] = outcome.replay_of
+    if outcome.signed_in is not None:
+        signed = outcome.signed_in
+        data["signedIn"] = {"whose": signed["whose"], "login": signed["login"], "app": signed["app"]}
     return ok(data)
 
 

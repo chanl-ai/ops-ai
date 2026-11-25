@@ -61,7 +61,7 @@ export function AccountSelect({ id, value, onChange, withTestAccounts = false }:
                   </span>
                 </SelectItem>
               ))}
-            {named && !(accounts.data ?? []).some((a) => a.name === named) && <SelectItem value={named}>{`${named} · not one of the team’s accounts`}</SelectItem>}
+            {named && !(accounts.data ?? []).some((a) => a.name === named) && <SelectItem value={named}>{`${named} · not an account of this team`}</SelectItem>}
           </SelectContent>
         </Select>
       )}

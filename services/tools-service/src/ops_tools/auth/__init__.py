@@ -19,11 +19,12 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, TypedDict
 from urllib.parse import urlsplit
 
 from ops_identity import ActingForPerson
 from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.ids import now_iso
 
 from ..connections.account_events import CONNECTED, connected_key, needs_reconnect_event
 from ..connections.records import EXPIRED, REFUSED
@@ -64,6 +65,19 @@ class ClientCertificate:
 SIGNED_WITH: ContextVar[str | None] = ContextVar("ops_tools_signed_with", default=None)
 
 
+class SignedAs(TypedDict):
+    """Whose login of an app a call ran as, in words a chat card shows: the team's login or the person's own, the
+    login's name (who signed it in, else the account's name) and the app's account it belongs to."""
+
+    whose: Literal["team", "person"]
+    login: str
+    app: str
+
+
+# The same call's login for the call's answer and its log row, set beside SIGNED_WITH; None for a call with no account.
+SIGNED_AS: ContextVar[SignedAs | None] = ContextVar("ops_tools_signed_as", default=None)
+
+
 @dataclass
 class Prepared:
     connection_id: str
@@ -80,6 +94,9 @@ class Prepared:
     credential: str | None = None
     # The person whose own row signed the call, so a refusal marks theirs alone; None for the team's.
     person: str | None = None
+    # Who a token or a username says signed in (the strategy sets it), and the login the call ran as in words.
+    login: str | None = None
+    signed_as: SignedAs | None = None
 
 
 @dataclass(frozen=True)
@@ -113,6 +130,7 @@ async def _basic(i: StrategyInput, p: Prepared) -> None:
     pair = f"{i.settings.get('username') or ''}:{i.secrets['password']}".encode()
     encoded = base64.b64encode(pair).decode()
     p.headers["Authorization"] = f"Basic {encoded}"
+    p.login = str(i.settings.get("username") or "") or None
     # An upstream that repeats the header shows the encoded pair, not the password.
     p.values.append(encoded)
 
@@ -155,7 +173,7 @@ def _token_strategy(grant: str) -> Strategy:
             p.values.extend(proof.signed)
         p.headers["Authorization"] = f"Bearer {token.access}"
         p.values.append(token.access)
-        p.rotation, p.renewable = token.rotation, True
+        p.rotation, p.renewable, p.login = token.rotation, True, token.account
 
     return apply
 
@@ -340,6 +358,11 @@ class Authenticator:
         prepared.credential = "person" if person != SHARED else ("team" if kind.holds_token else None)
         prepared.person = person if person != SHARED else None
         SIGNED_WITH.set(prepared.credential)
+        # A team API key names no person: the login reads as the account's own name ("EU org"), else the app's.
+        login = prepared.login or str(conn.account_name or "") or str(name)
+        whose: Literal["team", "person"] = "person" if person != SHARED else "team"
+        prepared.signed_as = SignedAs(whose=whose, login=login, app=str(name))
+        SIGNED_AS.set(prepared.signed_as)
         if prepared.credential is not None:
             # Apps > People's "last used": the row this call signs with, at most one write a minute (the store's WHERE).
             await self.connections.used(tenant_id, str(connection_id), person, at=datetime.now(UTC))
@@ -394,7 +417,7 @@ class Authenticator:
         if e.side == "upstream":
             state, why, since = REFUSED, str(e), (held.refreshed_at if held is not None else None)
         elif e.code == "NOT_SIGNED_IN" and ended is not None and ended <= at:
-            state, why, since = EXPIRED, f"the team account's sign-in ended on {ended.day} {ended:%b %Y}.", ended
+            state, why, since = EXPIRED, f"the team login's sign-in ended on {ended.day} {ended:%b %Y}.", ended
         else:
             return None
         notice = needs_reconnect_event(conn, state=state, reason=why, since=since, at=at)
@@ -403,13 +426,14 @@ class Authenticator:
             event: AuditEvent = {"action": "refresh_failed", "actor": actor, "at": at}
             await self.connections.note(tenant_id, connection_id, {**event, "detail": {"code": e.code}})
         message = (
-            f"{name} needs reconnecting: {why} An admin reconnects its team account under Apps, then runs it again."
+            f"{name} needs reconnecting: {why} An admin signs its team login in again under Apps, then runs it again."
         )
         details: Json = {
             "connectionId": connection_id, "appId": str(conn.app_id), "app": name, "connection": name,
             "account": "team", "state": state,
             # What a run waits on until an admin signs the team account in again: that sign-in reports it.
-            "connectedEvent": {"name": CONNECTED, "key": connected_key(connection_id, SHARED)},
+            # `after`: a sign-in from before this refusal leaves the run waiting (engine_resume.wake_parked).
+            "connectedEvent": {"name": CONNECTED, "key": connected_key(connection_id, SHARED), "after": now_iso()},
         }  # fmt: skip
         return AuthFailed(e.code, message, side=e.side, status=e.status, details=details)
 
@@ -435,7 +459,10 @@ class Authenticator:
         message = (
             f"This operation signs in to {name} as a person only, and this call acts for nobody."
             if backed
-            else f"{name} signs in as each person, and this call acts for nobody."
+            else (
+                f"{name} signs in as each person, and a run nobody started acts for no one. Set {name} to Everyone "
+                "uses the team's login, or have a person start the run."
+            )
         )
         reason: NotLinkedReason = "needs_person" if backed else "no_person"
         details: Json = {
@@ -497,7 +524,7 @@ class Authenticator:
             "authKind": kind.id,
             "personFields": list(kind.person_fields),
             # What a run that waits for this person to connect waits on: their connecting reports it.
-            "connectedEvent": {"name": CONNECTED, "key": connected_key(str(conn.id), person.sub)},
+            "connectedEvent": {"name": CONNECTED, "key": connected_key(str(conn.id), person.sub), "after": now_iso()},
             # Whether the team account serves runs nobody started (`_whose`); a call this person started never uses it.
             "teamAccount": str(conn.sign_in or "team") == "person_or_team" and bool(conn.team_backup),
         }

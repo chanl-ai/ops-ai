@@ -173,7 +173,7 @@ try {
           const member = await teamCard('r.menon@harborpine.example');
           const ok = (x) => x.state === 'needs_sign_in' && /Salesforce/.test(x.text) && !/this app/i.test(x.text);
           check('0c with the team account not signed in, chat offers an admin Connect the team account and a member Ask an admin',
-            on.status === 200 && ok(admin) && /Connect the team account/.test(admin.text) && admin.connect === 1 && ok(member) && member.ask === 1 && member.connect === 0,
+            on.status === 200 && ok(admin) && /Sign in the team login/.test(admin.text) && admin.connect === 1 && ok(member) && member.ask === 1 && member.connect === 0,
             { status: on.status, admin, member });
           // Back to off with no account, so the next steps meet Salesforce as a first turn-on.
           const card = ((await call(tools, 'GET', `/v1/apps?ids=${encodeURIComponent(sfId)}`, priya)).data?.data ?? []).find((c) => c.id === sfId);
@@ -184,7 +184,7 @@ try {
         // gets a Connect card naming Salesforce, never a bare error (the gateway's refusal names the account and app).
         const james0 = await signedIn(browser, consoleUrl, 'j.richardson@harborpine.example', 1280);
         await step('0b with nobody signed in yet, James’s chat shows a Connect card naming Salesforce', async () => {
-          const on = await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(sfId)}/team`, priya, { enabled: true, signIn: 'person_or_team', settings: { login_url: sf.info.login_url } });
+          const on = await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(sfId)}/team`, priya, { enabled: true, signIn: 'person', settings: { login_url: sf.info.login_url } });
           await call(agentsUrl, 'POST', '/v1/team-assistant/app-tools', priya, { moduleIds: on.data?.moduleIds ?? [] });
           const thread = (await call(agentsUrl, 'POST', '/v1/chat/threads', as(await tokenFor('j.richardson@harborpine.example'), 'team_ops'), { kbIds: [] })).data;
           await james0.goto(`${consoleUrl}/chat/${thread.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -197,7 +197,7 @@ try {
           await james0.getByTestId('connection-connect').waitFor({ timeout: 120_000 });
           const text = (await card.innerText()).replace(/\s+/g, ' ');
           await james0.screenshot({ path: join(SHOTS, 'no-instance-connect-card.png'), fullPage: true });
-          check('0b with nobody signed in yet, James’s chat shows a Connect card naming Salesforce', on.status === 200 && /Salesforce/.test(text) && /Connect Salesforce/.test(text) && !/this app/i.test(text), { status: on.status, text: text.slice(0, 300) });
+          check('0b with nobody signed in yet, James’s chat shows a Connect card naming Salesforce', on.status === 200 && /Salesforce/.test(text) && /Sign in to Salesforce/.test(text) && !/this app/i.test(text), { status: on.status, text: text.slice(0, 300) });
         }, james0);
         errors.push(...james0.errors);
         await james0.context().close();
@@ -283,7 +283,7 @@ try {
           const was = ((await call(tools, 'GET', `/v1/apps?ids=${encodeURIComponent(sfId)}`, priya)).data?.data ?? []).find((c) => c.id === sfId);
           await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(sfId)}/team`, priya, { enabled: false });
           if (was?.connectionId) await call(tools, 'DELETE', `/v1/apps/${encodeURIComponent(sfId)}/accounts/${was.connectionId}`, priya);
-          const on = await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(sfId)}/team`, priya, { enabled: true, signIn: 'person_or_team', settings: { login_url: sf.info.login_url } });
+          const on = await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(sfId)}/team`, priya, { enabled: true, signIn: 'person', settings: { login_url: sf.info.login_url } });
           await call(agentsUrl, 'POST', '/v1/team-assistant/app-tools', priya, { moduleIds: on.data?.moduleIds ?? [] });
           check('4 setup: Salesforce is turned on again per person', on.status === 200, { status: on.status });
           const thread = (await call(agentsUrl, 'POST', '/v1/chat/threads', as(await tokenFor('j.richardson@harborpine.example'), 'team_ops'), { kbIds: [] })).data;
@@ -298,7 +298,7 @@ try {
           await james.getByTestId('connection-connect').waitFor({ timeout: 120_000 });
           const text = (await card.innerText()).replace(/\s+/g, ' ');
           await james.screenshot({ path: join(SHOTS, 'first-chat-connect-card.png'), fullPage: true });
-          check('4 James’s first chat with the team’s assistant asks for his own Salesforce account', /Salesforce/.test(text) && /Connect Salesforce/.test(text), text.slice(0, 300));
+          check('4 James’s first chat with the team’s assistant asks for his own Salesforce account', /Salesforce/.test(text) && /Sign in to Salesforce/.test(text), text.slice(0, 300));
         }, james);
         errors.push(...james.errors);
         check('5 no page errors', errors.length === 0, errors.slice(0, 3));

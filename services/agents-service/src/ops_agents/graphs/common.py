@@ -351,6 +351,7 @@ def _call_data(c: ToolCallRecord) -> Json:
         "durationMs": c.duration_ms,
         "view": c.view,
         **({"cached": True} if c.cached else {}),
+        **({"signedIn": c.signed_in} if c.signed_in else {}),
     }
 
 

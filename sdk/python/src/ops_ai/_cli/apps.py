@@ -47,7 +47,7 @@ def main(argv: list[str]) -> int:
         p = sub.add_parser(name, parents=common, help=text)
         p.add_argument("app")
         p.add_argument("--account", help="the account's id; the app's default when left out")
-        p.add_argument("--team-account", action="store_true", help="the team account, not your own")
+        p.add_argument("--team-account", action="store_true", help="the team login, not your own")
     configs = sub.add_parser("auth-configs", parents=common, help="the team's app credentials")
     configs.add_argument("--app")
     people = sub.add_parser("people", parents=common, help="each person's sign-ins to the team's apps, by state")
@@ -129,7 +129,7 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
 
 # The window's "Whose account do tools use?": each person's own with the team account for runs nobody started, the
 # team account only, or each person only.
-WHOSE = {"each": "person_or_team", "team": "team", "person": "person"}
+WHOSE = {"each": "person", "team": "team", "person": "person"}
 
 
 def _turn_on(ns: argparse.Namespace, ops: OpsAI) -> int:

@@ -209,7 +209,7 @@ try {
             html += await admin.content();
             shown[name] = (await admin.locator('main').textContent()) ?? '';
           }
-          const keyPage = /Working\s*200/.test(shown['Header key desk']) && /with the team account/.test(shown['Header key desk']);
+          const keyPage = /Working\s*200/.test(shown['Header key desk']) && /with the team login/.test(shown['Header key desk']);
           // Each person signs in to Person desk with their own account, so the page offers hers.
           const personPage = /Your account/.test(shown['Person desk']);
           check('18 each plugin app opens on its page, the header-key one tested and working, and no key or client secret', keyPage && personPage && !html.includes(fake.info.secrets.key) && !html.includes(fake.info.clients['multi-app']), { keyPage, personPage, key: html.includes(fake.info.secrets.key), shown: shown['Header key desk'].replace(/\s+/g, ' ').slice(0, 400) });

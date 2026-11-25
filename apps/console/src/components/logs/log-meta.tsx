@@ -156,7 +156,7 @@ export function CallerCell({ call }: { call: Pick<ToolCallRow, 'subject' | 'acto
   const who = call.subject?.name ?? call.workflowName;
   const via = call.subject ? call.actor?.name : call.agentName;
   // Whose account the system saw: a person's own sign-in or the team's; nothing for a call with no sign-in.
-  const signedIn = call.credential === 'person' ? `Signed in as ${call.actingFor ?? 'the person'}` : call.credential === 'team' ? 'Team account' : undefined;
+  const signedIn = call.credential === 'person' ? `Signed in as ${call.actingFor ?? 'the person'}` : call.credential === 'team' ? 'Team login' : undefined;
   return (
     <div className="max-w-56 min-w-36" data-testid="caller-cell">
       <div className="truncate text-sm" title={who}>

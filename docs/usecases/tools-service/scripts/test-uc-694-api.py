@@ -14,7 +14,7 @@ MINE = "Mobile org · Maya"
 with rig("uc-694") as r:
     sf = r.sf
     # Each person may sign in with their own account beside the team's, so Maya may add one of her own.
-    retail_on(r, sign_in="person_or_team")
+    retail_on(r, sign_in="person")
     # 1. Maya adds a second account of her own, at the EU org, and signs in to it.
     started = r.gw.post(
         f"/v1/me/accounts/{r.ids['retail']}/another",

@@ -7,7 +7,6 @@ import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Switch } from '@/components/ui/switch';
 import { ConfirmActionDialog } from '@/components/shared/confirm-action-dialog';
 import { DangerZone } from '@/components/shared/danger-zone';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -16,6 +15,7 @@ import { QueryError } from '@/components/shared/query-states';
 import { Row, Rows } from '@/components/shared/surface';
 import { SettingsSection } from '@/components/shared/settings-section';
 import { AddAuthConfigButton, TurnOnButton } from '@/components/connections/app-actions';
+import { WhoSignsIn, type SignIn } from '@/components/connections/who-signs-in';
 import { type AppPage, useAppUsers, useChangeAccount, useChangeAppKind, useDeleteApp, useSetTeamApp } from '@/hooks/systems-queries';
 import type { Kind, Kinds } from '@/lib/connect-plan';
 import { addAuthConfigFirst, appStateFor } from '@/lib/app-state';
@@ -23,7 +23,7 @@ import { plural } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 /**
- * The app's Settings tab: whether people may connect their own account, how the app signs in, whether it is on for the
+ * The app's Settings tab: who signs in (the team's login or each person's), how the app signs in, whether it is on for the
  * team, and deleting it. Turning it off keeps its accounts and tools, so it is a setting, not in the danger zone. Auth
  * configs and their callback URL live on the Auth configs tab.
  */
@@ -59,24 +59,20 @@ export function SettingsTab({
   // An app the system no longer has installed changes nothing here; an admin may still delete what it left.
   const mayDelete = Boolean(conn.mayManage);
   const may = mayDelete && app.card.appGroup !== 'gone';
-  const personal = conn.signIn !== 'team';
-  // On: tools a person runs use their own account, and the team's sign-in serves only runs nobody started.
-  const flip = (on: boolean) =>
+  // The admin's one question per app (a connections.manage cell): everyone uses the team's login, or each person signs
+  // in. "Each person" keeps the team's login for runs nobody started where the app allows it (eachPersonValue).
+  const choose = (who: SignIn) =>
     change.mutate(
-      { appId: app.card.id, accountId: conn.id, body: { revision: conn.revision, signIn: on ? 'person_or_team' : 'team', teamBackup: on } },
-      { onError: (e) => toast.error('Couldn’t change personal accounts', { description: e.message }) },
+      { appId: app.card.id, accountId: conn.id, body: { revision: conn.revision, signIn: who } },
+      { onError: (e) => toast.error('Couldn’t change who signs in', { description: e.message }) },
     );
   return (
     <div className="flex flex-col gap-4" data-testid="app-settings">
       {kind?.perPerson && (
-        <SettingsSection title="Personal accounts">
-          <div className="flex items-center gap-3">
-            <label htmlFor="app-everyone" className="min-w-0 flex-1 text-sm">
-              <span className="block font-medium">{`People can connect their own ${app.card.name} account`}</span>
-              <span className="block text-xs text-muted-foreground">Tools a person runs use their own account, connected under Connectors; anyone who has not is asked to connect. Runs nobody started, such as schedules and mailboxes, use the team account. Off, everyone runs as the team account.</span>
-            </label>
-            <Switch id="app-everyone" checked={personal} disabled={!may || change.isPending} onCheckedChange={flip} data-testid="app-everyone" />
-          </div>
+        <SettingsSection title="Who signs in" description={`Chosen once for ${app.card.name}; nobody is asked in a chat.`}>
+          <fieldset disabled={!may || change.isPending} data-testid="app-everyone" data-value={conn.signIn}>
+            <WhoSignsIn value={conn.signIn as SignIn} onChange={choose} offered={app.card.plugin?.signIn} />
+          </fieldset>
         </SettingsSection>
       )}
       <SettingsSection title="Sign-in">

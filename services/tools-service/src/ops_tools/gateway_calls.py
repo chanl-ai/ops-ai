@@ -22,7 +22,7 @@ from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
 
-from .auth import SIGNED_WITH, Authenticator
+from .auth import SIGNED_AS, SIGNED_WITH, Authenticator, SignedAs
 from .environments import TEST
 from .executor import ConsoleRan, ConsoleRefused, Executor, Trial, invalid_fields
 from .limits import amount_refusal
@@ -98,6 +98,7 @@ class CallLogRow(TypedDict):
     decision: NotRequired[str]
     reasons: NotRequired[list[str]]
     credential: NotRequired[str | None]
+    signed_in_as: NotRequired[str | None]
 
 
 @dataclass(frozen=True)
@@ -107,6 +108,8 @@ class Allowed:
     output: Any
     view: Any = None
     replay_of: str | None = None
+    # Whose login of the app the call ran as (the team's or the person's), for the chat's card; None with no account.
+    signed_in: SignedAs | None = None
     # A write asked for as a plan only (`call(plan_only=True)`): what it would send, and nothing was sent or logged.
     planned: Json | None = None
 
@@ -665,7 +668,7 @@ class GatewayCalls:
         if access not in WRITES:
             if (limited := await over_rate()) is not None:
                 return limited
-            signing = SIGNED_WITH.set(None)
+            signing, signed = SIGNED_WITH.set(None), SIGNED_AS.set(None)
             outcome = await self._run(
                 resolved or Resolved(access, "local"),
                 req.tool,
@@ -676,13 +679,15 @@ class GatewayCalls:
                 environment=ctx.get("environment"),
                 **shown,
             )
-            row["credential"] = SIGNED_WITH.get()
+            row["credential"], signed_in = SIGNED_WITH.get(), SIGNED_AS.get()
+            row["signed_in_as"] = signed_in["login"] if signed_in else None
             SIGNED_WITH.reset(signing)
+            SIGNED_AS.reset(signed)
             if hide:
                 outcome = ToolOutcome(outcome.ok, scrub(outcome.output, hide), outcome.view)
             failed = _error_of(outcome)
             await self.log.record(**row, outcome="ok" if outcome.ok else "error", latency_ms=elapsed(), error=failed)
-            return Allowed(call_id, outcome.ok, outcome.output, outcome.view)
+            return Allowed(call_id, outcome.ok, outcome.output, outcome.view, signed_in=signed_in)
         try:
             # The caller's lease generation arrives as the X-Lease-Generation header; the fence is checked in the
             # claim's own transaction, before the dedup lookup (ADR-0016).
@@ -711,7 +716,7 @@ class GatewayCalls:
         if (limited := await over_rate()) is not None:
             return limited
         approvers = (caller.email,) if self_approved else tuple(_approvers(req.approval_token))
-        signing = SIGNED_WITH.set(None)
+        signing, signed = SIGNED_WITH.set(None), SIGNED_AS.set(None)
         outcome = await self._run(
             resolved or Resolved(access, "local"),
             req.tool,
@@ -722,8 +727,9 @@ class GatewayCalls:
             environment=ctx.get("environment"),
             **shown,
         )
-        credential = SIGNED_WITH.get()
+        credential, signed_in = SIGNED_WITH.get(), SIGNED_AS.get()
         SIGNED_WITH.reset(signing)
+        SIGNED_AS.reset(signed)
         failed = _error_of(outcome)
         await self.log.finish(
             call_id,
@@ -733,8 +739,9 @@ class GatewayCalls:
             latency_ms=elapsed(),
             error=failed,
             credential=credential,
+            signed_in_as=signed_in["login"] if signed_in else None,
             # Refused at sign-in for a person with no account of their own: nothing was sent, and the run waiting for
             # them sends this write again under its key once they connect.
             unsent=(failed or {}).get("code") == NOT_LINKED,
         )
-        return Allowed(call_id, outcome.ok, outcome.output, outcome.view)
+        return Allowed(call_id, outcome.ok, outcome.output, outcome.view, signed_in=signed_in)

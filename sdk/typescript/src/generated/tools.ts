@@ -1730,8 +1730,8 @@ export interface components {
              * @default team
              * @enum {string}
              */
-            signIn: "team" | "person" | "person_or_team";
-            signedIn?: components["schemas"]["SignedIn"] | null;
+            signIn: "team" | "person";
+            signedIn?: components["schemas"]["ops_tools__connections__schemas__SignedIn"] | null;
             /**
              * Status
              * @enum {string}
@@ -1834,9 +1834,9 @@ export interface components {
                 [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Signin */
-            signIn?: ("team" | "person" | "person_or_team") | null;
+            signIn?: ("person" | "team") | null;
             /** Teambackup */
-            teamBackup?: boolean | null;
+            teamBackup?: false | null;
         };
         /**
          * AccountTest
@@ -1940,7 +1940,7 @@ export interface components {
             /** Sandbox */
             sandbox: boolean;
             /** Signin */
-            signIn?: ("team" | "person" | "person_or_team") | null;
+            signIn?: ("person" | "team") | null;
             /** Signinvalues */
             signInValues?: components["schemas"]["SignInValue"][];
             /**
@@ -2544,13 +2544,17 @@ export interface components {
             output: components["schemas"]["JsonValue"];
             /** Replayof */
             replayOf?: string | null;
+            signedIn?: components["schemas"]["ops_tools__app__SignedIn"] | null;
             view?: components["schemas"]["JsonValue"];
         };
         /**
          * CallRunAs
-         * @description Whom a call ran as: a person (by the email their acting-for token named) or the team account.
+         * @description Whom a call ran as: a person (by the email their acting-for token named) or the team's login, with the
+         *     login's name and the person who asked.
          */
         CallRunAs: {
+            /** Askedby */
+            askedBy?: string | null;
             /** Email */
             email?: string | null;
             /**
@@ -2558,6 +2562,8 @@ export interface components {
              * @enum {string}
              */
             kind: "person" | "team";
+            /** Login */
+            login?: string | null;
         };
         /** CardCredential */
         CardCredential: {
@@ -2972,7 +2978,7 @@ export interface components {
              * Signin
              * @enum {string}
              */
-            signIn: "team" | "person" | "person_or_team";
+            signIn: "team" | "person";
             /**
              * State
              * @enum {string}
@@ -4930,7 +4936,7 @@ export interface components {
              * @default team
              * @enum {string}
              */
-            signIn: "team" | "person" | "person_or_team";
+            signIn: "team" | "person";
         };
         /** NoteIn */
         NoteIn: {
@@ -5709,17 +5715,6 @@ export interface components {
             /** Value */
             value: string;
         };
-        /** SignedIn */
-        SignedIn: {
-            /** Account */
-            account?: string | null;
-            /** Expiresat */
-            expiresAt?: string | null;
-            /** Scopes */
-            scopes: string[];
-            /** Since */
-            since?: string | null;
-        };
         /** SigningCertificate */
         SigningCertificate: {
             /** Expiressoon */
@@ -5859,7 +5854,7 @@ export interface components {
             /** Sandboxid */
             sandboxId?: string | null;
             /** Signin */
-            signIn?: ("team" | "person" | "person_or_team") | null;
+            signIn?: ("person" | "team") | null;
             signIns?: components["schemas"]["SignInCounts"] | null;
             /** State */
             state?: ("connected" | "not_signed_in" | "expired" | "refused" | "revoked") | null;
@@ -6723,6 +6718,32 @@ export interface components {
         WaitOut: {
             /** Changed */
             changed: boolean;
+        };
+        /**
+         * SignedIn
+         * @description Whose login of the app a call ran as: the team's or the person's own, the login's name and the account.
+         */
+        ops_tools__app__SignedIn: {
+            /** App */
+            app: string;
+            /** Login */
+            login: string;
+            /**
+             * Whose
+             * @enum {string}
+             */
+            whose: "team" | "person";
+        };
+        /** SignedIn */
+        ops_tools__connections__schemas__SignedIn: {
+            /** Account */
+            account?: string | null;
+            /** Expiresat */
+            expiresAt?: string | null;
+            /** Scopes */
+            scopes: string[];
+            /** Since */
+            since?: string | null;
         };
     };
     responses: never;

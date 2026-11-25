@@ -88,7 +88,7 @@ async def _connection(store: ConnectionStore, tenant: str, kind: str, sign_in: s
 
 
 async def _call(auth: Authenticator, tenant: str, conn: str, who: ActingForPerson | None) -> Prepared:
-    module = {"tenant_id": tenant, "team_id": TEAM, "connection_id": conn, "endpoint": BASE}
+    module: Any = {"tenant_id": tenant, "team_id": TEAM, "connection_id": conn, "endpoint": BASE}
     prepared = await auth.prepare(module, "test", tool="ledger_post", actor="t", acting_for=who)
     assert prepared is not None
     return prepared
@@ -149,6 +149,12 @@ async def test_a_call_with_nobody_behind_it_uses_nobodys_key(engine: AsyncEngine
     with pytest.raises(AuthFailed) as e:
         await _call(auth, tenant, conn, None)
     assert e.value.code == "CONNECTION_NOT_LINKED" and e.value.details["reason"] == "no_person"
+    # A run nobody started (a schedule, an event) is told the app and the two ways on.
+    name = e.value.details["connection"]
+    assert str(e.value) == (
+        f"{name} signs in as each person, and a run nobody started acts for no one. Set {name} to Everyone uses "
+        "the team's login, or have a person start the run."
+    ), str(e.value)
 
 
 async def test_a_team_connection_still_signs_with_the_teams_key(engine: AsyncEngine, tenant: str) -> None:
@@ -350,7 +356,7 @@ async def test_a_call_the_system_refuses_with_a_persons_key_asks_for_it_again_an
         return httpx.Response(200 if ok else 401, json={"ok": ok})
 
     executor = HttpExecutor(httpx.AsyncClient(transport=httpx.MockTransport(answer)), AllowLedger(), auth=auth)  # pyright: ignore[reportArgumentType]
-    module: dict[str, Any] = {
+    module: Any = {
         "tenant_id": tenant,
         "team_id": TEAM,
         "connection_id": conn,
@@ -358,7 +364,7 @@ async def test_a_call_the_system_refuses_with_a_persons_key_asks_for_it_again_an
         "egress_hosts": ["ledger.bank.test"],
         "timeout_ms": 8000,
     }
-    op: dict[str, Any] = {
+    op: Any = {
         "name": "ledger_get",
         "method": "GET",
         "path": "/entries",

@@ -36,8 +36,8 @@ forms and sign-in steps.
 | 5 | A run calls `fields_post_message` for C024BE91L, "Card 1042 & more" | The fake took a form with both fields and answered `ok` |
 | 6 | A run transfers 4999.50, then 5000.01, then no amount | The first is sent; `amount_over_limit`; 422; the fake counted one transfer |
 | 7 | Priya turns on the meetings desk with the Zoom-style app; a run calls `fields_zoom_get_record` | Every token request sent the client as basic auth and was accepted; the call answered as the client |
-| 8 | Priya turns on the sites desk for people or the team, and signs in the team's account; a run calls `fields_sites_get_record` | The sign-in address carried `audience=api.multi.test`, `prompt=consent` and the platform's own `state` and `client_id`; the lookup found `site-7f3a`; the call reached it |
-| 9 | The fake now names `site-other`; James signs in with his own account | Refused, "signed in to another site"; Your connections shows him not connected; the team still points at `site-7f3a` |
+| 8 | Priya turns on the sites desk with the team's login, and signs it in; a run calls `fields_sites_get_record` | The sign-in address carried `audience=api.multi.test`, `prompt=consent` and the platform's own `state` and `client_id`; the lookup found `site-7f3a`; the call reached it |
+| 9 | The fake now names `site-other`; the account is set to Each person signs in and James signs in with his own account; then it goes back to the team's login | Refused, "signed in to another site"; Your connections shows him not connected; the team still points at `site-7f3a` |
 | 10 | The fake names `../admin?x=1`, Priya signs in the team's account; then it names `site-other` and she signs in again | The first fails; the second moves the team's calls to `site-other` |
 | 11 | Every answer in the run is searched for the token and the client secrets | None found |
 | 12 | Priya turns Salesforce on and signs in; a run calls `salesforce_find_cases_with_deleted` | The fake saw no UserInfo call; the cases come back from the instance the token answer named; query-all carried `batchSize=2000` |

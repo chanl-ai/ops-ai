@@ -23,7 +23,7 @@ connection:
     - { id: openid, label: "Know which account signed in", required: true }
     - { id: api, label: "Records, with the signed-in user's permissions", required: true }
     - { id: refresh_token, label: "Stay signed in", required: true }
-  sign_in: [team, person, person_or_team]
+  sign_in: [team, person]
   # Salesforce names the org's address (its My Domain, https://acme.my.salesforce.com) as instance_url in every token
   # answer, whichever address the person signed in at; it must be under My Domain. `.test` can never be registered
   # (RFC 2606), so the fake Salesforce's host is safe to accept.

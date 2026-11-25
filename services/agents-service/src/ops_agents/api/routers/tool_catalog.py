@@ -319,6 +319,31 @@ async def not_added(rt: Runtime, team: str | None, search: str) -> list[NotAdded
     ]
 
 
+# The admin's one choice per app, as the console's app page words it (apps/console/src/lib/login-words.ts).
+SIGN_IN_WORDS = {
+    "team": "Everyone uses the team's login",
+    "person": "Each person signs in",
+    "person_or_team": "Each person signs in",
+}
+
+
+async def sign_in_by_module(rt: Runtime, team: str | None) -> dict[str, str]:
+    """Each module's app sign-in in words, from tools-service's app cards; empty when it cannot be reached."""
+    if rt.app_states is None:
+        return {}
+    try:
+        cards = await rt.app_states.cards(None, team)
+    except ToolsUnavailable:
+        return {}
+    out: dict[str, str] = {}
+    for c in cards:
+        words = SIGN_IN_WORDS.get(str(c.get("signIn") or ""))
+        for m in cast(list[str], c.get("moduleIds") or []):
+            if words:
+                out[str(m)] = words
+    return out
+
+
 @router.get("/options", response_model=Envelope[ToolOptionsPage], dependencies=[Depends(reader_of("tools"))])
 async def tool_options(
     rt: Rt,
@@ -358,9 +383,16 @@ async def tool_options(
         hits = [t for t in tools if q in f"{t.get('title') or ''} {t['name']} {t['server']} {t['description']}".lower()]
         offset, _ = options_window(cursor, limit)
     page = hits[offset : offset + limit + 1]
+    # The agent's tools rows (stored grants) say who signs in to each tool's app, in the app page's words.
+    signs = await sign_in_by_module(rt, team) if ids is not None else {}
     # A plugin tool reads by its title; every other tool by its name.
     options = [
-        {"id": t["id"], "label": t.get("title") or t["name"], "hint": t["server"], "disabled": None}
+        {
+            "id": t["id"],
+            "label": t.get("title") or t["name"],
+            "hint": " · ".join(x for x in (str(t["server"]), signs.get(str(t.get("moduleId") or ""))) if x),
+            "disabled": None,
+        }
         | ({} if agents else {"inputSchema": t.get("inputSchema"), "description": t.get("description")})
         for t in page
     ]

@@ -84,13 +84,13 @@ const columns: ColumnDef<Row>[] = [
   {
     // Whose account of the app the call signed in with: a person's own, or the team account.
     id: 'as',
-    accessorFn: (r) => (r.runAs?.kind === 'person' ? (r.runAs.email ?? '') : r.runAs?.kind === 'team' ? 'Team account' : ''),
+    accessorFn: (r) => (r.runAs?.kind === 'person' ? (r.runAs.email ?? '') : r.runAs?.kind === 'team' ? 'Team login' : ''),
     header: ({ column }) => <DataTableColumnHeader column={column} title="As" />,
     cell: ({ row }) =>
       row.original.runAs?.kind === 'person' ? (
         <span className="block max-w-48 truncate text-sm">{row.original.runAs.email}</span>
       ) : row.original.runAs?.kind === 'team' ? (
-        <Badge variant="secondary">Team account</Badge>
+        <Badge variant="secondary">Team login</Badge>
       ) : (
         <span className="text-xs text-muted-foreground">—</span>
       ),

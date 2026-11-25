@@ -1,19 +1,12 @@
 'use client';
 
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { signInChoiceWords, signInFor, type SignInSetting } from '@/lib/login-words';
 import { cn } from '@/lib/utils';
 
-export type SignIn = 'team' | 'person' | 'person_or_team';
+export type SignIn = SignInSetting;
 
 type Choice = 'shared' | 'each';
-
-/**
- * The value "Each person signs in" saves: with the team account for runs nobody started where the app allows it,
- * else each person only. tools-service keeps its three values; the screen asks one question with two answers.
- */
-export function eachPersonValue(offered?: readonly string[]): SignIn {
-  return !offered || offered.includes('person_or_team') ? 'person_or_team' : 'person';
-}
 
 /**
  * Whose login an account's calls use: the team's shared login, or each person's own. A private login is a person's
@@ -31,29 +24,25 @@ export function WhoSignsIn({
   offered?: readonly string[];
   signedIn?: { count: number; of: number };
 }) {
-  const each = eachPersonValue(offered);
   const choices: { value: Choice; label: string; hint: string; allowed: boolean }[] = [
     {
       value: 'shared',
-      label: 'Shared team login',
-      hint: 'Every call signs in as one login the team connects.',
+      label: signInChoiceWords('team'),
+      hint: 'Every call acts as one login the team signs in, and records who asked.',
       allowed: !offered || offered.includes('team'),
     },
     {
       value: 'each',
-      label: 'Each person signs in',
-      hint:
-        each === 'person_or_team'
-          ? 'Calls act as the person who asked; runs nobody started, such as schedules, use the shared login.'
-          : 'Calls act as the person who asked. Anyone who has not signed in is asked to.',
-      allowed: !offered || offered.includes('person') || offered.includes('person_or_team'),
+      label: signInChoiceWords('person'),
+      hint: 'Calls act as the person who asked. Anyone who has not signed in is asked to, once.',
+      allowed: !offered || offered.includes('person'),
     },
   ];
   const current: Choice = value === 'team' ? 'shared' : 'each';
   return (
     <RadioGroup
       value={current}
-      onValueChange={(v) => onChange(v === 'shared' ? 'team' : each)}
+      onValueChange={(v) => onChange(signInFor(v === 'shared' ? 'shared' : 'each'))}
       className="grid gap-2 md:grid-cols-2"
       aria-label="Who signs in"
       data-testid="connect-who"

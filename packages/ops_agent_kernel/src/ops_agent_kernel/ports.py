@@ -28,6 +28,8 @@ class ToolOutcome:
     # What the model is told in place of `output`, when the person is shown the outcome another way (a Connect card):
     # a plain line with no code, link or address to repeat. `output` stays on the call record for the card.
     for_model: Any = None
+    # Whose login of the app the call ran as (the gateway's `signedIn`: the team's or the person's), for the chat card.
+    signed_in: dict[str, Any] | None = None
 
 
 class ToolExecutor(Protocol):

@@ -67,10 +67,10 @@ def _describe(card: Json) -> str | None:
     if state == "needs_sign_in":
         if card.get("appGroup") == "needs_you":
             return f"{name}: on · you are not signed in (a call shows a Connect card)"
-        return f"{name}: on · the team account needs signing in again (a team admin does this)"
+        return f"{name}: on · the team login needs signing in again (a team admin does this)"
     if state == "test_failed":
         return f"{name}: on · its last sign-in test failed (a team admin checks it)"
-    return f"{name}: on · " + ("you are signed in" if person else "signed in with the team account")
+    return f"{name}: on · " + ("you are signed in" if person else "everyone uses the team's login")
 
 
 def left_out(cards: list[Json], held: list[str], module_of: Mapping[str, str | None], off: set[str]) -> list[Json]:

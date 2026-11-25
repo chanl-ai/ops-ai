@@ -21,6 +21,10 @@ async def test_turning_on_offers_the_place_as_a_default_on_ops_ais_config_and_ad
     tenant: str,
 ) -> None:
     body: dict[str, Any] = {"enabled": True, "signIn": "person_or_team", "settings": {"login_url": ACME}}
+    # The retired third answer (each person, team login as backup) is not offered by any plugin any more.
+    refused = await client.put(f"/v1/apps/{APP}/team", json=body, headers=admin(tenant))
+    assert refused.status_code == 400 and "sign_in_not_offered" in refused.text, refused.text
+    body["signIn"] = "person"
     on = await client.put(f"/v1/apps/{APP}/team", json=body, headers=admin(tenant))
     assert on.status_code == 200, on.text
     card = on.json()["data"]
@@ -30,7 +34,7 @@ async def test_turning_on_offers_the_place_as_a_default_on_ops_ais_config_and_ad
     field = next(f for f in config["fields"] if f["name"] == "login_url")
     assert (field["value"], field["mode"]) == (ACME, "default"), field
     detail = (await client.get(f"/v1/apps/{APP}/accounts/{account}", headers=admin(tenant))).json()["data"]
-    assert (detail["signIn"], detail["teamBackup"]) == ("person_or_team", True), detail
+    assert (detail["signIn"], detail["teamBackup"]) == ("person", False), detail
     assert card["toolsAdded"] == len(page["tools"]) > 0 and all(t["added"] for t in page["tools"]), page["tools"]
 
 

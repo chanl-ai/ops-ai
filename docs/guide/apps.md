@@ -50,12 +50,24 @@ Tools**. A tool's page has **Run** with **Mock**, which answers from saved mock 
 | A tool written in the console | A request on an app's address, with mock answers for tests ([Build your first tool](build-your-first-tool.md)) | built |
 | A Python function in a sandbox with no network, files or secrets | A code tool | partial: runs, writing one in the console is planned |
 
-## Accounts: the team's and your own
+## Who signs in: the team's login or each person's
 
-| Account | Used by | How to add it |
+A team admin answers one question per app, on the app's **Settings** tab under **Who signs in**. The agent's **Tools**
+list shows the same answer beside each tool's app.
+
+| Answer | What a chat user sees | What the audit keeps |
 |---|---|---|
-| Team account | Anyone in the team. The **Default** account answers every live call that names no other | **Connect the team account**, by a team admin |
-| Your account | Tools you run, and agents acting for you | **Connect my account**, or **Apps › Mine** |
+| **Everyone uses the team's login** | No sign-in and no question. Under the reply: "Runs in <app> as <login> (team login). You are recorded as the person who asked." | The team login and the person who asked |
+| **Each person signs in** | The first time, one card: **Sign in to <app> to continue**. After signing in the chat carries on, and later actions in that app ask nothing | The person's own login |
+
+Nobody is asked in a chat or a Human Task to choose between their own login and the team's. Each person manages their
+own sign-ins in **My apps**. On an app each person signs in to, a run nobody started, such as a schedule, cannot call
+it: there is no person to act as, and the team's login is not used as a backup. The run is refused with a message naming the app and the two ways on (set it to Everyone uses the team's login, or have a person start the run), and saving a workflow that a schedule or an event starts warns about each such step before its first run. Changing the answer takes the `connections.manage` permission (team admins by default).
+
+| Login | Used by | How to add it |
+|---|---|---|
+| Team login | Anyone in the team. The **Default** account answers every live call that names no other | **Sign in the team login**, by a team admin |
+| Your login | Tools you run, and agents acting for you | **Sign in to <app>** in a chat, or **My apps** |
 | Sandbox account | Test runs only | **Add a sandbox account** on the app's page |
 
 ### Your own sign-ins
@@ -68,10 +80,9 @@ use.
 
 <!-- site: steps -->
 1. A team admin opens **Data › Apps**, view **Team setup**, and presses **Turn on** on the app's card.
-2. They pick whose account tools use: each person's, the team's, or each person's with the team's for runs nobody
-   started. Saving signs nobody in.
-3. **Connect my account** or **Connect the team account** opens the app's own sign-in page. The app reads
-   **Connected** once an account has signed in.
+2. They pick who signs in: **Everyone uses the team's login** or **Each person signs in**. Saving signs nobody in.
+3. **Sign in with my login** or **Sign in the team login** opens the app's own sign-in page. The app reads
+   **Connected** once a login has signed in.
 
 The full steps, an app's states, bringing your own OAuth app and turning an app off are on [Set up an app](apps-setup.md).
 
@@ -86,7 +97,7 @@ level answers don't ask, ask the person in the chat, or ask a reviewer. A waitin
 
 | Action | Who |
 |---|---|
-| Turn an app on or off, connect its team account, add a custom app | A team admin |
+| Turn an app on or off, sign in its team login, set who signs in, add a custom app | A team admin |
 | Connect, set as default or disconnect your own account | Anyone in the team |
 | Add or edit an auth config (the OAuth app an app signs in with) | A team admin |
 | Add, rotate or delete a secret | A Security admin |

@@ -86,7 +86,7 @@ These are the console's current design, not gaps; the old expectation was stale.
 
 | Use case | Step | The page used to expect | The console now |
 |---|---|---|---|
-| uc-558 | 17 | Turning own accounts back on saves `person` | Saves `person_or_team`, team backup on (`app-settings-tab.tsx:58`) |
+| uc-558 | 17 | Each person signs in saves `person` | Saves `person`, no team backup (`login-words.ts` signInFor) |
 | uc-558 | 18 | An admin connects their own account on the app's page | Own sign-in is on My connectors; the app page's Connect is the team's (`app-page.tsx:75`) |
 | uc-607 | 4, 40 | The header and the catalog card read Connected after the team signs in | On an app where each person signs in, they show the viewer's state ("You: Needs sign-in"); the team row reads Connected |
 

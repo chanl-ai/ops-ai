@@ -157,8 +157,10 @@ class CallIdentity(TypedDict, closed=True):
 
 
 class CallRunAs(TypedDict, closed=True):
+    askedBy: NotRequired[str | None]
     email: NotRequired[str | None]
     kind: Literal["person", "team"]
+    login: NotRequired[str | None]
 
 
 class CardCredential(TypedDict, closed=True):
@@ -289,7 +291,7 @@ class CredentialAccount(TypedDict, closed=True):
     id: str
     name: str
     sandbox: NotRequired[bool]
-    signIn: Literal["team", "person", "person_or_team"]
+    signIn: Literal["team", "person"]
     state: Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
     stateReason: NotRequired[str | None]
     status: str
@@ -697,7 +699,7 @@ class NewAppIn(TypedDict, closed=True):
     name: NotRequired[str | None]
     sandbox: NotRequired[bool]
     serverUrl: NotRequired[str | None]
-    signIn: NotRequired[Literal["team", "person", "person_or_team"]]
+    signIn: NotRequired[Literal["team", "person"]]
 
 
 class NoteIn(TypedDict, closed=True):
@@ -990,13 +992,6 @@ class SignInValue(TypedDict, closed=True):
     name: str
     shown: str
     value: str
-
-
-class SignedIn(TypedDict, closed=True):
-    account: NotRequired[str | None]
-    expiresAt: NotRequired[str | None]
-    scopes: list[str]
-    since: NotRequired[str | None]
 
 
 class SigningCertificate(TypedDict, closed=True):
@@ -1331,6 +1326,19 @@ class WaitOut(TypedDict, closed=True):
     changed: bool
 
 
+class OpsToolsAppSignedIn(TypedDict, closed=True):
+    app: str
+    login: str
+    whose: Literal["team", "person"]
+
+
+class OpsToolsConnectionsSchemasSignedIn(TypedDict, closed=True):
+    account: NotRequired[str | None]
+    expiresAt: NotRequired[str | None]
+    scopes: list[str]
+    since: NotRequired[str | None]
+
+
 class AbandonedCall(TypedDict, closed=True):
     decision: str
     effect: bool
@@ -1380,8 +1388,8 @@ class AccountPatchIn(TypedDict, closed=True):
     sandbox: NotRequired[bool | None]
     secretValues: NotRequired[dict[str, str]]
     settings: NotRequired[dict[str, JsonValue] | None]
-    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
-    teamBackup: NotRequired[bool | None]
+    signIn: NotRequired[Literal["person", "team"] | None]
+    teamBackup: NotRequired[Literal[False] | None]
 
 
 class AnotherOwnIn(TypedDict, closed=True):
@@ -1477,6 +1485,7 @@ class CallResult(TypedDict, closed=True):
     ok: bool
     output: JsonValue
     replayOf: NotRequired[str | None]
+    signedIn: NotRequired[OpsToolsAppSignedIn | None]
     view: NotRequired[JsonValue]
 
 
@@ -2148,8 +2157,8 @@ class AccountDetail(TypedDict, closed=True):
     sandbox: bool
     secrets: dict[str, SecretPart]
     settings: dict[str, str]
-    signIn: NotRequired[Literal["team", "person", "person_or_team"]]
-    signedIn: NotRequired[SignedIn | None]
+    signIn: NotRequired[Literal["team", "person"]]
+    signedIn: NotRequired[OpsToolsConnectionsSchemasSignedIn | None]
     status: Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
     statusDetail: NotRequired[str | None]
     teamBackup: NotRequired[bool]
@@ -2197,7 +2206,7 @@ class AppAccount(TypedDict, closed=True):
     rowId: str
     samePlaceAs: NotRequired[str | None]
     sandbox: bool
-    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
+    signIn: NotRequired[Literal["person", "team"] | None]
     signInValues: NotRequired[list[SignInValue]]
     state: Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
     stateReason: NotRequired[str | None]
@@ -2477,7 +2486,7 @@ class SystemCard(TypedDict, closed=True):
     plugin: NotRequired[SystemPlugin | None]
     pluginId: NotRequired[str | None]
     sandboxId: NotRequired[str | None]
-    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
+    signIn: NotRequired[Literal["person", "team"] | None]
     signIns: NotRequired[SignInCounts | None]
     state: NotRequired[Literal["connected", "not_signed_in", "expired", "refused", "revoked"] | None]
     status: NotRequired[str | None]

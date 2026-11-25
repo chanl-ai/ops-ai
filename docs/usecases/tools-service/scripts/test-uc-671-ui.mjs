@@ -78,7 +78,7 @@ async function setUp(sf) {
   const sam = await token(SAM);
   const headers = { Authorization: `Bearer ${t}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
   await fetch(`${TOOLS}/v1/egress/ranges`, { method: 'POST', headers: { Authorization: `Bearer ${sam}`, 'X-Team-Id': 'team_security', 'Content-Type': 'application/json' }, body: JSON.stringify({ value: sf.range, note: 'uc-671' }) });
-  const on = await fetch(`${TOOLS}/v1/apps/${encodeURIComponent(SALESFORCE)}/team`, { method: 'PUT', headers, body: JSON.stringify({ enabled: true, signIn: 'person_or_team', accountName: 'Retail org', settings: { login_url: sf.login_url } }) });
+  const on = await fetch(`${TOOLS}/v1/apps/${encodeURIComponent(SALESFORCE)}/team`, { method: 'PUT', headers, body: JSON.stringify({ enabled: true, signIn: 'person', accountName: 'Retail org', settings: { login_url: sf.login_url } }) });
   // The team's assistant gets Salesforce's tools, as the Turn on window's box gives them, so a chat lists Salesforce.
   await fetch(`${AGENTS}/v1/team-assistant/app-tools`, { method: 'POST', headers, body: JSON.stringify({ moduleIds: (await on.json()).data?.moduleIds ?? [] }) });
   const rows = (await (await fetch(`${TOOLS}/v1/me/connections`, { headers })).json()).data;

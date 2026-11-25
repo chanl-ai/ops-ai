@@ -10,7 +10,7 @@ use your own OAuth app instead of Ops AI's.
 
 <!-- site: steps -->
 1. **Turn the App on** in **Data Gateway › Apps** (a team admin). Saving the App's settings never starts a sign-in.
-2. **Press Connect**: **Connect the team account**, or **Connect my account** on the App's page or on **Apps › Mine**.
+2. **Sign in**: **Sign in the team login**, or **Sign in with my login** on the App's page or in **My apps**.
 3. **Allow access** on the app's own sign-in page. It lists what Ops AI asks for, in the App's words.
 4. **Check the result.** The App reads **Connected** once the test after sign-in passes, and the account's row shows
    who signed in.
@@ -32,18 +32,19 @@ from anything an app answers.
 
 ## Team or personal sign-in
 
-When a team admin turns an App on, they pick whose account calls use. An App lists which of these it allows.
+When a team admin turns an App on, they pick who signs in: **Everyone uses the team's login** or **Each person signs
+in**. An App lists which of these it allows.
 
 | Choice | A call acting for a person | A call nobody started (a schedule) |
 |---|---|---|
-| The team's account | The team account | The team account |
-| Each person's own | That person's account; without one, the run waits for them to connect | Refused: there is no person to act as |
-| Each person's, with the team's as backup | That person's account | The team account |
+| Everyone uses the team's login | The team login, with the person recorded as the one who asked | The team login |
+| Each person signs in (app allows no team login) | That person's login; without one, they are asked to sign in once | Refused: there is no person to act as |
+| Each person signs in (app allows a team login) | That person's login | The team login |
 
-When a run waits for a person, **Human Tasks** shows **Connect your <App> account to continue**. Once they connect, the
-run goes on by itself.
+When a run waits for a person, **Human Tasks** shows **Sign in to <App> to continue**. Once they sign in, the run goes
+on by itself.
 
-One team's account never serves another team, and one person's token never serves anyone else.
+One team's login never serves another team, and one person's token never serves anyone else.
 
 ## Bring your own OAuth app
 

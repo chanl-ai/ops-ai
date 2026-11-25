@@ -37,7 +37,7 @@ An account is one row of the tools service's `connections` table for one app in 
 | Field | Meaning | Built |
 |---|---|---|
 | Name (`account_name`) | What people, steps and agents call it: "EU org", "Platform org", "Logistics site". One per app per owner (the team, or one person's own accounts), compared case-folded, so a person's own account may take a team account's name; a call naming it prefers the caller's own | Built. The stored `account_key` and the filtered unique index over owner and key (`0076_account_owner_key.py`, PostgreSQL and SQL Server) hold the rule. The routes raise `account_name_taken` with the same message everywhere (`store/connections.py:304-307`) |
-| Who signs in | Shared team login, or each person signs in with their own login | Built (`who-signs-in.tsx:38`) |
+| Who signs in | Everyone uses the team's login, or each person signs in with their own login; set per app by `connections.manage`, never asked in a chat | Built (`who-signs-in.tsx`, `lib/login-words.ts`) |
 | Test only | A test account is used only by test runs and cannot be the team default | Built (`connect-window.tsx:390`, `:513`; `plugins/routes.py:326`) |
 | Auth config | Ops AI's app, or the team's own OAuth app | Built |
 | Where it signs in | The sign-in address the account keeps for itself, when the app allows one per account | Built. The first turn-on on Ops AI's app keeps the address as a default, so a second org signs in at its own address (`plugins/routes.py:302`). A binding that already holds the address as fixed stays fixed |

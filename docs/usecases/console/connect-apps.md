@@ -23,7 +23,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | S16 | Settings › Edit keeps what was saved: its fields start blank, and saving without typing changes nothing; the sign-in address typed on the first Connect is the one the live account uses | ui | 19, 41 | 41 |
 | S21 | Tools lists single tools, each with its app, kind, status and the agents and workflows that use it; a tool's page shows its Used by | ui | 46 | 46 |
 | S19 | A tool's page and an app's page each have a Logs tab with the same call log as Tool calls, fixed to that tool or app, each call saying whom it ran as | ui | 7, 44 | 44 |
-| S20 | A run waiting for a person's own account, where no team account stands in, shows that Human Task on its own page with Connect my account, and goes on as them once they connect from it | ui | 45 | 45 |
+| S20 | A run waiting for a person's own account, where no team account stands in, shows that Human Task on its own page with Sign in to the app, and goes on as them once they connect from it | ui | 45 | 45 |
 | S17 | Apps lists the team's connected apps first, then the ones it may connect; each card shows its state (Connected, Needs sign-in, Signed in but test failed, Not installed) and one action; a category narrows the list, and the whole card opens the app's page | ui | 42 | 42 |
 | S14 | One Connect window: the auth config, test or team account, and Connect; the sign-in window opens at once; a refused sign-in shows in both windows and Connect works again; an app turned on again continues with its app credential | ui | 3 | 3 |
 | S3 | A person presses Connect on My accounts, allows access, and the row reads Connected as their account; a tool the agent then calls runs with it, shown on Logs | ui | 6-7 | 7 |
@@ -56,7 +56,8 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | 1 | Priya opens Connections | a card for Person desk with 1 tool, Plugin and Connect; the page read `GET /v1/apps` and no other list |
 | 2 | She searches "person" | the count reads 1 of N and only Person desk shows |
 | 3 | She presses Connect on Person desk, then Connect in the window, and the system sends her back refused (error=access_denied) | the window offers the auth config, Add your own app, Test account, Team account and More options folded; the sign-in window opens on the console's connect page; both windows say access was not given, and Connect works again |
-| 4 | She picks Each person signs in (turning on starts with the shared team login), opens More options, names the account Person desk, presses Connect and allows access as harbor.ops in the system's window | the window closes, the app's page opens on Accounts reading Connected, with Person desk as Default |
+| 4 | She keeps Everyone uses the team’s login, opens More options, names the account Person desk, presses Connect and allows access as harbor.ops in the system's window | the window closes, the app's page opens on Accounts reading Connected, with Person desk as Default |
+| 4b | She opens Settings and picks Each person signs in | The account saves `person` with no team backup; the question offers two answers. Who signs in has two answers per account, so the walk sets the team's login before 11 and each person before 13 through the API |
 | 5 | James opens My accounts | Person desk with Connect |
 | 6 | He presses Connect and allows access as james.person | the row reads Connected as james.person |
 | 7 | He asks the agent in chat for a record, then opens the app's Logs tab | the chat answers with the record read as james.person; Logs lists Read a record as James, Succeeded |
@@ -89,7 +90,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | 41 | On Salesforce's Settings, Priya presses Edit settings and Save without typing | the window has no field for the sign-in address (its auth config holds it); the saved settings are unchanged |
 | 43 | In Salesforce's Connect window, Priya picks Your own app and presses Authorize with the client fields empty | "Enter the client ID." and "Enter the client secret." under the fields; no sign-in window opens |
 | 42 | Person key desk is installed too, not on for the team; Priya opens Apps, picks the Service desk category, clears it, then clicks Person desk's card | Connected (Person desk, "Connected · 1 tool", Open) above Available (Person key desk, Not installed, Connect); the category leaves 1 card; the card opens Person desk's page |
-| 45 | Priya's run waits for her own Person desk account, which each person signs in to with no team account behind it; she opens the run's page, then the task, and presses Connect my account | the page shows the Human Task with Connect my account and no team option; after she connects, the run goes on and reads as priya.person |
+| 45 | Priya's run waits for her own Person desk account, which each person signs in to with no team account behind it; she opens the run's page, then the task, and presses Sign in to the app | the page shows the Human Task with Sign in to the app and no team option; after she connects, the run goes on and reads as priya.person |
 | 44 | James opens Read a record's page and its Logs tab | tabs General and Logs; the log lists Read a record, as j.richardson@harborpine.example, Succeeded |
 | 46 | James opens Tools, then Read a record's row | tabs All tools, Custom tools and Logs; the row reads Read a record, Person desk, App tool, Ready, Ticket desk; the tool's page names Ticket desk under Used by |
 | 28 | Priya makes a tool from a full URL (`POST /v1/tool-modules`), lists `GET /v1/systems`, and reads the tool's connection page and `builtin:files` | The tool's own connection, the built-in apps and module cards are not listed; both pages answer 200 |
@@ -101,7 +102,7 @@ system of `docs/usecases/lib/fake_multi_auth.py`, which signs in any account nam
 | api | `console/scripts/test-uc-607-api.py` | target: 21 and 23 wait on S1 and D2 |
 | sdk | `console/scripts/test-uc-607-sdk.py` | target: waits on K1 |
 | cli | `console/scripts/test-uc-607-cli.py` | target: waits on L1 |
-| ui | `console/scripts/test-uc-607-ui.mjs` | passing (2026-11-12): 41 of 41 checks. Step 19 follows the console's Add account and its required account name |
+| ui | `console/scripts/test-uc-607-ui.mjs` | passing (2026-11-25): 42 of 42 checks. Step 19 follows the console's Add account and its required account name |
 
 ## Non-vacuous check
 

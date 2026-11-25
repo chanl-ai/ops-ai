@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Brain, ChevronRight, Copy, ListTree, Paperclip, Pencil, RefreshCw, SearchX, ShieldAlert, Square, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { AlertTriangle, Brain, ChevronRight, Copy, ListTree, Paperclip, Pencil, RefreshCw, SearchX, ShieldAlert, Square, ThumbsDown, ThumbsUp, Users } from 'lucide-react';
 
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
@@ -19,6 +19,7 @@ import { modelRefusal } from '@/lib/model-refusals';
 import { failureKindWords } from '@/lib/failure-words';
 import { codeOf } from '@chanl-ai/ops-ai';
 import { foldedLine, orderReply } from '@/lib/reply-order';
+import { teamLoginLines } from '@/lib/login-words';
 import type { ChatMessage, MessageFeedback, ToolCall, WidgetAction } from '@/lib/types/chat';
 import { isLayoutPart, type MessagePart } from '@/lib/types/widgets';
 
@@ -200,6 +201,12 @@ export function AssistantMessage({
         if (choice) return <AccountChoiceCard key={c.id} call={c} choice={choice} onReply={readOnly ? undefined : onReply} />;
         return cards ? <OpsCallCards key={c.id} call={c} cards={cards} readOnly={cardsReadOnly} /> : <ToolCallCard key={c.id} call={c} />;
       })}
+      {teamLoginLines(ordered.folded.concat(ordered.shown)).map((line) => (
+        <p key={line} className="flex items-start gap-1.5 text-xs text-muted-foreground" data-testid="team-login-line">
+          <Users className="mt-0.5 size-3 shrink-0" aria-hidden />
+          <span className="min-w-0 break-words">{line}</span>
+        </p>
+      ))}
       {message.widgets?.map((w) => (
         <ChatWidgetView key={w.id} widget={w} onAction={readOnly || !onWidgetAction ? undefined : (a) => onWidgetAction(w.id, a)} />
       ))}
