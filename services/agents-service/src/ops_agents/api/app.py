@@ -99,6 +99,7 @@ from .routers import (
     service_events,
     step_up,
     templates,
+    tool_apps,
     tool_catalog,
     workflows,
 )
@@ -579,6 +580,7 @@ def create_app(
     mount(tool_uses_routes.model_alias_router, "Agents")
     mount(team_usage_routes.router, "Workflows")
     mount(tool_catalog.router, "Agents")
+    mount(tool_apps.router, "Agents")
     mount(assurance_routes.router, "Assurance")
     mount(guardrail_routes.router, "Agents")
     mount(skill_routes.router, "Agents")
