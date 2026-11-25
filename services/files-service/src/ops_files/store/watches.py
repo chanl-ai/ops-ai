@@ -212,7 +212,8 @@ class WatchesStore(Store):
 
     def _mine(self, watch_id: str) -> tuple[sa.ColumnElement[bool], ...]:
         w = file_watches
-        return (w.c.tenant_id == isolation.tenant(), w.c.id == watch_id, team_visible(w))
+        # The caller's team is named at each statement (`team_visible`), where the team-read scan looks for it.
+        return (w.c.tenant_id == isolation.tenant(), w.c.id == watch_id)
 
     async def _audit(self, c: AsyncConnection, team: str, watch_id: str, audit: Audit) -> None:
         await record_audit(
@@ -238,7 +239,11 @@ class WatchesStore(Store):
 
     async def get(self, watch_id: str) -> WatchRow | None:
         async with self.tx() as c:
-            row = (await c.execute(self._with_count().where(*self._mine(watch_id)))).mappings().first()
+            row = (
+                (await c.execute(self._with_count().where(*self._mine(watch_id), team_visible(file_watches))))
+                .mappings()
+                .first()
+            )
         return WatchRow.model_validate(dict(row)) if row else None
 
     async def list(self, team: str, params: ListParams) -> tuple[list[WatchRow], ListPage[dict[str, JsonValue]]]:
@@ -285,10 +290,14 @@ class WatchesStore(Store):
         if names is not None:
             given["value_names"] = names
         async with self.tx() as c:
-            team = (await c.execute(sa.select(file_watches.c.team).where(*self._mine(watch_id)))).scalar()
+            team = (
+                await c.execute(sa.select(file_watches.c.team).where(*self._mine(watch_id), team_visible(file_watches)))
+            ).scalar()
             if team is None:
                 return False
-            await c.execute(sa.update(file_watches).where(*self._mine(watch_id)).values(**given))
+            await c.execute(
+                sa.update(file_watches).where(*self._mine(watch_id), team_visible(file_watches)).values(**given)
+            )
             await self._audit(c, str(team), watch_id, audit)
         return True
 
@@ -296,11 +305,13 @@ class WatchesStore(Store):
         """Deletes the watch and its events; false, deleting nothing, when the watch is not the caller's team's."""
         e = file_watch_events
         async with self.tx() as c:
-            team = (await c.execute(sa.select(file_watches.c.team).where(*self._mine(watch_id)))).scalar()
+            team = (
+                await c.execute(sa.select(file_watches.c.team).where(*self._mine(watch_id), team_visible(file_watches)))
+            ).scalar()
             if team is None:
                 return False
             await c.execute(sa.delete(e).where(e.c.tenant_id == isolation.tenant(), e.c.watch_id == watch_id))
-            await c.execute(sa.delete(file_watches).where(*self._mine(watch_id)))
+            await c.execute(sa.delete(file_watches).where(*self._mine(watch_id), team_visible(file_watches)))
             await self._audit(c, str(team), watch_id, audit)
         return True
 
@@ -310,10 +321,16 @@ class WatchesStore(Store):
         w = file_watches
         free = sa.and_(w.c.check_requested_at.is_(None), sa.or_(w.c.lease_until.is_(None), w.c.lease_until < db_now()))
         async with self.tx() as c:
-            q = sa.update(w).where(*self._mine(watch_id), free).values(check_requested_at=at)
+            q = (
+                sa.update(w)
+                .where(*self._mine(watch_id), team_visible(file_watches), free)
+                .values(check_requested_at=at)
+            )
             if (await c.execute(q)).rowcount != 1:
                 return False
-            team = (await c.execute(sa.select(w.c.team).where(*self._mine(watch_id)))).scalar()
+            team = (
+                await c.execute(sa.select(w.c.team).where(*self._mine(watch_id), team_visible(file_watches)))
+            ).scalar()
             await self._audit(c, str(team), watch_id, audit)
         return True
 
@@ -335,7 +352,11 @@ class WatchesStore(Store):
         w = file_watches
         free = sa.or_(w.c.lease_until.is_(None), w.c.lease_until < db_now())
         async with self.tx() as c:
-            q = sa.update(w).where(*self._mine(watch_id), free).values(lease_owner=owner, lease_until=db_after(seconds))
+            q = (
+                sa.update(w)
+                .where(*self._mine(watch_id), team_visible(file_watches), free)
+                .values(lease_owner=owner, lease_until=db_after(seconds))
+            )
             return (await c.execute(q)).rowcount == 1
 
     async def renew(self, watch_id: str, *, owner: str, seconds: float) -> bool:
@@ -343,7 +364,7 @@ class WatchesStore(Store):
         async with self.tx() as c:
             q = (
                 sa.update(w)
-                .where(*self._mine(watch_id), w.c.lease_owner == owner)
+                .where(*self._mine(watch_id), team_visible(file_watches), w.c.lease_owner == owner)
                 .values(lease_until=db_after(seconds))
             )
             return (await c.execute(q)).rowcount == 1
@@ -355,7 +376,7 @@ class WatchesStore(Store):
         async with self.tx() as c:
             q = (
                 sa.update(w)
-                .where(*self._mine(watch_id), w.c.lease_owner == owner)
+                .where(*self._mine(watch_id), team_visible(file_watches), w.c.lease_owner == owner)
                 .values(place=place, lease_until=db_after(seconds))
             )
             return (await c.execute(q)).rowcount == 1
@@ -368,14 +389,18 @@ class WatchesStore(Store):
         async with self.tx() as c:
             q = (
                 sa.update(w)
-                .where(*self._mine(watch_id), w.c.lease_owner == owner)
+                .where(*self._mine(watch_id), team_visible(file_watches), w.c.lease_owner == owner)
                 .values(
                     last_outcome=outcome, last_check_at=at, check_requested_at=None, lease_owner=None, lease_until=None
                 )
             )
             if (await c.execute(q)).rowcount != 1:
                 return
-            row = (await c.execute(sa.select(w.c.team, w.c.next_event).where(*self._mine(watch_id)))).one()
+            row = (
+                await c.execute(
+                    sa.select(w.c.team, w.c.next_event).where(*self._mine(watch_id), team_visible(file_watches))
+                )
+            ).one()
             await add_event(
                 c,
                 service_outbox,
@@ -390,7 +415,11 @@ class WatchesStore(Store):
         """{source id: "<size>:<version tag>"} of the watch's files refused for their size, as the last check that saw
         them listed them."""
         async with self.tx() as c:
-            found = (await c.execute(sa.select(file_watches.c.refused_sizes).where(*self._mine(watch_id)))).scalar()
+            found = (
+                await c.execute(
+                    sa.select(file_watches.c.refused_sizes).where(*self._mine(watch_id), team_visible(file_watches))
+                )
+            ).scalar()
         sizes = cast(dict[str, object], found or {})
         return {k: v for k, v in sizes.items() if isinstance(v, str)}
 
@@ -399,7 +428,11 @@ class WatchesStore(Store):
         kept = dict(list(sizes.items())[:REFUSED_KEPT])
         w = file_watches
         async with self.tx() as c:
-            q = sa.update(w).where(*self._mine(watch_id), w.c.lease_owner == owner).values(refused_sizes=kept or None)
+            q = (
+                sa.update(w)
+                .where(*self._mine(watch_id), team_visible(file_watches), w.c.lease_owner == owner)
+                .values(refused_sizes=kept or None)
+            )
             return (await c.execute(q)).rowcount == 1
 
     async def add_events(self, watch_id: str, *, owner: str, events: list[WatchEvent]) -> int:
