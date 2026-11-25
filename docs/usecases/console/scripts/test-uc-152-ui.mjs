@@ -4,7 +4,7 @@
 import { PLATFORM_PORT, TOOLS_PORT, check, chromium, expectSampleData, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 // Pages this walk opens that are still on sample data and say so (uc-125 checks their notice); only the routing is checked here.
-// API keys is live; its scope list is read from the mock, which stays a failure here.
+// API keys is live, its scope list included (platform-service GET /v1/settings/lookups).
 expectSampleData('/settings/account/security', '/settings/team/notifications', '/settings/team/webhooks', '/settings/policies/gates', '/settings/workspace/usage');
 
 // Old route -> new route, one entry per page moved so far.

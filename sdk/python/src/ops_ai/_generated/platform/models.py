@@ -595,6 +595,15 @@ class SamlSettingsOut(TypedDict, closed=True):
     tiles: bool
 
 
+class ScopeOption(TypedDict, closed=True):
+    label: str
+    value: Literal["read", "write"]
+
+
+class SettingsLookups(TypedDict, closed=True):
+    apiScopes: list[ScopeOption]
+
+
 class SignIn(TypedDict, closed=True):
     email: str
     password: str
@@ -938,6 +947,11 @@ class EnvelopeRoleGrantOut(TypedDict, closed=True):
 
 class EnvelopeRoleHolderOut(TypedDict, closed=True):
     data: RoleHolderOut
+    success: Literal[True]
+
+
+class EnvelopeSettingsLookups(TypedDict, closed=True):
+    data: SettingsLookups
     success: Literal[True]
 
 

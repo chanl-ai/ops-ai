@@ -40,6 +40,18 @@ async def test_an_admin_creates_a_key_whose_secret_shows_once(platform: Platform
     assert secret.split(".", 1)[1] not in r.text and "secret" not in listed
 
 
+async def test_the_scope_list_is_what_a_key_is_created_with(platform: Platform) -> None:
+    _, h = await as_admin(platform)
+    r = await platform.public.get("/v1/settings/lookups", headers=h)
+    assert r.status_code == 200, r.text
+    listed = [s["value"] for s in r.json()["data"]["apiScopes"]]
+    assert listed and all(s["label"] for s in r.json()["data"]["apiScopes"]), r.text
+    made = await create(platform, h, scopes=listed)
+    assert made["key"]["scopes"] == listed  # type: ignore[index]
+    unlisted = await platform.public.post("/v1/api-keys", headers=h, json={"name": "x", "scopes": ["runs:write"]})
+    assert unlisted.status_code in (400, 422), unlisted.text
+
+
 async def test_only_an_admin_creates_or_revokes(platform: Platform) -> None:
     admin, h = await as_admin(platform)
     made = await create(platform, h)
