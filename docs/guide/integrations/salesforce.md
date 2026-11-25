@@ -20,7 +20,7 @@ permissions, so an agent never sees a record that user could not.
 The same steps from the command line:
 
 ```bash
-opsai apps on plugin:opsai.salesforce --whose each   # prints the team account's sign-in link
+opsai apps on plugin:opsai.salesforce --whose each   # prints the team login's sign-in link
 opsai apps test plugin:opsai.salesforce --team-account
 ```
 

@@ -34,7 +34,7 @@ Design: the app set-up design (one Turn on window, two questions and one choice)
 | 6 | James, who has not connected his own Salesforce account, opens My accounts | Salesforce is listed and not connected |
 | 7 | In the console, Priya opens Salesforce and presses Turn on | One window: where you sign in, whose account tools use, and the assistant box, ticked |
 | 8 | She presses Turn on in the window | The team's setting is saved and no sign-in window opens; the window says Saved, how many read tools were added and that members connect their own account from Connectors › Mine |
-| 8b | She presses Connect the team account and allows access at the fake Salesforce | The window says Connected as the account and that the assistant got the read tools |
+| 8b | She presses Sign in the team login and allows access at the fake Salesforce | The window says Connected as the account and that the assistant got the read tools |
 | 9 | Ravi, a viewer, opens Salesforce's page | No Connect or Turn on: the page offers only Sign in from Mine |
 | 10 | Salesforce is turned off, its account removed and turned on again with each person's own account (the window's default sign-in is the team account, under which James's chat runs as the team and shows no card), then James asks the assistant about a case in a new chat | The Connect card asks for his own Salesforce account |
 | 11 | Before Salesforce is on, Ravi (a member) opens Connectors › Mine and clicks the Salesforce card | The card and its details say Not set up for your team yet and Ask an admin, with no link to the app's page; he stays on Mine |

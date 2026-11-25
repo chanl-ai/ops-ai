@@ -65,7 +65,7 @@ Connect window asks for more than the steps above.
 |---|---|---|
 | Platform admin | Installs the plugin (its folder in the plugins folder, or pinned in the image); it is then offered to every team. Settings fixed for every team come from the install config | The install's plugin settings ([plugins guide](plugins.md)) |
 | Security admin | Lists the App's hosts, so its sign-in and calls may leave | **Settings › Security › Egress**, Add host (and Add range for a host on a private network) |
-| Team admin | Presses **Turn on** | The window shows the App's settings (such as its API address), whose account calls use (the team's, each person's, or each person's with the team's as backup), the OAuth app (Ops AI's, or your own with its client ID and secret and the return address to register), and its sign-in address. **Turn on** saves them and opens no sign-in; **Connect my account** or **Connect the team account** after it opens the App's sign-in page |
+| Team admin | Presses **Turn on** | The window shows the App's settings (such as its API address), who signs in (Everyone uses the team's login, or Each person signs in), the OAuth app (Ops AI's, or your own with its client ID and secret and the return address to register), and its sign-in address. **Turn on** saves them and opens no sign-in; **Sign in with my login** or **Sign in the team login** after it opens the App's sign-in page |
 
 The App's page is **Data › Apps** then the App's name, at `/integrations/apps/plugin:<plugin id>`. One Connect is
 enough to use it everywhere: test runs and live runs both sign in with the account you connected.

@@ -27,7 +27,7 @@ console with the same plugins and a scripted model.
 | Needs | How |
 |---|---|
 | PostgreSQL, OPA and Docker | `make db-up` |
-| People | dev roles: admin Priya Shah and builder James Richardson (team_ops) |
+| People | dev roles: admin Priya Shah and builder James Richardson (team_ops); the seeded chat user Lena Brandt (team_ops) for the ui steps |
 
 ## Steps and expected results
 
@@ -37,12 +37,13 @@ console with the same plugins and a scripted model.
 | 2 | Priya reads the call's row (`GET /v1/executions/{id}`) | `runAs` `{kind: team, login, askedBy: j.richardson@…}`, `actingFor` James |
 | 3 | Priya turns the person key desk (`test.person-key`) on as Each person signs in; James's call; James gives his key; two more calls | The first is refused `CONNECTION_NOT_LINKED` (the sign-in card); the next two run as him (`signedIn.whose` person) |
 | 4 | James (builder) changes the header key desk's sign-in; Priya reads it | 403; it still reads `team` |
-| 5 | James asks the assistant for a record on the header key desk | The reply shows "Runs in Header key desk as … (team login). You are recorded as the person who asked." and no sign-in card |
-| 6 | James asks for a record on the person key desk, gives his key in the card, then asks again | One card titled "Sign in to Person key desk to continue"; after his key the chat carries on with the record; the second ask shows no card; no text offers the team login |
-| 7 | Priya opens the header key desk's Settings and an agent's tools | "Who signs in" reads Everyone uses the team's login and Each person signs in; the tools row names the app's answer |
+| 5 | Lena (chat user) asks the assistant for a record on the header key desk | The reply shows "Runs in Header key desk as … (team login). You are recorded as the person who asked." and no sign-in card |
+| 6 | Lena asks for a record on the person key desk, gives her key in the card, then asks again | One card titled "Sign in to Person key desk to continue"; after her key the chat carries on with the record; the second ask shows no card; no text offers the team login |
+| 7 | Priya opens Person desk's Settings (it allows both answers) and an agent's tools | "Who signs in" reads Everyone uses the team's login and Each person signs in; the tools row names the app's answer |
 
-A Human Task waiting for a person's sign-in offers that person only **Sign in to <app>**: uc-607 ui step 45 reads the
-task Priya's run waits on and checks that no **Run with the team login** is offered to her.
+A Human Task waiting for a person's sign-in offers that person only **Sign in to <app>**; the rule is
+`connectWaitActions` in `apps/console/src/lib/login-words.ts`, tested in `login-words.test.ts`. uc-607 ui step 45 also
+reads the task Priya's run waits on and checks that no **Run with the team login** is offered to her.
 
 ## Acceptance layers
 

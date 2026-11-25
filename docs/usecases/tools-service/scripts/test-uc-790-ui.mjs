@@ -21,6 +21,8 @@ const KINDS = join(ROOT, 'services/tools-service/tests/plugin_kinds');
 const FOLDERS = readdirSync(KINDS).filter((n) => n.startsWith('kinds_')).map((n) => join(KINDS, n));
 const TEAM_APP = 'plugin:test.header-key';
 const OWN_APP = 'plugin:test.person-key';
+// Person desk offers both answers (team, person, person_or_team), so its Settings shows the whole question.
+const BOTH_APP = 'plugin:test.person';
 
 // The fake model: a team record is read on the header key desk, the person's own on the person key desk, and the ask
 // goes on once the person signs in from the card.
@@ -84,13 +86,18 @@ async function step(name, body, page) {
 }
 
 /** The screen at 1440 and 390 as `<name>-<width>.png`; reports anything wider than the window at either width. */
-async function shoot(page, name) {
+async function shoot(page, name, focus = null) {
   const cut = [];
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await page.waitForTimeout(400);
-    await page.screenshot({ path: join(SHOTS, `${name}-${width}.png`), fullPage: true });
-    const wide = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
+    if (focus) await focus.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(SHOTS, `${name}-${width}.png`), fullPage: !focus });
+    // The page and the main area, whose own scroll area holds a chat: neither may be wider than the window.
+    const wide = await page.evaluate(() => {
+      const main = document.querySelector('main');
+      return document.documentElement.scrollWidth > window.innerWidth + 1 || (!!main && main.scrollWidth > main.clientWidth + 1);
+    });
     if (wide) cut.push(width);
   }
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -124,17 +131,23 @@ try {
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: fake.info.range, note: 'uc-790' });
       const team = await call(tools, 'PUT', `/v1/apps/${TEAM_APP}/team`, priya, { enabled: true, credentials: { key: fake.info.secrets.key } });
       const own = await call(tools, 'PUT', `/v1/apps/${OWN_APP}/team`, priya, { enabled: true, signIn: 'person' });
+      // Person desk is turned on with the team's login, so its Settings reads Everyone uses the team's login.
+      const both = await call(tools, 'PUT', `/v1/apps/${BOTH_APP}/team`, priya, { enabled: true, signIn: 'team' });
       const agent = required(await call(agents, 'POST', '/v1/agents', priya, { name: 'Record desk', role: 'Reads records from the desks' }), 'create the agent');
       const toolIds = ['header_key_get_record', 'person_key_get_record'];
       const patched = await call(agents, 'PATCH', `/v1/agents/${agent.id}`, priya, { toolIds, ...(await agentBase(agents, priya, agent.id)) });
       const asked = await call(agents, 'POST', `/v1/agents/${agent.id}/publish-requests`, priya, { version: patched.data?.version, note: 'uc-790' });
       const live = asked.data?.status === 'pending' ? await call(agents, 'POST', `/v1/publish-requests/${asked.data.id}/decision`, maya, { decision: 'approved' }) : asked;
-      check('0 set-up: the team-login desk and the each-person desk are on, and Record desk holds a tool of each', team.status === 200 && own.status === 200 && patched.status === 200 && live.status < 300, { team: team.text, own: own.text, patched: patched.text, live: live.status });
+      check('0 set-up: the team-login desk and the each-person desk are on, and Record desk holds a tool of each', team.status === 200 && own.status === 200 && both.status === 200 && patched.status === 200 && live.status < 300, { team: team.text, own: own.text, both: both.text, patched: patched.text, live: live.status });
 
       const browser = await chromium.launch();
       const errors = [];
       try {
-        const james = await signedIn(browser, consoleUrl, 'j.richardson@harborpine.example', errors);
+        // The chat user is Lena Brandt (chat_user in team_ops, services/platform-service/seed/people.json); she gives the
+        // fake desk's second person key as her own.
+        const lenaToken = await tokenFor('l.brandt@harborpine.example').catch(() => null);
+        check('0b set-up: Lena Brandt, a chat user, signs in', Boolean(lenaToken), lenaToken);
+        const james = await signedIn(browser, consoleUrl, 'l.brandt@harborpine.example', errors);
         const open = async () => {
           await james.goto(`${consoleUrl}/chat?agent=${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await james.getByLabel('Message').waitFor({ timeout: 120_000 });
@@ -145,7 +158,7 @@ try {
           await james.locator('button[type=submit][aria-label="Send"]').click();
         };
 
-        await step('5 on the team-login desk the reply says which login acted and that James asked, with no sign-in card', async () => {
+        await step('5 on the team-login desk the reply says which login acted and that Lena asked, with no sign-in card', async () => {
           await open();
           await send('Read the team record rec-1042.');
           await james.getByText('The team record is read.').waitFor({ timeout: 90_000 });
@@ -154,13 +167,13 @@ try {
           const body = (await james.locator('main').innerText()).replace(/\s+/g, ' ');
           const cut = await shoot(james, 'chat-team-login');
           check(
-            '5 on the team-login desk the reply says which login acted and that James asked, with no sign-in card',
+            '5 on the team-login desk the reply says which login acted and that Lena asked, with no sign-in card',
             /^Runs in .+ as .+ \(team login\)\. You are recorded as the person who asked\.$/.test(line) && cards === 0 && !CHOICE.test(body) && cut.length === 0,
             { line, cards, cut },
           );
         }, james);
 
-        await step('6 on the each-person desk one Sign in card shows, the chat carries on after the key, the next ask shows none, and nothing offers the team login', async () => {
+        await step('6 on the each-person desk one Sign in card shows, the chat carries on after her key, the next ask shows none, and nothing offers the team login', async () => {
           await open();
           await send('Read my record rec-1042.');
           const card = james.getByTestId('connection-required');
@@ -168,7 +181,7 @@ try {
           await james.getByText('I carry on once you sign in from the card above.').waitFor({ timeout: 90_000 });
           const said = ((await card.innerText()) ?? '').replace(/\s+/g, ' ');
           const cut = await shoot(james, 'chat-sign-in-card');
-          await james.getByTestId('own-field-key').fill(fake.info.person_keys.james);
+          await james.getByTestId('own-field-key').fill(fake.info.person_keys.maya);
           await james.getByTestId('own-credentials-save').click();
           const first = await james.getByText('I carry on once you sign in from the card above.').count();
           await james.getByText('Your record is read.').first().waitFor({ timeout: 90_000 });
@@ -179,7 +192,7 @@ try {
           const body = (await james.locator('main').innerText()).replace(/\s+/g, ' ');
           const cutAfter = await shoot(james, 'chat-signed-in-goes-on');
           check(
-            '6 on the each-person desk one Sign in card shows, the chat carries on after the key, the next ask shows none, and nothing offers the team login',
+            '6 on the each-person desk one Sign in card shows, the chat carries on after her key, the next ask shows none, and nothing offers the team login',
             first === 1 && /Sign in to Person key desk to continue/.test(said) && !CHOICE.test(said) && cardsAfterFirst === 1 && cardsAfterSecond === 1 && !CHOICE.test(body) && cut.length === 0 && cutAfter.length === 0,
             { said: said.slice(0, 300), first, cardsAfterFirst, cardsAfterSecond, cut, cutAfter },
           );
@@ -187,7 +200,7 @@ try {
 
         const admin = await signedIn(browser, consoleUrl, 'p.shah@harborpine.example', errors);
         await step('7 the app page asks Who signs in with two answers, and the agent’s tools row names each app’s answer', async () => {
-          await admin.goto(`${consoleUrl}/data/connectors/${encodeURIComponent(TEAM_APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          await admin.goto(`${consoleUrl}/data/connectors/${encodeURIComponent(BOTH_APP)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await admin.getByTestId('app-tab-settings').click({ timeout: 90_000 });
           const choice = admin.getByTestId('app-everyone');
           const shown = await choice.waitFor({ timeout: 30_000 }).then(async () => ((await choice.innerText()) ?? '').replace(/\s+/g, ' '), () => '');
@@ -199,7 +212,7 @@ try {
           await tools_.getByText('Everyone uses the team’s login', { exact: false }).or(tools_.getByText("Everyone uses the team's login")).first().waitFor({ timeout: 60_000 });
           const rows = ((await tools_.innerText()) ?? '').replace(/\s+/g, ' ');
           await tools_.scrollIntoViewIfNeeded();
-          const cutAgent = await shoot(admin, 'agent-tools-row');
+          const cutAgent = await shoot(admin, 'agent-tools-row', tools_);
           check(
             '7 the app page asks Who signs in with two answers, and the agent’s tools row names each app’s answer',
             /Everyone uses the team’s login/.test(shown) && /Each person signs in/.test(shown) && picked === 'true' && /Everyone uses the team's login/.test(rows) && /Each person signs in/.test(rows) && cutApp.length === 0 && cutAgent.length === 0,
@@ -212,7 +225,7 @@ try {
         await browser.close();
       }
     },
-    { demo: true, fakeModelRules: RULES, tools: { env: { ...fake.info.settings, OPS_PLUGINS: 'true', OPS_PLUGIN_PATHS: JSON.stringify(FOLDERS) } } },
+    { demo: true, fakeModelRules: RULES, tools: { env: { ...fake.info.settings, OPS_PLUGINS: 'true', OPS_PLUGIN_PATHS: JSON.stringify(FOLDERS), OPS_PLUGIN_CLIENTS: JSON.stringify({ 'test.person': { id: 'multi-app', secret: fake.info.clients['multi-app'] } }) } } },
   );
 } finally {
   await stopFake(fake);

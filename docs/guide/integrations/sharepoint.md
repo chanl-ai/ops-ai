@@ -67,8 +67,8 @@ A bank that signs in with a certificate instead of a client secret uses
 
 ## Limits
 
-- One team account per connection. Each person signing in with their own Microsoft account is not offered.
-- A file is readable through the team account's access, not each reader's. Put only what the whole team may read in
+- One team login per connection. Each person signing in with their own Microsoft account is not offered.
+- A file is readable through the team login's access, not each reader's. Put only what the whole team may read in
   the source.
 
 ## Next

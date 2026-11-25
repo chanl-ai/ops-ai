@@ -44,7 +44,7 @@ in**. An App lists which of these it allows.
 When a run waits for a person, **Human Tasks** shows **Sign in to <App> to continue**. Once they sign in, the run goes
 on by itself.
 
-One team's account never serves another team, and one person's token never serves anyone else.
+One team's login never serves another team, and one person's token never serves anyone else.
 
 ## Bring your own OAuth app
 

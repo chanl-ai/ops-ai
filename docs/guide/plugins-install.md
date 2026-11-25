@@ -121,8 +121,8 @@ system's own refusal of an assertion (another key, a replay) is `AUTH_FAILED` na
 retried with a secret. RS256 (RSA keys) and ES256 (P-256 keys) are the algorithms; any other key is refused.
 
 A team that gives `clientId` and `clientSecret` signs in with its own OAuth app; one that gives neither uses the
-platform's. `signIn` is `team` (one team account), `person` (each person connects their own account, from the chat card
-or My accounts, and calls act as them) or `person_or_team` (each person, with the team account as backup). A plugin
+platform's. `signIn` is `team` (one team login, shown as Everyone uses the team's login), `person` (each person signs in with their own login, from the chat card
+or My apps, and calls act as them) or `person_or_team` (Each person signs in, with the team login for runs nobody started). A plugin
 lists which of these it allows. One team's app, connection or token never serves another team, and one person's token
 never serves anyone else.
 
@@ -155,7 +155,7 @@ moment make one account and the other is refused 409 `account_name_taken`.
 | Before a rename | `GET /v1/workflows/definitions/account-uses?app=…&name=…` | How many drafts and published versions name the account. A rename rewrites none of them: a published version is refused at its next call until its next publish names the new name |
 
 Agents-service sends what was chosen and never picks or compares names itself: a step's choice over a chat's over
-the agent's, decided in one place (`domain/accounts.py` chosen_accounts); a call run as the team account keeps only
+the agent's, decided in one place (`domain/accounts.py` chosen_accounts); a call run with the team login keeps only
 the step's. The model is told the account in use and where it points on its apps line ("Salesforce: on · uses EU org
 (kestrel-eu.my.salesforce.test)", `api/apps_line.py`), read from the row's `pointsAt` (the first identity entry that
 is not who signed in), so a person's email never reaches the prompt; it has no tool input to change the account. How a call's

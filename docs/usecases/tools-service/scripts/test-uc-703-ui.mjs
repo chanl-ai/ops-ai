@@ -153,7 +153,7 @@ try {
               await saveAgent(agentsUrl, priya, desk?.id, { accounts: { [APP]: 'Retail org' } });
               await page.keyboard.press('Escape');
               await settings('Retail org');
-              await page.getByText('Shared team login').click();
+              await page.getByText('Everyone uses the team’s login').click();
               const warn = page.getByTestId('account-who-uses');
               await warn.waitFor({ timeout: 30_000 });
               await page.waitForFunction(() => !document.querySelector('[data-testid="account-who-uses"]')?.textContent?.startsWith('Checking'), null, { timeout: 30_000 });

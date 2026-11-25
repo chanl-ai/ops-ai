@@ -39,7 +39,7 @@ accounts of one app. Design: the several accounts per app design, D1 and D10.
 | 4 | Maya opens the same tab at 1440 and 390 | No Add account; no row menu offers Settings or Delete |
 | 5 | Maya opens Connectors › Mine | It opens |
 | 7 | Priya opens Retail org's row menu › Settings (1440 and 390) | The dialog, not the Connect window, reads kestrel.my.salesforce.test and "0 of N people signed in" under Each person signs in; at 390 nothing scrolls sideways |
-| 8 | She picks Shared team login | "No workflow or agent names it." (or the counts) shows before Save |
+| 8 | She picks Everyone uses the team’s login | "No workflow or agent names it." (or the counts) shows before Save |
 | 9 | With the count held then refused, she renames EU org | "Checking which workflows and agents name it…", then "Couldn’t check …" |
 | 10 | She saves Europe org | The row and GET /v1/apps/{app} read Europe org and Retail org |
 | 11 | The app read is refused 503, then answered with no accounts | "Couldn’t load this app"; then the Accounts tab's empty state |
