@@ -548,7 +548,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               </BuilderFieldset>
               <div className="flex flex-col gap-4">
                 <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
-                  <ToolsSection draft={draft} set={set} toolIds={agent.toolIds} onChange={setTools} stale={agent.staleToolIds} grantable={tools.data ?? []} />
+                  <ToolsSection agentId={agent.id} agentName={agent.name} draft={draft} set={set} toolIds={agent.toolIds} onChange={setTools} stale={agent.staleToolIds} />
                   <KnowledgeSection collections={agent.collections} onChange={setKnowledge} />
                   <AgentSkillsSection
                     agentName={agent.name}

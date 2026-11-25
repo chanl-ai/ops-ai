@@ -2,10 +2,11 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ArrowUpRight, BookOpen, LayoutTemplate, Plus, Wrench } from 'lucide-react';
+import { ArrowUpRight, BookOpen, LayoutTemplate } from 'lucide-react';
 
 import { EvalSummaryLine } from '@/components/evals/eval-meta';
 import { AccountSelect } from '@/components/connections/account-select';
+import { AgentToolsByApp } from '@/components/agents/agent-tools-by-app';
 import { EntityPicker } from '@/components/shared/entity-picker';
 import { FormField } from '@/components/shared/form-field';
 import { SettingsSection } from '@/components/shared/settings-section';
@@ -19,17 +20,15 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { ListSection, type ListRow } from '@/components/shared/list-section';
-import { guardrailOptions, knowledgeBaseOptions, toolOptions, useOptionLabels, widgetOptionsFor } from '@/hooks/options-queries';
+import { ListSection } from '@/components/shared/list-section';
+import { guardrailOptions, knowledgeBaseOptions, useOptionLabels, widgetOptionsFor } from '@/hooks/options-queries';
 import { useGuardrailsByIds, type Guardrail } from '@/hooks/guardrail-queries';
 import type { Lookups } from '@/lib/api';
-import { plural, relativeTime } from '@/lib/format';
-import type { ToolOptionsPage } from '@/lib/types/query';
+import { relativeTime } from '@/lib/format';
 import type { WidgetPin, WidgetSettings } from '@/lib/types/widgets';
 import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPatterns, AgentPublicKeyOverride, AgentRun, Channel, GrantableTool, MemorySettings, ModelAlias, ModelSettings, SkillMenu } from '@/lib/types/domain';
 
 import { listChange } from '@/lib/agent-tools';
-import { appPageHref } from '@/lib/app-links';
 
 /**
  * Everything one save of the agent page can change. The tool list is not here: a grant, an @ insert and a skill
@@ -155,74 +154,18 @@ export function InstructionsSection({ draft, set, toolbar, footer, textareaRef }
 }
 
 /**
- * Under the tools picker: an app's tools the team has not added are not offered, so the picker says how many wait on
- * that app's Tools tab, one line per app, with the way there.
+ * The tools the agent may call, grouped by app, added through the two-step picker. Grants the registry no longer
+ * offers (unpublished, hidden or removed from their module) are listed apart with Remove.
  */
-function ToolsNotAddedNote({ apps }: { apps: NonNullable<ToolOptionsPage['notAdded']> }) {
-  if (!apps.length) return null;
+export function ToolsSection({ agentId, agentName, draft, set, toolIds, onChange, stale = [] }: { agentId: string; agentName: string; draft: AgentDraft; set: Set; toolIds: string[]; onChange: (change: { add?: string[]; remove?: string[] }) => void; stale?: string[] }) {
   return (
-    <div className="flex flex-col gap-1 border-t px-3 py-2 text-xs text-muted-foreground" data-testid="tools-not-added">
-      {apps.map((a) => (
-        <p key={a.appId}>
-          {`${plural(a.count, `${a.name} tool`)} ${a.count === 1 ? 'isn’t' : 'aren’t'} added. `}
-          <Link href={appPageHref(a.appId, 'tools')} className="underline underline-offset-2 hover:text-foreground">
-            {`Add ${a.count === 1 ? 'it' : 'them'} from ${a.name}’s Tools tab`}
-          </Link>
-        </p>
-      ))}
-    </div>
-  );
-}
-
-/**
- * The tools the agent may call, picked through the tools options route so any grantable tool can be found.
- * Grants the registry no longer offers (unpublished, hidden or removed from their module) are listed apart with
- * Remove, rather than as a chip the picker cannot label.
- */
-export function ToolsSection({ draft, set, toolIds, onChange, stale = [], grantable = [] }: { draft: AgentDraft; set: Set; toolIds: string[]; onChange: (change: { add?: string[]; remove?: string[] }) => void; stale?: string[]; grantable?: GrantableTool[] }) {
-  const gone = stale.filter((id) => toolIds.includes(id));
-  const offered = toolIds.filter((id) => !gone.includes(id));
-  // The picker answers the whole list it shows; what is sent is only what the person added or took away.
-  const pick = (ids: string[]) => onChange({ add: ids.filter((id) => !offered.includes(id)), remove: offered.filter((id) => !ids.includes(id)) });
-  const labels = new Map((useOptionLabels(toolOptions, offered).data?.data ?? []).map((o) => [o.id, o]));
-  const held = new Map(grantable.map((t) => [t.id, t]));
-  const rows: ListRow[] = [
-    ...offered.map((id) => {
-      const o = labels.get(id);
-      const t = held.get(id);
-      return {
-        id,
-        title: o?.label ?? id,
-        description: o?.hint ?? undefined,
-        state: t?.requiresApproval ? <Badge variant="outline">Review: {t.approval ?? 'every call'}</Badge> : undefined,
-        remove: { label: `Remove ${o?.label ?? id}`, onClick: () => onChange({ remove: [id] }) },
-      };
-    }),
-    ...gone.map((id) => ({
-      id,
-      title: <code className="font-mono text-sm">{id}</code>,
-      description: 'No longer offered: unpublished, hidden or removed from its module.',
-      state: <Badge variant="outline" className="border-warning/40 text-warning-text">Gone</Badge>,
-      remove: { label: `Remove ${id}`, onClick: () => onChange({ remove: [id] }) },
-    })),
-  ];
-  return (
-    <ListSection
-      id="agent-tools"
-      icon={Wrench}
-      title="Tools"
-      count={toolIds.length}
-      description="The only systems this agent may call. Tools marked review pause every call for a person."
-      add={<EntityPicker source={toolOptions} value={offered} onChange={pick} showChosen={false} addLabel="Add" searchPlaceholder="Search tools by name or system…" emptyText="No tool matches." testId="agent-tools-picker" note={(first) => <ToolsNotAddedNote apps={first.notAdded ?? []} />} />}
-      rows={rows}
-      empty="No tools. The agent can only answer from knowledge."
-    >
+    <AgentToolsByApp agentId={agentId} agentName={agentName} count={toolIds.length} stale={stale.filter((id) => toolIds.includes(id))} onChange={onChange}>
       <div className="border-t p-4">
         <FormField id="agent-accounts" label="Account" hint="Which account of an app this agent’s calls use. A workflow step that names its own account wins.">
           <AccountSelect id="agent-accounts" value={draft.accounts} onChange={(v) => set('accounts', v)} />
         </FormField>
       </div>
-    </ListSection>
+    </AgentToolsByApp>
   );
 }
 

@@ -1,3 +1,4 @@
+import type { ToolAppsParams } from '@/lib/types/agent-tool-apps';
 import type { Option, OptionsPage, OptionsParams } from '@/lib/types/query';
 
 /** The query string every `/options` route takes: search, cursor and limit, or the stored ids to label. */
@@ -23,4 +24,14 @@ export function pageOptions(all: Option[], p: OptionsParams): OptionsPage {
   const limit = p.limit ?? 25;
   const offset = Number(p.cursor ?? 0) || 0;
   return { data: hits.slice(offset, offset + limit), nextCursor: offset + limit < hits.length ? String(offset + limit) : null };
+}
+
+/** The query string of an agent's tool-apps routes. */
+export function toolAppsQs(p: ToolAppsParams): string {
+  const q = new URLSearchParams();
+  if (p.search) q.set('search', p.search);
+  if (p.granted !== undefined) q.set('granted', String(p.granted));
+  if (p.cursor) q.set('cursor', p.cursor);
+  if (p.limit) q.set('limit', String(p.limit));
+  return q.toString();
 }

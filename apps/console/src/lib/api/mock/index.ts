@@ -896,6 +896,48 @@ export function createMockApi(): OpsApi {
         respond(() => tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, name: t.name, server: t.module ?? t.system, moduleId: null, description: t.description, access: t.access, inputSchema: {}, requiresApproval: t.access !== 'read' || !!t.requiresReview, approval: t.requiresReview ? 'Review before it runs' : null }))),
       // The mock's apps have no catalog to add from, so nothing waits on a Tools tab.
       toolOptions: (p) => respond(() => ({ ...pageOptions(tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, label: t.name, hint: t.module ?? t.system })), p), notAdded: [] })),
+      // The mock groups its tools by their system, every system connected; a search matches an app's name and its tools' words.
+      toolApps: (aid, p) =>
+        respond(() => {
+          const held = new Set(agentOr404(aid).toolIds);
+          const q = (p.search ?? '').trim().toLowerCase();
+          const hit = (t: Tool) => `${t.name} ${t.description}`.toLowerCase().includes(q);
+          const apps = [...new Set(tools.filter((t) => t.enabled && !t.workflow).map((t) => t.system))].sort().map((name) => {
+            const own = tools.filter((t) => t.enabled && !t.workflow && t.system === name);
+            const byApp = name.toLowerCase().includes(q);
+            const found = own.filter(hit);
+            return {
+              id: `app:${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+              name,
+              kind: 'custom' as const,
+              connected: true,
+              appGroup: null,
+              signIn: 'Team account',
+              toolsTotal: own.length,
+              toolsOffered: own.length,
+              toolsGranted: own.filter((t) => held.has(t.id)).length,
+              matches: q && !byApp ? found.slice(0, 5).map((t) => ({ id: t.id, label: t.name, access: t.access, granted: held.has(t.id) })) : [],
+              shown: byApp || found.length > 0,
+            };
+          });
+          const rows = apps.filter((a) => a.shown && (p.granted === undefined || (a.toolsGranted > 0) === p.granted)).map(({ shown: _shown, ...a }) => a);
+          const limit = p.limit ?? 25;
+          const offset = Number(p.cursor ?? 0) || 0;
+          return { data: rows.slice(offset, offset + limit), nextCursor: offset + limit < rows.length ? String(offset + limit) : null };
+        }),
+      toolAppTools: (aid, appId, p) =>
+        respond(() => {
+          const held = new Set(agentOr404(aid).toolIds);
+          const q = (p.search ?? '').trim().toLowerCase();
+          const own = tools.filter((t) => t.enabled && !t.workflow && `app:${t.system.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` === appId);
+          if (!own.length) notFound('App');
+          const rows = own
+            .filter((t) => `${t.name} ${t.description}`.toLowerCase().includes(q) && (p.granted === undefined || held.has(t.id) === p.granted))
+            .map((t) => ({ id: t.id, label: t.name, description: t.description, access: t.access, requiresApproval: t.access !== 'read' || !!t.requiresReview, approval: t.requiresReview ? 'Review before it runs' : null, granted: held.has(t.id) }));
+          const limit = p.limit ?? 25;
+          const offset = Number(p.cursor ?? 0) || 0;
+          return { data: rows.slice(offset, offset + limit), nextCursor: offset + limit < rows.length ? String(offset + limit) : null };
+        }),
       modelAliases: () => respond(() => F.MODEL_ALIASES.map((a) => ({ ...a }))),
       modelAliasKnobs: (name) => respond(() => mockKnobs(mockAliases.rows(), name)),
       test: (aid, message) => respond(() => ({ reply: `${agents.find((a) => a.id === aid)?.name ?? 'The agent'} would answer “${message}” here.`, tookMs: 0, citations: [], toolCalls: [] })),

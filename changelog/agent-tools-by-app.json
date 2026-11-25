@@ -1,6 +1,6 @@
 {
   "date": "2026-11-25",
-  "title": "Choose an agent's tools by app",
-  "description": "An agent's tools are now listed by app, showing whether each app is connected and how many of its tools the agent holds.",
+  "title": "Add an agent's tools by app",
+  "description": "An agent's tools are now grouped by app, and Add tools opens a picker where you search apps and tools, see what is connected, and add all of an app's tools at once.",
   "tag": "new"
 }
