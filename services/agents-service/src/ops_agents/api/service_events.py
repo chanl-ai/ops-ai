@@ -284,7 +284,12 @@ async def _deliver(
     jobs = BackgroundJobs(db)
     event = await events.record(name=name, key=key, team_id=team_id, source=source, actor=actor, payload=payload)
     # A step parked on this event and key resumes before any listener starts: the run it belongs to is waiting.
-    woken = await wake_parked(db, name=name, key=key, team_id=str(event.team_id), payload=cast(Json, event.payload))
+    # `at` from this delivery, not the stored row: a repeat of a key returns the first row, and a person's later
+    # sign-in repeats the key of their first.
+    at = payload.get("at")
+    woken = await wake_parked(
+        db, name=name, key=key, team_id=str(event.team_id), payload=cast(Json, event.payload), at=at
+    )
     # The stored event is what runs: a repeat with another payload or team cannot change what an earlier one meant.
     run_key = f"{name}:{key}"
     runs = RunStore(EngineTransactions(db))

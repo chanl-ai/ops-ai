@@ -533,6 +533,8 @@ def connect_wait(output: Any) -> Json | None:
         # The account's app, under which the person's Connect my account opens it.
         "appId": d.get("appId"),
         "teamAccount": bool(d.get("teamAccount")),
+        # When the gateway refused: only a sign-in after it wakes the wait.
+        "after": named.get("after"),
         # The team account itself needs signing in again, by an admin, rather than a person's own account.
         "again": d.get("account") == "team",
     }
@@ -603,6 +605,7 @@ async def gateway_call(call: NodeCall) -> Outcome:
             connectionId=wait.get("connectionId"),
             appId=wait.get("appId"),
             teamAccount=wait.get("teamAccount"),
+            after=wait.get("after"),
         )
         if woke.get("teamAccount"):
             # Run as the team account (decided in Human Tasks by someone who may use it): sent acting for nobody.

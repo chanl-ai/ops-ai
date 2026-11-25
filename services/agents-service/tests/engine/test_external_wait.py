@@ -1,6 +1,7 @@
 """A step parked on outside work, on PostgreSQL with the real worker and the resume route, by failure mode: a
 forged or misdirected token resumes a step; a second callback resumes it again; another team's event wakes a step; the
-time limit leaves a wait row that a late event or callback still wakes; two resumes at once both run."""
+time limit leaves a wait row that a late event or callback still wakes; two resumes at once both run; a sign-in
+from before a refusal, delivered late, wakes the step that refusal parked."""
 
 from __future__ import annotations
 
@@ -21,14 +22,16 @@ from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.events import EventLog
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
+from ops_engine.ports import ToolResult
 from ops_engine.store import DefinitionStore, RunStore
 from ops_engine.worker import Worker
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
-from ops_service_kit.ids import new_id
+from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
 from tests.engine.test_lifecycle_rights import introspect, jwks
 from tests.engine.test_worker import CountingTools, drain, worker
+from tests.engine.test_worker import start as start_basic
 from tests.run_rows import write_run
 
 
@@ -229,3 +232,52 @@ async def test_two_resumes_of_one_pause_run_it_once_and_record_the_second_as_ign
         types = [e.type for e in await EventLog(engine).run_events(run_id, run_id, 0)]
     assert (first, second) == (True, False)
     assert types.count("resumed_by_callback") == 1 and "resume_ignored" in types, types
+
+
+class SignInFirst(CountingTools):
+    """The gateway as it answers a person who has not granted what the call needs: refused, naming the event their
+    next sign-in reports and when it refused, until `granted`."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.granted = False
+
+    async def call(
+        self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
+    ) -> ToolResult:
+        self.calls.append(key)
+        if self.granted:
+            return ToolResult(True, {"id": input.get("customer_id")})
+        event = {"name": "app_account.connected", "key": "con_sf:usr_priya", "after": now_iso()}
+        details = {"connectionId": "con_sf", "connection": "Salesforce", "reason": "insufficient_scope"}
+        error = {"code": "CONNECTION_NOT_LINKED", "details": details | {"connectedEvent": event}}
+        return ToolResult(False, {"error": error}, reason="Salesforce needs Priya to connect again, allowing more.")
+
+
+async def test_a_sign_in_from_before_the_refusal_delivered_late_leaves_the_run_waiting(engine: AsyncEngine) -> None:
+    """Failure mode: the person's earlier sign-in reaches agents-service only after a later call of theirs was
+    refused and parked; it wakes that step, the call is refused again, and the run takes its error way."""
+    tenant, tools = f"t-{uuid4().hex[:8]}", SignInFirst()
+    signed_in_before = now_iso()
+    run_id = await start_basic(engine, tenant, {"customerId": "C-1", "amount": 250})
+    w = worker(engine, tools, InMemorySaver())
+    await drain(w)
+
+    async def connected(at: str) -> list[str]:
+        with tenant_scope(tenant):
+            out = await deliver(
+                engine, None, name="app_account.connected", key="con_sf:usr_priya", team_id="team_a",
+                source="tools", actor=None, payload={"connectionId": "con_sf", "app": "Salesforce", "at": at},
+            )  # fmt: skip
+        return list(out["woke"])
+
+    stale = await connected(signed_in_before)
+    await drain(w)
+    still = await _run(engine, tenant, run_id)
+    tools.granted = True
+    fresh = await connected(now_iso())
+    await drain(w)
+    after = await _run(engine, tenant, run_id)
+    paused: dict[str, Any] = still["waiting"] or {}
+    assert (stale, still["status"], paused.get("node")) == ([], "waiting", "lookup"), still
+    assert fresh == [run_id] and after["waiting"]["node"] == "review", after

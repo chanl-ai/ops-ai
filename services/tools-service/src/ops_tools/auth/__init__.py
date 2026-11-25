@@ -24,6 +24,7 @@ from urllib.parse import urlsplit
 
 from ops_identity import ActingForPerson
 from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.ids import now_iso
 
 from ..connections.account_events import CONNECTED, connected_key, needs_reconnect_event
 from ..connections.records import EXPIRED, REFUSED
@@ -431,7 +432,8 @@ class Authenticator:
             "connectionId": connection_id, "appId": str(conn.app_id), "app": name, "connection": name,
             "account": "team", "state": state,
             # What a run waits on until an admin signs the team account in again: that sign-in reports it.
-            "connectedEvent": {"name": CONNECTED, "key": connected_key(connection_id, SHARED)},
+            # `after`: a sign-in from before this refusal leaves the run waiting (engine_resume.wake_parked).
+            "connectedEvent": {"name": CONNECTED, "key": connected_key(connection_id, SHARED), "after": now_iso()},
         }  # fmt: skip
         return AuthFailed(e.code, message, side=e.side, status=e.status, details=details)
 
@@ -522,7 +524,7 @@ class Authenticator:
             "authKind": kind.id,
             "personFields": list(kind.person_fields),
             # What a run that waits for this person to connect waits on: their connecting reports it.
-            "connectedEvent": {"name": CONNECTED, "key": connected_key(str(conn.id), person.sub)},
+            "connectedEvent": {"name": CONNECTED, "key": connected_key(str(conn.id), person.sub), "after": now_iso()},
             # Whether the team account serves runs nobody started (`_whose`); a call this person started never uses it.
             "teamAccount": str(conn.sign_in or "team") == "person_or_team" and bool(conn.team_backup),
         }
