@@ -69,6 +69,8 @@ else, with no baseline.
 | Surface | Primitive | Where | The rule |
 |---|---|---|---|
 | Page header | `PageLayout` | `components/page-layout.tsx` | Icon, title, one-line description, actions on the right; record pages pass `backHref` |
+| Section card | `Section` (`components/shared/surface.tsx`); `SettingsSection` for a settings form | `components/shared/surface.tsx` | One heading: `text-sm font-semibold` at the card's 16px padding, its actions on the heading row, the description under both; an agent's Limits fills the page width like the other tabs; the brief's headings are plain, not bands |
+| One tab strip | `PageLayout` `tabs` slot | `components/page-layout.tsx` | A page that brings its own tabs (a record's Canvas and Versions) does not also show its section's sibling pages; the strip scrolls sideways and starts at its first tab. The page title is the page's one h1 |
 | Sibling pages of one section | `TitleSwitcher` via `PageLayout switcher` | `components/shared/title-switcher.tsx` | Pages come from `sectionFor` in `lib/nav.ts`; no tab strip of sibling routes under the header |
 | Route tabs inside one record or area | `RouteTabs` | `components/shared/route-tabs.tsx` | Each tab is a URL, so a reload or a shared link lands on it |
 | List | `DataTableWithViews` + `DataTableColumnHeader` + `selectColumn` | `components/data-table-with-views.tsx` | Faceted filters with counts from the API, server pagination through `useListParams`, bulk actions in the selection bar; a row added in place shows first, marked New, through `created` (`useCreatedRows`) until the person pages, searches, filters or sorts, or a later write removes or changes it |

@@ -29,6 +29,12 @@ me and finds it under Assigned to me; the person who started the run may not dec
 |---|---|---|
 | ui | `agents-service/scripts/test-uc-225-ui.mjs` | passing, `make usecase-test UC=uc-225 LAYER=ui` (2026-10-18) |
 
+## Known red
+
+| Step | Since | Why | Fix |
+|---|---|---|---|
+| 4 (ui) | release 1.1.0, 2026-11-24 | The script expects the run's starter to be refused, but with the team's two-person rule off (the 1.1.0 design, the demo default) the starter takes the task; the test changes to follow the rule | Filed for after 1.1.0 |
+
 ## Non-vacuous check
 
 The route's own tests (services/agents-service/tests/api/test_review_assignment.py) failed all three against the

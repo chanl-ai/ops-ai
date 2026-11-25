@@ -14,13 +14,13 @@ permissions, so an agent never sees a record that user could not.
    Domain address.
 3. **Pick whose account calls use**: each person's own, the team's, or each person's with the team's for runs nobody
    started. See [Team or personal sign-in](sign-in-oauth.md#team-or-personal-sign-in).
-4. **Connect.** Press **Connect the team account** or **Connect my account**, and allow access on Salesforce's page.
+4. **Connect.** Press **Sign in the team login** or **Sign in with my login**, and allow access on Salesforce's page.
    The App reads **Connected** once the test after sign-in passes.
 
 The same steps from the command line:
 
 ```bash
-opsai apps on plugin:opsai.salesforce --whose each   # prints the team account's sign-in link
+opsai apps on plugin:opsai.salesforce --whose each   # prints the team login's sign-in link
 opsai apps test plugin:opsai.salesforce --team-account
 ```
 

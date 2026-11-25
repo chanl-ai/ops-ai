@@ -201,6 +201,39 @@
     linear-gradient(to left, oklch(0 0 0 / 0.18), transparent) right center / 14px 100% scroll no-repeat;
 }
 
+/* Header actions the page layout found would leave a button alone on a phone: two equal columns, each action filling its cell. */
+@media (max-width: 639px) {
+  [data-testid='page-actions'][data-grouped='yes'] {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  [data-testid='page-actions'][data-grouped='yes'] > *,
+  [data-testid='page-actions'][data-grouped='yes'] > [style*='contents'] > * {
+    min-width: 0;
+  }
+  /* Only the actions themselves fill a cell, not a control inside a status (the Version button in its chip). */
+  [data-testid='page-actions'][data-grouped='yes'] > button,
+  [data-testid='page-actions'][data-grouped='yes'] > a,
+  [data-testid='page-actions'][data-grouped='yes'] > span > button,
+  [data-testid='page-actions'][data-grouped='yes'] > span > a {
+    width: 100%;
+  }
+}
+
+/* A page's tab row: the tab list is as wide as its tabs and the row scrolls. (A list the row's width, centred, put the
+   overflow on both sides, and the first tab could not be scrolled to.) */
+.page-tabs-row [data-slot='tabs-list'] {
+  width: max-content;
+  max-width: none;
+  overflow: visible;
+  justify-content: flex-start;
+}
+/* A tab keeps its own width: `flex-1` tabs have no width of their own, so the list's max-content width collapsed to the
+   row's and the last tabs ran out of it. */
+.page-tabs-row [data-slot='tabs-list'] > * {
+  flex: none;
+}
+
 /* Scrollbars follow the theme. `color-scheme` (set on :root and .dark above) tells the browser which palette to use for
    native controls; without it Windows Chrome and Edge colour scrollbars from the OS theme, not the page's.
    `scrollbar-color` inherits, so one rule on html reaches every scroller. `scrollbar-width` does not inherit, so it is

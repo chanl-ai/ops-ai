@@ -15,7 +15,7 @@ from __future__ import annotations
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict, cast
 
 from ops_policy import Ed25519Signer, mint
 from ops_service_kit.errors import Forbidden, ServiceUnavailable
@@ -32,6 +32,17 @@ TTL_S = 60
 RENEW_BEFORE_S = 10
 
 
+class HeldAccess(TypedDict, total=False):
+    """What an acting-for token says the person may do in its team, as a session's claims say it."""
+
+    roles: dict[str, str]
+    perm_version: int
+    access: dict[str, list[str]]
+    grids: dict[str, dict[str, str]]
+    policies: Json
+    security_team: str
+
+
 @dataclass(frozen=True)
 class ActingForPerson:
     """The person a call acts for, from a verified acting-for token: `sub` is their id (`dev:<email>` in dev)."""
@@ -40,6 +51,14 @@ class ActingForPerson:
     email: str
     name: str
     team_id: str
+    # What the person may do in `team_id` when the token was minted (ACCESS_CLAIMS), for a service that decides a
+    # platform tool's cells as theirs (resolve.principal_of); None for a token without it, which holds no cells.
+    access: HeldAccess | None = None
+
+
+# The claims of an acting-for token that say what the person may do, as a session's say it (platform auth.py
+# access_claims).
+ACCESS_CLAIMS = ("roles", "perm_version", "access", "grids", "policies", "security_team")
 
 
 def refused(why: str) -> Forbidden:
@@ -55,11 +74,13 @@ def person_of(claims: Json, *, service: str, tenant_id: str, team_id: str | None
         raise refused("it was minted for another service")
     if claims.get("tenant_id") != tenant_id or not team_id or claims.get("team_id") != team_id:
         raise refused("it names another workspace or team than the call")
+    held = cast(HeldAccess, {k: claims[k] for k in ACCESS_CLAIMS if k in claims})
     return ActingForPerson(
         sub=str(claims["sub"]),
         email=str(claims.get("email", "")),
         name=str(claims.get("name", "")),
         team_id=str(claims["team_id"]),
+        access=held or None,
     )
 
 
@@ -96,16 +117,18 @@ class ActingForTokens:
         return minted[0]
 
     @classmethod
-    def from_platform(cls, platform: ServiceClient) -> ActingForTokens:
+    def from_platform(cls, platform: ServiceClient, *, audience: str | None = None) -> ActingForTokens:
         """Minted by platform-service's internal route, through the caller's client for it; the service token names
-        the tenant and team (a request body never does)."""
+        the tenant and team (a request body never does). `audience` is the service the tokens go to, unset for the
+        caller's default; one instance per audience, so a cached token is never sent to another service."""
 
         # Here, not at the top: client imports resolve, which imports this module.
         from .client import ServiceCallError  # noqa: PLC0415
 
         async def mint_one(tenant_id: str, email: str, team_id: str) -> tuple[str, float]:
             try:
-                data = await platform.post("/v1/acting-for-tokens", {"email": email}, tenant=tenant_id, team=team_id)
+                body: Json = {"email": email, **({"audience": audience} if audience else {})}
+                data = await platform.post("/v1/acting-for-tokens", body, tenant=tenant_id, team=team_id)
             except ServiceCallError as e:
                 if e.status in (403, 404):
                     raise refused(e.message) from e

@@ -37,7 +37,8 @@ await withUiStack(
       });
       await page.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(app)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByTestId('app-tab-settings').click({ timeout: 90_000 });
-      const everyone = page.getByTestId('app-everyone');
+      // Who signs in: the app page's two answers; Each person signs in is picked.
+      const everyone = page.getByTestId('app-everyone').locator('label[for="who-each"]');
       await everyone.waitFor({ timeout: 30_000 });
       const changed = page.waitForResponse((r) => r.request().method() === 'PATCH' && /\/accounts\/[^/]+$/.test(r.url()), { timeout: 30_000 }).catch(() => undefined);
       await everyone.click();

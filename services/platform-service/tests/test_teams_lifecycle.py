@@ -108,7 +108,7 @@ async def test_an_archived_team_leaves_tokens_rights_and_invitations_until_resto
     after = await _session(signin, f"arch@{signin.zone}")
     assert team not in after["principal"]["teamIds"]
     mine = await signin.public.get("/v1/teams", headers={"Authorization": f"Bearer {after['token']}"})
-    assert team not in [t["id"] for t in mine.json()["data"]]
+    assert team not in [t["id"] for t in mine.json()["data"]["data"]]
     # The token minted before the archive still names the team; its admin right there is read from the database.
     invite = await signin.public.post(
         "/v1/settings/members/invite",

@@ -16,7 +16,7 @@ with a way to try again. A session that has ended goes back to sign-in, and a li
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Priya opens Human Tasks from a link to a task that does not exist | A message says the task wasn't found or is closed, and the queue shows without it |
+| 1 | Priya opens Human Tasks from a link to a task that does not exist | The task pane says the task was not found or is in another team, and the queue shows beside it |
 | 2 | Her session is signed out elsewhere, then she opens a page | She is sent to sign-in, with the page she wanted kept as `next` |
 | 3 | She signs in again; the run's platform service stops; she reloads | One screen says Ops AI can't reach its services, with Try again; no page or sidebar error shows beside it |
 

@@ -74,7 +74,9 @@ export const agentsOperations = {
   },
   "agents_create_agent": {
     "body": "json",
-    "headers": [],
+    "headers": [
+      "x-acting-for"
+    ],
     "method": "POST",
     "path": "/v1/agents",
     "pathParams": [],
@@ -657,6 +659,19 @@ export const agentsOperations = {
       "limit",
       "ids",
       "agents"
+    ],
+    "stream": false
+  },
+  "agents_try_targets": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/try-targets",
+    "pathParams": [],
+    "query": [
+      "skill",
+      "workflow",
+      "step"
     ],
     "stream": false
   },
@@ -1466,7 +1481,14 @@ export const agentsOperations = {
     "path": "/v1/me/memories",
     "pathParams": [],
     "query": [
-      "agentId"
+      "agentId",
+      "kind",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -1972,6 +1994,15 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "workflows_bulk_engine_runs": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/runs/bulk",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "workflows_cancel_engine_run": {
     "body": null,
     "headers": [],
@@ -2273,6 +2304,17 @@ export const agentsOperations = {
     "path": "/v1/workflows/definitions/{workflow_id}/publish-preview",
     "pathParams": [
       "workflow_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "workflows_redrive_engine_run": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/runs/{run_id}/redrive",
+    "pathParams": [
+      "run_id"
     ],
     "query": [],
     "stream": false

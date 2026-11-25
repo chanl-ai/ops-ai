@@ -26,6 +26,6 @@ export const config = {
     '/integrations/:path*', '/workflows/:path*', '/knowledge/:path*', '/logs/:path*', '/document-types/:path*',
     '/reviews/:path*', '/tools/:path*', '/model-risk/:path*', '/guardrails/:path*', '/assurance/:path*',
     '/channels/:path*', '/activity/:path*', '/policies/:path*', '/widgets/:path*', '/agents/:path*', '/access/:path*',
-    '/skills/:path*', '/files/:path*', '/cases/:path*', '/wiki/:path*',
+    '/skills/:path*', '/files/:path*', '/cases/:path*', '/wiki/:path*', '/settings/account/connectors/:path*',
   ],
 };

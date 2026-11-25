@@ -4,8 +4,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "App plugin:test.fields was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -89,6 +91,11 @@
    "pluginId": "test.fields",
    "sandboxId": null,
    "signIn": null,
+   "signIns": {
+    "connected": 0,
+    "expired": 0,
+    "refused": 0
+   },
    "state": null,
    "status": null,
    "toolsAdded": 5,
@@ -176,6 +183,7 @@
       "pluginId": "test.fields",
       "sandboxId": null,
       "signIn": null,
+      "signIns": null,
       "state": null,
       "status": null,
       "toolsAdded": 5,
@@ -285,7 +293,7 @@
    "accountsCount": 1,
    "appGroup": "needs_admin",
    "appState": "needs_sign_in",
-   "appStateReason": "Sign in the team account.",
+   "appStateReason": "Sign in the team login.",
    "authKind": "bearer",
    "category": null,
    "connectionId": "<id:ca>",
@@ -358,6 +366,11 @@
    "pluginId": "test.fields",
    "sandboxId": null,
    "signIn": "team",
+   "signIns": {
+    "connected": 0,
+    "expired": 0,
+    "refused": 0
+   },
    "state": "not_signed_in",
    "status": "draft",
    "toolsAdded": 1,
@@ -423,7 +436,7 @@
       "accountsCount": 1,
       "appGroup": "needs_admin",
       "appState": "needs_sign_in",
-      "appStateReason": "Sign in the team account.",
+      "appStateReason": "Sign in the team login.",
       "authKind": "bearer",
       "category": null,
       "connectionId": "<id:ca>",
@@ -496,6 +509,7 @@
       "pluginId": "test.fields",
       "sandboxId": null,
       "signIn": "team",
+      "signIns": null,
       "state": "not_signed_in",
       "status": "draft",
       "toolsAdded": 1,
@@ -661,8 +675,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "App plugin:test.fields was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -746,6 +762,11 @@
    "pluginId": "test.fields",
    "sandboxId": null,
    "signIn": null,
+   "signIns": {
+    "connected": 0,
+    "expired": 0,
+    "refused": 0
+   },
    "state": null,
    "status": null,
    "toolsAdded": 5,
@@ -833,6 +854,7 @@
       "pluginId": "test.fields",
       "sandboxId": null,
       "signIn": null,
+      "signIns": null,
       "state": null,
       "status": null,
       "toolsAdded": 5,
@@ -904,8 +926,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "Fields desk is not turned on for this team.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false

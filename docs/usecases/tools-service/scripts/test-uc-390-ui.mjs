@@ -25,7 +25,7 @@ await withUiStack(
     try {
       const page = await consoleSignIn(browser, consoleUrl, PRIYA, PASSWORD, errors);
       const h = await testTeamAccount(page, consoleUrl, header);
-      check('5 the header key app’s live account tests Working with the team account, answered 200', h.status === 'ok' && /\b200\b/.test(h.said) && /team account/.test(h.said), h.said);
+      check('5 the header key app’s live account tests Working with the team account, answered 200', h.status === 'ok' && /\b200\b/.test(h.said) && /team login/.test(h.said), h.said);
       check('5 neither key shows on its page', !h.page.includes(TEST_KEY) && !h.page.includes(PROD_KEY), h.page.slice(0, 300));
 
       const q = await testTeamAccount(page, consoleUrl, query);

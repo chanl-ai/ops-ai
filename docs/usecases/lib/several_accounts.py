@@ -355,7 +355,7 @@ def maya_second_github(r: GitRig) -> tuple[httpx.Response, str, httpx.Response]:
     """GitHub on with each person's own account beside the team's; Maya signs in on Platform server, then adds Corp,
     a second account of her own at ghe.corp.test, and signs in to it. The add's answer, where its sign-in opened, and
     the sign-in's answer."""
-    github_on(r, sign_in="person_or_team")
+    github_on(r, sign_in="person")
     r.sign_in(r.maya, r.ids["public"], as_="self")
     started = r.gw.post(
         f"/v1/me/accounts/{r.ids['public']}/another",

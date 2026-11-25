@@ -90,7 +90,14 @@ class TeamAdminStore(TenantDb):
         member and admin counts and whether it is the Security team, all in SQL on one transaction."""
         async with self.tenant_tx(tenant_id) as c:
             q = _listing(statuses, await security_team_in(c, tenant_id))
-            page = await list_page(c, q, params, search=[teams.c.name_key], default_sort=teams.c.name_key.asc())
+            page = await list_page(
+                c,
+                q,
+                params,
+                search=[teams.c.name_key],
+                sortable={"name": teams.c.name_key},
+                default_sort=teams.c.name_key.asc(),
+            )
         page["data"] = [TeamRow.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
         return page
 

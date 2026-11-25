@@ -86,8 +86,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Case <case> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -98,8 +100,10 @@
     "body": {
       "error": {
         "code": "self_link",
+        "kind": "refused",
         "message": "A case cannot be linked to itself.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -369,8 +373,10 @@
     "body": {
       "error": {
         "code": "text_required",
+        "kind": "refused",
         "message": "A note needs text.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -417,8 +423,10 @@
             "msg": "Input should be 'low', 'normal', 'high' or 'urgent'"
           }
         ],
+        "kind": "input",
         "message": "priority: Input should be 'low', 'normal', 'high' or 'urgent'",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -465,8 +473,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "colour: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -540,8 +550,10 @@
     "body": {
       "error": {
         "code": "field_required",
+        "kind": "refused",
         "message": "Subject, status, priority and deadlines cannot be cleared.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -552,8 +564,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Case <case> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -573,8 +587,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "colour: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -784,8 +800,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Case case_none1 was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -796,8 +814,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Case <case> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -808,8 +828,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Run was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -820,8 +842,10 @@
     "body": {
       "error": {
         "code": "ref_required",
+        "kind": "refused",
         "message": "A run entry names the run it is about.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -860,8 +884,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Run was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -872,8 +898,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Review was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -893,8 +921,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "colour: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -905,8 +935,10 @@
     "body": {
       "error": {
         "code": "task_type_not_found",
+        "kind": "input",
         "message": "Task type no_such_type was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false

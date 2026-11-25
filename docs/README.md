@@ -380,7 +380,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `usecases/console/import-presets-access.md` | uc-054: import presets Read for GET and Write otherwise, warns when a spec has no auth, and asks for no connection |
 | `usecases/console/workflow-access-approved-by-another-person.md` | uc-053: Approve compares the signed-in person with the requester; James requests, Priya approves |
 | `usecases/console/access-is-read-or-write.md` | uc-052: no console control or badge offers a "Moves money" class; access is Read or Write |
-| `usecases/console/sub-pages-in-the-sidebar.md` | uc-047: every sidebar parent lists its sub-pages as rows, the active one lit, closed parents remembered |
+| `usecases/console/sub-pages-in-the-sidebar.md` | uc-047, retired: sidebar sub-pages as rows, removed from the console on 2026-11-12 |
 | `usecases/console/console-areas.md` | uc-723: the sidebar lists every area as an open section; area tabs only with the area_tabs flag |
 | `usecases/console/console-areas-server-facts.md` | uc-722: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id |
 | `usecases/console/tool-workbench.md` | uc-101: an operation on its full-width workbench; draft mock and transform, a secret typed for one run, the request sent masked, the mock staged for review |
@@ -506,6 +506,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `usecases/tools-service/a-team-admin-sets-its-own.md` | uc-615: A team admin sets its own app credential and tests it with their account |
 | `usecases/tools-service/usage-shows-only-this-team-s.md` | uc-616: Usage shows only this team's tool calls and whom each ran as |
 | `usecases/tools-service/an-app-that-fails-says-why.md` | uc-617: An app that fails says why: an expired account, a run waiting for a person's account, an unknown host |
+| `usecases/tools-service/chat-never-asks-whose-login.md` | uc-790: A chat user never chooses between their own login and the team's |
 | `usecases/tools-service/turning-an-app-off-names-its.md` | uc-618: Turning an app off names its users, a leaver loses their accounts, and Replace rotates a key |
 | `usecases/agents-service/a-new-team-s-assistant-answers.md` | uc-619: A new team's assistant answers from its knowledge and files |
 | `packages/README.md` | Index of the shared libraries that have a page |
@@ -569,6 +570,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `security/data-handling-and-masking.md` | Security: personal data masked for people by default, where data is stored, retention and its limits |
 | `security/model-calls.md` | Security: every model call through the AI gateway, keys, budgets, clearance, and what the call log keeps |
 | `security/egress-and-connections.md` | Security: the tool gateway, the HTTPS allow-list and new-address policy, connections and credentials |
+| `security/recovery-and-redrive.md` | Security: what a crash repeats and never repeats, Retry, Redrive, bulk actions and dead letters |
 | `guide/ops-assistant.md` | The Ops Assistant: checklist, Connect card, Think harder, Save read-back, reused reads, suggestion chips, memories |
 | `guide/whats-new.md` | What's new: every change a person would notice, newest first, built from the changelog |
 | `guide/use-cases/card-disputes.md` | Use case: card disputes, from the request to the approved credit, with SDK code |
@@ -595,6 +597,7 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/a-builder-runs-the-three.md` | uc-621: A builder runs the three foundation Examples |
 | `usecases/agents-service/a-builder-asks-the-first-three.md` | uc-622: A builder asks the first three published agents |
 | `usecases/agents-service/a-builder-validates-applies-and-test.md` | uc-623: A builder validates, applies and test-runs the three-node workflow |
+| `usecases/agents-service/a-builder-reads-why-a-test-run-failed.md` | uc-workflows-2: A builder reads why a test run failed, at the API, the SDK and the CLI |
 | `usecases/agents-service/a-builder-runs-the-two-composition.md` | uc-624: A builder runs the two composition Examples |
 | `usecases/tools-service/sign-in-return-any-window.md` | uc-625: Connect comes back Connected in any window, for every sign-in app |
 | `usecases/tools-service/apps-screens-for-each-role.md` | uc-626: Apps screens offer only what you may do, in plain words |
@@ -647,4 +650,16 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/a-team-holding-only-a-workflow.md` | uc-755: A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it |
 | `usecases/agents-service/a-shared-form-filled-in-signed.md` | uc-756: A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record |
 | `usecases/agents-service/a-builder-writes-a-skill-with.md` | uc-757: A builder writes a skill with steps and an agent brief, and a chat follows the steps |
-| `usecases/kb-service/search-a-long-document-s-pieces.md` | uc-762: Search a long document's pieces on the server |
+| `usecases/agents-service/a-builder-tries-one-skill-path.md` | uc-762: A builder tries one path of a skill, and no write runs until they confirm |
+| `usecases/agents-service/a-run-outlives-a-killed-worker.md` | uc-763: A run outlives a killed worker and redrives from its failed step |
+| `usecases/console/agent-page-settings-and-channels.md` | uc-764: An agent page shows its save state, its model, knowledge, tools and skills on the main page, and a channels tab |
+| `usecases/console/agent-versions-side-by-side.md` | uc-765: A builder asks two versions of an agent one question and reads the replies side by side |
+| `usecases/console/role-for-a-group-and-approvals.md` | uc-766: A role given to a group, and the approvals cell on the role's page |
+| `usecases/console/chat-only-person-my-apps.md` | uc-767: A person who only chats sees My apps in the sidebar and can chat |
+| `usecases/console/name-limits-on-a-form.md` | uc-768: One create form holds a name to the same rule the server keeps |
+| `usecases/console/my-apps-page.md` | uc-769: My apps is a page of its own, the same for an admin and a member |
+| `usecases/console/editor-page-layout.md` | uc-781: Record editors and list pages share one header, one tab strip and one section style |
+| `usecases/tools-service/admins-see-people-s-app-sign.md` | uc-770: Admins see people's app sign-ins and end one |
+| `usecases/agents-service/a-builder-takes-a-new-skill.md` | uc-771: A builder takes a new skill to its first publish in under ten minutes |
+| `usecases/kb-service/search-a-long-document-s-pieces.md` | uc-772: Search a long document's pieces on the server |
+| `usecases/agents-service/only-a-person-who-may-decide.md` | uc-782: Only a person who may decide a review decides, resumes or replays it |

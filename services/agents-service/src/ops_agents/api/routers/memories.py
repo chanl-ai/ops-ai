@@ -17,7 +17,8 @@ from pydantic import Field
 from ops_access import can
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, In, Json, Out
+from ops_service_kit.http import Envelope, In, Json, ListResult, Out
+from ops_service_kit.listing import ListQuery
 
 from ...store.memories import ACTIVE, FORGOTTEN, PERSON, Memories, MemoryRecord
 from ...store.tenancy import current_team
@@ -73,14 +74,21 @@ def _view(rt: Runtime, r: MemoryRecord) -> Json:
     }
 
 
-@router.get("", response_model=Envelope[list[MemoryView]])
+@router.get("", response_model=Envelope[ListResult[MemoryView]])
 async def list_memories(
-    rt: Rt, me: Me, _: Tx, agent_id: Annotated[str | None, Query(alias="agentId")] = None
+    rt: Rt,
+    me: Me,
+    _: Tx,
+    q: ListQuery,
+    agent_id: Annotated[str | None, Query(alias="agentId")] = None,
+    kind: Annotated[list[str] | None, Query()] = None,
 ) -> JSONResponse:
-    """What agents remember about the caller, newest first; `agentId` keeps one agent's."""
+    """One page of what agents remember about the caller, newest first, on the shared list contract: `search` matches
+    the key and the value, `agentId` keeps what that agent uses (its own and every agent's) and `kind` those kinds."""
+    del agent_id, kind  # Read from `q.filters`; declared so the document and the SDKs name them.
     # The team the request acts in, named: team_visible passes every team for a caller acting in none.
-    rows = await _store(rt, me).current(person_of(me), agent_id, team_id=current_team() or me.team_id)
-    return ok([_view(rt, r) for r in rows])
+    listed = await _store(rt, me).page(person_of(me), q, team_id=current_team() or me.team_id)
+    return ok({**listed, "data": [_view(rt, MemoryRecord.model_validate(r)) for r in listed["data"]]})
 
 
 @router.patch("/{memory_id}", response_model=Envelope[MemoryView])

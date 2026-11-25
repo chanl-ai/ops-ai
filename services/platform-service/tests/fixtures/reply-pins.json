@@ -5290,7 +5290,7 @@
       "memoryRetentionDays": null,
       "pageImages": {},
       "publishReview": {},
-      "requesterMayDecide": false,
+      "requesterMayDecide": true,
       "reviewSlaHours": 8,
       "securityTeamAddsSecrets": false,
       "skillPublishStrict": {},
@@ -5335,7 +5335,9 @@
       {
         "email": "owner@<run>.bank.test",
         "id": "<mem>",
+        "linksOwnSession": false,
         "name": "Ana Ops",
+        "needsInvite": false,
         "role": "admin",
         "status": "active",
         "team": "Team admin <team>",
@@ -5349,7 +5351,9 @@
         "email": "new.one@<run>.bank.test",
         "id": "<mem>",
         "invitedAt": "<timeZ>",
+        "linksOwnSession": false,
         "name": "new.one@<run>.bank.test",
+        "needsInvite": false,
         "role": "viewer",
         "status": "invited",
         "team": "Team admin <team>",
@@ -10556,7 +10560,7 @@
         "extractionFloor": 0.8,
         "mcpConnectionHours": 8,
         "memoryRetentionDays": null,
-        "requesterMayDecide": false,
+        "requesterMayDecide": true,
         "reviewSlaHours": 8,
         "securityTeamAddsSecrets": false,
         "stepUp": false
@@ -10716,7 +10720,7 @@
           "extractionFloor": 0.8,
           "mcpConnectionHours": 8,
           "memoryRetentionDays": null,
-          "requesterMayDecide": false,
+          "requesterMayDecide": true,
           "reviewSlaHours": 8,
           "securityTeamAddsSecrets": false,
           "stepUp": false
@@ -12323,7 +12327,7 @@
       "extractionFloor": 0.8,
       "mcpConnectionHours": 8,
       "memoryRetentionDays": null,
-      "requesterMayDecide": false,
+      "requesterMayDecide": true,
       "reviewSlaHours": 8,
       "securityTeamAddsSecrets": false,
       "stepUp": false
@@ -12345,8 +12349,10 @@
     {
       "error": {
         "code": "unauthorized",
+        "kind": "refused",
         "message": "Sign in again.",
         "requestId": "<req>",
+        "retryable": true,
         "status": 401
       },
       "success": false
@@ -12366,7 +12372,7 @@
         "extractionFloor": 0.8,
         "mcpConnectionHours": 8,
         "memoryRetentionDays": null,
-        "requesterMayDecide": false,
+        "requesterMayDecide": true,
         "reviewSlaHours": 8,
         "securityTeamAddsSecrets": false,
         "stepUp": false
@@ -12526,7 +12532,7 @@
           "extractionFloor": 0.8,
           "mcpConnectionHours": 8,
           "memoryRetentionDays": null,
-          "requesterMayDecide": false,
+          "requesterMayDecide": true,
           "reviewSlaHours": 8,
           "securityTeamAddsSecrets": false,
           "stepUp": false
@@ -12546,22 +12552,33 @@
     }
   },
   "signOut": null,
-  "teams": [
-    {
-      "id": "<team>",
-      "memberCount": 1,
-      "name": "Team admin <team>",
-      "ownerGroups": [],
-      "role": "admin",
-      "scope": "owned"
-    },
-    {
-      "id": "<team>",
-      "memberCount": 1,
-      "name": "Team viewer <team>",
-      "ownerGroups": [],
-      "role": "admin",
-      "scope": "owned"
+  "teams": {
+    "data": [
+      {
+        "id": "<team>",
+        "memberCount": 1,
+        "name": "Team admin <team>",
+        "ownerGroups": [],
+        "role": "admin",
+        "scope": "owned"
+      },
+      {
+        "id": "<team>",
+        "memberCount": 1,
+        "name": "Team viewer <team>",
+        "ownerGroups": [],
+        "role": "admin",
+        "scope": "owned"
+      }
+    ],
+    "facets": {},
+    "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 2,
+      "totalPages": 1
     }
-  ]
+  }
 }

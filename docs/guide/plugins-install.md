@@ -121,9 +121,9 @@ system's own refusal of an assertion (another key, a replay) is `AUTH_FAILED` na
 retried with a secret. RS256 (RSA keys) and ES256 (P-256 keys) are the algorithms; any other key is refused.
 
 A team that gives `clientId` and `clientSecret` signs in with its own OAuth app; one that gives neither uses the
-platform's. `signIn` is `team` (one team account), `person` (each person connects their own account, from the chat card
-or My accounts, and calls act as them) or `person_or_team` (each person, with the team account as backup). A plugin
-lists which of these it allows. One team's app, connection or token never serves another team, and one person's token
+platform's. `signIn` is `team` (one team login, shown as Everyone uses the team's login), `person` (each person signs in with their own login, from the chat card
+or My apps, and calls act as them). A plugin lists which of these it allows. The team login is never a backup for each
+person: `person_or_team` and `teamBackup: true` are refused, and an account stored with them reads as `person`. One team's app, connection or token never serves another team, and one person's token
 never serves anyone else.
 
 On a connection each person signs in to, a key, password or token kind asks each person for their own: the
@@ -155,7 +155,7 @@ moment make one account and the other is refused 409 `account_name_taken`.
 | Before a rename | `GET /v1/workflows/definitions/account-uses?app=…&name=…` | How many drafts and published versions name the account. A rename rewrites none of them: a published version is refused at its next call until its next publish names the new name |
 
 Agents-service sends what was chosen and never picks or compares names itself: a step's choice over a chat's over
-the agent's, decided in one place (`domain/accounts.py` chosen_accounts); a call run as the team account keeps only
+the agent's, decided in one place (`domain/accounts.py` chosen_accounts); a call run with the team login keeps only
 the step's. The model is told the account in use and where it points on its apps line ("Salesforce: on · uses EU org
 (kestrel-eu.my.salesforce.test)", `api/apps_line.py`), read from the row's `pointsAt` (the first identity entry that
 is not who signed in), so a person's email never reaches the prompt; it has no tool input to change the account. How a call's
@@ -170,8 +170,8 @@ account is chosen, in tools-service only (`plugins/host.py` `PluginHost.for_call
 | Otherwise | The team's default |
 | The named account's team sign-in ended (expired, refused or revoked) | None: 200 with `AUTH_FAILED` in the output, its details naming the account (`connection`) and `connectedEvent`. A run waits on that event ("Sign in to EU org again to continue"), a chat draws the sign-in card, and an admin's new sign-in reports the event so the run goes on. No other account is tried |
 
-Changing an account's who signs in from `team` to `person_or_team` with `teamBackup` makes a call acting for a person
-sign in as that person, and a call acting for nobody (a schedule) keep the team's login (uc-709).
+Changing an account's who signs in from `team` to `person` makes a call acting for a person sign in as that person
+(uc-709); a call acting for nobody (a schedule) is refused `CONNECTION_NOT_LINKED` with reason `no_person`.
 
 Every account row (the app's Accounts list, Connectors › Mine, the account pickers) carries `identity`: what tells it
 apart, built once in `plugins/host.py` `account_identity`. A plugin's `connection.identity` names the settings to show;
@@ -179,7 +179,7 @@ with none declared it shows what the sign-in filled, then the account's own sign
 address; who signed in comes last. A second account pointing at the same place carries `samePlaceAs` with the first's
 name, a warning only. A member's Accounts tab lists the team's accounts and counts their own sign-ins (`me.signIns`);
 their own accounts are on Connectors › Mine. Each team row also carries `signIn` (whose login its calls use: `team`,
-`person` or `person_or_team`) and `peopleSignedIn` (how many people hold their own sign-in on that account). The row's
+`team` or `person`) and `peopleSignedIn` (how many people hold their own sign-in on that account). The row's
 Settings dialog (`components/connections/account-settings-dialog.tsx`, apart from Connect, which signs in) changes the
 name, who signs in and the auth config; the team default is the star on the row; "Each person signs in" shows the count against
 the team's members, and a rename or a change of who signs in first shows how many drafts and published versions name

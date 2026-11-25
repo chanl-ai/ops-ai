@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-22",
+  "title": "Large API documents open faster in the tool picker",
+  "description": "When you add operations from an OpenAPI document or an MCP server, the picker searches them on the server and shows them a page at a time, so a large document opens fast. Select all covers every matching operation, and ones the tool already has are marked.",
+  "tag": "improved"
+}

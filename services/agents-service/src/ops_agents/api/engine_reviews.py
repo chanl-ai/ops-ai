@@ -1119,13 +1119,17 @@ async def get(rt: Runtime, review_id: str) -> EngineReview:
     raise NotFound("Review")
 
 
-async def _check_decider(rt: Runtime, approver: Principal, run: Json, calls: list[Json]) -> None:
+async def _check_decider(
+    rt: Runtime, approver: Principal, run: Json, calls: list[Json], paused: ReviewPayload | None = None
+) -> None:
     """Who may decide a run's review: a reviewer or admin of the run's team, whatever the writes it decides (`calls`)
     are, and not who started the run or whom the step names in requestedBy while requesterMayDecide is off.
     Anyone the step names in notDecidedBy is refused whatever the policy, such as whoever saved the version it
     approves."""
     del calls
-    paused = PAYLOAD(WAITING(run.get("waiting") or {}).get("payload") or {})
+    # `paused`: the step a decision was recorded on, once the run no longer waits on it.
+    if paused is None:
+        paused = PAYLOAD(WAITING(run.get("waiting") or {}).get("payload") or {})
     # `entries` iterates as `or []` did: a number in either list still fails the check rather than passing it.
     barred = {str(x).lower() for x in entries(paused.get("notDecidedBy"))}
     if approver.email.lower() in barred:
@@ -1224,6 +1228,10 @@ async def decide(
     if not waiting:
         earlier = await _decisions(rt, run_id)
         if earlier:
+            # A repeat is answered only to someone who may decide the step it was recorded on, before it says what was
+            # decided.
+            decided = PAYLOAD(RESUME_ROW(earlier[-1]).get("payload") or {})
+            await _check_decider(rt, approver, run, held_calls(json_object(decided)), decided)
             was = DECISION(RESUME_ROW(earlier[-1]).get("resume") or {})
             if decision in (was.get("decision"), was.get("option")):
                 return await view(rt, run, earlier[-1])
@@ -1234,7 +1242,7 @@ async def decide(
     paused = PAYLOAD(waiting.get("payload") or {})
     if connect_wait(paused) is not None:
         raise Conflict(
-            "This run waits for an account: it goes on once its person connects theirs, or runs on the team account.",
+            "This run waits for an account: it goes on once its person connects theirs, or runs with the team login.",
             code="connect_wait",
         )
     edited, inputs = correction(paused, inputs)
@@ -1433,9 +1441,11 @@ async def run_as_team_account(rt: Runtime, me: Principal, review_id: str) -> Eng
     if not waiting or wait is None or review_id not in (str(run["id"]), step_id(run, paused)):
         raise Conflict("This run is not waiting for an account.", code="run_not_waiting")
     app = wait["app"] or "This app"
-    require_team_account_use(me, team_id=str(run["team_id"]), what=f"{app}'s team account")
+    require_team_account_use(me, team_id=str(run["team_id"]), what=f"{app}'s team login")
     if not wait["teamAccount"]:
-        raise Conflict(f"{app} has no team account to run as; its person connects their own.", code="no_team_account")
+        raise Conflict(
+            f"{app} has no team login to run as; its person signs in with their own.", code="no_team_account"
+        )
     resume: Decision = {"teamAccount": {"by": me.email}}
     await resumed(
         rt.db, str(run["id"]), str(run["team_id"]), json_object(dict(waiting)), dict(resume), source="team_account"

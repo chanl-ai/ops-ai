@@ -328,6 +328,9 @@ EXEMPT: dict[str, str] = {
     "ops_agents.api.routers.engine.*": "a request's run stream, polled while the caller listens",
     "ops_agents.graphs.sla.*": "a review's interrupt loop inside one graph run",
     "ops_agents.store.leases.Heartbeat._loop": "renews one run's lease while the run goes; part of the workflow worker",
+    "ops_engine.worker.Worker._renew": "renews one turn's claim while the turn runs; part of the workflow worker",
+    "ops_agents.api.routers.chat._renew": "renews one chat turn's claim while the reply streams; part of the workflow "
+    "worker's queue",
     "ops_engine.worker.Worker._heartbeat": "renews one run's claim while a pass runs; part of the workflow worker",
     "ops_kb.service.Lease._keep": "renews one sync's source lease while the sync or rebuild runs",
     "ops_engine.compiler.*": "waits inside one compiled step",

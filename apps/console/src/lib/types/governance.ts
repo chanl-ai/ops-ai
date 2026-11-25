@@ -55,7 +55,7 @@ export interface ToolCallRow {
   /** Who the call runs as (`sub`): a user for chat and approvals, a workflow identity for workflow steps, a process principal for mailbox runs. Filled by the tools-service executions log. */
   subject?: CallIdentity<'user' | 'workflow' | 'process' | 'service'>;
   /** Whose account of the app the call signed in with: a person's own (by email) or the team account. */
-  runAs?: { kind: 'person' | 'team'; email?: string | null } | null;
+  runAs?: { kind: 'person' | 'team'; email?: string | null; login?: string | null; askedBy?: string | null } | null;
   /** Who acts on the subject's behalf (`act`), e.g. the agent; absent when the subject acts directly. */
   actor?: CallIdentity<'user' | 'agent' | 'workflow' | 'service'>;
   /** The step (idempotency key) within the run. */

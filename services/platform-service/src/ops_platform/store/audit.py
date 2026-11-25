@@ -29,6 +29,10 @@ KIND = {
     "member.accept": "joined",
     "member.role": "role_changed",
     "member.remove": "deleted",
+    "member.reinvite": "invited",
+    "member.reinvite_accept": "joined",
+    "signin.link": "created",
+    "signin.unlink": "revoked",
     "key.create": "created",
     "key.revoke": "revoked",
     "auth.sign_in": "login",
@@ -78,6 +82,8 @@ ROUTE_ACTIONS: dict[tuple[str, str], str] = {
     ("POST", "/v1/settings/members/invite"): "member.invite",
     ("POST", "/v1/settings/members/role"): "member.role",
     ("POST", "/v1/settings/members/delete"): "member.remove",
+    ("POST", "/v1/settings/members/reinvite"): "member.reinvite",
+    ("POST", "/v1/settings/members/unlink"): "signin.unlink",
     ("POST", "/v1/workspace/transfer"): "workspace.transfer",
     ("POST", "/v1/workspace/leave"): "workspace.leave",
     ("POST", "/v1/workspace/close"): "workspace.close",
@@ -352,6 +358,7 @@ class AuditLog(TenantDb):
                 stmt,
                 params,
                 search=[audit_entries.c.action, actor.c.name, actor.c.email],
+                sortable={"at": audit_entries.c.at},
                 default_sort=audit_entries.c.at.desc(),
             )
             counts = await _counts(c, team_id, account)

@@ -34,10 +34,10 @@ await withUiStack(
 
       await step('1 a link to a task that does not exist says so and shows the queue', async () => {
         await page.goto(`${consoleUrl}/reviews?review=wfrun_000000000000:review:1`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-        const said = await page.getByText('That task wasn’t found or is closed').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
-        await page.waitForURL((u) => !u.searchParams.has('review'), { timeout: 15_000 }).catch(() => undefined);
+        // The old address moves to Human Tasks, whose task pane draws the shared not-found state beside the queue.
+        const said = await page.getByTestId('query-not-found').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
         const url = new URL(page.url());
-        check('1 a link to a task that does not exist says so and shows the queue', said && url.pathname === '/reviews' && !url.searchParams.has('review'), { said, url: page.url() });
+        check('1 a link to a task that does not exist says so and shows the queue', said && url.pathname === '/work/tasks', { said, url: page.url() });
       });
 
       await step('2 a session signed out elsewhere goes back to sign-in, keeping the page', async () => {
@@ -47,7 +47,7 @@ await withUiStack(
         await page.goto(`${consoleUrl}/cases`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.waitForURL((u) => u.pathname.startsWith('/login'), { timeout: 60_000 }).catch(() => undefined);
         const url = new URL(page.url());
-        check('2 a session signed out elsewhere goes back to sign-in, keeping the page', out.status === 204 && url.pathname === '/login' && url.searchParams.get('next') === '/cases', { signOut: out.status, url: page.url() });
+        check('2 a session signed out elsewhere goes back to sign-in, keeping the page', out.status === 204 && url.pathname === '/login' && url.searchParams.get('next') === '/work/cases', { signOut: out.status, url: page.url() });
       });
 
       await step('3 with the services down, one screen says so with Try again', async () => {

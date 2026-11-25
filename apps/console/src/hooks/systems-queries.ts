@@ -66,6 +66,39 @@ export const useSystemCard = (id: string | null | undefined) =>
     staleTime: 60_000,
   });
 
+export type AppPeoplePage = Data<'apps_list_app_people'>;
+export type AppPerson = AppPeoplePage['data'][number];
+export type PersonSignIn = AppPerson['signIns'][number];
+type PersonState = PersonSignIn['state'];
+export interface PeopleFilters {
+  app?: string[];
+  state?: PersonState[];
+  [key: string]: string[] | undefined;
+}
+
+/**
+ * Apps > People: one page of the people holding their own sign-ins on the team's apps, grouped, counted by state and
+ * paged on the server (GET /v1/apps/people); `facets` count people per app and per state, `labels` name the apps.
+ * Asked only by someone who may manage the team's apps, so nobody else makes a request that is refused.
+ */
+export const useAppPeople = (p: { page: number; pageSize: number; search?: string; filters?: PeopleFilters; enabled: boolean }) =>
+  usePagedQuery({
+    queryKey: [...APPS, 'people', p.page, p.pageSize, p.search ?? '', p.filters ?? {}],
+    queryFn: () => sdk((ops) => ops.raw.tools.apps_list_app_people({ query: { page: p.page, pageSize: p.pageSize, search: p.search, ...p.filters } })),
+    enabled: p.enabled,
+  });
+
+/** End sign-in: ends one person's own sign-in on an account; People and the app's cards read again. */
+export function useEndSignIn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (i: { appId: string; accountId: string; personId: string }) =>
+      sdk((ops) => ops.raw.tools.apps_end_sign_in({ path: { app_id: i.appId, account_id: i.accountId, person_id: i.personId } })),
+    // People is under ['apps'], which every app-state read refreshes.
+    onSuccess: () => refreshAppState(qc),
+  });
+}
+
 function useSystemsMutation<I, O>(fn: (i: I) => Promise<O>) {
   const qc = useQueryClient();
   return useMutation({
@@ -78,10 +111,11 @@ export type ConnectionKinds = Data<'apps_connection_kinds'>;
 
 export type AppPage = Data<'apps_get_app'>;
 /** The accounts of an app a step or an agent may name (`usable`: the team's live ones), each with what it points at. */
-export const useAppAccounts = (appId: string | undefined) =>
+export const useAppAccounts = (appId: string | undefined, { withTest = false }: { withTest?: boolean } = {}) =>
   useTeamQuery({
-    queryKey: [...APPS, appId ?? '', 'accounts', 'usable'],
-    queryFn: () => sdk((ops) => ops.raw.tools.apps_list_account_choices({ path: { app_id: appId ?? '' }, query: { usable: true } })),
+    queryKey: [...APPS, appId ?? '', 'accounts', withTest ? 'with-test' : 'usable'],
+    // A try lists the app's test account too; a step or an agent names live accounts only.
+    queryFn: () => sdk((ops) => ops.raw.tools.apps_list_account_choices({ path: { app_id: appId ?? '' }, query: { usable: !withTest } })),
     enabled: !!appId,
   });
 /** One app's page, joined by tools-service: card, accounts, your own sign-in, tools, skills and latest runs. */

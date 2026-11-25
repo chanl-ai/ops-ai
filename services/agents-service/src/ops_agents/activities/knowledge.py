@@ -17,6 +17,7 @@ from typing import Protocol, cast
 
 from ops_agent_kernel.ports import KnowledgeUnavailableError
 from ops_agent_kernel.types import BaseAnswer, KnowledgeFound, Passage
+from ops_engine.ports import outside_call
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import ApiError
 from ops_service_kit.http import Json
@@ -66,7 +67,8 @@ class KbService:
         # No count: the bases' own retrieval settings decide how many passages return.
         body = {"kbIds": kb_ids, "question": query}
         try:
-            found = cast(Json, await self.kb.post("/v1/knowledge-bases/search", body))
+            with outside_call():
+                found = cast(Json, await self.kb.post("/v1/knowledge-bases/search", body))
         except (ServiceCallError, ServiceUnreachable) as e:
             log.warning("knowledge_unavailable", tenant=current_tenant(), error=type(e).__name__)
             raise KnowledgeUnavailableError("kb-service did not answer") from e

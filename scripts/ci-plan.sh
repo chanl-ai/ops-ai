@@ -4,6 +4,10 @@
 # service_jobs (the service matrix: one job per service, or per test shard and its checks for the long suites), release.
 # A push to release/* or hotfix/* (GITHUB_REF) is always a full plan with release=true: the impact plan once skipped
 # jobs on such a push and let a failure reach develop untested. ci.yml then also runs `checks` and release-proof.
+# heavy=false on a pull request (unless CI_FULL=true): the slow jobs (repo, store-mssql, release-proof, the script
+# tests) then wait for the merge queue and develop pushes, which run them before anything reaches develop.
+# repo_jobs is the repo job's matrix: one entry per suite of the full plan outside the services, plus the check list,
+# the script tests and the SDK/changelog checks, so they run side by side.
 # A full plan runs what `make verify` runs, spread over jobs: every service of its suite list (make/python.mk,
 # VERIFY_POOL) in the service matrix, and the rest of python-verify, sdk-verify and changelog-verify in one job.
 set -euo pipefail
@@ -50,6 +54,12 @@ for svc in ${services[@]+"${services[@]}"}; do
   for i in $(seq 1 "$n"); do jobs_json+=("{\"service\":\"$svc\",\"part\":\"test $i/$n\"}"); done
 done
 echo "full=$full"
+if [ "${GITHUB_EVENT_NAME:-}" = pull_request ] && [ "${CI_FULL:-}" != true ]; then echo "heavy=false"; else echo "heavy=true"; fi
+repo_json=()
+if [ "$full" = true ]; then
+  for p in ${rest[@]+"${rest[@]}"} checks scripts sdk; do repo_json+=("{\"part\":\"$p\"}"); done
+fi
+if [ "${#repo_json[@]}" -eq 0 ]; then echo "repo_jobs=[]"; else echo "repo_jobs=[$(IFS=,; echo "${repo_json[*]}")]"; fi
 echo "release=$release"
 # The suites of make verify that are not a service's, which a full plan's repo job runs through python-verify.
 echo "repo_pool=${rest[*]+${rest[*]}}"

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-22",
+  "title": "Apps opens as a table, with a People page",
+  "description": "Apps now opens as a table that says how people sign in to each app and how many sign-ins work, ended or failed, and leaves out template packs. Admins get a People tab listing each person's sign-ins, where they can end one; that person's app card then says an admin ended it.",
+  "tag": "improved"
+}

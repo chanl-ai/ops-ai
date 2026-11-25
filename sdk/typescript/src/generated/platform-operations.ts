@@ -225,12 +225,50 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "auth_sso_link_complete": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/auth/sso/link/complete",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "auth_sso_link_start": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/auth/sso/link/start",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "auth_sso_links": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/auth/sso/links",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "auth_sso_start": {
     "body": "json",
     "headers": [],
     "method": "POST",
     "path": "/v1/auth/sso/start",
     "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "auth_sso_unlink": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/auth/sso/links/{provider_id}",
+    "pathParams": [
+      "provider_id"
+    ],
     "query": [],
     "stream": false
   },
@@ -333,7 +371,9 @@ export const platformOperations = {
   },
   "members_change_roles": {
     "body": "json",
-    "headers": [],
+    "headers": [
+      "x-acting-for"
+    ],
     "method": "POST",
     "path": "/v1/settings/members/role",
     "pathParams": [],
@@ -342,7 +382,9 @@ export const platformOperations = {
   },
   "members_invite_members": {
     "body": "json",
-    "headers": [],
+    "headers": [
+      "x-acting-for"
+    ],
     "method": "POST",
     "path": "/v1/settings/members/invite",
     "pathParams": [],
@@ -381,11 +423,33 @@ export const platformOperations = {
     ],
     "stream": false
   },
+  "members_reinvite_members": {
+    "body": "json",
+    "headers": [
+      "x-acting-for"
+    ],
+    "method": "POST",
+    "path": "/v1/settings/members/reinvite",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "members_remove_members": {
     "body": "json",
     "headers": [],
     "method": "POST",
     "path": "/v1/settings/members/delete",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "members_unlink_members": {
+    "body": "json",
+    "headers": [
+      "x-acting-for"
+    ],
+    "method": "POST",
+    "path": "/v1/settings/members/unlink",
     "pathParams": [],
     "query": [],
     "stream": false
@@ -555,6 +619,17 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "roles_give_role_to_holder": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/roles/{role_id}/holders",
+    "pathParams": [
+      "role_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "roles_list_roles": {
     "body": null,
     "headers": [],
@@ -604,6 +679,22 @@ export const platformOperations = {
       "role_id"
     ],
     "query": [],
+    "stream": false
+  },
+  "roles_role_holder_options": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/roles/{role_id}/holder-options",
+    "pathParams": [
+      "role_id"
+    ],
+    "query": [
+      "search",
+      "cursor",
+      "limit",
+      "ids"
+    ],
     "stream": false
   },
   "roles_role_holders": {
@@ -827,7 +918,14 @@ export const platformOperations = {
     "method": "GET",
     "path": "/v1/teams",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "teams_list_workspace_teams": {

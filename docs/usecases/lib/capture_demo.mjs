@@ -71,9 +71,9 @@ async function signIn(email) {
 }
 
 const leadToken = await signIn(lead.email);
-const teams = rows(await api('platform', '/v1/teams', { token: leadToken }));
 // --team names the seeded team when it is not team.json's (the seed's --team, such as a second demo team).
 const TEAM_NAME = args.team ?? TEAM.team.name;
+const teams = rows(await api('platform', `/v1/teams?search=${encodeURIComponent(TEAM_NAME)}`, { token: leadToken }));
 const team = teams.find((t) => t.name === TEAM_NAME)?.id;
 if (!team) throw new Error(`${lead.email} is not in ${TEAM_NAME}; run make sample-team first`);
 const as = { token: leadToken, team };

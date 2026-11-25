@@ -216,3 +216,10 @@ async def test_dev_header_caller_reads_the_types_of_the_team_it_names(client: As
     listed = ok(await client.get("/v1/task-types", headers=team))["data"]
     assert "write_approval" in {t["id"] for t in listed}
     assert ok(await client.get("/v1/task-types/write_approval", headers=team))["id"] == "write_approval"
+
+
+async def test_a_posted_task_with_a_number_that_is_not_finite_is_refused_before_it_is_stored(c: AsyncClient) -> None:
+    body = '{"type": "generic_decision", "params": {"title": "Refund", "facts": [1e999]}}'  # read as infinity
+    r = await c.post("/v1/tasks", content=body, headers={**BUILDER, "Content-Type": "application/json"})
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "payload_not_finite", r.text

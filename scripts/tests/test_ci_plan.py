@@ -8,10 +8,14 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import ci_local
 
 ROOT = Path(__file__).resolve().parents[2]
 # Run under `make python-verify VERIFY_POOL=...` (ci.yml's repo job), the inner make would inherit that override
@@ -19,13 +23,13 @@ ROOT = Path(__file__).resolve().parents[2]
 CLEAN_MAKE_ENV = {k: v for k, v in os.environ.items() if k not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL")}
 
 
-def plan(tmp_path: Path, *changed: str, ref: str = "", full: str = "") -> dict[str, str]:
+def plan(tmp_path: Path, *changed: str, ref: str = "", full: str = "", event: str = "") -> dict[str, str]:
     listed = tmp_path / "changed.txt"
     listed.write_text("\n".join(changed) + "\n", encoding="utf-8")
     out = subprocess.run(
         ["bash", "scripts/ci-plan.sh", str(listed)],
         cwd=ROOT,
-        env={**CLEAN_MAKE_ENV, "GITHUB_REF": ref, "CI_FULL": full},
+        env={**CLEAN_MAKE_ENV, "GITHUB_REF": ref, "CI_FULL": full, "GITHUB_EVENT_NAME": event},
         capture_output=True,
         text=True,
         check=True,
@@ -188,3 +192,39 @@ def test_last_green_skips_the_current_commit_and_unknown_ones_and_is_empty_when_
     ]
     assert _last_green(tmp_path, c2, runs) == c1
     assert _last_green(tmp_path, c2, []) == ""
+
+
+def _runs(job: str, p: dict[str, str]) -> bool:
+    """Whether ci.yml starts the job for this plan, read from the job's own `if:` (ci_local's reader)."""
+    cond = ci_local.condition(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"][job].get("if"), p)
+    assert cond is not None, f"{job}'s condition reads GitHub's context, so a test cannot tell"
+    return cond
+
+
+def test_a_pull_request_skips_the_slow_jobs_that_the_merge_queue_and_develop_run(tmp_path: Path) -> None:
+    # A service change plans store-mssql; a change of the make files plans the full repo job.
+    for changed in ("services/kb-service/src/ops_kb/app.py", "make/env.mk"):
+        pr = plan(tmp_path, changed, event="pull_request")
+        assert (pr["heavy"], _runs("store-mssql", pr), _runs("repo", pr)) == ("false", False, False), pr
+        for event in ("merge_group", "push"):
+            assert plan(tmp_path, changed, event=event)["heavy"] == "true"
+    assert _runs("store-mssql", plan(tmp_path, "services/kb-service/src/ops_kb/app.py", event="merge_group"))
+    assert _runs("repo", plan(tmp_path, "make/env.mk", event="push"))
+    # Labelled ci:full, a pull request still runs everything.
+    assert _runs("repo", plan(tmp_path, "make/env.mk", event="pull_request", full="true"))
+
+
+def test_the_script_tests_and_release_proof_wait_for_heavy_and_a_pull_request_still_gets_ci_ok() -> None:
+    jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
+    script_step = next(s for s in jobs["checks"]["steps"] if s.get("name") == "Script tests")
+    assert "outputs.heavy == 'true'" in script_step["if"], script_step
+    assert "outputs.heavy == 'true'" in jobs["release-proof"]["if"], jobs["release-proof"]["if"]
+    # Skipped jobs pass the gate.
+    assert _gate({"plan": "success", "repo": "skipped", "store-mssql": "skipped", "release-proof": "skipped"}) == 0
+
+
+def test_the_repo_job_is_one_matrix_entry_per_suite_and_check(tmp_path: Path) -> None:
+    p = plan(tmp_path, "make/env.mk")
+    parts = [e["part"] for e in json.loads(p["repo_jobs"])]
+    assert parts == [*p["repo_pool"].split(), "checks", "scripts", "sdk"], parts
+    assert len(parts) >= 8 and plan(tmp_path, "docs/guide/plugins.md")["repo_jobs"] == "[]"

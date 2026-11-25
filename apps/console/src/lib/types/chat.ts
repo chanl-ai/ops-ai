@@ -137,6 +137,8 @@ export interface ToolCall {
   durationMs: number;
   /** Write tools stop at a gate: the call drafts the action and a person decides. */
   gated?: { gate: string; reviewers: string };
+  /** Whose login of the app the call ran as: the team's (said under the reply) or the person's own. */
+  signedIn?: { whose: 'team' | 'person'; login: string; app: string } | null;
 }
 
 export interface MessageFeedback {
@@ -248,6 +250,9 @@ export interface ChatMessage {
   error?: string;
   /** Why the model endpoint refused the reply, e.g. `rate_limited`; kept so a reload reads the same as the stream. */
   errorCode?: string;
+  /** The failure's kind and whether trying again can help, from the stream's error event (the one error model). */
+  errorKind?: 'input' | 'refused' | 'upstream' | 'timeout' | 'internal';
+  errorRetryable?: boolean;
   /** The pinned guardrail that refused the question (`before`), replaced the answer with its message (`after`) or had it rewritten once (`corrected`). */
   guardrail?: { guardrailId: string; version: number; name: string; topic: string; when: 'before' | 'after' | 'corrected' };
   /** What a guardrail kept back (`withheld`, never shown) or took back after it was shown (`retracted`). Present only
@@ -494,4 +499,4 @@ export type ChatStreamEvent =
   | { type: 'replace'; text: string }
   | { type: 'citations'; citations: Citation[] }
   | { type: 'done'; message: ChatMessage }
-  | { type: 'error'; message: string; partial: ChatMessage; code?: string };
+  | { type: 'error'; message: string; partial: ChatMessage; code?: string; kind?: ChatMessage['errorKind']; retryable?: boolean };

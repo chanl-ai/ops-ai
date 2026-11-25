@@ -248,6 +248,14 @@ class ToolGate(WireModel):
     reviewers: str
 
 
+class SignedIn(WireModel):
+    """Whose login of an app a call ran as: the team's or the person's own, the login's name and the app's account."""
+
+    whose: Literal["team", "person"]
+    login: str
+    app: str
+
+
 class ToolCall(WireModel):
     id: str
     name: str
@@ -259,6 +267,8 @@ class ToolCall(WireModel):
     status: Literal["running", "success", "failed"]
     duration_ms: int
     gated: ToolGate | None = None
+    # Set on a call an app's login signed: the chat card says who acted in the app and that the person asked.
+    signed_in: SignedIn | None = None
 
 
 class MessageFeedback(WireModel):
@@ -684,6 +694,10 @@ class ErrorEvent(WireModel):
     partial: ChatMessage
     # Why, when the model endpoint refused the call: rate_limited, key_budget_exhausted, sensitivity_not_cleared.
     code: str | None = None
+    # The error model's kind and whether Try again can help (ops_contracts.errors.CODES); `message` is then the
+    # sentence an end user reads, never a code or an exception's text.
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"] | None = None
+    retryable: bool | None = None
 
 
 ChatStreamEvent = (

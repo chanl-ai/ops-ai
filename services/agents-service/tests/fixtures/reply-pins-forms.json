@@ -32,8 +32,10 @@
             "msg": "Input should be greater than or equal to 1"
           }
         ],
+        "kind": "input",
         "message": "dailyCap: Input should be greater than or equal to 1",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -53,8 +55,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "colour: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -65,8 +69,10 @@
     "body": {
       "error": {
         "code": "unavailable",
+        "kind": "upstream",
         "message": "A form's files are stored in Files, and this service has no Files URL.",
         "requestId": "<req>",
+        "retryable": true,
         "status": 503
       },
       "success": false
@@ -208,8 +214,10 @@
     "body": {
       "error": {
         "code": "form_members_only",
+        "kind": "refused",
         "message": "Only members of the team that shares this form can send it.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -257,8 +265,10 @@
     "body": {
       "error": {
         "code": "form_link_expired",
+        "kind": "refused",
         "message": "This link has expired or was replaced. Ask whoever sent it to you for a new one.",
         "requestId": "<req>",
+        "retryable": true,
         "status": 401
       },
       "success": false
@@ -269,8 +279,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Form was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -281,8 +293,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Form was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -293,8 +307,10 @@
     "body": {
       "error": {
         "code": "form_link_expired",
+        "kind": "refused",
         "message": "This link has expired or was replaced. Ask whoever sent it to you for a new one.",
         "requestId": "<req>",
+        "retryable": true,
         "status": 401
       },
       "success": false
@@ -344,8 +360,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "extra: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -376,8 +394,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Form form_missing1 was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -388,8 +408,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Form <form> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false

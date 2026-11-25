@@ -51,7 +51,7 @@ await withUiStack(
       const sample = await james.getByTestId('agent-evals-tab').getByText(/sample|preview/i).allInnerTexts();
       check('16 James reads real cases on the tab: no preview badge or sample text', sample.length === 0, sample);
       await james.getByTestId('add-eval-case-button').click();
-      await james.getByLabel('Name').fill('Explains the hold');
+      await james.getByLabel('Name', { exact: true }).fill('Explains the hold');
       await james.getByLabel('Input').fill('Why is my wire on hold?');
       await james.getByLabel('Check 1 type').click();
       await james.getByRole('option', { name: 'Judge' }).click();

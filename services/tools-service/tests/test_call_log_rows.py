@@ -3,11 +3,12 @@ call whose run cannot be told from a workflow's."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from ops_tools.modules.executions import call_row
 from ops_tools.modules.seed import tool_title
 from ops_tools.store.calls import GatewayCall
+from ops_tools.store.modules import ModuleColumns
 
 BLANK = dict.fromkeys(GatewayCall.model_fields)
 
@@ -35,7 +36,7 @@ def test_a_chat_call_carries_its_thread_and_no_workflow() -> None:
 
 def test_a_call_shows_its_tools_title_and_app_never_only_the_slug() -> None:
     """A chat, an approval and the call log read the tool's title and its app's name from the row."""
-    module = {"id": "mod_plugin_salesforce", "display_name": "Salesforce", "system": "Salesforce"}
+    module = cast(ModuleColumns, {"id": "mod_plugin_salesforce", "display_name": "Salesforce", "system": "Salesforce"})
     row = call_row(_row(tool="salesforce_get_record"), {}, module, "Get a record")
     assert (row["title"], row["app"]) == ("Get a record", "Salesforce"), row
     plain = call_row(_row(), {}, None)
@@ -44,6 +45,26 @@ def test_a_call_shows_its_tools_title_and_app_never_only_the_slug() -> None:
 
 def test_a_teams_own_tool_has_a_title_in_words() -> None:
     """A custom tool (`open_case`) was listed by its code name where every other tool shows a title."""
-    assert tool_title({"name": "cases"}, "open_case", None) == "Open case"
-    assert tool_title({"name": "cases"}, "openCase", lambda m, op: None) == "Open case"
-    assert tool_title({"name": "cases"}, "open_case", lambda m, op: "Open a case") == "Open a case"
+    cases = cast(ModuleColumns, {"name": "cases"})
+    assert tool_title(cases, "open_case", None) == "Open case"
+    assert tool_title(cases, "openCase", lambda m, op: None) == "Open case"
+    assert tool_title(cases, "open_case", lambda m, op: "Open a case") == "Open a case"
+
+
+def test_a_team_login_call_records_the_login_and_the_person_who_asked() -> None:
+    """A chat on an app everyone uses with the team's login acts as that login; the audit row keeps who asked too."""
+    team = _row(acting_for="j.richardson@harborpine.example", credential="team", signed_in_as="ops@harborpine.example")
+    assert call_row(team, {}, None).get("runAs") == {
+        "kind": "team",
+        "login": "ops@harborpine.example",
+        "askedBy": "j.richardson@harborpine.example",
+    }
+    # A team API key logs no credential, as it is not a sign-in; its login still makes it the team's.
+    key = _row(acting_for="j.richardson@harborpine.example", credential=None, signed_in_as="Header key desk")
+    assert call_row(key, {}, None).get("runAs") == {
+        "kind": "team",
+        "login": "Header key desk",
+        "askedBy": "j.richardson@harborpine.example",
+    }
+    own = _row(acting_for="j.richardson@harborpine.example", credential="person")
+    assert call_row(own, {}, None).get("runAs") == {"kind": "person", "email": "j.richardson@harborpine.example"}

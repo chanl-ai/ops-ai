@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 
 from ops_ai import OpsAI
+from ops_ai._transport import every_page
 
 from .chat import agent_id
 from .common import client, emit, parser, refuse, table, verb_options
@@ -15,7 +16,9 @@ def main(argv: list[str]) -> int:
     ap = parser("opsai memories", "Your memories: list, forget, forget-agent, export.")
     sub = ap.add_subparsers(dest="verb", required=True)
     common = [verb_options()]
-    sub.add_parser("list", parents=common, help="what the agents remember about you").add_argument("--agent")
+    listing = sub.add_parser("list", parents=common, help="what the agents remember about you")
+    listing.add_argument("--agent")
+    listing.add_argument("--search", help="only memories whose key or value has these words")
     sub.add_parser("forget", parents=common, help="forget one memory").add_argument("id")
     sub.add_parser("forget-agent", parents=common, help="forget everything one agent remembers").add_argument("agent")
     sub.add_parser("export", parents=common, help="every memory, as the export downloads it")
@@ -34,7 +37,8 @@ def _agent(ops: OpsAI, name: str | None) -> str | None:
 def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
     agents = ops.raw.agents
     if ns.verb == "list":
-        rows = agents.memory_list_memories(agent_id=_agent(ops, ns.agent))
+        asked = {"agent_id": _agent(ops, ns.agent), "search": ns.search}
+        rows = every_page(agents.memory_list_memories, **{k: v for k, v in asked.items() if v})
         return table(ns, rows, "id", "agentName", "kind", "value", "createdAt")
     if ns.verb == "forget":
         agents.memory_forget_memory(ns.id)

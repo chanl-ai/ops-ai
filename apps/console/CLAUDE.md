@@ -37,7 +37,7 @@ Check every changed route headless with Playwright before calling the change don
 | Check | How |
 |---|---|
 | Against the live stack | A scratch Node script run from the repo root: open http://localhost:3016/login, sign in as a seeded person (their emails are in `services/platform-service/seed/people.json`; the dev password is `platform_demo_password` in `packages/ops_service_kit/src/ops_service_kit/settings.py:287`), visit the route, collect `pageerror` events and take a screenshot at 1440 and 390 wide |
-| As a repeatable check | A ui use case: `docs/usecases/<service>/scripts/test-uc-NNN-ui.mjs` with `withUiStack` and `chromium` from the harness (example: `docs/usecases/console/scripts/test-uc-047-ui.mjs`), run with `make usecase-test UC=<id> LAYER=ui` |
+| As a repeatable check | A ui use case: `docs/usecases/<service>/scripts/test-uc-NNN-ui.mjs` with `withUiStack` and `chromium` from the harness (example: `docs/usecases/console/scripts/test-uc-460-ui.mjs`), run with `make usecase-test UC=<id> LAYER=ui` |
 | Loading, error and empty states | On the mock (`pnpm dev`), add `?mock=slow`, `?mock=error` or `?mock=empty` to the route |
 | Developer pages | `/dev/*` (the widget gallery and others) answer only under `next dev` or with `OPS_ALLOW_PREVIEW_PAGES=1` (`src/proxy.ts:10`) |
 

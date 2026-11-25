@@ -9,7 +9,17 @@ from .definitions import (
     WorkflowOwnedError,
     WorkingCopy,
 )
-from .runs import CHILD_PREFIX, TERMINAL, DefinitionGoneError, ListedRun, NotLiveError, RunRow, RunStep, RunStore
+from .runs import (
+    CHILD_PREFIX,
+    REDRIVABLE,
+    TERMINAL,
+    DefinitionGoneError,
+    ListedRun,
+    NotLiveError,
+    RunRow,
+    RunStep,
+    RunStore,
+)
 from .steps import SqlJournal
 from .tables import ENGINE_BUILD, RUN_PREFIX, metadata
 from .tx import Transactions
@@ -18,6 +28,7 @@ from .work import Work, WorkQueue
 __all__ = [
     "CHILD_PREFIX",
     "ENGINE_BUILD",
+    "REDRIVABLE",
     "RUN_PREFIX",
     "TERMINAL",
     "DefinitionGoneError",

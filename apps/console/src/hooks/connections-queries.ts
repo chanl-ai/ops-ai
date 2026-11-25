@@ -28,6 +28,15 @@ export type MyConnector = Awaited<ReturnType<OpsAI['raw']['tools']['apps_my_conn
 export const useMyConnectors = () =>
   useTeamQuery({ queryKey: [...MINE, 'connectors'], queryFn: () => sdk((ops) => ops.raw.tools.apps_my_connections()), refetchOnMount: 'always' });
 
+/** One app of the person's, for its own page (GET /v1/me/connections?app=<id>): the server keeps the one row, so the page
+ * never reads the whole list to find it. Undefined data once loaded means the person has no such app. */
+export const useMyConnector = (appId: string) =>
+  useTeamQuery({
+    queryKey: [...MINE, 'connector', appId],
+    queryFn: async () => (await sdk((ops) => ops.raw.tools.apps_my_connections({ query: { app: appId } })))[0] ?? null,
+    refetchOnMount: 'always',
+  });
+
 /** Reads the person's connections again, after a sign-in window says they connected. */
 export function useRefreshMine() {
   const qc = useQueryClient();

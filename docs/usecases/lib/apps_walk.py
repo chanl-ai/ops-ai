@@ -202,10 +202,12 @@ def signed_sdk(role: str) -> Any:
 _TOKENS = Path(tempfile.mkdtemp(prefix="apps-cli-tokens-"))
 
 
-def ops_cli(role: str, *args: str, stdin: str | None = None) -> tuple[int, Any]:
+def ops_cli(role: str, *args: str, stdin: str | None = None, options_first: bool = False) -> tuple[int, Any]:
     """`ops <args> --as <role> --json` as a developer runs it from the repo, signed in like `make api` against this
     run's services, with `stdin` as its input (how a secret is given). Returns the exit code and the parsed answer, or
-    the raw text when it is not JSON."""
+    the raw text when it is not JSON. `options_first` puts `--as` and `--json` before the verb, where `opsai workflows`
+    reads them."""
+    said = [args[0], "--as", role, "--json", *args[1:]] if options_first else [*args, "--as", role, "--json"]
     env = {
         **os.environ,
         "OPS_PLATFORM_PORT": str(PLATFORM_PORT),
@@ -215,7 +217,7 @@ def ops_cli(role: str, *args: str, stdin: str | None = None) -> tuple[int, Any]:
         "OPS_API_TOKENS": str(_TOKENS),
     }
     p = subprocess.run(
-        ["uv", "run", "--quiet", "opsai", *args, "--as", role, "--json"],
+        ["uv", "run", "--quiet", "opsai", *said],
         cwd=ROOT, env=env, input=stdin, capture_output=True, text=True, timeout=180, check=False,
     )  # fmt: skip
     try:

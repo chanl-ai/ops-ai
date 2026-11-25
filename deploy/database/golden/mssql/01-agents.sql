@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0123_eval_run_digest
+-- agents-service, stamped at 20261124_0257_skill_owner_ids
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -59,6 +59,7 @@ CREATE TABLE engine_runs (
 	outcome VARCHAR(64) NULL, 
 	output NVARCHAR(max) NULL, 
 	error VARCHAR(max) NULL, 
+	failure NVARCHAR(max) NULL, 
 	waiting NVARCHAR(max) NULL, 
 	created_by VARCHAR(200) NOT NULL, 
 	started_via VARCHAR(200) NULL, 
@@ -115,9 +116,15 @@ CREATE TABLE engine_work (
 	lapses INTEGER NOT NULL DEFAULT '0', 
 	error VARCHAR(max) NULL, 
 	created_at VARCHAR(32) NOT NULL, 
+	team_id VARCHAR(64) NULL, 
+	priority INTEGER NULL, 
+	concurrency_key VARCHAR(240) NULL, 
+	rate_key VARCHAR(240) NULL, 
 	CONSTRAINT engine_work_pkey PRIMARY KEY (id), 
 	CONSTRAINT uq_engine_work_dedupe UNIQUE (tenant_id, dedupe_key)
 );
+GO
+CREATE INDEX ix_engine_work_claim ON engine_work (status, build, priority DESC, id);
 GO
 CREATE INDEX ix_engine_work_due ON engine_work (status, build, available_at);
 GO
@@ -309,6 +316,8 @@ GO
 CREATE INDEX ix_cases_team_priority ON cases (tenant_id, team_id, priority);
 GO
 CREATE INDEX ix_cases_team_status ON cases (tenant_id, team_id, status);
+GO
+CREATE INDEX ix_cases_team_subject ON cases (tenant_id, team_id, subject);
 GO
 CREATE UNIQUE INDEX uq_cases_producer_key ON cases (tenant_id, team_id, producer_key) WHERE producer_key IS NOT NULL;
 GO
@@ -556,6 +565,8 @@ CREATE TABLE eval_runs (
 GO
 CREATE INDEX ix_eval_runs_asset ON eval_runs (tenant_id, team_id, kind, asset_id, ran_at);
 GO
+CREATE INDEX ix_eval_runs_ran_at ON eval_runs (tenant_id, team_id, ran_at);
+GO
 CREATE INDEX ix_eval_runs_trigger ON eval_runs (tenant_id, team_id, [trigger]);
 GO
 CREATE TABLE registry_skills (
@@ -580,6 +591,8 @@ GO
 CREATE INDEX ix_registry_skills_team_origin ON registry_skills (tenant_id, team_id, origin);
 GO
 CREATE INDEX ix_registry_skills_team_owner ON registry_skills (tenant_id, team_id, owner_team);
+GO
+CREATE INDEX ix_registry_skills_team_updated ON registry_skills (tenant_id, team_id, updated_at);
 GO
 CREATE INDEX ix_registry_skills_tenant_team ON registry_skills (tenant_id, team_id);
 GO
@@ -878,6 +891,7 @@ CREATE TABLE model_call_records (
 	request_hash VARCHAR(64) NULL, 
 	response NVARCHAR(max) NULL, 
 	created_at VARCHAR(40) NOT NULL, 
+	reserved_until VARCHAR(40) NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
 	CONSTRAINT model_call_records_pkey PRIMARY KEY (id)
 );
@@ -1656,5 +1670,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0123_eval_run_digest');
+INSERT INTO alembic_version (version_num) VALUES ('20261124_0257_skill_owner_ids');
 GO

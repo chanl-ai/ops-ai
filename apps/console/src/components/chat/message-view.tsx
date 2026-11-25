@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Brain, ChevronRight, Copy, ListTree, Paperclip, Pencil, RefreshCw, SearchX, ShieldAlert, Square, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { AlertTriangle, Brain, ChevronRight, Copy, ListTree, Paperclip, Pencil, RefreshCw, SearchX, ShieldAlert, Square, ThumbsDown, ThumbsUp, Users } from 'lucide-react';
 
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
@@ -16,7 +16,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { useCan } from '@/hooks/me-queries';
 import { bytes } from '@/lib/format';
 import { modelRefusal } from '@/lib/model-refusals';
+import { failureKindWords } from '@/lib/failure-words';
+import { codeOf } from '@chanl-ai/ops-ai';
 import { foldedLine, orderReply } from '@/lib/reply-order';
+import { teamLoginLines } from '@/lib/login-words';
 import type { ChatMessage, MessageFeedback, ToolCall, WidgetAction } from '@/lib/types/chat';
 import { isLayoutPart, type MessagePart } from '@/lib/types/widgets';
 
@@ -163,6 +166,12 @@ export function AssistantMessage({
   // A refused model call reads by its code, worded for whether this reader manages settings; live and on reload alike.
   const managesSettings = useCan('settings', 'manage') === true;
   const refusal = message.error ? modelRefusal(message.errorCode, managesSettings) : undefined;
+  // Kind and retryable from the stream's error event; on reload from the stored code, through the one code table.
+  const failed = message.error ? codeOf(message.errorCode) : undefined;
+  const failKind = message.errorKind ?? failed?.kind ?? 'internal';
+  const mayRetry = message.errorRetryable ?? failed?.retryable ?? false;
+  // A listed refusal has its own words for the reader; anything else is worded by its kind, never by its exception text.
+  const failText = refusal && !refusal.code ? refusal.text : `${failureKindWords(failKind, 'reply')}.`;
   // What the reply suggests keeping asks its own line; what it kept, or anyone else's suggestion, is told in one line.
   const suggested = (message.remembered ?? []).filter((r) => r.status === 'suggested' && !!r.value);
   const kept = (message.remembered ?? []).filter((r) => !suggested.includes(r));
@@ -192,6 +201,12 @@ export function AssistantMessage({
         if (choice) return <AccountChoiceCard key={c.id} call={c} choice={choice} onReply={readOnly ? undefined : onReply} />;
         return cards ? <OpsCallCards key={c.id} call={c} cards={cards} readOnly={cardsReadOnly} /> : <ToolCallCard key={c.id} call={c} />;
       })}
+      {teamLoginLines(ordered.folded.concat(ordered.shown)).map((line) => (
+        <p key={line} className="flex items-start gap-1.5 text-xs text-muted-foreground" data-testid="team-login-line">
+          <Users className="mt-0.5 size-3 shrink-0" aria-hidden />
+          <span className="min-w-0 break-words">{line}</span>
+        </p>
+      ))}
       {message.widgets?.map((w) => (
         <ChatWidgetView key={w.id} widget={w} onAction={readOnly || !onWidgetAction ? undefined : (a) => onWidgetAction(w.id, a)} />
       ))}
@@ -285,7 +300,7 @@ export function AssistantMessage({
           <AlertTriangle className="size-4" />
           <AlertTitle>The answer stopped part-way</AlertTitle>
           <AlertDescription className="space-y-2">
-            <p data-testid="reply-error">{refusal?.text ?? message.error}</p>
+            <p data-testid="reply-error">{failText}</p>
             {refusal?.code && (
               <details className="text-xs text-muted-foreground">
                 <summary className="cursor-pointer">Details</summary>
@@ -298,7 +313,7 @@ export function AssistantMessage({
                   <Link href={refusal.fixAt}>Open Model providers</Link>
                 </Button>
               )}
-              {onRegenerate && !readOnly && (
+              {onRegenerate && !readOnly && mayRetry && (
                 <Button size="sm" variant="outline" className="border-destructive/40 text-foreground" onClick={onRegenerate}>
                   <RefreshCw className="size-3.5" /> Retry
                 </Button>

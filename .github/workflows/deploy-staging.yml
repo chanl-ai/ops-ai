@@ -2,12 +2,13 @@
 #   - ci.yml calls it after ci-ok passes on a push to develop, with that commit;
 #   - anyone with write access runs it by hand (Actions, deploy-staging, Run workflow, or `make stg-deploy-ci REF=`)
 #     with a branch, tag or commit.
-# A merge to develop is not deployed while staging is frozen: a release/* or hotfix/* branch exists on origin (a release
-# under test must not be overwritten) or the repository variable STAGING_HOLD is set (its value is the reason). A push
+# A merge to develop is not deployed while staging is frozen: a release/X.Y.Z or hotfix/* branch exists on origin (a
+# release under test must not be overwritten; the permanent train, release/current, does not freeze it, and the owner
+# sets STAGING_HOLD while a hand-started deploy of the train is under test) or the repository variable STAGING_HOLD is set (its value is the reason). A push
 # to a release or hotfix branch is deployed, and so is a hand-started run, which says in the summary what it overrode.
 #
 # The deploy is .github/actions/stg-deploy (`make stg-deploy REF=<sha>`): build once per commit, migrate, grants, every
-# process up, OCR, plugins, a signed-in request, then the click walk (skip_walk leaves the walk out). When a step fails
+# process up, OCR, plugins, a signed-in request, then the click walk and the smoke check (skip_walk leaves both out). When a step fails
 # after the machine was replaced, the job redeploys the release staging ran before (`make stg-rollback TO=`) and fails.
 name: deploy-staging
 
@@ -19,7 +20,7 @@ on:
         type: string
         required: true
       skip_walk:
-        description: Leave out the click walk
+        description: Leave out the click walk and the smoke check after it
         type: boolean
         default: false
       reason:
@@ -33,7 +34,7 @@ on:
         type: string
         default: develop
       skip_walk:
-        description: Leave out the click walk (the signed-in request still runs)
+        description: Leave out the click walk and the smoke check after it (the signed-in request still runs)
         type: boolean
         default: false
       reason:
@@ -91,7 +92,7 @@ jobs:
           case "$GITHUB_REF" in
             refs/heads/release/* | refs/heads/hotfix/*) ;;
             *)
-              branches=$(git ls-remote --heads origin 'refs/heads/release/*' 'refs/heads/hotfix/*' | sed 's|.*refs/heads/||' | tr '\n' ' ')
+              branches=$(git ls-remote --heads origin 'refs/heads/release/[0-9]*' 'refs/heads/hotfix/*' | sed 's|.*refs/heads/||' | tr '\n' ' ')
               [ -z "$branches" ] || pin="staging is frozen for ${branches% }"
               ;;
           esac
@@ -172,9 +173,11 @@ jobs:
             build="built on this run"
             [ "${SKIP_BUILD:-0}" != 1 ] || build="reused the image an earlier release pushed"
             walk=$(grep -o 'click walk ([0-9]* OK, [0-9]* FAIL)' "$log" 2>/dev/null | tail -1)
-            [ "$SKIP_WALK" != 1 ] || walk="skipped on request"
+            smoke=$(grep '^smoke: ' "$log" 2>/dev/null | tail -1 | sed 's/^smoke: //')
+            [ "$SKIP_WALK" != 1 ] || { walk="skipped on request"; smoke="skipped on request (skip_walk leaves out the smoke check too)"; }
             echo "| Build | $build |"
             echo "| Click walk | ${walk:-did not run} |"
+            echo "| Smoke check | ${smoke:-did not run} |"
             [ -z "$ROLLBACK" ] || echo "| Rollback | $ROLLBACK |"
             echo "| Job time | $(( $(date +%s) - ${STG_STARTED:-$(date +%s)} )) s |"
             if [ -s "$log" ]; then

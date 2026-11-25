@@ -40,6 +40,12 @@ it will leave and the case run it follows.
 
 The row shapes (`read`, `reply`) are covered without a stack by `services/agents-service/tests/unit/test_review_document_read.py`.
 
+## Known red
+
+| Step | Since | Why | Fix |
+|---|---|---|---|
+| 4 (ui) | release 1.1.0, 2026-11-24 | Cases this covers on the acknowledgement task draws Open case as text with no link, so the step counts no case link; the To and From lines show | Filed for after 1.1.0 |
+
 ## Non-vacuous check
 
 With the reviews page sending no correction on Approve (2026-10-18), step 3 failed: the court order case started on

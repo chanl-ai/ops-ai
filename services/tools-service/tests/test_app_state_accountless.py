@@ -1,6 +1,7 @@
 """A template pack (a plugin with no endpoint, such as the built-in core case types) has no account to sign in, so
 turning it on is all it takes: its card reads connected once on and off once off, never needing a sign-in or an
-account it can never have. Rig: test_app_accounts, with the built-in core pack loaded beside the desk plugin."""
+account it can never have, and the Apps list leaves it out, as no app a person connects. Rig: test_app_accounts, with
+the built-in core pack loaded beside the desk plugin."""
 
 from __future__ import annotations
 
@@ -52,19 +53,28 @@ async def client(
 
 
 async def state(c: httpx.AsyncClient, tenant: str) -> str:
-    r = await c.get("/v1/apps", params={"ids": APP}, headers=admin(tenant))
+    r = await c.get(f"/v1/apps/{APP}", headers=admin(tenant))
     assert r.status_code == 200, r.text
-    return next(x for x in r.json()["data"]["data"] if x["id"] == APP)["appState"]
+    return r.json()["data"]["card"]["appState"]
+
+
+async def listed(c: httpx.AsyncClient, tenant: str) -> list[str]:
+    r = await c.get("/v1/apps", params={"pageSize": 100}, headers=admin(tenant))
+    assert r.status_code == 200, r.text
+    return [x["id"] for x in r.json()["data"]["data"]]
 
 
 async def test_a_template_pack_turned_on_reads_connected_and_off_again_when_turned_off(
     client: httpx.AsyncClient, tenant: str
 ) -> None:
     assert await state(client, tenant) == "off"
+    assert APP not in await listed(client, tenant)
     on = await client.put(f"/v1/apps/{APP}/team", json={"enabled": True, "sandbox": False}, headers=admin(tenant))
     assert on.status_code == 200, on.text
     assert on.json()["data"]["connectionId"] is None
     assert await state(client, tenant) == "connected"
+    # A content pack has no tools and no sign-in: the Apps list never holds it, on or off; its page still answers.
+    assert APP not in await listed(client, tenant)
     off = await client.put(f"/v1/apps/{APP}/team", json={"enabled": False, "sandbox": False}, headers=admin(tenant))
     assert off.status_code == 200, off.text
     assert await state(client, tenant) == "off"

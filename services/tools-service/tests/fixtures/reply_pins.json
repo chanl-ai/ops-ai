@@ -198,6 +198,11 @@
        "pluginId": null,
        "sandboxId": null,
        "signIn": "team",
+       "signIns": {
+        "connected": 0,
+        "expired": 0,
+        "refused": 0
+       },
        "state": "not_signed_in",
        "status": "draft",
        "toolsAdded": null,
@@ -228,6 +233,11 @@
        "pluginId": null,
        "sandboxId": null,
        "signIn": "team",
+       "signIns": {
+        "connected": 0,
+        "expired": 0,
+        "refused": 0
+       },
        "state": "not_signed_in",
        "status": "draft",
        "toolsAdded": null,
@@ -292,8 +302,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "App app_nobody was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -388,6 +400,7 @@
       "pluginId": null,
       "sandboxId": null,
       "signIn": "team",
+      "signIns": null,
       "state": "not_signed_in",
       "status": "draft",
       "toolsAdded": null,
@@ -776,8 +789,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "10.20.0.0/16 on the egress allow-list was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -846,8 +861,10 @@
        "msg": "Field required"
       }
      ],
+     "kind": "input",
      "message": "tool: Field required",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 400
     },
     "success": false
@@ -864,8 +881,10 @@
      "details": {
       "scope": "tools:run"
      },
+     "kind": "refused",
      "message": "This service token does not hold the tools:run scope.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 403
     },
     "success": false
@@ -880,8 +899,10 @@
    "body": {
     "error": {
      "code": "unauthorized",
+     "kind": "refused",
      "message": "Sign in, or send a valid API key.",
      "requestId": "<id:req>",
+     "retryable": true,
      "status": 401
     },
     "success": false
@@ -930,8 +951,10 @@
        "fence is at generation 2"
       ]
      },
+     "kind": "input",
      "message": "fence is at generation 2",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 409
     },
     "success": false
@@ -955,8 +978,10 @@
        "msg": "Input should be greater than or equal to 1"
       }
      ],
+     "kind": "input",
      "message": "generation: Input should be greater than or equal to 1",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 400
     },
     "success": false
@@ -980,8 +1005,10 @@
        "msg": "Extra inputs are not permitted"
       }
      ],
+     "kind": "input",
      "message": "owner: Extra inputs are not permitted",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 400
     },
     "success": false
@@ -2031,8 +2058,10 @@
      "details": {
       "scope": "tools:view"
      },
+     "kind": "refused",
      "message": "This service token does not hold the tools:view scope.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 403
     },
     "success": false
@@ -2060,6 +2089,11 @@
        "name": "Marcus Webb",
        "sin": "123-456-789"
       }
+     },
+     "signedIn": {
+      "app": "Document service",
+      "login": "Document service",
+      "whose": "team"
      },
      "view": null
     },
@@ -2095,8 +2129,10 @@
        "tool is not registered with the gateway"
       ]
      },
+     "kind": "refused",
      "message": "tool is not registered with the gateway",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 403
     },
     "success": false
@@ -2123,8 +2159,10 @@
        "msg": "Field required"
       }
      ],
+     "kind": "input",
      "message": "key: Field required",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 400
     },
     "success": false
@@ -2139,8 +2177,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "Call was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -2173,7 +2213,8 @@
      "operation": "read",
      "outcome": "ok",
      "runAs": {
-      "kind": "team"
+      "kind": "team",
+      "login": "Document service"
      },
      "runId": "",
      "status": "ok",
@@ -2220,7 +2261,8 @@
        "operation": "read",
        "outcome": "ok",
        "runAs": {
-        "kind": "team"
+        "kind": "team",
+        "login": "Document service"
        },
        "runId": "",
        "status": "ok",
@@ -2335,8 +2377,10 @@
    "body": {
     "error": {
      "code": "conflict",
+     "kind": "input",
      "message": "A secret named LEDGER_KEY already exists. Rotate it to change its value.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 409
     },
     "success": false
@@ -2356,8 +2400,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "Secret LEDGER_API_KEY was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -2464,8 +2510,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "Secret NO_SUCH was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -2876,8 +2924,8 @@
      ],
      "facets": {
       "view": {
-       "active": 19,
-       "all": 22,
+       "active": 20,
+       "all": 23,
        "ended": 0,
        "expired": 1,
        "expiring": 2,
@@ -2889,7 +2937,7 @@
       "hasPrev": false,
       "page": 1,
       "pageSize": 20,
-      "total": 22,
+      "total": 23,
       "totalPages": 2
      }
     },
@@ -2924,8 +2972,8 @@
      ],
      "facets": {
       "view": {
-       "active": 19,
-       "all": 22,
+       "active": 20,
+       "all": 23,
        "ended": 0,
        "expired": 1,
        "expiring": 2,
@@ -2969,8 +3017,8 @@
      ],
      "facets": {
       "view": {
-       "active": 19,
-       "all": 22,
+       "active": 20,
+       "all": 23,
        "ended": 0,
        "expired": 1,
        "expiring": 2,
@@ -2982,8 +3030,8 @@
       "hasPrev": true,
       "page": 2,
       "pageSize": 1,
-      "total": 22,
-      "totalPages": 22
+      "total": 23,
+      "totalPages": 23
      }
     },
     "success": true
@@ -2994,25 +3042,6 @@
    "body": {
     "data": {
      "data": [
-      {
-       "decidedAt": "<datetime>",
-       "decidedBy": "James Richardson",
-       "environment": "production",
-       "expiresAt": "<datetime>",
-       "id": "mod_knowledge_apr3",
-       "justification": "Cite bank knowledge",
-       "major": 1,
-       "moduleId": "mod_knowledge",
-       "moduleName": "Knowledge search",
-       "operations": [
-        "search_knowledge"
-       ],
-       "requestedAt": "<datetime>",
-       "requestedBy": "Anika Singh",
-       "status": "approved",
-       "workflowId": "wf_dispute",
-       "workflowName": "Card dispute resolution"
-      },
       {
        "decidedAt": "<datetime>",
        "decidedBy": "James Richardson",
@@ -3035,8 +3064,8 @@
      ],
      "facets": {
       "view": {
-       "active": 19,
-       "all": 22,
+       "active": 20,
+       "all": 23,
        "ended": 0,
        "expired": 1,
        "expiring": 2,
@@ -3046,10 +3075,10 @@
      "pagination": {
       "hasNext": false,
       "hasPrev": true,
-      "page": 11,
+      "page": 12,
       "pageSize": 2,
-      "total": 22,
-      "totalPages": 11
+      "total": 23,
+      "totalPages": 12
      }
     },
     "success": true
@@ -3116,12 +3145,32 @@
        "status": "approved",
        "workflowId": "wf_dispute",
        "workflowName": "Card dispute resolution"
+      },
+      {
+       "constraints": "Fee reversals up to $100",
+       "decidedAt": "<datetime>",
+       "decidedBy": "Grace Liu",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_card_platform_apr3",
+       "justification": "Operations settles fee complaints it receives, with a second person approving each waiver",
+       "major": 2,
+       "moduleId": "mod_card_platform",
+       "moduleName": "Card platform",
+       "operations": [
+        "waive_fee"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Anika Singh",
+       "status": "approved",
+       "workflowId": "wf_ops_fee_disputes",
+       "workflowName": "Fee disputes"
       }
      ],
      "facets": {
       "view": {
-       "active": 19,
-       "all": 22,
+       "active": 20,
+       "all": 23,
        "ended": 0,
        "expired": 1,
        "expiring": 2,
@@ -3133,7 +3182,7 @@
       "hasPrev": false,
       "page": 1,
       "pageSize": 20,
-      "total": 3,
+      "total": 4,
       "totalPages": 1
      }
     },
@@ -3145,8 +3194,10 @@
    "body": {
     "error": {
      "code": "validation_failed",
+     "kind": "input",
      "message": "There is no view 'nothing': ask for one of active, expiring, requested, expired, ended, all.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 400
     },
     "success": false
@@ -3351,6 +3402,10 @@
         {
          "id": "wf_card_inbox",
          "name": "Card services inbox"
+        },
+        {
+         "id": "wf_ops_fee_disputes",
+         "name": "Fee disputes"
         }
        ]
       },
@@ -3685,6 +3740,10 @@
         {
          "id": "wf_card_inbox",
          "name": "Card services inbox"
+        },
+        {
+         "id": "wf_ops_fee_disputes",
+         "name": "Fee disputes"
         }
        ]
       }
@@ -4755,6 +4814,10 @@
         {
          "id": "wf_card_inbox",
          "name": "Card services inbox"
+        },
+        {
+         "id": "wf_ops_fee_disputes",
+         "name": "Fee disputes"
         }
        ]
       },
@@ -5057,6 +5120,10 @@
         {
          "id": "wf_card_inbox",
          "name": "Card services inbox"
+        },
+        {
+         "id": "wf_ops_fee_disputes",
+         "name": "Fee disputes"
         }
        ]
       },
@@ -5457,8 +5524,10 @@
    "body": {
     "error": {
      "code": "validation_failed",
+     "kind": "input",
      "message": "There is no view 'nothing': ask for one of all, needs_approval, expiring, expired, failing, security_review.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 400
     },
     "success": false
@@ -5567,8 +5636,10 @@
    "body": {
     "error": {
      "code": "team_required",
+     "kind": "refused",
      "message": "A service token on this route names its team.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 403
     },
     "success": false
@@ -5741,8 +5812,10 @@
    "body": {
     "error": {
      "code": "not_found",
+     "kind": "input",
      "message": "Module was not found.",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -5832,8 +5905,10 @@
        "tool lookup_case is not registered with the gateway"
       ]
      },
+     "kind": "input",
      "message": "tool lookup_case is not registered with the gateway",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false
@@ -5850,8 +5925,10 @@
        "tool no_such_tool is not registered with the gateway"
       ]
      },
+     "kind": "input",
      "message": "tool no_such_tool is not registered with the gateway",
      "requestId": "<id:req>",
+     "retryable": false,
      "status": 404
     },
     "success": false

@@ -116,7 +116,7 @@ async def test_a_connect_card_refusal_reaches_the_model_as_a_plain_line() -> Non
     _, result = await run(req, KernelPorts(model=model(steps, seen), tools=tools, knowledge=FixedKnowledge([])))
     told = json.dumps(seen[0])
     # The model says the ask carries on once they connect, never that they should ask again.
-    assert "carry on with this ask once they connect" in told and "ask again" not in told, told
+    assert "carry on with this ask once they sign in" in told and "ask again" not in told, told
     assert "offer no other steps" in told and "Salesforce" in told, told
     assert not any(s in told for s in ("CONNECTION_NOT_LINKED", "http", "@", "connectUrl")), told
     # The card still reads the whole refusal from the call record.

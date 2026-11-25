@@ -38,7 +38,7 @@ the pages their permission cells open, and an area with no such page is left out
 | | | Cases | `/work/cases` | `cases.view` |
 | | | Human Tasks | `/work/tasks` | `reviews.view` |
 | | | Chat (child: All chats) | `/chat` | `chat.run` |
-| | | My apps (user menu) | `/settings/account/connectors` | Always: the person's own sign-ins |
+| | | My apps (user menu) | `/work/apps` | Always: the person's own sign-ins |
 | Agent Builder | Make and change agents and what they run | Agents | `/build/agents` | `agents.view` |
 | | | Workflows (child: Runs) | `/build/workflows` | `workflows.view` |
 | | | Channels | `/build/channels` | `deployments.view` |

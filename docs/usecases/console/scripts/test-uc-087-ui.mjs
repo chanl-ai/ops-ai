@@ -33,23 +33,27 @@ await withUiStack(
       await page.getByRole('button', { name: /^Sign in/ }).first().click();
       await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
 
-      // Empty: nobody has chatted yet.
+      // Empty: nobody has chatted yet. The chats column starts folded on the chat home; Show chats opens it.
       await page.goto(`${consoleUrl}/chat`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      const empty = await page.getByText('No chats yet. Start one to ask an agent.').waitFor({ timeout: 60_000 }).then(() => true, () => false);
-      check('with no chats the rail says so and offers to start one', empty);
+      await page.getByTestId('chat-list-open').click({ timeout: 60_000 });
+      const column = page.getByTestId('chat-list-column');
+      const empty = await column.getByText('No chats yet. Ask something to start one.').waitFor({ timeout: 60_000 }).then(() => true, () => false);
+      check('with no chats the chats column says so', empty);
 
-      // Start from a suggested prompt: one click creates the thread and sends the prompt.
+      // Start from the chat home: the first message creates the thread and is sent.
       const agent = (await (await fetch(`${agents}/chat/agents`, { headers: J })).json()).data[0];
-      const prompt = agent.suggestions[0];
+      const prompt = 'What are your opening hours?';
+      const home = page.getByTestId('home-start');
       const sent = armed(page.waitForResponse((r) => r.request().method() === 'POST' && MESSAGES.test(r.url()), { timeout: 120_000 }));
-      await page.getByRole('button', { name: prompt, exact: true }).click({ timeout: 60_000 });
+      await home.getByRole('textbox', { name: 'Message' }).fill(prompt);
+      await home.getByRole('button', { name: 'Send', exact: true }).click({ timeout: 60_000 });
       await settled(sent);
       await page.waitForURL(/\/chat\/th_/, { timeout: 60_000 }).catch(() => undefined);
       const tid = new URL(page.url()).pathname.split('/').pop();
       const regenerate = page.getByRole('button', { name: 'Regenerate' });
       const answered = await regenerate.waitFor({ timeout: 60_000 }).then(() => true, () => false);
       const stored = tid?.startsWith('th_') ? await thread(tid) : null;
-      check('a suggested prompt starts a thread and is answered', answered && stored?.messages[0]?.content === prompt && stored.messages.length === 2, { prompt, tid, messages: stored?.messages.map((m) => `${m.role}: ${m.content.slice(0, 60)}`) });
+      check('a first message from the chat home starts a thread and is answered', answered && stored?.messages[0]?.content === prompt && stored.messages.length === 2, { prompt, tid, messages: stored?.messages.map((m) => `${m.role}: ${m.content.slice(0, 60)}`) });
 
       // Regenerate: the answer is replaced, not added.
       const before = await assistants(tid);
@@ -95,7 +99,7 @@ await withUiStack(
       const afterRetry = await thread(tid);
       check('a refused send shows why and keeps the message, and Retry sends it', refused && reason && afterRetry.messages.length === 4 && afterRetry.messages[2].content === 'Check my limits', { refused, reason, messages: afterRetry.messages.length });
 
-      // The rail pages by cursor, and search runs on the server: the oldest thread, past the first page, is found by
+      // The chats column pages by cursor as it scrolls, and search runs on the server: the oldest thread, past the first page, is found by
       // words in its question that its title does not show.
       const make = async () => (await (await fetch(`${agents}/chat/threads`, { method: 'POST', headers: J, body: JSON.stringify({ agentId: agent.id, kbIds: [] }) })).json()).data.id;
       const oldest = await make();
@@ -105,31 +109,38 @@ await withUiStack(
       const searches = [];
       page.on('request', (r) => r.url().includes('/chat/threads?') && new URL(r.url()).searchParams.get('search') && searches.push(new URL(r.url()).searchParams.get('search')));
       await page.goto(`${consoleUrl}/chat`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      const rows = page.locator('a[href^="/chat/th_"]');
+      // Opened once, the column stays open in this browser.
+      const ROWS = '[data-testid="chat-list-column"] a[href^="/chat/th_"]';
+      const rows = page.locator(ROWS);
       await rows.first().waitFor({ timeout: 60_000 });
+      await page.waitForFunction((sel) => document.querySelectorAll(sel).length > 0, ROWS);
       const first = await rows.count();
-      const more = page.getByRole('button', { name: 'Show more chats' });
-      const offered = await more.isVisible();
-      await page.getByRole('textbox', { name: 'Search chats' }).fill('saskatchewan');
-      await page.waitForFunction(() => document.querySelectorAll('a[href^="/chat/th_"]').length === 1, null, { timeout: 15_000 }).catch(() => undefined);
+      const more = column.getByTestId('chat-list-more');
+      const offered = (await more.count()) > 0;
+      await column.getByRole('textbox', { name: 'Search chats' }).fill('saskatchewan');
+      await page.waitForFunction((sel) => document.querySelectorAll(sel).length === 1, ROWS, { timeout: 15_000 }).catch(() => undefined);
       const found = await rows.evaluateAll((els) => els.map((e) => e.getAttribute('href')));
       const title = (await thread(oldest)).title;
       check('search runs on the server and finds a question its title does not show, past the first page', found.length === 1 && found[0] === `/chat/${oldest}` && !/saskatchewan/i.test(title) && searches.includes('saskatchewan'), { found, title, searches, first });
-      await page.getByRole('textbox', { name: 'Search chats' }).fill('');
-      await page.waitForFunction((n) => document.querySelectorAll('a[href^="/chat/th_"]').length === n, RAIL_PAGE, { timeout: 15_000 }).catch(() => undefined);
-      await more.click();
-      await page.waitForFunction((n) => document.querySelectorAll('a[href^="/chat/th_"]').length === n, total, { timeout: 15_000 }).catch(() => undefined);
+      await column.getByRole('textbox', { name: 'Search chats' }).fill('');
+      await page.waitForFunction(([sel, n]) => document.querySelectorAll(sel).length === n, [ROWS, RAIL_PAGE], { timeout: 15_000 }).catch(() => undefined);
+      // Scrolling the end of the list into view reads the next page.
+      for (let i = 0; i < 5 && (await rows.count()) < total; i++) {
+        await more.scrollIntoViewIfNeeded().catch(() => undefined);
+        await page.waitForTimeout(1_000);
+      }
+      await page.waitForFunction(([sel, n]) => document.querySelectorAll(sel).length === n, [ROWS, total], { timeout: 15_000 }).catch(() => undefined);
       const all = await rows.evaluateAll((els) => els.map((e) => e.getAttribute('href')));
-      check('the rail shows a page of chats and the next page after it, with no chat twice', first === RAIL_PAGE && offered && all.length === total && new Set(all).size === total && !(await more.isVisible()), { first, offered, shown: all.length, unique: new Set(all).size, total });
+      check('the chats column shows a page of chats and reads the next as it scrolls, with no chat twice', first === RAIL_PAGE && offered && all.length === total && new Set(all).size === total && (await more.count()) === 0, { first, offered, shown: all.length, unique: new Set(all).size, total });
 
-      // Error: the list cannot load; the rail says so with Retry, and Retry loads it.
+      // Error: the list cannot load; the column says so on a button that tries again, and it loads.
       await page.route('**/chat/threads?*', (route) => (route.request().method() === 'GET' ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ success: false, error: { code: 'internal', message: 'Something went wrong.', status: 500 } }) }) : route.continue()));
       await page.reload({ waitUntil: 'domcontentloaded' });
-      const failed = await page.getByText(/Couldn’t load chats/).waitFor({ timeout: 60_000 }).then(() => true, () => false);
+      const failed = await column.getByText(/Couldn’t load chats/).waitFor({ timeout: 60_000 }).then(() => true, () => false);
       await page.unroute('**/chat/threads?*');
-      if (failed) await page.getByRole('button', { name: 'Retry', exact: true }).click();
+      if (failed) await column.getByRole('button', { name: 'Couldn’t load chats. Try again' }).click();
       const recovered = await rows.first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
-      check('a list that cannot load says so with Retry, and Retry loads it', failed && recovered, { failed, recovered });
+      check('a list that cannot load says so on a button that tries again, and it loads', failed && recovered, { failed, recovered });
 
       check('no page errors', errors.length === 0, errors);
     } finally {

@@ -17,9 +17,15 @@ ROOT = Path(__file__).resolve().parents[2]
 CONSOLE_RAN = "\N{INFORMATION SOURCE} tests"  # node --test's summary line, printed by the console's verify
 
 
-def gate(tmp_path: Path, changes: dict[str, str], search_path: str | None = None) -> subprocess.CompletedProcess[str]:
-    """verify-staged.sh on HEAD plus `changes` (path to full content), each written as a blob into a private index."""
-    env = {**os.environ, "GIT_INDEX_FILE": str(tmp_path / "index")} | ({"PATH": search_path} if search_path else {})
+def gate(
+    tmp_path: Path, changes: dict[str, str], search_path: str | None = None, *, full: bool = True
+) -> subprocess.CompletedProcess[str]:
+    """verify-staged.sh on HEAD plus `changes` (path to full content), each written as a blob into a private index.
+
+    `full=False` leaves out OPS_FULL_HOOK: ruff and pyright on the staged Python run either way, and the make checks it
+    adds take over ten minutes on a service file."""
+    env = {k: v for k, v in os.environ.items() if k != "OPS_FULL_HOOK"} | {"GIT_INDEX_FILE": str(tmp_path / "index")}
+    env |= ({"OPS_FULL_HOOK": "1"} if full else {}) | ({"PATH": search_path} if search_path else {})
     subprocess.run(["git", "read-tree", "HEAD"], cwd=ROOT, env=env, check=True)
     for path, content in changes.items():
         blob = subprocess.run(
@@ -73,7 +79,8 @@ def test_a_clean_typed_file_passes_with_its_imports_read_once(tmp_path: Path) ->
 def test_a_gate_still_runs_when_many_files_follow_its_match(tmp_path: Path) -> None:
     # A path a gate matches, then thousands more: `printf | grep -q` under pipefail stopped writing at the first match,
     # read the broken pipe as no match and skipped the gate. A changed dependencies page must still fail its check.
-    env = {**os.environ, "GIT_INDEX_FILE": str(tmp_path / "index")}
+    # The check list (sbom, k8s) runs under OPS_FULL_HOOK=1; a plain commit leaves it to CI's checks job.
+    env = {**os.environ, "GIT_INDEX_FILE": str(tmp_path / "index"), "OPS_FULL_HOOK": "1"}
     subprocess.run(["git", "read-tree", "HEAD"], cwd=ROOT, env=env, check=True)
     page = "docs/architecture/dependencies.md"
     blob = subprocess.run(
@@ -145,3 +152,22 @@ def test_a_worktree_without_a_venv_names_the_missing_install_not_a_home_path(tmp
     out = done.stdout + done.stderr
     assert done.returncode != 0 and "this worktree has no .venv" in out and "uv sync" in out, out
     assert "names a home path" not in out, out
+
+
+GUARDRAILS = "services/agents-service/src/ops_agents/api/guardrails.py"
+
+
+def test_a_comment_only_change_to_a_service_file_passes_pyright_in_the_export(tmp_path: Path) -> None:
+    # The venv's editable install points `ops_agents` at the checkout while the file's relative imports read the export,
+    # so one PublishRequestRow was two types and a comment-only commit was refused with 29 errors on an unchanged HEAD.
+    old = "from __future__ import annotations\n"
+    changed = at_head(GUARDRAILS).replace(old, "from __future__ import annotations  # probe\n", 1)
+    done = gate(tmp_path, {GUARDRAILS: changed}, full=False)
+    out = done.stdout + done.stderr
+    assert done.returncode == 0, out[-2000:]
+
+
+def test_a_real_type_error_in_a_service_file_still_fails_pyright_in_the_export(tmp_path: Path) -> None:
+    done = gate(tmp_path, {GUARDRAILS: at_head(GUARDRAILS) + '\n\n_PROBE: int = "not a number"\n'}, full=False)
+    out = done.stdout + done.stderr
+    assert done.returncode != 0 and "reportAssignmentType" in out and "pyright refused" in out, out[-2000:]

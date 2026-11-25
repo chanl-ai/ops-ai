@@ -47,7 +47,7 @@ Status: current, checked against the code on 2026-11-18. Designed and not built:
 | Thread | Deployment (or none, for direct API use) | Version and digest, state, external key, parent thread | One active run at a time; keeps its version until it ends or is migrated |
 | Run | Thread | Input or decision, events, status, owner, generation | Holds the thread's lease while it runs |
 | Interrupt | Run, at one node | Payload, gated call, SLA block | Resumes once per decision |
-| Review | Interrupt, publish request or manual-handling item | Needs, eligible approvers, due time, decisions | The requester does not decide unless the team turns `requesterMayDecide` on |
+| Review | Interrupt, publish request or manual-handling item | Needs, eligible approvers, due time, decisions | The requester decides too, unless the team turned the two-person rule on (`requesterMayDecide` off) and they are not an Admin of the team |
 | Approval token | Review decision | Binding to one call's input hash | Expires in 15 minutes; any edit to the input invalidates it |
 | Timer | Interrupt and round | Kind, due time, claim | Fires at most once per interrupt and round |
 | Tool call | Run and step | Input hash, decision, reasons, outcome | One effect per `(thread, step, tool, inputHash)` |

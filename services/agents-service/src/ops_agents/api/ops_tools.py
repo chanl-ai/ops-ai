@@ -56,22 +56,26 @@ SYSTEM = "system:ops-assistant"
 # The built-in read tools tools-service provisions in every team (its BUILT_IN apps): the assistant is granted
 # them like any other tool, through the team's tool gateway.
 BUILT_IN_READS = ("search_knowledge", "read_file", "read_document")
-# The team's Ops Assistant, the team default agents-service provisions: read tools only, fixed instructions.
+# The Workspace built-in app's tools (tools-service seed.WORKSPACE_TOOLS), granted the same way, so a new team can
+# build and manage its workspace from chat: each runs as the person asking, with only their own rights.
+WORKSPACE_TOOLS = ("draft_agent", "invite_people")
+# The team's Ops Assistant, the team default agents-service provisions: built-in tools, fixed instructions.
 # `version` rises with any change here; a team's assistant nobody changed takes it at the next start or first chat.
 # The core names no app, team, record type or scenario (tests/unit/test_ops_assistant_prompt.py): what a team can reach
 # comes to each turn as data, its apps and the skills their plugins ship, never as a rule written here.
 ASSISTANT_FRAGMENTS: dict[str, str] = {
     "identity": "You are the team's assistant in Ops AI. You work for the person you are talking with, as them: you "
-    "read only what they may see, and a change you propose waits for a person's approval before it happens.",
+    "read only what they may see and change only what they may change. A draft you make is not live until it is "
+    "published; a change that takes effect at once waits for the person's yes on a card.",
     "act-first": "Act before asking: look things up with the tools you have, with sensible defaults (the person's own, "
     "open, recent) instead of asking which. Make independent reads together in one step. Before using an app, "
     "load the listed skill whose description fits the ask. Ask one short question only before a change, when "
     "nothing you can reach holds the answer, or when two readings would lead to different work, and ask for "
     "one thing at a time, giving its likely answers as followUps with present. Never ask for a token, "
     "password or address, and never give command-line or API steps. If an app you need is off or not "
-    "installed, say so in one line and who can help; when you need a sign-in a Connect card appears: say in "
-    "one line that you carry on once they connect, never that they should ask again; after it you go on with the "
-    'same ask. On "again", repeat the last call with the same arguments.',
+    "installed, say so in one line and who can help; when you need a sign-in a Sign in card appears: say in "
+    "one line that you carry on once they sign in, never that they should ask again or choose a login; after it "
+    'you go on with the same ask. On "again", repeat the last call with the same arguments.',
     "answer-style": "Answer like a colleague: the answer first, then up to four short points. Cite each fact from "
     "knowledge with its [n]. Call a record by a natural name, never its id or a tool's name. Say only what a tool "
     "result or passage holds; never invent records, buttons or apps, and never tell the person which control to "
@@ -104,9 +108,9 @@ class AssistantSeed(TypedDict):
 OPS_ASSISTANT: AssistantSeed = {
     "name": "Ops Assistant",
     "role": "Answers from the apps and knowledge your team has, as you, and drafts changes for your approval",
-    "version": 7,
+    "version": 8,
     "instructions": [{"text": text} for text in ASSISTANT_FRAGMENTS.values()],
-    "tools": list(BUILT_IN_READS),
+    "tools": [*BUILT_IN_READS, *WORKSPACE_TOOLS],
     "default_kb_ids": [],
     # It answers from every knowledge base of its team, as its role says.
     "all_team_knowledge": True,

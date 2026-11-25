@@ -35,12 +35,14 @@ setting and opens no sign-in; connecting is its own button, and it is optional f
 
 | Step | What happens |
 |---|---|
-| 1. On **Apps › Team setup**, press **Turn on** on the App's card (the App's page has the same button) | The Turn on window opens |
+| 1. On **Apps › Team setup**, press **Turn on** on the App's card (the App's page has the same button) | The Turn on window opens for an App that asks for something, such as a key or a place to sign in. An App that asks for nothing (a template pack such as Core, or Website) turns on at once, with no window, and the card reads Connected |
 | 2. For an App that asks where you sign in (Salesforce), pick the place: login.salesforce.com, test.salesforce.com, or your company's address (My Domain), typed as its host | Saved on the App's auth config |
-| 3. Pick whose account Tools use: each person's, the team's, or each person's with the team's for runs nobody started | Asked once, when the App is first turned on |
+| 3. Pick who signs in: Everyone uses the team's login, or Each person signs in | Asked once, when the App is first turned on |
 | 4. Keep **Give the team's assistant this app's read tools** ticked, or untick it | The assistant gets the read Tools when the App is saved |
 | 5. Press **Turn on** | The team's setting is saved and no sign-in window opens. The window reads, for example, **Saved. Salesforce is on for Operations**, how many read Tools were added, and **Members connect their own account from Apps › Mine** |
-| 6. Optional: press **Connect my account**, or **Connect the team account** when Tools run as the team's account | The App's own sign-in page opens; allow access there, and the window names the account that signed in |
+| 6. Optional: press **Sign in with my login**, or **Sign in the team login** when everyone uses the team's login | The App's own sign-in page opens; allow access there, and the window names the account that signed in |
+
+A template pack (Core, Starter skills) is not listed on Apps, because nobody connects an account to it. Open its page to turn it on or off: the empty template list on a page such as Skills links to it, and **Turn off** there opens the same window as for any App.
 
 An App is **Connected** only once an Account has signed in or a test has passed; saving settings alone does not count.
 The same rule holds everywhere an App's settings are saved: **Settings › Set up**, a new auth config and the Turn on
@@ -63,7 +65,7 @@ Connect window asks for more than the steps above.
 |---|---|---|
 | Platform admin | Installs the plugin (its folder in the plugins folder, or pinned in the image); it is then offered to every team. Settings fixed for every team come from the install config | The install's plugin settings ([plugins guide](plugins.md)) |
 | Security admin | Lists the App's hosts, so its sign-in and calls may leave | **Settings › Security › Egress**, Add host (and Add range for a host on a private network) |
-| Team admin | Presses **Turn on** | The window shows the App's settings (such as its API address), whose account calls use (the team's, each person's, or each person's with the team's as backup), the OAuth app (Ops AI's, or your own with its client ID and secret and the return address to register), and its sign-in address. **Turn on** saves them and opens no sign-in; **Connect my account** or **Connect the team account** after it opens the App's sign-in page |
+| Team admin | Presses **Turn on** | The window shows the App's settings (such as its API address), who signs in (Everyone uses the team's login, or Each person signs in), the OAuth app (Ops AI's, or your own with its client ID and secret and the return address to register), and its sign-in address. **Turn on** saves them and opens no sign-in; **Sign in with my login** or **Sign in the team login** after it opens the App's sign-in page |
 
 The App's page is **Data › Apps** then the App's name, at `/integrations/apps/plugin:<plugin id>`. One Connect is
 enough to use it everywhere: test runs and live runs both sign in with the account you connected.
@@ -90,12 +92,13 @@ again, and removed from whatever an App answers. A Security admin adds, rotates 
 
 ## A run waiting for a person
 
-When a workflow acts for a person who has not connected their own Account of an App, the run waits instead of failing.
-**Human Tasks** shows a task, **Connect your <App> account to continue**:
+When a workflow acts for a person who has not signed in to an App each person signs in to, the run waits instead of
+failing. **Human Tasks** shows a task, **Sign in to <App> to continue**:
 
-- The person it waits for presses **Connect my account**. Once they have connected, the run goes on by itself.
-- Where the App has a team Account, someone allowed to run as it (team admins by default) can press **Run as the team
-  account**, and the step goes on as the team Account.
+- The person it waits for presses **Sign in to <App>**. Once they have signed in, the run goes on by itself. They are
+  never asked to choose between their own login and the team's: that is the App's setting.
+- Where the App has a team login, someone else allowed to run as it (team admins by default) can press **Run with the
+  team login**, and the step goes on with it.
 
 ## Turn an app off
 

@@ -24,8 +24,10 @@
             "msg": "Field required"
           }
         ],
+        "kind": "input",
         "message": "query.name: Field required",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -45,8 +47,10 @@
             "msg": "List should have at least 1 item after validation, not 0"
           }
         ],
+        "kind": "input",
         "message": "moduleIds: List should have at least 1 item after validation, not 0",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -79,8 +83,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "agentId: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -103,8 +109,10 @@
         "details": {
           "scope": "workflows:view"
         },
+        "kind": "refused",
         "message": "This service token does not hold the workflows:view scope.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -241,8 +249,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Thread was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -262,8 +272,10 @@
             "msg": "String should have at least 1 character"
           }
         ],
+        "kind": "input",
         "message": "reason: String should have at least 1 character",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -283,8 +295,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "team: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -313,8 +327,10 @@
     "body": {
       "error": {
         "code": "unauthorized",
+        "kind": "refused",
         "message": "The identity provider confirmed a different account.",
         "requestId": "<req>",
+        "retryable": true,
         "status": 401
       },
       "success": false
@@ -325,8 +341,10 @@
     "body": {
       "error": {
         "code": "unauthorized",
+        "kind": "refused",
         "message": "The identity provider's answer could not be read.",
         "requestId": "<req>",
+        "retryable": true,
         "status": 401
       },
       "success": false
@@ -353,8 +371,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "otp: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -365,8 +385,10 @@
     "body": {
       "error": {
         "code": "unauthorized",
+        "kind": "refused",
         "message": "That code is not right.",
         "requestId": "<req>",
+        "retryable": true,
         "status": 401
       },
       "success": false
@@ -377,8 +399,10 @@
     "body": {
       "error": {
         "code": "unauthorized",
+        "kind": "refused",
         "message": "That password is not right.",
         "requestId": "<req>",
+        "retryable": true,
         "status": 401
       },
       "success": false
@@ -561,8 +585,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Tool no_such_tool was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -1140,8 +1166,10 @@
         "details": {
           "scope": "agents:view"
         },
+        "kind": "refused",
         "message": "This service token does not hold the agents:view scope.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -1161,8 +1189,10 @@
             "msg": "String should have at least 1 character"
           }
         ],
+        "kind": "input",
         "message": "query.tools: String should have at least 1 character",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false

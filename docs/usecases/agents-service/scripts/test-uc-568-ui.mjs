@@ -237,7 +237,10 @@ try {
           await page.getByTestId('file-read-propose').click();
           await page.getByTestId('extract-submit').click();
           const names = page.getByTestId('proposed-field');
-          await names.first().waitFor({ timeout: 240_000 });
+          await names.first().waitFor({ timeout: 240_000 }).catch(async (e) => {
+            await page.screenshot({ path: join(SHOTS, 'proposed-read-missing-1280.png'), fullPage: true });
+            throw e;
+          });
           const keys = await names.evaluateAll((els) => els.map((e) => e.value ?? e.textContent));
           await names.nth(keys.indexOf('taxpayer')).fill('debtor_name');
           await page.screenshot({ path: join(SHOTS, 'proposed-read-1280.png'), fullPage: true });
@@ -388,22 +391,26 @@ try {
           await page.getByTestId('start-from-file').click();
           await page.locator('input[type="file"]').first().setInputFiles({ name: 'customers.csv', mimeType: 'text/csv', buffer: Buffer.from(CSV) });
           // Once the file is chosen the drop zone gives way to the file's own row; removing the file brings it back.
-          const zone = page.getByRole('button', { name: /^Drop a CSV or Excel file here or choose one/ });
+          // The zone by its drawn words: the hidden file input carries the same name as an accessible button.
+          const zone = page.getByText('Drop a CSV or Excel file here or choose one', { exact: true });
           await page.getByTestId('batch-file-items').waitFor({ timeout: 60_000 });
-          const collapsed = !(await zone.isVisible()) && (await page.getByTestId('batch-file-items').innerText()).includes('customers.csv');
+          const zoneShown = await zone.isVisible();
+          const items = await page.getByTestId('batch-file-items').innerText();
+          await page.screenshot({ path: join(SHOTS, 'start-from-file-chosen-1280.png') });
+          const collapsed = !zoneShown && items.includes('customers.csv');
           // The dialog only picks the file (dialogs stay small); the check and the table are on their own page.
           const dryInDialog = await page.getByRole('dialog').getByTestId('batch-dry-run').count();
           await page.getByTestId('batch-check').click();
-          await page.waitForURL(/\/workflows\/batches\/check\?/, { timeout: 60_000 });
+          await page.waitForURL(/\/build\/runs\/batches\/check\?/, { timeout: 60_000 });
           const onPage = (await page.getByRole('dialog').count()) === 0 && (await seen(page.getByTestId('batch-check-page'), 30_000));
           const dry = page.getByTestId('batch-dry-run');
           await dry.waitFor({ timeout: 60_000 });
           const shown = await dry.innerText();
           await page.screenshot({ path: join(SHOTS, 'start-from-file-1280.png') });
           await page.getByTestId('batch-start').click();
-          await page.waitForURL((u) => /\/workflows\/batches\/[^/?]+$/.test(u.pathname) && !u.pathname.endsWith('/check'), { timeout: 60_000 });
+          await page.waitForURL((u) => /\/build\/runs\/batches\/[^/?]+$/.test(u.pathname) && !u.pathname.endsWith('/check'), { timeout: 60_000 });
           batchUrl = page.url();
-          check('39 Start from a file shows the chosen file in place of the drop zone, the row count and the first 5 rows mapped, then starts one run per row', /\b12\b/.test(shown) && ['CUS-6001', 'CUS-6005'].every((c) => shown.includes(c)) && !shown.includes('CUS-6006') && /notes/.test(shown) && collapsed && dryInDialog === 0 && onPage, { dryInDialog, onPage, shown: shown.slice(0, 300), collapsed, batchUrl });
+          check('39 Start from a file shows the chosen file in place of the drop zone, the row count and the first 5 rows mapped, then starts one run per row', /\b12\b/.test(shown) && ['CUS-6001', 'CUS-6005'].every((c) => shown.includes(c)) && !shown.includes('CUS-6006') && /notes/.test(shown) && collapsed && dryInDialog === 0 && onPage, { dryInDialog, onPage, shown: shown.slice(0, 300), collapsed, zoneShown, items, batchUrl });
         });
 
         // 40. The batch page: counts, failed rows first, Retry failed rows, Download as CSV.

@@ -227,7 +227,7 @@ the request body.
 |---|---|---|---|---|
 | S1 | A person who has not connected is asked with a link made for them alone, their run waits, and once they connect the run goes on as them | api | 1-4 | 4 |
 | S2 | Each person's calls use their own sign-in, and a request body cannot choose whose | api | 5-7 | 7 |
-| S3 | An admin tests the connection, and a run with nobody behind it uses the team account only when the backup is on | api | 8-9 | 9 |
+| S3 | An admin tests the connection, and a run with nobody behind it is refused: the team login is never a backup | api | 8-9 | 9 |
 | S4 | A sign-in that lacks a scope is asked again, and a person who disconnects has their next run wait for them | api | 10-11 | 11 |
 | S5 | A person asked in chat connects in a pop-up and the chat goes on as them | ui | 12-13, 15 | 13 |
 | S6 | A person sees their own sign-ins in My accounts and disconnects one | ui | 14, 16 | 16 |
@@ -256,8 +256,9 @@ the request body.
 | 6 | Wanjiru connects as `supervisor@kestrel.example` with the link a call for her answers | Her waiting run goes on; Salesforce records `supervisor@kestrel.example` |
 | 7 | A call sent with a service token whose body names James as `actingFor` | Refused (an unknown field, or `CONNECTION_NOT_LINKED`); no edit reaches Salesforce |
 | 8 | Priya signs in her own account and presses Test connection | The userinfo read answers 200 with Priya's own account named; the result is stored on the account |
-| 9 | A call with nobody behind it (service token, no acting-for), backup off | `CONNECTION_NOT_LINKED`; after Priya turns the backup on and signs in the team account, the same call uses the team account |
-| 9b | The update operation is marked `needsPerson` and republished; the same call with nobody behind it, backup still on | `CONNECTION_NOT_LINKED` with reason `needs_person`; the team account is not used |
+| 9 | A call with nobody behind it (service token, no acting-for); Priya then tries to make the team login a backup | `CONNECTION_NOT_LINKED`; the change is refused (400) and the same call is refused again |
+| 9a | A team API key ticks a Schedule workflow with the same write, so the run has nobody behind it | The run ends at once without waiting; its step's error names the app and says to set it to Everyone uses the team's login, or have a person start the run |
+| 9b | The update operation is marked `needsPerson` and republished; the same call with nobody behind it | `CONNECTION_NOT_LINKED` |
 | 10 | Priya, signed in from the account itself in step 8 (its scopes only, no `cases.write`): a call for her, then a run | `CONNECTION_NOT_LINKED` with reason `insufficient_scope` and a link asking for `cases.write`; her run waits for her |
 | 11 | James lists `GET /v1/me/accounts`, then disconnects | His Salesforce sign-in is listed; after Disconnect his next run waits for him to connect again |
 | 12 | James asks a chat agent holding the update operation to move a case | The reply shows the Connect Salesforce card; nothing reaches Salesforce |
@@ -265,7 +266,7 @@ the request body.
 | 14 | He opens My connectors from the person menu | His Salesforce card is listed with the account he signed in as |
 | 15 | At 375 px, My connectors and the chat with the card | Neither page scrolls sideways |
 | 16 | He opens the card's menu, chooses Disconnect and confirms | His card offers Connect again and `GET /v1/me/accounts` returns none |
-| 17 | Priya opens the app's page, then Settings, and turns People can connect their own account off and on | It reads on; off saves `team`, on saves `person_or_team` (team backup on) |
+| 17 | Priya opens the app's page, then Settings, and picks Everyone uses the team's login, then Each person signs in | Off saves `team`; Each person signs in saves `person` with no team backup |
 | 18 | Priya opens My connectors and presses Connect on the card | The card reads `lead@kestrel.example`, and `GET /v1/me/accounts` lists it |
 | 19 | Retired: the console switch was removed (af724998) | |
 

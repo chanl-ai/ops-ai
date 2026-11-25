@@ -96,7 +96,7 @@ export function ToolsTab({ app }: { app: AppPage }) {
       <AskBeforeChanges appId={app.card.id} appName={app.card.name} />
       {asked.length > 0 && (
         <Alert data-testid="app-tool-asked">
-          <AlertTitle>{`${asked.join(', ')} ${asked.length === 1 ? 'needs a permission' : 'need permissions'} the team account has not granted`}</AlertTitle>
+          <AlertTitle>{`${asked.join(', ')} ${asked.length === 1 ? 'needs a permission' : 'need permissions'} the team login has not granted`}</AlertTitle>
           <AlertDescription>{`Each ${app.card.name} account is asked the next time it signs in. Until then, ${asked.length === 1 ? 'it cannot run' : 'they cannot run'} as that account.`}</AlertDescription>
         </Alert>
       )}

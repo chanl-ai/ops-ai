@@ -18,6 +18,8 @@ const AREA = 'agents-service';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data.token;
 const as = (token) => ({ Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
 const armed = (p) => (p.catch(() => undefined), p);
+// The skill page saves itself a second after a change; Save in the header sends it now when the change still waits.
+const saveSkill = (p) => p.getByTestId('save-skill-draft').click({ timeout: 2_000 }).catch(() => undefined);
 
 await withUiStack(
   async (consoleUrl) => {
@@ -95,9 +97,13 @@ await withUiStack(
       check('10 a blank skill\'s text starts empty', !/## Steps|## Rules/.test(empty), { empty });
       await page.goto(`${consoleUrl}/build/skills/${skill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await lineOf('Look the charge up').waitFor({ timeout: 60_000 });
+      // Endings and results sit on the Settings tab.
+      await page.getByTestId('skill-settings-tab-trigger').click();
       const endings = page.getByTestId('skill-results-section');
-      await endings.scrollIntoViewIfNeeded();
+      await endings.waitFor({ timeout: 30_000 });
       check('10 the endings section says when another skill\'s step passes', /passes only if this skill ends as done/.test(await endings.innerText()), await endings.innerText());
+      await page.getByRole('tab', { name: /^Instructions/ }).click();
+      await lineOf('Look the charge up').waitFor({ timeout: 30_000 });
       // A tool picked in the middle of a step's sentence becomes the tool the step runs, drawn once as a mention.
       await lineOf('Look the charge up').click();
       await page.keyboard.press('End');
@@ -115,8 +121,7 @@ await withUiStack(
       const toolRows = await rows.allInnerTexts();
       check('10 the Tools list shows the tool the text mentions, with no Remove', (await toolRow.count()) === 1 && (await toolRow.getByRole('button').count()) === 0, { picked, toolRows });
       const stored = armed(page.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === `${agents}/v1/skills/${skill.id}/draft`, { timeout: 60_000 }));
-      await page.getByTestId('save-skill-draft').click();
-      await page.getByTestId('save-skill-draft-confirm').click();
+      await saveSkill(page);
       const keptSteps = (await (await stored).json()).data?.content?.steps ?? [];
       const kept = keptSteps.find((s) => (s.do ?? '').includes('Look the charge up')) ?? {};
       check(
@@ -126,10 +131,12 @@ await withUiStack(
       );
       // Someone else saves first: James's save is refused. Reload shows their text and keeps his as a read-only copy,
       // and nothing saves over their text unless he chooses to.
-      // The button is off while the save is in flight, so the saved toast is waited for first.
-      await page.getByText(/Saved draft v1/).first().waitFor({ timeout: 60_000 });
-      await page.waitForFunction(() => document.querySelector('[data-testid="save-skill-draft"]')?.disabled === true, null, { timeout: 60_000 });
-      await page.waitForTimeout(800);
+      await page.locator('[data-testid="save-state"][data-state="saved"]').waitFor({ timeout: 60_000 });
+      // Their save lands before his next change, so the save of his change is the one refused.
+      await made(`/v1/skills/${skill.id}/publish-requests`, { note: 'use case' });
+      const open = (await (await fetch(`${agents}/v1/skills/${skill.id}`, { headers: J })).json()).data;
+      const THEIRS = 'Ask whether there is anything else.';
+      await made(`/v1/skills/${skill.id}/draft`, { name: `Card dispute renamed ${RUN}`, source: `${open.text}\n${THEIRS}`, baseVersion: open.version, baseDigest: open.digest }, 'PUT');
       await lineOf('Tell the cardholder what happens next').click();
       await page.keyboard.press('End');
       // One insert, as a paste is: the check is about what Reload keeps, not about key-by-key typing.
@@ -139,13 +146,8 @@ await withUiStack(
       await page.waitForTimeout(800);
       await page.setViewportSize({ width: 1440, height: 1000 });
       await lineOf('Then thank them.').waitFor({ timeout: 10_000 }).catch(() => undefined);
-      check('10 unsaved text survives a resize to 390 and back, still unsaved', /Then thank them\./.test(await doc.innerText()) && (await page.getByTestId('save-skill-draft').isEnabled()), await doc.innerText());
-      await made(`/v1/skills/${skill.id}/publish-requests`, { note: 'use case' });
-      const open = (await (await fetch(`${agents}/v1/skills/${skill.id}`, { headers: J })).json()).data;
-      const THEIRS = 'Ask whether there is anything else.';
-      await made(`/v1/skills/${skill.id}/draft`, { name: `Card dispute renamed ${RUN}`, source: `${open.text}\n${THEIRS}`, baseVersion: open.version, baseDigest: open.digest }, 'PUT');
-      await page.getByTestId('save-skill-draft').click();
-      await page.getByTestId('save-skill-draft-confirm').click();
+      check('10 his text survives a resize to 390 and back', /Then thank them\./.test(await doc.innerText()), await doc.innerText());
+      await saveSkill(page);
       const staleAlert = page.getByTestId('skill-stale-base');
       const refusedStale = await staleAlert.waitFor({ timeout: 60_000 }).then(() => true, () => false);
       await page.getByTestId('skill-stale-reload').click();
@@ -174,8 +176,7 @@ await withUiStack(
       await page.keyboard.press('End');
       await page.keyboard.insertText(' Then thank them.');
       const onTop = armed(page.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === `${agents}/v1/skills/${skill.id}/draft`, { timeout: 60_000 }));
-      await page.getByTestId('save-skill-draft').click();
-      await page.getByTestId('save-skill-draft-confirm').click();
+      await saveSkill(page);
       const top = (await (await onTop).json()).data ?? {};
       const topSteps = top.content?.steps ?? [];
       const said = topSteps.map((s) => s.do ?? '').join('\n');
@@ -201,8 +202,7 @@ await withUiStack(
         await slow.keyboard.insertText(` mine${n}.`);
         const read = (await (await fetch(`${agents}/v1/skills/${raced.id}`, { headers: J })).json()).data;
         const put = await fetch(`${agents}/v1/skills/${raced.id}/draft`, { method: 'PUT', headers: J, body: JSON.stringify({ source: `${read.text}\nSay theirs${n}.`, baseVersion: read.version, baseDigest: read.digest }) });
-        await slow.getByTestId('save-skill-draft').click();
-        await slow.getByTestId('save-skill-draft-confirm').click();
+        await saveSkill(slow);
         await slow.getByTestId('skill-stale-base').waitFor({ timeout: 30_000 });
         await slow.getByTestId('skill-stale-reload').click();
         await slow.getByTestId('skill-stale-base').waitFor({ state: 'detached', timeout: 30_000 }).catch(() => undefined);
@@ -237,7 +237,8 @@ await withUiStack(
       await lineOf('Offer to explain the review').waitFor({ timeout: 60_000 });
       const legend = page.getByTestId('sop-condition-how');
       await legend.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
-      check('10 an if line shows that the agent decides', (await legend.count()) >= 1 && /^agent decides$/.test(await legend.first().innerText()), await legend.allInnerTexts());
+      // A condition in words is judged by a model; only a condition on a value reads as checked.
+      check('10 an if line shows that the agent decides', (await legend.count()) >= 1 && /^judged$/.test(await legend.first().innerText()), await legend.allInnerTexts());
       await shootBothWidths(page, AREA, 'uc-757-skill-text-admin', async () => {});
 
       await page.setViewportSize({ width: 1440, height: 1000 });
@@ -277,13 +278,14 @@ await withUiStack(
       await page.keyboard.press('Enter');
       check('13 picking it adds it to the agent', (await added).ok());
       const saved = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${agent.id}`, { timeout: 60_000 }));
-      check('14 the brief saves on its own and the status says it', (await saved).ok() && (await page.getByTestId('agent-save-status').filter({ hasText: /saved/i }).waitFor({ timeout: 30_000 }).then(() => true, () => false)), await page.getByTestId('agent-save-status').innerText());
+      check('14 the brief saves on its own and the status says it', (await saved).ok() && (await page.locator('[data-testid="save-state"][data-state="saved"]').waitFor({ timeout: 30_000 }).then(() => true, () => false)), await page.getByTestId('save-state').innerText());
       const after = (await (await fetch(`${agents}/v1/agents/${agent.id}`, { headers: J })).json()).data;
       check('15 the agent now holds the tool and its brief mentions it', after.toolIds.length === 1 && /@tool:/.test(after.brief.howToAnswer), { toolIds: after.toolIds, how: after.brief?.howToAnswer });
 
       // 16. The model and limits form stays closed until opened; the leave guard holds unsaved text.
-      await page.getByTestId('agent-model-limits-toggle').click();
-      check('16 model and limits opens to the model, thinking and the rules and limits', (await page.getByTestId('agent-model-limits').isVisible()) && (await page.getByTestId('agent-rules-and-limits').isVisible()));
+      await page.getByRole('tab', { name: 'Limits' }).click();
+      await page.getByTestId('agent-model-limits').waitFor({ timeout: 60_000 });
+      check('16 the Limits tab opens to the model, thinking and the rules and limits', (await page.getByTestId('agent-model-limits').isVisible()) && (await page.getByTestId('agent-rules-and-limits').isVisible()));
       // This agent has no model chosen, as every agent made from the SDK or the command line: how it thinks still saves.
       const thought = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/v1/agents/${agent.id}`), { timeout: 60_000 });
       await page.locator('#ag-thinking').click();
@@ -298,27 +300,39 @@ await withUiStack(
       const herGoal = 'Every dispute ends with a dated next step.';
       const hers = await saveAgent(agents, as(await tokenFor(PRIYA)), agent.id, { skillMenu: 'attached', brief: { ...opened.brief, goal: herGoal }, patterns: { ...opened.patterns, parallelReads: false } });
       const refused = page.waitForResponse(agentSave, { timeout: 60_000 });
-      await brief.getByRole('group', { name: 'Job' }).click();
+      // Thinking's save from step 16 lands first; the brief is read-only while a save is in flight.
+      await page.locator('[data-testid="save-state"][data-state="saved"]').waitFor({ timeout: 30_000 });
+      await page.getByRole('tab', { name: 'Settings' }).click();
+      // The brief's editor draws after the tab opens; text typed before it is ready goes nowhere.
+      await brief.locator('[contenteditable="true"]').first().waitFor({ timeout: 30_000 });
+      // The Job text itself: the group's middle can fall on its locked heading, which takes no cursor.
+      await brief.getByRole('group', { name: 'Job' }).locator('[data-node-view-content]').first().click();
       await page.keyboard.press('End');
       await page.keyboard.insertText(' By phone or chat.');
-      // Thinking sits in the same group of settings as the parallel reads she switched off.
+      const typed = await brief.getByText('By phone or chat.').first().waitFor({ timeout: 10_000 }).then(() => true, () => false);
+      // Thinking sits in the same group of settings as the parallel reads she switched off, on the Limits tab; the
+      // draft is kept across tabs.
+      await page.getByRole('tab', { name: 'Limits' }).click();
       await page.locator('#ag-thinking').click();
       await page.getByRole('option', { name: 'Low' }).click();
       const refusedWith = (await refused).status();
+      // The notice sits above the brief, on Settings.
+      await page.getByRole('tab', { name: 'Settings' }).click();
       const told = await page.getByTestId('agent-stale-base').waitFor({ timeout: 30_000 }).then(() => page.getByTestId('agent-stale-base').innerText(), () => '');
       check('20 a change made after another person saved is refused, and the page says who saved', hers.ok && refusedWith === 409 && /p\.shah@harborpine\.example saved a newer draft/.test(told), { hers: hers.status, refusedWith, told });
       const resent = page.waitForResponse((r) => agentSave(r) && r.ok(), { timeout: 60_000 });
       await page.getByTestId('agent-stale-reload').click();
       const both = (await (await resent).json()).data;
-      check('20 reloading keeps his unsaved change and hers, in the brief and in a group of settings', / By phone or chat\.$/.test(both?.brief?.purpose ?? '') && both?.brief?.goal === herGoal && both?.patterns?.thinking === 'low' && both?.patterns?.parallelReads === false && both?.skillMenu === 'attached' && (await page.getByTestId('agent-stale-base').count()) === 0, { purpose: both?.brief?.purpose, goal: both?.brief?.goal, patterns: both?.patterns, skillMenu: both?.skillMenu });
+      check('20 reloading keeps his unsaved change and hers, in the brief and in a group of settings', / By phone or chat\.$/.test(both?.brief?.purpose ?? '') && both?.brief?.goal === herGoal && both?.patterns?.thinking === 'low' && both?.patterns?.parallelReads === false && both?.skillMenu === 'attached' && (await page.getByTestId('agent-stale-base').count()) === 0, { typed, purpose: both?.brief?.purpose, goal: both?.brief?.goal, patterns: both?.patterns, skillMenu: both?.skillMenu });
 
       // 21. His own save from elsewhere is no clash to tell him about: the page reads the agent again and saves.
-      await page.getByTestId('agent-save-status').filter({ hasText: /saved/i }).waitFor({ timeout: 30_000 });
+      await page.locator('[data-testid="save-state"][data-state="saved"]').waitFor({ timeout: 30_000 });
       await saveAgent(agents, J, agent.id, { skillMenu: 'team' });
       const answers = [];
       const note = (r) => agentSave(r) && answers.push(r.status());
       page.on('response', note);
       const landed = page.waitForResponse((r) => agentSave(r) && r.ok(), { timeout: 60_000 });
+      await page.getByRole('tab', { name: 'Limits' }).click();
       await page.locator('#ag-thinking').click();
       await page.getByRole('option', { name: 'High' }).click();
       const mine = (await (await landed).json()).data;
@@ -372,10 +386,9 @@ await withUiStack(
       await maya.getByTestId('agent-brief').waitFor({ timeout: 120_000 });
       await maya.getByTestId('read-only-notice').waitFor({ timeout: 60_000 });
       check('18 a reviewer sees the agent page as view only, with no Edit as plain text link', (await maya.getByTestId('agent-prompt-mode').count()) === 0);
-      await maya.getByTestId('agent-uses-link').click();
-      const sheet = await maya.getByTestId('agent-uses-sheet').waitFor({ timeout: 15_000 }).then(() => true, () => false);
-      await maya.keyboard.press('Escape');
-      await maya.getByTestId('agent-model-limits-toggle').click();
+      // What the agent uses is a line of links under the brief; model and limits are on the Limits tab.
+      const sheet = await maya.getByTestId('agent-uses-link').waitFor({ timeout: 30_000 }).then(() => true, () => false);
+      await maya.getByRole('tab', { name: 'Limits' }).click();
       const limits = await maya.getByTestId('agent-model-limits').waitFor({ timeout: 15_000 }).then(() => true, () => false);
       check('18 a reviewer can open what the agent uses and its model and limits, with the fields off', sheet && limits && (await maya.locator('#ag-thinking').isDisabled()), { sheet, limits });
       await shootBothWidths(maya, AREA, 'uc-757-agent-member', async () => {});

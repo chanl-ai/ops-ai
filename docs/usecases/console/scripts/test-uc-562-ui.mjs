@@ -8,13 +8,19 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, FILES_PORT, KB_PORT, PLATFORM_PORT, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, FILES_PORT, KB_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, consoleSignIn, evidenceDir, expectSampleData, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+
+// Step 12 opens the Settings pages that still have sample parts, to check each says so and offers no Save.
+expectSampleData('/settings/account/security', '/settings/team/notifications', '/settings/team/webhooks', '/settings/policies/gates');
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
+const toolsApi = `http://127.0.0.1:${TOOLS_PORT}`;
 const files = `http://127.0.0.1:${FILES_PORT}`;
 const PASSWORD = 'northfield-demo';
 const JAMES = 'j.richardson@harborpine.example';
 const MAYA = 'm.okafor@harborpine.example';
+const PRIYA = 'p.shah@harborpine.example';
+const RAVI = 'r.menon@harborpine.example';
 const SHOTS = evidenceDir('562', 'uc');
 const LISTS = ['/agents', '/cases', '/tools', '/files', '/knowledge', '/skills'];
 
@@ -78,12 +84,19 @@ await withUiStack(
     const start = async () => (await json(await fetch(`${agents}/v1/runs`, { method: 'POST', headers: james, body: JSON.stringify({ workflowId: 'uc562_credit', input: { amount: 250 } }) })))?.runId;
     const runId = await start();
     const queuedRun = await start();
+    // A third, left unassigned: step 14 is a person who may decide it finding the way to.
+    const freeRun = await start();
     const stateOf = async (id) => (await json(await fetch(`${agents}/v1/runs/${id}`, { headers: james })))?.status;
     const runState = () => stateOf(runId);
-    const waiting = await until(async () => ((await stateOf(runId)) === 'waiting' && (await stateOf(queuedRun)) === 'waiting' ? 'waiting' : null));
+    const waiting = await until(async () => ((await stateOf(runId)) === 'waiting' && (await stateOf(queuedRun)) === 'waiting' && (await stateOf(freeRun)) === 'waiting' ? 'waiting' : null));
     const reviewId = `${runId}:review:1`;
     const queuedId = `${queuedRun}:review:1`;
+    const freeId = `${freeRun}:review:1`;
     const assigned = await json(await fetch(`${agents}/reviews/assign`, { method: 'POST', headers: maya, body: JSON.stringify({ ids: [reviewId, queuedId], assignee: MAYA }) }));
+    // A tool set whose call reads a secret no one has set, so Tools names it with a link to Secrets (step 5).
+    const unset = await json(await fetch(`${toolsApi}/v1/tool-modules/blank`, { method: 'POST', headers: james, body: JSON.stringify({ displayName: 'Statements (uc-562)', name: `uc562-statements-${Date.now() % 100000}`, type: 'http' }) }));
+    const opMade = await fetch(`${toolsApi}/v1/tool-modules/${unset.id}/operations`, { method: 'POST', headers: james, body: JSON.stringify({ name: 'latest_statement', description: 'The latest statement', access: 'read', method: 'GET', url: 'https://api.bank.test/statement?api_key={{UC562_STATEMENTS_KEY}}', headers: [] }) });
+    if (!unset?.id || opMade.status >= 300) throw new Error(`setup: the unset-secret tool set answered ${opMade.status} ${(await opMade.text()).slice(0, 200)}`);
     const made = await json(await fetch(`${agents}/v1/cases`, { method: 'POST', headers: james, body: JSON.stringify({ subject: 'Chargeback evidence for Marcus Bell', priority: 'high', customerId: 'C-2201', customerName: 'Marcus Bell' }) }));
     check('0 setup: a two-option credit task held by Maya and a case', waiting === 'waiting' && assigned?.updated?.length === 2 && !!made?.id, { runId, waiting, assigned, caseId: made?.id });
 
@@ -120,7 +133,7 @@ await withUiStack(
           const picked = (await page.getByTestId('option-reject').locator('span.font-medium').first().innerText()).split('\n')[0].trim();
           after = { picked, label: (await decide.innerText()).trim(), disabled: await decide.isDisabled() };
         }
-        check('1 a Human Task opens with no option picked and Decide waiting for a pick', checked === 0 && before.label === 'Pick a decision' && before.disabled && stillWaiting && !!after?.picked && after.label === after.picked && !after.disabled, { checked, before, stillWaiting, after });
+        check('1 a Human Task opens with no option picked and Decide waiting for a pick', checked === 0 && /^Pick .+ above$/.test(before.label) && before.disabled && stillWaiting && !!after?.picked && after.label === after.picked && !after.disabled, { checked, before, stillWaiting, after });
       });
 
       await step('2 a phone list shows the name, no Id, and a fade while more columns sit past the edge', async () => {
@@ -168,14 +181,14 @@ await withUiStack(
         await phone.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
         // An agent's page: a record page whose icon holds the back arrow, shown on hover on a desktop.
         await phone.goto(`${consoleUrl}/agents`, { waitUntil: 'load' });
-        const agentHref = await phone.locator('main tbody tr a[href^="/agents/"]').first().getAttribute('href', { timeout: 30_000 });
+        const agentHref = await phone.locator('main tbody tr a[href^="/build/agents/"]').first().getAttribute('href', { timeout: 30_000 });
         await phone.goto(`${consoleUrl}${agentHref}`, { waitUntil: 'load' });
         await phone.getByTestId('page-back-icon').waitFor({ timeout: 30_000 });
         await phone.waitForTimeout(800);
         const back = await phone.evaluate(() => ({ coarse: matchMedia('(pointer: coarse)').matches, arrow: Number(getComputedStyle(document.querySelector('[data-testid=page-back-icon] > svg')).opacity), crumbs: [...document.querySelectorAll('header nav[aria-label=Breadcrumb] a[href]')].map((a) => a.getAttribute('href')) }));
         await phone.screenshot({ path: join(SHOTS, 'agent-record-390-touch.png') });
         await ctx.close();
-        check('3 on a phone, descriptions read in full, header actions wrap, tab strips scroll with a cue, and a record page shows a way back', clamped === false && !offEdge.length && !!tabs && tabs.scrolls && /auto|scroll/.test(tabs.overflow) && tabs.fade && back.coarse && back.arrow > 0.5 && back.crumbs.includes('/agents'), { clamped, offEdge, tabs, back });
+        check('3 on a phone, descriptions read in full, header actions wrap, tab strips scroll with a cue, and a record page shows a way back', clamped === false && !offEdge.length && !!tabs && tabs.scrolls && /auto|scroll/.test(tabs.overflow) && tabs.fade && back.coarse && back.arrow > 0.5 && back.crumbs.includes('/build/agents'), { clamped, offEdge, tabs, back });
       });
 
       await step('4 Settings pages name their place, personal pages have no duplicate tabs, and Profile shows Maya', async () => {
@@ -199,7 +212,7 @@ await withUiStack(
         await item.waitFor({ timeout: 30_000 });
         const cutInQueue = await item.evaluate((el) => [...el.querySelectorAll('*')].filter((x) => x.childElementCount === 0 && x.innerText?.trim() && x.scrollWidth > x.clientWidth + 1).map((x) => x.innerText.trim()));
         const mine = (await json(await fetch(`${agents}/reviews?view=mine&pageSize=1`, { headers: maya })))?.viewCounts?.mine;
-        const counts = { overview: await page.getByTestId('sidebar-overview-count').count(), reviews: Number((await page.getByTestId('sidebar-count-reviews').innerText().catch(() => 'NaN')).trim()) };
+        const counts = { overview: await page.getByTestId('sidebar-overview-count').count(), reviews: Number((await page.getByTestId('sidebar-count-work-tasks').innerText().catch(() => 'NaN')).trim()) };
         await go('/tools/calls');
         await page.waitForTimeout(4000);
         const calls = await page.evaluate(() => ({ skeletons: document.querySelectorAll('main [data-slot=skeleton], main .animate-pulse').length, notServed: /Totals are not served yet/.test(document.querySelector('main')?.innerText ?? '') }));
@@ -208,13 +221,17 @@ await withUiStack(
         await page.locator('main tbody tr').first().waitFor({ timeout: 30_000 });
         const tools = await page.evaluate(() => ({ nested: document.querySelectorAll('main a a').length, opens: [...document.querySelectorAll('main tbody tr')].map((r) => r.querySelectorAll('[data-row-open]').length), secrets: document.querySelectorAll('main [data-testid^=unset-secrets-]').length }));
         const toolErrors = consoleErrors.filter((e) => e.at === '/tools').map((e) => e.text);
+        // A tool set's unset secrets are named on the custom tools list, which links to Secrets.
+        await go('/data/tools/custom');
+        await page.locator('main tbody tr').first().waitFor({ timeout: 30_000 });
+        tools.secrets = await page.locator('main [data-testid^=unset-secrets-]').count();
         let secretsLanded = null;
         if (tools.secrets) {
           await page.locator('main [data-testid^=unset-secrets-]').first().click();
-          await page.waitForURL((u) => u.pathname === '/integrations/credentials', { timeout: 15_000 }).catch(() => undefined);
+          await page.waitForURL((u) => u.pathname === '/data/secrets', { timeout: 15_000 }).catch(() => undefined);
           secretsLanded = new URL(page.url()).pathname;
         }
-        check('5 the queue shows amount and customer, one Human Tasks count, Tool calls settles, and Tools has no error', !cutInQueue.length && counts.overview === 0 && counts.reviews === mine && mine >= 1 && calls.skeletons === 0 && calls.notServed && tools.nested === 0 && tools.opens.every((n) => n === 1) && !toolErrors.length && tools.secrets > 0 && secretsLanded === '/integrations/credentials', { cutInQueue, counts, mine, calls, tools, toolErrors, secretsLanded });
+        check('5 the queue shows amount and customer, one Human Tasks count, Tool calls settles, and Tools has no error', !cutInQueue.length && counts.overview === 0 && counts.reviews === mine && mine >= 1 && calls.skeletons === 0 && tools.nested === 0 && tools.opens.every((n) => n === 1) && !toolErrors.length && tools.secrets > 0 && secretsLanded === '/data/secrets', { cutInQueue, counts, mine, calls, tools, toolErrors, secretsLanded });
       });
 
       await step('6 a builder sees one Runs list and one Workflows list, with no engine names', async () => {
@@ -225,7 +242,7 @@ await withUiStack(
         await shot('runs-one-list-1440');
         await go('/workflows');
         await page.locator('main tbody tr').first().waitFor({ timeout: 30_000 });
-        const list = await page.evaluate((old) => ({ kind: document.querySelectorAll('[data-testid=workflow-kind]').length, old: new RegExp(old).test(document.querySelector('main')?.innerText ?? ''), links: [...document.querySelectorAll('main tbody a[href^="/workflows/"]')].map((a) => a.getAttribute('href')).filter((h) => !h.startsWith('/workflows/definitions/') && !h.startsWith('/workflows/runs')) }), OLD.source);
+        const list = await page.evaluate((old) => ({ kind: document.querySelectorAll('[data-testid=workflow-kind]').length, old: new RegExp(old).test(document.querySelector('main')?.innerText ?? ''), rows: document.querySelectorAll('main tbody tr').length, links: [...document.querySelectorAll('main tbody a[href]')].map((a) => a.getAttribute('href')).filter((h) => !h.startsWith('/build/workflows/definitions/') && !h.startsWith('/build/runs')) }), OLD.source);
         // New workflow is a builder's button; James builds, Maya approves.
         const builder = await consoleSignIn(browser, consoleUrl, JAMES, PASSWORD, errors);
         await builder.goto(`${consoleUrl}/workflows`, { waitUntil: 'load' });
@@ -235,20 +252,20 @@ await withUiStack(
         const shapes = await dialog.locator('[role=radio]').count();
         const dialogOld = OLD.test(await dialog.innerText()) || /\bv[12]\b/.test(await dialog.innerText());
         await builder.context().close();
-        check('6 a builder sees one Runs list and one Workflows list, with no engine names', runs.tabs === 0 && !runs.old && list.kind === 0 && !list.old && !list.links.length && shapes === 0 && !dialogOld, { runs, list, shapes, dialogOld });
+        check('6 a builder sees one Runs list and one Workflows list, with no engine names', runs.tabs === 0 && !runs.old && list.kind === 0 && !list.old && list.rows > 0 && !list.links.length && shapes === 0 && !dialogOld, { runs, list, shapes, dialogOld });
       });
 
       await step('7 an old workflow link lands on the workflow, or says it is no longer available', async () => {
         await go('/workflows/uc562_credit');
-        await page.waitForURL((u) => u.pathname === '/workflows/definitions/uc562_credit', { timeout: 30_000 }).catch(() => undefined);
+        await page.waitForURL((u) => u.pathname === '/build/workflows/definitions/uc562_credit', { timeout: 30_000 }).catch(() => undefined);
         const current = new URL(page.url()).pathname;
         await go('/workflows/dispute_email');
         await page.waitForTimeout(1500);
-        const gone = await page.evaluate(() => ({ path: location.pathname, text: document.querySelector('main')?.innerText ?? '', back: !!document.querySelector('main a[href="/workflows"]') }));
+        const gone = await page.evaluate(() => ({ path: location.pathname, text: document.querySelector('main')?.innerText ?? '', back: !!document.querySelector('a[href="/build/workflows"]') }));
         await shot('old-workflow-link-1440');
         await go('/workflows/runs?run=thr_from_an_old_workflow');
         const oldRun = await page.evaluate(() => document.querySelector('main')?.innerText ?? '');
-        check('7 an old workflow link lands on the workflow, or says it is no longer available', current === '/workflows/definitions/uc562_credit' && /no longer available/i.test(gone.text) && gone.back && /no longer available/i.test(oldRun), { current, gone: { ...gone, text: gone.text.slice(0, 200) }, oldRun: oldRun.slice(0, 200) });
+        check('7 an old workflow link lands on the workflow, or says it is no longer available', current === '/build/workflows/definitions/uc562_credit' && /no longer available/i.test(gone.text) && gone.back && /no longer available/i.test(oldRun), { current, gone: { ...gone, text: gone.text.slice(0, 200) }, oldRun: oldRun.slice(0, 200) });
       });
 
       await step('8 the services are down for 30 s and the page says so, then recovers by itself', async () => {
@@ -275,7 +292,8 @@ await withUiStack(
         await page.unroute(api, down);
         const refetched = await fresh;
         const back = refetched && (await page.getByText('Chargeback evidence for Marcus Bell').first().waitFor({ timeout: 15_000 }).then(() => true, () => false));
-        const after = await page.evaluate(() => /can.t reach its services/i.test(document.body.innerText));
+        // Each failed read asks again on its own back-off, so the notice goes once the last of them answers.
+        const after = !(await page.waitForFunction(() => !/can.t reach its services/i.test(document.body.innerText), null, { timeout: 30_000 }).then(() => true, () => false));
         check('8 the services are down for 30 s and the page says so, then recovers by itself', during.said && during.text.trim().length > 0 && back && !after, { said: during.said, asked, during: during.text.slice(0, 160), refetched, back, stillSaid: after });
       });
 
@@ -339,7 +357,7 @@ await withUiStack(
         check('12 every Settings page with sample parts says why and offers no Save there, and nothing covers the Settings sidebar', routes.length > 5 && !Object.keys(bad).length && !covered, { routes: routes.length, gated, bad, covered });
       });
 
-      await step('13 an admin changes a source\'s schedule and is told it can\'t be saved yet; a save sends only what is stored', async () => {
+      await step('13 an admin changes a source\'s collection and the save sends only that field', async () => {
         // kb-service stores a source's name, collection, owner, sensitivity and tags (SourcePatch); the rest it drops.
         const STORED = ['name', 'collection', 'owner', 'sensitivity', 'tags'];
         const kb = `http://127.0.0.1:${KB_PORT}`;
@@ -360,7 +378,7 @@ await withUiStack(
         const sent = [];
         admin.on('request', (r) => { if (r.method() === 'PATCH' && r.url().includes(`/v1/sources/${source.id}`)) sent.push(Object.keys(r.postDataJSON() ?? {})); });
         await admin.locator('#set-collection').fill(`Disputes ${Date.now() % 1000}`);
-        await admin.getByRole('button', { name: 'Save changes' }).click();
+        await admin.getByTestId('save-source-settings').click();
         const toast = await admin.locator('[data-sonner-toast]').first().innerText({ timeout: 15_000 }).catch(() => '');
         await admin.waitForTimeout(1000);
         await admin.screenshot({ path: join(SHOTS, 'source-settings-not-stored-1440.png') });
@@ -371,7 +389,68 @@ await withUiStack(
         const claims = /hybrid|rerank on/i.test(presets);
         await admin.context().close();
         const extra = sent.flat().filter((k) => !STORED.includes(k));
-        check('13 an admin changes a source\'s schedule and is told it can\'t be saved yet; a save sends only what is stored', notice === 1 && scheduleOff && sent.length === 1 && !extra.length && /collection/i.test(toast) && !claims && /keyword/i.test(presets), { notice, scheduleOff, sent, extra, toast: toast.slice(0, 120), claims });
+        // Every setting is stored since source settings save and apply (schedule included): a save sends only the field changed.
+        check('13 an admin changes a source\'s collection and the save sends only that field', sent.length === 1 && !extra.length && /saved/i.test(toast) && !claims && /keyword/i.test(presets), { notice, scheduleOff, sent, extra, toast: toast.slice(0, 120), claims });
+      });
+
+      await step('14 a person who may decide an unassigned task is shown where the choices are and how to take it, and a person who may not is told why', async () => {
+        const seen = {};
+        const open = async (email, width) => {
+          const p = await consoleSignIn(browser, consoleUrl, email, PASSWORD, errors);
+          p.setDefaultTimeout(60_000);
+          await p.setViewportSize({ width, height: width < 500 ? 844 : 900 });
+          await p.goto(`${consoleUrl}/reviews?review=${encodeURIComponent(freeId)}`, { waitUntil: 'load' });
+          await p.getByTestId('decision-panel').waitFor();
+          await p.waitForTimeout(1200);
+          return p;
+        };
+        const probe = (p) =>
+          p.evaluate(() => {
+            const q = (id) => document.querySelector(`[data-testid="${id}"]`);
+            const radio = q('option-decision-form');
+            const toggle = q('task-details-toggle');
+            const decide = q('decide');
+            const vh = window.innerHeight;
+            return {
+              label: decide?.innerText.trim() ?? null,
+              disabled: decide?.disabled ?? null,
+              why: q('decide-why')?.innerText.trim() ?? null,
+              assign: !!q('assign-to-me'),
+              radioAbove: !toggle || (!!radio && radio.getBoundingClientRect().top < toggle.getBoundingClientRect().top),
+              radioInView: !!radio && radio.getBoundingClientRect().top < vh,
+              notice: q('review-decided-by')?.innerText.trim() ?? null,
+            };
+          });
+        for (const [who, email] of [['approver', MAYA], ['admin', PRIYA]]) {
+          for (const width of [1440, 390]) {
+            const p = await open(email, width);
+            seen[`${who}-${width}`] = await probe(p);
+            await p.screenshot({ path: join(SHOTS, `decide-${who}-${width}.png`) });
+            await p.context().close();
+          }
+        }
+        for (const [who, email] of [['viewer', RAVI], ['builder', JAMES]]) {
+          for (const width of [1440, 390]) {
+            const p = await open(email, width);
+            seen[`${who}-${width}`] = await probe(p);
+            await p.screenshot({ path: join(SHOTS, `decide-${who}-${width}.png`) });
+            await p.context().close();
+          }
+        }
+        // Two clicks: Assign to me, then pick and decide; the run goes on.
+        const maya1 = await open(MAYA, 1440);
+        await maya1.getByTestId('assign-to-me').click();
+        await maya1.getByTestId('assign-to-me').waitFor({ state: 'hidden', timeout: 30_000 });
+        const assignee = (await json(await fetch(`${agents}/reviews/${encodeURIComponent(freeId)}`, { headers: as(await tokenFor(MAYA)) })))?.assignee;
+        await maya1.getByTestId('option-decision-form').locator('[role=radio]').first().click();
+        await maya1.getByTestId('decide').click();
+        const moved = await until(async () => ((await stateOf(freeRun)) !== 'waiting' ? 'moved' : null), 60_000);
+        await maya1.context().close();
+        seen.viewer = seen['viewer-1440'];
+        // A builder either holds the cell (and is shown the way) or is told plainly who decides; never a bare disabled button.
+        const told = (r) => (r.assign && !!r.why) || /reviewer or admin/.test(r.notice ?? '');
+        const ok = (r) => /^Pick .+ above$/.test(r.label) && r.disabled && !!r.why && r.assign && r.radioAbove && r.radioInView;
+        check('14 an approver and an admin see Decide point at the choices, the choices in view above Details, and Assign to me, at 1440 and 390; Assign then pick then Decide moves the run on; a viewer sees no controls and is told who decides', ok(seen['approver-1440']) && ok(seen['approver-390']) && ok(seen['admin-1440']) && ok(seen['admin-390']) && !!assignee && moved === 'moved' && ['viewer-1440', 'viewer-390'].every((k) => !seen[k].assign && seen[k].label === null && /reviewer or admin/.test(seen[k].notice ?? '')) && told(seen['builder-1440']) && told(seen['builder-390']), { seen, assignee, moved });
       });
 
       check('9 no page error', !errors.length, errors.slice(0, 5));

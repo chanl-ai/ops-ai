@@ -263,6 +263,22 @@ class Api:
         }
         return await self.client.request(method, f"/v1/tool-modules{path}", headers=headers, **kw)
 
+    async def discovered(self, source: dict[str, Any], **kw: Any) -> dict[str, Any]:
+        """POST /discover, then every page of its operations: the discovery's meta with `operations` as one list."""
+        r = await self.call("POST", "/discover", json=source, **kw)
+        assert r.status_code == 200, r.text
+        found: dict[str, Any] = r.json()["data"]
+        ops: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            params = {"page": page, "pageSize": 100}
+            r = await self.call("GET", f"/discoveries/{found['id']}/operations", params=params, **kw)
+            assert r.status_code == 200, r.text
+            ops += r.json()["data"]["data"]
+            if page >= r.json()["data"]["pagination"]["totalPages"]:
+                return {**found, "operations": ops}
+            page += 1
+
     async def decide(self, module: str, decision: str = "approved", reason: str | None = None) -> httpx.Response:
         """Decides the module's open review as Reviews would, with agents-service's token."""
         detail = (await self.call("GET", f"/{module.lstrip('/')}")).json()["data"]

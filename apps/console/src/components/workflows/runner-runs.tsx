@@ -66,15 +66,18 @@ const columns: ColumnDef<Row>[] = [
   { accessorKey: 'finishedAt', header: 'Finished', meta: { kind: 'date' }, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{row.original.finishedAt ? relativeTime(row.original.finishedAt) : '—'}</span> },
 ];
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const SORT_COLUMNS = { status: 'status' };
+
 /**
  * Runs of the team's workflows, from agents-service `GET /v1/runs`: paged, filtered and
  * counted on the server. A row opens the run's own page with its graph and steps.
  */
 export function RunnerRuns() {
   const router = useRouter();
-  const list = useListParams<{ workflowId?: string[]; status?: string[] }>();
+  const list = useListParams<{ workflowId?: string[]; status?: string[] }>(undefined, undefined, undefined, SORT_COLUMNS);
   const filters = list.params.filters ?? {};
-  const query = useEngineRuns({ workflowId: filters.workflowId?.[0], status: filters.status, page: list.params.page, pageSize: list.params.pageSize });
+  const query = useEngineRuns({ workflowId: filters.workflowId?.[0], status: filters.status, page: list.params.page, pageSize: list.params.pageSize, sortBy: list.params.sortBy, sortOrder: list.params.sortOrder });
   const rows: Row[] = React.useMemo(
     () => (query.data?.data ?? []).map((r) => ({ ...r, onRowClick: (x: EngineRunRow) => router.push(`/build/runs/${encodeURIComponent(x.id)}`), rowTestId: `runner-run-row-${r.id}` })),
     [query.data, router],
@@ -111,6 +114,7 @@ export function RunnerRuns() {
         ]}
         onColumnFiltersChange={list.onColumnFiltersChange}
         serverPagination={serverPagination(list, query)}
+        serverSorting={list.serverSort}
         emptyState={
           <ListEmpty
             icon={WorkflowIcon}

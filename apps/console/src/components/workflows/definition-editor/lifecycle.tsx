@@ -36,11 +36,11 @@ export function StageBadge({ stage, testId }: { stage: DefinitionStage; testId?:
  * page never need in its text.
  */
 function VersionDetails({ version, digest }: { version: number; digest?: string }) {
-  if (!digest) return <span className="text-muted-foreground">Version {version}</span>;
+  if (!digest) return <span className="pl-3 text-muted-foreground">Version {version}</span>;
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button type="button" variant="link" size="sm" className="text-muted-foreground" data-testid="definition-version-details">
+        <Button type="button" variant="link" size="sm" className="font-normal text-muted-foreground" data-testid="definition-version-details">
           Version {version}
         </Button>
       </PopoverTrigger>
@@ -110,11 +110,6 @@ export function LifecycleActions({
   const { version, stage, liveVersion, paused, review } = lifecycle;
   return (
     <>
-      <div className="mr-auto flex flex-wrap items-center gap-2 text-sm" data-testid="definition-lifecycle">
-        <VersionDetails version={version} digest={lifecycle.digest} />
-        <StageBadge stage={stage} testId="definition-stage" />
-        <LiveElsewhere lifecycle={lifecycle} />
-      </div>
       {liveVersion !== null && (
         <Button type="button" variant="outline" onClick={() => setConfirm(paused ? 'resume' : 'pause')} data-testid={paused ? 'definition-resume' : 'definition-pause'}>
           {paused ? <Play /> : <Pause />} {paused ? 'Resume' : 'Pause'}
@@ -134,6 +129,12 @@ export function LifecycleActions({
           </Button>
         ))
       )}
+      {/* The status comes after the buttons: a wrapped row never leaves a button alone, and a status may. */}
+      <div className="flex h-9 items-center gap-1 rounded-md bg-muted/50 pr-3 text-sm whitespace-nowrap" role="status" data-testid="definition-lifecycle">
+        <VersionDetails version={version} digest={lifecycle.digest} />
+        <StageBadge stage={stage} testId="definition-stage" />
+        <LiveElsewhere lifecycle={lifecycle} />
+      </div>
       <DialogShell
         open={confirm !== null}
         onOpenChange={(o) => {

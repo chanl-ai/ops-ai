@@ -1,5 +1,7 @@
 """The sweeper: finds threads whose lease expired (their process died mid-run), records the dead run as crashed,
-takes the lease, and continues the thread from its last checkpoint on this process.
+takes the lease, and continues the thread from its last checkpoint on this process. A chat reply is a queued turn
+that a workflow worker takes over instead (chat_turns.py); this loop keeps the runs that are not turns: approval
+resumes, POST /v1/threads/{id}/runs/stream and the threads of agents and workflows a chat called.
 
 LangGraph continues from a checkpoint when invoked with no input: tasks that finished before the crash keep their
 saved writes, and the task that was running when the process died runs again from its start. A run that died before
@@ -14,7 +16,8 @@ from typing import Any
 
 from langgraph.types import Command
 
-from ops_engine.store import RUN_PREFIX, reconciler
+from ops_engine.store import RUN_PREFIX, WorkQueue, reconciler
+from ops_engine.worker import TURN
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
 from ops_service_kit.narrow import an_object
@@ -75,11 +78,14 @@ async def sweep_once(rt: Runtime, jobs: BackgroundJobs | None = None) -> list[st
     require_graphs(rt)
     assert rt.leases is not None
     recovered: list[str] = []
+    turns = WorkQueue(EngineTransactions(rt.db), rt.leases.owner, rt.leases.ttl)
     for lease in await rt.leases.expired():
         if lease.thread_id.startswith(RUN_PREFIX):
             continue  # A workflow runner thread: its worker reclaims it through the lapsed work claim, never this loop.
         if lease.thread_id.startswith(POLL_LEASE_PREFIX):
             continue  # A mailbox poll's lease: the next poll takes it over once it has expired.
+        if await turns.open_of(lease.thread_id, TURN):
+            continue  # A chat reply's: a workflow worker takes its turn over (chat_turns.py), never this loop.
         try:
             if run := await as_thread_tenant(
                 rt,

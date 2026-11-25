@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { UserCog, Users, UserX } from 'lucide-react';
+import { MailPlus, Unlink, UserCog, Users, UserX } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -11,6 +11,7 @@ import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { BulkFieldDialog, toastBulk } from '@/components/shared/bulk';
+import { ConfirmActionDialog } from '@/components/shared/confirm-action-dialog';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { InviteDialog } from '@/components/shared/invite-dialog';
 import { InviteLinksDialog } from '@/components/shared/invite-links-dialog';
@@ -21,11 +22,13 @@ import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useCan } from '@/hooks/me-queries';
-import { useInviteMembers, useInvitesToCurrentTeam, useMembers, useRemoveMembers, useSetMemberRole } from '@/hooks/settings-queries';
+import { useInviteMembers, useInvitesToCurrentTeam, useMembers, useReinviteMembers, useRemoveMembers, useSetMemberRole, useUnlinkMembers } from '@/hooks/settings-queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { useSticky } from '@/hooks/use-sticky';
-import { useTeam } from '@/hooks/use-team';
+import { useTeam, useTeamsNamed } from '@/hooks/use-team';
+import { teamLabel } from '@/components/shared/team-name';
 import { initials, relativeTime } from '@/lib/format';
 import type { Member, MemberFilters } from '@/lib/types/settings';
 import { serverPagination } from '@/components/shared/server-pagination';
@@ -82,7 +85,23 @@ function columns(canManage: boolean, showTeam: boolean, onRole: (m: Member) => v
       accessorKey: 'status',
       header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />, meta: { kind: 'status' },
       cell: ({ row }) =>
-        row.original.status === 'invited' ? <span className="text-xs text-warning-text">Invited {relativeTime(row.original.invitedAt)}</span> : <span className="text-xs text-muted-foreground">Active</span>,
+        row.original.status === 'invited' ? (
+          <span className="text-xs text-warning-text">Invited {relativeTime(row.original.invitedAt)}</span>
+        ) : (
+          <span className="flex flex-col items-start gap-0.5">
+            <span className="text-xs text-muted-foreground">Active</span>
+            {row.original.needsInvite && (
+              <Badge variant="outline" className="border-warning/40 font-normal text-warning-text" data-testid={`member-needs-invite-${row.original.id}`}>
+                Needs a new invite
+              </Badge>
+            )}
+            {row.original.linksOwnSession && (
+              <span className="max-w-48 text-xs text-muted-foreground" data-testid={`member-links-own-${row.original.id}`}>
+                Link from your own session after a password reset
+              </span>
+            )}
+          </span>
+        ),
       filterFn: facetFilterFn,
     },
     ...(canManage ? [actionsColumn(onRole, onRemove)] : []),
@@ -122,19 +141,23 @@ const STATUS_OPTIONS = [
 const SORT_COLUMNS = { name: 'name', role: 'role', status: 'status', teamId: 'teamId' };
 
 export function MembersPanel({ inviteOpen, onInviteOpenChange }: { inviteOpen: boolean; onInviteOpenChange: (open: boolean) => void }) {
-  const { team, teams } = useTeam();
+  const { team } = useTeam();
   const canManage = useCan('access', 'manage') === true;
+  const canEdit = useCan('access', 'edit') === true;
   const list = useListParams<MemberFilters>('name', 20, undefined, SORT_COLUMNS);
   const query = useMembers(list.params);
   const facets = query.data?.facets ?? {};
+  const teams = useTeamsNamed(Object.keys(facets.teamId ?? {}));
   // A list from one team has one Team value on every row; the column and facet earn their width only when it varies.
   const showTeam = Object.keys(facets.teamId ?? {}).length > 1 || !!list.params.filters?.teamId?.length;
   const invite = useInviteMembers();
   const currentTeamOnly = useInvitesToCurrentTeam();
   const setRole = useSetMemberRole();
   const remove = useRemoveMembers();
+  const reinvite = useReinviteMembers();
+  const unlink = useUnlinkMembers();
   const [links, setLinks] = React.useState<{ email: string; url: string }[]>([]);
-  const [action, setAction] = React.useState<{ kind: 'role' | 'remove'; rows: Member[] } | null>(null);
+  const [action, setAction] = React.useState<{ kind: 'role' | 'remove' | 'unlink' | 'reinvite'; rows: Member[] } | null>(null);
   const shown = useSticky(action);
   const [resetKey, setResetKey] = React.useState(0);
 
@@ -164,7 +187,7 @@ export function MembersPanel({ inviteOpen, onInviteOpenChange }: { inviteOpen: b
           filters={[
             { column: 'role', title: 'Role', options: withCounts('role', MEMBER_ROLES.map((r) => ({ value: r.value, label: r.label }))) },
             { column: 'status', title: 'Status', options: withCounts('status', STATUS_OPTIONS) },
-            ...(showTeam ? [{ column: 'teamId', title: 'Team', options: withCounts('teamId', teams.map((t) => ({ value: t.id, label: t.name }))) }] : []),
+            ...(showTeam ? [{ column: 'teamId', title: 'Team', options: withCounts('teamId', Object.keys(facets.teamId ?? {}).map((id) => ({ value: id, label: teamLabel(id, teams) }))) }] : []),
           ]}
           onColumnFiltersChange={list.onColumnFiltersChange}
           selectionResetKey={resetKey}
@@ -172,9 +195,18 @@ export function MembersPanel({ inviteOpen, onInviteOpenChange }: { inviteOpen: b
             canManage
               ? [
                   { label: 'Change role', icon: UserCog, variant: 'outline', onClick: (rows) => setAction({ kind: 'role', rows }) },
+                  { label: 'Resend invite', icon: MailPlus, variant: 'outline', onClick: (rows) => setAction({ kind: 'reinvite', rows }) },
+                  ...(canEdit ? [{ label: 'Unlink sign-in', icon: Unlink, variant: 'outline' as const, onClick: (rows: Member[]) => setAction({ kind: 'unlink', rows }) }] : []),
                   { label: 'Remove', icon: UserX, variant: 'destructive', onClick: (rows) => setAction({ kind: 'remove', rows }) },
                 ]
               : undefined
+          }
+          toolbarExtra={
+            canManage ? (
+              <Button variant="outline" size="sm" onClick={() => setAction({ kind: 'reinvite', rows: [] })} data-testid="reinvite-affected">
+                <MailPlus className="size-4" /> Resend invites
+              </Button>
+            ) : undefined
           }
           serverPagination={serverPagination(list, query)}
           serverSorting={list.serverSort}
@@ -186,8 +218,8 @@ export function MembersPanel({ inviteOpen, onInviteOpenChange }: { inviteOpen: b
         open={inviteOpen}
         onOpenChange={onInviteOpenChange}
         teamName={team?.name ?? 'team'}
-        teams={team?.scope === 'all' && !currentTeamOnly ? teams.map((t) => ({ id: t.id, name: t.name })) : undefined}
-        defaultTeamId={team?.id}
+        pickTeam={team?.scope === 'all' && !currentTeamOnly}
+        defaultTeam={team ? { id: team.id, label: team.name } : undefined}
         roles={MEMBER_ROLES}
         isPending={invite.isPending}
         onSubmit={async (input) => {
@@ -211,6 +243,48 @@ export function MembersPanel({ inviteOpen, onInviteOpenChange }: { inviteOpen: b
           const role = MEMBER_ROLES.find((r) => r.label === label)!.value;
           toastBulk(await setRole.mutateAsync({ ids: action!.rows.map((m) => m.id), role }), `Changed role to ${label} for`, 'member', nameOf);
           setResetKey((k) => k + 1);
+        }}
+      />
+      <ConfirmActionDialog
+        open={action?.kind === 'reinvite'}
+        onOpenChange={(o) => !o && setAction(null)}
+        title={shown?.rows.length ? `Send a new invite to ${shown.rows.length === 1 ? shown.rows[0].name : `${shown.rows.length} members`}?` : 'Send new invites to everyone who needs one?'}
+        consequence="Each person who cannot sign in gets a link by email, to their own address only. It works once, expires in 7 days, and links their company sign-in without changing their role. People who do not need one are skipped."
+        runsNow
+        note="No link is shown here."
+        confirmLabel="Send"
+        isPending={reinvite.isPending}
+        onConfirm={async () => {
+          try {
+            const res = await reinvite.mutateAsync(shown?.rows.length ? shown.rows.map((m) => m.id) : undefined);
+            if (res.mailed.length) toast.success(`Mailed ${res.mailed.length} ${res.mailed.length === 1 ? 'invite' : 'invites'}`);
+            else if (!res.skipped.length) toast('Nobody needs a new invite');
+            if (res.skipped.length) toastBulk({ updated: [], skipped: res.skipped }, 'Mailed', 'invite', nameOf);
+            setAction(null);
+            setResetKey((k) => k + 1);
+          } catch (e) {
+            toast.error('Couldn’t send the invites', { description: (e as Error).message });
+          }
+        }}
+      />
+      <DeleteDialog
+        open={action?.kind === 'unlink'}
+        onOpenChange={(o) => !o && setAction(null)}
+        entityType="company sign-in"
+        verb="Unlink"
+        entityName={shown?.rows.length === 1 ? shown.rows[0].name : undefined}
+        count={shown && shown.rows.length > 1 ? shown.rows.length : undefined}
+        description="They can no longer sign in through the company provider until they link it again, and any session it opened ends now. Their account, role and data stay."
+        confirmText="Unlink"
+        isLoading={unlink.isPending}
+        onConfirm={async () => {
+          try {
+            toastBulk(await unlink.mutateAsync(action!.rows.map((m) => m.id)), 'Unlinked', 'sign-in', nameOf);
+            setAction(null);
+            setResetKey((k) => k + 1);
+          } catch (e) {
+            toast.error('Couldn’t unlink', { description: (e as Error).message });
+          }
         }}
       />
       <DeleteDialog

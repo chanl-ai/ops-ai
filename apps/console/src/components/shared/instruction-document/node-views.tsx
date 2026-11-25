@@ -96,8 +96,8 @@ export function BlockView({ node }: ReactNodeViewProps) {
   const errorId = `${React.useId()}-error`;
   return (
     <NodeViewWrapper as="section" role="group" aria-label={node.attrs.label} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined} data-field={key} className="flex flex-col gap-2">
-      {/* A heading reads as a label of the card, not a field: a full-width muted band across the editor's padding. */}
-      <div contentEditable={false} className="-mx-4 bg-muted px-4 py-1.5 text-sm font-medium text-muted-foreground select-none">
+      {/* A plain heading, the size and weight of every other section heading on the page. */}
+      <div contentEditable={false} role="heading" aria-level={2} className="text-sm font-semibold select-none">
         {node.attrs.label}
       </div>
       <NodeViewContent className={error ? 'rounded-sm ring-2 ring-destructive/40' : undefined} />

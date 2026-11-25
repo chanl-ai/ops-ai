@@ -1,6 +1,6 @@
 # The use case runner puts docs/usecases/lib (usecase_harness) on the path; pyright alone cannot see it.
 # pyright: basic, reportMissingImports=false
-"""uc-762 search a long document's pieces on the server, api layer: docs/usecases/kb-service/search-a-long-document-s-
+"""uc-772 search a long document's pieces on the server, api layer: docs/usecases/kb-service/search-a-long-document-s-
 pieces.md. Own kb-service with its files-service and documents-service; no model is called."""
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ HANDBOOK = {
 
 
 def main() -> None:
-    with tempfile.TemporaryDirectory(prefix="uc-762-") as tmp, kb(Path(tmp) / "files") as k:
+    with tempfile.TemporaryDirectory(prefix="uc-772-") as tmp, kb(Path(tmp) / "files") as k:
         base = data(k.post("/v1/knowledge-bases", json={"name": "Mortgage servicing", "owner": OWNER}))
         text = data(k.post("/v1/sources", json={"type": "text", "name": "Handbook", "kbIds": [base["id"]]}))
         item = data(k.post(f"/v1/sources/{text['id']}/items", json=HANDBOOK))["item"]

@@ -231,8 +231,8 @@ export function AccountsTab({
     {!seesConfigs && signIns > 0 && (
       <p className="text-sm text-muted-foreground" data-testid="app-accounts-mine">
         {`You are signed in on ${signIns} ${signIns === 1 ? 'account' : 'accounts'} of ${name}. `}
-        <Link href="/settings/account/connectors" className="underline underline-offset-4">
-          Your own accounts are on Connectors › Mine
+        <Link href="/work/apps" className="underline underline-offset-4">
+          Your own accounts are in My apps
         </Link>
       </p>
     )}
@@ -351,7 +351,7 @@ function AccountActions({
               onSuccess: (r) => {
                 // What the test read, as one line: the status it answered, what it said, and whose sign-in it used.
                 const h = r.health;
-                const said = [h?.httpStatus ? `HTTP ${h.httpStatus}` : null, h?.status === 'ok' ? null : h?.message, `with ${own ? 'your own account' : 'the team account'}`].filter(Boolean).join(' · ');
+                const said = [h?.httpStatus ? `HTTP ${h.httpStatus}` : null, h?.status === 'ok' ? null : h?.message, `with ${own ? 'your own login' : 'the team login'}`].filter(Boolean).join(' · ');
                 if (h?.status === 'ok') toast.success(`${shownAs(a)} works`, { description: said });
                 else toast.error(`${shownAs(a)}’s test failed`, { description: said });
               },

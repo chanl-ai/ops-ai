@@ -266,7 +266,15 @@ def sign_in(email: str, password: str) -> str:
 
 
 def team_id(token: str) -> str:
-    teams = data(httpx.get(f"{PLATFORM}/v1/teams", headers={"Authorization": f"Bearer {token}"}, timeout=20), "teams")
+    teams = data(
+        httpx.get(
+            f"{PLATFORM}/v1/teams",
+            params={"search": TEAM_NAME, "pageSize": 50},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=20,
+        ),
+        "teams",
+    )["data"]
     found = next((t for t in teams if t.get("name") == TEAM_NAME), None)
     if found is None:
         raise SystemExit(f"FAIL  no team named {TEAM_NAME}; run `make sample-team` first")

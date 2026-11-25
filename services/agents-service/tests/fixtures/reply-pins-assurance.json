@@ -70,8 +70,10 @@
     "body": {
       "error": {
         "code": "empty_cases",
+        "kind": "refused",
         "message": "cases must not be empty.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -85,8 +87,10 @@
         "details": {
           "type": "rubric"
         },
+        "kind": "refused",
         "message": "Unknown check type: rubric. Allowed: calls_tool, judge, refuses, reply_contains.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -97,8 +101,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Agent ag_missing1 was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -254,8 +260,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "colour: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -269,8 +277,10 @@
         "details": {
           "type": "rubric"
         },
+        "kind": "refused",
         "message": "Unknown check type: rubric. Allowed: calls_tool, judge, refuses, reply_contains.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -293,8 +303,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot run the eval cases of agent <ag>; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -317,8 +329,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot run the eval cases of agent <ag>; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -333,8 +347,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Eval case was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -357,8 +373,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot run the eval cases of agent <ag>; a Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false
@@ -401,8 +419,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Eval run was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -666,8 +686,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Skill sk_missing1 was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -853,8 +875,10 @@
           ],
           "teamId": "team_ops"
         },
+        "kind": "refused",
         "message": "Your role cannot view the team's evals; a Viewer, Reviewer, Builder or Admin can.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 403
       },
       "success": false

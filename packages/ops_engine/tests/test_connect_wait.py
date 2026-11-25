@@ -54,7 +54,7 @@ async def test_the_run_waits_for_its_person_to_connect_and_then_sends_the_call()
     [paused] = (await g.aget_state(config("c1"))).interrupts
     wait = paused.value
     assert (wait["kind"], wait["event"], wait["key"]) == ("external", "app_account.connected", KEY), wait
-    assert wait["title"] == "Connect your CRM account to continue" and wait["app"] == "CRM", wait
+    assert wait["title"] == "Sign in to CRM to continue" and wait["app"] == "CRM", wait
     # The console opens the account under its app to connect it.
     assert (wait["connectionId"], wait["appId"]) == ("con_crm", "con_crm"), wait
     assert wait["timeoutSeconds"] == 0, "a run waiting for a person is never failed by a time limit"

@@ -2,8 +2,8 @@
 
 A knowledge snapshot's 30 days count from when its source lets it go; once they pass, the files_retention process
 deletes it unless a legal hold keeps it. That process lists the due files across tenants as ops_files_system, granted
-that read here, then deletes each as its own tenant and team. Runs on PostgreSQL and SQL Server (on SQL Server the
-system user is not bound by row security, so nothing is granted).
+that read here, then deletes each as its own tenant and team. On SQL Server the read comes from the team predicate
+functions admitting the system user (files_0017) and the grant in deploy/database/golden/mssql/grants.sql.
 
 Revision ID: files_0014
 Revises: files_0013

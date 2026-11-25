@@ -344,6 +344,12 @@ class BulkDecisionInput(TypedDict, closed=True):
     stepUpToken: NotRequired[str | None]
 
 
+class BulkRunsResult(TypedDict, closed=True):
+    action: str
+    changed: list[str]
+    skipped: list[str]
+
+
 class BulkSkip(TypedDict, closed=True):
     id: str
     reason: str
@@ -692,6 +698,11 @@ class EnvelopeBriefDraft(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeBulkRunsResult(TypedDict, closed=True):
+    data: BulkRunsResult
+    success: Literal[True]
+
+
 class EnvelopeChangeWaits(TypedDict, closed=True):
     data: ChangeWaits
     success: Literal[True]
@@ -735,8 +746,10 @@ class EnvelopeListAgentVersion(TypedDict, closed=True):
 class ErrorBody(TypedDict, closed=True):
     code: str
     details: NotRequired[Any]
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"]
     message: str
     requestId: str
+    retryable: bool
     status: int
 
 
@@ -1649,13 +1662,18 @@ class RunChild(TypedDict, closed=True):
 
 class RunFailure(TypedDict, closed=True):
     attempt: NotRequired[int | None]
-    code: NotRequired[str | None]
-    field: NotRequired[str | None]
+    code: str
+    details: NotRequired[dict[str, str | int | float | bool | None]]
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"]
     message: str
     nodeId: NotRequired[str | None]
     nodeName: NotRequired[str | None]
-    retryable: NotRequired[bool | None]
+    of: NotRequired[int | None]
+    retryAfterSeconds: NotRequired[float | None]
+    retryable: bool
     suggestion: NotRequired[str | None]
+    traceId: NotRequired[str | None]
+    userMessage: str
 
 
 class RunFile(TypedDict, closed=True):
@@ -1718,6 +1736,14 @@ class RunWaiting(TypedDict, closed=True):
     iteration: int
     node: str
     payload: dict[str, JsonValue]
+
+
+class RunsFilter(TypedDict, closed=True):
+    code: NotRequired[str | None]
+    createdFrom: NotRequired[str | None]
+    createdTo: NotRequired[str | None]
+    kind: NotRequired[str | None]
+    workflowId: NotRequired[str | None]
 
 
 class SaveBase(TypedDict, closed=True):
@@ -2172,6 +2198,11 @@ class TaskWarning(TypedDict, closed=True):
     severity: Literal["warning", "error"]
 
 
+class TeamChoice(TypedDict, closed=True):
+    id: str
+    name: str | None
+
+
 class TeamUsage(TypedDict, closed=True):
     liveWorkflows: list[str]
     runsInProgress: int
@@ -2334,6 +2365,20 @@ class ToolsNotAdded(TypedDict, closed=True):
     appId: str
     count: int
     name: str
+
+
+class TryStep(TypedDict, closed=True):
+    access: NotRequired[str | None]
+    accounts: NotRequired[dict[str, str]]
+    do: str
+    holds: NotRequired[bool | None]
+    input: NotRequired[dict[str, JsonValue]]
+    key: str
+    number: int
+    sample: NotRequired[JsonValue]
+    sampleFrom: NotRequired[Literal["last_run", "schema", "none"]]
+    test: NotRequired[str | None]
+    tool: NotRequired[str | None]
 
 
 class TurnUsage(TypedDict, closed=True):
@@ -2853,6 +2898,11 @@ class BulkResult(TypedDict, closed=True):
     updated: list[str]
 
 
+class BulkRunsRequest(TypedDict, closed=True):
+    action: Literal["redrive", "cancel"]
+    filter: NotRequired[RunsFilter]
+
+
 class CaseEventView(TypedDict, closed=True):
     at: str
     by: str
@@ -3302,11 +3352,6 @@ class EnvelopeListMailboxView(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListMemoryView(TypedDict, closed=True):
-    data: list[MemoryView]
-    success: Literal[True]
-
-
 class EnvelopeListModelAlias(TypedDict, closed=True):
     data: list[ModelAlias]
     success: Literal[True]
@@ -3522,6 +3567,12 @@ class ListResultFormView(TypedDict, closed=True):
     pagination: Pagination
 
 
+class ListResultMemoryView(TypedDict, closed=True):
+    data: list[MemoryView]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
 class ListResultTaskTypeView(TypedDict, closed=True):
     data: list[TaskTypeView]
     facets: dict[str, dict[str, int]]
@@ -3717,6 +3768,7 @@ class RunList(TypedDict, closed=True):
 
 class RunRow(TypedDict, closed=True):
     canCancel: NotRequired[bool | None]
+    canRedrive: NotRequired[bool | None]
     canRetry: NotRequired[bool | None]
     createdAt: str
     createdBy: str
@@ -3768,6 +3820,7 @@ class Skill(TypedDict, closed=True):
     needs: NotRequired[list[str] | None]
     origin: Literal["blank", "generated", "imported", "duplicated"]
     ownerTeam: str
+    ownerTeamName: NotRequired[str | None]
     parts: NotRequired[list[SkillPartSummary]]
     pendingReviewId: NotRequired[str | None]
     publishedVersion: int | None
@@ -3794,12 +3847,14 @@ class SkillList(TypedDict, closed=True):
     data: list[Skill]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
+    teamNames: NotRequired[dict[str, str]]
     viewCounts: dict[str, int]
 
 
 class SkillOptions(TypedDict, closed=True):
     knowledgeBases: list[str]
     limits: dict[str, int]
+    ownerTeams: list[TeamChoice]
     teams: list[str]
     tools: list[SkillToolRef]
 
@@ -3825,6 +3880,7 @@ class SkillPublishInfo(TypedDict, closed=True):
     kbsAdded: list[str]
     note: str
     ownerTeam: str
+    ownerTeamName: NotRequired[str | None]
     requestedBy: str
     skillId: str
     skillName: str
@@ -3990,6 +4046,21 @@ class ToolOptionsPage(TypedDict, closed=True):
 class ToolUsedBy(TypedDict, closed=True):
     agents: list[ToolUserRef]
     workflows: list[ToolUserRef]
+
+
+class TryPath(TypedDict, closed=True):
+    ends: str
+    id: str
+    label: str
+    steps: list[TryStep]
+
+
+class TryTargets(TypedDict, closed=True):
+    id: str
+    kind: Literal["skill", "workflow_step"]
+    more: NotRequired[bool]
+    name: str
+    paths: list[TryPath]
 
 
 class UpdateReview(TypedDict, closed=True):
@@ -4326,6 +4397,11 @@ class EnvelopeListResultFormView(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListResultMemoryView(TypedDict, closed=True):
+    data: ListResultMemoryView
+    success: Literal[True]
+
+
 class EnvelopeListResultTaskTypeView(TypedDict, closed=True):
     data: ListResultTaskTypeView
     success: Literal[True]
@@ -4428,6 +4504,11 @@ class EnvelopeThreadState(TypedDict, closed=True):
 
 class EnvelopeToolOptionsPage(TypedDict, closed=True):
     data: ToolOptionsPage
+    success: Literal[True]
+
+
+class EnvelopeTryTargets(TypedDict, closed=True):
+    data: TryTargets
     success: Literal[True]
 
 
@@ -4597,7 +4678,7 @@ class SkillCreateInput(TypedDict, closed=True):
     name: str
     notWhen: NotRequired[str]
     origin: NotRequired[Literal["blank", "generated", "imported", "duplicated"]]
-    ownerTeam: str
+    ownerTeam: NotRequired[str | None]
     parts: NotRequired[list[SkillPartInput]]
     refusal: NotRequired[str]
     requestReview: NotRequired[bool]
@@ -4819,6 +4900,7 @@ class SkillDetail(TypedDict, closed=True):
     needs: NotRequired[list[str] | None]
     origin: Literal["blank", "generated", "imported", "duplicated"]
     ownerTeam: str
+    ownerTeamName: NotRequired[str | None]
     parts: NotRequired[list[SkillPartSummary]]
     pendingReview: NotRequired[SkillPendingReview | None]
     pendingReviewId: NotRequired[str | None]
@@ -4898,6 +4980,7 @@ class EnvelopeWorkflowDetail(TypedDict, closed=True):
 
 class RunDetail(TypedDict, closed=True):
     canCancel: NotRequired[bool | None]
+    canRedrive: NotRequired[bool | None]
     canRetry: NotRequired[bool | None]
     children: NotRequired[list[RunChild]]
     createdAt: str

@@ -99,8 +99,26 @@ async def test_teams_lists_only_the_callers_teams(platform: Platform) -> None:
     await platform.person(roles=("admin",), tenant_id=p.tenant_id)
     r = await platform.public.get("/v1/teams", headers=await bearer(platform, p))
     assert r.status_code == 200, r.text
-    assert [t["id"] for t in r.json()["data"]] == list(p.teams)
-    assert r.json()["data"][0]["memberCount"] == 1
+    listed = r.json()["data"]["data"]
+    assert sorted(t["id"] for t in listed) == sorted(p.teams)
+    assert listed[0]["memberCount"] == 1
+
+
+async def test_teams_search_name_ids_and_page_on_the_server(platform: Platform) -> None:
+    p = await platform.person(roles=("admin", "viewer"))
+    h = await bearer(platform, p)
+    by_role = {r: t for t, r in p.teams.items()}
+
+    async def listed(**params: Any) -> dict[str, Any]:
+        r = await platform.public.get("/v1/teams", params=params, headers=h)
+        assert r.status_code == 200, r.text
+        return r.json()["data"]
+
+    assert [t["id"] for t in (await listed(search="viewer"))["data"]] == [by_role["viewer"]], "search reads the name"
+    assert [t["id"] for t in (await listed(ids=by_role["admin"]))["data"]] == [by_role["admin"]], "ids names one"
+    first, second = await listed(pageSize=1), await listed(pageSize=1, page=2)
+    assert first["pagination"]["total"] == 2 and first["pagination"]["hasNext"], first["pagination"]
+    assert {first["data"][0]["id"], second["data"][0]["id"]} == set(p.teams)
 
 
 async def test_a_team_header_outside_the_token_is_403_and_absent_with_several_is_400(platform: Platform) -> None:

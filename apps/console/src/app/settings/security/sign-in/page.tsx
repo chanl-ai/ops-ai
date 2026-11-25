@@ -16,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useSignInPolicySettings } from '@/hooks/account-queries';
 import { useRemoveSignInProvider, useSamlMetadataUrl, useSaveSignInProvider, useSignInProviders, useSignInSecretNames, useVerifySignInDomain } from '@/hooks/sign-in-provider-queries';
 import { useCan } from '@/hooks/me-queries';
-import { useTeam } from '@/hooks/use-team';
+import { useTeamsNamed } from '@/hooks/use-team';
 import { ApiError } from '@/lib/api/contract';
 import type { SignInProvider } from '@/lib/types/sign-in';
 
@@ -34,14 +34,15 @@ export default function SignInSettingsPage() {
   const secretNames = useSignInSecretNames(providers.isSuccess);
   const metadataUrl = useSamlMetadataUrl();
   const policy = useSignInPolicySettings();
-  const { teams } = useTeam();
   const save = useSaveSignInProvider();
   const remove = useRemoveSignInProvider();
   const verify = useVerifySignInDomain();
   const [dialog, setDialog] = React.useState<{ open: boolean; provider: SignInProvider | null }>({ open: false, provider: null });
   const [removing, setRemoving] = React.useState<SignInProvider | null>(null);
   const [verifying, setVerifying] = React.useState<string | null>(null);
-  const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? id;
+  // The providers' sign-in teams, read by id: a team the person does not hold shows its id.
+  const teams = useTeamsNamed((providers.data ?? []).map((p) => p.jit?.team));
+  const teamName = (id: string) => teams.get(id)?.name ?? id;
 
   const onVerify = (domain: string) => {
     setVerifying(domain);
@@ -85,7 +86,6 @@ export default function SignInSettingsPage() {
         open={dialog.open}
         onOpenChange={(open) => setDialog((d) => ({ ...d, open }))}
         provider={dialog.provider}
-        teams={teams}
         secretNames={secretNames.data ?? []}
         metadataUrl={metadataUrl}
         pending={save.isPending}

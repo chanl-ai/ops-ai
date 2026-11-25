@@ -12,7 +12,7 @@ connection:
   scopes:
     - { id: openid, label: Know which account signed in, required: true }
     - { id: "records:write", label: Change records }
-  sign_in: [team, person, person_or_team]
+  sign_in: [team, person]
   authorize_params: { audience: "{audience}", prompt: consent }
   after_sign_in: { url: "{base_url}/sites/accessible", read: "[0].id", setting: site_id }
   token_hosts: [.multi.test]

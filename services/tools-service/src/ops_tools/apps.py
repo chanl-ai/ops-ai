@@ -29,7 +29,7 @@ from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import tools_of
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import Envelope, In, Json, JsonValue, ListResult, Out, ok
+from ops_service_kit.http import Envelope, In, Json, JsonValue, LabelledListResult, ListResult, Out, ok
 from ops_service_kit.listing import ListParams, ListQuery
 from ops_service_kit.names import Name
 from ops_service_kit.narrow import an_object
@@ -73,7 +73,15 @@ from .connections.records import (
     state_reason,
     team_test,
 )
-from .connections.schemas import AccountDetail, AccountIn, AccountTest, ConnectionHealth, NewAppIn, SignIn
+from .connections.schemas import (
+    AccountDetail,
+    AccountIn,
+    AccountTest,
+    AppPerson,
+    ConnectionHealth,
+    NewAppIn,
+    SignIn,
+)
 from .connections.service import (
     OPS_AI_APP,
     AccountChanges,
@@ -115,6 +123,7 @@ from .plugins.templates import view_of
 from .store.app_cards import VIEWS, AppCards, CardRow
 from .store.connections import (
     DEFAULT_VALUE,
+    ENDED_BY_ADMIN,
     FIXED_VALUE,
     PERSON_ORIGIN,
     PLUGIN_APP,
@@ -217,6 +226,12 @@ class CardCredential(Out):
     type: Literal["ops_ai", "own"]
 
 
+class SignInCounts(Out):
+    connected: int = 0
+    expired: int = 0
+    refused: int = 0
+
+
 class SystemCard(Out):
     id: str
     kind: Literal["plugin", "connection", "module", "builtin"]
@@ -257,10 +272,12 @@ class SystemCard(Out):
     app_group: AppGroup
     # Whose OAuth app the card's account signs in with; none for an app that signs in without one.
     credential: CardCredential | None = None
-    # Who signs in on the card's account: the team account, each person, or each person with the team's as backup.
-    sign_in: Literal["team", "person", "person_or_team"] | None = None
+    # Who signs in on the card's account: the team's login or each person.
+    sign_in: Literal["team", "person"] | None = None
     # The caller's own sign-in on an app each person signs in to; None where the team's account always signs in.
     own_sign_in: Literal["connected", "expired", "none"] | None = None
+    # The sign-in health on the Apps list: people's own sign-ins on the app counted by state; None outside the list.
+    sign_ins: SignInCounts | None = None
 
 
 # An app credential's status, from the last Test with my account (connections.service check_credential).
@@ -279,6 +296,10 @@ class SystemCardList(ListResult[SystemCard]):
     """A page of the team's app cards, with each tab's count."""
 
     view_counts: AppViewCounts
+
+
+class AppPeopleList(LabelledListResult[AppPerson]):
+    """A page of Apps > People, with the name of each app the `app` facet counts."""
 
 
 class AppCredential(Out):
@@ -316,8 +337,8 @@ class CredentialAccount(Out):
     state: AccountState
     status: str
     state_reason: str | None = None
-    # Who signs in on it: the team account, each person, or each person with the team's as backup.
-    sign_in: Literal["team", "person", "person_or_team"]
+    # Who signs in on it: the team's login or each person.
+    sign_in: Literal["team", "person"]
     # When the team account last signed in; none before it has.
     connected_at: str | None = None
 
@@ -559,8 +580,8 @@ class AppAccount(Out):
     # Why it is refused or expired: the system's words, or the day the sign-in ended.
     state_reason: str | None = None
     owner: AccountOwner
-    # Whose login its calls use: the team's (`team`), each person's (`person`), or each person's with the team's for
-    # runs nobody started (`person_or_team`). Optional so older readers keep parsing.
+    # Whose login its calls use: the team's (`team`) or each person's (`person`). Optional so older readers keep
+    # parsing.
     sign_in: SignIn | None = None
     # How many people hold their own sign-in on this account: the "3 of 12" under "Each person signs in". Optional so
     # older readers keep parsing.
@@ -953,6 +974,10 @@ class Apps:
             )
         if only is not None:
             cards = [c for c in cards if c["id"] in only]
+        if listed:
+            # A content pack (templates only) has no tools and no sign-in, so it is no app a person connects: the Apps
+            # list leaves it out, and its templates are reached where templates are.
+            cards = [c for c in cards if not self._is_pack(c)]
         stated = await self._app_states(who, cards, by_id, person, facts)
         return sorted(stated, key=lambda c: str(c["name"]).lower())
 
@@ -961,7 +986,11 @@ class Apps:
         built-in apps, the defaults version, Ops AI's OAuth clients and the rows' shape. A new install or release with
         another set rebuilds every team's rows."""
         plugins = (
-            [(pid, p.manifest.title, p.manifest.display.category) for pid, p in sorted(self.plugins.plugins.items())]
+            [
+                # Whether it is a pack decides whether the list holds it at all.
+                (pid, p.manifest.title, p.manifest.display.category, not p.manifest.endpoint)
+                for pid, p in sorted(self.plugins.plugins.items())
+            ]
             if self.plugins is not None
             else []
         )
@@ -1030,7 +1059,14 @@ class Apps:
                 break
             await self.app_cards.claim(tenant, team, stamp, now)
             stale = True
-        data = [SystemCard.model_validate(built[i]).model_dump(by_alias=True) for i in ids]
+        health = await self.connections.store.sign_in_counts(tenant, team, ids, now)
+        states = ("connected", "expired", "refused")
+        data = [
+            SystemCard.model_validate(
+                {**built[i], "signIns": dict(zip(states, health.get(i, (0, 0, 0)), strict=True))}
+            ).model_dump(by_alias=True)
+            for i in ids
+        ]
         return {**page, "data": data}, counts
 
     async def _app_states(
@@ -1337,6 +1373,10 @@ def _oauth_kind(name: object) -> Kind | None:
 CONNECT_OWN = "Connect your own account."
 
 
+# What a person's card says once an admin ended their sign-in on Apps > People; they connect again to go on.
+ENDED_BY_AN_ADMIN = "Ended by an admin"
+
+
 def app_state(
     card: CardDraft,
     conn: Account | None,
@@ -1373,14 +1413,14 @@ def app_state(
     if sign_in == "person" or (sign_in == "person_or_team" and person):
         if own is None:
             return "needs_sign_in", CONNECT_OWN
+        if own.refused_at is not None and own.refused_reason == ENDED_BY_ADMIN:
+            return "needs_sign_in", ENDED_BY_AN_ADMIN
         if own.refused_at is not None:
             return "needs_sign_in", "Your sign-in ended. Sign in again."
         test = an_object(t, "the sign-in's test") if (t := own.test) is not None else None
     else:
         if card.get("state") != CONNECTED:
-            return "needs_sign_in", state_reason(
-                conn, team_token, str(card.get("state"))
-            ) or "Sign in the team account."
+            return "needs_sign_in", state_reason(conn, team_token, str(card.get("state"))) or "Sign in the team login."
         test = team_test(conn, team_token)
     if test is not None and test.get("status") == "failed":
         return "test_failed", str(test.get("message") or "The test after the sign-in failed.")
@@ -2434,13 +2474,36 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
         page, counts = await apps.page(who, q, builtins=include == "builtin", person=person)
         return ok({**page, "viewCounts": counts})
 
+    # Before GET /v1/apps/{app_id}, which would otherwise read "people" as an app id.
+    @r.get("/v1/apps/people", response_model=Envelope[AppPeopleList])
+    async def list_app_people(  # pyright: ignore[reportUnusedFunction]
+        *,
+        who: Annotated[Caller, Depends(caller)],
+        _: Tx,
+        q: ListQuery,
+        app: Annotated[list[str] | None, Query(description="an app id: their sign-ins to these apps")] = None,
+        state: Annotated[
+            list[Literal["connected", "expired", "refused"]] | None,
+            Query(description="the people with a sign-in in any of these states"),
+        ] = None,
+    ) -> JSONResponse:
+        """Apps > People: one page of the people holding their own sign-ins on the team's apps, by name, each with the
+        apps they signed in to, their sign-ins counted by state (connected, expired, refused), the last call any of
+        them signed, and every sign-in. `search` matches the name; `app` and `state` repeat; `facets` counts people per
+        app (`labels` names each app) and per state. Needs connections.manage. The filters are read from the shared
+        list query; they are named here for the document."""
+        del app, state
+        return ok(await apps.connections.people(who, q))
+
     @r.get("/v1/me/connections", response_model=Envelope[list[MyConnector]])
-    async def my_connections(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it
+    async def my_connections(  # pyright: ignore[reportUnusedFunction]
+        who: Annotated[Caller, Depends(caller)], app: Annotated[str | None, Query(max_length=200)] = None
+    ) -> JSONResponse:
+        """The caller's connectors, My apps: one row per app that acts as them, with what it can do, who it
         signs in as, its appState and appGroup, and where it is used; an app the team has off is listed when each
-        person signs in to it. No request transaction: the team's write approval policies and who uses each tool are
-        asked of the platform and agents-service."""
-        return ok(await my_connectors(apps, who))
+        person signs in to it. `app` keeps that one app, for its page. No request transaction: the team's write
+        approval policies and who uses each tool are asked of the platform and agents-service."""
+        return ok(await my_connectors(apps, who, app))
 
     @r.post("/v1/apps", response_model=Envelope[AccountDetail], status_code=201)
     async def add_app(body: NewAppIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

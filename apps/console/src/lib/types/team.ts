@@ -14,7 +14,7 @@ export type TeamIcon = 'platform' | 'lending' | 'cards' | 'fraud' | 'onboarding'
  * a team sees records whose owner is one of its owner groups; a team with scope `all` sees everything.
  */
 /** `role` (the signed-in person's role in the team) is returned too; no screen reads it. */
-export type Team = Omit<Narrow<Reply<'teams_list_teams'>[number], { scope: 'all' | 'owned' }>, 'role'> & {
+export type Team = Omit<Narrow<Reply<'teams_list_teams'>['data'][number], { scope: 'all' | 'owned' }>, 'role'> & {
   /** Not returned by platform-service yet: the switcher derives it from the name. */
   icon: TeamIcon;
 };

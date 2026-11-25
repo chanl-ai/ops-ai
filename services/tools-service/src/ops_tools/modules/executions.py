@@ -43,6 +43,9 @@ class CallApprovalJson(TypedDict):
 class CallRunAsJson(TypedDict):
     kind: str
     email: NotRequired[str | None]
+    # A call the team's login signed: the login's name and the person the call acted for.
+    login: NotRequired[str]
+    askedBy: NotRequired[str]
 
 
 class CallRowJson(TypedDict):
@@ -187,8 +190,16 @@ def call_row(
         row["credential"] = r.credential
     # Whom Usage says the call ran as: whose sign-in signed it; one refused before any sign-in ran as the
     # person it acted for, if any. Never the service that carried the call.
-    as_person = r.acting_for and r.credential in ("person", None)
-    row["runAs"] = {"kind": "person", "email": r.acting_for} if as_person else {"kind": "team"}
+    # A team key logs no credential (it is not a sign-in) but names its login; a row with neither is from before.
+    as_person = r.acting_for and (r.credential == "person" or (r.credential is None and not r.signed_in_as))
+    run_as: CallRunAsJson = {"kind": "person", "email": r.acting_for} if as_person else {"kind": "team"}
+    if not as_person:
+        # The team's login acted for whoever asked: the audit names both.
+        if r.signed_in_as:
+            run_as["login"] = r.signed_in_as
+        if r.acting_for:
+            run_as["askedBy"] = r.acting_for
+    row["runAs"] = run_as
     failed = r.error
     if r.outcome == "error" and failed is not None:
         # Which side the call broke on and why, as the executor named it; the message names the host, never an

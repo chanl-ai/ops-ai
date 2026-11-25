@@ -1,6 +1,9 @@
 // uc-127 the live console follows the layout rules, ui layer: docs/usecases/console/layout-rules-sweep.md.
 // Signed in through platform-service as James (builder). One check per rule, on the pages that have the control.
-import { PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { PLATFORM_PORT, TOOLS_PORT, check, chromium, expectSampleData, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+
+// Pages whose areas are the console's sample data on this stack, as in uc-125 and uc-152.
+expectSampleData('/settings/team/webhooks', '/settings/team/api-keys', '/govern/models');
 
 const TAG = Math.random().toString(36).slice(2, 6);
 const JAMES = 'j.richardson@harborpine.example';
@@ -25,7 +28,7 @@ const openWidget = async (page, consoleUrl) => {
   await dialog.getByLabel('Name').fill(`Layout ${TAG}`);
   await dialog.getByLabel('When the agent uses it').fill('The person asks for a layout check.');
   await dialog.getByLabel('Name').press('Enter');
-  await page.waitForURL((u) => /^\/widgets\/[^/]+$/.test(u.pathname), { timeout: 30_000 });
+  await page.waitForURL((u) => /^\/build\/widgets\/[^/]+$/.test(u.pathname), { timeout: 30_000 });
   await page.getByTestId('widget-preview').waitFor({ timeout: 60_000 });
 };
 // Luminance of any CSS colour, through a canvas pixel, so oklch and color-mix values compare alike.
@@ -111,31 +114,36 @@ await withUiStack(
         return a.getAttribute('href');
       };
       const handles = {};
-      for (const [path, prefix, suffix] of [['/agents', '/agents/', ''], ['/model-risk', '/model-risk/', '']]) {
+      for (const [path, prefix, suffix] of [['/agents', '/build/agents/', ''], ['/model-risk', '/govern/models/', '']]) {
         const href = await firstLink(path, prefix);
         await page.goto(`${consoleUrl}${href}${suffix}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         handles[path] = await page.locator('[data-slot="resizable-handle"]').first().waitFor({ timeout: 60_000 }).then(() => true, () => false);
       }
       check('rule 2: agent settings and a record page rail each have a drag handle', Object.values(handles).every(Boolean), handles);
 
-      // Rule 3: at 320px the tab labels of a record page sit inside their tabs and the page does not widen.
+      // Rule 3: at 320px the tab labels of a record page sit inside their tabs and the page does not widen. An agent's page
+      // has six tabs; a workflow's has two (Canvas, Versions), too few to need the row to scroll.
       const narrow = await signIn(browser, consoleUrl, 320);
-      await narrow.goto(`${consoleUrl}/workflows`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      const link = narrow.locator('tbody a[href^="/workflows/"]').first();
+      await narrow.goto(`${consoleUrl}/agents`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      const link = narrow.locator('tbody a[href^="/build/agents/"]').first();
       await link.waitFor({ timeout: 120_000 });
       await narrow.goto(`${consoleUrl}${await link.getAttribute('href')}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await narrow.locator('[data-slot="tabs-list"]').first().waitFor({ timeout: 60_000 });
       const tabs = await narrow.evaluate(() => {
-        const list = document.querySelector('[data-slot="tabs-list"]');
-        const triggers = [...list.querySelectorAll('[data-slot="tabs-trigger"]')];
+        // A record page's tab row is a Tabs list or route tabs (links in a list); the row with the most tabs is the record's.
+        const of = (l) => [...l.querySelectorAll('[data-slot="tabs-trigger"], li > a')];
+        const list = [...document.querySelectorAll('[data-slot="tabs-list"]')].sort((a, b) => of(b).length - of(a).length)[0];
+        if (!list) return { count: 0, spilled: 0, page: false, scrolls: false, overflowX: '' };
+        const triggers = of(list);
         return { count: triggers.length, spilled: triggers.filter((t) => t.scrollWidth > t.clientWidth + 1).length, page: document.documentElement.scrollWidth <= window.innerWidth + 1, scrolls: list.scrollWidth > list.clientWidth, overflowX: getComputedStyle(list).overflowX };
       });
       check('rule 3: at 320px no tab label spills its tab, the list scrolls sideways and the page does not widen', tabs.count >= 4 && tabs.spilled === 0 && tabs.page && tabs.scrolls && tabs.overflowX === 'auto', tabs);
 
-      // Rule 4: every table of records starts with select-all and shows a middle-truncated, copyable id. Secrets and Egress
-      // list a key (the name or host is the id), so they have select-all and no separate Id column.
+      // Rule 4: a table of records that offers bulk actions starts with select-all (data-table-with-views draws it only
+      // then), and every table offers a copyable Id column from View. Secrets and Egress list a key (the name or host is
+      // the id), so they have no separate Id column. Connections is a catalogue of apps, not a table of records.
       const sam = await signIn(browser, consoleUrl, 1440, SAM);
-      const withId = ['/agents', '/workflows', '/integrations', '/model-risk', '/guardrails', '/widgets', '/knowledge', '/logs/tool-calls', '/logs/audit', '/settings/webhooks', '/settings/api-keys', '/cases', '/reviews'];
+      const withId = ['/agents', '/workflows', '/model-risk', '/guardrails', '/widgets', '/knowledge', '/logs/tool-calls', '/logs/audit', '/settings/webhooks', '/settings/api-keys', '/cases', '/reviews'];
       const keyed = ['/settings/secrets', '/settings/egress'];
       const asSam = [...keyed, '/logs/audit'];
       const nested = [];
@@ -145,6 +153,12 @@ await withUiStack(
         const who = asSam.includes(path) ? sam : page;
         await who.goto(`${consoleUrl}${path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await who.locator('tbody tr').first().waitFor({ timeout: 120_000 }).catch(() => undefined);
+        // The Id column is a detail a person reads once, so it sits under View until turned on (id-column.tsx).
+        const view = who.getByRole('button', { name: 'View', exact: true });
+        const idToggle = who.getByTestId('view-column-recordId');
+        const offered = (await view.count()) > 0 && (await view.first().click().then(() => idToggle.waitFor({ timeout: 5_000 }).then(() => true, () => false)));
+        if (offered && (await idToggle.getAttribute('data-state')) !== 'checked') await idToggle.click();
+        await who.keyboard.press('Escape');
         lists[path] = await who.evaluate(() => {
           const heads = [...document.querySelectorAll('thead th')].map((th) => th.textContent?.trim() ?? '');
           const first = document.querySelector('tbody tr');
@@ -157,9 +171,11 @@ await withUiStack(
         });
       }
       // A list the stack has no records for still draws its header; the copy button needs a row to be found in.
-      const ok = (path) => lists[path].selectAll && (keyed.includes(path) ? lists[path].rows > 0 && !lists[path].idHead : lists[path].idHead && (lists[path].rows === 0 || lists[path].copy));
+      // An empty list draws its empty state, not a table, so only lists with rows are read for the Id column.
+      const bulk = ['/workflows', '/model-risk'];
+      const ok = (path) => (!bulk.includes(path) || lists[path].selectAll) && (keyed.includes(path) ? lists[path].rows > 0 && !lists[path].idHead : lists[path].rows === 0 || (lists[path].idHead && lists[path].copy));
       check('rule 4: a copyable id inside an opening row nests no button in a button', nested.length === 0, nested);
-      check('rule 4: every list of records starts with select-all, and all but the keyed ones (secrets, egress) have an Id column with a copy button', Object.keys(lists).every(ok), Object.fromEntries(Object.entries(lists).filter(([k]) => !ok(k))));
+      check('rule 4: lists with bulk actions start with select-all, and all but the keyed ones (secrets, egress) offer an Id column with a copy button from View', Object.keys(lists).every(ok), Object.fromEntries(Object.entries(lists).filter(([k]) => !ok(k))));
 
       // Rule 5: a record page's primary actions sit in the header's actions slot, not in a row above its table.
       const J = { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };

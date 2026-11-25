@@ -1,6 +1,6 @@
 # Durability, failure and audit
 
-Status: current, checked against the code on 2026-11-18. Designed and not built: an append-only journal with identity fields per step, journal retention and signed export. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md).
+Status: current, checked against the code on 2026-11-23. Designed and not built: an append-only journal with identity fields per step, journal retention and signed export. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md).
 
 LangGraph saves state between nodes. Keeping a run alive for days, with one owner at a time and no duplicated side
 effect, is our code, all in the same PostgreSQL. Fencing and timers are decided in
@@ -22,7 +22,8 @@ tool calls, and a crash can lose the last step's checkpoint. Cost: one checkpoin
 | Acquire | One `INSERT … ON CONFLICT DO UPDATE … WHERE expires_at < now() RETURNING`: taking over an expired lease and refusing a live one are the same statement. Lease times use PostgreSQL's `now()` |
 | Refusal | 409 `run_active` with `{owner, runId, ageSeconds}`; two processes starting one thread at the same instant: exactly one runs |
 | Heartbeat | Every TTL/3 while the run lasts. A lost heartbeat stops the run at its next stream event (`lease_lost`) |
-| Sweeper | Every sweep interval, in every API process: takes over an expired lease with the same statement, marks the dead run `crashed` with its owner, running nodes and generation, and runs the graph with no input, so LangGraph continues from the last checkpoint. A run that died before its first checkpoint restarts from the input kept in `graph_runs.input` |
+| Chat turns | A chat reply is an `engine_work` row of kind `turn` (`api/chat_turns.py`). The route queues it and claims it, so the process the person is connected to runs and streams it, renewing the claim beside the lease; a team at its cap (`OPS_ENGINE_TEAM_CAP`) is refused with `team_at_capacity`. When that process dies, a workflow worker claims the lapsed row and continues the thread from its last checkpoint, keyed by the turn's id, so it pays for no model call and sends no write under a new key; a turn past `turn_deadline_seconds` from when it was queued is ended and its thread let go. Test: `services/agents-service/tests/engine/test_chat_turns.py` |
+| Sweeper | Every sweep interval, in every API process, for runs that are not chat turns (approval resumes, `/v1/threads/{id}/runs/stream`, the threads of agents and workflows a chat called): takes over an expired lease with the same statement, marks the dead run `crashed` with its owner, running nodes and generation, and runs the graph with no input, so LangGraph continues from the last checkpoint. A run that died before its first checkpoint restarts from the input kept in `graph_runs.input` |
 | Defaults | Lease TTL 15 s, sweep 3 s, timer poll 1 s (`OPS_LEASE_TTL_SECONDS`, `OPS_SWEEP_INTERVAL_SECONDS`, `OPS_TIMER_POLL_SECONDS`) |
 | Recovery time | With TTL 6 s and a 1 s sweep: kill to recovery start 5.4 to 5.5 s (bound: TTL minus time since the last heartbeat, plus up to one sweep); kill to the next pause 12.2 to 12.9 s, about 7 s of which is the recovery's own model calls |
 | TTL trade-off | Shorter recovers faster, costs more heartbeat writes, and lets a slow database or a GC pause expire a live lease, which fencing then has to catch |
@@ -36,8 +37,9 @@ deduplication lives where the call lands (tools-service), never in the process t
 
 | Call in a re-run node | What happens |
 |---|---|
-| Agent-kernel model call already completed, inside a graph run on PostgreSQL | Replayed from `model_call_records` (`api/model_ledger.py`), keyed by thread and a hash of the request without timestamps and run ids; a re-run resume node makes no second call |
-| Workflow model calls (classify, extract, draft, grade) | Repeat: 3 extra calls per crash in the dispute workflow's fan-out. The repeat may differ, though nothing downstream saw the first answer |
+| Agent-kernel model call already completed in a chat turn, on PostgreSQL or SQL Server | Replayed from `model_call_records` (`api/model_ledger.py`), keyed by thread, the LangGraph task and a hash of the request without timestamps, run ids and conversation ids; a re-run resume node makes no second call |
+| Workflow AI and agent step model calls (classify, summarise, extract from text, draft, agent) already completed | Replayed from the same records, keyed by run, the step's own id (run:node:iteration) and the request hash, so a re-run after a crash, a lost checkpoint or a step whose done mark never committed pays nothing twice; a changed input is a new request and calls the model. Test: `services/agents-service/tests/engine/test_model_replay.py` |
+| Chat-graph models outside the kernel (classify, extract, grade nodes, `MeteredModels`) | Repeat; they are metered, not recorded |
 | Model call in flight at the crash | Repeats; a response is recorded only after its stream is read to the end |
 | Tool write through tools-service | Runs once (dedupe below) |
 | Usage rows | Written as each call returns, outside the checkpoint and unfenced, so a crashed attempt's spend is still counted |
@@ -93,6 +95,12 @@ when the gateway never ran it (`POST /v1/calls/abandon`, `services/tools-service
 | write, not idempotent | Send a reply | One attempt, then a reconciliation read | Manual handling if the read cannot tell |
 | money | Place a wire hold | One attempt, then a reconciliation read; approval token from two approvers | Manual handling |
 
+A write whose gateway claimed it and then died (the call lost, or still claimed past the step's deadline) goes by
+the class its operation declares (`WriteClass`, `packages/ops_engine/src/ops_engine/ports.py`): `idempotent` is sent
+again under the next attempt's key, `checkable` is settled by a read of the system and sent again only when the read
+says it never ran, and `unsafe` (the default) pauses the run as Stuck for a person. The gateway adapter reads the class
+from the operation's policy (`writeClass`); tools-service does not declare it yet, so every write is `unsafe` today.
+
 No run ends silently: a failed or stuck run, a recursion limit hit, or a timer past its retry cap lands in manual
 handling, shown in Reviews. A workflow on the engine retries by side-effect class (`RETRY_BY_EFFECTS`,
 `packages/ops_engine/src/ops_engine/compiler.py:1399`), and the run reconciler marks stuck runs
@@ -118,6 +126,41 @@ gateway after the token's TTL. The agents service renews the token from the reco
 |---|---|---|
 | Renew from recorded approvals (chosen) | No second review for an approval already given; covers retries and crash recovery; nothing changes at the gateway | The approval, not the token, now bounds the window: an approval can act up to 24 h after it was given |
 | Raise a fresh review on `token_expired` | The reviewer sees the call again | Asks again for every late resume, including after a crash the reviewer had nothing to do with; a run stalls until someone decides twice |
+
+## Redrive and dead letters
+
+A Failed or Stuck run goes again with `POST /v1/runs/{id}/redrive`, or many at once with `POST /v1/runs/bulk`
+(workflow, kind, code, time; at most 500 per call), both through `RunStore.redrive`
+(`packages/ops_engine/src/ops_engine/store/runs.py`). Whoever may cancel the run may redrive it.
+
+```mermaid
+flowchart LR
+  F[Failed run] -->|Redrive| S[Set aside the failed step's<br/>recorded failing attempt]
+  S --> Q[Queued on its pinned version]
+  Q --> W[Worker starts the graph over]
+  W --> R{Step recorded?}
+  R -->|yes| Ret[Return the record, run nothing]
+  R -->|no| A[Next attempt under the next key]
+  R -->|write, no port| Rec[Reconcile by its key first]
+```
+
+| Part | Rule |
+|---|---|
+| Version | The run row keeps its version and digest; a later publish is never read |
+| Checkpoints | A failed run's checkpoints are gone, so the graph starts over and every recorded step returns its record. A Stuck run keeps its checkpoints and continues from the last one, as Retry does |
+| The failed step | Every recorded port is returned on a re-run, the error and refused ports included, so in the redrive's own transaction the failing attempt of the step the run's failure names (latest iteration) is marked `redriven`. It stays on the run as history; the step takes its next attempt, and its total duration counts from that attempt. A run failed before its failure record existed is set aside only when it ended at a failure End, at its last failing step |
+| Writes | A write is set aside, and so sent again as the next attempt, only when its recorded answer proves it did nothing (`journal.definitely_not_done`): the refused port, a call that never left (`CONNECT_FAILED`, `CONNECT_TIMEOUT`, `POOL_TIMEOUT`, `TLS_FAILED`, `RATE_LIMITED`), a gateway refusal before sending (no address, account, sign-in, secret or egress; input refused) or a 4xx answer other than 408. The resend under the next key keeps the earlier approval and its approved arguments (`gateway_call` in `compiler.py`). Any other write, its timeout port, a 5xx or broken-off call, a plugin's `UPSTREAM_UNREACHABLE` or `PLUGIN_FAILED`, an unreadable answer or an unknown code, is made dangling (no port) and reconciled by its key before any second send; an attempt that already had no port is left as it is |
+| Retry budget | A write's attempts count from after the last set-aside one, so a redriven write has its full three |
+| Child runs | A Run workflow step keys each child by run, step, iteration and item, not attempt, so a parent's redrive finds the same failed child and fails again; redrive the child run itself |
+| Events | The route records `redriven` with who did it on the run's events |
+
+Test: `services/agents-service/tests/engine/test_redrive.py`; kill test uc-763.
+
+An event between services (`ops_store/outbox.py`) is retried with a jittered backoff of up to 60 s. After
+`MAX_ATTEMPTS` (15, about ten minutes) its `next_at` is cleared and it is a dead letter: never due again, kept by the
+hourly prune with its last error. `Relay.redrive(event_ids)` sends dead letters again from now with their attempts
+counted from zero; no route or screen calls it yet. Delivered events are kept for `KEEP_S` (a week). Test:
+`packages/ops_store/tests/test_outbox.py`.
 
 ## The journal
 

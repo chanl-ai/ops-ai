@@ -52,7 +52,7 @@ delete, run, decide, manage). Every check in every service goes through that gri
 | The token is bound to the tool, the run's step and the hash of the exact input the approver saw; any change to the input voids every approval of it | Built |
 | A token lives 15 minutes; a late resume renews it from the recorded approvals of that exact call for up to 24 hours, so a reviewer is never asked twice | Built |
 | Each operation's policy sets how many distinct people must approve and whether each needs a fresh sign-in; the same person cannot approve twice | Built |
-| Whether the person who asked may also decide is a setting (`requesterMayDecide`, off by default), changed by a team admin in Governance › Policies | Built |
+| Whether the person who asked may also decide is a setting: the two-person rule (`requesterMayDecide` off), off by default and never binding a team's Admins, changed by a team admin in Governance › Approvals › Advanced | Built |
 | Publishing an agent, workflow, skill, guardrail, task type or widget needs a second person's review, unless the team's publish policy says otherwise; a major change to a tool module needs the Security team's review | Built |
 | Approval tokens are signed with a shared key that the agents and tools services both hold. Signing with an asymmetric key that only the reviews code holds | Planned |
 

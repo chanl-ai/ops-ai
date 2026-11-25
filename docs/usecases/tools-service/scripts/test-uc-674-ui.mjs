@@ -72,7 +72,7 @@ await withUiStack(
   async (consoleUrl) => {
     mkdirSync(SHOTS, { recursive: true });
     const priya = as(await tokenFor('p.shah@harborpine.example'), 'team_ops');
-    const on = await fetch(`${tools}/v1/apps/${encodeURIComponent(SF)}/team`, { method: 'PUT', headers: priya, body: JSON.stringify({ enabled: true, signIn: 'person_or_team', settings: { login_url: 'https://login.salesforce.com/services/oauth2' } }) });
+    const on = await fetch(`${tools}/v1/apps/${encodeURIComponent(SF)}/team`, { method: 'PUT', headers: priya, body: JSON.stringify({ enabled: true, signIn: 'person', settings: { login_url: 'https://login.salesforce.com/services/oauth2' } }) });
     const turnedOn = await on.json();
     // The team's assistant gets Salesforce's read tools, as the Turn on window's box gives them, so the chat picker
     // lists Salesforce once it is on.
@@ -105,6 +105,8 @@ await withUiStack(
         const afterAdd = await badge(sam);
         await sam.getByTestId('app-connect').click();
         await sam.getByTestId('connect-window').waitFor({ timeout: 30_000 });
+        // Each member signs in to GitHub with their own login (step 6 reads a member's own state).
+        await sam.getByTestId('connect-window-whose').locator('label[for="who-each"]').click();
         await sam.getByTestId('connect-window-authorize').click();
         await sam.getByTestId('connect-window-done').waitFor({ timeout: 60_000 });
         await sam.getByTestId('connect-window-done').click();
@@ -237,7 +239,7 @@ await withUiStack(
         await ravi.goto(`${consoleUrl}/integrations/my-accounts`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await ravi.getByTestId(`connector-ask-${GH}`).waitFor({ timeout: 60_000 });
         const ask = (await ravi.getByTestId(`connector-ask-${GH}`).innerText()).trim();
-        // Whose state: on an app each person signs in to, the header is the reader's and the team's row says so.
+        // Whose state: on an app each person signs in to, the header and the row are the reader's; no team login stands in.
         const errs = await open(nadia, consoleUrl, GH);
         const whose = (await nadia.getByTestId('app-status-whose').innerText()).replace(/\s+/g, ' ').trim();
         const row = (await nadia.locator('[data-testid^="account-state-"]').first().locator('xpath=..').innerText()).replace(/\s+/g, ' ');
@@ -253,7 +255,7 @@ await withUiStack(
         check('10 Each role reads its own words: the picker, who to ask, whose state, and a missing app’s page',
           adminPicker.action === 1 && !/ask an admin/i.test(adminPicker.text) && viewerPicker.action === 0 && /ask an admin/i.test(viewerPicker.text) &&
             /Ask an admin: (James Richardson|Priya Shah)/.test(ask) && !/Dev Admin/.test(ask) &&
-            /^You:/.test(whose) && /Team account:/.test(row) && errs().length === 0 &&
+            /^You:/.test(whose) && /Needs sign-in/.test(row) && !/Team login/.test(row) && errs().length === 0 &&
             /isn’t installed/.test(line) && how === 1 && viewerHow === 0 && gone().length === 0,
           { adminPicker, viewerPicker, ask, whose, row, line, how, viewerHow, errors: [...errs(), ...gone()] });
       }, priyaPage);

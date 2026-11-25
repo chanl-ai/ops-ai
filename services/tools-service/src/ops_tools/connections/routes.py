@@ -31,6 +31,7 @@ from .schemas import (
     MyAccount,
     PersonCredentialsIn,
     SignInCompleteIn,
+    SignInEnded,
     SignInFinished,
     SignInIn,
     SignInStart,
@@ -119,6 +120,17 @@ def accounts_router(service: ConnectionService, directory: Directory) -> APIRout
     async def sign_out(app_id: str, account_id: str, who: Annotated[Caller, Depends(caller)], _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Ends the team's sign-in on the account; each person's own stays."""
         return ok(await service.sign_out(who, await _of(who, app_id, account_id)))
+
+    @r.post(f"{ACCOUNT}/people/{{person_id}}/sign-out", response_model=Envelope[SignInEnded])
+    async def end_sign_in(  # pyright: ignore[reportUnusedFunction]
+        app_id: str, account_id: str, person_id: str, who: Annotated[Caller, Depends(caller)], _: Tx
+    ) -> JSONResponse:
+        """End sign-in: ends another person's own sign-in on the account, so their next call asks them to connect.
+        The row is kept, refused with "ended_by_admin" and who ended it, and one audit row is written; a second End
+        changes nothing (`changed` false). 404 sign_in_not_found when the person holds none. Needs
+        connections.manage."""
+        ended = await service.end_sign_in(who, await _of(who, app_id, account_id), person_id)
+        return ok(SignInEnded.model_validate(ended).model_dump(by_alias=True))
 
     @r.get("/v1/me/accounts", response_model=Envelope[list[MyAccount]])
     async def my_accounts(who: Annotated[Caller, Depends(caller)], _: Tx, every: bool = False) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

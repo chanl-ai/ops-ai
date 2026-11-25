@@ -32,7 +32,7 @@ export function ToolSetActions() {
       <AddModuleDialog
         open={adding}
         onOpenChange={setAdding}
-        onDiscover={(s) => discover.mutateAsync(s)}
+        onDiscover={(source) => discover.mutateAsync({ source })}
         discovering={discover.isPending}
         creating={create.isPending}
         onCreate={async (input) => {

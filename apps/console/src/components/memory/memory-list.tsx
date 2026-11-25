@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Brain, Download, Pencil, Trash2 } from 'lucide-react';
+import { Brain, Download, Pencil, SearchX, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DeleteDialog } from '@/components/shared/delete-dialog';
@@ -9,36 +9,46 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { QueryError } from '@/components/shared/query-states';
 import { labelOf } from '@/components/shared/readable-value';
+import { SearchSelect } from '@/components/shared/search-select';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from '@/components/ui/item';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCorrectMemory, useExportMemories, useForgetAgentMemories, useForgetMemory, useMemories } from '@/hooks/memory-queries';
+import { agentOptions } from '@/hooks/options-queries';
+import { useDebounced } from '@/hooks/use-debounced';
+import { plural } from '@/lib/format';
 import type { Memory } from '@/lib/types/memory';
 
 const KIND: Record<Memory['kind'], string> = { fact: 'Fact', preference: 'Preference', episode: 'Earlier chat' };
+const PAGE = 20;
 
 /**
- * What agents remember about the signed-in person, which they correct, forget and export. With `agentId` it
- * shows one agent's (the chat's What I remember sheet); without, every agent's grouped by agent (My account > Memory).
+ * What agents remember about the signed-in person, which they correct, forget and export. With `agentId` it shows
+ * what one agent uses (the chat's What I remember sheet); without, every agent's, newest first, with an agent filter
+ * (My account > Memory). The search, the agent and the page are the server's: a person with thousands of memories
+ * loads one page.
  */
 export function MemoryList({ agentId }: { agentId?: string }) {
-  const q = useMemories(agentId);
-  const groups = React.useMemo(() => {
-    const by = new Map<string, Memory[]>();
-    for (const m of q.data ?? []) by.set(m.agentId, [...(by.get(m.agentId) ?? []), m]);
-    return [...by.values()];
-  }, [q.data]);
+  const [search, setSearch] = React.useState('');
+  const [picked, setPicked] = React.useState<{ id: string; label: string } | null>(null);
+  const [page, setPage] = React.useState(1);
+  const words = useDebounced(search.trim());
+  const agent = agentId ?? picked?.id;
+  const q = useMemories({ page, pageSize: PAGE, search: words || undefined, agentId: agent });
+  const rows = q.data?.data ?? [];
+  const paging = q.data?.pagination;
+  const narrowed = !!words || (!agentId && !!picked);
 
-  if (q.isPending)
+  if (q.isPending && !q.data)
     return (
       <div className="space-y-2" data-testid="memory-list-loading">
         <Skeleton className="h-14 w-full" />
         <Skeleton className="h-14 w-full" />
       </div>
     );
-  if (q.isError) return <QueryError what="what agents remember" onRetry={() => q.refetch()} retrying={q.isFetching} error={q.error} />;
+  if (q.isError && !q.data) return <QueryError what="what agents remember" onRetry={() => q.refetch()} retrying={q.isFetching} error={q.error} />;
 
   return (
     <div className="space-y-4" data-testid="memory-list">
@@ -48,43 +58,64 @@ export function MemoryList({ agentId }: { agentId?: string }) {
         </p>
         <ExportButton />
       </div>
-      {groups.length === 0 ? (
-        <EmptyState
-          icon={Brain}
-          title="Nothing remembered yet"
-          description="When you tell an agent something about yourself, like your timezone or how you like answers, it shows here."
-          testId="memory-empty"
-        />
+      <div className="flex flex-wrap items-center gap-2">
+        <Input value={search} onChange={(e) => (setSearch(e.target.value), setPage(1))} placeholder="Search memories…" aria-label="Search memories" className="min-w-0 flex-1 sm:max-w-xs" data-testid="memory-search" />
+        {!agentId && (
+          <SearchSelect source={agentOptions} value={picked} onChange={(id, o) => (setPicked(id ? { id, label: o?.label ?? id } : null), setPage(1))} placeholder="All agents" noneLabel="All agents" searchPlaceholder="Search agents…" emptyText="No agent matches." testId="memory-agent" />
+        )}
+        {agent && <ForgetAll agentId={agent} agentName={picked?.label ?? rows.find((m) => m.agentId === agent)?.agentName ?? 'This agent'} />}
+      </div>
+      {rows.length === 0 ? (
+        narrowed ? (
+          <EmptyState icon={SearchX} title="No memory matches" description="Try other words, or another agent." testId="memory-none-match" />
+        ) : (
+          <EmptyState
+            icon={Brain}
+            title="Nothing remembered yet"
+            description="When you tell an agent something about yourself, like your timezone or how you like answers, it shows here."
+            testId="memory-empty"
+          />
+        )
       ) : (
-        groups.map((rows) => <AgentGroup key={rows[0].agentId} rows={rows} showName={!agentId} />)
+        <ItemGroup className="gap-2" aria-busy={q.isFetching && q.isPlaceholderData}>
+          {rows.map((m) => (
+            <MemoryRow key={m.id} memory={m} showAgent={!agent} />
+          ))}
+        </ItemGroup>
+      )}
+      {paging && paging.totalPages > 1 && (
+        <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground" data-testid="memory-pages">
+          <span>
+            Page {paging.page} of {paging.totalPages} · {plural(paging.total, 'memory', 'memories')}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={!paging.hasPrev} onClick={() => setPage(paging.page - 1)} data-testid="memory-prev">
+              Previous
+            </Button>
+            <Button variant="outline" size="sm" disabled={!paging.hasNext} onClick={() => setPage(paging.page + 1)} data-testid="memory-next">
+              Next
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
-function AgentGroup({ rows, showName }: { rows: Memory[]; showName: boolean }) {
+/** Forgets everything one agent keeps about the person; the toast says how many the server forgot. */
+function ForgetAll({ agentId, agentName }: { agentId: string; agentName: string }) {
   const [confirm, setConfirm] = React.useState(false);
   const forgetAll = useForgetAgentMemories();
-  const { agentId, agentName } = rows[0];
   return (
-    <section className="space-y-2" data-testid="memory-group" data-agent={agentId}>
-      <div className="flex items-center justify-between gap-2">
-        {showName ? <h3 className="text-sm font-medium">{agentName}</h3> : <span />}
-        <Button variant="ghost" size="sm" onClick={() => setConfirm(true)} data-testid="memory-forget-all">
-          Forget all
-        </Button>
-      </div>
-      <ItemGroup className="gap-2">
-        {rows.map((m) => (
-          <MemoryRow key={m.id} memory={m} />
-        ))}
-      </ItemGroup>
+    <>
+      <Button variant="ghost" size="sm" onClick={() => setConfirm(true)} data-testid="memory-forget-all">
+        Forget all
+      </Button>
       <DeleteDialog
         open={confirm}
         onOpenChange={setConfirm}
         verb="Forget"
         entityType="memories"
-        count={rows.length}
         description={`${agentName} forgets everything it keeps about you, at once. Your next chat with it starts without it.`}
         isLoading={forgetAll.isPending}
         testIdPrefix="memory-all"
@@ -94,11 +125,11 @@ function AgentGroup({ rows, showName }: { rows: Memory[]; showName: boolean }) {
           toast.success(`${agentName} forgot ${forgotten} ${forgotten === 1 ? 'memory' : 'memories'}`);
         }}
       />
-    </section>
+    </>
   );
 }
 
-function MemoryRow({ memory: m }: { memory: Memory }) {
+function MemoryRow({ memory: m, showAgent }: { memory: Memory; showAgent: boolean }) {
   const [editing, setEditing] = React.useState(false);
   const [value, setValue] = React.useState(m.value);
   const [confirm, setConfirm] = React.useState(false);
@@ -121,6 +152,7 @@ function MemoryRow({ memory: m }: { memory: Memory }) {
         <ItemTitle>
           <span>{label}</span>
           <Badge variant="secondary">{KIND[m.kind]}</Badge>
+          {showAgent && <Badge variant="outline">{m.agentId ? m.agentName : 'Every agent'}</Badge>}
           {m.source === 'person' && <Badge variant="outline">Corrected by you</Badge>}
         </ItemTitle>
         {editing ? (

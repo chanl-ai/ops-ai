@@ -84,10 +84,13 @@ function columns(canManage: boolean, act: Act): ColumnDef<WorkspaceTeam>[] {
   ];
 }
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const SORT_COLUMNS = { name: 'name' };
+
 /** Every team of the workspace: workspace admins create, rename, archive and restore them here. */
 export default function TeamsPage() {
   const editor = useWorkspaceTeamsEditor();
-  const list = useListParams<WorkspaceTeamFilters>('name');
+  const list = useListParams<WorkspaceTeamFilters>('name', undefined, undefined, SORT_COLUMNS);
   const canView = !!editor.data?.canView;
   const canManage = !!editor.data?.canManage;
   const query = useWorkspaceTeams(list.params, canView);
@@ -131,6 +134,7 @@ export default function TeamsPage() {
         filters={[{ column: 'status', title: 'Status', options: [{ label: 'Active', value: 'active' }, { label: 'Archived', value: 'archived' }] }]}
         onColumnFiltersChange={list.onColumnFiltersChange}
         serverPagination={serverPagination(list, query)}
+        serverSorting={list.serverSort}
         emptyState={<ListEmpty icon={Users} noun="teams" filtered={list.isFiltered} createLabel={canManage ? 'Create team' : undefined} onCreate={canManage ? () => setDialog({ open: true, team: null }) : undefined} description="Each group gets a team that owns its agents, workflows, tools, knowledge and secrets." />}
       />
     );

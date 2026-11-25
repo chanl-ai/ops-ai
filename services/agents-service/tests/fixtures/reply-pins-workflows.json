@@ -39,8 +39,10 @@
             "msg": "Input should be 'blank', 'approval', 'triage' or 'chat'"
           }
         ],
+        "kind": "input",
         "message": "template: Input should be 'blank', 'approval', 'triage' or 'chat'",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -51,8 +53,10 @@
     "body": {
       "error": {
         "code": "agent_required",
+        "kind": "input",
         "message": "The chat template needs agentSlug.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -72,8 +76,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "colour: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -88,8 +94,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Workflow <wf> was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -382,8 +390,10 @@
             "msg": "Input should be less than or equal to 200"
           }
         ],
+        "kind": "input",
         "message": "query.pageSize: Input should be less than or equal to 200",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -638,8 +648,10 @@
     "body": {
       "error": {
         "code": "not_published",
+        "kind": "input",
         "message": "Publish this workflow before setting it live.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 409
       },
       "success": false
@@ -677,8 +689,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Workflow <wf> version 9 was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -765,8 +779,10 @@
             }
           ]
         },
+        "kind": "refused",
         "message": "The graph does not compile; validate it to see the failing checks.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 422
       },
       "success": false
@@ -1012,8 +1028,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Workflow wf_missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -1089,8 +1107,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Workflow <wf> version 9 was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -1323,8 +1343,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "owner: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false

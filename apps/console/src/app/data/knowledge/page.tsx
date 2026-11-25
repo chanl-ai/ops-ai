@@ -178,9 +178,12 @@ function columns(actions: { open: (k: KnowledgeBaseRow, tab?: string) => void; r
   ];
 }
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const SORT_COLUMNS = { name: 'name' };
+
 export default function KnowledgeBasesPage() {
   const router = useRouter();
-  const list = useListParams<KbFilters>('name');
+  const list = useListParams<KbFilters>('name', undefined, undefined, SORT_COLUMNS);
   const query = useKnowledgeBases(list.params);
   const create = useCreateKb();
   const { session } = useSession();
@@ -266,6 +269,7 @@ export default function KnowledgeBasesPage() {
           )}
           gridClassName="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
           serverPagination={serverPagination(list, query)}
+          serverSorting={list.serverSort}
           emptyState={
             <ListEmpty
               icon={Database}

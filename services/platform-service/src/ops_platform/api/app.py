@@ -19,8 +19,10 @@ from ops_access import ACTIONS, ANY_TEAM, AREAS, SECURITY_TEAM_ACTIONS
 from ops_access.catalogue import ADMIN, FIXED_ROLES, Grant
 from ops_identity import Principal as Caller
 from ops_identity import ServiceAuth, ServiceClient, service_verifiers
+from ops_identity.acting_for import person_of as acting_person_of
+from ops_identity.acting_for import refused as acting_for_refused
 from ops_identity.fastapi import Tx
-from ops_policy import STEP_UP_TTL_S, CredentialStore, Ed25519Signer
+from ops_policy import STEP_UP_TTL_S, CredentialStore, Ed25519Signer, TokenError, verify
 from ops_service_kit import narrow
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.client_address import client_address
@@ -130,6 +132,8 @@ from .schemas import (
     ProviderIn,
     ProviderOut,
     Refresh,
+    ReinviteBulkOut,
+    ReinviteIn,
     ResetIn,
     RoleCellsIn,
     RoleCreatedOut,
@@ -137,6 +141,7 @@ from .schemas import (
     RoleDetail,
     RoleGrantIn,
     RoleGrantOut,
+    RoleHolderIn,
     RoleHolderOut,
     RoleIn,
     RoleOut,
@@ -148,6 +153,9 @@ from .schemas import (
     SignInTestOut,
     SignInTestStartOut,
     SsoCompleteIn,
+    SsoLink,
+    SsoLinked,
+    SsoLinkStartIn,
     SsoStarted,
     SsoStartIn,
     StepUpIn,
@@ -174,6 +182,8 @@ KEY_ID = r"^key_[A-Za-z0-9_-]{1,60}$"
 ISO_TIME = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$"
 INVITE_TOKEN = r"^inv_[A-Za-z0-9_-]{8,64}$"
 RECORD_ID = r"^[A-Za-z0-9_-]{1,64}$"
+# The audience of an acting-for token sent to the members routes (acting_for.AUDIENCES: tools-service only).
+PLATFORM_AUDIENCE = "platform"
 
 
 def _bearer(authorization: Annotated[str | None, Header()] = None) -> str:
@@ -405,7 +415,7 @@ def create_public_app(
         if body.provider is not None:
             started = await sso.start_tile(body.provider, next_path=body.next)
         else:
-            started = await sso.start(body.email or "", next_path=body.next)
+            started = await sso.start(body.email or "", next_path=body.next, invite=body.invite)
         return ok({"redirectUrl": started.redirect_url, "flowKey": started.flow_key})
 
     @app.get("/v1/auth/oidc/callback", tags=["auth"], status_code=303, responses=ERRORS)
@@ -489,6 +499,39 @@ def create_public_app(
         issued = await sso.step_up_complete(token, code=body.code, flow_key=body.flow_key, request_id=new_id("req"))
         return ok({"token": issued.token, "expiresAt": issued.expires_at})
 
+    @app.post("/v1/auth/sso/link/start", tags=["auth"], response_model=Envelope[SsoStarted], responses=ERRORS)
+    async def sso_link_start(  # pyright: ignore[reportUnusedFunction]
+        body: SsoLinkStartIn, token: Annotated[str, Depends(_bearer)]
+    ) -> Any:
+        """A signed-in person's round trip to their workspace's provider, to sign in with their account there. It
+        needs this session's step-up, the provider asks for credentials again, and it must answer with the person's
+        own email: 401 `step_up_required` without one."""
+        started = await sso.link_start(token, step_up=body.step_up, next_path=body.next)
+        return ok({"redirectUrl": started.redirect_url, "flowKey": started.flow_key})
+
+    @app.delete("/v1/auth/sso/links/{provider_id}", tags=["auth"], status_code=204, responses=ERRORS)
+    async def sso_unlink(  # pyright: ignore[reportUnusedFunction]
+        provider_id: Annotated[str, Path(pattern=r"^[A-Za-z0-9_-]{1,64}$")], token: Annotated[str, Depends(_bearer)]
+    ) -> Response:
+        """Removes the signed-in person's own link to this provider, audited, and ends the sessions it opened."""
+        await sso.unlink_own(token, provider_id, request_id=new_id("req"))
+        return Response(status_code=204)
+
+    @app.get("/v1/auth/sso/links", tags=["auth"], response_model=Envelope[list[SsoLink]], responses=ERRORS)
+    async def sso_links(token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """The company providers the signed-in person can link and whether they have; empty when their email's
+        domain names none in their workspace."""
+        return ok(await sso.links(token))
+
+    @app.post("/v1/auth/sso/link/complete", tags=["auth"], response_model=Envelope[SsoLinked], responses=ERRORS)
+    async def sso_link_complete(  # pyright: ignore[reportUnusedFunction]
+        body: SsoCompleteIn, token: Annotated[str, Depends(_bearer)]
+    ) -> Any:
+        """Links the provider account the round trip answered with, for the session that started it; 409
+        `already_linked` when that account is someone's or the person has one there already."""
+        p = await sso.link_complete(token, code=body.code, flow_key=body.flow_key, request_id=new_id("req"))
+        return ok({"providerId": p.id, "kind": p.kind})
+
     @app.post("/v1/auth/password/forgot", tags=["auth"], status_code=204, responses=ERRORS)
     async def forgot_password(body: ForgotIn) -> Response:  # pyright: ignore[reportUnusedFunction]
         """Mails a reset link when the email can sign in by password; the answer is the same either way."""
@@ -502,7 +545,7 @@ def create_public_app(
         return Response(status_code=204)
 
     team_store = TeamStore(store.db)
-    people = Members(team_store)
+    people = Members(team_store, mail=sign.mail, console_url=sign.console_url, signin=signin_store)
     settings = Settings()
     lifecycle = WorkspaceLifecycle(
         LifecycleStore(store.db),
@@ -556,6 +599,44 @@ def create_public_app(
             return Actor(str(claims["tenant_id"]), "*", str(claims["sub"]), new_id("req"))
         return await acting(claims, x_team_id)
 
+    readers = services or ServiceAuth(
+        audience="platform", verifiers=service_verifiers(settings, "platform"), scopes=settings.service_scopes
+    )
+
+    async def service_of(token: str) -> Any:
+        """A service token's caller, refused with `workspace_closed` when it names a closed workspace."""
+        svc = readers.resolve(token)
+        await lifecycle.open_or_refuse(svc.tenant_id)
+        return svc
+
+    async def acting_as_person(
+        request: Request,
+        token: Annotated[str, Depends(_bearer)],
+        x_team_id: Annotated[str | None, Header()] = None,
+        x_acting_for: Annotated[str | None, Header()] = None,
+    ) -> Actor:
+        """`acting`, or tools-service's call for a person (a platform tool such as invite_people): its service token
+        names the tenant and team, and the acting-for token this service signed for platform names the person, in
+        that same tenant and team. The person's rights are read from the database by the route, never from either
+        token, so the call can do only what the person may. 403 `acting_for_refused` for any other service, a missing
+        or forged token, or one for another team or service."""
+        if not readers.signs(token):
+            return await acting(await claims_of(request, token), x_team_id)
+        svc = await service_of(token)
+        # Which service may call is the proof's: only tools-service may have one minted for this audience
+        # (acting_for.AUDIENCES), and `act` must name the service token's own service.
+        if not svc.team_id:
+            raise acting_for_refused("the service token names no team")
+        if not x_acting_for:
+            raise acting_for_refused("the call names no person")
+        try:
+            claims = verify(x_acting_for, signer.verifier(PLATFORM_AUDIENCE))
+        except TokenError as e:
+            raise acting_for_refused("it does not verify") from e
+        person = acting_person_of(claims, service=svc.sub, tenant_id=svc.tenant_id, team_id=svc.team_id)
+        note_caller(svc.tenant_id, svc.team_id)
+        return Actor(svc.tenant_id, svc.team_id, person.sub, new_id("req"))
+
     policy_store = PolicyStore(store.db)
     me_store = MeStore(store.db)
 
@@ -593,12 +674,13 @@ def create_public_app(
             }
         )
 
-    @app.get("/v1/teams", tags=["teams"], response_model=Envelope[list[TeamOut]], responses=ERRORS)
-    async def list_teams(_: Tx, claims: Annotated[Claims, Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        """The teams the caller may switch to: their own, and every active team for a workspace admin."""
+    @app.get("/v1/teams", tags=["teams"], response_model=Envelope[ListResult[TeamOut]], responses=ERRORS)
+    async def list_teams(_: Tx, q: ListQuery, claims: Annotated[Claims, Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """One page of the teams the caller may switch to, by name, on the shared list contract: their own, and every
+        active team for a workspace admin. `search` matches the name; `ids` names exact teams, as the switcher labels
+        the current one."""
         tenant, user = str(claims["tenant_id"]), str(claims["sub"])
-        teams = await team_store.teams_of(tenant, user, everywhere=await everywhere(tenant, user))
-        return ok([t.model_dump(by_alias=True) for t in teams])
+        return ok(await team_store.teams_page(tenant, user, q, everywhere=await everywhere(tenant, user)))
 
     @app.get("/v1/settings/members", tags=["members"], response_model=Envelope[ListResult[MemberOut]], responses=ERRORS)
     async def list_members(  # pyright: ignore[reportUnusedFunction]
@@ -618,8 +700,10 @@ def create_public_app(
         joined = [str(m["user_id"]) for m in page["data"] if m["user_id"]]
         wide = await RoleStore(store.db).workspace_roles(actor.tenant_id, joined, now=now_iso())
         shown = [MemberRow.model_validate(m) for m in page["data"]]
+        own = await team_store.admins_among(actor.tenant_id, [str(m.user_id) for m in shown if m.needs_invite])
         page["data"] = [
             m.model_dump(by_alias=True, exclude={"created_at"})
+            | ({"needsInvite": False, "linksOwnSession": True} if m.user_id in own else {"linksOwnSession": False})
             | ({"invitedAt": m.created_at} if m.status == "invited" else {})
             | {"workspaceRoles": wide.get(str(m.user_id), [])}
             for m in shown
@@ -644,15 +728,30 @@ def create_public_app(
         return ok(options_page([r.model_dump(by_alias=True) for r in rows], offset, limit))
 
     @app.post("/v1/settings/members/invite", tags=["members"], response_model=Envelope[InviteBulkOut], responses=ERRORS)
-    async def invite_members(_: Tx, body: InviteIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def invite_members(_: Tx, body: InviteIn, actor: Annotated[Actor, Depends(acting_as_person)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(await people.invite(actor, body.emails, body.role))
+
+    @app.post(
+        "/v1/settings/members/reinvite", tags=["members"], response_model=Envelope[ReinviteBulkOut], responses=ERRORS
+    )
+    async def reinvite_members(_: Tx, body: ReinviteIn, actor: Annotated[Actor, Depends(acting_as_person)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """A link invite for each member who `needsInvite`, every such member of the team when `ids` is omitted,
+        mailed to the member's own address and never returned; the member stays active, others are skipped
+        `not_affected`, admins `links_own_session`. Signing in through the provider from it links them, once."""
+        return ok(await people.reinvite(actor, body.ids))
+
+    @app.post("/v1/settings/members/unlink", tags=["members"], response_model=Envelope[BulkOut], responses=ERRORS)
+    async def unlink_members(_: Tx, body: DeleteIn, actor: Annotated[Actor, Depends(acting_as_person)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """Removes each member's company sign-in links and ends the sessions they opened, audited; `not_linked` for a
+        member with none."""
+        return ok(await people.unlink(actor, body.ids))
 
     async def users_of(actor: Actor, member_ids: list[str]) -> list[str]:
         rows = await team_store.members(actor.tenant_id, actor.team_id, roles=[], statuses=[])
         return [m.user_id for m in rows if m.id in member_ids and m.user_id]
 
     @app.post("/v1/settings/members/role", tags=["members"], response_model=Envelope[BulkOut], responses=ERRORS)
-    async def change_roles(_: Tx, body: RoleIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def change_roles(_: Tx, body: RoleIn, actor: Annotated[Actor, Depends(acting_as_person)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The owner is never demoted here: 409 `owner_must_transfer`."""
         if body.role != ADMIN.id:
             await lifecycle.refuse_owner(actor.tenant_id, await users_of(actor, body.ids))
@@ -734,10 +833,10 @@ def create_public_app(
         claims: Annotated[Claims, Depends(claims_of)],
         team: Annotated[str | None, Query(max_length=64)] = None,
     ) -> Any:
-        """Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there:
-        what a "View only" notice names. The team is `team`, the record's, when the page shows another team's
-        record, else the one the request acts in; a member of that team, or a workspace admin, may ask, holding
-        access.view where the request acts (a Chat user does not: 403 `admin_required`)."""
+        """Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there
+        other than the caller: what a "View only" notice names. The team is `team`, the record's, when the page shows
+        another team's record, else the one the request acts in; a member of that team, or a workspace admin, may ask,
+        holding access.view where the request acts (a Chat user does not: 403 `admin_required`)."""
         if area not in AREAS or action not in ACTIONS:
             raise ValidationFailed(f"{area}.{action} is not in the catalogue.", code="unknown_cell")
         await people.require_admin(actor, "access", "view")
@@ -751,7 +850,7 @@ def create_public_app(
             raise Conflict(
                 "This workspace names no Security team; a workspace admin names it.", code="no_security_team"
             )
-        found = await holder_store.holders(actor.tenant_id, team, area, action)
+        found = await holder_store.holders(actor.tenant_id, team, area, action, excluding=actor.user_id)
         return ok({"teamId": team, **found.model_dump(by_alias=True)})
 
     @app.get("/v1/me/permissions", tags=["me"], response_model=Envelope[PermissionsOut], responses=ERRORS)
@@ -1030,16 +1129,6 @@ def create_public_app(
         await people.require_admin(actor, "access", "view")
         return ok(await policies.list(actor))
 
-    readers = services or ServiceAuth(
-        audience="platform", verifiers=service_verifiers(settings, "platform"), scopes=settings.service_scopes
-    )
-
-    async def service_of(token: str) -> Any:
-        """A service token's caller, refused with `workspace_closed` when it names a closed workspace."""
-        svc = readers.resolve(token)
-        await lifecycle.open_or_refuse(svc.tenant_id)
-        return svc
-
     @app.get("/v1/policies/{key}", tags=["policies"], response_model=Envelope[PolicyOut], responses=ERRORS)
     async def get_policy(  # pyright: ignore[reportUnusedFunction]
         _: Tx,
@@ -1276,6 +1365,50 @@ def create_public_app(
         what deleting it would take from them. A workspace admin's."""
         await people.require_admin(actor, "access", "view")
         return ok(await roles.store.holders(actor.tenant_id, role_id, q))
+
+    @app.get(
+        "/v1/roles/{role_id}/holder-options", tags=["roles"], response_model=Envelope[OptionsPage], responses=ERRORS
+    )
+    async def role_holder_options(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
+        role_id: Annotated[str, Path(pattern=RECORD_ID)],
+        actor: Annotated[Actor, Depends(acting)],
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: Annotated[int, Query(ge=1, le=100)] = 20,
+        ids: Annotated[list[str] | None, Query()] = None,
+    ) -> Any:
+        """Who the role can be given to in the team the request acts in: its active people and the workspace's groups,
+        one searched list by name; each value is `person:<user id>` or `group:<group id>`. Whoever may give roles there
+        (access.manage)."""
+        await people.require_admin(actor, "access", "manage")
+        offset, window = options_window(cursor, limit)
+        rows = await roles.store.holder_options(
+            actor.tenant_id, actor.team_id, search=search, ids=ids or [], offset=offset, limit=window
+        )
+        return ok(options_page(rows, offset, limit))
+
+    @app.post(
+        "/v1/roles/{role_id}/holders",
+        tags=["roles"],
+        status_code=201,
+        response_model=Envelope[RoleHolderOut],
+        responses=ERRORS,
+    )
+    async def give_role_to_holder(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
+        role_id: Annotated[str, Path(pattern=RECORD_ID)],
+        body: RoleHolderIn,
+        actor: Annotated[Actor, Depends(acting)],
+    ) -> Any:
+        """Gives a custom role to a person or a group in the team the request acts in: an admin of that team or a
+        workspace admin (access.manage there). Audited as `role.grant`; applies on each holder's next request."""
+        await people.require_admin(actor, "access", "manage")
+        given = await roles.give(
+            actor.tenant_id, role_id, body.kind, body.id, actor.team_id, by=actor.user_id, request_id=actor.request_id
+        )
+        return ok(given, status=201)
 
     @app.get(
         "/v1/people/{person_id}/role-grants",
@@ -1692,7 +1825,7 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth, signer: 
         return ok({"id": body.key, "written": written})
 
     if signer is not None:
-        acting = ActingFor(store, signer)
+        acting = ActingFor(store, signer, workspace=WorkspaceStore(store.db))
 
         @app.post(
             "/v1/acting-for-tokens",
@@ -1708,7 +1841,11 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth, signer: 
             if not caller.tenant_id or not caller.team_id:
                 raise Forbidden("The service token names no tenant or team.", code="tenant_required")
             issued = await acting.mint(
-                service=caller.sub, tenant_id=caller.tenant_id, email=body.email, team_id=caller.team_id
+                service=caller.sub,
+                tenant_id=caller.tenant_id,
+                email=body.email,
+                team_id=caller.team_id,
+                audience=body.audience,
             )
             return ok({"token": issued.token, "expiresAt": issued.expires_at})
 

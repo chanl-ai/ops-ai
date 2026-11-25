@@ -1,3 +1,4 @@
+import type { RunFailure } from '@/lib/failure-words';
 import type { PublishPreview } from './publish-preview';
 import type { DocumentRead } from '@/lib/types/domain';
 
@@ -256,6 +257,8 @@ export interface EngineRunsParams {
   status?: string[];
   page?: number;
   pageSize?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface EngineRun {
@@ -268,6 +271,8 @@ export interface EngineRun {
   canCancel?: boolean;
   /** Whether the signed-in person may retry it now: it is Stuck and they may cancel it. */
   canRetry?: boolean;
+  /** Whether the signed-in person may redrive it now: it is Failed or Stuck and they may cancel it. */
+  canRedrive?: boolean;
   workflowId: string;
   version: number;
   digest: string;
@@ -313,6 +318,8 @@ export interface EngineRunStep {
 
 export interface EngineRunDetail extends EngineRun {
   steps: EngineRunStep[];
+  /** Why it failed, in the one error model: kind, code, message and whether a retry helps; null while it has not. */
+  failure?: RunFailure | null;
   /** Once the run has succeeded: the End step it finished on, its outcome and output. */
   result: { node: string | null; name: string | null; outcome: string; output: unknown } | null;
   /** The runs its steps started (Start workflow, once or for each item), in step and item order, each with its status. */

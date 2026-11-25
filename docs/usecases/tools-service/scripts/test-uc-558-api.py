@@ -5,6 +5,7 @@ through a worker, so whom each tool call acts for comes from the run's starter. 
 
 from __future__ import annotations
 
+import json
 import os
 import signal
 import subprocess
@@ -408,7 +409,7 @@ with ExitStack() as stack:
     )
     backup = gw.patch(
         f"/v1/apps/{conn.get('id')}/accounts/{conn.get('id')}",
-        json={"revision": revision, "signIn": "person_or_team", "teamBackup": True},
+        json={"revision": revision, "teamBackup": True},
         headers=priya,
     )
     team = gw.post(
@@ -438,15 +439,44 @@ with ExitStack() as stack:
         timeout=30,
     )
     check(
-        "9 a call with nobody behind it is refused while the backup is off, and uses the team account once it is on",
+        "9 a call with nobody behind it is refused naming the app and the two ways on, the team login cannot be made a "
+        "backup, and the call stays refused",
         "CONNECTION_NOT_LINKED" in nobody.text
-        and backup.status_code == 200
-        and behind.status_code == 200
-        and editors(sf)[2:] == ["svc-claims@kestrel.example"],
+        and f"Set {conn.get('name')} to Everyone uses the team's login, or have a person start the run" in nobody.text
+        and backup.status_code == 400
+        and "CONNECTION_NOT_LINKED" in behind.text
+        and editors(sf)[2:] == [],
         (nobody.text[:200], backup.text[:200], behind.text[:200], editors(sf)),
     )
 
-    # 9b. An operation marked needsPerson never takes the team backup, even with it on.
+    # 9a. The same write from a real scheduled run: a team key ticks a Schedule workflow, so the run has nobody
+    # behind it and its step is refused at once with the app named and the two ways on, instead of waiting.
+    scheduled = DEFINITION.replace("uc558_case_update", "uc558_nightly_close").replace(
+        "{id: start, type: ops.trigger.request, typeVersion: 1, name: Request}",
+        "{id: start, type: ops.trigger.schedule, typeVersion: 1, name: Nightly, parameters: {key: nightly}}",
+    )
+    saved = agents_api.post("/v1/workflows/definitions", json={"yaml": scheduled}, headers=priya)
+    agents_api.post("/v1/workflows/definitions/uc558_nightly_close/publish-requests", json={}, headers=priya)
+    key = data(api.post("/v1/api-keys", headers=priya, json={"name": "uc558 nightly", "scopes": ["read", "write"]}))
+    ticked = agents_api.post(
+        "/v1/runs",
+        json={"workflowId": "uc558_nightly_close", "input": {"status": "Closed"}, "runKey": "uc558-nightly-1"},
+        headers={"Authorization": f"Bearer {(key or {}).get('secret', '')}", "X-Team-Id": "team_ops"},
+    )
+    nightly = settle(agents_api, priya, str((data(ticked) or {}).get("runId", "wfrun_missing")), done=True)
+    said = json.dumps(nightly["step"].get("output") or {})
+    check(
+        "9a a scheduled run is refused at once naming the app and the two ways on, and does not wait",
+        ticked.status_code == 202
+        and nightly["status"] in ("succeeded", "failed")
+        and nightly["outcome"] in ("refused", "failed")
+        and f"{conn.get('name')} signs in as each person, and a run nobody started acts for no one" in said
+        and f"Set {conn.get('name')} to Everyone uses the team's login, or have a person start the run" in said
+        and not nightly["waits"],
+        (saved.status_code, ticked.text[:200], nightly),
+    )
+
+    # 9b. An operation marked needsPerson is refused with nobody behind it.
     module_id = str(published.get("id"))
     marked = gw.patch(f"/v1/tool-modules/{module_id}/operations/{op.get('id')}", json={"needsPerson": True})
     asked = required(gw.post(f"/v1/tool-modules/{module_id}/versions", json={"note": "uc-558 needs a person"}), "request a security review")
@@ -464,8 +494,8 @@ with ExitStack() as stack:
         timeout=30,
     )
     check(
-        "9b an operation that needs a person is refused with nobody behind it, though the team backup is on",
-        marked.status_code == 200 and "needs_person" in person_only.text,
+        "9b an operation that needs a person is refused with nobody behind it",
+        marked.status_code == 200 and "CONNECTION_NOT_LINKED" in person_only.text,
         (marked.text[:200], person_only.text[:300]),
     )
 

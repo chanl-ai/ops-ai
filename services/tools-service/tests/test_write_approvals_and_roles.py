@@ -12,7 +12,7 @@ Decided by the real Rego in OPA, on a seeded tenant's registry.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any, cast
 
 import pytest
@@ -28,7 +28,7 @@ from .test_write_approval_gateway import Call, _gateway, reasons  # pyright: ign
 CASE = {"subject": "Card stopped working abroad"}
 
 
-def _module_of(modules: list[dict[str, Any]], tool: str) -> str:
+def _module_of(modules: Sequence[Mapping[str, Any]], tool: str) -> str:
     return next(f"module:{m['id']}" for m in modules if any(o["name"] == tool for o in m["operations"]))
 
 
@@ -159,5 +159,7 @@ def test_only_a_person_who_decides_the_teams_reviews_approves_their_own_write() 
         access, _person("approver", loose)
     )
     assert not approves_own_writes(access, _person("viewer", loose)), "a viewer is asked like anyone else"
-    # The four-eyes rule, the default: someone else decides even an admin's write.
-    assert not approves_own_writes(access, _person("admin"))
+    # The two-person rule on: someone else decides a reviewer's write; an Admin of the team still approves her own.
+    strict = {"requesterMayDecide": False}
+    assert not approves_own_writes(access, _person("approver", strict))
+    assert approves_own_writes(access, _person("admin", strict))

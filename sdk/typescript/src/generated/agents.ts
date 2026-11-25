@@ -101,7 +101,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Bulk Decide */
+        /**
+         * Bulk Decide
+         * @description Decides each review as one decision would, each checked by that decision's own decider rule, so a reviewer
+         *     of the review's team decides it whatever team they act in. Someone who decides reviews in no team and decided none
+         *     of these (an ask-the-person asker answers their own) is refused (403), as a single decision refuses them; anyone
+         *     else gets a result per id.
+         */
         post: operations["reviews_bulk_decide"];
         delete?: never;
         options?: never;
@@ -1713,7 +1719,8 @@ export interface paths {
         };
         /**
          * List Memories
-         * @description What agents remember about the caller, newest first; `agentId` keeps one agent's.
+         * @description One page of what agents remember about the caller, newest first, on the shared list contract: `search` matches
+         *     the key and the value, `agentId` keeps what that agent uses (its own and every agent's) and `kind` those kinds.
          */
         get: operations["memory_list_memories"];
         put?: never;
@@ -2146,6 +2153,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/runs/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Engine Runs
+         * @description Redrives every Failed or Stuck run, or cancels every unfinished one, of the acting team that the filter
+         *     matches, oldest first and at most BULK_LIMIT in one call. Each run is checked as its single route checks it: one
+         *     the caller may not cancel is skipped and listed, never acted on.
+         *     No request transaction: each run is changed in its own, as the single routes change it.
+         */
+        post: operations["workflows_bulk_engine_runs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/runs/set-aside-emails/{event_id}/run": {
         parameters: {
             query?: never;
@@ -2263,6 +2293,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/runs/{run_id}/redrive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redrive Engine Run
+         * @description Queues a Failed or Stuck run again from its failed step, on the version the run pinned: steps it recorded are
+         *     not run again. A failed write is sent again, on its earlier approval, only when its answer proves it did nothing
+         *     (refused, never sent, or refused before acting); any other is reconciled by its key at the gateway first. Who may
+         *     cancel the run may redrive it; a run neither Failed nor Stuck is refused (409 run_not_redrivable).
+         *     No request transaction: the masking policy (platform-service) is asked after the write, with none open.
+         */
+        post: operations["workflows_redrive_engine_run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/runs/{run_id}/retry": {
         parameters: {
             query?: never;
@@ -2326,7 +2380,8 @@ export interface paths {
          *
          *     Every view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.
          *     With `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing
-         *     a tool or knowledge base the agent lacks as `locked`, naming them in `needs`.
+         *     a tool or knowledge base the agent lacks as `locked`, naming them in `needs`. Each row's `ownerTeamName` and the
+         *     filter's `teamNames` are asked of platform-service once the transaction has closed.
          */
         get: operations["agents_list_skills"];
         put?: never;
@@ -2351,8 +2406,9 @@ export interface paths {
         };
         /**
          * Skill Options
-         * @description What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams. The
-         *     directory is read from tools-service first, with nothing open, then the rows in one transaction.
+         * @description What a skill may name: the tools the directory offers, the knowledge bases agents hold, and the teams the
+         *     caller may create skills in (`skills.create` held there). The directory is read from tools-service first, with
+         *     nothing open, then the rows in one transaction.
          */
         get: operations["agents_skill_options"];
         put?: never;
@@ -2373,7 +2429,8 @@ export interface paths {
         /**
          * Get Skill
          * @description The skill with its instructions and every version: skills: view in the skill's team (403 `forbidden`), the same
-         *     right render asks for, so a person who may only chat never reads a skill's text.
+         *     right render asks for, so a person who may only chat never reads a skill's text. The owner team's name is asked
+         *     of platform-service once the transaction has closed.
          */
         get: operations["agents_get_skill"];
         put?: never;
@@ -2829,7 +2886,8 @@ export interface paths {
         put?: never;
         /**
          * Route One
-         * @description Taking a case from the workflow to people is a decision on it: a reviewer or admin of its team.
+         * @description Taking a case from the workflow to people is a decision on it: a reviewer or admin of its team, and for a case
+         *     waiting on a step, whoever may decide that step (`_may_route`).
          */
         post: operations["threads_route_one"];
         delete?: never;
@@ -3022,6 +3080,27 @@ export interface paths {
          * @description One tool as its row on the Tools page reads; declared after /options so that path is not read as a tool.
          */
         get: operations["agents_get_tool"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/try-targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Try Targets
+         * @description The paths a builder can try: `skill` for a skill's paths, or `workflow` and `step` for one tool step of a
+         *     workflow. A builder of the skill's or workflow's team only (403); the samples are that team's own runs' answers.
+         */
+        get: operations["agents_try_targets"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4964,6 +5043,24 @@ export interface components {
             /** Updated */
             updated: string[];
         };
+        /** BulkRunsRequest */
+        BulkRunsRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "redrive" | "cancel";
+            filter?: components["schemas"]["RunsFilter"];
+        };
+        /** BulkRunsResult */
+        BulkRunsResult: {
+            /** Action */
+            action: string;
+            /** Changed */
+            changed: string[];
+            /** Skipped */
+            skipped: string[];
+        };
         /** BulkSkip */
         BulkSkip: {
             /** Id */
@@ -6266,6 +6363,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[BulkRunsResult] */
+        Envelope_BulkRunsResult_: {
+            data: components["schemas"]["BulkRunsResult"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[CaseDetail] */
         Envelope_CaseDetail_: {
             data: components["schemas"]["CaseDetail"];
@@ -6593,6 +6699,15 @@ export interface components {
         /** Envelope[ListResult[FormView]] */
         Envelope_ListResult_FormView__: {
             data: components["schemas"]["ListResult_FormView_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[MemoryView]] */
+        Envelope_ListResult_MemoryView__: {
+            data: components["schemas"]["ListResult_MemoryView_"];
             /**
              * Success
              * @constant
@@ -7077,6 +7192,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[TryTargets] */
+        Envelope_TryTargets_: {
+            data: components["schemas"]["TryTargets"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[Union[DryRun, BatchStarted]] */
         Envelope_Union_DryRun__BatchStarted__: {
             /** Data */
@@ -7288,16 +7412,6 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[list[MemoryView]] */
-        Envelope_list_MemoryView__: {
-            /** Data */
-            data: components["schemas"]["MemoryView"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
         /** Envelope[list[ModelAlias]] */
         Envelope_list_ModelAlias__: {
             /** Data */
@@ -7374,10 +7488,17 @@ export interface components {
             code: string;
             /** Details */
             details?: unknown;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "input" | "refused" | "upstream" | "timeout" | "internal";
             /** Message */
             message: string;
             /** Requestid */
             requestId: string;
+            /** Retryable */
+            retryable: boolean;
             /** Status */
             status: number;
         };
@@ -8465,6 +8586,18 @@ export interface components {
         ListResult_FormView_: {
             /** Data */
             data: components["schemas"]["FormView"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[MemoryView] */
+        ListResult_MemoryView_: {
+            /** Data */
+            data: components["schemas"]["MemoryView"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -9956,6 +10089,8 @@ export interface components {
         RunDetail: {
             /** Cancancel */
             canCancel?: boolean | null;
+            /** Canredrive */
+            canRedrive?: boolean | null;
             /** Canretry */
             canRetry?: boolean | null;
             /** Children */
@@ -10007,25 +10142,41 @@ export interface components {
         };
         /**
          * RunFailure
-         * @description The failing step as a builder reads it: the same sentence as `error`, plus where and whether a retry helps.
+         * @description Why a run failed, in the one error model (ops_contracts.errors): a kind, a stable code, the builder's
+         *     message, a sentence safe for a customer and whether a retry helps, with the failing step and attempt.
          */
         RunFailure: {
             /** Attempt */
             attempt?: number | null;
             /** Code */
-            code?: string | null;
-            /** Field */
-            field?: string | null;
+            code: string;
+            /** Details */
+            details?: {
+                [key: string]: string | number | boolean | null;
+            };
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "input" | "refused" | "upstream" | "timeout" | "internal";
             /** Message */
             message: string;
             /** Nodeid */
             nodeId?: string | null;
             /** Nodename */
             nodeName?: string | null;
+            /** Of */
+            of?: number | null;
+            /** Retryafterseconds */
+            retryAfterSeconds?: number | null;
             /** Retryable */
-            retryable?: boolean | null;
+            retryable: boolean;
             /** Suggestion */
             suggestion?: string | null;
+            /** Traceid */
+            traceId?: string | null;
+            /** Usermessage */
+            userMessage: string;
         };
         /** RunFile */
         RunFile: {
@@ -10107,6 +10258,8 @@ export interface components {
         RunRow: {
             /** Cancancel */
             canCancel?: boolean | null;
+            /** Canredrive */
+            canRedrive?: boolean | null;
             /** Canretry */
             canRetry?: boolean | null;
             /** Createdat */
@@ -10203,6 +10356,23 @@ export interface components {
             payload: {
                 [key: string]: components["schemas"]["JsonValue"];
             };
+        };
+        /**
+         * RunsFilter
+         * @description Which runs a bulk action takes: each given field narrows it. `kind` and `code` are the run's recorded error
+         *     (ops_contracts.errors); `createdFrom` and `createdTo` bound when the run started, ISO times, the end excluded.
+         */
+        RunsFilter: {
+            /** Code */
+            code?: string | null;
+            /** Createdfrom */
+            createdFrom?: string | null;
+            /** Createdto */
+            createdTo?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Workflowid */
+            workflowId?: string | null;
         };
         /**
          * SaveBase
@@ -10329,6 +10499,8 @@ export interface components {
             origin: "blank" | "generated" | "imported" | "duplicated";
             /** Ownerteam */
             ownerTeam: string;
+            /** Ownerteamname */
+            ownerTeamName?: string | null;
             /** Parts */
             parts?: components["schemas"]["SkillPartSummary"][];
             /** Pendingreviewid */
@@ -10469,7 +10641,7 @@ export interface components {
              */
             origin: "blank" | "generated" | "imported" | "duplicated";
             /** Ownerteam */
-            ownerTeam: string;
+            ownerTeam?: string | null;
             /** Parts */
             parts?: components["schemas"]["SkillPartInput"][];
             /**
@@ -10541,6 +10713,8 @@ export interface components {
             origin: "blank" | "generated" | "imported" | "duplicated";
             /** Ownerteam */
             ownerTeam: string;
+            /** Ownerteamname */
+            ownerTeamName?: string | null;
             /** Parts */
             parts?: components["schemas"]["SkillPartSummary"][];
             pendingReview?: components["schemas"]["SkillPendingReview"] | null;
@@ -10684,6 +10858,10 @@ export interface components {
                 };
             };
             pagination: components["schemas"]["Pagination"];
+            /** Teamnames */
+            teamNames?: {
+                [key: string]: string;
+            };
             /** Viewcounts */
             viewCounts: {
                 [key: string]: number;
@@ -10708,6 +10886,8 @@ export interface components {
             limits: {
                 [key: string]: number;
             };
+            /** Ownerteams */
+            ownerTeams: components["schemas"]["TeamChoice"][];
             /** Teams */
             teams: string[];
             /** Tools */
@@ -10848,6 +11028,8 @@ export interface components {
             note: string;
             /** Ownerteam */
             ownerTeam: string;
+            /** Ownerteamname */
+            ownerTeamName?: string | null;
             /** Requestedby */
             requestedBy: string;
             /** Skillid */
@@ -11719,6 +11901,13 @@ export interface components {
              */
             severity: "warning" | "error";
         };
+        /** TeamChoice */
+        TeamChoice: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string | null;
+        };
         /** TeamUsage */
         TeamUsage: {
             /** Liveworkflows */
@@ -12284,6 +12473,68 @@ export interface components {
             count: number;
             /** Name */
             name: string;
+        };
+        /** TryPath */
+        TryPath: {
+            /** Ends */
+            ends: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Steps */
+            steps: components["schemas"]["TryStep"][];
+        };
+        /** TryStep */
+        TryStep: {
+            /** Access */
+            access?: string | null;
+            /** Accounts */
+            accounts?: {
+                [key: string]: string;
+            };
+            /** Do */
+            do: string;
+            /** Holds */
+            holds?: boolean | null;
+            /** Input */
+            input?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Key */
+            key: string;
+            /** Number */
+            number: number;
+            sample?: components["schemas"]["JsonValue"];
+            /**
+             * Samplefrom
+             * @default none
+             * @enum {string}
+             */
+            sampleFrom: "last_run" | "schema" | "none";
+            /** Test */
+            test?: string | null;
+            /** Tool */
+            tool?: string | null;
+        };
+        /** TryTargets */
+        TryTargets: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "skill" | "workflow_step";
+            /**
+             * More
+             * @default false
+             */
+            more: boolean;
+            /** Name */
+            name: string;
+            /** Paths */
+            paths: components["schemas"]["TryPath"][];
         };
         /**
          * TurnUsage
@@ -14699,7 +14950,9 @@ export interface operations {
     agents_create_agent: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-acting-for"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -23458,6 +23711,13 @@ export interface operations {
         parameters: {
             query?: {
                 agentId?: string | null;
+                kind?: string[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -23471,7 +23731,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_MemoryView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_MemoryView__"];
                 };
             };
             /** @description Invalid request */
@@ -25987,6 +26247,111 @@ export interface operations {
             };
         };
     };
+    workflows_bulk_engine_runs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkRunsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_BulkRunsResult_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     workflows_run_set_aside_email: {
         parameters: {
             query?: never;
@@ -26432,6 +26797,109 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                     "text/event-stream": string;
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    workflows_redrive_engine_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RunRow_"];
                 };
             };
             /** @description Invalid request */
@@ -30776,6 +31244,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ToolRow_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_try_targets: {
+        parameters: {
+            query?: {
+                skill?: string | null;
+                workflow?: string | null;
+                step?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_TryTargets_"];
                 };
             };
             /** @description Invalid request */

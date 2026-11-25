@@ -23,6 +23,7 @@ from ops_engine.store import DefinitionStore, RunStore
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.ids import new_id
 from tests.engine.test_worker import CountingTools, M, drain, worker
+from tests.run_rows import write_run
 
 FLOW = parse(
     {
@@ -65,9 +66,7 @@ async def test_a_person_the_step_names_cannot_decide_and_another_reviewer_can(en
         run_id = new_id("wfrun")
         run = {"id": run_id, "team_id": "team_a", "workflow_id": FLOW.id, "version": version, "digest": FLOW.digest()}
         # The saver's address as the module recorded it, in another case: the match ignores case.
-        await RunStore(tx).create(
-            run | {"run_key": run_id, "mode": "live", "input": {"savedBy": "M@X"}, "created_by": "a@x"}
-        )
+        await write_run(tx, run | {"run_key": run_id, "mode": "live", "input": {"savedBy": "M@X"}, "created_by": "a@x"})
     w = worker(engine, CountingTools(), InMemorySaver())
     await drain(w)
     rt: Any = SimpleNamespace(db=engine, settings=SimpleNamespace(lease_ttl_seconds=6.0))
@@ -104,8 +103,8 @@ async def test_whoever_the_step_names_as_asking_decides_while_the_requester_poli
         )
         run_id = new_id("wfrun")
         run = {"id": run_id, "team_id": "team_a", "workflow_id": asked.id, "version": version, "digest": asked.digest()}
-        await RunStore(tx).create(
-            run | {"run_key": run_id, "mode": "live", "input": {"asker": "M@X"}, "created_by": "event:tools/x"}
+        await write_run(
+            tx, run | {"run_key": run_id, "mode": "live", "input": {"asker": "M@X"}, "created_by": "event:tools/x"}
         )
     w = worker(engine, CountingTools(), InMemorySaver())
     await drain(w)

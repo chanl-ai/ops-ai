@@ -40,6 +40,7 @@ from .deps import Runtime
 from .platform_policies import PolicyUnread
 from .routers.tool_catalog import known_tools
 from .step_shapes import ServiceLookups
+from .team_names import team_name
 
 log = get_logger("ops_agents.skills")
 MAX_PER_TURN = 2
@@ -578,6 +579,8 @@ class SkillListRow(TypedDict):
     useWhen: str
     loading: str
     ownerTeam: str
+    # Set by the read routes once the transaction has closed (`named_owner`).
+    ownerTeamName: NotRequired[str | None]
     status: str
     version: int
     publishedVersion: int | None
@@ -1062,6 +1065,7 @@ async def review_body(rt: Runtime, req: PublishRequestRow) -> Json:
         "skillId": req.subject_id,
         "skillName": body["skillName"],
         "ownerTeam": row.owner_team,
+        "ownerTeamName": (await team_name(rt, row.owner_team))["teamName"],
         "fromVersion": body.get("fromVersion"),
         "toVersion": int(req.version),
         "editClass": "re_test",
@@ -1305,7 +1309,8 @@ async def load_seed(rt: Runtime, path: Path) -> None:
         content = await check_content(rt, s)
         await reg.create(
             content,
-            owner_team=cast(str, s["ownerTeam"]),
+            # The owner team is the team that holds the skill; a seed file's `ownerTeam` text is not read.
+            owner_team=SEED_TEAM,
             team_id=SEED_TEAM,
             origin="blank",
             by="seed",

@@ -7,7 +7,16 @@ from typing import Any
 
 import httpx
 from fake_bank_https import HOST, fake_bank
-from usecase_harness import agents, approve_tool_review, check, data, finish, service_headers, tools
+from usecase_harness import (
+    agents,
+    approve_tool_review,
+    check,
+    data,
+    discovered_operations,
+    finish,
+    service_headers,
+    tools,
+)
 
 SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
 
@@ -68,7 +77,8 @@ with fake_bank() as bank, agents(), tools(settings=bank.settings) as gw:
     check("nothing reached the bank while refused", not bank.received, bank.received)
     gw.post("/v1/egress/ranges", json={"value": bank.range, "note": "uc-012 fake bank"})
     found = gw.post("/v1/tool-modules/discover", json=spec)
-    ops = {o["name"]: o["access"] for o in data(found).get("operations", [])} if found.status_code == 200 else {}
+    listed = discovered_operations(gw, data(found)["id"]) if found.status_code == 200 else []
+    ops = {o["name"]: o["access"] for o in listed}
     check(
         "with the range listed, the document is read and each GET is a read",
         ops == {"get_account": "read", "latest_statement": "read"},
@@ -106,7 +116,9 @@ with fake_bank() as bank, agents(), tools(settings=bank.settings) as gw:
     tools_found = gw.post("/v1/tool-modules/discover", json=mcp)
     check(
         "the MCP server's tools are discovered as writes",
-        [(o["name"], o["access"]) for o in data(tools_found).get("operations", [])] == [("lookup_case", "write")],
+        tools_found.status_code == 200
+        and [(o["name"], o["access"]) for o in discovered_operations(gw, data(tools_found)["id"])]
+        == [("lookup_case", "write")],
         tools_found.text[:300],
     )
     case_desk = data(

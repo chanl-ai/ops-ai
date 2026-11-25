@@ -24,7 +24,7 @@ await withUiStack(
     try {
       const page = await consoleSignIn(browser, consoleUrl, PRIYA, PASSWORD, errors);
       const r = await testTeamAccount(page, consoleUrl, right);
-      check('7 the account fetches a token and tests Working with the team account, answered 200', r.status === 'ok' && /\b200\b/.test(r.said) && /team account/.test(r.said), r.said);
+      check('7 the account fetches a token and tests Working with the team account, answered 200', r.status === 'ok' && /\b200\b/.test(r.said) && /team login/.test(r.said), r.said);
       check('7 the client secret does not show on its page', !r.page.includes('cc-secret'), r.page.slice(0, 300));
       const w = await testTeamAccount(page, consoleUrl, wrong);
       check('8 a secret the bank refuses tests Failed and says invalid_client', w.status !== 'ok' && /Failed/.test(w.said) && /invalid_client/.test(w.said), w.said);

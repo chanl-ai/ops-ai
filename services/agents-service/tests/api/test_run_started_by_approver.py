@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_engine.store.tables import engine_runs
 from tests.api.test_action_roles import live_run, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
-from tests.engine.test_lifecycle_rights import ADMIN, person, unowned_live
+from tests.engine.test_lifecycle_rights import person, unowned_live
 
 Stack = tuple[AsyncClient, AsyncEngine]
 
@@ -32,4 +32,12 @@ async def test_a_run_records_whether_its_starter_approves_its_writes(stack: Stac
     # A builder decides reviews since D59; one whose role lost reviews.decide does not approve their writes.
     no_decide = person("jo", "team_ops", "builder", unticked=(("reviews", "decide"),))
     assert not await _started_by_approver(c, engine, no_decide, 2), "a role without reviews.decide does not"
-    assert not await _started_by_approver(c, engine, ADMIN, 3), "by default someone else decides an admin's run"
+    strict = {"requesterMayDecide": False}
+    strict_admin = person("priya", "team_ops", "admin", policies=strict)
+    assert await _started_by_approver(c, engine, strict_admin, 3), (
+        "an admin approves her own run's writes whatever the rule"
+    )
+    strict_builder = person("jo", "team_ops", "builder", policies=strict)
+    assert not await _started_by_approver(c, engine, strict_builder, 4), (
+        "with the two-person rule on, someone else does"
+    )

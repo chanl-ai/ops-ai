@@ -94,7 +94,7 @@ import { useCanSetDefaultAgent, useDefaultAgent } from '@/hooks/chat-queries';
 import { useCanBuild } from '@/hooks/me-queries';
 import { useWidgetScriptUrl } from '@/hooks/widget-deployment-queries';
 import { relativeTime } from '@/lib/format';
-import { useTeam } from '@/hooks/use-team';
+import { useTeamsNamed } from '@/hooks/use-team';
 import { teamLabel } from '@/components/shared/team-name';
 import type { Agent } from '@/lib/types/domain';
 import { SplitView } from '@/components/shared/setting/split-view';
@@ -142,8 +142,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const tools = useGrantableTools();
   const modelAliases = useModelAliases();
   const { data: lookups } = useLookups();
-  const { teams } = useTeam();
-  const teamName = teamLabel(agent.teamId, teams);
+  const teamName = teamLabel(agent.teamId, useTeamsNamed([agent.teamId]));
   const versions = useAgentVersions(agent.id);
   const runs = useAgentRuns(agent.id);
   const update = useUpdateAgent(agent.id);
@@ -290,6 +289,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
       <PageLayout
         icon={Bot}
         backHref="/build/agents"
+        recordName={agent.name}
         title={editable ? <EditableTitle value={draft.name} onChange={(v) => set('name', v)} label="Agent name" error={errors.name} /> : draft.name}
         description={agent.role}
         badge={
@@ -431,7 +431,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               <RecentRunsCard runs={runs.data} loading={runs.isPending} />
             </div>
           ) : tab === 'limits' ? (
-            <div className="flex max-w-3xl flex-col gap-4" data-testid="agent-limits">
+            <div className="flex flex-col gap-4" data-testid="agent-limits">
               <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
                 <WidgetsSection draft={draft} set={set} toolIds={agent.toolIds} />
               </BuilderFieldset>
@@ -538,7 +538,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 cardFooter={
                   <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2" data-testid="agent-brief-footer">
                     <AgentUsesLink uses={agent.uses} />
-                    <div className="flex items-center gap-1">
+                    <div className="ml-auto flex items-center gap-1">
                       {editable && mode === 'full' && <MoveIntoBrief onChoose={() => setModeAsked('brief')} disabled={dirty || update.isPending} />}
                       <ViewPromptDialog agentId={agent.id} version={agent.version} name={agent.name} />
                     </div>

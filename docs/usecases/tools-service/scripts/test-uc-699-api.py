@@ -17,7 +17,7 @@ ROUNDS = 4
 
 with rig("uc-699") as r:
     sf = r.sf
-    retail_on(r, sign_in="person_or_team")
+    retail_on(r, sign_in="person")
     # 1. Two adds of one name at the same moment, several rounds, so the two requests overlap in the route.
     outcomes: list[list[tuple[int, str]]] = []
     for n in range(ROUNDS):

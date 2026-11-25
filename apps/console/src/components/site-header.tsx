@@ -6,12 +6,14 @@ import { usePathname } from 'next/navigation';
 import { AreaSwitcher } from '@/components/shared/area-switcher';
 import { Separator } from '@/components/ui/separator';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { useRecordCrumb } from '@/components/shared/record-crumb';
 import { crumbsFor } from '@/lib/nav';
 
 /** `actions` sits at the right of the bar (search, notifications); the layout passes them in. */
 export function SiteHeader({ actions }: { actions?: React.ReactNode }) {
   const pathname = usePathname();
-  const crumbs = crumbsFor(pathname);
+  const record = useRecordCrumb();
+  const crumbs = record ? [...crumbsFor(pathname), { label: record }] : crumbsFor(pathname);
   return (
     <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b">
       <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">

@@ -18,7 +18,7 @@ connection:
   scopes:
     - { id: repo, label: "Read and comment on issues in your repositories", required: true }
     - { id: "read:user", label: "Know which account signed in", required: true }
-  sign_in: [team, person, person_or_team]
+  sign_in: [team, person]
   health_check: { path: /user }
   # What a refused sign-in says, by the code GitHub sends back on the redirect or the token exchange.
   sign_in_errors:

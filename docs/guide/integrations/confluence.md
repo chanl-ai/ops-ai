@@ -52,7 +52,7 @@ password](sign-in-keys.md).
 ## Limits
 
 - Read only: Ops AI never edits a page.
-- One team account. Pages are read with that account's access, so pick spaces the whole team may read.
+- One team login. Pages are read with that login's access, so pick spaces the whole team may read.
 
 ## Next
 

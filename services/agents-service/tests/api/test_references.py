@@ -21,7 +21,6 @@ RECALL: dict[str, Any] = {
     "name": "Wire recall steps",
     "useWhen": "A customer asks to recall a wire.",
     "instructions": "Confirm the wire, then ask the payments desk to recall it.",
-    "ownerTeam": "Retail",
 }
 LATER = "insert"
 

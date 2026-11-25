@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- platform-service, stamped at 0046_roles_given_to_groups
+-- platform-service, stamped at 20261124_0100_close_invites
 CREATE TABLE tenants (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -107,6 +107,8 @@ CREATE TABLE roles (
 GO
 CREATE INDEX ix_roles_builtin ON roles (tenant_id, builtin);
 GO
+CREATE INDEX ix_roles_name ON roles (tenant_id, name);
+GO
 CREATE TABLE groups (
 	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
@@ -196,7 +198,15 @@ CREATE TABLE api_keys (
 	CONSTRAINT api_keys_prefix_key UNIQUE (prefix)
 );
 GO
+CREATE INDEX ix_api_keys_team_created_at ON api_keys (team_id, created_at);
+GO
+CREATE INDEX ix_api_keys_team_expires_at ON api_keys (team_id, expires_at);
+GO
 CREATE INDEX ix_api_keys_team_id ON api_keys (team_id);
+GO
+CREATE INDEX ix_api_keys_team_last_used_at ON api_keys (team_id, last_used_at);
+GO
+CREATE INDEX ix_api_keys_team_name ON api_keys (team_id, name);
 GO
 CREATE INDEX ix_api_keys_team_target_id ON api_keys (team_id, target_id);
 GO
@@ -249,6 +259,8 @@ CREATE TABLE audit_entries (
 	CONSTRAINT fk_audit_entries_team FOREIGN KEY(tenant_id, team_id) REFERENCES teams (tenant_id, id), 
 	CONSTRAINT audit_entries_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
 );
+GO
+CREATE INDEX ix_audit_entries_at ON audit_entries (tenant_id, at);
 GO
 CREATE INDEX ix_audit_entries_team_id ON audit_entries (team_id);
 GO
@@ -431,6 +443,7 @@ CREATE TABLE signin_identities (
 	last_used_at VARCHAR(40) NOT NULL, 
 	CONSTRAINT signin_identities_pkey PRIMARY KEY (id), 
 	CONSTRAINT uq_signin_identities_subject UNIQUE (tenant_id, provider_id, subject), 
+	CONSTRAINT uq_signin_identities_person UNIQUE (tenant_id, provider_id, user_id), 
 	CONSTRAINT fk_signin_identities_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
 	CONSTRAINT fk_signin_identities_user FOREIGN KEY(tenant_id, user_id) REFERENCES users (tenant_id, id), 
 	CONSTRAINT signin_identities_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
@@ -457,6 +470,8 @@ CREATE TABLE signin_flows (
 	answered_at VARCHAR(40) NULL, 
 	used_at VARCHAR(40) NULL, 
 	test_result NVARCHAR(max) NULL, 
+	subject VARCHAR(255) NULL, 
+	invite_hash VARCHAR(64) NULL, 
 	CONSTRAINT signin_flows_pkey PRIMARY KEY (id), 
 	CONSTRAINT fk_signin_flows_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
 	CONSTRAINT signin_flows_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id), 
@@ -748,5 +763,5 @@ CREATE TABLE alembic_version_platform (
     CONSTRAINT alembic_version_platform_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_platform (version_num) VALUES ('0046_roles_given_to_groups');
+INSERT INTO alembic_version_platform (version_num) VALUES ('20261124_0100_close_invites');
 GO

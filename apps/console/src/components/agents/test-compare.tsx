@@ -74,7 +74,10 @@ function Side({ label, threadId, open }: { label: string; threadId?: string; ope
  */
 export function TestCompare({ agentId, agentName, newest, versions, open }: { agentId: string; agentName: string; newest: number; versions: AgentVersion[]; open: Openers }) {
   const others = versions.filter((v) => v.version !== newest);
-  const [against, setAgainst] = React.useState<number | undefined>(others.find((v) => v.state === 'published')?.version ?? others[0]?.version);
+  // The person's pick, else the published version, else the newest other one. Derived on every render: on a page opened
+  // by its address the versions arrive after the first render, and a default fixed then would stay empty.
+  const [chosen, setAgainst] = React.useState<number | undefined>();
+  const against = others.some((v) => v.version === chosen) ? chosen : (others.find((v) => v.state === 'published')?.version ?? others[0]?.version);
   const [threads, setThreads] = React.useState<{ draft?: string; other?: string }>({});
   const create = useCreateThread();
   const chat = useSendMessage();

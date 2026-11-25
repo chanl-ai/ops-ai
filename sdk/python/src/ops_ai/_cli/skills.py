@@ -64,7 +64,9 @@ def main(argv: list[str]) -> int:
     history = sub.add_parser("versions", parents=common, help="each version, who asked for, approved and published it")
     history.add_argument("id")
     applying = sub.add_parser("apply", parents=common, help="create a skill from a file, or save it as a draft")
-    applying.add_argument("definition", help="a YAML or JSON file; ownerTeam is needed to create")
+    applying.add_argument(
+        "definition", help="a YAML or JSON file; ownerTeam (a team id) is the acting team when left out"
+    )
     applying.add_argument("--note", default="")
     export = sub.add_parser("export", parents=common, help="print a stored skill as a file apply reads")
     export.add_argument("id")

@@ -1,4 +1,4 @@
-# 58 access exceptions: decisions taken outside can() and policy defaults that hold something back
+# 59 access exceptions: decisions taken outside can() and policy defaults that hold something back
 # (scripts/check_access_exceptions.py). This number may only go down. Each line is `path kind key count row`; row is
 # the line of the Exceptions register in docs/architecture/roles-and-permissions.md that records the decision.
 # When the code changes, lower the count or delete the line. A new line needs a register row and a Standards-exception:
@@ -30,6 +30,7 @@ services/platform-service/src/ops_platform/auth.py refusal workspace_closed 1 E4
 services/tools-service/src/ops_tools/modules/service.py refusal plugin_module 1 E45  # keep tools: a plugin's module is changed by its plugin
 services/platform-service/src/ops_platform/teams.py refusal domain_not_allowed 1 E18  # keep platform: the workspace's allowed email domains, a setting
 services/platform-service/src/ops_platform/policies.py conflict approval_floor 1 E55  # keep platform: a team's approval rule stays at or above the Security team's floor
+services/platform-service/src/ops_platform/roles.py conflict privileged_for_group 1 E56  # keep platform: a privileged role goes to people only, never to a group
 services/platform-service/src/ops_platform/workspace_lifecycle.py conflict last_admin 1 E43  # keep platform: a team keeps one active admin
 services/platform-service/src/ops_platform/workspace_lifecycle.py conflict owner_must_transfer 1 E42  # keep platform: the owner leaves only by a transfer
 services/tools-service/src/ops_tools/gateway_calls.py lock SYSTEM_TOOLS 3 E06  # convert tools: the system lock becomes a grid cell or a policy
@@ -67,7 +68,7 @@ packages/ops_access/src/ops_access/policies.py policy-default memoryRetentionDay
 packages/ops_access/src/ops_access/policies.py policy-default mcpConnectionHours=8 1 open  # keep platform: an open default, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default pageImages={} 1 E03  # keep platform: holds something back by decision, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default publishReview={} 1 E01  # keep platform: holds something back by decision, read through policy()
-packages/ops_access/src/ops_access/policies.py policy-default requesterMayDecide=false 1 E49  # keep platform: holds something back by decision, read through policy()
+packages/ops_access/src/ops_access/policies.py policy-default requesterMayDecide=true 1 open  # keep platform: an open default, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default reviewSlaHours=8 1 open  # keep platform: an open default, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default securityTeamAddsSecrets=false 1 open  # keep platform: an open default, read through policy()
 packages/ops_access/src/ops_access/policies.py policy-default skillPublishStrict={} 1 open  # keep platform: an open default, read through policy()
@@ -89,6 +90,7 @@ packages/ops_access/src/ops_access/policies.py policy-default approvalsFloor={} 
 * conflict agent_paused 0 state
 * conflict alias_exists 0 state
 * conflict already_decided 0 state
+* conflict already_linked 0 state
 * conflict already_granted 0 state
 * conflict already_published 0 state
 * conflict already_resumed 0 state
@@ -153,6 +155,7 @@ packages/ops_access/src/ops_access/policies.py policy-default approvalsFloor={} 
 * conflict nothing_to_approve 0 state
 * conflict nothing_to_publish 0 state
 * conflict owner_changed 0 state
+* conflict plan_stale 0 state
 * conflict provider_exists 0 state
 * conflict provider_not_rebindable 0 state
 * conflict purged 0 state
@@ -164,6 +167,7 @@ packages/ops_access/src/ops_access/policies.py policy-default approvalsFloor={} 
 * conflict role_set_by_rule 0 state
 * conflict run_active 0 state
 * conflict run_finished 0 state
+* conflict run_not_redrivable 0 state
 * conflict run_not_running 0 state
 * conflict run_not_stuck 0 state
 * conflict run_not_waiting 0 state

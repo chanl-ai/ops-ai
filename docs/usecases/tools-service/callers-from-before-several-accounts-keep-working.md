@@ -27,7 +27,7 @@ app. Design: the several accounts per app design, AC10.
 |---|---|---|
 | 1 | A call with `runContext.account: EU org`; one with that and `accounts: {salesforce: Retail org}` | The EU org; then the production org |
 | 2 | `runContext.account: Ghost org` | 404 ACCOUNT_NOT_FOUND |
-| 3 | Maya posts `/v1/me/accounts/{id}/another` with no body | A sign-in at the first account's My Domain |
+| 3 | Retail org is set to Each person signs in; Maya posts `/v1/me/accounts/{id}/another` with no body | A sign-in at the first account's My Domain |
 | 4 | The older SDK reads Salesforce's page | Both team accounts, each row carrying `identity` |
 | 5 | The older SDK's `apps_add_own_account(id)` | A sign-in at the first account's My Domain |
 

@@ -103,6 +103,15 @@ export function useRoleChanges(id: string) {
 export const useRoleHolders = (id: string, enabled: boolean, p: ListParams = { page: 1, pageSize: 10 }) =>
   useTeamQuery({ queryKey: ['access', 'role', id, 'holders', p], queryFn: () => api.teams.roleHolders!(id, p), enabled: enabled && !!api.teams.roleHolders });
 
+/** Gives the role to a person or a group in the team the console acts in; the role's count and holders refresh. */
+export function useGiveRoleTo(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (holder: { kind: 'person' | 'group'; id: string }) => api.teams.giveRoleTo!(id, holder),
+    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: ['access', 'role', id] }), qc.invalidateQueries({ queryKey: ['access', 'roles'] })]),
+  });
+}
+
 /** The custom roles given to a person, and giving or taking one; their access refreshes after either. */
 export function useRoleGrants(personId: string, p: ListParams = { page: 1, pageSize: 20 }) {
   const qc = useQueryClient();
@@ -171,18 +180,18 @@ export function useCanCheck(): (area: string, action: string, everyTeam?: boolea
 }
 
 /**
- * The person's teams in which they hold `area.action`: all of them when a workspace role grants it, undefined while
- * permissions load. A list that spans teams shows only these, and a team picker offers only these.
+ * The person's teams in which they hold `area.action`: `'all'` when a workspace role grants it in every team,
+ * undefined while permissions load. A list that spans teams shows only these, and a team picker offers only these.
  */
-export function useTeamsAllowing(area: string, action: string): string[] | undefined {
-  const { team, teamId, teams } = useTeam();
+export function useTeamsAllowing(area: string, action: string): string[] | 'all' | undefined {
+  const { team, teamId } = useTeam();
   const perms = useMyPermissions();
   const here = useCanCheck()(area, action);
   // Without per-team permissions only the current team's answer is known.
   if (!api.teams.me) return here === undefined ? undefined : here ? [team?.id ?? teamId] : [];
   if (!perms.data) return undefined;
   const held = (list: { area: string; action: string }[]) => list.some((p) => p.area === area && p.action === action);
-  if (held(perms.data.workspace ?? [])) return teams.map((t) => t.id);
+  if (held(perms.data.workspace ?? [])) return 'all';
   return perms.data.teams.filter((t) => held(t.permissions)).map((t) => t.teamId);
 }
 

@@ -50,11 +50,14 @@ await withUiStack(
       await dialog.locator('#mk-openapi').click();
       await dialog.getByLabel('Spec URL').fill(specUrl);
       const discovered = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${tools}/v1/tool-modules/discover`, { timeout: 60_000 }));
+      const paged = armed(page.waitForResponse((r) => r.request().method() === 'GET' && r.url().startsWith(`${tools}/v1/tool-modules/discoveries/`), { timeout: 60_000 }));
       await dialog.getByTestId('import-next').click();
       const discoverRes = await discovered;
       const found = discoverRes ? (await discoverRes.json()).data : undefined;
+      const pageRes = await paged;
+      const ops = pageRes ? (await pageRes.json()).data?.data : undefined;
       // Access comes from the method: both documented operations are GETs, so both read and start selected.
-      check('the dialog reads the bank document through tools-service, each GET a read', discoverRes?.status() === 200 && found?.operations?.every((o) => o.access === 'read') && found.operations.length === 2, { status: discoverRes?.status(), ops: found?.operations?.map((o) => [o.name, o.access]) });
+      check('the dialog reads the bank document through tools-service, each GET a read', discoverRes?.status() === 200 && found?.operationTotal === 2 && ops?.length === 2 && ops.every((o) => o.access === 'read'), { status: discoverRes?.status(), found, ops: ops?.map((o) => [o.name, o.access]) });
 
       await dialog.locator('#op-latest_statement').click();
       const created = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${tools}/v1/tool-modules`, { timeout: 60_000 }));
@@ -72,7 +75,7 @@ await withUiStack(
       // Tool names are unique across modules, so the module made above goes first. It names no connection: the module
       // gets its own, holding the document's address.
       await fetch(`${tools}/v1/tool-modules/${module?.id}`, { method: 'DELETE', headers: JSONH });
-      const forged = await post('/v1/tool-modules', { name: 'uc012-ui-forged', displayName: 'Forged', system: 'Forged', source: { kind: 'openapi', specUrl }, operations: [{ ...found.operations.find((o) => o.name === 'get_account'), method: 'DELETE', path: '/admin' }] });
+      const forged = await post('/v1/tool-modules', { name: 'uc012-ui-forged', displayName: 'Forged', system: 'Forged', source: { kind: 'openapi', specUrl }, operations: [{ ...(({ added: _added, ...o }) => o)(ops.find((o) => o.name === 'get_account')), method: 'DELETE', path: '/admin' }] });
       const forgedModule = forged.ok ? (await forged.json()).data : undefined;
       const forgedOp = forgedModule?.operations?.[0];
       check('a forged method and path are replaced by the document', forgedOp?.method === 'GET' && forgedOp?.path === '/accounts/{accountId}', { status: forged.status, op: forgedOp && [forgedOp.method, forgedOp.path], body: forged.ok ? undefined : (await forged.text()).slice(0, 200) });
@@ -85,7 +88,7 @@ await withUiStack(
       // Sam acts in Security, so the team_ops module that calls the host is named by its id, without a link: its name
       // and page are that team's records. The list is read again on this visit, so the id is waited for.
       const named = await hostRow.getByText(forgedModule?.id ?? '-', { exact: true }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
-      check('the host names the module that calls it', named && (await hostRow.locator(`a[href="/tools/${forgedModule?.id}"]`).count()) === 0, { row: await hostRow.innerText(), forged: forgedModule?.id });
+      check('the host names the module that calls it', named && (await hostRow.locator(`a[href="/data/tools/${forgedModule?.id}"]`).count()) === 0, { row: await hostRow.innerText(), forged: forgedModule?.id });
       await hostRow.getByRole('button').last().click();
       await page.getByRole('menuitem', { name: 'Remove' }).click();
       const removed = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${tools}/v1/egress/hosts/remove`, { timeout: 60_000 }));

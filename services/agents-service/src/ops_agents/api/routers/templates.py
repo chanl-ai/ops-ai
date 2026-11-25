@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import copy as deep
 import json
-from dataclasses import replace
 from typing import Annotated, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query
@@ -33,7 +32,7 @@ from pydantic import Field, ValidationError
 from ops_contracts.templates import CopyRef, Installed, TemplateRequires
 from ops_documents_client import DocumentsClient, DocumentsRefused
 from ops_identity import ServiceCallError, ServiceUnreachable
-from ops_identity.fastapi import ActingPerson, Tx
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import (
     ApiError,
     Conflict,
@@ -55,7 +54,7 @@ from ...store.skills import LABELS as SKILL_LABELS
 from ...store.template_copies import TemplateCopies, TemplateCopyRow
 from ...store.tenancy import current_team
 from ..agent_registry import GUARDRAILS, AgentCaps, AgentSpec, registry
-from ..auth import Principal, caller, reader_of, require_builder
+from ..auth import Principal, caller, maker, reader_of, require_builder
 from ..child_runs import team_workflows
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -78,15 +77,6 @@ router = APIRouter(prefix="/v1/templates", tags=["templates"])
 resources = APIRouter(prefix="/v1/resources", tags=["resources"])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(caller)]  # noqa: UP040
-
-
-async def maker(me: Annotated[Principal, Depends(caller)], acting: ActingPerson) -> Principal:
-    """The caller, named as the person a service's call acts for (X-Acting-For, verified by ops_identity), so a copy
-    tools-service makes over MCP records that person as its maker. The rights checked stay the service token's, which
-    carries only the cells the person holds."""
-    if acting is None or me.identity is None or me.identity.kind != "service":
-        return me
-    return replace(me, email=acting.email, name=acting.name or acting.email, sub=acting.sub)
 
 
 Maker: TypeAlias = Annotated[Principal, Depends(maker)]  # noqa: UP040

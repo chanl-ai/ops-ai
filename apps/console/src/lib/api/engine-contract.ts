@@ -35,6 +35,8 @@ export interface EngineApi {
   cancelRun(runId: string): Promise<EngineRun>;
   /** Queues a Stuck run again from its last recorded step; 409 `run_not_stuck` once it moved on. */
   retryRun(runId: string): Promise<EngineRun>;
+  /** Queues a Failed or Stuck run again from its failed step, on its own version; 409 `run_not_redrivable` otherwise. */
+  redriveRun(runId: string): Promise<EngineRun>;
   /** Starts the run of an email the mailbox listener set aside, under the email's own run key; 404 once it ran. */
   runSetAsideEmail(eventId: string): Promise<EngineRunStarted>;
 }

@@ -37,7 +37,6 @@
     "apps/console/src/app/layout.tsx"
    ],
    "usecases": [
-    "uc-047",
     "uc-100",
     "uc-264",
     "uc-232",
@@ -666,9 +665,7 @@
     "apps/console/src/app/wiki/**",
     "apps/console/src/components/wiki/**"
    ],
-   "usecases": [
-    "uc-047"
-   ]
+   "usecases": []
   },
   {
    "row": "page: Settings, workspace general",

@@ -21,10 +21,12 @@ from ops_store.listing import ListPage
 from .store.roles import (
     AlreadyGrantedError,
     Holdings,
+    PrivilegedForGroupError,
     RoleInUseError,
     RoleNameTakenError,
     RoleRow,
     RoleStore,
+    UnknownGroupError,
 )
 
 
@@ -256,6 +258,36 @@ class Roles:
             raise Conflict(f"They hold {role.name} in that team already.", code="already_granted") from e
         [given] = (await self.store.grants_of(tenant_id, person_id, ListParams(ids=[grant_id])))["data"]
         return given
+
+    async def give(
+        self, tenant_id: str, role_id: str, kind: str, subject_id: str, team_id: str, *, by: str, request_id: str
+    ) -> Json:
+        """Gives a person or a group a custom role in a team, from the role's page, and answers the new holder row. A
+        person goes through `grant` (its 409s apply); a group the workspace lacks is 404, and a group is never given a
+        role holding a privileged cell (409 `privileged_for_group` naming the cells) or one it holds (409
+        `already_granted`). The store writes the `role.grant` audit entry either way."""
+        if kind == "person":
+            await self.grant(tenant_id, subject_id, role_id, team_id, by=by, request_id=request_id)
+        else:
+            role = await self._custom(tenant_id, role_id, "given to a group")
+            try:
+                await self.store.assign(
+                    tenant_id, subject_kind="group", subject_id=subject_id, role_id=role_id, team_id=team_id, by=by,
+                    request_id=request_id,
+                )  # fmt: skip
+            except UnknownGroupError as e:
+                raise NotFound("No group with that id.") from e
+            except PrivilegedForGroupError as e:
+                raise Conflict(
+                    f"{role.name} holds permissions a group is never given: {', '.join(e.cells)}. "
+                    "Give it to each person.",
+                    code="privileged_for_group",
+                    details={"cells": e.cells},
+                ) from e
+            except AlreadyGrantedError as e:
+                raise Conflict(f"That group holds {role.name} in this team already.", code="already_granted") from e
+        rows = (await self.store.holders(tenant_id, role_id, ListParams(ids=[subject_id])))["data"]
+        return next(r for r in rows if r["kind"] == kind and r["teamId"] == team_id)
 
     async def _custom(self, tenant_id: str, role_id: str, verb: str) -> RoleRow:
         role = await self.store.role_by_id(tenant_id, role_id)

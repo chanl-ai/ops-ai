@@ -1,6 +1,6 @@
 # Search a long document's pieces on the server
 
-Status: passing. Id: `uc-762`. Service: `kb-service`. Layers: api.
+Status: passing. Id: `uc-772`. Service: `kb-service`. Layers: api.
 
 Short title: Search a long document's pieces on the server
 
@@ -37,7 +37,7 @@ table below, and "Proved by" is the one step whose check shows the story works. 
 | PostgreSQL with pgvector | `make db-up` |
 | kb-service with its files-service and documents-service | `kb()` in the harness |
 
-Run: `make usecase-test UC=uc-762 LAYER=api`.
+Run: `make usecase-test UC=uc-772 LAYER=api`.
 
 ## Steps and expected results
 
@@ -54,7 +54,7 @@ stays in the table as **Open**, and a card is filed for it; the script never rea
 
 | Layer | Script | State |
 |---|---|---|
-| api | `kb-service/scripts/test-uc-762-api.py` | passing |
+| api | `kb-service/scripts/test-uc-772-api.py` | passing |
 
 ## Non-vacuous check
 

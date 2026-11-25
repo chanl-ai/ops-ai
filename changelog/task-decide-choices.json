@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "Human Tasks show where to choose and how to take a task",
+  "description": "On a Human Task the Decide button now says which choices to pick and why it waits, the choices sit above the folded Details, and a task can be taken with Assign. A person who cannot decide is told who can.",
+  "tag": "fix"
+}

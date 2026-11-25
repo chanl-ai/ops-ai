@@ -4,7 +4,10 @@ One claimed row is one pass over a run: a start runs it from its trigger (or con
 a crash), a resume answers the review it waits on. While it runs, a heartbeat renews both the thread lease and the
 work claim. A worker that dies leaves both to lapse; the next claim takes the row over with a higher lease generation
 and LangGraph continues from the last checkpoint, where the node wrapper returns every recorded step without running
-it. A pass that raises is retried; the third failure fails the run with its error (workflow-runner.md section 4).
+it. A pass that fails is tried again only when its error's kind is retryable (ops_contracts.errors.CODES), after a
+jittered wait no shorter than the error's retry-after; a non-retryable error fails the run at once, and a run whose
+MAX_PASSES attempts are used pauses as Stuck with its last error, for Retry. A busy lease, a shutdown or a deploy
+gives the claim back without using an attempt (workflow-runner.md section 4).
 
 The sweeper is this claim: a lapsed claim is what a crashed run looks like here. The v1 sweeper in the API process
 leaves engine threads (RUN_PREFIX) alone.
@@ -24,13 +27,24 @@ from typing import Any, cast
 from langgraph.types import Command
 
 from ops_checkpointer import LeaseSupersededError
+from ops_contracts.errors import CODES, RunError, code_of, run_error
 from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 from ops_store import background
+from ops_store.retry import jittered
 
-from .compiler import CHANNEL, CompiledCache, NodeFailedError, WriteInDoubtError, WriteUncertainError, technical
+from .compiler import (
+    CHANNEL,
+    CompiledCache,
+    NodeFailedError,
+    WriteInDoubtError,
+    WriteNeedsPersonError,
+    WriteUncertainError,
+    failure_code,
+    technical,
+)
 from .definition import parse
-from .journal import RunCancelledError
+from .journal import FAILING_PORTS, RunCancelledError
 from .node_types import TypeRegistry
 from .ports import EnginePorts, EventPort, LeaseBusyError, LeasePort
 from .store import TERMINAL, DefinitionStore, RunRow, RunStore, SqlJournal, Transactions, Work, WorkQueue
@@ -39,7 +53,8 @@ from .store.clock import now_iso
 log = get_logger("ops_engine.worker")
 
 MAX_PASSES = 4
-# The wait before a failed pass is tried again: an outage such as a service restart is ridden out.
+# The longest wait before a failed pass is tried again, by attempt: an outage such as a service restart is ridden
+# out. Each wait is jittered over the whole span (ops_store.retry).
 PASS_WAITS = (5.0, 30.0, 120.0)
 # A write still in doubt after this many passes (backoff capped at 30 s, so about ten minutes) fails its run for a
 # person to settle: the gateway expires a stale claim to lost well before, so this is reached only when it cannot.
@@ -49,19 +64,50 @@ RECURSION_LIMIT = 100
 UNEXPECTED = "The run stopped on an error outside its steps. The technical detail is in the run's events."
 
 
-def failure_of(e: Exception) -> tuple[str, str]:
-    """(plain message, technical detail) for a pass that failed."""
+def failure_of(e: Exception) -> tuple[str, str, RunError]:
+    """(plain message, technical detail, the error model's record) for a pass that failed. A step's failure keeps its
+    code, step and attempt; an outside call that failed before a step ran (the tools service restarting) is that
+    call's failure, and anything else is ours (`internal_error`)."""
     if isinstance(e, NodeFailedError):
-        return e.plain, e.detail
-    return UNEXPECTED, technical(e)
+        err = run_error(
+            e.code,
+            e.plain,
+            step=e.step,
+            step_name=e.step_name,
+            attempt=e.attempt,
+            of=e.of,
+            retry_after_seconds=e.retry_after,
+        )
+        return e.plain, e.detail, err
+    return UNEXPECTED, technical(e), run_error(failure_code(e), UNEXPECTED)
+
+
+# The error model's code for a step that left by a way of failing and led the run to a failure End.
+PORT_CODES = {
+    "error": "ended_as_failure",
+    "refused": "forbidden",
+    "unreadable": "schema_mismatch",
+    "timeout": "step_too_long",
+}
 
 
 class ClaimLostError(RuntimeError):
     pass
 
 
+def pass_wait(attempts: int, retry_after: float | None) -> float:
+    """The wait before a failed pass's next attempt: jittered over its PASS_WAITS span, and never shorter than the
+    error's retry-after."""
+    return jittered(PASS_WAITS[min(attempts, len(PASS_WAITS)) - 1], retry_after)
+
+
 # The review deadline when the host gives none: the workspace setting's own default.
 DEFAULT_REVIEW_HOURS = 8.0
+
+# A chat reply as queue work: its row's run_id is the thread, its payload names the turn. The host runs it.
+TURN = "turn"
+# What a turn that ran out of time says: on its row, and through the host on the reply.
+TURN_TOO_LONG = "The reply took too long, so it was stopped."
 
 
 @dataclass
@@ -79,6 +125,8 @@ class WorkerHost:
     run_scope: Callable[[str], AbstractContextManager[object]]
     owner: str
     concurrency: int = 4
+    # Work rows one team (or concurrency key) may run at once across every worker; None for no cap (work.py).
+    team_cap: int | None = None
     # Called with the run before its pass, inside the pass's own task: the host records the run's team, so what the
     # pass sends on (a tool call's service token) names the team the run belongs to, as a person's request would.
     enter_run: Callable[[RunRow], None] | None = None
@@ -90,6 +138,14 @@ class WorkerHost:
     # The URL and token an outside system resumes a step parked on its work with, from the run and its waiting
     # state; None gives a parked step no callback, so only its event or its time limit wakes it.
     resume_link: Callable[[RunRow, Json, float], dict[str, str]] | None = None
+    # Runs a chat turn this worker claimed (the process that queued it died): continues its thread and answers None,
+    # or a delay in seconds to give the claim back after (its thread is still held). None: this worker runs no turns,
+    # and leaves their rows to one that does.
+    turn: Callable[[Work], Awaitable[float | None]] | None = None
+    # Ends a turn past its time limit: its reply is stopped with TURN_TOO_LONG and its thread let go.
+    end_turn: Callable[[Work, str], Awaitable[None]] | None = None
+    # A turn's time limit, from when it was queued, whoever runs it (the setting turn_deadline_seconds).
+    turn_limit_s: float = 120.0
     _cache: CompiledCache | None = field(default=None, init=False)
 
     def cache(self) -> CompiledCache:
@@ -116,8 +172,6 @@ def ending(values: Json) -> Json | None:
     return None
 
 
-# The ways a step leaves when it did not do its job: what a failure End names as the reason the run failed.
-FAILING_PORTS = ("error", "refused", "unreadable", "timeout")
 # An error as the engine records it, "DocumentNotFound: 404 not_found: File was not found.": the exception's name and
 # the service's status and code are for builders, who read them on the step; the run's reason keeps the message.
 _ENGINE_PREFIX = re.compile(r"^(?:[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+: )?(?:\d{3} [a-z]+(?:_[a-z]+)*: )?")
@@ -136,6 +190,14 @@ _PLAIN_CODES = {
 }
 
 
+def _age_s(iso: str) -> float:
+    """Seconds since an ISO time; 0 for a row with none."""
+    if not iso:
+        return 0.0
+    at = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    return (datetime.now(UTC) - (at if at.tzinfo else at.replace(tzinfo=UTC))).total_seconds()
+
+
 def plain_error(text: str) -> str:
     """A step's error as the run's reason reads it: the message without the engine's prefix, a bare code in words."""
     said = _ENGINE_PREFIX.sub("", text.strip()).rstrip(".").strip() or text.strip().rstrip(".")
@@ -148,7 +210,13 @@ class Worker:
     def __init__(self, host: WorkerHost, beat: background.Beat | None = None) -> None:
         """`beat` is the workflow worker's heartbeat, written from this loop's own scope, never a pass's."""
         self.host, self.beat = host, beat
-        self.queue = WorkQueue(host.tx, host.owner, host.leases.ttl)
+        self.queue = WorkQueue(
+            host.tx,
+            host.owner,
+            host.leases.ttl,
+            team_cap=host.team_cap,
+            skip_kinds=() if host.turn is not None else (TURN,),
+        )
         self.runs = RunStore(host.tx)
         self.definitions = DefinitionStore(host.tx)
 
@@ -191,6 +259,11 @@ class Worker:
             task.add_done_callback(tasks.discard)
         for t in list(tasks):
             t.cancel()
+        # Each cancelled pass gives its claim back before the loop returns (_process); not awaited, the process could
+        # exit first and every deploy would count a lapse toward Stuck.
+        for t in list(tasks):
+            with suppress(asyncio.CancelledError, Exception):
+                await t
 
     async def _due(self) -> int | None:
         try:
@@ -216,6 +289,9 @@ class Worker:
         await asyncio.create_task(scoped())
 
     async def _process(self, work: Work) -> None:
+        if work.kind == TURN:
+            await self._turn(work)
+            return
         run = await self.runs.row(work.run_id)
         # A run whose graph reached its End is done with work, though it may still wait on runs it started: its
         # checkpoints are gone, so a late row (a decided review's deadline) must not start the graph again.
@@ -224,11 +300,13 @@ class Worker:
             return
         if self.host.enter_run is not None:
             self.host.enter_run(run)
-        lease_run = f"work_{work.id}_{work.attempts}"
+        # The owner too: a claim given back keeps its attempt count, so a later claim of the row reads the same count.
+        lease_run = f"work_{work.id}_{work.attempts}_{self.host.owner}"
         try:
             generation = await self.host.leases.acquire(run.id, lease_run)
         except LeaseBusyError:
-            await self.queue.release(work, 1.0)
+            # Another pass holds the run: nothing failed, so the claim goes back without using an attempt.
+            await self.queue.give_back(work, 1.0)
             return
         lost = asyncio.Event()
         beat = asyncio.create_task(self._heartbeat(work, run.id, lease_run, lost))
@@ -245,6 +323,15 @@ class Worker:
                 raise ClaimLostError("the lease or the work claim was taken over mid-pass")
             passing.result()
             await self.queue.done(work)
+        except asyncio.CancelledError:
+            # The worker is stopping (a shutdown or a deploy): the claim goes back now, without using an attempt, and
+            # the next worker continues from the last checkpoint.
+            passing.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await passing
+            with suppress(Exception):
+                await asyncio.shield(self.queue.give_back(work, 0.0))
+            raise
         except RunCancelledError as e:
             # The step under way when the run was cancelled ended and was recorded; the next one did not begin.
             log.info("engine_pass_cancelled", run=run.id, work=work.id, error=str(e))
@@ -259,22 +346,34 @@ class Worker:
             with suppress(LeaseSupersededError):
                 await self.runs.update(run.id, generation=generation, status="queued", error=str(e))
                 await self.queue.release(work, min(30.0, float(2**work.attempts)), error=str(e))
+        except WriteNeedsPersonError as e:
+            # Its gateway died and its class cannot settle it: a person decides (Retry reads the gateway again).
+            log.warning("engine_write_needs_person", run=run.id, work=work.id, error=e.detail)
+            with suppress(LeaseSupersededError):
+                message, detail, err = failure_of(e)
+                await self._stuck(run, generation, work, message, detail, err=err)
         except WriteUncertainError as e:
             # A write that may have run: the run fails now with the reason, and no pass sends it again.
             log.warning("engine_write_uncertain", run=run.id, work=work.id, error=e.detail)
             with suppress(LeaseSupersededError):
-                await self._fail(run, generation, work, e.plain, e.detail)
+                message, detail, err = failure_of(e)
+                await self._fail(run, generation, work, message, detail, err=err)
         except Exception as e:
             # The run's error is what people read on the run page; the technical text goes on the event and the
             # work row (and on the step's own row for a step that failed).
-            message, detail = failure_of(e)
-            log.exception("engine_pass_failed", run=run.id, work=work.id, attempt=work.attempts)
+            message, detail, err = failure_of(e)
+            log.exception("engine_pass_failed", run=run.id, work=work.id, attempt=work.attempts, code=err.code)
             with suppress(LeaseSupersededError):
-                if work.attempts < MAX_PASSES:
-                    await self.runs.update(run.id, generation=generation, status="queued", error=message)
-                    await self.queue.release(work, PASS_WAITS[min(work.attempts, len(PASS_WAITS)) - 1], error=detail)
+                if not code_of(err.code).retryable:
+                    # Trying again cannot help (bad input, a rule's refusal, our own fault): it fails now.
+                    await self._fail(run, generation, work, message, detail, err=err)
+                elif work.attempts < MAX_PASSES:
+                    await self.runs.update(
+                        run.id, generation=generation, status="queued", error=message, failure=err.wire()
+                    )
+                    await self.queue.release(work, pass_wait(work.attempts, err.retry_after_seconds), error=detail)
                 else:
-                    await self._fail(run, generation, work, message, detail)
+                    await self._stuck(run, generation, work, message, detail, err=err)
         finally:
             watching.cancel()
             beat.cancel()
@@ -282,12 +381,70 @@ class Worker:
                 await beat
             await self.host.leases.release(run.id, lease_run)
 
-    async def _heartbeat(self, work: Work, thread_id: str, lease_run: str, lost: asyncio.Event) -> None:
-        """Renews the lease and the claim. A cancel does not stop the pass here: the step under way finishes and is
-        journaled, and the next step's journal row is refused (RunCancelledError), so no call is cut off mid-flight."""
+    async def _turn(self, work: Work) -> None:
+        """A chat turn whose own process died: the host continues its thread from the last checkpoint, under the
+        claim, renewed here. The time limit counts from when the turn was queued, so a takeover never restarts it."""
+        assert self.host.turn is not None
+        left = self.host.turn_limit_s - _age_s(work.created_at)
+        if left <= 0:
+            await self._end_turn(work)
+            return
+        ended: str | None = None  # how the turn ended when it did not run to its end
+        again: float | None = None
+        try:
+            async with asyncio.TaskGroup() as group:
+                renewing = group.create_task(self._renew(work))
+                try:
+                    again = await asyncio.wait_for(self.host.turn(work), left)
+                finally:
+                    renewing.cancel()
+        except* TimeoutError:
+            ended = "late"
+        except* asyncio.CancelledError:
+            with suppress(Exception):
+                await asyncio.shield(self.queue.give_back(work, 0.0))
+            raise
+        except* Exception as group_failed:
+            e = group_failed.exceptions[0]
+            log.error("engine_turn_failed", work=work.id, thread=work.run_id, error=type(e).__name__)
+            ended = technical(e)
+        if ended == "late":
+            await self._end_turn(work)
+        elif ended is not None:
+            await self.queue.done(work, status="failed", error=ended)
+        elif again is None:
+            await self.queue.done(work)
+        else:
+            await self.queue.give_back(work, again)
+
+    async def _end_turn(self, work: Work) -> None:
+        if self.host.end_turn is not None:
+            await self.host.end_turn(work, TURN_TOO_LONG)
+        await self.queue.done(work, status="failed", error=TURN_TOO_LONG)
+
+    async def _renew(self, work: Work) -> None:
         while True:
             await asyncio.sleep(self.host.leases.ttl / 3)
-            if not await self.host.leases.heartbeat(thread_id, lease_run) or not await self.queue.renew(work):
+            try:
+                if not await self.queue.renew(work):
+                    log.warning("engine_turn_claim_lost", work=work.id, thread=work.run_id)
+                    return
+            except Exception as e:  # A blip is tried again at the next beat, as the pass heartbeat does.
+                log.warning("engine_turn_renew_failed", work=work.id, error=type(e).__name__)
+
+    async def _heartbeat(self, work: Work, thread_id: str, lease_run: str, lost: asyncio.Event) -> None:
+        """Renews the lease and the claim while the pass runs, a long tool call included. A cancel does not stop the
+        pass here: the step under way finishes and is journaled, and the next step's journal row is refused
+        (RunCancelledError), so no call is cut off mid-flight. A renewal that raises (a database blip) is tried
+        again at the next beat: only a lease or claim another worker has taken stops the pass."""
+        while True:
+            await asyncio.sleep(self.host.leases.ttl / 3)
+            try:
+                held = await self.host.leases.heartbeat(thread_id, lease_run) and await self.queue.renew(work)
+            except Exception as e:
+                log.warning("engine_heartbeat_failed", run=thread_id, work=work.id, error=type(e).__name__)
+                continue
+            if not held:
                 log.warning("engine_lease_lost", run=thread_id, work=work.id)
                 lost.set()
                 return
@@ -295,13 +452,27 @@ class Worker:
     async def _event(self, run: RunRow, generation: int, type_: str, node: str | None, data: Any) -> None:
         await self.host.events.append(run.id, run.team_id, type_, node, data, generation=generation)
 
-    async def _fail(self, run: RunRow, generation: int, work: Work, message: str, detail: str) -> None:
-        """Ends the run as failed: `message` for people, `detail` on its event and work row."""
-        await self.runs.update(run.id, generation=generation, status="failed", error=message, finished_at=now_iso())
-        await self._event(run, generation, "failed", None, {"message": message, "detail": detail})
+    async def _fail(
+        self, run: RunRow, generation: int, work: Work, message: str, detail: str, *, err: RunError
+    ) -> None:
+        """Ends the run as failed: `message` for people, `err` as the error model records it, `detail` on its event
+        and work row."""
+        await self.runs.update(
+            run.id, generation=generation, status="failed", error=message, failure=err.wire(), finished_at=now_iso()
+        )
+        await self._event(run, generation, "failed", None, {"message": message, "detail": detail, "code": err.code})
         await self.queue.done(work, status="failed", error=detail)
         await self._drop_checkpoints(run.id)
         await self.runs.settle_parents(run.id, run.created_by)
+
+    async def _stuck(
+        self, run: RunRow, generation: int, work: Work, message: str, detail: str, *, err: RunError
+    ) -> None:
+        """Pauses the run as Stuck with its last error once its attempts are used: its checkpoints and journal stay,
+        so Retry (RunStore.retry) continues it from its last recorded step."""
+        await self.runs.update(run.id, generation=generation, status="stuck", error=message, failure=err.wire())
+        await self._event(run, generation, "stuck", None, {"message": message, "detail": detail, "code": err.code})
+        await self.queue.done(work, status="stuck", error=detail)
 
     async def _drop_checkpoints(self, run_id: str) -> None:
         """The journal is the record the console reads; an ended run's checkpoints are not needed. A failed delete
@@ -471,15 +642,19 @@ class Worker:
             await self.host.remind(run, reminder)
         await self._next_reminder(run, payload, interrupt.id, n + 1)
 
-    async def _why_failed(self, run: RunRow, end: str) -> str:
+    async def _why_failed(self, run: RunRow, end: str) -> tuple[str, RunError]:
         """Why a run that reached a failure End failed: the last step that left by a way of failing (error, refused,
         unreadable, timeout) with its own error and how many attempts it took, then where the run ended. With no such
         step the End is the reason, and says so."""
         failing = [
-            s for s in await self.runs.step_rows(run.id) if s.port in FAILING_PORTS and s.node_type != "ops.flow.end"
+            s
+            for s in await self.runs.step_rows(run.id)
+            # An attempt a Redrive set aside belongs to an earlier pass; its tries are not this failure's.
+            if s.port in FAILING_PORTS and s.node_type != "ops.flow.end" and s.status != "redriven"
         ]
         if not failing:
-            return f"Ended at {end}, an end marked as a failure"
+            said = f"Ended at {end}, an end marked as a failure"
+            return said, run_error("ended_as_failure", said, details={"end": end})
         step = failing[-1]
         stored = await self.definitions.row(run.workflow_id, run.version)
         definition: Json = (stored.definition if stored else None) or {}
@@ -490,20 +665,32 @@ class Worker:
         said = plain_error(str(out.get("reason") or out.get("error") or step.error or step.port))
         tries = sum(1 for s in failing if s.node_id == step.node_id and s.iteration == step.iteration)
         attempts = f" after {tries} attempts" if tries > 1 else ""
-        return f"{name} failed{attempts}: {said}. The run ended at {end}."
+        text = f"{name} failed{attempts}: {said}. The run ended at {end}."
+        code = str(out.get("code") or "").lower()
+        err = run_error(
+            code if code in CODES else PORT_CODES[step.port or "error"],
+            text,
+            step=step.node_id,
+            step_name=name if name != step.node_id else None,
+            attempt=tries,
+            details={"end": end},
+        )
+        return text, err
 
     async def _finished(self, run: RunRow, generation: int, graph: Any, cfg: Json) -> None:
         values = cast(Json, (await graph.aget_state(cfg)).values or {})
         end = ending(values) or {}
         outcome = str(end.get("outcome") or "done")
         failed = end.get("result") == "failed"
+        why = await self._why_failed(run, str(end.get("name") or "")) if failed else None
         status = await self.runs.finish(
             run.id,
             generation=generation,
             failed=failed,
             outcome=outcome,
             output=end.get("output"),
-            error=await self._why_failed(run, str(end.get("name") or "")) if failed else None,
+            error=why[0] if why else None,
+            failure=why[1].wire() if why else None,
         )
         await self._event(run, generation, "finished", None, {"outcome": outcome, "status": status})
         await self._drop_checkpoints(run.id)

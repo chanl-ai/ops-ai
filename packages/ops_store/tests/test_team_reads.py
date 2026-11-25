@@ -29,6 +29,9 @@ NOT_YET_MARKED = {
     "registry_publish_requests",
     # background process: the update notices of the account-level event workflows have no team
     "service_events",
+    # ops_engine: the work queue, claimed by the workers across every team; a claim counts a team's live rows by its
+    # team column, and a row takes its run's team when it is queued (agents 0125)
+    "engine_work",
     # ops_engine: runs and definitions, scoped by the team passed in
     "engine_definitions",
     # ops_engine: a workflow's working copy copies its workflow's nullable team, and a team's builder edits a shared

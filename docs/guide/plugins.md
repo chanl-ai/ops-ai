@@ -143,7 +143,7 @@ paging, knowledge sources and templates.
 | `id`, `title`, `version`, `sdk` | `id` is reverse-domain (`opsai.salesforce`); the part after the last dot prefixes every tool name (`salesforce_query`) |
 | `connection.kinds` | Sign-in kinds the system accepts: `oauth2_auth_code`, `oauth2_client_credentials`, `oauth2_jwt_bearer`, `api_key`, `basic`, `bearer` or `none` |
 | `connection.authorize_url`, `token_url`, `revoke_url`, `scopes` | The OAuth app's addresses and scopes; `{setting}` placeholders are filled from settings |
-| `connection.sign_in` | Who signs in: `team`, `person` or `person_or_team`; `person` needs a kind that holds each person's own credential (`api_key`, `basic`, `bearer` or `oauth2_auth_code`), and validate refuses it on a plugin whose kinds are only `none`, `oauth2_client_credentials` or `oauth2_jwt_bearer` |
+| `connection.sign_in` | Who signs in: `team` or `person` (a manifest that still lists the retired `person_or_team` reads as `person`); `person` needs a kind that holds each person's own credential (`api_key`, `basic`, `bearer` or `oauth2_auth_code`), and validate refuses it on a plugin whose kinds are only `none`, `oauth2_client_credentials` or `oauth2_jwt_bearer` |
 | `connection.api_key` | For `api_key`: `{placement: header \| query, name}`, how the system takes its key; validate refuses an `api_key` plugin without it |
 | `connection.from_token`, `token_hosts` | Settings read from the token answer, and the host suffixes such a value must end in |
 | `connection.after_sign_in` | One lookup after sign-in that fills a setting (Salesforce's instance from UserInfo); see Headers, forms and sign-in steps |

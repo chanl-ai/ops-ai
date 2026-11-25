@@ -11,16 +11,17 @@ from ops_agent_kernel.ports import ToolOutcome
 from ops_agents.activities.catalog import Catalog
 from ops_agents.activities.tools import LocalToolExecutor
 from ops_email import MailNotConfiguredError, MailSender, OutboundMessage
-from ops_identity import ActingForPerson, ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable, principal_of
 from ops_service_kit.errors import ApiError
 from ops_service_kit.http import Json, JsonValue
 
 from .file_tools import FileTools
 from .knowledge_tools import KnowledgeSearch
 from .modules.review_events import APPLY_ACCESS
-from .modules.seed import FILE_TOOL_NAMES, KNOWLEDGE_TOOL_NAMES
+from .modules.seed import FILE_TOOL_NAMES, KNOWLEDGE_TOOL_NAMES, WORKSPACE_TOOL_NAMES
 
 if TYPE_CHECKING:
+    from .mcp_tools import PlatformTools
     from .modules.service import ApprovalView
 
 # The local executor refuses a write without a token. By the time a call reaches it the gateway has decided, so
@@ -72,6 +73,7 @@ class AccessDecisions(Protocol):
         by: str | None,
         team_id: str | None = None,
         deciders: Sequence[str] = (),
+        acting_for: Principal | None = None,
     ) -> ApprovalView | Mapping[str, JsonValue]: ...
 
 
@@ -92,13 +94,15 @@ class LocalToolRunner:
         decisions: AccessDecisions | None = None,
         file_tools: FileTools | None = None,
         knowledge: KnowledgeSearch | None = None,
+        workspace: PlatformTools | None = None,
     ) -> None:
         """`mail` is the install's own sender (ops_email.EmailProviders), for a send_reply that names no mailbox;
         without one, or with none configured, such a send fails with that reason. `mailbox_sender(tenant, team,
         address)` is the sender of a named mailbox of the caller's team (mailboxes.MailboxSenders), used when
         send_reply names `mailbox`. `cases` is agents-service, where open_case opens a case in the caller's team.
         `file_tools` reads the caller's team's files and documents through documents-service; `knowledge` searches
-        its knowledge bases through kb-service."""
+        its knowledge bases through kb-service. `workspace` runs the Workspace app's tools (mcp_tools.WORKSPACE) as
+        the person the call acts for."""
         self.tools = LocalToolExecutor(catalog)
         self.mail = mail
         self.mailbox_sender = mailbox_sender
@@ -106,6 +110,7 @@ class LocalToolRunner:
         self.decisions = decisions
         self.file_tools = file_tools
         self.knowledge = knowledge
+        self.workspace = workspace
 
     async def run(self, tool: str, arguments: Mapping[str, JsonValue], *, key: str, caller: ToolCaller) -> ToolOutcome:
         # send_acknowledgement sends the same way; it is declared a write that runs at once (seed.SENDS).
@@ -130,9 +135,27 @@ class LocalToolRunner:
             if self.knowledge is None:
                 return ToolOutcome(False, {"error": "This tools-service searches no knowledge: kb-service is not set."})
             return await self.knowledge.run(cast(Json, arguments), tenant=caller.tenant_id, team=caller.team_id)
+        if tool in WORKSPACE_TOOL_NAMES:
+            return await self._workspace(tool, arguments, caller)
         if tool == APPLY_ACCESS:
             return await self._apply_access(arguments, caller)
         return await self.tools.execute(tool, cast(Json, arguments), key=key, approval_token=DECIDED)
+
+    async def _workspace(self, tool: str, arguments: Mapping[str, JsonValue], caller: ToolCaller) -> ToolOutcome:
+        """A Workspace tool, run as the person the call acts for with only the cells their acting-for token says they
+        hold in the call's team; the owning service decides again with its own check. Never on the calling service's
+        own rights: a call that names no person, or a person of another team, is refused."""
+        person = caller.acting_for
+        if self.workspace is None:
+            return ToolOutcome(False, {"error": "This tools-service runs no Workspace tools."})
+        if person is None or not caller.team_id or person.team_id != caller.team_id:
+            return ToolOutcome(
+                False,
+                {"error": {"code": "acting_for_required", "status": 403, "message": "A Workspace tool acts only "
+                "for the person asking, in their own team."}},
+            )  # fmt: skip
+        who = principal_of(person, caller.tenant_id)
+        return await self.workspace.run(tool, dict(arguments), who=who, team=caller.team_id)
 
     async def _apply_access(self, arguments: Mapping[str, JsonValue], caller: ToolCaller) -> ToolOutcome:
         """A tool access request's decision, applied to the module's grant. Who decided is the person the
@@ -151,6 +174,7 @@ class LocalToolRunner:
                 by=caller.approvers[0],
                 team_id=caller.team_id,
                 deciders=caller.approvers,
+                acting_for=principal_of(caller.acting_for, caller.tenant_id) if caller.acting_for else None,
             )
         except ApiError as e:
             return ToolOutcome(False, {"error": str(e), "code": e.code})

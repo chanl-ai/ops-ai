@@ -19,14 +19,14 @@ task is next (`/place?group=case`). Every view as a table, with bulk decisions a
 | # | Step | Expected |
 |---|---|---|
 | 0 | List open Human Tasks grouped by case | Marcus, Jordan, Priya: by deadline alone Priya would sit between the other two |
-| 1 | Maya opens Human Tasks | The queue in that order under case titles, a task open beside it, the sidebar folded |
+| 1 | Maya opens Human Tasks | The queue in that order under case titles, a task open beside it |
 | 2 | Scroll the decision panel | Approve stays at the same place, inside the window |
 | 3 | Approve Marcus's task | Confirm it's you when the task asks; the run moves on; Jordan's task (same case) opens |
 | 4 | Open Priya's task, choose Decline, give a reason, decide | Each option shown as a choice; Decide changes to the chosen option's name; the run moves on |
 | 5 | Reassign Jordan's task | Its assignee is the person chosen |
 | 6 | Open `/reviews/{id}`, then a decided task's `?review=` | Redirected to the queue; the decided task reads "Decided by …" |
 | 7 | Open All tasks | The table with its views |
-| 8 | Open Cases | The sidebar is back |
+| 8 | Open the sidebar on Human Tasks, then open Cases | The sidebar stays open: it starts folded and keeps her own choice |
 | 9 | Throughout | No page error; no sideways scroll at 375 px |
 
 ## Acceptance layers

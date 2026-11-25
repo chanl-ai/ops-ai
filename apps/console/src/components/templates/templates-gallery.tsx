@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { QueryError } from '@/components/shared/query-states';
+import { packFor } from '@/lib/template-packs';
 import { Row, Rows } from '@/components/shared/surface';
 import { type ServerListAsk, useServerList } from '@/hooks/server-list';
 import { ApiError } from '@/lib/api/contract';
@@ -92,6 +93,7 @@ function TemplatesDialog({
   const [search, setSearch] = React.useState('');
   const query = useTemplates(kind, search, open);
   const install = useInstallTemplate(kind);
+  const pack = packFor(kind);
   const [adding, setAdding] = React.useState<string | null>(null);
   const noun = NOUN[kind];
   const rows = query.rows;
@@ -141,13 +143,23 @@ function TemplatesDialog({
           {search ? (
             'No template matches this search.'
           ) : (
-            <>
-              {`No ${noun} templates yet. A team admin turns on an app or pack on `}
-              <Link href="/data/connectors" className="text-primary underline-offset-4 hover:underline" data-testid="templates-gallery-connectors">
-                Connectors
-              </Link>
-              {' to offer some.'}
-            </>
+            pack ? (
+              <>
+                {`No ${noun} templates yet. A team admin turns on the `}
+                <Link href={pack.href} className="text-primary underline-offset-4 hover:underline" data-testid="templates-gallery-pack">
+                  {pack.name}
+                </Link>
+                {' pack to offer some.'}
+              </>
+            ) : (
+              <>
+                {`No ${noun} templates yet. A team admin turns on an app on `}
+                <Link href="/data/connectors" className="text-primary underline-offset-4 hover:underline" data-testid="templates-gallery-connectors">
+                  Connectors
+                </Link>
+                {' to offer some.'}
+              </>
+            )
           )}
         </p>
       ) : (

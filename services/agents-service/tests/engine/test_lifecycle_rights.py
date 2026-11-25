@@ -15,7 +15,9 @@ from sqlalchemy.pool import StaticPool
 
 from ops_access import AREAS, BUILTIN_GRIDS, encode_grid
 from ops_agents.api.app import create_app
+from ops_agents.api.routers import channel_list, forms, workflows
 from ops_agents.api.routers.engine import router as engine_router
+from ops_agents.api.routers.engine import runs_router
 from ops_agents.store.base import metadata
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
@@ -195,3 +197,49 @@ async def test_a_member_without_the_workflows_view_cell_reads_no_workflow_defini
     assert (await c.get(picker, params={"source": "workflows"}, headers=NOT_A_WORKFLOW_READER)).status_code == 403
     assert (await c.get(picker, params={"source": "agents"}, headers=NOT_A_WORKFLOW_READER)).status_code == 200
     assert (await c.get(picker, params={"source": "workflows"}, headers=VIEWER)).status_code == 200
+
+
+# Every GET on these routers asks workflows.view, except the step-form picker, which asks each source's own view cell
+# (the test above). Path ids are filled so a reader reaches the route; a missing record answers 404, never 403.
+WORKFLOW_READS = (engine_router, runs_router, workflows.router, forms.router, channel_list.live_router)
+ASKS_ITS_SOURCE = {"/v1/workflows/option-sources"}
+FILLED = {"{workflow_id}": "ops_refunds", "{version}": "1", "{run_id}": "run_none"}
+PARAMS = {
+    "/v1/workflows/definitions/account-uses": {"app": "gmail", "name": "ops"},
+    "/v1/workflows/definitions/{workflow_id}/diff": {"from": "1", "to": "working-copy"},
+    "/v1/runs/{run_id}/events": {"follow": "false"},
+}
+
+
+async def test_a_member_without_the_workflows_view_cell_reads_no_workflow_run_or_step(
+    stack: tuple[AsyncClient, AsyncEngine],
+) -> None:
+    # Taken from the routers, so a workflow or run read added without the view check fails here.
+    c, _ = stack
+    saved = await c.post("/v1/workflows/definitions", json={"definition": definition("ops_refunds")}, headers=BUILDER)
+    assert saved.status_code == 201, saved.text
+    gets = sorted(
+        {
+            r.path
+            for router in WORKFLOW_READS
+            for r in router.routes
+            if isinstance(r, APIRoute)
+            and "GET" in (r.methods or set())
+            and r.path.startswith(("/v1/workflows", "/v1/runs"))
+        }
+        - ASKS_ITS_SOURCE
+    )
+    assert {"/v1/runs", "/v1/runs/{run_id}", "/v1/workflows", "/v1/workflows/{workflow_id}/runs"} <= set(gets)
+    for template in gets:
+        path = template
+        for key, value in FILLED.items():
+            path = path.replace(key, value)
+        params = PARAMS.get(template, {})
+        for who in (NOT_A_WORKFLOW_READER, CHAT_USER):
+            refused = await c.get(path, params=params, headers=who)
+            assert refused.status_code == 403, f"{template}: {refused.status_code} {refused.text[:200]}"
+            assert refused.json()["error"]["code"] == "forbidden", f"{template}: {refused.text[:200]}"
+        # Publish preview also needs the publish cell, which a viewer does not hold.
+        reader = BUILDER if template.endswith("publish-preview") else VIEWER
+        read = await c.get(path, params=params, headers=reader)
+        assert read.status_code in (200, 404), f"{template}: {read.status_code} {read.text[:200]}"

@@ -19,7 +19,6 @@ from typing import Literal, cast
 from ops_email import InboundAttachment, InboundMessage
 from ops_engine import default_registry
 from ops_engine.node_types import start_form
-from ops_engine.starts import form_values
 from ops_engine.store import DefinitionRow, RunRow, RunStore
 from ops_files_client import FileNotFound, FileNotReady, FilesClient, FilesRefused
 from ops_service_kit.errors import Conflict, ServiceUnavailable, Unprocessable
@@ -32,7 +31,7 @@ from ..store.tenancy import current_tenant
 from .auth import Principal, approves_own_writes, started_by
 from .deps import Runtime
 from .email_trigger import EmailStarts, Target, binding_of
-from .engine_runs import start_run
+from .engine_runs import checked_values, start_run
 
 REGISTRY = default_registry()
 Mode = Literal["live", "test"]
@@ -132,25 +131,11 @@ async def by_email(rt: Runtime, h: HandStart) -> RunRow:
 ADAPTERS: dict[str, Adapter] = {"form": by_form, "email": by_email, "schedule": by_form}
 
 
-def _blank(value: JsonValue) -> bool:
-    return value is None or (isinstance(value, str) and not value.strip()) or value in ([], {})
-
-
 def filled(form: Json, values: Json) -> Json:
-    """The start form's values with its defaults, or 422 `invalid_input` naming each required field left empty, as the
-    console's start dialog says it. Every start of a form takes this path: by hand, the hosted form, and
-    POST /v1/runs for a Request trigger. `details.path` is the schema property name."""
-    schema = an_object(form.get("schema") or {}, "start form schema")
-    out, missing = form_values(schema, values)
-    if missing:
-        required = cast(list[JsonValue], schema.get("required") or [])
-        paths = [str(k) for k in required if _blank(out.get(k) if isinstance(k, str) else None)]
-        raise Unprocessable(
-            f"{', '.join(missing)} {'is' if len(missing) == 1 else 'are'} required.",
-            code="invalid_input",
-            details={"missing": missing, "path": paths[0] if paths else missing[0]},
-        )
-    return out
+    """The start form's values as a run takes them: its defaults, and text read as each field's declared type, or
+    422 `invalid_input` naming the field and the reason, as the console's start dialog says it. `details.path` is the
+    schema property."""
+    return checked_values(an_object(form.get("schema") or {}, "start form schema"), values)
 
 
 async def start(rt: Runtime, me: Principal, stored: DefinitionRow, values: Json, mode: Mode) -> RunRow:

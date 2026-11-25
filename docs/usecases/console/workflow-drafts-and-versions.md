@@ -20,8 +20,8 @@ with no save state and no Publish.
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | James opens the workflow | No Save version button; the save state reads "No changes yet"; the problems chip reads "No problems" |
-| 2 | James changes a step's settings | "Saving…" then "Saved just now"; `PUT …/working-copy` was sent and the workflow still has one version |
+| 1 | James opens the workflow | No Save version button; Save is disabled; the save state reads "Saved" and nothing was sent; the problems chip reads "No problems" |
+| 2 | James changes a step's settings | "Saving…" then "Saved"; `PUT …/working-copy` was sent and the workflow still has one version |
 | 3 | James breaks a step | The chip counts the problem ("1 problem"); the copy still saved |
 | 4 | James presses Back before the save lands | "Discard changes?" asks; Keep editing stays |
 | 5 | James opens Publish with the problem | The problem is listed with Fix; pressing Publish sends nothing and the workflow keeps one version |

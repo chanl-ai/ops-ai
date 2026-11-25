@@ -21,6 +21,7 @@ import json
 import math
 import operator
 import re
+import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -32,11 +33,13 @@ from langgraph.graph import END, START, StateGraph  # pyright: ignore[reportMiss
 from langgraph.types import interrupt
 
 from ops_checkpointer import LeaseSupersededError
+from ops_contracts.errors import CODES, code_of
 from ops_service_kit.http import Json, JsonList, JsonValue
 
 from . import ai_steps
 from .definition import FALLBACK, MAPPING_PREFIX, TEXT_PATH, NodeInstance, WorkflowDefinition
-from .journal import Journal, StepRow, StepStatus
+from .journal import Journal, StepRow, StepStatus, never_sent, sent_and_unanswered
+from .journal import error_of as _error_of
 from .node_types import CASE_PRIORITIES, DEFAULT_MAX_ITEMS, RETRY_BY_EFFECTS, NodeType, TypeRegistry
 from .ports import (
     AS_TEAM_ACCOUNT,
@@ -45,11 +48,13 @@ from .ports import (
     CaseNotFoundError,
     CaseTypeNotFoundError,
     EnginePorts,
+    OutsideAnswerError,
     ReviewPort,
     RunPort,
     RunRefusedError,
     StartedRun,
     ToolResult,
+    is_outside,
 )
 
 CHANNEL = "node:"
@@ -59,33 +64,50 @@ DEFAULT_OPTIONS = {"approved": "approve", "rejected": "reject"}
 
 # The wait between attempts; tests replace it to record the backoff instead of sleeping through it.
 sleep = asyncio.sleep
+# The clock a step's total duration is read by; tests replace it to move time on without waiting.
+monotonic = time.monotonic
 
 
 def channel(node_id: str) -> str:
     return f"{CHANNEL}{node_id}"
 
 
-class WriteInDoubtError(RuntimeError):
+class WriteInDoubtError(OutsideAnswerError):
     """A write's gateway call is still running, so whether it happened is not known yet. Never a reason to send it
     again; the run is tried again later."""
 
 
 class StepError(ValueError):
-    """A step's refusal that carries a sentence for people (`plain`) beside its technical text (`str()`)."""
+    """A step's refusal that carries a sentence for people (`plain`) beside its technical text (`str()`). `code` is
+    its code in the one error model (ops_contracts.errors.CODES); a step's own refusal is an input it cannot run."""
 
-    def __init__(self, plain: str, detail: str) -> None:
+    def __init__(self, plain: str, detail: str, *, code: str = "input_invalid") -> None:
         super().__init__(detail)
         self.plain = plain
+        self.code = code
 
 
 class NodeFailedError(RuntimeError):
     """A node used every attempt its effects class allows and its type has no error port to route the failure to.
     `str()` is the plain message the run shows people; `detail` is the technical text, also kept on the step's row."""
 
-    def __init__(self, plain: str, detail: str) -> None:
+    def __init__(
+        self,
+        plain: str,
+        detail: str,
+        *,
+        code: str = "internal_error",
+        step: str | None = None,
+        step_name: str | None = None,
+        attempt: int | None = None,
+        of: int | None = None,
+        retry_after: float | None = None,
+    ) -> None:
         super().__init__(plain)
         self.plain = plain
         self.detail = detail
+        self.code, self.step, self.step_name, self.attempt, self.of = code, step, step_name, attempt, of
+        self.retry_after = retry_after
 
 
 # What a run says when a write's result is uncertain: it fails, and nothing sends the write again.
@@ -96,9 +118,48 @@ class WriteUncertainError(NodeFailedError):
     """A write that may have happened: the system timed out or answered 5xx after it was sent, the gateway lost the
     call, or it was still running at the step's deadline. The run fails at once, never retried by a pass."""
 
+    def __init__(
+        self,
+        plain: str,
+        detail: str,
+        *,
+        step: str | None = None,
+        step_name: str | None = None,
+        attempt: int | None = None,
+    ) -> None:
+        super().__init__(plain, detail, code="write_uncertain", step=step, step_name=step_name, attempt=attempt)
+
+
+class WriteNeedsPersonError(WriteUncertainError):
+    """An uncertain write whose gateway died and whose class cannot settle it (`unsafe`, or a read that cannot
+    tell): the run pauses as Stuck for a person to decide, instead of failing."""
+
 
 def technical(e: BaseException) -> str:
     return f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+
+
+def failure_code(e: BaseException) -> str:
+    """The error model's code for an exception a step raised: a deadline is `step_too_long`, a step's own refusal its
+    code, a service error its code when the model knows it, an error that crossed a port (an app, tool or model call)
+    the app or tool failing, a dropped connection an outage, and anything else the engine's own fault."""
+    if isinstance(e, TimeoutError):
+        return "step_too_long"
+    if isinstance(e, StepError):
+        return e.code
+    code = getattr(e, "code", None)
+    if isinstance(code, str) and code.lower() in CODES:
+        return code.lower()
+    if is_outside(e):
+        return "tool_failed"
+    # A connection refused or reset (the gateway or the database restarting) is an outage a later try rides out.
+    return "unavailable" if isinstance(e, OSError) else "internal_error"
+
+
+def retry_after_of(e: BaseException) -> float | None:
+    """The wait a provider asked for (a 429's Retry-After), when the exception carries one."""
+    value = getattr(e, "retry_after_s", None) or getattr(e, "retry_after", None)
+    return float(value) if isinstance(value, int | float) and value > 0 else None
 
 
 def plain_failure(step: str, e: BaseException, attempts: int) -> str:
@@ -435,28 +496,6 @@ def write_call(call: NodeCall, node_id: str) -> Json:
 TIMEOUT_CODES = frozenset({"UPSTREAM_TIMEOUT", "CONNECT_TIMEOUT"})
 
 
-# Gateway codes for a call that never reached the outside system (tools-service executor.py transport_failure), and
-# a 429 the system refused before acting: safe to send again.
-NEVER_SENT = frozenset({"CONNECT_FAILED", "CONNECT_TIMEOUT", "POOL_TIMEOUT", "TLS_FAILED", "RATE_LIMITED"})
-
-
-def never_sent(error: Any) -> bool:
-    return isinstance(error, dict) and cast(Json, error).get("code") in NEVER_SENT
-
-
-def sent_and_unanswered(error: Any) -> bool:
-    """Whether a gateway error says the call reached the outside system and no answer came back that says what it did:
-    it timed out after connecting, broke off, or answered 5xx (tools-service executor.py transport_failure and
-    status_failure). A write that ends this way may have happened."""
-    if not isinstance(error, dict):
-        return False
-    e = cast(Json, error)
-    code, status = e.get("code"), e.get("status")
-    if code == "UPSTREAM_TIMEOUT":
-        return True
-    return code == "UPSTREAM_ERROR" and (status is None or (isinstance(status, int) and status >= 500))
-
-
 def _error_code(output: Any) -> str | None:
     """The gateway's failure code in a tool's output (`{"error": {"code": ...}}`), or None."""
     if not isinstance(output, dict):
@@ -494,6 +533,8 @@ def connect_wait(output: Any) -> Json | None:
         # The account's app, under which the person's Connect my account opens it.
         "appId": d.get("appId"),
         "teamAccount": bool(d.get("teamAccount")),
+        # When the gateway refused: only a sign-in after it wakes the wait.
+        "after": named.get("after"),
         # The team account itself needs signing in again, by an admin, rather than a person's own account.
         "again": d.get("account") == "team",
     }
@@ -558,14 +599,13 @@ async def gateway_call(call: NodeCall) -> Outcome:
             call,
             event=str(wait["name"]),
             key=str(wait["key"]),
-            title=f"Sign in to {app} again to continue"
-            if wait.get("again")
-            else f"Connect your {app} account to continue",
+            title=f"Sign in to {app} again to continue" if wait.get("again") else f"Sign in to {app} to continue",
             timeout_seconds=0,
             app=app,
             connectionId=wait.get("connectionId"),
             appId=wait.get("appId"),
             teamAccount=wait.get("teamAccount"),
+            after=wait.get("after"),
         )
         if woke.get("teamAccount"):
             # Run as the team account (decided in Human Tasks by someone who may use it): sent acting for nobody.
@@ -786,7 +826,7 @@ async def ai_extract(call: NodeCall) -> Outcome:
             return Outcome(
                 "error", {"error": error.get("message"), "code": "schema_error", "details": error.get("details")}
             )
-        raise RuntimeError(f"the extraction failed ({error.get('code')}): {error.get('message')}")
+        raise OutsideAnswerError(f"the extraction failed ({error.get('code')}): {error.get('message')}")
     # The extraction's id stays on the output: the run page links the read to it, and its model call is logged under it.
     out = {k: v for k, v in answer.items() if k not in ("id", "status", "outcome", "corrections")} | {
         "extractionId": answer.get("id")
@@ -799,7 +839,7 @@ async def ai_extract(call: NodeCall) -> Outcome:
         return Outcome("review", out)
     if status != "done" or answer.get("outcome") not in ("ok", "review"):
         # A state this step does not know is raised, never turned into a port it does not have.
-        raise RuntimeError(f"documents-service answered status {status!r} with outcome {answer.get('outcome')!r}")
+        raise OutsideAnswerError(f"documents-service answered status {status!r} with outcome {answer.get('outcome')!r}")
     return Outcome(str(answer["outcome"]), out)
 
 
@@ -885,7 +925,8 @@ def child_label(template: Any, scope: Mapping[str, JsonValue], item: Any, loopin
 async def workflow_start(call: NodeCall) -> Outcome:
     """Start workflow: one child, or one per item of `forEach`, each keyed by this run, step, iteration and item so a
     retried or re-run step finds its children instead of starting more. A refusal stops at the item it refused, with
-    the children already started listed, and they stay started."""
+    the children already started listed, and they stay started. The key names no attempt, so a Redrive of the parent
+    finds the same failed child and reads its failure again: a failed child is redriven on its own run."""
     if call.ports.runs is None:
         raise RuntimeError("no run port: this worker cannot start workflows")
     workflow = str(call.params["workflow"])
@@ -1381,7 +1422,15 @@ class Wrapper:
                 detail = technical(e)
                 await self.journal.finish(r, status="error", port=None, output=None, error=detail)
                 await self.ports.hooks.after_step(run_id, nid, "error")
-                raise NodeFailedError(plain_failure(self.node.name or nid, e, 1), detail) from e
+                raise NodeFailedError(
+                    plain_failure(self.node.name or nid, e, 1),
+                    detail,
+                    code=failure_code(e),
+                    step=nid,
+                    step_name=self.node.name,
+                    attempt=r.attempt,
+                    of=1,
+                ) from e
             return await self.record(r, outcome)
 
         if last is not None and last.status == "waiting":
@@ -1397,6 +1446,9 @@ class Wrapper:
         # An idempotent write is keyed by its step, so it is retried like a read instead.
         reconciled = effects == "write" and not self.type.idempotent
         policy = self.type.retry_policy() if effects == self.type.effects else RETRY_BY_EFFECTS[cast(Any, effects)]
+        # A write's attempts count against its budget by number; the attempts a Redrive set aside are history, so the
+        # count starts after the last of them.
+        set_aside = max((r.attempt for r in rows if r.status == "redriven"), default=0)
         if (
             last is not None
             and last.status in ("running", "error")
@@ -1406,7 +1458,10 @@ class Wrapper:
             # A write that may have reached the gateway (its process died mid-call, or the call raised) is never sent
             # again: its own key decides what happened.
             settled = await self.reconcile(
-                last, deadline_s=await self.deadline(params), may_resend=last.attempt < policy.attempts
+                last,
+                deadline_s=await self.deadline(params),
+                may_resend=last.attempt - set_aside < policy.attempts,
+                params=params,
             )
             if settled is not None:
                 return settled
@@ -1416,11 +1471,24 @@ class Wrapper:
         attempt = (last.attempt if last else 0) + 1
         first = attempt
         timeout = await self.deadline(params)
+        # The step's total duration counts from its earliest attempt this run knows of, a previous pass's included (a
+        # process that died mid-attempt). An attempt a Redrive set aside, or a failed one the previous pass ended on
+        # (a write a Redrive left dangling, a step that failed with no port), closed that pass, so this one starts the
+        # duration over.
+        counted = last is not None and last.status not in ("redriven", "error")
+        began = monotonic() - _since(last.started_at if counted and last is not None else None)
+
+        def next_wait(n: int, retry_after: float | None = None) -> float | None:
+            """The wait before attempt `n` of this pass, or None when it would end past the step's total duration."""
+            wait = policy.wait(n, retry_after)
+            return None if monotonic() - began + wait >= policy.total_seconds else wait
+
         while True:
             r = row(attempt, effects)
             await self.journal.begin(r)
+            left = max(1.0, policy.total_seconds - (monotonic() - began))
             try:
-                outcome = await asyncio.wait_for(executor(call(r)), timeout)
+                outcome = await asyncio.wait_for(executor(call(r)), min(timeout, left))
             except GraphInterrupt:
                 # Paused, not dead: the attempt is marked waiting so a resume continues it.
                 await self.journal.finish(r, status="waiting", port=None, output=None, error=None)
@@ -1433,7 +1501,11 @@ class Wrapper:
                 if reconciled:
                     # A timeout or a 5xx says nothing about whether the write happened; the gateway's record does.
                     settled = await self.reconcile(
-                        r, cause=message, deadline_s=timeout, may_resend=attempt < policy.attempts
+                        r,
+                        cause=message,
+                        deadline_s=timeout,
+                        may_resend=attempt - set_aside < policy.attempts,
+                        params=params,
                     )
                     if settled is not None:
                         return settled
@@ -1441,11 +1513,17 @@ class Wrapper:
                     attempt += 1
                     await sleep(policy.wait(attempt))
                     continue
-                if attempt - first + 1 < policy.attempts:
+                # Only a kind a second try can pass is tried again (CODES); bad input or a refusal fails at once.
+                wait = (
+                    next_wait(attempt - first + 2, retry_after_of(e))
+                    if code_of(failure_code(e)).retryable and attempt - first + 1 < policy.attempts
+                    else None
+                )
+                if wait is not None:
                     await self.journal.finish(r, status="error", port=None, output=None, error=message)
                     await self.ports.hooks.after_step(run_id, nid, "error")
                     attempt += 1
-                    await sleep(policy.wait(attempt - first + 1))
+                    await sleep(wait)
                     continue
                 if "error" in self.type.output_ports(self.node.parameters):
                     return await self.record(r, Outcome("error", {"error": message}), error=message)
@@ -1453,23 +1531,39 @@ class Wrapper:
                 await self.ports.hooks.after_step(run_id, nid, "error")
                 tried = attempt - first + 1
                 detail = f"{nid} failed after {tried} attempts: {message}"
-                raise NodeFailedError(plain_failure(self.node.name or nid, e, tried), detail) from e
+                raise NodeFailedError(
+                    plain_failure(self.node.name or nid, e, tried),
+                    detail,
+                    code=failure_code(e),
+                    step=nid,
+                    step_name=self.node.name,
+                    attempt=tried,
+                    of=policy.attempts,
+                    retry_after=retry_after_of(e),
+                ) from e
             error = _error_of(outcome.out) if outcome.port == "error" else None
             if reconciled and sent_and_unanswered(error):
                 # The system may have acted: the run stops here with the reason, and nothing sends it again.
                 message = technical_error(outcome.out)
                 await self.journal.finish(r, status="error", port=None, output=outcome.out, error=message)
                 await self.ports.hooks.after_step(run_id, nid, "error")
-                raise WriteUncertainError(uncertain_failure(self.node.name or nid), message)
-            tried = attempt if reconciled else attempt - first + 1
-            if (never_sent(error) or (not reconciled and sent_and_unanswered(error))) and tried < policy.attempts:
+                raise WriteUncertainError(
+                    uncertain_failure(self.node.name or nid),
+                    message,
+                    step=nid,
+                    step_name=self.node.name,
+                    attempt=r.attempt,
+                )
+            tried = attempt - set_aside if reconciled else attempt - first + 1
+            outage = never_sent(error) or (not reconciled and sent_and_unanswered(error))
+            if outage and tried < policy.attempts and (wait := next_wait(tried + 1)) is not None:
                 # An outage, not an answer: a read is tried again; a write the system never got is sent again
                 # under the next attempt's key, its first key recorded as failed at the gateway.
                 message = technical_error(outcome.out)
                 await self.journal.finish(r, status="error", port=None, output=outcome.out, error=message)
                 await self.ports.hooks.after_step(run_id, nid, "error")
                 attempt += 1
-                await sleep(policy.wait(tried + 1))
+                await sleep(wait)
                 continue
             return await self.record(r, outcome)
 
@@ -1481,6 +1575,34 @@ class Wrapper:
         await self.ports.hooks.after_step(r.run_id, r.node_id, status)
         return {channel(r.node_id): _envelope(replace(r, port=outcome.port, output=outcome.out))}
 
+    async def dead_gateway(
+        self,
+        dangling: StepRow,
+        message: str,
+        recorded: Any,
+        params: Mapping[str, JsonValue] | None,
+        *,
+        may_resend: bool,
+    ) -> Json | None:
+        """A write whose gateway claimed it and then died (lost, or still claimed past the step's deadline), by the
+        class its operation declares: an `idempotent` one returns None, so the caller sends it again; a `checkable` one
+        is settled by a read of the system, and sent again when the read says it never ran; an `unsafe` one, or one
+        whose read cannot tell, pauses the run for a person (WriteNeedsPersonError). Never a key held forever."""
+        operation = str(cast(Json, dangling.input or {}).get("operation") or "")
+        classify = getattr(self.ports.tools, "write_class", None)
+        kind = await classify(operation) if classify is not None else "unsafe"
+        await self.journal.finish(dangling, status="error", port=None, output=recorded, error=message)
+        read_back = getattr(self.ports.tools, "read_back", None)
+        if kind == "checkable" and read_back is not None and params is not None:
+            seen = cast(ToolResult | None, await read_back(operation, cast(Json, params.get("input") or {})))
+            if seen is not None and seen.ok:
+                return await self.record(dangling, Outcome("ok", seen.output))
+            if seen is None and may_resend:
+                return None
+        elif kind == "idempotent" and may_resend:
+            return None
+        raise WriteNeedsPersonError(uncertain_failure(self.node.name or self.node.id), f"{message} ({kind} write)")
+
     async def reconcile(
         self,
         dangling: StepRow,
@@ -1488,6 +1610,7 @@ class Wrapper:
         cause: str | None = None,
         deadline_s: float | None = None,
         may_resend: bool = False,
+        params: Mapping[str, JsonValue] | None = None,
     ) -> Json | None:
         """A write whose outcome is unknown: the gateway's record under the attempt's own key decides. Found done
         means the write happened; refused or failed by its input is that port; absent means it never arrived, and the
@@ -1503,12 +1626,14 @@ class Wrapper:
         if found is not None and found.pending:
             if _past(dangling.started_at, deadline_s if deadline_s is not None else self.type.timeout_seconds):
                 message = f"{dangling.key} was still running at the gateway at the step's deadline"
-                await self.journal.finish(dangling, status="error", port=None, output=None, error=message)
-                raise WriteUncertainError(uncertain_failure(name), message)
+                return await self.dead_gateway(dangling, message, None, params, may_resend=may_resend)
             raise WriteInDoubtError(f"{dangling.key} is still running at the gateway")
         if found is not None and not found.ok and not found.refused:
             recorded: Any = found.output
-            if found.lost or sent_and_unanswered(_error_of(recorded)):
+            if found.lost:
+                message = found.reason or technical_error(recorded)
+                return await self.dead_gateway(dangling, message, recorded, params, may_resend=may_resend)
+            if sent_and_unanswered(_error_of(recorded)):
                 message = found.reason or technical_error(recorded)
                 await self.journal.finish(dangling, status="error", port=None, output=recorded, error=message)
                 raise WriteUncertainError(uncertain_failure(name), message)
@@ -1527,6 +1652,16 @@ class Wrapper:
         return await self.record(dangling, outcome, error=cause if outcome.port == "error" else None)
 
 
+def _since(started_at: str | None) -> float:
+    """Seconds since an attempt began; 0 for one with no start time."""
+    if not started_at:
+        return 0.0
+    began = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+    if began.tzinfo is None:
+        began = began.replace(tzinfo=UTC)
+    return max(0.0, (datetime.now(UTC) - began).total_seconds())
+
+
 def _past(started_at: str | None, seconds: float) -> bool:
     """Whether `seconds` have passed since an attempt began; an attempt with no start time has not."""
     if not started_at:
@@ -1535,18 +1670,6 @@ def _past(started_at: str | None, seconds: float) -> bool:
     if began.tzinfo is None:
         began = began.replace(tzinfo=UTC)
     return (datetime.now(UTC) - began).total_seconds() >= seconds
-
-
-def _error_of(out: Any) -> Any:
-    """The gateway's error inside a step's output: the error port wraps the tool's own `{"error": ...}` once more."""
-    error: Any = cast(Json, out).get("error") if isinstance(out, dict) else None
-    while isinstance(error, dict):
-        layer = cast(Json, error)
-        inner: Any = layer.get("error")
-        if "code" in layer or not isinstance(inner, dict):
-            break
-        error = cast(Any, inner)
-    return cast(Any, error)
 
 
 def technical_error(out: Any) -> str:

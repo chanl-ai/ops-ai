@@ -352,7 +352,7 @@ export function InstructionDocument({ value, onChange, searchReferences, onInser
         {(!readOnly || footerSlot) && (
           <div className="flex flex-wrap items-center gap-2 border-t px-4 py-2">
             {footerSlot ?? <p className="text-xs text-muted-foreground">{hint}</p>}
-            <span className="flex-1" />
+            {!footerSlot && <span className="flex-1" />}
             {!readOnly && footer === 'add-step' && (
               <Button type="button" variant="ghost" size="sm" onClick={() => editor && addStep(editor)}>
                 <Plus />

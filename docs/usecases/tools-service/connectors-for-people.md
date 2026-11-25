@@ -2,12 +2,12 @@
 
 Status: current. Id: `uc-671`. Service: `tools-service` with agents-service. Layers: api, ui.
 
-Each person sees the apps that act as them as Connectors › Mine: one row per app, never one per account, with what
+Each person sees the apps that act as them as My apps: one card per app, never one per account, with what
 the app can do as them (built from the tools the team switched on, a write marked when it waits for approval), whom it
 signs in as (named by the sign-in itself), its state, and where it is used. An app the team has off is listed so the
 person can ask for it, and a call on it is refused as `APP_OFF_FOR_TEAM` naming the app and team, which chat draws as a
 card. Every connected connector is on in a new chat; the composer's picker narrows one chat, stored as that thread's
-`toolsOff`, and never adds a tool. Connectors › Team setup is the admin's view of the same apps (the Apps page,
+`toolsOff`, and never adds a tool. Apps under Data is the admin's view of the same apps (the Apps page,
 unchanged in content), read only for a member.
 
 ## Stories
@@ -17,7 +17,7 @@ unchanged in content), read only for a member.
 | S12 | A person's connectors are one row per app with its accounts as a count, what it can do, whom it signs in as and their own calls this week; an app off for the team is listed off | api | 1-4 | 4 |
 | S13 | A call on an app the team has off is refused naming the app and team, and a chat's connector set narrows only that chat | api | 5 | 5 |
 | S14 | The SDK and the CLI read the same rows and disconnect a connector's primary account | api | 6-7 | 7 |
-| S15 | Connectors › Mine shows one row per app with one action by state, a details sheet, and fits a phone | ui | 8-10 | 10 |
+| S15 | My apps shows one card per app with one action by state, an app page, and fits a phone | ui | 8-10 | 10 |
 | S16 | Chat's composer lists the chat's connectors with their actions, and an app off for the team is a card | ui | 11-12 | 12 |
 
 ## Preconditions
@@ -39,12 +39,12 @@ unchanged in content), read only for a member.
 | 5 | A call acting for Sam in Security on Person desk | 403 `APP_OFF_FOR_TEAM` with details `app`, `appId`, `teamId` |
 | 6 | `ops.me.connectors.list()` as Priya | The same rows |
 | 7 | `opsai connectors list`, then `opsai connectors disconnect "Person desk"` | The row is listed; after the disconnect of her default the other account is primary and the count is 1 |
-| 8 | Priya opens Connectors in the sidebar at 1280 and searches | The title reads Connectors with Mine and Team setup; one GitHub row with "+1 account"; each row one action by state; "git" finds GitHub alone, "jira" none; an app the install lacks is not listed |
-| 9 | She opens a row | The details sheet: what it can do with Read, Write and Reviewed; Used by as counts and links; the accounts; Test now and Disconnect |
-| 10 | At 390, light and dark | The state and action sit inside the connector cell and inside the viewport; no screen says Apps or My accounts |
+| 8 | Priya opens My apps at 1280 and searches | One GitHub card with "+1 account" when she holds two; a can-do line on each card; "git" finds GitHub alone, "jira" none; an app the install lacks is not listed |
+| 9 | She opens a card | The app's own page: what it can do with Read, Write and Reviewed; the accounts; Test now and Disconnect |
+| 10 | At 390 in dark | The state and action sit inside the card and inside the viewport; My apps never says My accounts |
 | 11 | Priya opens the composer's connector picker in a chat, and on Chat's home before a first message, and unchecks Salesforce | It was checked; apps needing a sign-in or off for the team are listed in their groups; Salesforce's tools leave that chat only, and a chat started from the home takes the choice before its first message |
-| 12 | Ravi opens Connectors › Team setup and an app's page; Sam asks chat for his Salesforce cases | Ravi sees no Add custom app and no Connect; Sam's reply shows the off-for-team card |
-| 13 | Priya, with two GitHub accounts and no default, asks chat for open issues, then opens GitHub on Mine | The chat asks which account with a card; Mine says chat asks which until she chooses, and Use in chats makes one her default |
+| 12 | Ravi opens the Apps page under Data and an app's page; Sam asks chat for his Salesforce cases | Ravi sees no Add custom app and no Connect; Sam's reply shows the off-for-team card |
+| 13 | Priya, with two GitHub accounts and no default, asks chat for open issues, then opens GitHub on My apps | The chat asks which account with a card; the app's page says chat asks which until she chooses, and Use in chats makes one her default |
 
 Chat scripts: `make chat-script FILE=docs/usecases/chat/salesforce-off-for-team.yaml AS=sam`,
 `make chat-script FILE=docs/usecases/chat/connectors-narrowed.yaml AS=priya` and

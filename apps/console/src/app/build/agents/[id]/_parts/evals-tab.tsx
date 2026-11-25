@@ -147,6 +147,9 @@ const runColumns: ColumnDef<RunRow>[] = [
   },
 ];
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const RUN_SORT = { trigger: 'trigger', ranAt: 'ranAt' };
+
 /**
  * The agent's Evals tab: the saved cases and the kept runs as two views of one table, and the newest run above them.
  * A run happens when someone presses Run evals or runs `opsai agents eval`; it answers when it has finished.
@@ -162,7 +165,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
   const remove = useDeleteEvalCase(agent.id);
   const bulkRemove = useBulkDeleteEvalCases(agent.id);
 
-  const runList = useListParams<RunFilters>('id', 10);
+  const runList = useListParams<RunFilters>('id', 10, undefined, RUN_SORT);
   const runs = useEvalRuns(agent.id, runList.params);
 
   const [view, setView] = React.useState<'cases' | 'runs'>('cases');
@@ -203,14 +206,13 @@ export function EvalsTab({ agent }: { agent: Agent }) {
 
   return (
     <div className="flex flex-col gap-6" data-testid="agent-evals-tab">
-      <section className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="min-w-0">
-            <h2 className="text-base font-semibold">Latest run</h2>
-            <p className="text-sm text-muted-foreground">Runs the saved cases on the newest version, and on the live one when that is another. A run happens when someone presses Run evals or runs opsai agents eval.</p>
-          </div>
-          {mayRun && (
-            <div className="ml-auto flex flex-wrap gap-2">
+      <Section
+        title="Latest run"
+        description="Runs the saved cases on the newest version, and on the live one when that is another. A run happens when someone presses Run evals or runs opsai agents eval."
+        bodyClassName="flex flex-col gap-3 p-4"
+        actions={
+          mayRun && (
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
                 <Upload className="size-3.5" /> Import CSV
               </Button>
@@ -221,8 +223,9 @@ export function EvalsTab({ agent }: { agent: Agent }) {
                 <Play className="size-3.5" /> Run evals
               </LoadingButton>
             </div>
-          )}
-        </div>
+          )
+        }
+      >
         {latest.isPending || cases.isPending ? (
           <Skeleton className="h-40 w-full rounded-lg" />
         ) : latest.isError ? (
@@ -246,7 +249,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
             <EvalResultsTable results={latest.data.results} liveVersion={latest.data.liveVersion} />
           </>
         )}
-      </section>
+      </Section>
 
       {mayRun && successChecks.length > 0 && (
         <Section title="Success checks from the brief" description="Written on an earlier version of the brief. Make each a case so a run grades it." flush>
@@ -310,6 +313,7 @@ export function EvalsTab({ agent }: { agent: Agent }) {
               filters={[{ column: 'trigger', title: 'Started by', options: (['manual', 'cli', 'publish_request'] as const).map((v) => ({ value: v, label: triggerLabel(v), count: runFacets.trigger?.[v] ?? 0 })) }]}
               onColumnFiltersChange={runList.onColumnFiltersChange}
               serverPagination={serverPagination(runList, runs)}
+              serverSorting={runList.serverSort}
               emptyState={<ListEmpty icon={FlaskConical} noun="eval runs" filtered={runList.isFiltered} description="Runs appear here each time someone runs evals." />}
             />
           )}

@@ -7,7 +7,7 @@
 # from the console routes each ui script opens, the most focused scripts first; edit them as scripts change.
 no-ui | docs/**, changelog/**, **/*.md, **/tests/**, **/*.test.ts, scripts/**, make/**, Makefile, deploy/**, sdk/**, examples/**, access-exceptions-allowlist.txt, **/openapi.json, **/uv.lock, pnpm-lock.yaml | -
 access | apps/console/src/app/access/**, apps/console/src/components/access/** | uc-219 uc-143 uc-164
-activity | apps/console/src/app/activity/** | uc-141 uc-403 uc-047
+activity | apps/console/src/app/activity/** | uc-141 uc-403
 agents | apps/console/src/app/agents/**, apps/console/src/components/agents/** | uc-018 uc-088 uc-253
 cases | apps/console/src/app/cases/**, apps/console/src/components/cases/** | uc-251 uc-256 uc-460
 channels | apps/console/src/app/channels/**, apps/console/src/components/channels/** | uc-245 uc-136 uc-199

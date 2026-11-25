@@ -90,7 +90,7 @@ table lists them as that file holds them on the date in the status line. A per-t
 
 | Key | Name | Scope | Default | What it does |
 |---|---|---|---|---|
-| `requesterMayDecide` | Requester may decide | workspace | off | The person who asked for a decision may also make it. Off (the default): someone else has to decide. |
+| `requesterMayDecide` | Requester may decide | team | on | The person who asked for a decision may also make it. Off is the two-person rule (Approvals › Advanced): someone else has to decide, unless the person is an Admin of the team. |
 | `extractionFloor` | Extraction confidence floor | workspace | 0.8 | The lowest confidence an Extract from file step may accept; no step can ask for less. |
 | `stepUp` | Step-up on every approval | workspace | off | Every approver confirms their sign-in again before deciding. Off: only operations that ask for it. |
 | `publishReview` | Publish reviews | per team | major changes | Which of a team's publishes wait for review: always, major changes only (the default), or never. |

@@ -51,9 +51,12 @@ class _Held(Out):
 class HolderStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.RLS})
 
-    async def holders(self, tenant_id: str, team_id: str, area: str, action: str) -> Holders:
+    async def holders(
+        self, tenant_id: str, team_id: str, area: str, action: str, *, excluding: str | None = None
+    ) -> Holders:
         """The roles granting `area.action` and the active people they reach in `team_id`: assigned there or in every
-        team (`*`), directly or through a team they are an active member of. Expired assignments reach nobody."""
+        team (`*`), directly or through a team they are an active member of. Expired assignments reach nobody.
+        `excluding` is a person's id left out: whoever asks whom to ask is never told to ask themselves."""
         now = now_iso()
         live = sa.and_(
             role_assignments.c.team_id.in_([team_id, ANY_TEAM]),
@@ -108,6 +111,7 @@ class HolderStore(TenantDb):
         people = [
             RoleHolder(id=p.id, name=p.name, email=p.email, roles=roles_of[p.id], in_team=in_team[p.id])
             for p in first.values()
+            if p.id != excluding
         ]
         # Those granted in the team first, each part by name.
         return Holders(roles=found, holders=sorted(people, key=lambda h: not h.in_team))

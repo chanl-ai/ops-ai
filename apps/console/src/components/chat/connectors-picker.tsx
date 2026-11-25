@@ -16,8 +16,8 @@ import { APP_STATES, appStateFor, labelFor } from '@/lib/app-state';
 import { appPageHref } from '@/lib/app-links';
 import { useCan } from '@/hooks/me-queries';
 
-/** Where a connector's one action is taken: the person's own sign-in on Connectors (Mine), an admin's on Team setup. */
-const MINE = '/settings/account/connectors';
+/** Where a connector's one action is taken: the person's own sign-in on My apps. */
+const MINE = '/work/apps';
 
 /**
  * The composer's connector picker: every connector the chat may use, the ones it uses checked (every connected one in a

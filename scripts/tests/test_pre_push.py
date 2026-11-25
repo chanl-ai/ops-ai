@@ -18,7 +18,7 @@ def git(repo: Path, *args: str) -> str:
 
 def push(repo: Path, since: str, to: str) -> subprocess.CompletedProcess[str]:
     refs = f"refs/heads/main {to} refs/heads/main {since}\n"
-    env = {"PATH": "/usr/bin:/bin", "OPS_RUFF": RUFF, "HOME": str(repo)}
+    env = {"PATH": "/usr/bin:/bin", "OPS_RUFF": RUFF, "HOME": str(repo), "OPS_FULL_HOOK": "1"}
     return subprocess.run(
         ["sh", str(repo / ".githooks/pre-push")],
         cwd=repo,
@@ -133,7 +133,7 @@ def console_push(repo: Path, tmp_path: Path, local: str, _since: str) -> tuple[i
     (repo / "apps/console/node_modules").mkdir(parents=True, exist_ok=True)
     (bin_dir / "node").write_text(f"#!/bin/sh\ntouch {ran}\nexit 1\n")
     (bin_dir / "node").chmod(0o755)
-    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "OPS_RUFF": RUFF, "HOME": str(repo)}
+    env = {"PATH": f"{bin_dir}:/usr/bin:/bin", "OPS_RUFF": RUFF, "HOME": str(repo), "OPS_FULL_HOOK": "1"}
     done = subprocess.run(
         ["sh", str(repo / ".githooks/pre-push"), "origin"],
         cwd=repo,
@@ -191,3 +191,33 @@ def test_a_console_push_from_a_worktree_without_node_modules_names_the_missing_i
     out = done.stdout + done.stderr
     assert done.returncode != 0 and "pre-push: this worktree has no node_modules" in out and "pnpm install" in out, out
     assert "console unit suite failed" not in out, out
+
+
+def push_to(repo: Path, since: str, to: str, branch: str) -> subprocess.CompletedProcess[str]:
+    refs = f"refs/heads/x {to} refs/heads/{branch} {since}\n"
+    env = {"PATH": "/usr/bin:/bin", "OPS_RUFF": RUFF, "HOME": str(repo)}
+    return subprocess.run(
+        ["sh", str(repo / ".githooks/pre-push")],
+        cwd=repo,
+        input=refs,
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+
+
+def test_a_remote_branch_named_for_the_process_is_refused_and_a_named_change_pushes(tmp_path: Path) -> None:
+    repo, base = make_repo(tmp_path)
+    refused = [push_to(repo, base, base, b) for b in ("lane/ui", "fix/console-fixes", "feat/Agents-Page", "wip")]
+    assert all(r.returncode == 1 and "must be <type>/<scope>" in r.stdout for r in refused), [r.stdout for r in refused]
+    ok = push_to(repo, base, base, "fix/console-slash-skill-chip")
+    assert ok.returncode == 0, ok.stdout
+
+
+def test_the_train_and_a_hotfix_branch_push_under_their_own_names(tmp_path: Path) -> None:
+    # release/current and hotfix/<what> do not follow <type>/<scope>-<what>; a hotfix is named for its fix.
+    repo, base = make_repo(tmp_path)
+    ok = [push_to(repo, base, base, b) for b in ("release/current", "hotfix/login-loop", "hotfix/1.2.1")]
+    assert all(r.returncode == 0 for r in ok), [r.stdout for r in ok]
+    assert push_to(repo, base, base, "hotfixes/login").returncode == 1

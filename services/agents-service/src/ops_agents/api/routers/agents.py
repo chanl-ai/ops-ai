@@ -62,7 +62,7 @@ from ..agent_registry import (
     version_state,
 )
 from ..agent_test import one_test_turn
-from ..auth import Principal, caller, caller_in, caller_of, principal, reader_of, require_builder
+from ..auth import Principal, caller, caller_in, caller_of, maker, principal, reader_of, require_builder
 from ..child_runs import engine_workflows, refusal, team_workflows
 from ..deps import Runtime, runtime
 from ..engine_agents import KernelModels
@@ -103,6 +103,8 @@ router = APIRouter(prefix="/v1/agents", dependencies=[Depends(caller_in("agents"
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 Cl: TypeAlias = Annotated[Principal, Depends(caller)]  # noqa: UP040
+# The caller named as the person a service's call acts for (tools-service's draft_agent), so the draft names them.
+Mk: TypeAlias = Annotated[Principal, Depends(maker)]  # noqa: UP040
 Reader: TypeAlias = Annotated[Principal, Depends(reader_of("agents"))]  # noqa: UP040
 
 Channel = Literal["voice", "chat", "email", "api"]
@@ -462,7 +464,7 @@ async def changeable(rt: Runtime, me: Principal, agent_id: str, action: str) -> 
 
 
 @router.post("", response_model=Envelope[Agent], status_code=201)
-async def create_agent(rt: Rt, me: Cl, body: AgentInput) -> JSONResponse:
+async def create_agent(rt: Rt, me: Mk, body: AgentInput) -> JSONResponse:
     if not me.team_id:
         # A dev session naming no team acts across teams; an agent belongs to exactly one.
         raise ValidationFailed(

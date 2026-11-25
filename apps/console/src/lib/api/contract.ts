@@ -280,7 +280,9 @@ export interface OpsApi {
   };
   /** Teams the user can switch between. The current team id is sent with every call (see team-context.ts). */
   teams: {
-    list(): Promise<Team[]>;
+    /** One page of the person's teams by name: `search` matches the name, `ids` names exact teams (the current one, a
+     * record's owning team) so a label never needs the whole list. */
+    list(p: ListParams): Promise<ListResult<Team>>;
     /** Absent under platform sign-in, where an admin creates teams in platform settings; the switcher then offers no Add team. */
     create?(input: TeamInput): Promise<Team>;
     /** The person's role on each team, read fresh from platform-service so a role change shows without signing in
@@ -302,6 +304,11 @@ export interface OpsApi {
     renameRole?(id: string, input: { name: string; description?: string }): Promise<RoleDetail>;
     deleteRole?(id: string, moveTo?: string): Promise<void>;
     roleHolders?(id: string, p: ListParams): Promise<ListResult<RoleHolder>>;
+    /** Who the role can be given to in the team the console acts in: its people and the workspace's groups, one
+     * searched list whose values are `person:<user id>` or `group:<group id>`. */
+    roleHolderOptions?(id: string, p: OptionsParams): Promise<OptionsPage>;
+    /** Gives the role to a person or a group in the team the console acts in; that team's admins. */
+    giveRoleTo?(id: string, holder: { kind: 'person' | 'group'; id: string }): Promise<RoleHolder>;
     /** The custom roles given to a person, each in one of their teams; given and taken by that team's admins. */
     roleGrants?(personId: string, p: ListParams): Promise<ListResult<RoleGrant>>;
     /** Gives the role in the team the console acts in. */

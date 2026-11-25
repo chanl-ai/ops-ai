@@ -144,6 +144,21 @@ with agents() as api:
         {"stopped": stopped, "cost": closed["cost"], "interrupt": closed.get("interrupt")},
     )
 
+    opened = data(api.get("/v1/agents/ag_fraud", headers=TEAM))
+    grants = {"toolIds": [*opened["toolIds"], "agent:ag_dispute"]}
+    base = {"baseVersion": opened["version"], "baseDigest": opened["digest"]}
+    draft = data(api.patch("/v1/agents/ag_fraud", json={**base, **grants}, headers=TEAM))
+    panel = data(api.post("/chat/threads", json={"agentId": "ag_fraud", "kbIds": [], "test": True}, headers=TEAM))
+    tried = [e["call"] for e in say(api, panel["id"], ask) if e.get("type") == "tool_end"]
+    chat = data(api.post("/chat/threads", json={"agentId": "ag_fraud", "kbIds": []}, headers=TEAM))
+    live = [e["call"] for e in say(api, chat["id"], ask) if e.get("type") == "tool_end"]
+    asked = [(c["name"], (c.get("output") or {}).get("status"), ((c.get("output") or {}).get("path") or [""])[0]) for c in tried]
+    check(
+        "12 a specialist granted on a draft answers in the Test panel before publishing, and not in a chat",
+        asked == [("agent__ag_dispute", "answered", f"ag_fraud@v{draft['version']}")] and live == [],
+        {"test": asked, "chat": live},
+    )
+
 src = ROOT / "services" / "agents-service" / "src" / "ops_agents"
 hits = subprocess.run(
     [

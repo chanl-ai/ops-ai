@@ -3492,6 +3492,57 @@
         "title": "BulkResult",
         "type": "object"
       },
+      "BulkRunsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "redrive",
+              "cancel"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "filter": {
+            "$ref": "#/components/schemas/RunsFilter"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "BulkRunsRequest",
+        "type": "object"
+      },
+      "BulkRunsResult": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "changed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed",
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "action",
+          "changed",
+          "skipped"
+        ],
+        "title": "BulkRunsResult",
+        "type": "object"
+      },
       "BulkSkip": {
         "additionalProperties": false,
         "properties": {
@@ -7692,6 +7743,25 @@
         "title": "Envelope[BulkResult]",
         "type": "object"
       },
+      "Envelope_BulkRunsResult_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/BulkRunsResult"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[BulkRunsResult]",
+        "type": "object"
+      },
       "Envelope_CaseDetail_": {
         "additionalProperties": false,
         "properties": {
@@ -8393,6 +8463,25 @@
           "data"
         ],
         "title": "Envelope[ListResult[FormView]]",
+        "type": "object"
+      },
+      "Envelope_ListResult_MemoryView__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_MemoryView_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[MemoryView]]",
         "type": "object"
       },
       "Envelope_ListResult_TaskTypeView__": {
@@ -9403,6 +9492,25 @@
         "title": "Envelope[ToolRow]",
         "type": "object"
       },
+      "Envelope_TryTargets_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TryTargets"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[TryTargets]",
+        "type": "object"
+      },
       "Envelope_Union_DryRun__BatchStarted__": {
         "additionalProperties": false,
         "properties": {
@@ -9887,29 +9995,6 @@
         "title": "Envelope[list[MailboxView]]",
         "type": "object"
       },
-      "Envelope_list_MemoryView__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/MemoryView"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[MemoryView]]",
-        "type": "object"
-      },
       "Envelope_list_ModelAlias__": {
         "additionalProperties": false,
         "properties": {
@@ -10081,6 +10166,17 @@
           "details": {
             "title": "Details"
           },
+          "kind": {
+            "enum": [
+              "input",
+              "refused",
+              "upstream",
+              "timeout",
+              "internal"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -10088,6 +10184,10 @@
           "requestId": {
             "title": "Requestid",
             "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
           },
           "status": {
             "title": "Status",
@@ -10098,7 +10198,9 @@
           "code",
           "message",
           "status",
-          "requestId"
+          "requestId",
+          "kind",
+          "retryable"
         ],
         "title": "ErrorBody",
         "type": "object"
@@ -13115,6 +13217,38 @@
           "facets"
         ],
         "title": "ListResult[FormView]",
+        "type": "object"
+      },
+      "ListResult_MemoryView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryView"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[MemoryView]",
         "type": "object"
       },
       "ListResult_TaskTypeView_": {
@@ -17674,6 +17808,17 @@
             ],
             "title": "Cancancel"
           },
+          "canRedrive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canredrive"
+          },
           "canRetry": {
             "anyOf": [
               {
@@ -17896,7 +18041,7 @@
       },
       "RunFailure": {
         "additionalProperties": false,
-        "description": "The failing step as a builder reads it: the same sentence as `error`, plus where and whether a retry helps.",
+        "description": "Why a run failed, in the one error model (ops_contracts.errors): a kind, a stable code, the builder's\nmessage, a sentence safe for a customer and whether a retry helps, with the failing step and attempt.",
         "properties": {
           "attempt": {
             "anyOf": [
@@ -17910,26 +18055,42 @@
             "title": "Attempt"
           },
           "code": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Code"
+            "title": "Code",
+            "type": "string"
           },
-          "field": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+          "details": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Details",
+            "type": "object"
+          },
+          "kind": {
+            "enum": [
+              "input",
+              "refused",
+              "upstream",
+              "timeout",
+              "internal"
             ],
-            "title": "Field"
+            "title": "Kind",
+            "type": "string"
           },
           "message": {
             "title": "Message",
@@ -17957,16 +18118,31 @@
             ],
             "title": "Nodename"
           },
-          "retryable": {
+          "of": {
             "anyOf": [
               {
-                "type": "boolean"
+                "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Retryable"
+            "title": "Of"
+          },
+          "retryAfterSeconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retryafterseconds"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
           },
           "suggestion": {
             "anyOf": [
@@ -17978,10 +18154,29 @@
               }
             ],
             "title": "Suggestion"
+          },
+          "traceId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traceid"
+          },
+          "userMessage": {
+            "title": "Usermessage",
+            "type": "string"
           }
         },
         "required": [
-          "message"
+          "kind",
+          "code",
+          "message",
+          "userMessage",
+          "retryable"
         ],
         "title": "RunFailure",
         "type": "object"
@@ -18275,6 +18470,17 @@
               }
             ],
             "title": "Cancancel"
+          },
+          "canRedrive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canredrive"
           },
           "canRetry": {
             "anyOf": [
@@ -18608,6 +18814,69 @@
           "payload"
         ],
         "title": "RunWaiting",
+        "type": "object"
+      },
+      "RunsFilter": {
+        "additionalProperties": false,
+        "description": "Which runs a bulk action takes: each given field narrows it. `kind` and `code` are the run's recorded error\n(ops_contracts.errors); `createdFrom` and `createdTo` bound when the run started, ISO times, the end excluded.",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "createdFrom": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdfrom"
+          },
+          "createdTo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Createdto"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "workflowId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflowid"
+          }
+        },
+        "title": "RunsFilter",
         "type": "object"
       },
       "SaveBase": {
@@ -19006,6 +19275,17 @@
           "ownerTeam": {
             "title": "Ownerteam",
             "type": "string"
+          },
+          "ownerTeamName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownerteamname"
           },
           "parts": {
             "items": {
@@ -19419,8 +19699,15 @@
             "type": "string"
           },
           "ownerTeam": {
-            "title": "Ownerteam",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownerteam"
           },
           "parts": {
             "items": {
@@ -19510,8 +19797,7 @@
         },
         "required": [
           "name",
-          "instructions",
-          "ownerTeam"
+          "instructions"
         ],
         "title": "SkillCreateInput",
         "type": "object"
@@ -19620,6 +19906,17 @@
           "ownerTeam": {
             "title": "Ownerteam",
             "type": "string"
+          },
+          "ownerTeamName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownerteamname"
           },
           "parts": {
             "items": {
@@ -20102,6 +20399,13 @@
           "pagination": {
             "$ref": "#/components/schemas/Pagination"
           },
+          "teamNames": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Teamnames",
+            "type": "object"
+          },
           "viewCounts": {
             "additionalProperties": {
               "type": "integer"
@@ -20163,6 +20467,13 @@
             "title": "Limits",
             "type": "object"
           },
+          "ownerTeams": {
+            "items": {
+              "$ref": "#/components/schemas/TeamChoice"
+            },
+            "title": "Ownerteams",
+            "type": "array"
+          },
           "teams": {
             "items": {
               "type": "string"
@@ -20180,6 +20491,7 @@
         },
         "required": [
           "teams",
+          "ownerTeams",
           "tools",
           "knowledgeBases",
           "limits"
@@ -20550,6 +20862,17 @@
           "ownerTeam": {
             "title": "Ownerteam",
             "type": "string"
+          },
+          "ownerTeamName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownerteamname"
           },
           "requestedBy": {
             "title": "Requestedby",
@@ -23218,6 +23541,32 @@
         "title": "TaskWarning",
         "type": "object"
       },
+      "TeamChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "TeamChoice",
+        "type": "object"
+      },
       "TeamUsage": {
         "additionalProperties": false,
         "properties": {
@@ -25039,6 +25388,174 @@
           "count"
         ],
         "title": "ToolsNotAdded",
+        "type": "object"
+      },
+      "TryPath": {
+        "additionalProperties": false,
+        "properties": {
+          "ends": {
+            "title": "Ends",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/TryStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "ends",
+          "steps"
+        ],
+        "title": "TryPath",
+        "type": "object"
+      },
+      "TryStep": {
+        "additionalProperties": false,
+        "properties": {
+          "access": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access"
+          },
+          "accounts": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Accounts",
+            "type": "object"
+          },
+          "do": {
+            "title": "Do",
+            "type": "string"
+          },
+          "holds": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holds"
+          },
+          "input": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Input",
+            "type": "object"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "sample": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "sampleFrom": {
+            "default": "none",
+            "enum": [
+              "last_run",
+              "schema",
+              "none"
+            ],
+            "title": "Samplefrom",
+            "type": "string"
+          },
+          "test": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          }
+        },
+        "required": [
+          "key",
+          "number",
+          "do"
+        ],
+        "title": "TryStep",
+        "type": "object"
+      },
+      "TryTargets": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "skill",
+              "workflow_step"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "more": {
+            "default": false,
+            "title": "More",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "paths": {
+            "items": {
+              "$ref": "#/components/schemas/TryPath"
+            },
+            "title": "Paths",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "name",
+          "paths"
+        ],
+        "title": "TryTargets",
         "type": "object"
       },
       "TurnUsage": {
@@ -28198,6 +28715,7 @@
     },
     "/reviews/bulk-decision": {
       "post": {
+        "description": "Decides each review as one decision would, each checked by that decision's own decider rule, so a reviewer\nof the review's team decides it whatever team they act in. Someone who decides reviews in no team and decided none\nof these (an ask-the-person asker answers their own) is refused (403), as a single decision refuses them; anyone\nelse gets a result per id.",
         "operationId": "reviews_bulk_decide",
         "parameters": [
           {
@@ -30715,6 +31233,22 @@
                 }
               ],
               "title": "X-Dev-User"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-acting-for",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Acting-For"
             }
           }
         ],
@@ -47685,7 +48219,7 @@
         "x-ops-public": "sdk"
       },
       "get": {
-        "description": "What agents remember about the caller, newest first; `agentId` keeps one agent's.",
+        "description": "One page of what agents remember about the caller, newest first, on the shared list contract: `search` matches\nthe key and the value, `agentId` keeps what that agent uses (its own and every agent's) and `kind` those kinds.",
         "operationId": "memory_list_memories",
         "parameters": [
           {
@@ -47702,6 +48236,119 @@
                 }
               ],
               "title": "Agentid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -47774,7 +48421,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_MemoryView__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_MemoryView__"
                 }
               }
             },
@@ -52484,6 +53131,195 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/runs/bulk": {
+      "post": {
+        "description": "Redrives every Failed or Stuck run, or cancels every unfinished one, of the acting team that the filter\nmatches, oldest first and at most BULK_LIMIT in one call. Each run is checked as its single route checks it: one\nthe caller may not cancel is skipped and listed, never acted on.\nNo request transaction: each run is changed in its own, as the single routes change it.",
+        "operationId": "workflows_bulk_engine_runs",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkRunsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_BulkRunsResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Bulk Engine Runs",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/runs/set-aside-emails/{event_id}/run": {
       "post": {
         "description": "Run again on an email the mailbox listener set aside: its run starts on the workflow's live version under\nthe email's own run key, as the person, and the kept copy of the email is dropped. Who may start the workflow may\nrun it; 404 when there is no such email in the team or it already ran, 503 when Files did not store an attachment\n(the email stays set aside).\nNo request transaction: the email's attachments are stored in files-service between its reads and its write.",
@@ -53458,6 +54294,194 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/runs/{run_id}/redrive": {
+      "post": {
+        "description": "Queues a Failed or Stuck run again from its failed step, on the version the run pinned: steps it recorded are\nnot run again. A failed write is sent again, on its earlier approval, only when its answer proves it did nothing\n(refused, never sent, or refused before acting); any other is reconciled by its key at the gateway first. Who may\ncancel the run may redrive it; a run neither Failed nor Stuck is refused (409 run_not_redrivable).\nNo request transaction: the masking policy (platform-service) is asked after the write, with none open.",
+        "operationId": "workflows_redrive_engine_run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_RunRow_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Redrive Engine Run",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/runs/{run_id}/retry": {
       "post": {
         "description": "Queues a Stuck run again from its last recorded step: recorded steps are not run again and a write\nwith a record at the gateway is never sent again. Who may cancel the run may retry it; a run that is not Stuck is\nrefused (409 run_not_stuck).\nNo request transaction: the masking policy (platform-service) is asked after the write, with none open.",
@@ -53807,7 +54831,7 @@
     },
     "/v1/skills": {
       "get": {
-        "description": "One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when\nor slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,\nwhich is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,\n`ownerTeam`, `origin` and `loading` filter by facet; `knowledgeBases` keeps skills naming any base given. The view\ncounts and facets cover every skill the search leaves, before the view and the facet filters; the page, its counts\nand its facets are read in SQL (`store/skill_list.py`).\n\nEvery view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.\nWith `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing\na tool or knowledge base the agent lacks as `locked`, naming them in `needs`.",
+        "description": "One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when\nor slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,\nwhich is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,\n`ownerTeam`, `origin` and `loading` filter by facet; `knowledgeBases` keeps skills naming any base given. The view\ncounts and facets cover every skill the search leaves, before the view and the facet filters; the page, its counts\nand its facets are read in SQL (`store/skill_list.py`).\n\nEvery view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.\nWith `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing\na tool or knowledge base the agent lacks as `locked`, naming them in `needs`. Each row's `ownerTeamName` and the\nfilter's `teamNames` are asked of platform-service once the transaction has closed.",
         "operationId": "agents_list_skills",
         "parameters": [
           {
@@ -54414,7 +55438,7 @@
     },
     "/v1/skills/options": {
       "get": {
-        "description": "What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams. The\ndirectory is read from tools-service first, with nothing open, then the rows in one transaction.",
+        "description": "What a skill may name: the tools the directory offers, the knowledge bases agents hold, and the teams the\ncaller may create skills in (`skills.create` held there). The directory is read from tools-service first, with\nnothing open, then the rows in one transaction.",
         "operationId": "agents_skill_options",
         "parameters": [
           {
@@ -54772,7 +55796,7 @@
         "x-ops-public": "sdk"
       },
       "get": {
-        "description": "The skill with its instructions and every version: skills: view in the skill's team (403 `forbidden`), the same\nright render asks for, so a person who may only chat never reads a skill's text.",
+        "description": "The skill with its instructions and every version: skills: view in the skill's team (403 `forbidden`), the same\nright render asks for, so a person who may only chat never reads a skill's text. The owner team's name is asked\nof platform-service once the transaction has closed.",
         "operationId": "agents_get_skill",
         "parameters": [
           {
@@ -59915,7 +60939,7 @@
     },
     "/v1/threads/{thread_id}/route-to-people": {
       "post": {
-        "description": "Taking a case from the workflow to people is a decision on it: a reviewer or admin of its team.",
+        "description": "Taking a case from the workflow to people is a decision on it: a reviewer or admin of its team, and for a case\nwaiting on a step, whoever may decide that step (`_may_route`).",
         "operationId": "threads_route_one",
         "parameters": [
           {
@@ -61928,6 +62952,236 @@
           }
         },
         "summary": "Get Tool",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/try-targets": {
+      "get": {
+        "description": "The paths a builder can try: `skill` for a skill's paths, or `workflow` and `step` for one tool step of a\nworkflow. A builder of the skill's or workflow's team only (403); the samples are that team's own runs' answers.",
+        "operationId": "agents_try_targets",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "skill",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Skill"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workflow",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Workflow"
+            }
+          },
+          {
+            "in": "query",
+            "name": "step",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Step"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_TryTargets_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Try Targets",
         "tags": [
           "Agents"
         ],

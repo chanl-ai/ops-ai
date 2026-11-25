@@ -25,7 +25,7 @@ SIGN_IN_KINDS = (
     "oauth2_auth_code",
     "oauth2_jwt_bearer",
 )
-SIGN_IN_SETTINGS = ("team", "person", "person_or_team")
+SIGN_IN_SETTINGS = ("team", "person")
 # The kinds that hold each person's own credential, so each person may sign in (tools-service auth/kinds.py,
 # per_person): their own key, password or token, or their own OAuth sign-in.
 PER_PERSON_KINDS = ("api_key", "basic", "bearer", "oauth2_auth_code")
@@ -119,7 +119,22 @@ class Connection(Strict):
     token_url: str | None = None
     revoke_url: str | None = None
     scopes: list[Scope] = Field(default_factory=list[Scope])
-    sign_in: list[Literal["team", "person", "person_or_team"]] = Field(min_length=1)
+    # The two answers to who signs in. `person_or_team` (each person, team as backup) is retired: a manifest that still
+    # lists it reads as `person`.
+    sign_in: list[Literal["team", "person"]] = Field(min_length=1)
+
+    @field_validator("sign_in", mode="before")
+    @classmethod
+    def _two_answers(cls, v: Any) -> Any:
+        if not isinstance(v, list):
+            return v
+        out: list[Any] = []
+        for x in cast(list[Any], v):
+            y = "person" if x == "person_or_team" else x
+            if y not in out:
+                out.append(y)
+        return out
+
     # Settings read from the token answer at sign-in (Salesforce's instance_url), each must be a host ending in one of
     # `token_hosts`, so a token cannot point every call at a host outside the system.
     from_token: dict[str, str] = Field(default_factory=dict[str, str])

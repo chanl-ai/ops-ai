@@ -5,7 +5,7 @@ Status: current. Id: `uc-108`. Service: `console`. Layers: ui.
 Every chat conversation starts with its agent's per-conversation caps (model calls and cost; empty fields are the
 platform defaults of 200 calls and 5.00, never unlimited). When a cap is reached, the next turn pauses and the chat
 shows a card with what was spent, taken from the server's ledger. The conversation's owner continues it, which adds
-one more allotment; an admin of its team can raise the caps for that conversation. The server checks who does which.
+one more allotment; whoever holds `chat.manage` in its team (Builder and Admin by default) can raise the caps for that conversation. The server checks who does which.
 Design: [chat](../../console/chat.md).
 
 ## Preconditions
@@ -22,8 +22,8 @@ make one model call.
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | James asks twice in his chat | The second turn shows the budget card "N of 1 model calls" matching the thread's ledger; no Raise for a builder; the message box says the chat is paused |
-| 2 | Maya continues James's chat; James raises it, both through the API | 403 each |
+| 1 | James asks twice in his chat | The second turn shows the budget card "N of 1 model calls" matching the thread's ledger, with Continue and Raise (a builder holds `chat.manage`); the message box says the chat is paused |
+| 2 | Maya, an approver, continues James's chat and raises it, both through the API | 403 each |
 | 3 | James presses Continue | 200; the turn answers; the card says it was continued; the box takes messages again |
 | 4 | Priya, an admin, asks twice in her own chat and raises the cap to 5 | 200; the card says "raised to 5" |
 

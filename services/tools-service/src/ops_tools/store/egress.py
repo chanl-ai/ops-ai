@@ -45,11 +45,13 @@ def _listed(name: str, key: str, length: int) -> sa.Table:
         sa.Column(key, sa.String(length), primary_key=True),
         sa.Column("note", sa.Text, nullable=False),
         sa.Column("added_by", sa.String(200), nullable=False),
-        sa.Column("added_at", _TS, nullable=False),
+        sa.Column("added_at", _TS, nullable=False, info=LISTED),
         # The template slot a provisioned record fills, found again by it on the next run, and what a person may change:
         # `system` nothing, `managed` anything. Null on a record no template made.
         sa.Column("template_id", sa.String(120), index=True, info=LISTED),
         sa.Column("protection", sa.String(16)),
+        # The list sorts by when each entry was added.
+        sa.Index(f"ix_{name}_added_at", "tenant_id", "added_at"),
         info=TENANT_SCOPED,
     )
 
@@ -179,13 +181,15 @@ class EgressStore(Store):
         h = egress_hosts.c
         q = sa.select(*egress_hosts.c).where(h.tenant_id == tenant_id)
         named = team_modules()
+        by_host = sa.func.lower(h.host)
         async with self._list_tx(tenant_id) as c:
             page = await list_page(
                 c,
                 q,
                 params,
                 search=[h.host, h.note],
-                default_sort=sa.func.lower(h.host),
+                sortable={"host": by_host, "addedAt": h.added_at},
+                default_sort=by_host,
                 filters={"templateId": h.template_id},
             )
             hosts = [ListedHost.model_validate(r) for r in page["data"]]

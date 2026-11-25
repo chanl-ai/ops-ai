@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+from unittest.mock import ANY
 
 import sqlalchemy as sa
 
@@ -48,7 +49,7 @@ async def test_a_refused_team_account_names_the_app_to_reconnect_and_tells_admin
         "account": "team",
         "state": "refused",
         # What a run waits on until an admin signs the team account in again.
-        "connectedEvent": {"name": "app_account.connected", "key": f"{connection_id}:team"},
+        "connectedEvent": {"name": "app_account.connected", "key": f"{connection_id}:team", "after": ANY},
     }, error
     await call_as_team(rig, tenant, "test.client")
     told = await notices(rig, tenant)
@@ -56,6 +57,7 @@ async def test_a_refused_team_account_names_the_app_to_reconnect_and_tells_admin
     assert told[0]["team_id"] == "team_platform"
     assert told[0]["payload"]["state"] == "refused" and told[0]["payload"]["app"] == "Client desk", told[0]
     assert "invalid_client" in told[0]["payload"]["reason"]
+    assert told[0]["payload"]["environment"] == "production", "the notice workflow requires the environment"
 
 
 async def test_a_fixed_and_again_refused_account_tells_admins_again(rig: Rig, tenant: str) -> None:  # noqa: F811

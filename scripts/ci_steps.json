@@ -8,7 +8,7 @@
       {"step": "Lint and format the changed Python", "twin": "base=$(git merge-base \"${BASE_SHA:-origin/main}\" HEAD); files=$(git diff --name-only --diff-filter=ACMR \"$base\" HEAD -- '*.py'); [ -z \"$files\" ] || { uv run ruff format --check $files && uv run ruff check $files; }"},
       {"step": "Types of the packages", "twin": "uv run python scripts/check_tests_typecheck.py packages"},
       {"step": "make -s checks", "twin": "make -s checks"},
-      {"step": "Script tests", "twin": "uv run pytest -q scripts/tests"}
+      {"step": "Script tests", "twin": "uv run pytest -q -n auto --dist loadfile scripts/tests"}
     ],
     "service": [
       {"step": "case \"$PART\" in", "twin": "make python-verify"}
@@ -23,8 +23,7 @@
       {"step": "make -s docs-verify", "twin": "make -s docs-verify"}
     ],
     "repo": [
-      {"step": "make python-verify VERIFY_POOL=\"${{ needs.plan.outputs.repo_pool }}\"", "twin": "make python-verify"},
-      {"step": "make sdk-verify changelog-verify", "twin": "make sdk-verify changelog-verify"}
+      {"step": "case \"$PART\" in", "twin": "make python-verify sdk-verify changelog-verify"}
     ],
     "store-mssql": [
       {"step": "SQL Server", "no_local_twin": "Starts a SQL Server container and the ODBC driver; nearest proof is `make mssql-remote-up` then `make mssql-remote-test`."},

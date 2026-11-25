@@ -6,6 +6,7 @@ import type { SignInOptions } from '@/lib/types/sign-in';
 import type { OpsApi } from './contract';
 import { createTransport } from './http';
 import { optionsQs } from './options';
+import { addSort } from './sort-query';
 
 /** One audit row as platform-service returns it (GET /v1/audit): names, summary and action word joined by the service. */
 interface PlatformAuditRow {
@@ -61,6 +62,8 @@ export function createPlatformAccessHttp(
       invite: (i) => send('POST', '/settings/members/invite', { emails: i.emails, role: i.role }),
       setRole: (ids, role) => send('POST', '/settings/members/role', { ids, role }),
       remove: (ids) => send('POST', '/settings/members/delete', { ids }),
+      reinvite: (ids) => send('POST', '/settings/members/reinvite', ids ? { ids } : {}),
+      unlink: (ids) => send('POST', '/settings/members/unlink', { ids }),
       options: (p) => get(`/settings/members/options?${optionsQs(p)}`),
     },
     invites: {
@@ -80,7 +83,7 @@ export function createPlatformAccessHttp(
     },
     audit: {
       list: async (p: ListParams<AuditFilters> & { view: AuditView }) => {
-        const q = new URLSearchParams({ page: String(p.page), pageSize: String(p.pageSize), view: p.view });
+        const q = addSort(new URLSearchParams({ page: String(p.page), pageSize: String(p.pageSize), view: p.view }), p);
         const kind = p.filters?.action?.[0];
         const target = p.filters?.targetType?.[0];
         if (kind) q.set('kind', kind);
