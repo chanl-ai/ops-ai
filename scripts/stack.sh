@@ -197,7 +197,7 @@ cmd_of() {
     # The worker also reads the workflows' mailboxes (Email received) and stores their attachments in files-service.
     worker) echo "$(auth_env)env $AGENTS_URLS $MAILBOX_ENV OPS_EMAIL_POLL_SECONDS=3 uv run --directory services/agents-service python -m ops_agents.api.worker" ;;
     # Seeds the openai-local connection at the fake on start; agents reach it with the dev runtime key it seeds.
-    models) echo "$(auth_env)env OPS_MODELS_PORT=$MODELS_PORT OPS_MODELS_FAKE_OPENAI_URL=http://127.0.0.1:$FAKE_OPENAI_PORT/v1 uv run --directory services/models-service python -m ops_models" ;;
+    models) echo "$(auth_env)env OPS_MODELS_PORT=$MODELS_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_FAKE_OPENAI_URL=http://127.0.0.1:$FAKE_OPENAI_PORT/v1 uv run --directory services/models-service python -m ops_models" ;;
     fakeai) echo "env FAKE_OPENAI_PORT=$FAKE_OPENAI_PORT uv run --directory services/models-service/scripts --project .. python -m fake_openai $PWD/services/models-service/seed/demo-fake-openai" ;;
     fakebank) echo "env FAKE_BANK_PORT=$FAKE_BANK_PORT uv run --directory services/tools-service/scripts --project .. python -m fake_bank $RUN_ABS/fake-bank" ;;
     apidocs) echo "env OPS_API_DOCS_PORT=$API_DOCS_PORT OPS_PLATFORM_PORT=$PLATFORM_PORT OPS_AGENTS_PORT=$AGENTS_PORT OPS_TOOLS_PORT=$TOOLS_PORT OPS_MODELS_PORT=$MODELS_PORT OPS_KB_PORT=$KB_PORT OPS_FILES_PORT=$FILES_PORT OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT python3 scripts/api_docs.py" ;;

@@ -280,6 +280,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
+    "agents_list_model_alias_uses": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/model-alias-uses",
+        "pathParams": [],
+        "query": ["aliases"],
+        "stream": False,
+    },
     "agents_list_model_aliases": {
         "body": None,
         "headers": [],
@@ -2879,6 +2888,10 @@ class Operations:
         "Undo Memory"
         return self._t.call(SERVICE, OPERATIONS["memory_undo_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def agents_list_model_alias_uses(self, *, aliases: str | None = None) -> Any:
+        "List Model Alias Uses"
+        return self._t.call(SERVICE, OPERATIONS["agents_list_model_alias_uses"], {}, {"aliases": aliases}, {}, None)  # type: ignore[no-any-return]
+
     def agents_list_model_aliases(self) -> list[ModelAlias]:
         "List Model Aliases"
         return self._t.call(SERVICE, OPERATIONS["agents_list_model_aliases"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -4642,6 +4655,12 @@ class AsyncOperations:
     async def memory_undo_memory(self, memory_id: str) -> Any:
         "Undo Memory"
         return await self._t.call(SERVICE, OPERATIONS["memory_undo_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def agents_list_model_alias_uses(self, *, aliases: str | None = None) -> Any:
+        "List Model Alias Uses"
+        return await self._t.call(
+            SERVICE, OPERATIONS["agents_list_model_alias_uses"], {}, {"aliases": aliases}, {}, None
+        )  # type: ignore[no-any-return]
 
     async def agents_list_model_aliases(self) -> list[ModelAlias]:
         "List Model Aliases"

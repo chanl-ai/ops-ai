@@ -736,6 +736,11 @@ class EnvelopeNoneType(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeDictStrInt(TypedDict, closed=True):
+    data: dict[str, int]
+    success: Literal[True]
+
+
 class EnvelopeListAgentRun(TypedDict, closed=True):
     data: list[AgentRun]
     success: Literal[True]

@@ -230,6 +230,11 @@ queries = 2
 ["GET /v1/me/memories/export"]
 queries = 3
 
+# One read of the agents' newest and published versions, inside the request transaction.
+["GET /v1/model-alias-uses"]
+queries = 1
+query = { aliases = "default" }
+
 ["GET /v1/model-aliases"]
 queries = 0
 

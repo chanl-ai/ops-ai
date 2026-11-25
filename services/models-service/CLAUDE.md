@@ -20,8 +20,8 @@ runs it with `OPS_MODELS_FAKE_OPENAI_URL` pointing at the fake OpenAI (`scripts/
 | `src/ops_models/app.py` | Every route (`create_models_app`): admin and admission routes on the service token, provider keys and connections for account admins, completions on the model key |
 | `registry/providers/*.json`, `src/ops_models/registry.py` | One entry per provider type, read and checked at start-up; `OPS_MODELS_PROVIDER_REGISTRY_EXTRA` names a folder of more |
 | `src/ops_models/providers.py`, `sigv4.py`, `connection_settings.py` | The adapters an entry names (`ADAPTERS`: openai-compatible, Azure OpenAI, Bedrock, scripted) and the rules a connection's settings must meet |
-| `catalog/models.json`, `catalog/knobs.json`, `src/ops_models/catalog.py` | The pinned model catalog and each provider's knob ranges; `fit` holds every call to the alias's model |
-| `scripts/sync_catalog.py` | Refreshes the catalog snapshot from models.dev and LiteLLM (`make catalog-sync`); review and commit the diff |
+| `catalog/models.json`, `catalog/knobs.json`, `src/ops_models/catalog.py` | The pinned model facts (`models.json`) and the knob table (`knobs.json`: each provider's knobs, ranges and defaults, and how a model's facts narrow them); `ranges_for` builds a model's knobs from both, `fit` holds every call to the alias's model |
+| `scripts/sync_catalog.py` | Refreshes the catalog snapshot (model facts only, no ranges) from models.dev and LiteLLM (`make catalog-sync`); review and commit the diff |
 | `src/ops_models/provider_keys.py` | Account provider keys, sealed, never returned |
 | `src/ops_models/seed.py` | The dev seed: scripted connection, `bank-*` aliases, model keys `mk_dev_agents`, `mk_dev_extract`, `mk_dev_tools_check` and one per agent |
 | `src/ops_models/store/` | All database code; `store/provider_keys.py:20` names the tenant role `ops_models_tenant` |

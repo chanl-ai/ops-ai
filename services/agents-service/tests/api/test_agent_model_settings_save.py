@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from ops_agents.api.app import create_app
 from ops_agents.store.base import metadata
 from ops_engine.store import metadata as engine_metadata
+from ops_identity import dev_service_signer, mint_service_token
 from ops_service_kit.http import Json
 from ops_service_kit.settings import Settings
 
@@ -81,3 +82,46 @@ async def test_a_save_is_held_to_the_alias_knobs(tmp_path: Path) -> None:
         kept = await save({"temperature": 0.2, "thinking_budget": 0})
         assert kept.status_code == 200, kept.text
         assert kept.json()["data"]["modelSettings"] == {"temperature": 0.2, "thinking_budget": 0}, kept.json()["data"]
+
+
+async def test_the_alias_uses_count_each_agent_naming_an_alias_once(tmp_path: Path) -> None:
+    url = f"sqlite+aiosqlite:///{tmp_path / 'db.sqlite'}"
+    engine = create_async_engine(url)
+    async with engine.begin() as c:
+        await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
+    app = create_app(
+        Settings(database_url=url, seed_dir=SEED),
+        model=scripted_model(),
+        engine=engine,
+        checkpointer=InMemorySaver(),
+        graph_models=FakeGraphModels(),
+        knowledge=fixture_knowledge(),
+    )
+    token = mint_service_token(
+        dev_service_signer(), service="models", audience="agents", tenant_id="local", scopes=["agents:view"]
+    )
+    models = {"Authorization": f"Bearer {token}"}
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c,
+    ):
+        app.state.runtime.model_aliases = Knobs()
+        for name in ("Claims Helper", "Claims Reviewer"):
+            made = await c.post("/v1/agents", json={"name": name, "role": "answers claims", "model": "bank-standard"})
+            assert made.status_code == 201, made.text
+        # A newer draft beside the published version: the agent is counted once, not per version.
+        held = made.json()["data"]
+        published = await c.post(f"/v1/agents/{held['id']}/publish-requests", json={"version": held["version"]})
+        assert published.status_code == 201, published.text
+        held = (await c.get(f"/v1/agents/{held['id']}")).json()["data"]
+        base = {"baseVersion": held["version"], "baseDigest": held["digest"]}
+        edited = await c.patch(f"/v1/agents/{held['id']}", json={"role": "reviews claims", **base})
+        assert edited.status_code == 200, edited.text
+        counted = await c.get("/v1/model-alias-uses", params={"aliases": "bank-standard,unused"}, headers=models)
+        bare = mint_service_token(dev_service_signer(), service="models", audience="agents", tenant_id="local")
+        unscoped = await c.get(
+            "/v1/model-alias-uses", params={"aliases": "bank-standard"}, headers={"Authorization": f"Bearer {bare}"}
+        )
+    assert counted.status_code == 200 and counted.json()["data"] == {"bank-standard": 2, "unused": 0}, counted.text
+    assert unscoped.status_code == 403, unscoped.text

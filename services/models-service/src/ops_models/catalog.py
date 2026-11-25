@@ -1,7 +1,8 @@
-"""The model catalog: what each catalogued model can do and which knobs it takes, from the committed snapshot
-(`catalog/models.json`, written by scripts/sync_catalog.py from models.dev and LiteLLM) and the knob table
-(`catalog/knobs.json`). Read once at start-up and never from the network, so a release serves the catalog it was cut
-with.
+"""The model catalog: what each catalogued model can do and which knobs it takes. The committed snapshot
+(`catalog/models.json`, written by scripts/sync_catalog.py from models.dev and LiteLLM) holds each model's facts; the
+knob table (`catalog/knobs.json`) holds which knobs each provider takes, their ranges and defaults, and how a model's
+facts narrow them. Each model's knobs are built from the two in memory (`ranges_for`), never from the
+network, so a release serves the catalog it was cut with and a change to the table changes every model's knobs.
 
 A caller names a knob by its name (`thinking_budget`) or by the request field it reaches the provider as
 (`thinking.budget_tokens`); which field that is, what it sets alongside and when it is off are the knob table's.
@@ -39,6 +40,9 @@ class KnobDef(In):
     with_: dict[str, str] = Field(default_factory=dict[str, str], alias="with")
     # At or below this the knob is off and is not sent (a thinking budget of 0).
     off_at: float | None = None
+    # The model fact that caps it (`output`, its longest answer), plus an offset.
+    maximum_from: Literal["output"] | None = None
+    maximum_offset: int = 0
 
 
 class KnobRange(In):
@@ -52,6 +56,15 @@ class KnobRange(In):
     wire: str | None = None
 
 
+class ReasoningOption(In):
+    """One of models.dev's reasoning options for a model, as the snapshot keeps it."""
+
+    type: str
+    min: float | None = None
+    max: float | None = None
+    values: list[str] | None = None
+
+
 class CatalogModel(In):
     name: Name
     context: int | None = None
@@ -61,7 +74,9 @@ class CatalogModel(In):
     images: bool = False
     input_per_million: float | None = None
     output_per_million: float | None = None
-    knobs: dict[str, KnobRange] = Field(default_factory=dict[str, KnobRange])
+    # Whether it takes a temperature: the knob table's `sampling` knobs apply only when it does.
+    temperature: bool = False
+    reasoning_options: list[ReasoningOption] = Field(default_factory=list[ReasoningOption])
 
 
 class ProviderKnobs(In):
@@ -83,6 +98,11 @@ class CatalogFile(In):
 class KnobsFile(In):
     about: str = ""
     knobs: dict[str, KnobDef]
+    sampling: list[str]
+    # models.dev's reasoning option type, and the knob it is.
+    options: dict[str, str]
+    # An option's field, and the range keyword it fills.
+    option_fields: dict[Literal["min", "max", "values"], Literal["x-minimum-on", "maximum", "enum"]]
     providers: dict[str, ProviderKnobs]
     uncatalogued: Uncatalogued
 
@@ -94,6 +114,7 @@ _RANGE = ("minimum", "maximum", "default", "enum", "x-minimum-on")
 class Catalog:
     def __init__(self, models: CatalogFile, knobs: KnobsFile) -> None:
         self.models = models.providers
+        self.table = knobs
         self.knobs = knobs.knobs
         self.providers = knobs.providers
         self.uncatalogued = knobs.uncatalogued.takes
@@ -110,11 +131,40 @@ class Catalog:
     def listed(self, catalog_id: str | None) -> list[tuple[str, CatalogModel]]:
         return sorted((self.models.get(catalog_id) or {}).items()) if catalog_id else []
 
+    def ranges_for(self, catalog_id: str | None, model: CatalogModel) -> dict[str, KnobRange]:
+        """The knobs `model` takes and each one's range and default: its provider's from the knob table, kept only
+        when the model's facts allow the knob (a sampling knob needs a temperature, an option knob its option), then
+        narrowed by them (the option's bounds or choices, the model's longest answer)."""
+        table = self.providers.get(catalog_id or "")
+        if table is None:
+            return {}
+        options = {self.table.options[o.type]: o for o in model.reasoning_options if o.type in self.table.options}
+        out: dict[str, KnobRange] = {}
+        for name in table.takes:
+            knob = self.knobs[name]
+            if name in self.table.sampling and not model.temperature:
+                continue
+            if name in self.table.options.values() and name not in options:
+                continue
+            held: Json = table.ranges.get(name, KnobRange()).model_dump(by_alias=True, exclude_none=True)
+            held.pop("wire", None)
+            option = options.get(name)
+            if option is not None:
+                given: dict[str, JsonValue] = option.model_dump(exclude_none=True)
+                for field, keyword in self.table.option_fields.items():
+                    if given.get(field):
+                        held[keyword] = given[field]
+            if knob.maximum_from == "output" and model.output and "maximum" not in held:
+                held["maximum"] = model.output + knob.maximum_offset
+            rng = KnobRange.model_validate(held)
+            out[name] = _defaulted(rng)
+        return out
+
     def knob_schema(self, catalog_id: str | None, model_id: str) -> Json:
         """A JSON Schema object of the knobs the model takes, each with its title, description, range and catalog
         default; for a model the catalog does not hold, the common knobs with no range or default."""
         found = self.model(catalog_id, model_id)
-        ranges = found.knobs if found else {n: KnobRange() for n in self.uncatalogued}
+        ranges = self.ranges_for(catalog_id, found) if found else {n: KnobRange() for n in self.uncatalogued}
         properties: Json = {}
         for name, held in ranges.items():
             knob = self.knobs[name]
@@ -131,7 +181,9 @@ class Catalog:
     def fit(self, body: Json, catalog_id: str | None, model_id: str) -> Json:
         """`body` as the provider receives it under the knob rule in this module's docstring."""
         found = self.model(catalog_id, model_id)
-        held: Mapping[str, KnobRange] = found.knobs if found else {n: KnobRange() for n in self.knobs}
+        held: Mapping[str, KnobRange] = (
+            self.ranges_for(catalog_id, found) if found else {n: KnobRange() for n in self.knobs}
+        )
         overrides = self.providers[catalog_id].ranges if found and catalog_id in self.providers else {}
         out: Json = dict(body)
         for name, knob in self.knobs.items():
@@ -151,6 +203,16 @@ class Catalog:
                     for field, set_to in knob.with_.items():
                         _write(out, field, set_to)
         return out
+
+
+def _defaulted(rng: KnobRange) -> KnobRange:
+    """A default the range allows: a number no higher than its maximum, a choice it lists (else its middle one)."""
+    default = rng.default
+    if rng.enum and default not in rng.enum:
+        default = rng.enum[len(rng.enum) // 2]
+    elif isinstance(default, int | float) and rng.maximum is not None and default > rng.maximum:
+        default = int(rng.maximum) if isinstance(default, int) else rng.maximum
+    return rng.model_copy(update={"default": default})
 
 
 def _fitted(knob: KnobDef, value: JsonValue, held: KnobRange, *, clamp: bool) -> Scalar | None:

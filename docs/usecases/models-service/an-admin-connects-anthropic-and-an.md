@@ -64,6 +64,7 @@ tokens. It assumes the committed model catalog; nothing is fetched at run time.
 | 13 | James sets 0.4, top k 99 then resets it and sets 30, a 2,000 thinking budget, then 1.6 and Done, then 0.4 and Done | Reset empties its field; 1.6 keeps the dialog open and saves nothing; the agent then saves exactly those three settings |
 | 14 | James tests the agent | The fake received the saved settings |
 | 15 | James opens Connections | The page says only an account admin changes models, the rail has no Connections link and the API answers 403 |
+| 16 | The admin lists the aliases on models-service after step 6 | Alias `fast-…` says it is used by 1 agent (`usedBy: 1`), counted by agents-service |
 
 ## Acceptance layers
 
@@ -77,4 +78,4 @@ tokens. It assumes the committed model catalog; nothing is fetched at run time.
 Step 7: with the saved settings left out of the turn's settings, the request reaches the provider without them;
 `services/agents-service/tests/unit/test_agent_model_settings_call.py` was seen failing that way. Step 6 fails when the
 save is not checked against the alias's knobs (`tests/api/test_agent_model_settings_save.py` was seen failing that way).
-Step 12 fails when the dialog draws a fixed list of settings instead of the alias's knobs; step 13 fails when Reset stores the default as a value (the saved settings then hold four keys).
+Step 16 fails when the count is not asked of agents-service (it reads null). Step 12 fails when the dialog draws a fixed list of settings instead of the alias's knobs; step 13 fails when Reset stores the default as a value (the saved settings then hold four keys).

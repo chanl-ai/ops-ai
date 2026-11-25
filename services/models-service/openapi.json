@@ -199,6 +199,17 @@
             "title": "Status",
             "type": "string"
           },
+          "usedBy": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usedby"
+          },
           "version": {
             "title": "Version",
             "type": "integer"
@@ -2670,7 +2681,7 @@
     },
     "/v1/models/aliases": {
       "get": {
-        "description": "Each alias's serving version, by name. `search` matches the name, the kind or the model; `ids` names\naliases by name.",
+        "description": "Each alias's serving version, by name. `search` matches the name, the kind or the model; `ids` names\naliases by name. `usedBy`: how many agents name the alias, for a person; null for a service or when\nagents-service did not answer.",
         "operationId": "aliases_list_aliases",
         "parameters": [
           {

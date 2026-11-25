@@ -354,6 +354,17 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_list_model_alias_uses": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/model-alias-uses",
+    "pathParams": [],
+    "query": [
+      "aliases"
+    ],
+    "stream": false
+  },
   "agents_list_model_aliases": {
     "body": null,
     "headers": [],

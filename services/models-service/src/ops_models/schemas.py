@@ -101,6 +101,8 @@ class AliasOut(Out):
     images: bool = False
     # The connection's name, for the aliases page; None when the connection is gone.
     provider_name: str | None = None
+    # How many agents name this alias: for a person only, None when agents-service did not answer.
+    used_by: int | None = None
 
 
 class AliasRef(Out):

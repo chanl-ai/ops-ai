@@ -550,6 +550,8 @@ class Settings(BaseSettings):
             # offers the team's skills as prompts and lists and installs templates, each token holding only the
             # cells the person it calls for holds (mcp_tools.py). workflows:run: an MCP link starts a workflow's live
             # version for the signed-in person, held only when that person holds it, with their acting-for token.
+            # agents:view: the alias list says how many agents name each alias (GET /v1/model-alias-uses).
+            "models": ["agents:view"],
             "tools": [
                 "agents:view",
                 "knowledge:view",

@@ -26,7 +26,15 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ops_access import Access
-from ops_identity import Auth, CurrentPrincipal, CurrentTenantCaller, Principal, current_service, install_auth
+from ops_identity import (
+    Auth,
+    CurrentPrincipal,
+    CurrentTenantCaller,
+    Principal,
+    ServiceClient,
+    current_service,
+    install_auth,
+)
 from ops_identity.fastapi import Tx
 from ops_metering import Price, Usage, cost
 from ops_policy import CredentialStore
@@ -65,6 +73,7 @@ from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
 from ops_store.database import Database
 
+from .alias_users import AgentsAliasUsers, AliasUsers, NoAliasUsers
 from .catalog import Catalog, CatalogModel
 from .connection_settings import azure_openai_problem
 from .key_check import EndpointRefused, KeyRefused, azure_host, listed_models
@@ -373,7 +382,7 @@ def _type_view(e: ProviderEntry) -> ProviderTypeOut:
     )
 
 
-def _catalog_view(model_id: str, m: CatalogModel) -> CatalogModelOut:
+def _catalog_view(model_id: str, m: CatalogModel, knobs: list[str]) -> CatalogModelOut:
     return CatalogModelOut(
         id=model_id,
         name=m.name,
@@ -383,7 +392,7 @@ def _catalog_view(model_id: str, m: CatalogModel) -> CatalogModelOut:
         images=m.images,
         input_per_million=m.input_per_million,
         output_per_million=m.output_per_million,
-        knobs=sorted(m.knobs),
+        knobs=knobs,
     )
 
 
@@ -492,12 +501,14 @@ def create_models_app(
     key_fetch: PublicFetch | None = None,
     chat_aliases: tuple[str, ...] = ("default", "assistant"),
     background: Sequence[Callable[[], Coroutine[Any, Any, None]]] | None = None,
+    alias_users: AliasUsers | None = None,
 ) -> FastAPI:
     """Tests inject `upstream`, the client provider calls go out on; otherwise one is opened and closed with the app.
     `auth` resolves callers (ops_identity's shared dependency); by default it is built from Settings for "models".
     Provider keys are the accounts' own (`provider_keys`), kept in `credentials` (the store the settings choose by
     default); `provider_secrets` are the dev stack's keys from settings, behind them. `background` are the processes
-    the lifespan runs beside the server, by default the sweep of idle key spend."""
+    the lifespan runs beside the server, by default the sweep of idle key spend. `alias_users` says how many agents
+    name each alias; by default agents-service on `OPS_AGENTS_URL`, and no counts when that is unset."""
     http = upstream or httpx.AsyncClient(timeout=60)
     # Testing a key sends it out: only to a public address, never following a redirect with it.
     key_fetch = key_fetch or PublicFetch(max_redirects=0, timeout_s=20)
@@ -539,6 +550,8 @@ def create_models_app(
                     task.cancel()
         if upstream is None:
             await http.aclose()
+        if agents_client is not None:
+            await agents_client.aclose()
 
     app = FastAPI(
         title="Ops AI models service",
@@ -551,6 +564,14 @@ def create_models_app(
     # Read and checked here, at start-up: an entry naming an adapter no code registers stops the service.
     registry = load_registry(ADAPTERS, BUILTIN, settings.models_provider_registry_extra)
     catalog = Catalog.load()
+    agents_client: ServiceClient | None = None
+    if alias_users is None:
+        if settings.agents is not None:
+            agents_client = ServiceClient.for_settings(
+                settings, service="models", audience="agents", scopes=["agents:view"]
+            )
+        alias_users = AgentsAliasUsers(agents_client) if agents_client else NoAliasUsers()
+    users: AliasUsers = alias_users
     if settings.cors_origins:
         # The console calls the provider key and connection routes from the browser (Settings > Model providers).
         app.add_middleware(
@@ -696,7 +717,8 @@ def create_models_app(
         if row is None:
             raise refusal(404, "provider_not_found", f"No provider connection {provider_id}.")
         entry = registry.get(row.type)
-        return typed([_catalog_view(i, m) for i, m in catalog.listed(entry.catalog if entry else None)])
+        kind = entry.catalog if entry else None
+        return typed([_catalog_view(i, m, sorted(catalog.ranges_for(kind, m))) for i, m in catalog.listed(kind)])
 
     @app.put(
         "/v1/models/providers/{provider_id}",
@@ -922,12 +944,19 @@ def create_models_app(
         keys.forget(p.tenant_id, name)
         return Response(status_code=204)
 
-    async def named(rows: Sequence[AliasRow]) -> list[AliasOut]:
-        """Each alias version with its connection's name, read in one page of connections by id."""
+    async def named(rows: Sequence[AliasRow], caller: Principal) -> list[AliasOut]:
+        """Each alias version with its connection's name, read in one page of connections by id, and for a person how
+        many agents name the alias (agents-service, one call per page). A service reads the list to resolve aliases
+        and gets no count, so agents-service's own alias reads never call it back."""
         ids = sorted({r.provider_id for r in rows})
         held = (await providers.page(ListParams(ids=ids, page_size=len(ids)))).data if ids else []
         names = {c.id: c.name for c in held}
-        return [_alias_view(r).model_copy(update={"provider_name": names.get(r.provider_id)}) for r in rows]
+        wanted = sorted({r.name for r in rows}) if caller.kind == "person" else []
+        used = await users.counts(caller.tenant_id, wanted) if wanted else {}
+        return [
+            _alias_view(r).model_copy(update={"provider_name": names.get(r.provider_id), "used_by": used.get(r.name)})
+            for r in rows
+        ]
 
     @app.get(
         "/v1/models/aliases",
@@ -936,11 +965,12 @@ def create_models_app(
         response_model=Envelope[ListResult[AliasOut]],
         responses=ERRORS,
     )
-    async def list_aliases(_: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def list_aliases(caller: CurrentTenantCaller, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Each alias's serving version, by name. `search` matches the name, the kind or the model; `ids` names
-        aliases by name."""
+        aliases by name. `usedBy`: how many agents name the alias, for a person; null for a service or when
+        agents-service did not answer."""
         page = await aliases.page(q)
-        views = await named(page.data)
+        views = await named(page.data, caller)
         return typed(ListResult[AliasOut](data=views, pagination=page.pagination, facets=page.facets))
 
     @app.post(
@@ -963,13 +993,13 @@ def create_models_app(
         response_model=Envelope[ListResult[AliasOut]],
         responses=ERRORS,
     )
-    async def list_versions(name: str, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def list_versions(name: str, caller: CurrentTenantCaller, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The alias's versions, oldest first. `search` matches the model or the status; `ids` names versions by
         number. 404 when there is no such alias."""
         page = await aliases.version_page(name, q)
         if page is None:
             raise refusal(404, "alias_not_found", f"No alias {name}.")
-        views = await named(page.data)
+        views = await named(page.data, caller)
         return typed(ListResult[AliasOut](data=views, pagination=page.pagination, facets=page.facets))
 
     @app.get(

@@ -7,12 +7,15 @@ up to 64,000 tokens, and no thinking effort)."""
 from __future__ import annotations
 
 import json
+import shutil
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import httpx
 
 from ops_models.app import create_models_app
+from ops_models.catalog import CATALOG_DIR, Catalog
 from ops_service_kit.contract import response_checker
 
 from .conftest import LOCAL, SERVICE, Models
@@ -92,3 +95,25 @@ async def test_a_call_reaches_the_provider_fitted_to_the_model(models: Models) -
         "thinking": {"type": "enabled", "budget_tokens": 1024},
     }, sent[0]
     assert sent[0]["parallel_tool_calls"] is False, "a setting that is not a knob is passed on as sent"
+
+
+def test_an_edit_to_the_knob_table_changes_the_model_knobs(tmp_path: Path) -> None:
+    """The ranges, defaults and knobs each provider takes are the knob table's, read when the catalog loads: the
+    snapshot holds only each model's facts."""
+    shutil.copy(CATALOG_DIR / "models.json", tmp_path / "models.json")
+    table = json.loads((CATALOG_DIR / "knobs.json").read_text())
+    anthropic = table["providers"]["anthropic"]
+    anthropic["ranges"]["temperature"] = {"minimum": 0, "maximum": 0.8, "default": 0.5}
+    anthropic["takes"].remove("top_k")
+    (tmp_path / "knobs.json").write_text(json.dumps(table))
+
+    knobs = Catalog.load(tmp_path).knob_schema("anthropic", HAIKU)["properties"]
+    assert isinstance(knobs, dict) and "top_k" not in knobs, knobs
+    assert knobs["temperature"] == {
+        "type": "number",
+        "title": "Temperature",
+        "description": "Lower is steadier, higher is more varied.",
+        "minimum": 0.0,
+        "maximum": 0.8,
+        "default": 0.5,
+    }, knobs["temperature"]

@@ -1,7 +1,7 @@
 # The use case runner puts docs/usecases/lib (usecase_harness) on the path; pyright alone cannot see it.
 # pyright: basic, reportMissingImports=false
 """uc-792 An admin connects Anthropic and an agent's model settings reach its chat, api layer:
-docs/usecases/models-service/an-admin-connects-anthropic-and-an.md, steps 1-7.
+docs/usecases/models-service/an-admin-connects-anthropic-and-an.md, steps 1-7 and 16.
 
 The run's own models-service and the fake OpenAI (services/models-service/scripts/fake_openai), standing in for
 Anthropic's OpenAI-compatible endpoint: it answers only the key in FAKE_OPENAI_API_KEY and keeps the settings of each
@@ -15,7 +15,7 @@ import uuid
 from pathlib import Path
 
 import httpx
-from usecase_harness import TEAM, agents, check, data, fake_openai, finish, models, save_agent
+from usecase_harness import AGENTS_PORT, TEAM, agents, check, data, fake_openai, finish, models, save_agent
 
 KEY = "sk-ant-uc792-0123456789abcdef"
 os.environ["FAKE_OPENAI_API_KEY"] = KEY
@@ -27,7 +27,8 @@ ALIAS = f"fast-{RUN}"
 
 with fake_openai(Path(tempfile.mkdtemp(prefix="uc792-fake-"))) as fake_v1:
     with (
-        models() as models_url,
+        # models-service asks agents-service how many agents name each alias (step 16).
+        models({"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}) as models_url,
         httpx.Client(base_url=models_url, timeout=30) as m,
         httpx.Client(base_url=fake_v1.removesuffix("/v1"), timeout=10) as fake,
     ):
@@ -110,5 +111,9 @@ with fake_openai(Path(tempfile.mkdtemp(prefix="uc792-fake-"))) as fake_v1:
                 and last.get("thinking") == {"type": "enabled", "budget_tokens": 2000},
                 {"turn": turn.text[:200], "received": received[-3:]},
             )
+
+            listed = data(m.get("/v1/models/aliases", params={"ids": ALIAS}, headers=ADMIN)) or {}
+            used = [a.get("usedBy") for a in listed.get("data", [])]
+            check("16 the alias list says one agent uses the alias", used == [1], listed)
 
 finish()

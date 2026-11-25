@@ -7,9 +7,9 @@ release runs on the catalog it was cut with; run this, review the diff, commit i
     uv run python scripts/sync_catalog.py            # fetch both sources
     uv run python scripts/sync_catalog.py --from DIR # read DIR/models-dev.json and DIR/litellm.json instead
 
-Kept: each provider catalog/knobs.json lists, its chat models that call tools, not deprecated. Each model's knobs
-come from models.dev's flags (temperature, reasoning options) and the provider's `takes` list, with ranges and
-defaults from knobs.json and the model's own output limit."""
+Kept: each provider catalog/knobs.json lists, its chat models that call tools, not deprecated, with the facts
+models-service builds their knobs from (whether it takes a temperature, its reasoning options, its output limit). No
+range or default is written here: those are catalog/knobs.json's, read by models-service."""
 
 from __future__ import annotations
 
@@ -36,44 +36,17 @@ def _litellm_row(table: dict[str, Any], provider: str, model_id: str) -> dict[st
     return {}
 
 
-def _knobs(table: dict[str, Any], model: dict[str, Any], output: int | None) -> dict[str, Any]:
-    takes: list[str] = table["takes"]
-    provider: dict[str, Any] = table["ranges"]
-    out: dict[str, Any] = {}
-    sampling = bool(model.get("temperature"))
-    for name in ("temperature", "top_p", "top_k"):
-        if name in takes and sampling:
-            out[name] = dict(provider.get(name) or {})
-    if "max_tokens" in takes:
-        limit = dict(provider.get("max_tokens") or {})
-        if output:
-            limit["maximum"] = output
-            limit["default"] = min(int(limit.get("default") or output), output)
-        out["max_tokens"] = limit
-    for option in model.get("reasoning_options") or []:
-        kind = option.get("type")
-        if kind == "budget_tokens" and "thinking_budget" in takes:
-            budget = {k: v for k, v in (provider.get("thinking_budget") or {}).items() if k != "wire"}
-            if option.get("min"):
-                budget["x-minimum-on"] = option["min"]
-            cap = option.get("max") or (output - 1 if output else None)
-            if cap:
-                budget["maximum"] = cap
-                budget["default"] = min(int(budget.get("default") or cap), cap)
-            out["thinking_budget"] = budget
-        if kind == "effort" and option.get("values") and "reasoning_effort" in takes:
-            values = [str(v) for v in option["values"]]
-            effort = dict(provider.get("reasoning_effort") or {})
-            effort["enum"] = values
-            if effort.get("default") not in values:
-                effort["default"] = values[len(values) // 2]
-            out["reasoning_effort"] = effort
-    return out
+def _option(option: dict[str, Any]) -> dict[str, Any]:
+    """A models.dev reasoning option as the snapshot keeps it: its type, and its bounds or choices when it has them."""
+    kept = {k: option[k] for k in ("type", "min", "max") if option.get(k) is not None}
+    if option.get("values"):
+        kept["values"] = [str(v) for v in option["values"]]
+    return kept
 
 
 def snapshot(models_dev: dict[str, Any], litellm: dict[str, Any], knobs: dict[str, Any]) -> dict[str, Any]:
     providers: dict[str, Any] = {}
-    for pid, provider in knobs["providers"].items():
+    for pid in knobs["providers"]:
         kept: dict[str, Any] = {}
         for model_id, m in sorted((models_dev.get(pid) or {}).get("models", {}).items()):
             row = _litellm_row(litellm, pid, model_id)
@@ -99,7 +72,9 @@ def snapshot(models_dev: dict[str, Any], litellm: dict[str, Any], knobs: dict[st
                 "images": "image" in (m.get("modalities") or {}).get("input", []),
                 "inputPerMillion": input_price,
                 "outputPerMillion": output_price,
-                "knobs": _knobs(provider, m, output),
+                # The facts models-service builds this model's knobs from, with catalog/knobs.json.
+                "temperature": bool(m.get("temperature")),
+                "reasoningOptions": [_option(o) for o in m.get("reasoning_options") or [] if o.get("type")],
             }
         providers[pid] = kept
     return {
