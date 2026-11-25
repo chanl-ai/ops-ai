@@ -6034,6 +6034,13 @@
       "TeamPermissions": {
         "additionalProperties": false,
         "properties": {
+          "heldInTeam": {
+            "items": {
+              "$ref": "#/components/schemas/EffectivePermission"
+            },
+            "title": "Heldinteam",
+            "type": "array"
+          },
           "permissions": {
             "items": {
               "$ref": "#/components/schemas/EffectivePermission"
@@ -6053,7 +6060,8 @@
         "required": [
           "teamId",
           "teamName",
-          "permissions"
+          "permissions",
+          "heldInTeam"
         ],
         "title": "TeamPermissions",
         "type": "object"
