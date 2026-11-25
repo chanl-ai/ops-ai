@@ -86,6 +86,8 @@ export interface ModelAliasRow {
   version: number;
   kind: string;
   providerId: string;
+  /** The connection's name, from models-service. */
+  providerName?: string | null;
   modelId: string;
   clearedSensitivity: string;
   inputPerMillion: string;

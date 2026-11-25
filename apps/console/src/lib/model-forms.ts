@@ -100,3 +100,9 @@ export function priceProblem(value: string): string | undefined {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? undefined : 'Enter a price of 0 or more.';
 }
+
+/** Who may change aliases: they apply to every team in the install, so models-service asks for install.manage. */
+export const ALIAS_READ_ONLY_REASON = 'Only the workspace owner changes model aliases, because they apply to every team in the install.';
+export function aliasWriteAccess(canManageInstall: boolean | undefined): { editable: boolean; reason: string | null } {
+  return canManageInstall === true ? { editable: true, reason: null } : { editable: false, reason: canManageInstall === undefined ? null : ALIAS_READ_ONLY_REASON };
+}

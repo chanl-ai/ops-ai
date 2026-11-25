@@ -19,14 +19,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useCan } from '@/hooks/me-queries';
 import { useModelAliasList } from '@/hooks/model-queries';
-import { providerConnectionOptions, useOptionLabels } from '@/hooks/options-queries';
 import { useProviderConnections } from '@/hooks/provider-connection-queries';
 import { useListParams } from '@/hooks/use-list-params';
+import { aliasWriteAccess } from '@/lib/model-forms';
 import type { ModelAliasRow } from '@/lib/types/models';
 
 const SORT = { name: 'name' };
 
-function columns(connectionName: (id: string) => string, onEdit: (a: ModelAliasRow) => void): ColumnDef<ModelAliasRow>[] {
+function columns(onEdit: ((a: ModelAliasRow) => void) | null): ColumnDef<ModelAliasRow>[] {
   return [
     {
       accessorKey: 'name',
@@ -44,7 +44,7 @@ function columns(connectionName: (id: string) => string, onEdit: (a: ModelAliasR
       header: 'Goes to',
       cell: ({ row }) => (
         <div className="min-w-0 text-sm">
-          {connectionName(row.original.providerId)}
+          {row.original.providerName ?? 'Unknown connection'}
           <div className="text-xs text-muted-foreground">
             <code className="font-mono">{row.original.modelId}</code>
           </div>
@@ -64,11 +64,12 @@ function columns(connectionName: (id: string) => string, onEdit: (a: ModelAliasR
     {
       id: 'actions',
       meta: { className: 'sticky right-0 z-[1] w-10 bg-card shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.12)]' },
-      cell: ({ row }) => (
-        <StopRowClick>
-          <DataTableRowActions row={row} actions={[{ label: 'Edit', icon: Pencil, onClick: (r) => onEdit(r.original) }]} />
-        </StopRowClick>
-      ),
+      cell: ({ row }) =>
+        onEdit ? (
+          <StopRowClick>
+            <DataTableRowActions row={row} actions={[{ label: 'Edit', icon: Pencil, onClick: (r) => onEdit(r.original) }]} />
+          </StopRowClick>
+        ) : null,
       enableHiding: false,
     },
   ];
@@ -84,11 +85,9 @@ export default function ModelAliasesPage() {
   const aliases = useModelAliasList(list.params, admin);
   // Whether any connection exists at all: an alias points at one, so without one the page says to connect first.
   const connections = useProviderConnections({ page: 1, pageSize: 1 }, admin);
-  const providerIds = [...new Set((aliases.data?.data ?? []).map((a) => a.providerId))];
-  const labels = useOptionLabels(providerConnectionOptions, providerIds);
-  const names = React.useMemo(() => Object.fromEntries((labels.data?.data ?? []).map((o) => [o.id, o.label])), [labels.data]);
+  const access = aliasWriteAccess(useCan('install', 'manage'));
   const [dialog, setDialog] = React.useState<{ editing: ModelAliasRow | null } | null>(null);
-  const cols = React.useMemo(() => columns((id) => names[id] ?? 'Unknown connection', (a) => setDialog({ editing: a })), [names]);
+  const cols = React.useMemo(() => columns(access.editable ? (a) => setDialog({ editing: a }) : null), [access.editable]);
   const noConnections = connections.data?.pagination.total === 0;
 
   return (
@@ -97,6 +96,7 @@ export default function ModelAliasesPage() {
       description="The names builders pick on the agent page, and the connection and model each one calls."
       actions={
         admin &&
+        access.editable &&
         !noConnections && (
           <Button onClick={() => setDialog({ editing: null })} data-testid="alias-add">
             <Plus className="size-4" /> Make alias
@@ -112,24 +112,44 @@ export default function ModelAliasesPage() {
       ) : aliases.isPending || connections.isPending ? (
         <PageSkeleton statCards={0} tableRows={4} />
       ) : noConnections ? (
-        <EmptyState icon={Tag} title="Connect a provider first" description="An alias points at a model on a connection. This workspace has none yet." action={{ label: 'Go to Connections', href: '/settings/workspace/model-providers' }} />
+        <EmptyState
+          icon={Tag}
+          title="Connect a provider first"
+          description="An alias points at a model on a connection. This workspace has none yet."
+          action={{ label: 'Go to Connections', href: '/settings/workspace/model-providers' }}
+        />
       ) : aliases.isError && !aliases.data ? (
         <QueryError what="model aliases" onRetry={() => aliases.refetch()} retrying={aliases.isFetching} error={aliases.error} testId="model-aliases-error" />
       ) : (
-        <DataTableWithViews
-          columns={cols}
-          data={aliases.data?.data ?? []}
-          getRowId={(a) => a.name}
-          searchColumn="name"
-          searchPlaceholder="Search aliases…"
-          onColumnFiltersChange={list.onColumnFiltersChange}
-          serverPagination={serverPagination(list, aliases)}
-          serverSorting={list.serverSort}
-          hideViewSwitcher
-          emptyState={
-            <ListEmpty icon={Tag} noun="aliases" filtered={list.isFiltered} createLabel="Make alias" onCreate={() => setDialog({ editing: null })} description="Builders pick an alias on the agent page, never a raw model. Make one for each model you want them to use." />
-          }
-        />
+        <>
+          {access.reason && (
+            <Alert data-testid="alias-read-only">
+              <Info />
+              <AlertDescription>{access.reason}</AlertDescription>
+            </Alert>
+          )}
+          <DataTableWithViews
+            columns={cols}
+            data={aliases.data?.data ?? []}
+            getRowId={(a) => a.name}
+            searchColumn="name"
+            searchPlaceholder="Search aliases…"
+            onColumnFiltersChange={list.onColumnFiltersChange}
+            serverPagination={serverPagination(list, aliases)}
+            serverSorting={list.serverSort}
+            hideViewSwitcher
+            emptyState={
+              <ListEmpty
+                icon={Tag}
+                noun="aliases"
+                filtered={list.isFiltered}
+                createLabel={access.editable ? 'Make alias' : undefined}
+                onCreate={access.editable ? () => setDialog({ editing: null }) : undefined}
+                description="Builders pick an alias on the agent page, never a raw model. Make one for each model you want them to use."
+              />
+            }
+          />
+        </>
       )}
       <AliasDialog open={!!dialog} onOpenChange={(o) => !o && setDialog(null)} editing={dialog?.editing ?? null} />
     </SettingsPageLayout>

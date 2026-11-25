@@ -83,6 +83,8 @@ export function ConnectProviderDialog({ open, onOpenChange, onConnected }: { ope
       setStep(3);
       await test(body);
     } catch (e) {
+      // A key name another connection signs in with is never taken over: the person names this connection differently.
+      if ((e as { code?: string }).code === 'key_ref_in_use') return setErrors({ name: 'Another connection already signs in with a key of this name. Give this connection a different name.' });
       const message = (e as Error).message.replace(/^Value error, /, '');
       const field = NAMED.find((f) => message.startsWith(f));
       setErrors({ [field ?? 'submit']: message });
