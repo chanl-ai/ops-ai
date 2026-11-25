@@ -1807,6 +1807,17 @@
             ],
             "title": "Appgroup"
           },
+          "appState": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appstate"
+          },
           "connected": {
             "title": "Connected",
             "type": "boolean"
@@ -1821,7 +1832,8 @@
               "builtin",
               "custom",
               "workflows",
-              "agents"
+              "agents",
+              "other"
             ],
             "title": "Kind",
             "type": "string"
@@ -1836,6 +1848,10 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "notAdded": {
+            "title": "Notadded",
+            "type": "integer"
           },
           "signIn": {
             "anyOf": [
@@ -1869,6 +1885,7 @@
           "toolsTotal",
           "toolsOffered",
           "toolsGranted",
+          "notAdded",
           "matches"
         ],
         "title": "AgentToolApp",

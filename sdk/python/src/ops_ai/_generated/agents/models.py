@@ -2906,11 +2906,13 @@ class AgentTestTurn(TypedDict, closed=True):
 
 class AgentToolApp(TypedDict, closed=True):
     appGroup: NotRequired[str | None]
+    appState: NotRequired[str | None]
     connected: bool
     id: str
-    kind: Literal["plugin", "builtin", "custom", "workflows", "agents"]
+    kind: Literal["plugin", "builtin", "custom", "workflows", "agents", "other"]
     matches: list[AgentToolAppMatch]
     name: str
+    notAdded: int
     signIn: NotRequired[str | None]
     toolsGranted: int
     toolsOffered: int

@@ -4555,6 +4555,8 @@ export interface components {
         AgentToolApp: {
             /** Appgroup */
             appGroup?: string | null;
+            /** Appstate */
+            appState?: string | null;
             /** Connected */
             connected: boolean;
             /** Id */
@@ -4563,11 +4565,13 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "plugin" | "builtin" | "custom" | "workflows" | "agents";
+            kind: "plugin" | "builtin" | "custom" | "workflows" | "agents" | "other";
             /** Matches */
             matches: components["schemas"]["AgentToolAppMatch"][];
             /** Name */
             name: string;
+            /** Notadded */
+            notAdded: number;
             /** Signin */
             signIn?: string | null;
             /** Toolsgranted */
