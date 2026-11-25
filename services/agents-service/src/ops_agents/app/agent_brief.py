@@ -13,12 +13,13 @@ from typing import Literal, TypedDict
 from pydantic import ValidationError
 
 from ops_agent_kernel.prompt_writer import Brief, Patterns, head, section_problem, tail
+from ops_agent_kernel.types import NEVER_HEADING
 from ops_contracts.skill_run import REF_TOKEN, Ref
 from ops_service_kit.errors import Unprocessable, ValidationFailed
 from ops_service_kit.http import Json
 from ops_service_kit.narrow import json_list, json_object
 
-from .instruction_sections import SectionList, default_list, headings, menu_labels
+from .instruction_sections import SectionList, default_list, headings, menu_labels, never_label
 from .skill_content import Position, Problem
 
 PromptMode = Literal["brief", "full"]
@@ -61,6 +62,11 @@ def never_of(spec: Json) -> list[str]:
     return list(brief.never) if brief is not None else []
 
 
+def never_heading_of(spec: Json) -> str:
+    """The heading the version's never rules are written under, as the list named it when the brief was saved."""
+    return str(spec.get("neverHeading") or NEVER_HEADING)
+
+
 def prompt_view(spec: Json) -> str:
     """The agent's own prompt as the model reads it, with each mention as the name the model knows it under: the
     stored instructions, then the never rules last. The platform rules, the skill lists and a running step are placed
@@ -69,7 +75,7 @@ def prompt_view(spec: Json) -> str:
     if mode_of(spec) is None:
         return text
     never = [rendered(rule, spec) for rule in never_of(spec)]
-    return "\n\n".join(p for p in (rendered(text, spec), tail(None, never)) if p)
+    return "\n\n".join(p for p in (rendered(text, spec), tail(None, never, never_heading_of(spec))) if p)
 
 
 def patterns_of(spec: Json) -> Patterns:
@@ -152,6 +158,10 @@ def patched(
     out["promptMode"] = now
     if brief is not None:
         out["brief"] = brief.model_dump(by_alias=True)
+        # Kept only when renamed, so a version saved under the default list stores what it stored before.
+        out.pop("neverHeading", None)
+        if (label := never_label(listing)) != NEVER_HEADING:
+            out["neverHeading"] = label
     if now == "brief" and brief is not None:
         out["role"] = brief.purpose.strip()[:ROLE_MAX]
         out["instructions"] = head(str(out.get("name") or ""), brief, order)

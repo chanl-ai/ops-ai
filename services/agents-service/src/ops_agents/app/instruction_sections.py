@@ -21,6 +21,7 @@ from ops_agent_kernel.prompt_writer import (
     HEADINGS_MAX,
     Heading,
 )
+from ops_agent_kernel.types import NEVER_HEADING
 from ops_service_kit.errors import Unprocessable
 from ops_service_kit.http import In, Json, Out
 from ops_service_kit.names import Name80, slugify, tidy
@@ -297,6 +298,11 @@ async def reset(store: SectionStore) -> SectionList:
     """Deletes the workspace's list; returns the default it now uses."""
     await store.delete()
     return default_list()
+
+
+def never_label(listing: SectionList) -> str:
+    """The heading the never rules are written under: the label of the section that drives never-last."""
+    return next((s.label for s in listing.sections if s.drives == "never-last"), NEVER_HEADING)
 
 
 def menu_labels(listing: SectionList) -> dict[str, str]:

@@ -15,6 +15,8 @@ from ops_contracts.skill_run import Branch, IfNot, StepCheck
 from ops_service_kit.http import In, Json
 from ops_service_kit.names import name_problem, tidy
 
+from .types import NEVER_HEADING
+
 Rule = Annotated[str, Field(min_length=1, max_length=300)]
 
 
@@ -44,7 +46,7 @@ DEFAULT_HEADINGS: tuple[Heading, ...] = (
     Heading("hand_off", "Hand off when", "fixed"),
     Heading("escalation", "Escalation wording", "menu"),
     Heading("examples", "Examples", "fixed"),
-    Heading("never", "Never", "fixed"),
+    Heading("never", NEVER_HEADING, "fixed"),
 )
 # The heading each default menu section is written under, for a section sent or stored without a name.
 SECTION_TITLES: dict[str, str] = {h.id: h.label for h in DEFAULT_HEADINGS if h.kind == "menu"}
@@ -250,8 +252,9 @@ def _step(now: Now) -> str:
     return "\n".join(lines)
 
 
-def tail(now: Now | None, never: Sequence[str]) -> str:
-    """What follows everything else in the prompt; empty when no skill is running and there is no never rule."""
+def tail(now: Now | None, never: Sequence[str], heading: str = NEVER_HEADING) -> str:
+    """What follows everything else in the prompt, the never rules last under `heading`; empty when no skill is
+    running and there is no never rule."""
     sections: list[str] = []
     if now is not None:
         sections.append(_step(now))
@@ -259,5 +262,5 @@ def tail(now: Now | None, never: Sequence[str]) -> str:
             sections.append(f"# Rules for this skill\n{now.rules.strip()}")
     rules = [r.strip() for r in never if r.strip()]
     if rules:
-        sections.append("# Never\n" + "\n".join(f"- {r}" for r in rules))
+        sections.append(f"# {heading}\n" + "\n".join(f"- {r}" for r in rules))
     return "\n\n".join(sections)

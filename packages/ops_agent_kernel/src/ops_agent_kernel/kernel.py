@@ -1436,7 +1436,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         )
         if state.unstarted and state.run.running is None:
             written = f"{written}\n\n# A skill the person picked did not start\n{state.unstarted}"
-        last = prompt_writer.tail(steps.now(state.run, names), req.settings.never)
+        last = prompt_writer.tail(steps.now(state.run, names), req.settings.never, req.settings.never_heading)
         return f"{written}\n\n{last}" if last else written
 
     # With a schema the answer is the provider's native structured output (a json_schema response format): the model

@@ -141,6 +141,8 @@ class AgentSpec(TypedDict, total=False):
     brief: Json
     promptMode: Literal["brief", "full"]
     patterns: Json
+    # The never rules' heading when the workspace's list renamed it at the save; absent means the default.
+    neverHeading: str
 
 
 # A new agent's caps are empty (no cap): a real agent can need many calls. Seeds set low ones.
@@ -266,6 +268,7 @@ def definition_of(agent_id: str, version: int, spec: Json) -> AgentDefinition:
         memory_kinds=tuple(memory_of(spec)["kinds"]),
         skill_menu=s.get("skillMenu") or "team",
         never=never,
+        never_heading=agent_brief.never_heading_of(spec),
         thinking=None if patterns.thinking == "default" else patterns.thinking,
         parallel_reads=patterns.parallel_reads,
     )
