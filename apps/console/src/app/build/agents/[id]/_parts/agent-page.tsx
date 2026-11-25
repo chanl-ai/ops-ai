@@ -608,7 +608,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               )}
             </div>
     } right={
-    <aside ref={panelRef} className="scroll-mt-4" aria-label="Test and agent details">
+    <aside ref={panelRef} className="h-full scroll-mt-4" aria-label="Test and agent details">
               <AgentTestPanel
                 agentId={agent.id}
                 agentName={agent.name}

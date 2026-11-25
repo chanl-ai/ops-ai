@@ -14,7 +14,7 @@ const KEY = ['instruction-sections'] as const;
  * their labels, order, groups, example lines and presets. Read by the agent editor's Add section menu and by the
  * Agent instructions settings page.
  */
-export const useInstructionSections = () => useTeamQuery({ queryKey: KEY, queryFn: () => api.agents.instructionSections(), staleTime: 30_000 });
+export const useInstructionSections = () => useTeamQuery({ queryKey: KEY, queryFn: () => api.agents.instructionSections() });
 
 function useWriteList<A>(fn: (a: A) => Promise<InstructionSectionList>) {
   const qc = useQueryClient();
