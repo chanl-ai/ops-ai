@@ -12,7 +12,7 @@ from typing import Annotated, Literal, cast
 from pydantic import BeforeValidator, Field, model_validator
 
 from ops_contracts.skill_run import Branch, IfNot, StepCheck
-from ops_service_kit.http import In
+from ops_service_kit.http import In, Json
 from ops_service_kit.names import name_problem, tidy
 
 Rule = Annotated[str, Field(min_length=1, max_length=300)]
@@ -68,7 +68,7 @@ def titled(data: object) -> object:
     it is."""
     if not isinstance(data, dict):
         return data
-    section = cast(dict[str, object], data)
+    section = cast(Json, data)
     kind, name = section.get("kind"), section.get("name")
     if isinstance(kind, str) and kind in SECTION_TITLES and not (isinstance(name, str) and name.strip()):
         return {**section, "name": SECTION_TITLES[kind]}

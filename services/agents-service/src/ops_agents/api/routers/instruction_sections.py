@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from ops_access import can
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, Json
 from ops_service_kit.logging import get_logger
 
 from ...app import instruction_sections as sections
@@ -28,7 +28,7 @@ Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 Reader: TypeAlias = Annotated[Principal, Depends(reader_of("agents"))]  # noqa: UP040
 
 
-def _wire(listing: SectionList) -> dict[str, object]:
+def _wire(listing: SectionList) -> Json:
     return listing.model_dump(mode="json", by_alias=True)
 
 
