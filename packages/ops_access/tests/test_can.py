@@ -396,8 +396,8 @@ def test_a_grid_encodes_into_a_short_claim_and_back() -> None:
     grants: list[Grant] = [("agents", "view", "all"), ("memory", "edit", "own"), ("chat", "view", "own")]
     claim = encode_grid(grants)
     assert sorted(decode_grid(claim)) == sorted(grants)
-    # Every cell of the catalogue's 26 areas: one more area adds about 22 characters.
-    assert len(str(encode_grid([(a, x, "all") for a in AREAS for x in ACTIONS]))) < 640
+    # Every cell of the catalogue's 28 areas: one more area adds about 22 characters.
+    assert len(str(encode_grid([(a, x, "all") for a in AREAS for x in ACTIONS]))) < 680
 
 
 async def test_a_refusal_names_the_roles_the_workspaces_edited_grid_gives_the_cell() -> None:
