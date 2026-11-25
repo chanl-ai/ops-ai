@@ -4,6 +4,7 @@ import * as React from 'react';
 import { Plus, RotateCcw, X } from 'lucide-react';
 
 import { FormField } from '@/components/shared/form-field';
+import { without } from '@/lib/schema-values';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -89,13 +90,7 @@ export function formFromSchema(schema: Schema): FormSpec {
 
 export const asObject = (v: unknown): Params => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Params) : {});
 export const asList = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-/** Drops a cleared setting rather than storing an empty value the schema may refuse. */
-export const without = (p: Params, key: string, value: unknown): Params => {
-  const next = { ...p };
-  if (value === undefined || value === '') delete next[key];
-  else next[key] = value;
-  return next;
-};
+export { without };
 
 export const NONE = '__none__';
 

@@ -517,7 +517,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                   // One row: the model on the left, what the agent uses as quiet text, the actions on the right. What opens
                   // something to read (View prompt, the uses links) stays outside the read-only fieldset.
                   <>
-                    <AgentModelButton model={draft.model} settings={draft.modelSettings} aliases={modelAliases.data ?? []} editable={editable} onApply={(m, ms) => (set('model', m), set('modelSettings', ms))} />
+                    <AgentModelButton model={draft.model} settings={draft.modelSettings} aliases={modelAliases.data ?? []} aliasesReady={!modelAliases.isPending && !modelAliases.isError} editable={editable} onApply={(m, ms) => (set('model', m), set('modelSettings', ms))} />
                     <span data-testid="agent-brief-footer" className="min-w-0 max-sm:order-last max-sm:basis-full">
                       <AgentUsesLink uses={agent.uses} />
                     </span>
