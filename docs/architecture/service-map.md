@@ -197,6 +197,7 @@ network. Designed: `agents-service` still has `ops_agents.api`, `ops_agents.grap
 | `ops_policy` | RFC 8785 input hash, approval-token signing and verification, step-up tokens | agents, tools | Built; the OPA client stays in tools-service |
 | `ops_storage` | Object storage protocol: filesystem, S3, Azure Blob (ADR-0010) | files | Built |
 | `ops_ingest` | Parsing, splitting, metadata, dedupe, source rules | kb | Built |
+| `ops_sources` | Reads a source through its tools: every page of changes since a saved place, paced fetches, gone-twice, behind a state port ([overview](../packages/ops_sources/overview.md)) | kb; files next | Built for kb |
 | `usecase-runner` | Runs `docs/usecases` scripts and reports verdicts | `make usecase-test` | Built |
 | `ops_engine` | The workflow runner: node type registry, compiler to LangGraph, step journal, Postgres work queue, worker loop, leases with generation fencing, reconcile-by-key ([workflow-runner.md](workflow-runner.md)) | agents | Built in part (slice 1); runs inside agents-service |
 | `ops_hitl` | Reviews, Cases, work items, decisions, approval-token minting | agents | Planned; the code lives in `agents-service` today |

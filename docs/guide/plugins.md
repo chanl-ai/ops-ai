@@ -480,7 +480,8 @@ connection the team signs in to as a team, since a scheduled sync has no person 
 needs no connection.
 
 `ops_plugin_sdk.testing.knowledge_contract(plugin, source, fake, settings=, values=, change=, delete=)` checks a
-plugin against its fake system: it lists every item, fetches one, checks a matching tag answers `unchanged`, finds a
+plugin against its fake system: it finds places through the scopes tool (when the source has one), lists every item
+page by page, fetches one, checks a matching tag answers `unchanged`, finds a
 change through the changes tool (or the watermark) and a delete through the deleted tool (or a full listing). It
 returns the problems found; a plugin's own tests assert it returns none.
 
