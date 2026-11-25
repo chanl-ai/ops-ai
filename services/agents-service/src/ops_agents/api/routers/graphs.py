@@ -192,7 +192,7 @@ async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONRespons
     if body.graph.startswith("agent:") and rt.catalog.agent(body.graph.removeprefix("agent:")) is None:
         # Its graph stays compiled while turns under way drain; no new thread starts on it.
         await refuse_new_turns(rt, body.graph.removeprefix("agent:"))
-        raise ValidationFailed(f"Unknown graph {body.graph}: that agent is not live.")
+        raise ValidationFailed(f"Unknown graph {body.graph}: that agent is not live.", code="agent_not_published")
     if key_pin is not None and body.graph in rt.graphs:
         raise Forbidden(f"{body.graph} has no versions, so a key pinned to one cannot start it.", code="key_target")
     if body.graph not in rt.graphs:
