@@ -46,6 +46,7 @@ from ..auth import (
     Principal,
     graph_target,
     principal,
+    require_agent_turn,
     require_builder,
     require_chat_use,
     require_key_reaches,
@@ -414,13 +415,17 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
     else:
         if waiting:
             raise Conflict("This thread is waiting for a decision; resume it instead.", code="run_waiting")
-        owner = str(an_object(row["meta"] or {}, "thread meta").get("ownerEmail") or "")
-        if row["graph"].startswith("agent:") and not me.is_key and owner.lower() == me.email.lower():
-            # A person's turn in their own thread with an agent is a chat message: chat.run in the agent's team, as
-            # chat checks it; anyone else's thread keeps the run-start rule.
-            require_chat_use(me, team_id=await agent_team(rt, row["graph"].removeprefix("agent:")))
+        team = str(row["team_id"] or "") or None
+        if row["graph"].startswith("agent:"):
+            require_agent_turn(
+                me,
+                team_id=team,
+                agent_team_id=await agent_team(rt, row["graph"].removeprefix("agent:")),
+                owner=str(an_object(row["meta"] or {}, "thread meta").get("ownerEmail") or ""),
+                what=f"thread {thread_id}",
+            )
         else:
-            require_runs_start(me, team_id=str(row["team_id"] or "") or None, what=f"thread {thread_id}")
+            require_runs_start(me, team_id=team, what=f"thread {thread_id}")
         # A paused agent takes no new turn on its own graph or the shared wrapper; a turn already under way finishes.
         agent_id = None
         if row["graph"].startswith("agent:"):
