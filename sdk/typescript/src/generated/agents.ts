@@ -103,8 +103,10 @@ export interface paths {
         put?: never;
         /**
          * Bulk Decide
-         * @description Decides each review as one decision would. Someone whose role decides no reviews in the team they act in is
-         *     refused outright (403), as `assign` refuses them; anyone else gets a result per id.
+         * @description Decides each review as one decision would, each checked by that decision's own decider rule, so a reviewer
+         *     of the review's team decides it whatever team they act in. Someone who decides reviews in no team and decided none
+         *     of these (an ask-the-person asker answers their own) is refused (403), as a single decision refuses them; anyone
+         *     else gets a result per id.
          */
         post: operations["reviews_bulk_decide"];
         delete?: never;
@@ -2885,7 +2887,8 @@ export interface paths {
         put?: never;
         /**
          * Route One
-         * @description Taking a case from the workflow to people is a decision on it: a reviewer or admin of its team.
+         * @description Taking a case from the workflow to people is a decision on it: a reviewer or admin of its team, and for a case
+         *     waiting on a step, whoever may decide that step (`_may_route`).
          */
         post: operations["threads_route_one"];
         delete?: never;

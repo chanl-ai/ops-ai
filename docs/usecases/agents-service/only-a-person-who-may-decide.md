@@ -16,11 +16,15 @@ two-person rule holds even after someone has already decided.
 | Dana | member who asks | Asks the agent for a write and starts a workflow run; may not decide either while the two-person rule is on |
 | Lee | reviewer | Approves Dana's write |
 | Maya | reviewer | Approves the Human Task on Dana's run |
+| Joe | builder in Operations | Asks to publish two workflows and for two tool modules' security reviews |
+| Rohan | viewer in Operations | Holds no approve cell; tries to decide Joe's publish request |
+| Wanjiru | workspace admin (Admin in every team), acting in Platform | Decides Operations' publish requests |
+| Sam | Security's admin, acting in Security | Decides the modules' security reviews, which Security holds |
 
 ## In this example
 
 In this example Dana tries to decide her own chat write and her own run's Human Task by every route, before and after a
-reviewer decides it. It assumes the team turned the two-person rule on (requesterMayDecide off).
+reviewer decides it, then has signed-in people decide outside the team they act in. It assumes the team turned the two-person rule on (requesterMayDecide off).
 
 ## Stories
 
@@ -30,6 +34,7 @@ reviewer decides it. It assumes the team turned the two-person rule on (requeste
 | S2 | After Lee approves, Dana posting the same decision is refused and resumes nothing | api | 5-6 | 6 |
 | S3 | Lee posting his decision again gets the approved review, and the chat goes on only once | api | 7 | 7 |
 | S4 | After Maya decides Dana's Human Task, Dana's repeat is refused and Maya's is answered | api | 8-12 | 11 |
+| S5 | A Viewer is refused, and a workspace admin and Security's admin decide outside the team they act in, one at a time and in bulk | api | 13-18 | 15 |
 
 ## Preconditions
 
@@ -53,6 +58,13 @@ reviewer decides it. It assumes the team turned the two-person rule on (requeste
 | 10 | Maya approves the task | 200 |
 | 11 | Dana posts approve, then reject, on the decided task | 403 both times, before the decision is named |
 | 12 | Maya posts approve again | 200, approved |
+| 13 | Priya turns publish review on for Operations' workflows; Joe saves two and asks to publish them (signed-in people from here on) | Both wait for review |
+| 13b-c | Rohan, a Viewer, decides the first in Reviews, then in a bulk decision | 403 both times |
+| 14 | Wanjiru, acting in Platform, approves the first in Reviews | 200, approved |
+| 15 | Wanjiru approves the second in a bulk decision | It is updated |
+| 16 | Joe asks for two of his tool modules' security reviews | Both wait in Security |
+| 17 | Sam, acting in Security, approves one in Reviews | 200, approved |
+| 18 | Sam approves the other in a bulk decision | It is updated |
 
 ## Acceptance layers
 
