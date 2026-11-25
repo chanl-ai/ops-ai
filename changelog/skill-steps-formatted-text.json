@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-25",
+  "title": "Skill steps show as formatted text",
+  "description": "The skill steps editor shows headings, lists and bold as formatting instead of raw markers, with @ for tools, knowledge and skills and / for an if or otherwise path. Starting a skill from a template now has a search with a preview.",
+  "tag": "improved"
+}
