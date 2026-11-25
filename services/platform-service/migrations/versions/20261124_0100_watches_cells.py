@@ -3,7 +3,8 @@
 A watched folder copies an app's folders into the team's Files for every member, so adding, changing, checking and
 deleting one has a cell of its own, watches.manage, held by Admin and Builder (each holds every cell of its kind, as the
 catalogue grants). Reading a watch follows files.view, so no role is given watches.view. Adds each missing cell and
-raises each tenant's permission version; the downgrade removes the area's cells.
+raises each tenant's permission version, with the isolation policy of roles and role_permissions set aside
+(`backfill_ddl`) so the writes see every tenant's rows; the downgrade removes the area's cells the same way.
 
 Revision ID: 20261124_0100_watches_cells
 Revises: 20261124_0100_close_invites
@@ -11,7 +12,10 @@ Revises: 20261124_0100_close_invites
 
 from __future__ import annotations
 
+import sqlalchemy as sa
 from alembic import op
+
+from ops_store.schema import TENANT_SCOPED, backfill_ddl
 
 revision = "20261124_0100_watches_cells"
 down_revision = "20261124_0100_close_invites"
@@ -20,20 +24,33 @@ depends_on = None
 
 EVERY = ("view", "create", "edit", "publish", "delete", "run", "decide", "manage")
 CELLS = {"admin": EVERY, "builder": EVERY}
+CHAIN = "platform"
+RAISE = "UPDATE tenants SET permission_version = permission_version + 1"
+
+
+def _set_aside() -> tuple[list[str], list[str]]:
+    tables = [
+        sa.Table(n, sa.MetaData(), sa.Column("tenant_id", sa.String(64)), info=TENANT_SCOPED)
+        for n in ("roles", "role_permissions")
+    ]
+    return backfill_ddl(tables, op.get_bind().dialect.name, chain=CHAIN, kind="tenant")
 
 
 def upgrade() -> None:
-    for role, actions in CELLS.items():
-        for action in actions:
-            op.execute(
-                "INSERT INTO role_permissions (tenant_id, role_id, area, action, scope) "
-                f"SELECT r.tenant_id, r.id, 'watches', '{action}', 'all' FROM roles r WHERE r.id = '{role}' "
-                "AND NOT EXISTS (SELECT 1 FROM role_permissions p WHERE p.tenant_id = r.tenant_id "
-                f"AND p.role_id = r.id AND p.area = 'watches' AND p.action = '{action}')"
-            )
-    op.execute("UPDATE tenants SET permission_version = permission_version + 1")
+    inserts = [
+        "INSERT INTO role_permissions (tenant_id, role_id, area, action, scope) "
+        f"SELECT r.tenant_id, r.id, 'watches', '{action}', 'all' FROM roles r WHERE r.id = '{role}' "
+        "AND NOT EXISTS (SELECT 1 FROM role_permissions p WHERE p.tenant_id = r.tenant_id "
+        f"AND p.role_id = r.id AND p.area = 'watches' AND p.action = '{action}')"
+        for role, actions in CELLS.items()
+        for action in actions
+    ]
+    before, after = _set_aside()
+    for statement in (*before, *inserts, *after, RAISE):
+        op.execute(statement)
 
 
 def downgrade() -> None:
-    op.execute("DELETE FROM role_permissions WHERE area = 'watches'")
-    op.execute("UPDATE tenants SET permission_version = permission_version + 1")
+    before, after = _set_aside()
+    for statement in (*before, "DELETE FROM role_permissions WHERE area = 'watches'", *after, RAISE):
+        op.execute(statement)

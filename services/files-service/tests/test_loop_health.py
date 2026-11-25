@@ -1,5 +1,5 @@
-"""files-service's two background processes, as its lifespan runs them: a pass that raises shows on
-/health/background, so a relay or a retention loop that has stopped working never reads as running."""
+"""files-service's background processes, as its lifespan runs them: a pass that raises shows on /health/background,
+so a relay, a retention loop or the watched-folder checks that have stopped working never read as running."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from ops_files.app import create_files_app
 from ops_files.retention import keep_purging
 from ops_files.store import FilesStore
 from ops_files.tenant_files import TenantFiles
+from ops_files.watches import WatchChecks, keep_checking
 from ops_identity import Auth
 from ops_service_kit.settings import Settings
 from ops_storage.local import LocalObjectStore
@@ -71,4 +72,20 @@ async def test_a_retention_pass_that_raises_shows_on_health(engine: AsyncEngine,
 
     async with serving(files, loop, "files_retention") as client:
         await loop_reports_failure(client, "files_retention", lambda: setattr(files, "purge_released", broken))
+    stop.set()
+
+
+async def test_a_watch_check_pass_that_raises_shows_on_health(engine: AsyncEngine, tmp_path: Path) -> None:
+    files = _files(engine, tmp_path)
+    checks = WatchChecks(files, reader=None)  # pyright: ignore[reportArgumentType]  # the broken pass reads nothing
+    stop = asyncio.Event()
+
+    async def broken() -> int:
+        raise ConnectionError("database connection refused")
+
+    async def loop() -> None:
+        await keep_checking(checks, stop, every_s=0.05)
+
+    async with serving(files, loop, "files_watch_checks") as client:
+        await loop_reports_failure(client, "files_watch_checks", lambda: setattr(checks, "run_asked", broken))
     stop.set()
