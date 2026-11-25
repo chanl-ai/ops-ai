@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-25",
+  "title": "Agent history shows model settings changes",
+  "description": "When you change only an agent's model settings, its version history says so. Agents saved before model settings existed show no change until you set one.",
+  "tag": "improved"
+}
