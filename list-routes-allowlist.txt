@@ -51,3 +51,5 @@ tools-service GET /v1/plugin-templates  # bounded: one plugin's templates
 tools-service GET /v1/tool-catalog  # owed: keyset pages by after; no search
 tools-service GET /v1/tool-modules/discoveries/{discovery_id}/names  # owed: every operation name of one discovery for select-all; no cap on a discovery's size
 tools-service GET /v1/tool-modules/{module_id}  # bounded: one module and its operations
+models-service GET /v1/models/provider-types  # the registry's JSON entries, a handful shipped with the service, not table rows
+models-service GET /v1/models/providers/{provider_id}/catalog  # one provider's pinned catalog snapshot, read whole by the model picker
