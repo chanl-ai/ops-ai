@@ -280,6 +280,9 @@ class AssignInput(In):
 
 @console_router.post("/bulk-decision", response_model=Envelope[BulkResult])
 async def bulk_decide(rt: Rt, me: Me, body: BulkDecisionInput) -> JSONResponse:
+    """Decides each review as one decision would. Someone whose role decides no reviews in the team they act in is
+    refused outright (403), as `assign` refuses them; anyone else gets a result per id."""
+    require_reviews_decide(review_teams(me), me.team_id or "", "these tasks")
     updated: list[str] = []
     skipped: list[dict[str, str]] = []
     for thread_id in body.ids:
