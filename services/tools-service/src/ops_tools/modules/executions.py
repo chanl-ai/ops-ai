@@ -190,7 +190,8 @@ def call_row(
         row["credential"] = r.credential
     # Whom Usage says the call ran as: whose sign-in signed it; one refused before any sign-in ran as the
     # person it acted for, if any. Never the service that carried the call.
-    as_person = r.acting_for and r.credential in ("person", None)
+    # A team key logs no credential (it is not a sign-in) but names its login; a row with neither is from before.
+    as_person = r.acting_for and (r.credential == "person" or (r.credential is None and not r.signed_in_as))
     run_as: CallRunAsJson = {"kind": "person", "email": r.acting_for} if as_person else {"kind": "team"}
     if not as_person:
         # The team's login acted for whoever asked: the audit names both.

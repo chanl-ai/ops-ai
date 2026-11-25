@@ -59,5 +59,12 @@ def test_a_team_login_call_records_the_login_and_the_person_who_asked() -> None:
         "login": "ops@harborpine.example",
         "askedBy": "j.richardson@harborpine.example",
     }
+    # A team API key logs no credential, as it is not a sign-in; its login still makes it the team's.
+    key = _row(acting_for="j.richardson@harborpine.example", credential=None, signed_in_as="Header key desk")
+    assert call_row(key, {}, None).get("runAs") == {
+        "kind": "team",
+        "login": "Header key desk",
+        "askedBy": "j.richardson@harborpine.example",
+    }
     own = _row(acting_for="j.richardson@harborpine.example", credential="person")
     assert call_row(own, {}, None).get("runAs") == {"kind": "person", "email": "j.richardson@harborpine.example"}
