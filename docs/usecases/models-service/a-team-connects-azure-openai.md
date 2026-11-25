@@ -13,7 +13,7 @@ connection names goes through and is flagged on the connection and in the call l
 | # | Story | Layer | Steps | Proved by |
 |---|---|---|---|---|
 | S1 | An agent's alias on an Azure deployment answers, streamed and not, with its tool calls and its usage totals, on both Azure paths | api | 1-4 | 2 |
-| S2 | An account admin connects Azure OpenAI on Model providers: the form asks endpoint, API version, region and key, refuses a version too old to stream usage, the list shows the region Azure answered from or a mismatch, and a builder sees none of it | ui | 9-14 | 10 |
+| S2 | An account admin connects Azure OpenAI on Settings, Models, Connections: the form asks endpoint, API version, region and key, refuses a version too old to stream usage, the list shows the region Azure answered from or a mismatch, and a builder sees none of it | ui | 9-14 | 10 |
 | S3 | An install sets OPENAI_API_TYPE=azure with its endpoint, version and region, and the stack's default model is that resource; a missing api-version stops models-service naming it | cli | 7-8 | 8 |
 | S4 | A resource answering from another region than the connection names still answers, flagged on the connection and in the call log | api | 5 | 5 |
 | S5 | No answer, list, call log or refusal shows the key, and a connection with a missing or old api-version is refused | api | 6 | 6 |
@@ -40,9 +40,9 @@ No real Azure resource is called: none is available to this repository, so a rea
 | 6 | Read the list, the call log and every refusal | No part of the key appears; a connection missing its api-version, or with 2024-02-01, is refused 400 naming the field |
 | 7 | Start models-service with OPENAI_API_TYPE=azure, OPENAI_API_BASE (the fake), OPENAI_API_VERSION=2024-10-21, OPENAI_API_REGION=swedencentral and the dev key `openai` | `openai-local` is the Azure connection and alias `default` answers through it |
 | 8 | Start it again with OPENAI_API_VERSION unset | It exits non-zero, and its output names OPENAI_API_VERSION |
-| 9 | Sam, an account admin, saves key `AZURE_UC605` on Model providers and opens Connect a provider | Azure OpenAI is picked and the form shows Endpoint, API version, Region and Key |
+| 9 | Sam, an account admin, opens Connect a provider on Settings, Models, Connections and picks Azure OpenAI from the searched list | The form shows Endpoint, API version, Region and API key; OpenAI-compatible URL asks a base URL and a key only |
 | 10 | Sam enters API version 2024-06-01 and connects | Refused under API version, naming 2024-10-21 |
-| 11 | Sam enters 2024-10-21 and connects | The list shows `uc605-ui` as Azure OpenAI, its endpoint, swedencentral, Not called yet, and `AZURE_UC605` |
+| 11 | Sam enters 2024-10-21 and connects, then closes the dialog that shows the key test | The list shows `uc605-ui` as Azure OpenAI, its endpoint, swedencentral, Not called yet, and the key name `UC605-UI` it was saved under |
 | 12 | An alias on it is called, and Sam reloads | 200; the region reads Answered from Sweden Central |
 | 13 | A connection in westeurope is called, and Sam reloads | 200; its row reads Answered from Sweden Central, expected westeurope |
 | 14 | James, a builder of Operations, opens the page and tries the API | The page says only an account admin sees it; list and create answer 403 |

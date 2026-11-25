@@ -21,6 +21,7 @@ import { createInvitesHttp } from './invites-http';
 import { createOAuthHttp } from './oauth-http';
 import { createAccountHttp } from './account-http';
 import { createWorkspacePoliciesHttp } from './workspace-policies-http';
+import { createModelAliasesHttp } from './model-aliases-http';
 import { createProviderConnectionsHttp } from './provider-connections-http';
 import { createProviderKeysHttp } from './provider-keys-http';
 import { createSignInProvidersHttp } from './sign-in-providers-http';
@@ -276,6 +277,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
       grantableTools: () => get<{ data: GrantableTool[] }>('/tools?pageSize=200').then((r) => r.data),
       toolOptions: (p) => get(`/tools/options?${optionsQs(p)}${p.agents === false ? '&agents=false' : ''}`),
       modelAliases: () => get('/model-aliases'),
+      modelAliasKnobs: (name) => get(`/model-aliases/${encodeURIComponent(name)}/knobs`),
       test: (id, message) => send('POST', `/agents/${id}/test`, { message }),
       bulkUpdate: (ids, patch) => send('POST', '/agents/bulk-update', { ids, patch }),
       bulkRemove: (ids) => send('POST', '/agents/bulk-delete', { ids }),
@@ -322,6 +324,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     signInProviders: createSignInProvidersHttp(get, send),
     providerKeys: createProviderKeysHttp(get, send, qs),
     providerConnections: createProviderConnectionsHttp(get, send, qs),
+    modelAliases: createModelAliasesHttp(get, send, qs),
     evals: createEvalsHttp(get, send, qs),
     modelRisk: createModelRiskHttp(get, send, qs),
     toolModules: createToolModulesHttp(get, send, qs),

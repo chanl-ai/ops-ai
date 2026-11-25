@@ -375,12 +375,24 @@ def c122_cancel(p: Principal) -> Scope | None:
 
 
 TODAY: dict[tuple[str, str], Verdict] = {
-    # The workspace area is Owner's alone: no membership role reads or changes it.
+    # The workspace and install areas are Owner's alone: no membership role reads or changes them.
     **{
         (area, "view"): open_to_members
         for area in AREAS
         if area
-        not in ("settings", "audit", "activity", "mcp", "webhooks", "usage", "chat", "memory", "workspace", "watches")
+        not in (
+            "settings",
+            "audit",
+            "activity",
+            "mcp",
+            "webhooks",
+            "usage",
+            "chat",
+            "memory",
+            "workspace",
+            "watches",
+            "install",
+        )
     },
     ("chat", "view"): chat_owner,
     ("memory", "edit"): memory_editor,

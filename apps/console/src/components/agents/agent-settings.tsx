@@ -26,7 +26,7 @@ import type { Lookups } from '@/lib/api';
 import { plural, relativeTime } from '@/lib/format';
 import type { ToolOptionsPage } from '@/lib/types/query';
 import type { WidgetPin, WidgetSettings } from '@/lib/types/widgets';
-import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPatterns, AgentPublicKeyOverride, AgentRun, Channel, GrantableTool, MemorySettings, ModelAlias, SkillMenu } from '@/lib/types/domain';
+import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPatterns, AgentPublicKeyOverride, AgentRun, Channel, GrantableTool, MemorySettings, ModelAlias, ModelSettings, SkillMenu } from '@/lib/types/domain';
 
 import { listChange } from '@/lib/agent-tools';
 import { appPageHref } from '@/lib/app-links';
@@ -39,6 +39,8 @@ export interface AgentDraft {
   name: string;
   role: string;
   model: string;
+  /** The knobs set on the model; one left out takes the catalog default. */
+  modelSettings: ModelSettings;
   channels: Channel[];
   instructions: string;
   /** The account each app's calls use (app id to account name); an app it does not name uses its default. */
@@ -59,6 +61,7 @@ export const draftOf = (a: Agent): AgentDraft => ({
   name: a.name,
   role: a.role,
   model: a.model,
+  modelSettings: a.modelSettings ?? {},
   channels: a.channels,
   instructions: a.instructions,
   accounts: a.accounts ?? {},
@@ -93,6 +96,7 @@ const SECTION: Record<keyof AgentDraft, string> = {
   name: 'Identity',
   role: 'Identity',
   model: 'Identity',
+  modelSettings: 'Identity',
   channels: 'Identity',
   instructions: 'Instructions',
   accounts: 'Tools',

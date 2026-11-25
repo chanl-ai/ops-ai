@@ -128,6 +128,7 @@ packages/ops_access/src/ops_access/policies.py policy-default approvalsFloor={} 
 * conflict invite_used 0 state
 * conflict key_exists 0 state
 * conflict key_in_use 0 state
+* conflict key_ref_in_use 0 state
 * conflict last_sign_in_method 0 state
 * conflict live_workflows 0 state
 * conflict locked_in_storage 0 state

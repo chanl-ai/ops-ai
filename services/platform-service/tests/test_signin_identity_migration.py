@@ -20,7 +20,7 @@ from ops_service_kit.ids import new_id
 from .conftest import alembic_config
 
 BEFORE = "20261122_2022_list_sort_indexes"
-# The tables the chain from BEFORE to head writes: this migration, the next (members) and the watches cells.
+# The tables the chain from BEFORE to head writes: this migration, the next (members) and the watches and install cells.
 OWNED = (
     "signin_identities",
     "sessions",

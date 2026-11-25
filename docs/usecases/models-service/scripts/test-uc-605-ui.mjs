@@ -64,21 +64,27 @@ await withUiStack(
       await page.getByTestId('provider-connections').waitFor({ timeout: 60_000 });
       await page.getByTestId('provider-connect').click();
       const dialog = page.getByRole('dialog');
+      const pickType = async (type, search) => {
+        await dialog.getByTestId('provider-search').click();
+        await page.getByPlaceholder('Search providers…').last().fill(search);
+        await page.getByTestId(`provider-search-option-${type}`).click();
+      };
+      await pickType('azure-openai', 'azure');
       await dialog.getByLabel('Endpoint').waitFor({ timeout: 30_000 });
-      const azureFields = (await dialog.getByLabel('API version').count()) === 1 && (await dialog.getByLabel('Region').count()) === 1;
-      await page.getByTestId('provider-type').click();
-      await page.getByRole('option', { name: 'OpenAI-compatible' }).click();
+      const azureFields = (await dialog.getByLabel('API version').count()) === 1 && (await dialog.getByLabel('Region').count()) === 1 && (await dialog.getByLabel('API key').count()) === 1;
+      await dialog.getByRole('button', { name: 'Back' }).click();
+      await pickType('openai-compatible', 'compatible');
+      await dialog.getByLabel('Base URL').waitFor({ timeout: 30_000 });
       const plainFields = (await dialog.getByLabel('API version').count()) === 0 && (await dialog.getByLabel('Region').count()) === 0;
-      await page.getByTestId('provider-type').click();
-      await page.getByRole('option', { name: 'Azure OpenAI' }).click();
+      await dialog.getByRole('button', { name: 'Back' }).click();
+      await pickType('azure-openai', 'azure');
       check('9 picking Azure OpenAI asks endpoint, API version, region and key; OpenAI-compatible asks no version or region', azureFields && plainFields, { azureFields, plainFields });
 
       await dialog.getByLabel('Name').fill(NAME);
       await dialog.getByLabel('Endpoint').fill(endpoint);
       await dialog.getByLabel('API version').fill('2024-06-01');
       await dialog.getByLabel('Region').fill('swedencentral');
-      await page.getByTestId('provider-key-ref').click();
-      await page.getByRole('option', { name: KEY }).click();
+      await dialog.getByLabel('API key').fill(FAKE_OPENAI_KEY);
       await page.getByTestId('provider-connect-save').click();
       await see(page, 'older than 2024-10-21', 'old-version');
       await page.screenshot({ path: join(SHOTS, 'refused-version-1280.png'), fullPage: true });
@@ -86,11 +92,13 @@ await withUiStack(
 
       await dialog.getByLabel('API version').fill('2024-10-21');
       await page.getByTestId('provider-connect-save').click();
+      // The saved connection's key is then tested, which a loopback address refuses; the dialog says so and closes on Done.
+      await page.getByTestId('provider-connect-done').click();
       await dialog.waitFor({ state: 'detached', timeout: 30_000 });
       const row = page.getByTestId('provider-connections').locator('tr', { hasText: NAME });
       await row.waitFor({ timeout: 30_000 });
       const shown = (await row.innerText()).replace(/\s+/g, ' ');
-      check('11 the list shows the connection as Azure OpenAI with its endpoint, region, Not called yet and key name', ['Azure OpenAI', '2024-10-21', endpoint, 'swedencentral', 'Not called yet', KEY].every((t) => shown.includes(t)), shown);
+      check('11 the list shows the connection as Azure OpenAI with its endpoint, region, Not called yet and key name', ['Azure OpenAI', '2024-10-21', endpoint, 'swedencentral', 'Not called yet', NAME.toUpperCase()].every((t) => shown.includes(t)), shown);
 
       const id = await providerId(NAME);
       await aliasOn('uc605-ui-claims', id);

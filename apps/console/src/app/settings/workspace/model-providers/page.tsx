@@ -2,14 +2,15 @@
 
 import * as React from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Cpu, Info, KeyRound, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Cpu, Info, KeyRound, List, Plug, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { ConnectProviderDialog } from '@/components/models/connect-provider-dialog';
-import { PROVIDER_TYPES } from '@/components/models/provider-meta';
+import { ConnectionModelsSheet } from '@/components/models/connection-models-sheet';
+import { ModelSetupCard } from '@/components/models/model-setup-card';
 import { SettingsPageLayout } from '@/components/settings/settings-page-layout';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { TextCell } from '@/components/shared/table-cells';
@@ -26,9 +27,11 @@ import { useCan } from '@/hooks/me-queries';
 import { serverPagination } from '@/components/shared/server-pagination';
 import { useCreatedRows } from '@/hooks/use-created-rows';
 import { useListParams } from '@/hooks/use-list-params';
-import { useCreateProviderConnection, useProviderConnections } from '@/hooks/provider-connection-queries';
-import { useProviderKeys, useRemoveProviderKey, useSaveProviderKey } from '@/hooks/provider-key-queries';
-import { relativeTime } from '@/lib/format';
+import { useProviderTypes } from '@/hooks/model-queries';
+import { useProviderConnections } from '@/hooks/provider-connection-queries';
+import { useCheckProviderKey, useProviderKeys, useRemoveProviderKey, useSaveProviderKey } from '@/hooks/provider-key-queries';
+import { keyWhere } from '@/lib/model-forms';
+import { plural, relativeTime } from '@/lib/format';
 import type { ProviderConnection } from '@/lib/types/models';
 import type { ProviderKey } from '@/lib/types/provider-keys';
 
@@ -108,39 +111,58 @@ function Region({ c }: { c: ProviderConnection }) {
   );
 }
 
-const connectionColumns: ColumnDef<ProviderConnection>[] = [
-  {
-    accessorKey: 'name',
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
-    cell: ({ row }) => <span className="text-sm font-medium">{row.original.name}</span>,
-    enableHiding: false,
-  },
-  {
-    accessorKey: 'type',
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Type" />,
-    cell: ({ row }) => (
-      <span className="flex items-center gap-1.5 text-sm whitespace-nowrap">
-        {PROVIDER_TYPES[row.original.type]?.label ?? row.original.type}
-        {row.original.apiVersion && <code className="font-mono text-xs text-muted-foreground">{row.original.apiVersion}</code>}
-      </span>
-    ),
-  },
-  {
-    accessorKey: 'baseUrl',
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Endpoint" />,
-    cell: ({ row }) => <code className="font-mono text-xs"><TextCell>{row.original.baseUrl ?? 'None'}</TextCell></code>,
-  },
-  {
-    accessorKey: 'region',
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Region" />,
-    cell: ({ row }) => <Region c={row.original} />,
-  },
-  {
-    accessorKey: 'keyRef',
-    header: ({ column }) => <DataTableColumnHeader column={column} title="Signs in with" />,
-    cell: ({ row }) => (row.original.keyRef ? <code className="font-mono text-sm">{row.original.keyRef}</code> : <span className="text-sm text-muted-foreground">No key</span>),
-  },
-];
+/** The connection table's columns; `labels` gives each registry type's name and `actions` the row menu. */
+function connectionColumns(labels: Record<string, string>, actions: { onModels: (c: ProviderConnection) => void; onTest: (c: ProviderConnection) => void }): ColumnDef<ProviderConnection>[] {
+  return [
+    {
+      accessorKey: 'name',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <div className="text-sm font-medium">{row.original.name}</div>
+          <div className="text-xs text-muted-foreground">{labels[row.original.type] ?? row.original.type}</div>
+        </div>
+      ),
+      enableHiding: false,
+    },
+    {
+      accessorKey: 'baseUrl',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Endpoint" />,
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <code className="font-mono text-xs"><TextCell>{row.original.baseUrl ?? 'None'}</TextCell></code>
+          {row.original.apiVersion && <div className="text-xs text-muted-foreground">API {row.original.apiVersion}</div>}
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'region',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Region" />,
+      cell: ({ row }) => <Region c={row.original} />,
+    },
+    {
+      accessorKey: 'keyRef',
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Signs in with" />,
+      cell: ({ row }) => (row.original.keyRef ? <code className="font-mono text-sm">{row.original.keyRef}</code> : <span className="text-sm text-muted-foreground">No key</span>),
+    },
+    {
+      id: 'actions',
+      meta: { className: 'sticky right-0 z-[1] w-10 bg-card shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.12)]' },
+      cell: ({ row }) => (
+        <StopRowClick>
+          <DataTableRowActions
+            row={row}
+            actions={[
+              { label: 'Models', icon: List, onClick: (r) => actions.onModels(r.original) },
+              { label: 'Test connection', icon: Plug, onClick: (r) => actions.onTest(r.original), disabledReason: row.original.keyRef ? undefined : 'This connection takes no key, so there is nothing to test.' },
+            ]}
+          />
+        </StopRowClick>
+      ),
+      enableHiding: false,
+    },
+  ];
+}
 
 function columns(onReplace: (k: ProviderKey) => void, onRemove: (k: ProviderKey) => void): ColumnDef<ProviderKey>[] {
   return [
@@ -199,7 +221,9 @@ export default function ModelProvidersPage() {
   const connectionList = useListParams('name', undefined, undefined, CONNECTION_SORT);
   const keys = useProviderKeys(keyList.params, admin);
   const connections = useProviderConnections(connectionList.params, admin);
-  const connect = useCreateProviderConnection();
+  const types = useProviderTypes(admin);
+  const check = useCheckProviderKey();
+  const [listing, setListing] = React.useState<ProviderConnection | null>(null);
   const newKeys = useCreatedRows<ProviderKey>();
   const newConnections = useCreatedRows<ProviderConnection>();
   const [connecting, setConnecting] = React.useState(false);
@@ -207,11 +231,22 @@ export default function ModelProvidersPage() {
   const [editing, setEditing] = React.useState<{ replacing: string | null } | null>(null);
   const [removing, setRemoving] = React.useState<string | null>(null);
   const cols = React.useMemo(() => columns((k) => setEditing({ replacing: k.name }), (k) => setRemoving(k.name)), []);
+  const labels = React.useMemo(() => Object.fromEntries((types.data ?? []).map((t) => [t.id, t.label])), [types.data]);
+  const testConnection = async (c: ProviderConnection) => {
+    try {
+      const result = await check.mutateAsync({ name: c.keyRef!, where: keyWhere(c.type, c) });
+      if (result.ok) toast.success(`${c.name}: key accepted`, { description: `It reaches ${plural(result.models, 'model')}.` });
+      else toast.error(`${c.name}: key refused`, { description: result.reason ?? 'The provider refused the key.' });
+    } catch (e) {
+      toast.error(`Couldn’t test ${c.name}`, { description: (e as Error).message });
+    }
+  };
+  const connCols = React.useMemo(() => connectionColumns(labels, { onModels: setListing, onTest: testConnection }), [labels]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <SettingsPageLayout
-      section="Model providers"
-      description="Where the account’s AI models are called, and the keys they sign in with. No team sees a key, and a value is never shown after saving."
+      section="Connections"
+      description="Where the workspace’s AI models are called, and the key each one signs in with. A key is never shown after saving."
       actions={
         admin && (
           <Button onClick={() => setEditing({ replacing: null })} data-testid="provider-key-add">
@@ -240,9 +275,11 @@ export default function ModelProvidersPage() {
             </div>
             {connections.isError && !connections.data ? (
               <QueryError what="provider connections" onRetry={() => connections.refetch()} retrying={connections.isFetching} error={connections.error} testId="provider-connections-error" />
+            ) : connections.data?.pagination.total === 0 && !connectionList.isFiltered ? (
+              <ModelSetupCard onSetup={() => setConnecting(true)} />
             ) : (
               <DataTableWithViews
-                columns={connectionColumns}
+                columns={connCols}
                 data={connections.data?.data ?? []}
                 getRowId={(c) => c.id}
                 searchColumn="name"
@@ -278,14 +315,12 @@ export default function ModelProvidersPage() {
       <ConnectProviderDialog
         open={connecting}
         onOpenChange={setConnecting}
-        hasKeys={!!keys.data?.pagination.total}
-        saving={connect.isPending}
-        onSave={async (input) => {
-          const made = await connect.mutateAsync(input);
-          newConnections.show({ apiVersion: null, region: null, observedRegion: null, regionMismatch: null, ...input, id: made.id });
-          toast.success(`Connected ${input.name}`, { description: 'Point an alias at it to use it.' });
+        onConnected={(row) => {
+          newConnections.show(row);
+          toast.success(`Connected ${row.name}`, { description: 'Point an alias at it to use it.' });
         }}
       />
+      <ConnectionModelsSheet connection={listing} onClose={() => setListing(null)} />
       <DeleteDialog
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}

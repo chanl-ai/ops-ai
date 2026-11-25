@@ -25,7 +25,7 @@ from ops_store.outbox import add as add_event
 from ops_store.store import Store
 
 from .policies import write_new_workspace_policies
-from .roles import bump_version, ensure_builtin_roles, ensure_owner, mirror_membership
+from .roles import bump_version, ensure_builtin_roles, ensure_owner, mirror_membership, seed_owner
 from .tables import members, platform_outbox, role_assignments, teams, tenants, users
 from .tenancy import SEED_ID_CHECK, TenantDb
 
@@ -169,6 +169,8 @@ async def write_seed(
                 await c.execute(insert_ignore(c, role_assignments, grant, keys=GRANT_KEY))
             if every:
                 await bump_version(c, tenant_id)
+        if data.get("owner"):
+            await seed_owner(c, tenant_id, str(data["owner"]), seeded=user_ids, at=now)
         await ensure_owner(c, tenant_id, at=now)
 
 

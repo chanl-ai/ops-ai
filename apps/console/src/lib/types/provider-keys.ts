@@ -12,9 +12,11 @@ export interface ProviderKey {
 
 /** Which provider a key is for, and for Azure OpenAI the resource's endpoint and API version. */
 export interface KeyWhere {
-  provider: 'openai' | 'azure-openai' | 'anthropic';
+  /** A provider type's id (GET /v1/models/provider-types). */
+  provider: string;
   endpoint?: string;
   apiVersion?: string;
+  region?: string;
 }
 
 export interface KeyCheck {
@@ -28,9 +30,4 @@ export interface KeyCheck {
 export interface ProviderModel {
   id: string;
   model?: string | null;
-}
-
-export interface ChatModelChoice extends KeyWhere {
-  keyName: string;
-  model: string;
 }

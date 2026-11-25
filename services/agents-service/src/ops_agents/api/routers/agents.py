@@ -70,7 +70,7 @@ from ..engine_agents import KernelModels
 from ..envelope import ok
 from ..eval_runs import judge_for, prices_of, run_saved, version_turn
 from ..guardrails import resolve_pins
-from ..model_aliases import chat_aliases
+from ..model_aliases import chat_aliases, model_setting_problem
 from ..publish_policy import Decision, decide, team_document
 from ..review_sla import sla_hours
 from ..rights import rights
@@ -188,6 +188,14 @@ class AgentPatch(In):
     brief: Brief | None = None
     prompt_mode: Literal["brief", "full"] | None = None
     patterns: Patterns | None = None
+    # The model settings by knob name, as the whole map: checked against the knobs of the version's alias
+    # (GET /v1/model-aliases/{name}/knobs) and refused (422 `model_setting_invalid`) naming the knob it breaks.
+    model_settings: (
+        dict[
+            Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")], float | int | Annotated[str, Field(max_length=40)]
+        ]
+        | None
+    ) = Field(default=None, max_length=12)
     note: str | None = None
     # Set by the provisioning service only.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
@@ -533,6 +541,7 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
             "brief",
             "prompt_mode",
             "patterns",
+            "model_settings",
             "template_id",
             "protection",
         },
@@ -560,6 +569,9 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
         spec["widgets"] = body.widgets.model_dump(by_alias=True)
     if body.memory is not None:
         spec["memory"] = body.memory.model_dump(by_alias=True)
+    if body.model_settings is not None:
+        alias = str(spec.get("model") or "") or rt.settings.model_alias
+        spec["modelSettings"] = await _checked_model_settings(rt, alias, body.model_settings)
     spec = agent_brief.patched(
         spec,
         brief=body.brief,
@@ -575,6 +587,20 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
     await reg.save(agent_id, spec, by=me.email, note=body.note or "", base=read)
     await reg.set_template(agent_id, template_id=body.template_id, protection=body.protection)
     return ok(await _view(rt, agent_id))
+
+
+async def _checked_model_settings(rt: Runtime, alias: str, wanted: dict[str, float | int | str]) -> Json:
+    """`wanted` when every knob is one the alias's model takes, in its range; else 422 `model_setting_invalid` naming
+    the first knob it breaks. The models service fits each call again, since the alias can later move models."""
+    if not wanted:
+        return {}
+    if not alias:
+        raise Unprocessable("Model settings apply to the agent's model alias; pick one first.", code="no_model_alias")
+    assert rt.model_aliases is not None
+    held = await rt.model_aliases.knobs(alias)
+    if (why := model_setting_problem(wanted, cast(Json, held["knobs"]))) is not None:
+        raise Unprocessable(why, code="model_setting_invalid", details={"alias": alias})
+    return dict(wanted)
 
 
 async def _check_knowledge(rt: Runtime, wanted: list[str], held: list[str]) -> None:

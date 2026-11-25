@@ -1,0 +1,12 @@
+{
+  "id": "scripted",
+  "label": "Scripted (tests)",
+  "icon": "flask",
+  "adapter": "scripted",
+  "connection": {
+    "type": "object",
+    "properties": {},
+    "required": []
+  },
+  "test": "none"
+}

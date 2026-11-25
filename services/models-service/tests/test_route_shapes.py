@@ -8,6 +8,8 @@ from uuid import uuid4
 from .conftest import SERVICE, Models
 
 ALIAS_KEYS = {
+    "providerName",
+    "usedBy",
     "name",
     "version",
     "kind",
@@ -48,6 +50,9 @@ async def test_the_alias_list_holds_each_aliases_serving_version_only(models: Mo
             "status": "current",
             "reasoningEffort": None,
             "images": False,
+            "providerName": "scripted",
+            # A service reads the list without counts.
+            "usedBy": None,
         }
     ]
     names = [a["name"] for a in r.json()["data"]["data"]]

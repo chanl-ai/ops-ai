@@ -230,8 +230,19 @@ queries = 2
 ["GET /v1/me/memories/export"]
 queries = 3
 
+# One read of the agents' newest and published versions, inside the request transaction.
+["GET /v1/model-alias-uses"]
+queries = 1
+query = { aliases = "default" }
+
 ["GET /v1/model-aliases"]
 queries = 0
+
+# models-service answers the alias's knobs; no row is read here. The budget stack has no models-service, so the
+# seeded name is no alias and the route answers its refusal.
+["GET /v1/model-aliases/{name}/knobs"]
+queries = 0
+status = 422
 
 # Two transactions by design: the reads that name the held writes, then (tools-service asked with none open) the build.
 ["GET /v1/overview"]

@@ -8,8 +8,12 @@ from pathlib import Path
 
 import pytest
 
+from ops_platform.bootstrap import FirstAdmin, bootstrap
 from ops_platform.seed import seed
+from ops_platform.store.lifecycle import owner_query
 from ops_platform.store.seeding import SeedConflictError
+from ops_platform.store.tenancy import TenantDb
+from ops_service_kit.ids import new_id
 from ops_service_kit.settings import Settings
 
 from .conftest import DEMO_PASSWORD, Platform
@@ -116,3 +120,42 @@ async def test_a_stack_seeded_as_shipped_gives_each_person_only_their_own_roles(
         "/v1/auth/sign-in", json={"email": "v.lind@harborpine.example", "password": DEMO_PASSWORD}
     )
     assert r.json()["data"]["principal"]["teamIds"] == ["team_ops"], r.json()["data"]["principal"]
+
+
+async def test_a_fresh_dev_install_has_one_owner_who_signs_in(
+    platform: Platform, database_url: str, tmp_path: Path
+) -> None:
+    """`make up` runs the first-admin bootstrap (a generated password nobody types), then the people seed. The owner,
+    the only person holding install.manage, must be the seed's admin who signs in with the demo password, not the
+    bootstrap's. A fresh tenant with the seed's people under fresh ids stands in for a new database."""
+    run = new_id("t")[2:10]
+    data = json.loads(PEOPLE.read_text())
+    tenant, security = f"ten_{run}", f"team_security_{run}"
+    data["tenant"]["id"] = tenant
+    for team in data["teams"]:
+        team["id"] = f"{team['id']}_{run}"
+    for person in data["people"]:
+        person["id"] = f"{person['id']}_{run}"
+        person["email"] = person["email"].replace("@", f"+{run}@")
+        person["teams"] = {f"{t}_{run}": role for t, role in person["teams"].items()}
+    data["owner"] = f"{data['owner']}_{run}"
+    fresh = tmp_path / "people.json"
+    fresh.write_text(json.dumps(data))
+    first = FirstAdmin(
+        tenant_id=tenant, tenant_name="Harbor & Pine Bank", team_id=security, team_name="Security",
+        email=f"dev-admin+{run}@harborpine.example", name="Alex Morgan", password="generated-password-1",
+    )  # fmt: skip
+    assert await bootstrap(database_url, first, iterations=1000) == "created"
+    await seed(database_url, fresh, security_team=security)
+
+    db = TenantDb.open(database_url)
+    async with db.tenant_tx(tenant) as c:
+        owners = [str(r) for r in (await c.execute(owner_query(tenant))).scalars()]
+    await db.engine.dispose()
+    named = next(p for p in data["people"] if p["id"] == data["owner"])
+    assert owners == [named["id"]]
+    r = await platform.public.post("/v1/auth/sign-in", json={"email": named["email"], "password": DEMO_PASSWORD})
+    assert r.status_code == 200, r.text
+    h = {"Authorization": f"Bearer {r.json()['data']['token']}"}
+    held = (await platform.public.get("/v1/me/permissions", headers=h)).json()["data"]["workspace"]
+    assert {(c["area"], c["action"]) for c in held} >= {("install", "manage")}, held

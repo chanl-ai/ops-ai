@@ -33,7 +33,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-040 | tools-service | Security decides a tool module review | api, ui | `tools-service/security-decides-a-module-review.md` |
 | uc-041 | tools-service | Workflow approvals use agents-service workflows | api | `tools-service/workflow-approvals-use-agents-service-workflows.md` |
 | uc-042 | tools-service | A module's call counts and activity come from real calls | api | `tools-service/module-traffic-from-real-calls.md` |
-| uc-047 | console | Sub-pages show as rows in the sidebar, in the area they belong to (retired) | ui | `console/sub-pages-in-the-sidebar.md` |
+| uc-047 | console | Sub-pages show as rows in the sidebar, in the area they belong to | none | `console/sub-pages-in-the-sidebar.md` |
 | uc-048 | agents-service | An agent is granted and calls a published tools-service operation | api | `agents-service/agent-calls-registry-operations.md` |
 | uc-049 | agents-service | A write runs only after as many people as its policy names approve it | api, ui | `agents-service/write-approval-policy.md` |
 | uc-052 | console | Access is Read or Write in the console | ui | `console/access-is-read-or-write.md` |
@@ -316,5 +316,9 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-770 | tools-service | Admins see people's app sign-ins and end one | ui | `tools-service/admins-see-people-s-app-sign.md` |
 | uc-771 | agents-service | A builder takes a new skill to its first publish in under ten minutes | ui | `agents-service/a-builder-takes-a-new-skill.md` |
 | uc-781 | console | Record editors and list pages share one header, one tab strip and one section style | ui | `console/editor-page-layout.md` |
+| uc-772 | kb-service | Search a long document's pieces on the server | api | `kb-service/search-a-long-document-s-pieces.md` |
+| uc-782 | agents-service | Only a person who may decide a review decides, resumes or replays it | api | `agents-service/only-a-person-who-may-decide.md` |
 | uc-790 | tools-service | A chat user never chooses between their own login and the team's | api, ui | `tools-service/chat-never-asks-whose-login.md` |
 | uc-780 | console | A long list or text in a table cell stays inside its column | ui | `console/long-values-in-tables.md` |
+| uc-791 | models-service | A provider type added as a file shows in the add list | api, ui | `models-service/a-provider-type-added-as-a.md` |
+| uc-792 | models-service | An admin connects Anthropic and an agent's model settings reach its chat | api, ui | `models-service/an-admin-connects-anthropic-and-an.md` |

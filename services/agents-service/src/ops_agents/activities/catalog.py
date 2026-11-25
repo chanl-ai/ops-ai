@@ -235,6 +235,8 @@ class AgentDefinition(_Model):
     # How hard the model thinks (low, medium, high); None sends no setting. Off: one tool call at a time.
     thinking: str | None = None
     parallel_reads: bool = True
+    # The version's model settings by knob name (agent_registry.model_settings_of).
+    model_settings: dict[str, float | int | str] = {}
 
 
 class ApprovalTemplate(_Model):
@@ -395,6 +397,7 @@ class Catalog(_Model):
             never_heading=agent.never_heading,
             thinking=agent.thinking,
             parallel_reads=agent.parallel_reads,
+            model_settings=dict(agent.model_settings),
             # Callers narrow widgets only: pinned ones switched off, composing off, a lower cap (resolver-checked).
             widgets=[w.template() for w in agent.widgets if not effective or w.widget_id not in effective.widgets_off],
             compose=agent.compose and not (effective and effective.compose_off),

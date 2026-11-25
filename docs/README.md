@@ -671,3 +671,5 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/kb-service/search-a-long-document-s-pieces.md` | uc-772: Search a long document's pieces on the server |
 | `usecases/agents-service/only-a-person-who-may-decide.md` | uc-782: Only a person who may decide a review decides, resumes or replays it |
 | `usecases/files-service/a-watched-folder-brings-files-in.md` | uc-779: A watched folder brings files in |
+| `usecases/models-service/a-provider-type-added-as-a.md` | uc-791: A provider type added as a file shows in the add list |
+| `usecases/models-service/an-admin-connects-anthropic-and-an.md` | uc-792: An admin connects Anthropic and an agent's model settings reach its chat |

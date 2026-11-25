@@ -579,6 +579,7 @@ def create_app(
     mount(team_assistant_routes.router, "Agents")
     mount(tool_uses_routes.document_type_router, "Workflows")
     mount(tool_uses_routes.account_router, "Workflows")
+    mount(tool_uses_routes.model_alias_router, "Agents")
     mount(team_usage_routes.router, "Workflows")
     mount(tool_catalog.router, "Agents")
     mount(assurance_routes.router, "Assurance")

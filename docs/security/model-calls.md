@@ -12,7 +12,7 @@ hosted.
 An account admin connects the model endpoint the bank has approved.
 
 <!-- site: steps -->
-1. Open Settings › Workspace › Model providers and add a connection: the endpoint's address and its key. The key is
+1. Open Settings › Workspace › Models › Connections and connect a provider: pick it from the list, then give its endpoint and key. The key is
    never shown again, and no team sees it.
 2. Open an agent and press Test. The answer comes from that endpoint.
 3. The call is recorded with the key, the model, tokens, cost, time taken and outcome. The record holds no prompt or
@@ -45,7 +45,7 @@ flowchart LR
 
 | Control | What it does | Default | Who changes it |
 |---|---|---|---|
-| Provider connections and keys | Where the install's models are called and the key each signs in with | None until an admin adds one | An account admin, in Settings › Workspace › Model providers |
+| Provider connections and keys | Where the install's models are called and the key each signs in with | None until an admin adds one | An account admin, in Settings › Workspace › Models |
 | Clearance per alias version | The highest data level the model may receive (public, internal, confidential, restricted) and whether it may receive images and files | Set per version | The operator, when binding an alias |
 | Budget per key | A spending cap in money; the call that would pass it is refused | Per key | The operator |
 | Budget per organisation on a shared key | An organisation's share of a key's budget | Per key | The operator |

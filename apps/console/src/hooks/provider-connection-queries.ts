@@ -14,5 +14,10 @@ export const useProviderConnections = (p: ListParams, enabled = true) => usePage
 
 export function useCreateProviderConnection() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (input: ProviderConnectionInput) => api.providerConnections.create(input), onSuccess: () => qc.invalidateQueries({ queryKey: KEY }) });
+  return useMutation({ mutationFn: (input: ProviderConnectionInput) => api.providerConnections.create(input), onSuccess: () => {
+      qc.invalidateQueries({ queryKey: KEY });
+      // The secrets a connection is made with are saved as a key, which the Keys list shows.
+      qc.invalidateQueries({ queryKey: ['provider-keys'] });
+    },
+  });
 }

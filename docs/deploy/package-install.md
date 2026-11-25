@@ -85,7 +85,7 @@ $C run --rm -T --no-deps agents python /app/deploy/fly/connect_model.py --models
 $C up -d
 ```
 
-Save the provider's key in the console under Settings > Model providers, with the name you gave `--key-ref`. The agents
+Save the provider's key in the console under Settings > Models > Connections, with the name you gave `--key-ref`. The agents
 service reports unhealthy until a model is connected.
 
 ## 7. Check it

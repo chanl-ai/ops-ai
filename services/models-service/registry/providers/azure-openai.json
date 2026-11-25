@@ -1,0 +1,53 @@
+{
+  "id": "azure-openai",
+  "label": "Azure OpenAI",
+  "icon": "azure",
+  "adapter": "azure-openai",
+  "catalog": "azure",
+  "connection": {
+    "type": "object",
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "title": "Endpoint",
+        "description": "The resource's endpoint, such as https://<resource>.openai.azure.com, with no path.",
+        "format": "uri",
+        "x-column": "base_url"
+      },
+      "apiVersion": {
+        "type": "string",
+        "title": "API version",
+        "description": "v1, or a dated version from 2024-10-21 on.",
+        "default": "v1",
+        "pattern": "^(v1|\\d{4}-\\d{2}-\\d{2}(-preview)?)$",
+        "x-column": "api_version"
+      },
+      "region": {
+        "type": "string",
+        "title": "Region",
+        "description": "Optional: an answer from another region is flagged.",
+        "pattern": "^[A-Za-z0-9 -]{1,64}$",
+        "x-column": "region"
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API key",
+        "description": "Saved sealed as the account's provider key; never shown again.",
+        "x-secret": true
+      }
+    },
+    "required": [
+      "baseUrl",
+      "apiVersion",
+      "apiKey"
+    ]
+  },
+  "modelList": {
+    "path": "/openai/deployments?api-version={apiVersion}",
+    "auth": "api-key",
+    "host": "azure",
+    "modelField": "model",
+    "apiVersion": "2022-12-01"
+  },
+  "test": "modelList"
+}

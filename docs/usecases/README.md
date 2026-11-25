@@ -409,3 +409,5 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-790 | tools-service | A chat user never chooses between their own login and the team's | api, ui | current |
 | uc-779 | files-service | A watched folder brings files in | api, ui | draft |
 | uc-780 | console | A long list or text in a table cell stays inside its column | ui | draft |
+| uc-791 | models-service | A provider type added as a file shows in the add list | api, ui | current |
+| uc-792 | models-service | An admin connects Anthropic and an agent's model settings reach its chat | api, ui | current |

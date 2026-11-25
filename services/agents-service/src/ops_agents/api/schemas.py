@@ -281,6 +281,8 @@ class Agent(Out):
     # brief: the prompt is written from the brief. full: the builder's own instructions, with the never rules last.
     prompt_mode: Literal["brief", "full"] | None = None
     patterns: PatternsView = Field(default_factory=PatternsView)
+    # The model settings the version saved, by knob name; empty runs on the model's defaults.
+    model_settings: dict[str, float | int | str] = Field(default_factory=dict[str, float | int | str])
     uses: AgentUses = Field(default_factory=AgentUses)
     controls: AgentControls
     used_in: list[UsedIn]
@@ -574,6 +576,17 @@ class ModelAlias(Out):
     cleared_sensitivity: str | None = None
     input_per_million: str | None = None
     output_per_million: str | None = None
+
+
+class ModelAliasKnobs(Out):
+    """The settings an agent on the alias may save, from models-service: `knobs` is a JSON Schema object of only the
+    knobs the alias's model takes, each with its type, title, description, range and catalog default."""
+
+    alias: str
+    version: int
+    model_id: str
+    catalogued: bool
+    knobs: Json
 
 
 # ── reviews of publish requests ──
