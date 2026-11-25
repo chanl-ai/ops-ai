@@ -558,6 +558,60 @@ class ToolOptionsPage(OptionsPage):
     not_added: list[ToolsNotAdded] = Field(default_factory=list[ToolsNotAdded])
 
 
+class AgentToolAppMatch(Out):
+    """One of an app's tools whose words match the search, so the picker can offer it under its app."""
+
+    id: str
+    label: str
+    access: str
+    granted: bool
+
+
+class AgentToolApp(Out):
+    """An app as an agent's tools picker shows it: its state for the person asking, and how many of its tools the team
+    added and the agent holds. A tool with no app card groups under its module, or under Workflows or Agents."""
+
+    id: str
+    name: str
+    # `other` holds the agent's grants that nothing offers now (a paused agent, or any tool while tools-service is
+    # down), so each can still be removed.
+    kind: Literal["plugin", "builtin", "custom", "workflows", "agents", "other"]
+    connected: bool
+    # The app card's state as tools-service sends it, which the console's app state badge draws; none with no card.
+    app_state: str | None = None
+    # tools-service's group for the app (`on`, `needs_you`, `needs_admin`, ...); none for a group with no app card.
+    app_group: str | None = None
+    sign_in: str | None = None
+    # Every tool the app has; the tools the team added, which an agent may be granted; the ones this agent holds.
+    tools_total: int
+    tools_offered: int
+    tools_granted: int
+    # The app's tools the team has not added, which the agent cannot be granted here: total less offered, at least 0.
+    not_added: int
+    # At most five, the first by label, and only when the search matched a tool's words.
+    matches: list[AgentToolAppMatch]
+
+
+class AgentToolAppsPage(OptionsPage):
+    data: list[AgentToolApp]  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
+class AppTool(Out):
+    """One of an app's tools the team added, and whether this agent holds it."""
+
+    id: str
+    label: str
+    description: str
+    access: str
+    requires_approval: bool
+    approval: str | None = None
+    granted: bool
+
+
+class AppToolsPage(OptionsPage):
+    data: list[AppTool]  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
 class PromptVariable(Out):
     """A `{key}` an agent's instructions may name, filled at run time from the turn's variables."""
 

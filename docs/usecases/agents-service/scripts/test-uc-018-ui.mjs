@@ -2,6 +2,7 @@
 // Headless Chromium against a console whose Agents, Workflows and Cases call the agents service on the scripted model;
 // chatting with the agent is a conversation in Chat (agents are not offered by Workflows' Start run).
 import { AGENTS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { chooseMatchedTool, openToolsPicker, searchMatchedTool } from '../../lib/tools_picker.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const TEAM = { 'X-Team-Id': 'team_ops' };
@@ -52,22 +53,22 @@ await withUiStack(async (consoleUrl) => {
 
     // Grant lookup_account from the runtime's catalogue: the picker lists GET /v1/tools and nothing else.
     const catalogue = (await (await fetch(`${agents}/v1/tools?pageSize=200`, { headers: TEAM })).json()).data.data.map((t) => t.id).sort();
-    // The tools picker (EntityPicker) searches the runtime's catalogue on the server, a page at a time.
-    const optioned = armed(page.waitForResponse((r) => r.request().method() === 'GET' && r.url().startsWith(`${agents}/v1/tools/options`), { timeout: 60_000 }));
-    await page.getByTestId('agent-tools-picker').getByRole('button', { name: 'Grant tools' }).click();
-    const served = (await (await optioned)?.json())?.data?.data ?? [];
-    const options = page.getByRole('option');
-    await options.first().waitFor({ timeout: 30_000 });
-    const shown = await options.allInnerTexts();
-    check('the tool picker shows the options route page, every id from the runtime catalogue', served.length > 0 && shown.length === served.length && served.every((o, i) => shown[i].startsWith(o.label) && catalogue.includes(o.id)), { shown, served: served.map((o) => o.id) });
-    // Published workflows an agent can start come from the same catalogue, hinted "Workflows".
-    const workflows = served.filter((o) => o.hint === 'Workflows');
-    check('published workflows are offered, hinted as Workflows', workflows.length > 0 && workflows.every((o) => shown.some((t) => t.startsWith(o.label) && t.includes('Workflows'))), { workflows: workflows.map((o) => o.id) });
-    await page.getByPlaceholder('Search tools by name or system…').fill('lookup_account');
+    // Add tools lists the apps the agent may be granted tools from; a search names the matching tools under their app.
+    const appsRead = armed(page.waitForResponse((r) => r.request().method() === 'GET' && new URL(r.url()).pathname === `/v1/agents/${agent?.id}/tool-apps` && !new URL(r.url()).searchParams.get('search'), { timeout: 60_000 }));
+    await openToolsPicker(page);
+    const served = (await (await appsRead)?.json())?.data?.data ?? [];
+    await page.getByTestId('tools-picker-search').waitFor({ timeout: 30_000 });
+    const cards = await Promise.all(served.map((a) => page.getByTestId(`tools-app-${a.id}`).first().waitFor({ timeout: 15_000 }).then(() => true, () => false)));
+    check('the tool picker shows a card for each app the server lists', served.length > 0 && cards.every(Boolean), { served: served.map((a) => a.id) });
+    // Published workflows an agent can start are offered as their own app.
+    check('published workflows are offered as an app', served.some((a) => a.kind === 'workflows'), { kinds: served.map((a) => a.kind) });
+    const searched = armed(page.waitForResponse((r) => r.request().method() === 'GET' && new URL(r.url()).searchParams.get('search') === 'lookup_account' && new URL(r.url()).pathname === `/v1/agents/${agent?.id}/tool-apps`, { timeout: 60_000 }));
+    const match = await searchMatchedTool(page, 'lookup_account', 'lookup_account');
+    const hits = (await (await searched)?.json())?.data?.data ?? [];
+    check('searching the tool finds it under its app, a tool of the runtime catalogue', hits.some((a) => a.matches.some((m) => m.id === 'lookup_account')) && catalogue.includes('lookup_account'), { hits: hits.map((a) => [a.id, a.matches.map((m) => m.id)]) });
     // The draft saves itself a second after the change: no Save dialog, no note, and the same version.
     const patched = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${agent?.id}`, { timeout: 60_000 }));
-    await page.getByRole('option', { name: /^lookup_account\b/ }).first().click({ timeout: 30_000 });
-    await page.keyboard.press('Escape');
+    await chooseMatchedTool(page, match);
     const patchRes = await patched;
     const saved = patchRes ? (await patchRes.json()).data : undefined;
     const status = await page.getByTestId('agent-save-status').filter({ hasText: /^Draft v1 saved$/ }).first().waitFor({ timeout: 30_000 }).then(() => true, () => false);

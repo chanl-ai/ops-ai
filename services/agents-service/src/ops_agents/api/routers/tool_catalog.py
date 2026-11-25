@@ -199,6 +199,16 @@ def _status_of(tool: ToolEntry, card: Json | None) -> str:
     return "needs_approval" if tool.get("requiresApproval") else "ready"
 
 
+def app_of(tool: ToolEntry, card: Json | None) -> AppRef | None:
+    """The app a tool belongs to: its module's app card, else its module under the server's name; None for a
+    workflow or an agent, which have no module."""
+    if card is not None:
+        # The card's id and name pass through as tools-service sends them (its schema says strings).
+        return {"id": cast(str, card["id"]), "name": cast(str, card["name"])}
+    module = tool.get("moduleId")
+    return {"id": f"module:{module}", "name": tool["server"]} if module else None
+
+
 async def tool_rows(rt: Runtime, person: str | None, team: str | None) -> list[CatalogRow]:
     """Every tool the team may grant, one row each, joined in one read of tools-service's apps (for `person`) and one
     of this service's own grants and workflow steps. tools-service is asked for the apps and the operations before
@@ -215,10 +225,7 @@ async def tool_rows(rt: Runtime, person: str | None, team: str | None) -> list[C
     for t in tools:
         module = t.get("moduleId")
         card = by_module.get(str(module)) if module else None
-        # The card's id and name pass through as tools-service sends them (its schema says strings).
-        app: AppRef | None = {"id": cast(str, card["id"]), "name": cast(str, card["name"])} if card else None
-        if app is None and module:
-            app = {"id": f"module:{module}", "name": t["server"]}
+        app = app_of(t, card)
         used = uses.get(str(t["id"])) or []
         by: dict[str, list[UserRef]] = {
             k: [{"id": u["id"], "name": u["name"]} for u in used if u["kind"] == k] for k in ("agent", "workflow")
@@ -236,7 +243,7 @@ async def tool_rows(rt: Runtime, person: str | None, team: str | None) -> list[C
     return rows
 
 
-def _person(p: Principal) -> str | None:
+def person_of(p: Principal) -> str | None:
     """The person a list is read for: their email, as the acting-for token names them; none for a key or service."""
     return p.email if not p.is_key and "@" in p.email else None
 
@@ -265,7 +272,7 @@ async def list_tools(
     """The Tools page: one row per tool with its app, kind, status and users, searched, filtered (`app`, `kind`,
     `status`, each repeatable) and paged here. Facets count every row the search matches, before the filters, and
     `appNames` names each app the app facet counts."""
-    rows = await tool_rows(rt, _person(p), p.team_id)
+    rows = await tool_rows(rt, person_of(p), p.team_id)
     q = search.strip().lower()
     if q:
         rows = [r for r in rows if q in f"{r['title']} {r['name']} {_app_name(r) or ''} {r['description']}".lower()]
@@ -344,6 +351,26 @@ async def sign_in_by_module(rt: Runtime, team: str | None) -> dict[str, str]:
     return out
 
 
+async def team_tools(rt: Runtime, team: str | None, *, fresh: bool = False, listed: ToolRows | None = None) -> ToolRows:
+    """`known_tools` less another team's v1 workflows and agents: what an agent of `team` may be granted. v2
+    workflows come scoped to the selected team already; v1 registry workflows and agents carry a team. Operations are
+    tenant-wide, as the grant check offers them."""
+    known = await (known_tools(rt, fresh=fresh) if listed is None else known_tools(rt, listed=listed))
+    if not team:
+        return known
+    others = {f"workflow:{w['id']}" for w in await published_workflows(rt) if w.get("team_id") not in (None, "", team)}
+    agents = {str(t["id"]).removeprefix("agent:") for t in known if str(t["id"]).startswith("agent:")}
+    owners = await registry(rt).tenant_owners(agents)
+    others |= {f"agent:{a}" for a, owner in owners.items() if owner not in ("", team)}
+    return [t for t in known if t["id"] not in others]
+
+
+def options_cut[T](rows: list[T], offset: int, limit: int) -> list[T]:
+    """The rows an `/options` page answers from, read as `options_window` says (one past `limit`): the lists here are
+    the directory tools-service sends, with no rows to query, so they are cut in Python."""
+    return rows[offset : offset + limit + 1]
+
+
 @router.get("/options", response_model=Envelope[ToolOptionsPage], dependencies=[Depends(reader_of("tools"))])
 async def tool_options(
     rt: Rt,
@@ -360,20 +387,13 @@ async def tool_options(
     tools-service and have no rows to query, so the search runs over the directory this service already caches (30 s)
     rather than in a store query. `ids` labels stored grants instead of searching; a name no longer offered is left
     out."""
-    # v2 workflows come scoped to the selected team already; v1 registry workflows carry a team, so another team's
-    # are left out here. Operations are tenant-wide, as the grant check offers them.
     team = current_team()
     # One transaction for the local reads: `known_tools` asks tools-service before its first statement, so nothing
     # is called while it is open; the not-added line after it asks tools-service with it closed.
     async with isolation.request_transaction():
         # The agent and workflow pickers read it fresh, so a tool just added to the team is offered at once.
-        known = await known_tools(rt, fresh=True)
-        others = {
-            f"workflow:{w['id']}"
-            for w in await published_workflows(rt)
-            if team and w.get("team_id") not in (None, "", team)
-        }
-    tools = [t for t in known if t["id"] not in others and (agents or not str(t["id"]).startswith("agent:"))]
+        known = await team_tools(rt, team, fresh=True)
+    tools = [t for t in known if agents or not str(t["id"]).startswith("agent:")]
     if ids is not None:
         wanted = set(ids)
         hits = [t for t in tools if t["id"] in wanted]
@@ -382,7 +402,7 @@ async def tool_options(
         q = search.strip().lower()
         hits = [t for t in tools if q in f"{t.get('title') or ''} {t['name']} {t['server']} {t['description']}".lower()]
         offset, _ = options_window(cursor, limit)
-    page = hits[offset : offset + limit + 1]
+    page = options_cut(hits, offset, limit)
     # The agent's tools rows (stored grants) say who signs in to each tool's app, in the app page's words.
     signs = await sign_in_by_module(rt, team) if ids is not None else {}
     # A plugin tool reads by its title; every other tool by its name.
@@ -404,7 +424,7 @@ async def tool_options(
 @router.get("/{tool_id}", response_model=Envelope[ToolRow])
 async def get_tool(rt: Rt, tool_id: str, p: Annotated[Principal, Depends(reader_of("tools"))]) -> JSONResponse:
     """One tool as its row on the Tools page reads; declared after /options so that path is not read as a tool."""
-    row = next((r for r in await tool_rows(rt, _person(p), p.team_id) if r["id"] == tool_id), None)
+    row = next((r for r in await tool_rows(rt, person_of(p), p.team_id) if r["id"] == tool_id), None)
     if row is None:
         raise NotFound(f"Tool {tool_id}")
     return ok(row)

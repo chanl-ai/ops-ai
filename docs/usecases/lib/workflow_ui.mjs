@@ -3,6 +3,8 @@
 // a person sees it, never from the API, so each check proves the page shows what the run did.
 import { AGENTS_PORT, PLATFORM_PORT } from '@ops-ai/usecase-runner/harness';
 
+import { addMatchedTool } from './tools_picker.mjs';
+
 export const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 export const PASSWORD = 'northfield-demo';
 export const JAMES = 'j.richardson@harborpine.example';
@@ -219,26 +221,20 @@ export function aiDefinition(id, steps, wires) {
 }
 
 /**
- * Grants each operation through the agent page's tools picker (EntityPicker): open, search, pick, signed in as
+ * Grants each operation through the agent page's Add tools picker (lib/tools_picker.mjs): open, search, click, signed in as
  * `email`. agents-service reads the tool directory through a 30-second cache, so an operation published moments ago is
  * offered only once that cache turns over; the script waits for the options route to offer it (up to 60 s) before
  * searching, so the picker's first search finds it.
  */
 export async function grantTools(page, ops, email) {
   const H = await as(email);
-  const picker = page.getByTestId('agent-tools-picker');
   for (const op of ops) {
     const offered = await until(async () => {
       const r = await fetch(`${agents}/v1/tools/options?search=${encodeURIComponent(op)}`, { headers: H });
       return ((await r.json()).data?.data ?? []).some((o) => o.id === op);
     }, 60);
     if (!offered) throw new Error(`the tools picker never offered ${op}`);
-    await picker.getByRole('button', { name: 'Grant tools' }).click({ timeout: 120_000 });
-    await page.getByPlaceholder('Search tools by name or system…').fill(op);
-    // A team's own tool is listed by its name in words ("get_account" reads "Get account"), a plugin's by its title.
-    const named = new RegExp(`^(${op}|${op.replace(/_/g, ' ')})\\b`, 'i');
-    await page.getByRole('option', { name: named }).first().click({ timeout: 60_000 });
-    await page.keyboard.press('Escape');
+    await addMatchedTool(page, op, op);
   }
 }
 

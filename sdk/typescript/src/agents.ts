@@ -58,6 +58,16 @@ export class Agents {
     return rows;
   }
 
+  /** One page of the apps whose tools the agent may be granted. `search` also matches tool text and names the matching tools in `matches`. */
+  toolApps(agentId: string, params: { search?: string; granted?: boolean; cursor?: string; limit?: number } = {}) {
+    return this.raw.agents.agents_tool_apps({ path: { agent_id: agentId }, query: params as never });
+  }
+
+  /** One page of one app's tools for the agent. */
+  toolAppTools(agentId: string, appId: string, params: { search?: string; granted?: boolean; cursor?: string; limit?: number } = {}) {
+    return this.raw.agents.agents_app_tools({ path: { agent_id: agentId, app_id: appId }, query: params as never });
+  }
+
   /** Adds tools (their ids from `toolOptions`) to the agent's draft, keeping the ones it holds. Publish it for the grant to take effect. */
   async grantTools(id: string, tools: string[]) {
     const agent = await this.get(id);

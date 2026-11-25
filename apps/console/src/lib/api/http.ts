@@ -1,7 +1,7 @@
 import type { GrantableTool, Tool } from '@/lib/types/domain';
 import type { ListParams } from '@/lib/types/query';
 
-import { optionsQs } from './options';
+import { optionsQs, toolAppsQs } from './options';
 import { ApiError, type OpsApi } from './contract';
 import type { CasesApi } from './cases-contract';
 import { createCasesHttp } from './cases-http';
@@ -276,6 +276,8 @@ export function createHttpApi(baseUrl: string): OpsApi {
       // page reads the largest page the route serves.
       grantableTools: () => get<{ data: GrantableTool[] }>('/tools?pageSize=200').then((r) => r.data),
       toolOptions: (p) => get(`/tools/options?${optionsQs(p)}${p.agents === false ? '&agents=false' : ''}`),
+      toolApps: (agentId, p) => get(`/agents/${agentId}/tool-apps?${toolAppsQs(p)}`),
+      toolAppTools: (agentId, appId, p) => get(`/agents/${agentId}/tool-apps/${encodeURIComponent(appId)}/tools?${toolAppsQs(p)}`),
       modelAliases: () => get('/model-aliases'),
       modelAliasKnobs: (name) => get(`/model-aliases/${encodeURIComponent(name)}/knobs`),
       test: (id, message) => send('POST', `/agents/${id}/test`, { message }),

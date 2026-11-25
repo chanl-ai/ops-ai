@@ -1,3 +1,4 @@
+import type { AgentToolAppsPage, AppToolsPage, ToolAppsParams } from '@/lib/types/agent-tool-apps';
 import type { PublishPreview } from '@/lib/types/publish-preview';
 import type { SaveBase } from '@/lib/save-base';
 import type { CasesApi } from './cases-contract';
@@ -148,6 +149,10 @@ export interface OpsApi {
     /** The tools picker: grantable tools searched and paged on the server; `ids` labels stored grants. */
     /** `agents: false` leaves agents out (an MCP link's picker: its door runs tools and workflows only). */
     toolOptions(p: OptionsParams & { agents?: boolean }): Promise<ToolOptionsPage>;
+    /** The apps whose tools this agent may be granted, connected first; a search also names the matching tools (`matches`). */
+    toolApps(agentId: string, p: ToolAppsParams): Promise<AgentToolAppsPage>;
+    /** One app's tools the team added, each saying whether the agent holds it; 404 for an app the agent has none of. */
+    toolAppTools(agentId: string, appId: string, p: ToolAppsParams): Promise<AppToolsPage>;
     /** The model aliases an agent may name; a publish naming any other is refused (422 unknown_model_alias). */
     modelAliases(): Promise<ModelAlias[]>;
     /** Only the settings the alias's model takes, each with its range and catalog default; 422 `unknown_model_alias` for another name. */

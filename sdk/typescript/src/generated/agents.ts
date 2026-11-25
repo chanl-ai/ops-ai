@@ -727,6 +727,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agents/{agent_id}/tool-apps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tool Apps
+         * @description The apps whose tools the agent may be granted, connected first, then by name. `search` matches an app's name or
+         *     the title, name and description of one of its tools, which are listed under it (`matches`). `granted=true` keeps
+         *     the apps the agent holds a tool of; `granted=false` the apps with a tool it does not hold yet.
+         */
+        get: operations["agents_tool_apps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/tool-apps/{app_id}/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * App Tools
+         * @description One app's tools the team added, searched by title, name and description, each marked with whether the agent
+         *     holds it; `granted` keeps the held ones (`true`) or the rest (`false`). An app the team has no card or tool of
+         *     answers 404.
+         */
+        get: operations["agents_app_tools"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents/{agent_id}/versions": {
         parameters: {
             query?: never;
@@ -4626,6 +4670,61 @@ export interface components {
             wouldPause?: components["schemas"]["WouldPause"] | null;
         };
         /**
+         * AgentToolApp
+         * @description An app as an agent's tools picker shows it: its state for the person asking, and how many of its tools the team
+         *     added and the agent holds. A tool with no app card groups under its module, or under Workflows or Agents.
+         */
+        AgentToolApp: {
+            /** Appgroup */
+            appGroup?: string | null;
+            /** Appstate */
+            appState?: string | null;
+            /** Connected */
+            connected: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "plugin" | "builtin" | "custom" | "workflows" | "agents" | "other";
+            /** Matches */
+            matches: components["schemas"]["AgentToolAppMatch"][];
+            /** Name */
+            name: string;
+            /** Notadded */
+            notAdded: number;
+            /** Signin */
+            signIn?: string | null;
+            /** Toolsgranted */
+            toolsGranted: number;
+            /** Toolsoffered */
+            toolsOffered: number;
+            /** Toolstotal */
+            toolsTotal: number;
+        };
+        /**
+         * AgentToolAppMatch
+         * @description One of an app's tools whose words match the search, so the picker can offer it under its app.
+         */
+        AgentToolAppMatch: {
+            /** Access */
+            access: string;
+            /** Granted */
+            granted: boolean;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+        };
+        /** AgentToolAppsPage */
+        AgentToolAppsPage: {
+            /** Data */
+            data: components["schemas"]["AgentToolApp"][];
+            /** Nextcursor */
+            nextCursor?: string | null;
+        };
+        /**
          * AgentUses
          * @description How many of each kind the agent holds, for the page's one-line summary.
          */
@@ -4719,6 +4818,26 @@ export interface components {
             /** Runs */
             runs: string;
         };
+        /**
+         * AppTool
+         * @description One of an app's tools the team added, and whether this agent holds it.
+         */
+        AppTool: {
+            /** Access */
+            access: string;
+            /** Approval */
+            approval?: string | null;
+            /** Description */
+            description: string;
+            /** Granted */
+            granted: boolean;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Requiresapproval */
+            requiresApproval: boolean;
+        };
         /** AppToolsGiven */
         AppToolsGiven: {
             /** Agentid */
@@ -4739,6 +4858,13 @@ export interface components {
         AppToolsIn: {
             /** Moduleids */
             moduleIds: string[];
+        };
+        /** AppToolsPage */
+        AppToolsPage: {
+            /** Data */
+            data: components["schemas"]["AppTool"][];
+            /** Nextcursor */
+            nextCursor?: string | null;
         };
         /** Approval */
         Approval: {
@@ -6552,6 +6678,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[AgentToolAppsPage] */
+        Envelope_AgentToolAppsPage_: {
+            data: components["schemas"]["AgentToolAppsPage"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[Agent] */
         Envelope_Agent_: {
             data: components["schemas"]["Agent"];
@@ -6573,6 +6708,15 @@ export interface components {
         /** Envelope[AppToolsGiven] */
         Envelope_AppToolsGiven_: {
             data: components["schemas"]["AppToolsGiven"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[AppToolsPage] */
+        Envelope_AppToolsPage_: {
+            data: components["schemas"]["AppToolsPage"];
             /**
              * Success
              * @constant
@@ -18357,6 +18501,223 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_AgentTestTurn_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_tool_apps: {
+        parameters: {
+            query?: {
+                search?: string;
+                cursor?: string | null;
+                limit?: number;
+                granted?: boolean | null;
+            };
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AgentToolAppsPage_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_app_tools: {
+        parameters: {
+            query?: {
+                search?: string;
+                cursor?: string | null;
+                limit?: number;
+                granted?: boolean | null;
+            };
+            header?: never;
+            path: {
+                agent_id: string;
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AppToolsPage_"];
                 };
             };
             /** @description Invalid request */

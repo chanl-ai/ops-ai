@@ -897,6 +897,67 @@ export function createMockApi(): OpsApi {
         respond(() => tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, name: t.name, server: t.module ?? t.system, moduleId: null, description: t.description, access: t.access, inputSchema: {}, requiresApproval: t.access !== 'read' || !!t.requiresReview, approval: t.requiresReview ? 'Review before it runs' : null }))),
       // The mock's apps have no catalog to add from, so nothing waits on a Tools tab.
       toolOptions: (p) => respond(() => ({ ...pageOptions(tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, label: t.name, hint: t.module ?? t.system })), p), notAdded: [] })),
+      // The mock answers as agents-service does: apps from the tools' systems (all connected, nothing left to turn on), a
+      // search matching an app's name or its tools' words with the matches sorted, a group `other` for the agent's grants
+      // nothing offers (a paused agent's), `granted` keeping the apps holding a tool (true) or still missing one (false).
+      toolApps: (aid, p) =>
+        respond(() => {
+          const held = new Set(agentOr404(aid).toolIds);
+          const q = (p.search ?? '').trim().toLowerCase();
+          const offered = tools.filter((t) => t.enabled && !t.workflow);
+          const text = (t: Tool) => `${t.name} ${t.description}`.toLowerCase();
+          const sorted = (l: Tool[]) => [...l].sort((x, y) => x.name.toLowerCase().localeCompare(y.name.toLowerCase()) || x.id.localeCompare(y.id));
+          const groups = [...new Set(offered.map((t) => t.system))].map((name) => ({
+            id: `app:${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+            name,
+            kind: 'custom' as const,
+            own: offered.filter((t) => t.system === name),
+          }));
+          const unoffered = [...held].filter((id) => !offered.some((t) => t.id === id) && /^(agent|workflow):/.test(id));
+          const rows = [
+            ...groups,
+            ...(unoffered.length ? [{ id: 'other', name: 'Other', kind: 'other' as const, own: unoffered.map((id) => ({ id, name: id, description: '', access: 'unknown' }) as unknown as Tool) }] : []),
+          ]
+            .filter((g) => !q || g.name.toLowerCase().includes(q) || g.own.some((t) => text(t).includes(q)))
+            .map((g) => ({
+              id: g.id,
+              name: g.name,
+              kind: g.kind,
+              connected: true,
+              appState: g.kind === 'other' ? null : 'connected',
+              appGroup: g.kind === 'other' ? null : 'on',
+              signIn: g.kind === 'other' ? null : 'Team account',
+              toolsTotal: g.own.length,
+              toolsOffered: g.own.length,
+              toolsGranted: g.own.filter((t) => held.has(t.id)).length,
+              notAdded: 0,
+              matches: q ? sorted(g.own.filter((t) => text(t).includes(q))).slice(0, 5).map((t) => ({ id: t.id, label: t.name, access: t.access, granted: held.has(t.id) })) : [],
+            }))
+            .filter((a) => p.granted === undefined || (p.granted ? a.toolsGranted > 0 : a.toolsGranted < a.toolsOffered))
+            .sort((x, y) => x.name.toLowerCase().localeCompare(y.name.toLowerCase()) || x.id.localeCompare(y.id));
+          const limit = p.limit ?? 25;
+          const offset = Number(p.cursor ?? 0) || 0;
+          return { data: rows.slice(offset, offset + limit), nextCursor: offset + limit < rows.length ? String(offset + limit) : null };
+        }),
+      toolAppTools: (aid, appId, p) =>
+        respond(() => {
+          const held = new Set(agentOr404(aid).toolIds);
+          const q = (p.search ?? '').trim().toLowerCase();
+          const offered = tools.filter((t) => t.enabled && !t.workflow);
+          const slug = (t: Tool) => `app:${t.system.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+          const own =
+            appId === 'other'
+              ? [...held].filter((id) => !offered.some((t) => t.id === id) && /^(agent|workflow):/.test(id)).map((id) => ({ id, label: id, description: '', access: 'unknown', requiresApproval: false, approval: null }))
+              : offered.filter((t) => slug(t) === appId).map((t) => ({ id: t.id, label: t.name, description: t.description, access: t.access as string, requiresApproval: t.access !== 'read' || !!t.requiresReview, approval: t.requiresReview ? 'Review before it runs' : null }));
+          if (!own.length) notFound('App');
+          const rows = own
+            .filter((t) => `${t.label} ${t.description}`.toLowerCase().includes(q) && (p.granted === undefined || held.has(t.id) === p.granted))
+            .sort((x, y) => x.label.toLowerCase().localeCompare(y.label.toLowerCase()) || x.id.localeCompare(y.id))
+            .map((t) => ({ ...t, granted: held.has(t.id) }));
+          const limit = p.limit ?? 25;
+          const offset = Number(p.cursor ?? 0) || 0;
+          return { data: rows.slice(offset, offset + limit), nextCursor: offset + limit < rows.length ? String(offset + limit) : null };
+        }),
       modelAliases: () => respond(() => F.MODEL_ALIASES.map((a) => ({ ...a }))),
       modelAliasKnobs: (name) => respond(() => mockKnobs(mockAliases.rows(), name)),
       test: (aid, message) => respond(() => ({ reply: `${agents.find((a) => a.id === aid)?.name ?? 'The agent'} would answer “${message}” here.`, tookMs: 0, citations: [], toolCalls: [] })),

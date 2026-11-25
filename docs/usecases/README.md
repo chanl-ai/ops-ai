@@ -411,3 +411,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-780 | console | A long list or text in a table cell stays inside its column | ui | draft |
 | uc-791 | models-service | A provider type added as a file shows in the add list | api, ui | current |
 | uc-792 | models-service | An admin connects Anthropic and an agent's model settings reach its chat | api, ui | current |
+| uc-agents-1 | agents-service | An agent's tools are chosen by app: searched, opened, all of an app's tools added in one save, and listed by app with counts | api, ui | draft |
