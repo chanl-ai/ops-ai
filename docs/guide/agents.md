@@ -47,15 +47,23 @@ The agent page writes the prompt from headings, so each kind of instruction has 
 Hand off when, Examples and Never are always there. How to answer holds what an answer includes and how it is
 formatted; tone goes in its own section.
 
-**Add section** opens a menu of seven more headings: Personality, Tone, Environment, Context, Tool use, Error handling
-and Escalation wording. Each can be added once, and a section you do not fill in is left out of the prompt.
+**Add section** opens a searchable list. Sections sit in groups (Voice and style, Context, Behaviour), each with an
+example line, and one already added is greyed out and checked. The workspace decides what the list holds: Personality,
+Tone, Environment, Context, Tool use, Error handling and Escalation wording to start, and a section you do not fill in
+is left out of the prompt. Tone and Personality offer preset chips (Warm, Neutral, Formal, Concise, Plain-spoken):
+pressing one writes its sentence into the section as ordinary text you can edit.
 **Add custom section** asks for a name first and adds a heading of your own, up to five. A custom name cannot repeat
 a heading the brief already has or another custom name, and it is marked prompt text only: nothing else reads it.
 People who can only view an agent see the sections and no Add section or Remove controls.
 
+An admin changes the list under Settings, Agent instructions: rename a section, move it up or down, hide it from Add
+section, add one, and edit its hint, example line, menu group and presets, then Save. Reset to default puts the
+first list back. Changing the list never rewrites an agent already saved; the new labels and order apply the next time
+that agent's brief is saved. People without the settings manage right read the list and have no controls.
+
 **View prompt** shows what the model receives, in this order: Who you are, Goal, Personality, Tone, Environment,
 Context, How to answer, Tool use, Error handling, your own sections in the order you keep them, Hand off when,
-Escalation wording, Examples, and Never last. Escalation wording sits straight after Hand off when so the moment and
+Escalation wording, Examples, and Never last, when the list is the default; an admin's order replaces it. Escalation wording sits straight after Hand off when so the moment and
 the words stay together, and Context sits straight after Environment. An agent saved before sections reads and runs
 exactly as it did.
 
