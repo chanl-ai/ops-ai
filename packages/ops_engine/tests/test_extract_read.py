@@ -1,14 +1,17 @@
 """Extract from file's "What to read", by failure mode: a full-text or proposed read refused by the step's own
-parameter check because it names no fields, type or Detect; the read choice dropped on its way to documents-service;
-a full-text or proposed answer reshaped so later steps lose `text`, `pages` or `proposal`; and the field picker
-offering the wrong outputs after such a step."""
+parameter check because it names no fields, type or Detect; a full-text read asking extractions instead of the file's
+shared reading, or keeping pages past maxPages; a reading still under way polled instead of parked; a failed reading
+raised instead of taking the error port; the read choice dropped on its way to documents-service; a proposed answer
+reshaped so later steps lose `proposal`; and the field picker offering the wrong outputs after such a step."""
 
 from __future__ import annotations
 
 from typing import Any
 
 import jsonschema
+import pytest
 
+from ops_engine import compiler
 from ops_engine.compiler import ai_extract
 from ops_engine.definition import NodeInstance
 from ops_engine.node_types import default_registry
@@ -16,11 +19,6 @@ from ops_engine.shapes import BUILDERS
 from tests.test_extract_step import Files, call
 
 EXTRACT = default_registry().get("ops.ai.extract", 1)
-TEXT: dict[str, Any] = {
-    "fileId": "fil_1",
-    "text": "PURCHASE ORDER 88412\n\nRemittance advice",
-    "pages": [{"number": 1, "text": "PURCHASE ORDER 88412", "tables": []}, {"number": 2, "text": "Remittance advice"}],
-}
 PROPOSED: dict[str, Any] = {
     "fileId": "fil_1",
     "proposal": {"name": "Purchase order", "fields": [{"key": "po_number", "label": "PO number", "type": "text"}]},
@@ -50,12 +48,86 @@ def test_a_full_text_or_proposed_read_needs_no_fields_type_or_detect() -> None:
         raise AssertionError(f"{bad} passed the step's parameter check")
 
 
-async def test_a_full_text_read_asks_for_text_and_leaves_with_the_pages() -> None:
-    files = Files({"id": "ext_1", "status": "done", "outcome": "ok", **TEXT})
-    out = await ai_extract(call(files, fields=[], read="text", maxPages=3))
-    [(_, asked, _)] = files.asked
-    assert asked["read"] == "text" and asked["maxPages"] == 3 and "fields" not in asked, asked
-    assert out.port == "ok" and out.out == TEXT | {"extractionId": "ext_1"}, out
+def _reading(status: str, pages: int = 0) -> dict[str, Any]:
+    """The file's shared reading as documents-service answers it, `pages` pages long once done."""
+    answer: dict[str, Any] = {
+        "fileId": "fil_1", "digest": "d" * 64, "status": status, "readerVersion": "r1",
+        "settings": {"ocr": "auto", "language": "eng"}, "pagesTotal": pages or None, "pagesDone": pages,
+    }  # fmt: skip
+    if status == "done":
+        table = {"id": "b2", "kind": "table", "text": "", "cells": [{"row": 0, "col": 0, "text": "Due", "box": None}]}
+        answer["pages"] = [
+            {"number": n, "source": "ocr", "text": f"Page {n} of {pages}", "blocks": [table], "words": [{"t": "w"}]}
+            for n in range(1, pages + 1)
+        ]
+    return answer
+
+
+class Parked(Exception):
+    """What interrupt() does to the step in a real run: the pass ends there, and a resume runs the step again."""
+
+
+async def test_a_full_text_read_is_the_shared_reading_trimmed_to_max_pages() -> None:
+    """Full text asked extractions for `read: text`, which documents-service refuses with a 400: the step now reads
+    the file's one reading and keeps only the pages asked for, each with its text and tables."""
+    files = Files({}, reading=_reading("done", 3))
+    out = await ai_extract(call(files, fields=[], read="text", ocr=True, maxPages=2))
+    assert files.asked == [] and files.read == [("fil_1", "auto", False)], (files.asked, files.read)
+    assert out.port == "ok", out
+    assert out.out == {
+        "fileId": "fil_1",
+        "text": "Page 1 of 3\n\nPage 2 of 3",
+        "pages": [
+            {"number": n, "text": f"Page {n} of 3", "tables": [{"cells": [{"row": 0, "col": 0, "text": "Due"}]}]}
+            for n in (1, 2)
+        ],
+        "readPages": 2,
+    }, out
+
+
+async def test_a_reading_still_under_way_parks_on_reading_finished_and_reads_it_when_woken(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A long scan is read in the background: the step parks on documents-service's reading.finished under the key
+    that event is posted with, never polls, and on the resumed pass reads the finished reading."""
+    parked: list[dict[str, Any]] = []
+
+    def interrupt(payload: dict[str, Any]) -> dict[str, Any]:
+        parked.append(payload)
+        raise Parked
+
+    monkeypatch.setattr(compiler, "interrupt", interrupt)
+    files = Files({}, reading=_reading("reading"))
+    with pytest.raises(Parked):
+        await ai_extract(call(files, fields=[], read="text", ocr=True))
+    key = f"reading.finished:{'d' * 64}:r1:auto:eng:fil_1"
+    assert [(p["kind"], p["event"], p["key"], p["timeoutSeconds"]) for p in parked] == [
+        ("external", "reading.finished", key, 1200.0)
+    ], parked
+    files.reading_answer = _reading("done", 2)
+    out = await ai_extract(call(files, fields=[], read="text", ocr=True))
+    assert out.port == "ok" and out.out["text"] == "Page 1 of 2\n\nPage 2 of 2", out
+    assert len(files.read) == 2 and files.asked == [], files.read
+
+
+async def test_a_reading_that_failed_before_the_step_is_asked_again_and_a_second_failure_takes_the_error_port() -> None:
+    files = Files({}, reading=_reading("failed") | {"error": {"code": "too_many_tries", "message": "Gave up"}})
+    out = await ai_extract(call(files, fields=[], read="text"))
+    assert files.read == [("fil_1", "off", False), ("fil_1", "off", True)], files.read
+    assert out.port == "error" and out.out == {"error": "Gave up", "code": "too_many_tries"}, out
+
+
+async def test_max_pages_cuts_first_then_max_tokens_keeps_what_fits_and_says_it_is_partial() -> None:
+    """Pages of 40 characters under maxTokens 25 (100 characters): with maxPages 3 the ceiling keeps pages 1 and 2 and
+    says partial; with maxPages 2 both pages fit, so it is not partial. Counting tokens before the page cut, or
+    ignoring the ceiling, says otherwise."""
+    reading = _reading("done", 4)
+    for p in reading["pages"]:
+        p["text"] = f"{p['number']}" * 40
+    out = await ai_extract(call(Files({}, reading=reading), fields=[], read="text", maxPages=3, maxTokens=25))
+    cut = await ai_extract(call(Files({}, reading=reading), fields=[], read="text", maxPages=2, maxTokens=25))
+    assert ([p["number"] for p in out.out["pages"]], out.out["partial"], out.out["readPages"]) == ([1, 2], True, 2)
+    assert ([p["number"] for p in cut.out["pages"]], cut.out["partial"], cut.out["readPages"]) == ([1, 2], False, 2)
 
 
 async def test_a_proposed_read_carries_the_hint_and_leaves_with_the_proposal() -> None:

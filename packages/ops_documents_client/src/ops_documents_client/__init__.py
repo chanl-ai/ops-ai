@@ -151,6 +151,16 @@ class DocumentsClient:
             raise _refused(e) from e
         return answer
 
+    async def reading_now(self, tenant: str, team: str, file_id: str, *, ocr: str = "auto") -> dict[str, Any]:
+        """The file's reading as it is now, never asked for: status `none` when nobody asked, and a failed one stays
+        failed (asking again with `reading` reads the file again)."""
+        try:
+            return await self._documents.request(
+                "GET", f"/v1/documents/readings/{_id(file_id)}", params={"ocr": ocr}, tenant=tenant, team=team
+            )
+        except ServiceCallError as e:
+            raise _refused(e) from e
+
     async def document_type(self, tenant: str, team: str, type_id: str) -> dict[str, Any]:
         """The team's document type with its versions; another team's or an unknown one is DocumentNotFound."""
         try:

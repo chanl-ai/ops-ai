@@ -1,7 +1,8 @@
 """A step parked on outside work, on PostgreSQL with the real worker and the resume route, by failure mode: a
 forged or misdirected token resumes a step; a second callback resumes it again; another team's event wakes a step; the
 time limit leaves a wait row that a late event or callback still wakes; two resumes at once both run; a sign-in
-from before a refusal, delivered late, wakes the step that refusal parked."""
+from before a refusal, delivered late, wakes the step that refusal parked; a Full text step woken by a failed reading
+reads the file again; a reading that ends before its step parks never wakes it."""
 
 from __future__ import annotations
 
@@ -281,3 +282,103 @@ async def test_a_sign_in_from_before_the_refusal_delivered_late_leaves_the_run_w
     paused: dict[str, Any] = still["waiting"] or {}
     assert (stale, still["status"], paused.get("node")) == ([], "waiting", "lookup"), still
     assert fresh == [run_id] and after["waiting"]["node"] == "review", after
+
+
+class Readings:
+    """documents-service's shared reading of one file: what a GET answers, in turn, and how often the step asked."""
+
+    def __init__(self, *now: dict[str, Any]) -> None:
+        self.now, self.asked = list(now), 0
+
+    async def reading(self, run_id: str, file_id: str, *, ocr: str, ask: bool) -> dict[str, Any]:
+        self.asked += ask
+        return self.now.pop(0) if len(self.now) > 1 else self.now[0]
+
+
+def _reading(status: str, **more: Any) -> dict[str, Any]:
+    return {
+        "fileId": "fil_9", "digest": "d9", "status": status, "readerVersion": "r1",
+        "settings": {"ocr": "auto", "language": "eng"}, **more,
+    }  # fmt: skip
+
+
+async def _full_text(engine: AsyncEngine, tenant: str) -> str:
+    def end(port: str) -> dict[str, Any]:
+        out = {"outcome": port, "output": "$.nodes.read.out"}
+        return {"id": port, "type": "ops.flow.end", "typeVersion": 1, "parameters": out}
+
+    flow = parse(
+        {
+            "schemaVersion": 2,
+            "id": f"text_{uuid4().hex[:6]}",
+            "nodes": [
+                {"id": "start", "type": "ops.trigger.request", "typeVersion": 1, "parameters": {}},
+                {
+                    "id": "read",
+                    "type": "ops.ai.extract",
+                    "typeVersion": 1,
+                    "name": "Read",
+                    "parameters": {"file": "fil_9", "read": "text", "ocr": True},
+                },
+                end("ok"),
+                end("error"),
+            ],
+            "connections": [
+                {"from": {"node": "start", "port": "payload"}, "to": {"node": "read", "port": "in"}},
+                {"from": {"node": "read", "port": "ok"}, "to": {"node": "ok", "port": "in"}},
+                {"from": {"node": "read", "port": "error"}, "to": {"node": "error", "port": "in"}},
+            ],
+        }
+    )
+    tx = EngineTransactions(engine)
+    with tenant_scope(tenant):
+        version, _ = await DefinitionStore(tx).publish(
+            flow.id, name="Text", definition=flow.wire(), digest=flow.digest(), now="n", by="a@x", stage="live",
+            team="team_a",
+        )  # fmt: skip
+        run_id = new_id("wfrun")
+        await write_run(
+            tx,
+            {"id": run_id, "team_id": "team_a", "workflow_id": flow.id, "version": version, "digest": flow.digest()}
+            | {"run_key": run_id, "mode": "live", "input": {}, "created_by": "a@x"},
+        )
+    return run_id
+
+
+async def test_a_reading_that_fails_while_parked_takes_the_error_port_without_reading_the_file_again(
+    engine: AsyncEngine, settings: Settings
+) -> None:
+    """Woken by reading.failed, the step asked for the reading again, which reads a failed one again: it timed out or
+    started a second read. It now reads the reading as it is and leaves by error with the reading's code."""
+    tenant = f"t-{uuid4().hex[:8]}"
+    failed = _reading("failed", error={"code": "unsupported_format", "message": "No reader for the file"})
+    docs = Readings(_reading("reading"), _reading("reading"), failed)
+    run_id = await _full_text(engine, tenant)
+    w = _worker(engine, settings)
+    w.host.ports.documents = docs  # type: ignore[assignment]
+    await drain(w)
+    parked = await _run(engine, tenant, run_id)
+    with tenant_scope(tenant):
+        out = await deliver(
+            engine, None, name="reading.failed", key="reading.failed:d9:r1:auto:eng:fil_9", team_id="team_a",
+            source="documents", actor=None, payload={"fileId": "fil_9", "status": "failed"},
+        )  # fmt: skip
+    await drain(w)
+    done = await _run(engine, tenant, run_id)
+    assert parked["status"] == "waiting" and out["woke"] == [run_id], (parked["status"], out)
+    assert (done["outcome"], done["output"]["code"], docs.asked) == ("error", "unsupported_format", 0), done
+
+
+async def test_a_reading_that_ends_between_the_ask_and_the_park_wakes_the_step_at_once(
+    engine: AsyncEngine, settings: Settings
+) -> None:
+    """Its reading.finished was posted before the wait was written, so nothing woke the step until its time limit."""
+    tenant = f"t-{uuid4().hex[:8]}"
+    page: dict[str, Any] = {"number": 1, "text": "Page 1 of 1", "blocks": []}
+    docs = Readings(_reading("reading"), _reading("done", pages=[page]))
+    run_id = await _full_text(engine, tenant)
+    w = _worker(engine, settings)
+    w.host.ports.documents = docs  # type: ignore[assignment]
+    await drain(w)
+    done = await _run(engine, tenant, run_id)
+    assert (done["status"], done["outcome"], done["output"]["text"]) == ("succeeded", "ok", "Page 1 of 1"), done
