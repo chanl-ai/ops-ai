@@ -21,6 +21,7 @@ from langgraph.types import Command
 from ops_access import can
 from ops_agent_kernel.pii import masked
 from ops_agents.graphs.definition import WorkflowDefinition, option_declarations, option_name
+from ops_contracts.chat import ApprovalWidget, ChatMessage, LabelValue
 from ops_service_kit import narrow
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Json, JsonList, JsonValue
@@ -202,6 +203,30 @@ def as_seen_by(reader: Principal, review: Listed) -> Listed:
     if sees_real_values(reader, review):
         return review
     return cast(Listed, masked(review, keep=_TASK_KEEP))
+
+
+# What an approval card says that is not a customer's data: which card, app and step it is, its state and who decided.
+_CARD_VALUES = frozenset({"title", "tool_label", "action", "summary", "fields", "consequence", "reason"})
+
+
+def card_as_seen_by(reader: Principal, card: ApprovalWidget, team: str | None) -> ApprovalWidget:
+    """A chat's approval card, the task of a write waiting in `team`, as `reader` reads it by the task rule
+    (`sees_real_values`): who may decide it now (`can_decide`) or holds reviews.decide in the team reads its values;
+    anyone else, the conversation's owner and a reader of every chat included, reads them masked as the task is."""
+    task: Json = {"id": card.review_id, "canDecide": card.can_decide is True, "decidingTeam": {"id": team}}
+    if sees_real_values(reader, task):
+        return card
+    shown = cast(Json, masked(card.model_dump(include=set(_CARD_VALUES))))
+    rows = [LabelValue.model_validate(r) for r in cast(list[Json], shown.pop("fields"))]
+    return card.model_copy(update={**shown, "fields": rows})
+
+
+def message_as_seen_by(reader: Principal, message: ChatMessage, team: str | None) -> ChatMessage:
+    """`message` with each approval card as `reader` reads it (`card_as_seen_by`); its other cards as they are."""
+    if not any(isinstance(w, ApprovalWidget) for w in message.widgets or []):
+        return message
+    widgets = [card_as_seen_by(reader, w, team) if isinstance(w, ApprovalWidget) else w for w in message.widgets or []]
+    return message.model_copy(update={"widgets": widgets})
 
 
 class ReviewStats(TypedDict):

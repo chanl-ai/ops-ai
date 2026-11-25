@@ -30,6 +30,7 @@ from ops_service_kit.ids import now_iso
 from ops_store import isolation
 
 from ...store.graphs import StoredThread
+from .. import hitl_facade
 from ..auth import Principal, principal
 from ..chat_budget import answer as answer_budget
 from ..chat_threads import chat_row, messages_of, thread_view
@@ -121,4 +122,7 @@ async def budget(rt: Rt, me: Me, thread_id: str, body: BudgetAnswer) -> JSONResp
     await answer_budget(rt, me, thread_id, body)
     row = await chat_row(rt, thread_id, None)
     assert row is not None
-    return ok(thread_view(rt, row, (await messages_of(rt, [thread_id], reader=person_of(me)))[thread_id]).wire())
+    messages = (await messages_of(rt, [thread_id], reader=person_of(me)))[thread_id]
+    # An approval card's values as its task shows them to this reader, as the conversation read shows them.
+    shown = [hitl_facade.message_as_seen_by(me, m, row.team_id) for m in messages]
+    return ok(thread_view(rt, row, shown).wire())

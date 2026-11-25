@@ -6,6 +6,7 @@ holds the decide cell in the task's team sees them masked and cannot check what 
 from __future__ import annotations
 
 import json
+from typing import cast
 
 import pytest
 from httpx import AsyncClient
@@ -178,6 +179,41 @@ async def test_a_task_waiting_in_a_thread_reaches_no_one_but_its_deciders_with_r
     approve = person("usr_amy", ["team_ops"], role="approver")
     decided = await c.post(f"/reviews/{task}/decision", json={"decision": "approved"}, headers=approve)
     assert decided.status_code == 200, decided.text
-    reads["decision replayed"] = await c.post(f"/reviews/{task}/decision", json={"decision": "approved"}, headers=vera)
     leaks = {name: r.status_code for name, r in reads.items() if r.status_code != 200 or any(v in r.text for v in REAL)}
     assert not leaks, leaks
+    # A Viewer replaying the decision is refused before the decided task is read back.
+    replayed = await c.post(f"/reviews/{task}/decision", json={"decision": "approved"}, headers=vera)
+    assert replayed.status_code == 403 and not any(v in replayed.text for v in REAL), replayed.text
+
+
+@pytest.mark.parametrize(("role", "decides"), [("viewer", False), ("approver", True)])
+async def test_a_chat_approval_card_shows_real_values_only_to_who_may_decide_it(
+    dev_platform: AsyncClient,  # noqa: F811
+    role: str,
+    decides: bool,
+) -> None:
+    """The card a chat's write waits on carried the call's raw inputs to the conversation's owner, live and on reload,
+    while the same task in Human Tasks was masked for them."""
+    c = dev_platform
+    owner = person(f"usr_{role}_asker", ["team_ops"], role=role)
+    thread = (await c.post("/chat/threads", json={"agentId": "ag_dispute", "kbIds": []}, headers=owner)).json()["data"]
+    sent = await c.post(
+        f"/chat/threads/{thread['id']}/messages",
+        json={"content": ASK},
+        headers={**owner, "Accept": "text/event-stream"},
+    )
+    cards = [e["widget"] for e in sse_events(sent.text) if e["type"] == "widget" and e["widget"]["kind"] == "approval"]
+    done = [e["message"] for e in sse_events(sent.text) if e["type"] == "done"]
+    read = await c.get(f"/chat/threads/{thread['id']}", headers=owner)
+    messages: list[Json] = read.json()["data"]["messages"]
+    stored = [
+        w for m in messages for w in cast(JsonList, m.get("widgets") or []) if cast(Json, w)["kind"] == "approval"
+    ]
+    assert cards and done and stored, (sent.text, read.text)
+    for shown in (json.dumps(cards), json.dumps([m.get("widgets") for m in done]), json.dumps(stored)):
+        # The dispute tool's card shows the reason as written, SSN and all; its template leaves the account id out.
+        if decides:
+            assert "123-45-6789" in shown, shown
+        else:
+            assert "123-45-6789" not in shown and "[SSN]" in shown, shown
+            assert "C-1042" in shown and "request_document" in shown, shown

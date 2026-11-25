@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from ops_access import can
+from ops_agent_kernel.pii import masked
 from ops_engine.store import RunStore
 from ops_service_kit.errors import Forbidden, NotFound, Unprocessable
 from ops_service_kit.http import Envelope, Json, ListResult, Out, paged
@@ -24,6 +25,7 @@ from ...store.cases import CaseNotFound, CaseStore
 from ...store.engine import EngineTransactions
 from ...store.tenancy import current_team
 from ...store.trigger_events import SET_ASIDE_AFTER
+from .. import ai_steps_gate, hitl_facade
 from ..actors import ActorView, NamedActors, actor_reads, named_actors
 from ..auth import Principal, caller_in, caller_of
 from ..deps import Runtime, runtime
@@ -267,7 +269,16 @@ async def list_activity(rt: Rt, me: Me, q: Annotated[ActivityQuery, Query()]) ->
             else {}
         )
     who = await named_actors(rt, reads)
+    # A call is worded from what it sent, masked as the run's own page masks it (aiStepsMaskPersonalData).
+    call_team = {r.row_id: r.team_id for r in found.rows if r.kind == "tool_call"}
+    masks = {t: await ai_steps_gate.people_see_masked(rt, t or None) for t in set(call_team.values())}
+    calls = {k: {**v, "input": masked(v.get("input"))} if masks.get(call_team.get(k)) else v for k, v in calls.items()}
     told = await describe_calls(rt, calls)
     titles = case_said | {f"tool_call:{k}": str(v["sentence"]) for k, v in told.items()}
-    listed = paged([row_view(r, who, titles, details, ended) for r in found.rows], found.total, q.page, q.pageSize)
+    rows = [row_view(r, who, titles, details, ended) for r in found.rows]
+    for r, row in zip(found.rows, rows, strict=True):
+        # A decision's or reminder's title is its task's (a reply's address, a write's subject): read as the task is.
+        if r.kind in ("decision", "reminder"):
+            row["title"] = hitl_facade.as_seen_in(me, r.team_id, row["title"])
+    listed = paged(rows, found.total, q.page, q.pageSize)
     return ok(listed | {"facets": {"kind": found.by_kind, "status": found.by_status}})

@@ -256,7 +256,7 @@ async def decide(rt: Rt, me: Me, thread_id: str, body: ReviewDecisionInput) -> J
         amount=body.amount,
         inputs=body.inputs,
     )
-    # A decision posted again to a decided task answers with the task as it was decided, before any decider check.
+    # A decision posted again reaches here only for someone who may decide the task (hitl_facade.decide).
     return ok(hitl_facade.as_seen_by(me, review))
 
 

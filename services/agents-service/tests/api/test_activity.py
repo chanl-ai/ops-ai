@@ -312,3 +312,18 @@ async def test_a_finished_run_says_which_end_it_reached(stack: Stack) -> None:  
         await RunStore(EngineTransactions(rt.db)).update(run, status="succeeded", outcome="small")
     rows = [r for r in (await activity(c, BUILDER))["data"] if r["id"] == f"workflow_run:{run}"]
     assert [r["outcomeText"] for r in rows] == ["Finished at the Small end."], rows
+
+
+async def test_a_workflow_tool_call_is_worded_with_its_personal_data_masked(stack: Stack) -> None:  # noqa: F811
+    """A step's call was worded from its journaled input, so Activity showed the account id the run's page masks."""
+    c, rt = stack
+    run = await started_run(c, BUILDER, "ops_check")
+    with tenant_scope(TENANT):
+        await SqlJournal(EngineTransactions(rt.db)).begin(
+            StepRow(
+                run, "hold", 1, 1, "running", "write", f"{run}:hold:1:1",
+                input={"operation": "place_hold", "input": {"accountId": "CHQ-2219"}}, node_type="ops.action.tool",
+            )
+        )  # fmt: skip
+    [row] = (await activity(c, BUILDER, kind="tool_call"))["data"]
+    assert "CHQ-2219" not in row["title"] and "[account]" in row["title"], row

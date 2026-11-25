@@ -116,6 +116,9 @@ def test_amounts_dates_case_numbers_and_ids_are_not_masked(text: str) -> None:
         ("card_token", "tok_9f2a", "[card]"),
         ("accountid", "SAVINGS-2219", "[account]"),
         ("ssnlast4", "4471", "[SSN]"),
+        # Which account a connection uses (team, own) is readable only under the bare name: an id is still an id.
+        ("accountId", "team", "[account]"),
+        ("account", "SAVINGS", "[account]"),
     ],
 )
 def test_a_value_is_masked_by_its_field_name_whatever_its_type(key: str, value: Any, shown: Any) -> None:
@@ -171,10 +174,14 @@ def test_a_field_named_in_text_is_masked_by_its_name(text: str, shown: str) -> N
         ("ssnLast4", None),
         ("amount", 1250000),
         ("cards", [{"type": "case", "id": "cas_0001"}]),
+        # tools-service's word for which account a connection signs in with.
+        ("account", "team"),
+        ("account", "own"),
     ],
 )
 def test_fields_that_name_no_identifier_are_kept(key: str, value: Any) -> None:
     assert masked({key: value}) == {key: value}
+    assert masked([{"label": key, "value": value}]) == [{"label": key, "value": value}]
     assert mask(json.dumps({key: value})) == json.dumps({key: value})
 
 

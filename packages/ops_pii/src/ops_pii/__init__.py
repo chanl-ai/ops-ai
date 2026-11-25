@@ -73,6 +73,9 @@ _ID_WORDS = frozenset(
         "reference", "code", "key", "token",
     }
 )  # fmt: skip
+# What a bare `account` says when it names which account a connection signs in with, not an identifier: tools-service's
+# "account": "team" or "own" (a connection's health, a reconnect refusal). Under an identifier word it is still masked.
+_ACCOUNT_SORTS = frozenset({"team", "own"})
 # Plural identifier words: an object under such a name (accountIds: {checking: ...}) holds only identifiers.
 _PLURAL = frozenset({"ids", "numbers"})
 # The words a lower case name with no break is read as ("accountid", "ssnlast4"), longest first.
@@ -132,6 +135,12 @@ def field_kind(name: str) -> str | None:
     return None
 
 
+def says_which_account(name: str, value: object) -> bool:
+    """Whether `value` under the field `name` names which account is used (team, own) rather than identifying one: a
+    bare account name with one of those words."""
+    return isinstance(value, str) and value.lower() in _ACCOUNT_SORTS and _words(name) in (["account"], ["acct"])
+
+
 def _keyed(m: re.Match[str]) -> str:
     key = m.group(2) if m.group(2) is not None else m.group(4)
     shown = field_kind(key)
@@ -142,7 +151,7 @@ def _keyed(m: re.Match[str]) -> str:
     if m.group(9) is not None:
         items = _ITEM.sub(lambda i: f"{i.group(1)}{shown}{i.group(1)}" if i.group(1) else f'"{shown}"', m.group(9))
         return f"{name}[{items}]"
-    if not (m.group(7) or m.group(8)):
+    if not (m.group(7) or m.group(8)) or says_which_account(key, m.group(7) or m.group(8)):
         return m.group(0)
     quote = m.group(6) or quote_key
     return f"{name}{quote}{shown}{quote}"
@@ -206,7 +215,7 @@ def _row_name(row: dict[Any, Any]) -> str | None:
         return None
     for k in _ROW_NAMES:
         if isinstance(name := row.get(k), str) and (shown := field_kind(name)) is not None:
-            return shown
+            return None if says_which_account(name, row["value"]) else shown
     return None
 
 
@@ -238,8 +247,10 @@ def _walk(
     hidden: Callable[[str, Any], Any] | None,
 ) -> Any:
     shown = field_kind(key) if key else None
-    if shown is not None:
+    if shown is not None and not says_which_account(key or "", value):
         return _whole(value, shown, key or "", text, hidden)
+    if shown is not None:
+        return value
     if isinstance(value, str):
         return text(value)
     if isinstance(value, list | tuple | set | frozenset):
