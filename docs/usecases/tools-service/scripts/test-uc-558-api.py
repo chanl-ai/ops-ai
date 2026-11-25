@@ -5,6 +5,7 @@ through a worker, so whom each tool call acts for comes from the run's starter. 
 
 from __future__ import annotations
 
+import json
 import os
 import signal
 import subprocess
@@ -446,6 +447,33 @@ with ExitStack() as stack:
         and "CONNECTION_NOT_LINKED" in behind.text
         and editors(sf)[2:] == [],
         (nobody.text[:200], backup.text[:200], behind.text[:200], editors(sf)),
+    )
+
+    # 9a. The same write from a real scheduled run: a team key ticks a Schedule workflow, so the run has nobody
+    # behind it and its step is refused at once with the app named and the two ways on, instead of waiting.
+    scheduled = DEFINITION.replace("uc558_case_update", "uc558_nightly_close").replace(
+        "{id: start, type: ops.trigger.request, typeVersion: 1, name: Request}",
+        "{id: start, type: ops.trigger.schedule, typeVersion: 1, name: Nightly, parameters: {key: nightly}}",
+    )
+    saved = agents_api.post("/v1/workflows/definitions", json={"yaml": scheduled}, headers=priya)
+    agents_api.post("/v1/workflows/definitions/uc558_nightly_close/publish-requests", json={}, headers=priya)
+    key = data(api.post("/v1/api-keys", headers=priya, json={"name": "uc558 nightly", "scopes": ["read", "write"]}))
+    ticked = agents_api.post(
+        "/v1/runs",
+        json={"workflowId": "uc558_nightly_close", "input": {"status": "Closed"}, "runKey": "uc558-nightly-1"},
+        headers={"Authorization": f"Bearer {(key or {}).get('secret', '')}", "X-Team-Id": "team_ops"},
+    )
+    nightly = settle(agents_api, priya, str((data(ticked) or {}).get("runId", "wfrun_missing")), done=True)
+    said = json.dumps(nightly["step"].get("output") or {})
+    check(
+        "9a a scheduled run is refused at once naming the app and the two ways on, and does not wait",
+        ticked.status_code == 202
+        and nightly["status"] in ("succeeded", "failed")
+        and nightly["outcome"] in ("refused", "failed")
+        and f"{conn.get('name')} signs in as each person, and a run nobody started acts for no one" in said
+        and f"Set {conn.get('name')} to Everyone uses the team's login, or have a person start the run" in said
+        and not nightly["waits"],
+        (saved.status_code, ticked.text[:200], nightly),
     )
 
     # 9b. An operation marked needsPerson is refused with nobody behind it.

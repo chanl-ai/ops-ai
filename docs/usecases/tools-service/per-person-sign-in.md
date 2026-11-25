@@ -257,6 +257,7 @@ the request body.
 | 7 | A call sent with a service token whose body names James as `actingFor` | Refused (an unknown field, or `CONNECTION_NOT_LINKED`); no edit reaches Salesforce |
 | 8 | Priya signs in her own account and presses Test connection | The userinfo read answers 200 with Priya's own account named; the result is stored on the account |
 | 9 | A call with nobody behind it (service token, no acting-for); Priya then tries to make the team login a backup | `CONNECTION_NOT_LINKED`; the change is refused (400) and the same call is refused again |
+| 9a | A team API key ticks a Schedule workflow with the same write, so the run has nobody behind it | The run ends at once without waiting; its step's error names the app and says to set it to Everyone uses the team's login, or have a person start the run |
 | 9b | The update operation is marked `needsPerson` and republished; the same call with nobody behind it | `CONNECTION_NOT_LINKED` |
 | 10 | Priya, signed in from the account itself in step 8 (its scopes only, no `cases.write`): a call for her, then a run | `CONNECTION_NOT_LINKED` with reason `insufficient_scope` and a link asking for `cases.write`; her run waits for her |
 | 11 | James lists `GET /v1/me/accounts`, then disconnects | His Salesforce sign-in is listed; after Disconnect his next run waits for him to connect again |
