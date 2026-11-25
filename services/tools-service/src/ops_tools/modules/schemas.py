@@ -707,10 +707,13 @@ class CallApproval(Out):
 
 
 class CallRunAs(Out):
-    """Whom a call ran as: a person (by the email their acting-for token named) or the team account."""
+    """Whom a call ran as: a person (by the email their acting-for token named) or the team's login, with the
+    login's name and the person who asked."""
 
     kind: Literal["person", "team"]
     email: str | None = None
+    login: str | None = None
+    asked_by: str | None = None
 
 
 class ToolCallRow(Out):

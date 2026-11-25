@@ -378,7 +378,7 @@
           "signedIn": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/SignedIn"
+                "$ref": "#/components/schemas/ops_tools__connections__schemas__SignedIn"
               },
               {
                 "type": "null"
@@ -2913,6 +2913,16 @@
             ],
             "title": "Replayof"
           },
+          "signedIn": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ops_tools__app__SignedIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "view": {
             "$ref": "#/components/schemas/JsonValue"
           }
@@ -2928,8 +2938,19 @@
       },
       "CallRunAs": {
         "additionalProperties": false,
-        "description": "Whom a call ran as: a person (by the email their acting-for token named) or the team account.",
+        "description": "Whom a call ran as: a person (by the email their acting-for token named) or the team's login, with the\nlogin's name and the person who asked.",
         "properties": {
+          "askedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Askedby"
+          },
           "email": {
             "anyOf": [
               {
@@ -2948,6 +2969,17 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Login"
           }
         },
         "required": [
@@ -11932,56 +11964,6 @@
         "title": "SignInValue",
         "type": "object"
       },
-      "SignedIn": {
-        "additionalProperties": false,
-        "properties": {
-          "account": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Account"
-          },
-          "expiresAt": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expiresat"
-          },
-          "scopes": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Scopes",
-            "type": "array"
-          },
-          "since": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Since"
-          }
-        },
-        "required": [
-          "scopes"
-        ],
-        "title": "SignedIn",
-        "type": "object"
-      },
       "SigningCertificate": {
         "additionalProperties": false,
         "properties": {
@@ -15132,6 +15114,85 @@
           "changed"
         ],
         "title": "WaitOut",
+        "type": "object"
+      },
+      "ops_tools__app__SignedIn": {
+        "additionalProperties": false,
+        "description": "Whose login of the app a call ran as: the team's or the person's own, the login's name and the account.",
+        "properties": {
+          "app": {
+            "title": "App",
+            "type": "string"
+          },
+          "login": {
+            "title": "Login",
+            "type": "string"
+          },
+          "whose": {
+            "enum": [
+              "team",
+              "person"
+            ],
+            "title": "Whose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "whose",
+          "login",
+          "app"
+        ],
+        "title": "SignedIn",
+        "type": "object"
+      },
+      "ops_tools__connections__schemas__SignedIn": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiresat"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          }
+        },
+        "required": [
+          "scopes"
+        ],
+        "title": "SignedIn",
         "type": "object"
       }
     }

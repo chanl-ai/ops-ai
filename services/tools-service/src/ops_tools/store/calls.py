@@ -71,6 +71,9 @@ gateway_calls = sa.Table(
     # Whom a verified acting-for token named (an email), and whose sign-in signed the call: person or team.
     sa.Column("acting_for", sa.String(320)),
     sa.Column("credential", sa.String(16)),
+    # The login the call ran as when it ran (who signed it in, else the account's name), so an audit says who acted
+    # in the app beside who asked (`acting_for`).
+    sa.Column("signed_in_as", sa.String(320)),
     # The route that took the call, api (POST /v1/calls) or mcp, and the client's own name for itself over MCP, a claim
     # shown as one; null on rows older than the columns.
     sa.Column("channel", sa.String(16)),
@@ -140,6 +143,7 @@ class GatewayCall(Out):
     connection_id: str | None
     acting_for: str | None
     credential: str | None
+    signed_in_as: str | None = None
     channel: str | None
     client_name: str | None
     client_id: str | None

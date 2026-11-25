@@ -19,7 +19,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, TypedDict
 from urllib.parse import urlsplit
 
 from ops_identity import ActingForPerson
@@ -64,6 +64,19 @@ class ClientCertificate:
 SIGNED_WITH: ContextVar[str | None] = ContextVar("ops_tools_signed_with", default=None)
 
 
+class SignedAs(TypedDict):
+    """Whose login of an app a call ran as, in words a chat card shows: the team's login or the person's own, the
+    login's name (who signed it in, else the account's name) and the app's account it belongs to."""
+
+    whose: Literal["team", "person"]
+    login: str
+    app: str
+
+
+# The same call's login for the call's answer and its log row, set beside SIGNED_WITH; None for a call with no account.
+SIGNED_AS: ContextVar[SignedAs | None] = ContextVar("ops_tools_signed_as", default=None)
+
+
 @dataclass
 class Prepared:
     connection_id: str
@@ -80,6 +93,9 @@ class Prepared:
     credential: str | None = None
     # The person whose own row signed the call, so a refusal marks theirs alone; None for the team's.
     person: str | None = None
+    # Who a token or a username says signed in (the strategy sets it), and the login the call ran as in words.
+    login: str | None = None
+    signed_as: SignedAs | None = None
 
 
 @dataclass(frozen=True)
@@ -113,6 +129,7 @@ async def _basic(i: StrategyInput, p: Prepared) -> None:
     pair = f"{i.settings.get('username') or ''}:{i.secrets['password']}".encode()
     encoded = base64.b64encode(pair).decode()
     p.headers["Authorization"] = f"Basic {encoded}"
+    p.login = str(i.settings.get("username") or "") or None
     # An upstream that repeats the header shows the encoded pair, not the password.
     p.values.append(encoded)
 
@@ -155,7 +172,7 @@ def _token_strategy(grant: str) -> Strategy:
             p.values.extend(proof.signed)
         p.headers["Authorization"] = f"Bearer {token.access}"
         p.values.append(token.access)
-        p.rotation, p.renewable = token.rotation, True
+        p.rotation, p.renewable, p.login = token.rotation, True, token.account
 
     return apply
 
@@ -340,6 +357,11 @@ class Authenticator:
         prepared.credential = "person" if person != SHARED else ("team" if kind.holds_token else None)
         prepared.person = person if person != SHARED else None
         SIGNED_WITH.set(prepared.credential)
+        # A team API key names no person: the login reads as the account's own name ("EU org"), else the app's.
+        login = prepared.login or str(conn.account_name or "") or str(name)
+        whose: Literal["team", "person"] = "person" if person != SHARED else "team"
+        prepared.signed_as = SignedAs(whose=whose, login=login, app=str(name))
+        SIGNED_AS.set(prepared.signed_as)
         if prepared.credential is not None:
             # Apps > People's "last used": the row this call signs with, at most one write a minute (the store's WHERE).
             await self.connections.used(tenant_id, str(connection_id), person, at=datetime.now(UTC))

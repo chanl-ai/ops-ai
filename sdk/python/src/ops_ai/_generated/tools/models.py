@@ -157,8 +157,10 @@ class CallIdentity(TypedDict, closed=True):
 
 
 class CallRunAs(TypedDict, closed=True):
+    askedBy: NotRequired[str | None]
     email: NotRequired[str | None]
     kind: Literal["person", "team"]
+    login: NotRequired[str | None]
 
 
 class CardCredential(TypedDict, closed=True):
@@ -992,13 +994,6 @@ class SignInValue(TypedDict, closed=True):
     value: str
 
 
-class SignedIn(TypedDict, closed=True):
-    account: NotRequired[str | None]
-    expiresAt: NotRequired[str | None]
-    scopes: list[str]
-    since: NotRequired[str | None]
-
-
 class SigningCertificate(TypedDict, closed=True):
     expiresSoon: bool
     notAfter: str
@@ -1331,6 +1326,19 @@ class WaitOut(TypedDict, closed=True):
     changed: bool
 
 
+class OpsToolsAppSignedIn(TypedDict, closed=True):
+    app: str
+    login: str
+    whose: Literal["team", "person"]
+
+
+class OpsToolsConnectionsSchemasSignedIn(TypedDict, closed=True):
+    account: NotRequired[str | None]
+    expiresAt: NotRequired[str | None]
+    scopes: list[str]
+    since: NotRequired[str | None]
+
+
 class AbandonedCall(TypedDict, closed=True):
     decision: str
     effect: bool
@@ -1477,6 +1485,7 @@ class CallResult(TypedDict, closed=True):
     ok: bool
     output: JsonValue
     replayOf: NotRequired[str | None]
+    signedIn: NotRequired[OpsToolsAppSignedIn | None]
     view: NotRequired[JsonValue]
 
 
@@ -2149,7 +2158,7 @@ class AccountDetail(TypedDict, closed=True):
     secrets: dict[str, SecretPart]
     settings: dict[str, str]
     signIn: NotRequired[Literal["team", "person", "person_or_team"]]
-    signedIn: NotRequired[SignedIn | None]
+    signedIn: NotRequired[OpsToolsConnectionsSchemasSignedIn | None]
     status: Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
     statusDetail: NotRequired[str | None]
     teamBackup: NotRequired[bool]
