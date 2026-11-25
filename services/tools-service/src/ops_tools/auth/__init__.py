@@ -416,7 +416,7 @@ class Authenticator:
         if e.side == "upstream":
             state, why, since = REFUSED, str(e), (held.refreshed_at if held is not None else None)
         elif e.code == "NOT_SIGNED_IN" and ended is not None and ended <= at:
-            state, why, since = EXPIRED, f"the team account's sign-in ended on {ended.day} {ended:%b %Y}.", ended
+            state, why, since = EXPIRED, f"the team login's sign-in ended on {ended.day} {ended:%b %Y}.", ended
         else:
             return None
         notice = needs_reconnect_event(conn, state=state, reason=why, since=since, at=at)
@@ -425,7 +425,7 @@ class Authenticator:
             event: AuditEvent = {"action": "refresh_failed", "actor": actor, "at": at}
             await self.connections.note(tenant_id, connection_id, {**event, "detail": {"code": e.code}})
         message = (
-            f"{name} needs reconnecting: {why} An admin reconnects its team account under Apps, then runs it again."
+            f"{name} needs reconnecting: {why} An admin signs its team login in again under Apps, then runs it again."
         )
         details: Json = {
             "connectionId": connection_id, "appId": str(conn.app_id), "app": name, "connection": name,

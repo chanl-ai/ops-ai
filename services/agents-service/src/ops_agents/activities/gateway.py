@@ -307,7 +307,7 @@ CHOICE = "ACCOUNT_CHOICE_NEEDED"
 # The team signs in with one account and nobody has yet: the card above sends an admin to connect it.
 TEAM_SIGN_IN = "NOT_SIGNED_IN"
 TEAM_SIGN_IN_LINE = (
-    "Not run: {app} is on for this team, but its team account is not signed in yet. Reply with one sentence saying a "
+    "Not run: {app} is on for this team, but its team login is not signed in yet. Reply with one sentence saying a "
     "team admin connects it from the card above, then you carry on with this ask; offer no other steps or help."
 )
 # A team account whose sign-in ended (tools-service auth._team_account_stopped, which names the event its next sign-in

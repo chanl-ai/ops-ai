@@ -792,7 +792,7 @@ def sign_in_fits(module_sign_in: str, conn: Account) -> None:
     given = str(conn.sign_in or "team")
     if module_sign_in == "person_or_team" or (module_sign_in == "team") == (given == "team"):
         return
-    want = "the team's account" if module_sign_in == "team" else "each person's own account"
+    want = "the team's login" if module_sign_in == "team" else "each person's own login"
     raise ValidationFailed(
         f"This module signs in with {want}, and {conn.name} does not. Pick another connection.",
         code="sign_in_mismatch",

@@ -738,7 +738,7 @@ class ConnectionService:
         if "docs_url" in i:
             values["docs_url"] = details["docs_url"]
         if values.get("team_backup", conn.team_backup) and values.get("sign_in", conn.sign_in) != "person_or_team":
-            raise ValidationFailed("The team account is a backup only when each person signs in, team as backup.")
+            raise ValidationFailed("The team login is a backup only when each person signs in, team as backup.")
         sealed: dict[str, str] = {}
         drop = False
         detail: dict[str, list[str] | str | None] = {"fields": sorted(values)}
@@ -853,7 +853,7 @@ class ConnectionService:
     @staticmethod
     def _sign_in_fits(kind: Kind, sign_in: str) -> None:
         if sign_in != "team" and not kind.per_person:
-            raise ValidationFailed(f"{kind.label} signs in with the team's account only.", code="sign_in_unsupported")
+            raise ValidationFailed(f"{kind.label} signs in with the team's login only.", code="sign_in_unsupported")
 
     async def _write(self, who: Caller, conn: Account, revision: int, values: AccountColumns, **kw: Any) -> None:
         try:
@@ -1609,7 +1609,7 @@ class ConnectionService:
         src = await self._get(who, connection_id)
         if (src.sign_in or "team") == "team":
             raise ValidationFailed(
-                f"{src.name} signs in with the team's account, not each person's own.", code="sign_in_unsupported"
+                f"{src.name} signs in with the team's login, not each person's own.", code="sign_in_unsupported"
             )
         # The client secret of an app credential is the credential's, shared by every account that signs in with it.
         if any(k != "clientSecret" or not src.credential_id for k in _names(src)):
@@ -1689,7 +1689,7 @@ class ConnectionService:
         kind = kind_of(str(conn.auth_kind))
         if (conn.sign_in or "team") == "team" or not kind.person_fields:
             raise ValidationFailed(
-                f"{conn.name} signs in with the team's account or a sign-in at the system, not your own "
+                f"{conn.name} signs in with the team's login or a sign-in at the system, not your own "
                 f"{kind.label.lower()}.",
                 code="sign_in_unsupported",
             )

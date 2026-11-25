@@ -47,7 +47,7 @@ async def test_a_broken_team_account_asks_an_admin_to_reconnect_its_app(
     sheet = await client.get(f"/reviews/by-run-key/{EVENT}:{key}", headers=REVIEWER | TEAM)
     assert sheet.status_code == 200, sheet.text
     review = sheet.json()["data"]
-    assert review["title"] == "Reconnect Client desk's team account", review["title"]
+    assert review["title"] == "Sign in Client desk's team login again", review["title"]
     task = review["task"]
     assert task["type"]["id"] == "app_reconnect", task["type"]
     said = next(x["data"]["text"] for x in task["regions"] if x["region"] == "message")

@@ -597,9 +597,7 @@ async def gateway_call(call: NodeCall) -> Outcome:
             call,
             event=str(wait["name"]),
             key=str(wait["key"]),
-            title=f"Sign in to {app} again to continue"
-            if wait.get("again")
-            else f"Connect your {app} account to continue",
+            title=f"Sign in to {app} again to continue" if wait.get("again") else f"Sign in to {app} to continue",
             timeout_seconds=0,
             app=app,
             connectionId=wait.get("connectionId"),

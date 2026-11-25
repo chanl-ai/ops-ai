@@ -829,7 +829,7 @@
             "id": "app_reconnect"
           },
           "params": {
-            "title": "Reconnect {$.input.app}'s team account",
+            "title": "Sign in {$.input.app}'s team login again",
             "said": "{$.input.reason} Reconnect it on the app's page under Apps; runs that use it fail until then.",
             "facts": [
               {

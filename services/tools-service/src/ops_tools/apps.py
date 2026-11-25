@@ -1420,9 +1420,7 @@ def app_state(
         test = an_object(t, "the sign-in's test") if (t := own.test) is not None else None
     else:
         if card.get("state") != CONNECTED:
-            return "needs_sign_in", state_reason(
-                conn, team_token, str(card.get("state"))
-            ) or "Sign in the team account."
+            return "needs_sign_in", state_reason(conn, team_token, str(card.get("state"))) or "Sign in the team login."
         test = team_test(conn, team_token)
     if test is not None and test.get("status") == "failed":
         return "test_failed", str(test.get("message") or "The test after the sign-in failed.")

@@ -1234,7 +1234,7 @@ async def decide(
     paused = PAYLOAD(waiting.get("payload") or {})
     if connect_wait(paused) is not None:
         raise Conflict(
-            "This run waits for an account: it goes on once its person connects theirs, or runs on the team account.",
+            "This run waits for an account: it goes on once its person connects theirs, or runs with the team login.",
             code="connect_wait",
         )
     edited, inputs = correction(paused, inputs)
@@ -1433,9 +1433,11 @@ async def run_as_team_account(rt: Runtime, me: Principal, review_id: str) -> Eng
     if not waiting or wait is None or review_id not in (str(run["id"]), step_id(run, paused)):
         raise Conflict("This run is not waiting for an account.", code="run_not_waiting")
     app = wait["app"] or "This app"
-    require_team_account_use(me, team_id=str(run["team_id"]), what=f"{app}'s team account")
+    require_team_account_use(me, team_id=str(run["team_id"]), what=f"{app}'s team login")
     if not wait["teamAccount"]:
-        raise Conflict(f"{app} has no team account to run as; its person connects their own.", code="no_team_account")
+        raise Conflict(
+            f"{app} has no team login to run as; its person signs in with their own.", code="no_team_account"
+        )
     resume: Decision = {"teamAccount": {"by": me.email}}
     await resumed(
         rt.db, str(run["id"]), str(run["team_id"]), json_object(dict(waiting)), dict(resume), source="team_account"
