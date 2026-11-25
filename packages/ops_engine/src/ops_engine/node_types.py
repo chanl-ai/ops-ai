@@ -1011,14 +1011,14 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                     "type": "object",
                     "maxProperties": 20,
                     "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 200},
-                    "description": "The team account each app's call uses, by app id to account name; none set uses "
+                    "description": "The team login each app's call uses, by app id to account name; none set uses "
                     "the app's default. A test run uses the app's test account",
                 },
             },
         },
         ui=_form(
             ("operation", _f("Operation", "source", "A registry operation the tool gateway calls", source="tools")),
-            ("accounts", _f("Account", "account", "Which of the app's team accounts this step uses")),
+            ("accounts", _f("Account", "account", "Which of the app's team logins this step uses")),
             ("input", _f("Input", "mappings", "The operation's arguments")),
             (
                 "approvedBy",

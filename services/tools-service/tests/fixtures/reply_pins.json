@@ -2090,6 +2090,11 @@
        "sin": "123-456-789"
       }
      },
+     "signedIn": {
+      "app": "Document service",
+      "login": "Document service",
+      "whose": "team"
+     },
      "view": null
     },
     "success": true
@@ -2208,7 +2213,8 @@
      "operation": "read",
      "outcome": "ok",
      "runAs": {
-      "kind": "team"
+      "kind": "team",
+      "login": "Document service"
      },
      "runId": "",
      "status": "ok",
@@ -2255,7 +2261,8 @@
        "operation": "read",
        "outcome": "ok",
        "runAs": {
-        "kind": "team"
+        "kind": "team",
+        "login": "Document service"
        },
        "runId": "",
        "status": "ok",

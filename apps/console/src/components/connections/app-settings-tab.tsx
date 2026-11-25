@@ -71,7 +71,7 @@ export function SettingsTab({
       {kind?.perPerson && (
         <SettingsSection title="Who signs in" description={`Chosen once for ${app.card.name}; nobody is asked in a chat.`}>
           <fieldset disabled={!may || change.isPending} data-testid="app-everyone" data-value={conn.signIn}>
-            <WhoSignsIn value={conn.signIn as SignIn} onChange={choose} />
+            <WhoSignsIn value={conn.signIn as SignIn} onChange={choose} offered={app.card.plugin?.signIn} />
           </fieldset>
         </SettingsSection>
       )}

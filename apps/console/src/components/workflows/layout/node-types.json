@@ -389,7 +389,7 @@
             "minLength": 1,
             "type": "string"
           },
-          "description": "The team account each app's call uses, by app id to account name; none set uses the app's default. A test run uses the app's test account",
+          "description": "The team login each app's call uses, by app id to account name; none set uses the app's default. A test run uses the app's test account",
           "maxProperties": 20,
           "type": "object"
         },
@@ -445,7 +445,7 @@
     "ui": {
       "fields": {
         "accounts": {
-          "help": "Which of the app's team accounts this step uses",
+          "help": "Which of the app's team logins this step uses",
           "label": "Account",
           "widget": "account"
         },
