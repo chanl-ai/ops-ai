@@ -200,15 +200,23 @@ NO_TOOLS_VIEW = person("tia", "team_ops", "builder", unticked=(("tools", "view")
 NO_AGENTS_VIEW = person("abe", "team_ops", "builder", unticked=(("agents", "view"),))
 
 
-@pytest.mark.parametrize("without", [NO_TOOLS_VIEW, NO_AGENTS_VIEW], ids=["tools view", "agents view"])
+@pytest.mark.parametrize(
+    ("without", "still_reads"),
+    [(NO_TOOLS_VIEW, "/v1/agents/{id}"), (NO_AGENTS_VIEW, "/v1/tools/options")],
+    ids=["tools view", "agents view"],
+)
 async def test_both_lists_are_refused_without_the_view_right(
     stack: tuple[AsyncClient, AsyncEngine],  # noqa: F811
     without: dict[str, str],
+    still_reads: str,
 ) -> None:
     c, _ = stack
     made = await c.post("/v1/agents", json={"name": "Case desk", "role": "Works cases"}, headers=BUILDER)
     assert made.status_code == 201, made.text
     apps = f"/v1/agents/{made.json()['data']['id']}/tool-apps"
+    # The caller is refused for the one right taken away: a route that asks only the other right still answers.
+    other = await c.get(still_reads.format(id=made.json()["data"]["id"]), headers=without)
+    assert other.status_code == 200, other.text
     listed = await c.get(apps, headers=BUILDER)
     assert listed.status_code == 200, listed.text
     tools = f"{apps}/{quote(listed.json()['data']['data'][0]['id'], safe='')}/tools"

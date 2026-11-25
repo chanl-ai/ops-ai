@@ -68,7 +68,7 @@ What each layer proves, and what neither does:
 | Publish stays usable after a grant of a fixture tool | | 12 | |
 | A grant nothing offers any more stays listed | 6 | 13 | |
 | Grants stay listed while tools-service is out of reach | 7 | not checked: a ui stack cannot point agents-service at an address nothing answers | |
-| Publish stays usable after a grant of an imported tool | | not checked: this stack starts no tools-service, so it has no imported tool | |
+| Publish stays usable after a grant of an imported tool | | not here: this stack starts no tools-service | uc-055 ui grants two imported bank tools through the picker and then presses Publish |
 | Connected, sign-in and not-added states, the Connect panel, another team's agent, paging, view rights | | | `services/agents-service/tests/api/test_tool_apps.py` for the API; the console's states have no script |
 
 ## Non-vacuous check

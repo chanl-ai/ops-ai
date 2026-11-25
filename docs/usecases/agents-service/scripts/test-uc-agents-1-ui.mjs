@@ -89,7 +89,7 @@ await withUiStack(async (consoleUrl) => {
     await page.getByTestId('tools-app-select-all').click({ timeout: 30_000 });
     const add = page.getByTestId('tools-app-add');
     const label = (await add.innerText({ timeout: 15_000 }).catch(() => '')).trim();
-    // One width here: the picker is a dialog at this width and is drawn again, from its first step, when the width changes.
+    // One width here: a run that resized to 390 and back at this point found the picker without its Add button.
     await page.screenshot({ path: join(SHOTS, 'app-tools-selected-1440.png') });
     check('10 the app lists its own tools, and Select all offers to add all of them', JSON.stringify(offered) === JSON.stringify(wanted) && label === `Add ${wanted.length} tools`, { offered, wanted, label });
 
