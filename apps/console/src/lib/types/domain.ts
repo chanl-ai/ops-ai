@@ -20,6 +20,9 @@ export type WorkflowToolApproval = 'pauses_on_writes' | 'pauses_always' | 'runs_
  *  skills only, or none. */
 export type SkillMenu = 'team' | 'attached' | 'off';
 
+/** The knobs an agent sets on its model alias, by name; only those the alias's model takes (GET /v1/model-aliases/{name}/knobs). */
+export type ModelSettings = Record<string, number | string>;
+
 export interface Agent {
   /** What the caller may do with this record, from the same check its write routes run; on the detail response only. */
   canEdit?: boolean;
@@ -75,6 +78,8 @@ export interface Agent {
   memory?: MemorySettings;
   /** Which skills a person may pick with / in a chat with it (`team` when absent). */
   skillMenu?: SkillMenu;
+  /** The model's knobs this agent sets (temperature, top p, ...) by name; a knob left out takes the catalog default. */
+  modelSettings?: ModelSettings;
   controls: AgentControls;
   /** The prompt as four headings and two lists; null for an agent written as plain text, which keeps its role and instructions. */
   brief?: AgentBrief | null;
@@ -246,6 +251,7 @@ export type AgentPatch = Partial<AgentInput> & {
   memory?: MemorySettings;
   /** Which skills a person may pick with / in a chat with it (`team` when absent). */
   skillMenu?: SkillMenu;
+  modelSettings?: ModelSettings;
   /** Sent only after the builder edits a brief field; the service then writes `role` and `instructions` itself. */
   brief?: AgentBrief;
   promptMode?: PromptMode;

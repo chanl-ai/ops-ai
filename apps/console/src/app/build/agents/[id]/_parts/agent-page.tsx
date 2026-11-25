@@ -27,7 +27,7 @@ import {
   UsedInCard,
 } from '@/components/agents/agent-settings';
 import { AgentBriefEditor, legacyBrief, MoveIntoBrief } from '@/components/agents/agent-brief-editor';
-import { ModelSelect } from '@/components/agents/model-select';
+import { AgentModelButton } from '@/components/agents/agent-model-dialog';
 import { AgentModelLimitsSection } from '@/components/agents/agent-model-limits-section';
 import { AgentCompareView } from '@/components/agents/test-compare';
 import { AgentUsesLink } from '@/components/agents/agent-uses-line';
@@ -517,10 +517,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                   // One row: the model on the left, what the agent uses as quiet text, the actions on the right. What opens
                   // something to read (View prompt, the uses links) stays outside the read-only fieldset.
                   <>
-                    <fieldset disabled={!editable} className="flex min-w-0 max-w-full items-center gap-2 border-0 p-0" data-testid="agent-model-button">
-                      <label htmlFor="ag-model" className="text-sm text-muted-foreground">Model</label>
-                      <ModelSelect id="ag-model" value={draft.model} onValueChange={(v) => set('model', v)} aliases={modelAliases.data ?? []} className="w-auto max-w-full" />
-                    </fieldset>
+                    <AgentModelButton model={draft.model} settings={draft.modelSettings} aliases={modelAliases.data ?? []} editable={editable} onApply={(m, ms) => (set('model', m), set('modelSettings', ms))} />
                     <span data-testid="agent-brief-footer" className="min-w-0 max-sm:order-last max-sm:basis-full">
                       <AgentUsesLink uses={agent.uses} />
                     </span>

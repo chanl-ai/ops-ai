@@ -204,7 +204,7 @@ function BasicControl({ id, spec, schema, value, onChange, testId, readOnly, ren
   switch (spec.widget) {
     case 'text':
       // A field the schema marks secret is never drawn as readable text, whatever renderers a page gives.
-      return <Input id={id} type={schema['x-secret'] ? 'password' : 'text'} autoComplete={schema['x-secret'] ? 'off' : undefined} value={typeof value === 'string' ? value : ''} disabled={readOnly} placeholder={spec.placeholder ?? (typeof schema.default === 'string' ? `e.g. ${schema.default}` : undefined)} onChange={(e) => onChange(e.target.value || undefined)} data-field={id} />;
+      return <Input id={id} type={schema['x-secret'] ? 'password' : 'text'} autoComplete={schema['x-secret'] ? 'off' : undefined} value={typeof value === 'string' ? value : ''} disabled={readOnly} placeholder={spec.placeholder ?? (typeof schema.default === 'string' ? `e.g. ${schema.default}` : undefined)} onChange={(e) => onChange(e.target.value || undefined)} data-field={id} data-testid={testId} />;
     case 'textarea':
       return <Textarea id={id} value={typeof value === 'string' ? value : ''} disabled={readOnly} rows={4} onChange={(e) => onChange(e.target.value || undefined)} data-field={id} />;
     case 'number':

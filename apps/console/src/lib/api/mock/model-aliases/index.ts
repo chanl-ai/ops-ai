@@ -2,6 +2,7 @@ import type { AliasKnobs, ModelAliasRow } from '@/lib/types/models';
 
 import { ApiError } from '../../contract';
 import type { ModelAliasesApi } from '../../model-aliases-contract';
+import { knobProblems } from '@/lib/model-forms';
 import { list } from '../runtime';
 
 // Sample aliases of a bank, an insurer and a plant: the connection ids are those of the mock's connections.
@@ -32,6 +33,15 @@ export function mockKnobs(rows: ModelAliasRow[], name: string): AliasKnobs {
   const row = rows.find((r) => r.name === name);
   if (!row) throw new ApiError(`No model alias ${name}.`, 422, undefined, 'unknown_model_alias');
   return { alias: name, version: row.version, modelId: row.modelId, catalogued: true, knobs: { type: 'object', properties: row.modelId.startsWith('o') ? KNOBS.reasoning : KNOBS.chat } };
+}
+
+/** As agents-service answers a save: the first setting the alias's model does not take, or takes out of range (422 `model_setting_invalid`). */
+export function mockSettingProblem(rows: ModelAliasRow[], alias: string, settings: Record<string, number | string>): void {
+  const knobs = mockKnobs(rows, alias).knobs.properties;
+  const unknown = Object.keys(settings).find((k) => !(k in knobs));
+  const range = Object.entries(knobProblems(knobs, settings))[0];
+  const bad = unknown ? [unknown, 'is not a setting this model takes'] : range;
+  if (bad) throw new ApiError(`${bad[0]}: ${bad[1]}`, 422, undefined, 'model_setting_invalid', { alias });
 }
 
 /** Sample aliases for a console with no models-service; nothing outlives a reload. */

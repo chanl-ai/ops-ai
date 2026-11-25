@@ -38,7 +38,7 @@ import { createOAuthMock } from './oauth';
 import { currentMockUser, registerMockUser, setMockPassword, verifyMockStepUp } from './auth';
 import { createAccountMock } from './sessions';
 import { createMockWorkspacePolicies } from './workspace-policies';
-import { createMockModelAliases, mockKnobs } from './model-aliases';
+import { createMockModelAliases, mockKnobs, mockSettingProblem } from './model-aliases';
 import { createMockProviderConnections } from './provider-connections';
 import { createMockProviderKeys } from './provider-keys';
 import { createMockSignInProviders } from './sign-in-providers';
@@ -806,6 +806,7 @@ export function createMockApi(): OpsApi {
             fields.brief = { ...fields.brief, sections: (fields.brief.sections ?? []).map((x) => titled(x, list.sections)) };
             Object.assign(fields, { role: fields.brief.purpose, instructions: composeBrief(a.name, fields.brief, list.sections), promptMode: fields.promptMode ?? 'brief' });
           } else if (fields.promptMode === 'brief' && a.brief) Object.assign(fields, { role: a.brief.purpose, instructions: composeBrief(a.name, a.brief, (savedSections ?? defaultSectionList()).sections) });
+          if (fields.modelSettings) mockSettingProblem(mockAliases.rows(), fields.model ?? a.model, fields.modelSettings);
           if (fields.toolIds) for (const t of tools) t.grantedAgentIds = fields.toolIds.includes(t.id) ? [...new Set([...t.grantedAgentIds, aid])] : t.grantedAgentIds.filter((x) => x !== aid);
           const list = versionsOf(aid, a.version, 'agent');
           // One draft: rewrite the newest version unless it is published or a publish request names it.
