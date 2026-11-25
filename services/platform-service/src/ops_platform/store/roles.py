@@ -8,7 +8,7 @@ reader ever sees a role in `members` that the assignments disagree with. Every s
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
@@ -944,6 +944,24 @@ async def ensure_owner(c: AsyncConnection, tenant_id: str, *, at: str) -> str | 
     )  # fmt: skip
     await bump_version(c, tenant_id)
     return str(first)
+
+
+async def seed_owner(c: AsyncConnection, tenant_id: str, person: str, *, seeded: Iterable[str], at: str) -> None:
+    """The dev seed's named owner (`owner` in the seed file) holds Owner while the workspace has none, or while its
+    owner is nobody the seed file names: the first-admin bootstrap, which `make up` runs first, signs in with a
+    generated password nobody types. A transfer between seeded people stays. One Owner row is kept throughout."""
+    owner = sa.and_(role_assignments.c.tenant_id == tenant_id, role_assignments.c.role_id == OWNER.id)
+    held = (await c.execute(sa.select(role_assignments.c.subject_id).where(owner))).scalar()
+    if held is not None and (held == person or held in set(seeded)):
+        return
+    await c.execute(role_assignments.delete().where(owner))
+    await c.execute(
+        role_assignments.insert().values(
+            id=new_id("ras"), tenant_id=tenant_id, subject_kind="person", subject_id=person, role_id=OWNER.id,
+            team_id=ANY_TEAM, granted_by="seed", reason="The dev seed's owner", source="grant", created_at=at,
+        )
+    )  # fmt: skip
+    await bump_version(c, tenant_id)
 
 
 def membership_admins() -> sa.Select[str, str]:

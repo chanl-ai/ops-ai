@@ -84,7 +84,7 @@ attached by rule, never picked: Security admin and Owner.
 | Viewer | `viewer` | Reads the team's work, chats with its agents | Team viewers; every invite starts here |
 | Chat user | `chat_user` | Chats with the team's published agents and reads only their own threads | A first SSO sign-in; a grant; an invite or a role change (E31) |
 | Security admin (attached) | (none; given with Admin in the Security team) | Egress, any team's secrets (naming the team), storage settings, module security reviews | Admins of the Security team (`builtin_roles_for`, `catalogue.py`); a Security admin is an Admin of the Security team |
-| Owner (attached) | (none) | Transfers, closes and restores the workspace (`workspace.manage`); creates and re-points the install's model aliases (`install.manage`) | The workspace's one owner, moved only by a transfer (E42). One install serves one account, so the owner is the install admin: the install's first admin becomes it |
+| Owner (attached) | (none) | Transfers, closes and restores the workspace (`workspace.manage`); creates and re-points the install's model aliases (`install.manage`) | The workspace's one owner, moved only by a transfer (E42). One install serves one account, so the owner is the install admin: the install's first admin becomes it. In the dev seed it is the person the seed file names as `owner` (`services/platform-service/seed/people.json`), who signs in with the demo password, rather than the bootstrap's admin |
 
 Privileged cells (`PRIVILEGED`, `privileged_cells` in `catalogue.py`) are never given through a group: every `access`
 cell but `access.view` (which every member holds), `workspace.manage`, `install.manage`, `secrets_egress` create, edit and delete, and the four Security-team actions. A module's
