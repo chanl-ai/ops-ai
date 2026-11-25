@@ -38,6 +38,7 @@ UPDATE_KEYS = (
     "brief",
     "promptMode",
     "patterns",
+    "modelSettings",
 )
 
 

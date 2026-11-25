@@ -358,6 +358,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
+    "agents_model_alias_knobs": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/model-aliases/{name}/knobs",
+        "pathParams": ["name"],
+        "query": [],
+        "stream": False,
+    },
     "agents_publish_check": {
         "body": None,
         "headers": [],
@@ -2874,6 +2883,10 @@ class Operations:
         "List Model Aliases"
         return self._t.call(SERVICE, OPERATIONS["agents_list_model_aliases"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def agents_model_alias_knobs(self, name: str) -> ModelAliasKnobs:
+        "Model Alias Knobs"
+        return self._t.call(SERVICE, OPERATIONS["agents_model_alias_knobs"], {"name": name}, {}, {}, None)  # type: ignore[no-any-return]
+
     def cases_overview(self) -> OverviewCounts:
         "Overview"
         return self._t.call(SERVICE, OPERATIONS["cases_overview"], {}, {}, {}, None)  # type: ignore[no-any-return]
@@ -4633,6 +4646,10 @@ class AsyncOperations:
     async def agents_list_model_aliases(self) -> list[ModelAlias]:
         "List Model Aliases"
         return await self._t.call(SERVICE, OPERATIONS["agents_list_model_aliases"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def agents_model_alias_knobs(self, name: str) -> ModelAliasKnobs:
+        "Model Alias Knobs"
+        return await self._t.call(SERVICE, OPERATIONS["agents_model_alias_knobs"], {"name": name}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def cases_overview(self) -> OverviewCounts:
         "Overview"

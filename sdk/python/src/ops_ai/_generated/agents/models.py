@@ -1228,6 +1228,14 @@ class ModelAlias(TypedDict, closed=True):
     outputPerMillion: NotRequired[str | None]
 
 
+class ModelAliasKnobs(TypedDict, closed=True):
+    alias: str
+    catalogued: bool
+    knobs: dict[str, JsonValue]
+    modelId: str
+    version: int
+
+
 class NextAction(TypedDict, closed=True):
     dueAt: str | None
     href: str
@@ -3280,6 +3288,11 @@ class EnvelopeMigrated(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeModelAliasKnobs(TypedDict, closed=True):
+    data: ModelAliasKnobs
+    success: Literal[True]
+
+
 class EnvelopeOptionsPage(TypedDict, closed=True):
     data: OptionsPage
     success: Literal[True]
@@ -4239,6 +4252,7 @@ class Agent(TypedDict, closed=True):
     limits: AgentLimits
     memory: NotRequired[MemorySettings]
     model: str
+    modelSettings: NotRequired[dict[str, float | int | str]]
     name: str
     patterns: NotRequired[PatternsView]
     paused: bool
@@ -4288,6 +4302,7 @@ class AgentPatch(TypedDict, closed=True):
     limits: NotRequired[AgentLimits | None]
     memory: NotRequired[MemorySettings | None]
     model: NotRequired[str | None]
+    modelSettings: NotRequired[dict[str, float | int | str] | None]
     name: NotRequired[str | None]
     note: NotRequired[str | None]
     patterns: NotRequired[Patterns | None]

@@ -1889,6 +1889,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/model-aliases/{name}/knobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Model Alias Knobs
+         * @description The settings an agent on alias `name` may save: only the knobs its model takes, each with its range and catalog
+         *     default, for the agent page's model settings; 422 `unknown_model_alias` for an alias models-service does not
+         *     serve.
+         */
+        get: operations["agents_model_alias_knobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/overview": {
         parameters: {
             query?: never;
@@ -4101,6 +4123,10 @@ export interface components {
             memory?: components["schemas"]["MemorySettings"];
             /** Model */
             model: string;
+            /** Modelsettings */
+            modelSettings?: {
+                [key: string]: number | string;
+            };
             /** Name */
             name: string;
             patterns?: components["schemas"]["PatternsView"];
@@ -4251,6 +4277,10 @@ export interface components {
             memory?: components["schemas"]["MemorySettings"] | null;
             /** Model */
             model?: string | null;
+            /** Modelsettings */
+            modelSettings?: {
+                [key: string]: number | string;
+            } | null;
             /** Name */
             name?: string | null;
             /** Note */
@@ -6877,6 +6907,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ModelAliasKnobs] */
+        Envelope_ModelAliasKnobs_: {
+            data: components["schemas"]["ModelAliasKnobs"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[NoneType] */
         Envelope_NoneType_: {
             /** Data */
@@ -9047,6 +9086,25 @@ export interface components {
             name: string;
             /** Outputpermillion */
             outputPerMillion?: string | null;
+        };
+        /**
+         * ModelAliasKnobs
+         * @description The settings an agent on the alias may save, from models-service: `knobs` is a JSON Schema object of only the
+         *     knobs the alias's model takes, each with its type, title, description, range and catalog default.
+         */
+        ModelAliasKnobs: {
+            /** Alias */
+            alias: string;
+            /** Catalogued */
+            catalogued: boolean;
+            /** Knobs */
+            knobs: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Modelid */
+            modelId: string;
+            /** Version */
+            version: number;
         };
         /** NextAction */
         NextAction: {
@@ -25106,6 +25164,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_list_ModelAlias__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_model_alias_knobs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ModelAliasKnobs_"];
                 };
             };
             /** @description Invalid request */

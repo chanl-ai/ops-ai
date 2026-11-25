@@ -447,6 +447,17 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_model_alias_knobs": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/model-aliases/{name}/knobs",
+    "pathParams": [
+      "name"
+    ],
+    "query": [],
+    "stream": false
+  },
   "agents_publish_check": {
     "body": null,
     "headers": [],
