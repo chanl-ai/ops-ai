@@ -281,15 +281,15 @@ class GatewayClient:
 # What the model is told when the chat shows the person a card for the refusal (connection-required-card.tsx): what
 # to ask of them in plain words, never the code, the link or whom it names, which the card already shows.
 CARD_LINES: dict[str, str] = {
-    "not_connected": "Not run: the person has not connected their own {app} account. Reply with one sentence saying "
-    "you carry on with this ask once they connect it from the card above; offer no other steps or help.",
-    "needs_person": "Not run: this tool acts as the person, who has not connected their own {app} account. Reply "
-    "with one sentence saying you carry on with this ask once they connect it from the card above; offer no other "
+    "not_connected": "Not run: the person has not signed in to {app} with their own login. Reply with one sentence "
+    "saying you carry on with this ask once they sign in from the card above; offer no other steps or help.",
+    "needs_person": "Not run: this tool acts as the person, who has not signed in to {app} with their own login. "
+    "Reply with one sentence saying you carry on with this ask once they sign in from the card above; offer no other "
     "steps or help.",
     "refused": "Not run: the person's {app} sign-in has ended. Reply with one sentence saying you carry on with this "
     "ask once they sign in again from the card above; offer no other steps or help.",
     "insufficient_scope": "Not run: the person's {app} sign-in does not allow this yet. Reply with one sentence "
-    "saying you carry on with this ask once they connect again from the card above; offer no other steps or help.",
+    "saying you carry on with this ask once they sign in again from the card above; offer no other steps or help.",
     "no_person": "Not run: {app} signs in as each person, and this call acts for nobody, so it cannot run here.",
 }
 # An app the team has off: the card above asks a team admin to turn it on.

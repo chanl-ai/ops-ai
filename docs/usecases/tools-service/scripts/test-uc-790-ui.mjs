@@ -29,7 +29,8 @@ const OURS = [
   { when: '\\bRead my record (?P<id>rec-\\d+)', tool: 'person_key_get_record', arguments: { id: '{id}' } },
   { when: '\\bI connected (?P<system>[^.\\n]+)\\. Please go ahead', tool: 'person_key_get_record', arguments: { id: 'rec-1042' } },
   { after: 'header_key_get_record', text: 'The team record is read.' },
-  { after: 'person_key_get_record', result: 'CONNECTION_NOT_LINKED', text: 'I need you to sign in first; the card above does it.' },
+  // The model is told the refusal as a plain line (activities/gateway.py CARD_LINES), never its code.
+  { after: 'person_key_get_record', result: 'once they sign in', text: 'I carry on once you sign in from the card above.' },
   { after: 'person_key_get_record', text: 'Your record is read.' },
 ];
 const RULES = evidenceDir('790', 'model');
@@ -141,7 +142,7 @@ try {
         };
         const send = async (text) => {
           await james.getByLabel('Message').fill(text);
-          await james.getByRole('button', { name: 'Send' }).click();
+          await james.locator('button[type=submit][aria-label="Send"]').click();
         };
 
         await step('5 on the team-login desk the reply says which login acted and that James asked, with no sign-in card', async () => {
@@ -164,10 +165,12 @@ try {
           await send('Read my record rec-1042.');
           const card = james.getByTestId('connection-required');
           await card.waitFor({ timeout: 90_000 });
+          await james.getByText('I carry on once you sign in from the card above.').waitFor({ timeout: 90_000 });
           const said = ((await card.innerText()) ?? '').replace(/\s+/g, ' ');
           const cut = await shoot(james, 'chat-sign-in-card');
           await james.getByTestId('own-field-key').fill(fake.info.person_keys.james);
           await james.getByTestId('own-credentials-save').click();
+          const first = await james.getByText('I carry on once you sign in from the card above.').count();
           await james.getByText('Your record is read.').first().waitFor({ timeout: 90_000 });
           const cardsAfterFirst = await card.count();
           await send('Read my record rec-1043.');
@@ -177,8 +180,8 @@ try {
           const cutAfter = await shoot(james, 'chat-signed-in-goes-on');
           check(
             '6 on the each-person desk one Sign in card shows, the chat carries on after the key, the next ask shows none, and nothing offers the team login',
-            /Sign in to Person key desk to continue/.test(said) && !CHOICE.test(said) && cardsAfterFirst === 1 && cardsAfterSecond === 1 && !CHOICE.test(body) && cut.length === 0 && cutAfter.length === 0,
-            { said: said.slice(0, 300), cardsAfterFirst, cardsAfterSecond, cut, cutAfter },
+            first === 1 && /Sign in to Person key desk to continue/.test(said) && !CHOICE.test(said) && cardsAfterFirst === 1 && cardsAfterSecond === 1 && !CHOICE.test(body) && cut.length === 0 && cutAfter.length === 0,
+            { said: said.slice(0, 300), first, cardsAfterFirst, cardsAfterSecond, cut, cutAfter },
           );
         }, james);
 
