@@ -233,6 +233,12 @@ queries = 3
 ["GET /v1/model-aliases"]
 queries = 0
 
+# models-service answers the alias's knobs; no row is read here. The budget stack has no models-service, so the
+# seeded name is no alias and the route answers its refusal.
+["GET /v1/model-aliases/{name}/knobs"]
+queries = 0
+status = 422
+
 # Two transactions by design: the reads that name the held writes, then (tools-service asked with none open) the build.
 ["GET /v1/overview"]
 queries = 18
