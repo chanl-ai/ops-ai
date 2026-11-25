@@ -101,6 +101,7 @@ from ..schemas import (  # pyright: ignore[reportPrivateImportUsage]
     PublishDecisionFields,
     PublishReview,
 )
+from ..unattended_sign_in import unattended_sign_in_warnings
 from .tool_catalog import known_tools
 
 router = APIRouter(prefix="/v1/workflows", dependencies=[Depends(principal)])
@@ -383,17 +384,20 @@ def _parsed(body: DefinitionInput) -> WorkflowDefinition:
 
 
 @router.post("/definitions/validate", response_model=Envelope[DefinitionValidation])
-async def validate_definition(rt: Rt, body: DefinitionInput) -> JSONResponse:
+async def validate_definition(rt: Rt, me: Me, body: DefinitionInput) -> JSONResponse:
     """Per-node checks against the type registry: unknown type or version, unknown port, an out port that leads
     nowhere (End has none), an unreachable node, parameters that do not match the type's schema; and warnings that
     never refuse a save (level `warning`, e.g. a step two branches meet at without a Join). Saves nothing.
     No request transaction: it reads no row, and documents-service is asked for field shapes."""
-    d, checks = await _checked(rt, body.yaml if body.yaml is not None else body.definition or {})
+    raw = body.yaml if body.yaml is not None else body.definition or {}
+    d, checks = await _checked(rt, raw, team=current_team() or me.team_id or None)
     errors = [c for c in checks if c["level"] == "error"]
     return ok({"ok": not errors, "workflowId": d and d.id, "digest": d and d.digest(), "checks": checks})
 
 
-async def _checked(rt: Runtime, raw: str | Json) -> tuple[WorkflowDefinition | None, list[Json]]:
+async def _checked(
+    rt: Runtime, raw: str | Json, *, team: str | None = None
+) -> tuple[WorkflowDefinition | None, list[Json]]:
     """The definition parsed (None when it does not parse) and its checks: the errors that stop a version, then the
     warnings that never do. The validate route and every working copy save answer with this list."""
     try:
@@ -401,9 +405,9 @@ async def _checked(rt: Runtime, raw: str | Json) -> tuple[WorkflowDefinition | N
     except InvalidDefinitionError as e:
         return None, [enrich_check({"node": None, "level": "error", "code": "invalid_definition", "message": str(e)})]
     checks = [enrich_check(c) for c in validate(d, REGISTRY)]
-    warnings = [
-        enrich_check(c) for c in advise(d, REGISTRY) + await step_shapes.field_warnings(rt, current_team() or "", d)
-    ]
+    team = team or current_team() or ""
+    found = advise(d, REGISTRY) + await step_shapes.field_warnings(rt, team, d)
+    warnings = [enrich_check(c) for c in found + await unattended_sign_in_warnings(rt, team, d)]
     return d, checks + warnings
 
 
@@ -469,7 +473,9 @@ async def _store_version(
         )
     except WorkflowOwnedError as e:
         raise Conflict(f"{d.id} is another team's workflow; choose another id.", code="workflow_owned") from e
-    found = advise(d, REGISTRY) + await step_shapes.field_warnings(rt, team or current_team() or "", d)
+    acting = team or current_team() or ""
+    found = advise(d, REGISTRY) + await step_shapes.field_warnings(rt, acting, d)
+    found += await unattended_sign_in_warnings(rt, acting, d)
     advice = [{"node": w["node"], "field": w["field"], "message": w["message"]} for w in found]
     warnings = await task_view.step_warnings(rt, d.wire()) + advice
     return {
@@ -873,9 +879,9 @@ async def save_working_copy(rt: Rt, me: Me, workflow_id: str, body: WorkingCopyI
     version: publishing does. 409 `stale_base` when `baseVersion` and `baseDigest` are not the newest copy, with who
     saved it and when: read the workflow again and repeat the change. No request transaction: documents-service is
     asked for field shapes before the write."""
-    await _editable(rt, me, workflow_id)
+    held = await _editable(rt, me, workflow_id)
     definition: Json = {**body.definition, "id": workflow_id}
-    _, checks = await _checked(rt, definition)
+    _, checks = await _checked(rt, definition, team=held.team_id)
     base = (body.base_version, body.base_digest)
     try:
         copy = await definitions(rt).put_working_copy(

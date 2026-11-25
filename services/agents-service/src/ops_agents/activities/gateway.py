@@ -290,7 +290,8 @@ CARD_LINES: dict[str, str] = {
     "ask once they sign in again from the card above; offer no other steps or help.",
     "insufficient_scope": "Not run: the person's {app} sign-in does not allow this yet. Reply with one sentence "
     "saying you carry on with this ask once they sign in again from the card above; offer no other steps or help.",
-    "no_person": "Not run: {app} signs in as each person, and this call acts for nobody, so it cannot run here.",
+    "no_person": "Not run: {app} signs in as each person, and a run nobody started acts for no one. Say in one line "
+    "that an admin can set {app} to Everyone uses the team's login, or a person can start the run.",
 }
 # An app the team has off: the card above asks a team admin to turn it on.
 APP_OFF_LINE = (
