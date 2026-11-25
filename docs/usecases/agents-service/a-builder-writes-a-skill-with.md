@@ -38,6 +38,7 @@ with a read and a write on a mock bank, published for the team, and platform sig
 | S7 | A builder adds Tone and a section of his own to a brief, and the prompt shows them in order with Never last | api | 24, 25, 26, 27, 28 | 24 |
 | S8 | An admin adds a section to the workspace's list, a builder adds it to an agent, and agents saved before keep their prompt | api | 29, 30, 31, 32 | 29 |
 | S9 | A builder finds a section in a grouped menu he can search, and a preset writes a sentence he can edit | ui | 33 | 33 |
+| S10 | A builder picks connectors before the first test message, and the test panel stays beside the settings he scrolls | ui | 34, 35 | 34 |
 
 ## Preconditions
 
@@ -78,6 +79,8 @@ with a read and a write on a mock bank, published for the team, and platform sig
 | 31 | `opsai agents sections`, `sections-apply` on a file as Priya and as a viewer, `agents apply` and `export`, then `sections-reset` | The viewer's command fails; the export prints the two sections and `instructions` with the headings in the list's order; `sections` prints the first list again |
 | 32 | Priya opens Settings, Agent instructions and adds Compliance notes; the list then places it before Tone and renames Tone to Voice; James picks Compliance notes from Add section on an agent and opens View prompt, then opens the agent of step 28; a viewer opens the settings page; Priya presses Reset to default (ui, 1440 and 390) | The list holds Compliance notes as a menu section. View prompt reads Compliance notes, Voice, How to answer, Hand off when, Never last. The agent of step 28 shows the prompt it had, headed Tone. The viewer reads the list with no Add section and no Reset to default; at 390 nothing scrolls sideways. After the reset the list is the first one |
 | 33 | James opens an agent with no sections, opens Add section, searches it, picks Tone, presses its Warm preset, types into the sentence it wrote and opens View prompt (ui, 1440) | The menu has a search field and lists the sections under Voice and style, Context and Behaviour, each with its example line; a search for tone lists Tone first and a word no section has lists none. The preset's sentence is drawn as text, saves with the words he typed, and View prompt shows it under Tone |
+| 34 | James opens an agent he has never tested and presses Connectors on the test panel before sending anything (ui, 1440) | Connectors is on the panel from the start and no test chat exists yet; pressing it makes one test chat for the agent and opens the list |
+| 35 | James scrolls the settings beside the test panel at 1440, then at 390 (ui) | At 1440 the panel reaches the end of the page with no room under the composer and stays whole in view, not covered, while the settings scroll; at 390 it sits under the settings and scrolls with them |
 
 ## Acceptance layers
 
@@ -114,3 +117,8 @@ the move is saved through the list's route (TODO: walk the control by hand).
 Step 33 is the check for presets: James types into the sentence the Warm preset wrote, so a preset kept as a
 setting beside the text, or drawn as text he cannot edit, fails the save. The search listing Tone is paired with a
 word no section has listing none.
+
+Step 34 is the check for Connectors on a new test: the button is looked for before any message, paired with no test
+chat having been made yet, so a panel that makes one as it opens fails. Step 35 counts only when the settings moved
+more than 100px at 1440, and at 390 the panel must move exactly as far as they do. The 32px and 48px limits in step 35
+are assumed from the page's padding, not from a written rule (TODO: confirm them when the layout is built).
