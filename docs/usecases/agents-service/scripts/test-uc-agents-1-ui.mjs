@@ -64,12 +64,17 @@ await withUiStack(async (consoleUrl) => {
     const kept = !!app && (await seen(card));
     const gone = others.length > 0 && (await Promise.all(others.map((a) => page.getByTestId(`tools-app-${a.id}`).first().waitFor({ state: 'detached', timeout: 15_000 }).then(() => true, () => false)))).every(Boolean);
     const match = app?.matches?.[0];
-    const named = !!match && (await seen(page.getByRole('dialog').getByText(match.label, { exact: true }), 15_000));
+    // A team's own tool may be shown by its name in words ("get_account" reads "Get account"), a plugin's by its title.
+    const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const shownAs = match && new RegExp(`^(${[match.label, match.id, match.id.replace(/_/g, ' ')].map(esc).join('|')})$`, 'i');
+    const named = !!match && (await seen(page.getByRole('dialog').getByText(shownAs), 15_000));
     check('7 searching a tool finds its app on the server, lists the tool under it and drops the other apps', kept && gone && named, { hits: hits.map((a) => a.id), kept, gone, named, match });
 
     // 8 Opening the app lists its tools; Select all offers to add every one of them.
-    const toolsRead = armed(page.waitForResponse((r) => r.request().method() === 'GET' && decodeURIComponent(new URL(r.url()).pathname) === `${appsPath}/${app?.id}/tools`, { timeout: 60_000 }));
+    const toolsRead = armed(page.waitForResponse((r) => r.request().method() === 'GET' && decodeURIComponent(new URL(r.url()).pathname) === `${appsPath}/${app?.id}/tools` && !new URL(r.url()).searchParams.get('search'), { timeout: 60_000 }));
     await card.first().click();
+    // The app's whole list is wanted: a search field that still holds the typed word is cleared.
+    if (await search.first().inputValue({ timeout: 5_000 }).catch(() => '')) await search.first().fill('');
     const offered = ((await (await toolsRead)?.json())?.data?.data ?? []).map((t) => t.id).sort();
     await page.getByTestId('tools-app-select-all').click({ timeout: 30_000 });
     const add = page.getByTestId('tools-app-add');
@@ -96,7 +101,7 @@ await withUiStack(async (consoleUrl) => {
     // Polled, since the page marks itself saved a moment after the save answers.
     const usable = await publish.first().waitFor({ timeout: 30_000 }).then(() => page.waitForFunction(() => document.querySelector('[data-testid="request-agent-publish"]')?.disabled === false, null, { timeout: 30_000 })).then(() => true, () => false);
     await page.screenshot({ path: join(SHOTS, 'agent-tools-by-app-1440.png') });
-    check('10 the Tools section shows one row for the app with its granted count, and Publish is not disabled', after.length === 1 && oneRow && rowText.includes(system) && rowText.includes(`${counted?.toolsGranted} of ${counted?.toolsTotal} tools`) && counted?.toolsGranted === wanted.length && usable, { rowText, counted, rows: after.length, oneRow, usable });
+    check('10 the Tools section shows one row for the app with its granted count, and Publish is not disabled', after.length === 1 && oneRow && rowText.includes(system) && rowText.includes(`${wanted.length} of ${wanted.length} tools`) && counted?.toolsGranted === wanted.length && usable, { rowText, counted, rows: after.length, oneRow, usable });
 
     check('no page errors', errors.length === 0, errors.slice(0, 3));
   } finally {
