@@ -51,6 +51,12 @@ class Principal:
     # The dev header caller (dev mode, no roles): every permission, in the one team its request names.
     dev: bool = False
 
+    @property
+    def actor(self) -> str:
+        """Who a save or a publish is recorded under: the email, else the key's or person's subject, so two API keys
+        (which have no email) are never one author."""
+        return self.email or self.sub or self.name
+
 
 async def principal(p: CurrentPrincipal) -> Principal:
     return _principal(p)

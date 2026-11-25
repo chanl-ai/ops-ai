@@ -2110,8 +2110,9 @@ export interface paths {
          *     only the template changed, and writes the template's value on a conflict only where `choices` says so; `reset`
          *     makes the draft from the template as it is, after `confirm` (409 `copy_edited` listing the edits it drops). What
          *     runs keeps running until the draft passes its publish review. 409 `update_stale` when the template or the copy
-         *     moved since the review `expect` names, and nothing is saved; 409 `detached` for a copy the team made its own; 422
-         *     `tool_not_available`, naming the tools, when the template needs one the team cannot call.
+         *     moved since the review `expect` names, and nothing is saved; 409 `stale_base` when another builder saved the
+         *     agent's or skill's draft after it was read, and nothing is saved; 409 `detached` for a copy the team made its
+         *     own; 422 `tool_not_available`, naming the tools, when the template needs one the team cannot call.
          */
         post: operations["resources_take_update"];
         delete?: never;
@@ -3527,6 +3528,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/workflows/definitions/{workflow_id}/sample": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Definition Sample
+         * @description What `step` receives: each step that can finish before it, from the working copy when one is open, with each
+         *     field's name, path and the value the acting team's newest finished run gave it, so the sheet joins nothing. All
+         *     steps when `step` is left out. Only the acting team's runs feed it, through the runs list's own team rule and
+         *     `visible_run`; values are masked when the team masks personal data for people. 403 unless the caller may view the
+         *     team's workflows. One transaction for the run and its steps; documents-service, tools-service and the masking
+         *     policy are asked with none open.
+         */
+        get: operations["workflows_definition_sample"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/workflows/definitions/{workflow_id}/versions/{version}/shapes": {
         parameters: {
             query?: never;
@@ -3584,7 +3610,8 @@ export interface paths {
          * Node Types
          * @description Every registered node type at every version: ports with their connection types, parameters as JSON Schema with
          *     the form generated from them, effects, retry and executor, and why the acting team cannot use one now. No request
-         *     transaction: it reads no row, and the AI-steps policy comes from platform-service.
+         *     transaction: it reads no row, and the AI-steps policy comes from platform-service. 403 for a caller without the
+         *     workflows view cell.
          */
         get: operations["workflows_node_types"];
         put?: never;
@@ -5924,6 +5951,19 @@ export interface components {
             /** Workflowid */
             workflowId: string;
         };
+        /** DefinitionSample */
+        DefinitionSample: {
+            given?: components["schemas"]["SampleStep"] | null;
+            run?: components["schemas"]["SampleRun"] | null;
+            /** Saved */
+            saved: boolean;
+            /** Step */
+            step?: string | null;
+            /** Steps */
+            steps: components["schemas"]["SampleStep"][];
+            /** Workflowid */
+            workflowId: string;
+        };
         /** DefinitionShapes */
         DefinitionShapes: {
             /** Steps */
@@ -6474,6 +6514,15 @@ export interface components {
         /** Envelope[DefinitionPublished] */
         Envelope_DefinitionPublished_: {
             data: components["schemas"]["DefinitionPublished"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[DefinitionSample] */
+        Envelope_DefinitionSample_: {
+            data: components["schemas"]["DefinitionSample"];
             /**
              * Success
              * @constant
@@ -8992,14 +9041,23 @@ export interface components {
             executor: string;
             /** Extraoutputs */
             extraOutputs?: string[];
+            /** Fails */
+            fails: string;
             /** Group */
             group: string;
+            /** How */
+            how: string;
             /** Id */
             id: string;
             /** Inputs */
             inputs: components["schemas"]["PortView"][];
             /** Label */
             label: string;
+            /**
+             * Limit
+             * @default
+             */
+            limit: string;
             /** Optionaloutputs */
             optionalOutputs: components["schemas"]["OptionalPortView"][];
             /** Outputs */
@@ -9013,8 +9071,15 @@ export interface components {
                 [key: string]: components["schemas"]["JsonValue"];
             };
             retry: components["schemas"]["RetryView"];
+            /** Summary */
+            summary: string;
             /** Timeoutseconds */
             timeoutSeconds: number;
+            /**
+             * Tries
+             * @default
+             */
+            tries: string;
             /** Ui */
             ui: {
                 [key: string]: components["schemas"]["JsonValue"];
@@ -10373,6 +10438,39 @@ export interface components {
             kind?: string | null;
             /** Workflowid */
             workflowId?: string | null;
+        };
+        /** SampleField */
+        SampleField: {
+            /** Label */
+            label: string;
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /** Sample */
+            sample?: string | null;
+        };
+        /** SampleRun */
+        SampleRun: {
+            /** Createdat */
+            createdAt: string;
+            /** Id */
+            id: string;
+            /** Version */
+            version: number;
+        };
+        /** SampleStep */
+        SampleStep: {
+            /** Fields */
+            fields: components["schemas"]["SampleField"][];
+            /** Id */
+            id: string;
+            /** Installed */
+            installed: boolean;
+            /** Kind */
+            kind?: string | null;
+            /** Name */
+            name: string;
         };
         /**
          * SaveBase
@@ -33777,6 +33875,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_DefinitionView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    workflows_definition_sample: {
+        parameters: {
+            query?: {
+                step?: string | null;
+            };
+            header?: never;
+            path: {
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_DefinitionSample_"];
                 };
             };
             /** @description Invalid request */

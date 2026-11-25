@@ -121,6 +121,7 @@ function CanvasTab({ view, types }: { view: DefinitionView; types: EngineNodeTyp
         startRun={startRun}
         startByHand={startByHand}
         lifecycle={view}
+        savedDigest={view.saveBase?.digest}
         requestPublish={requestPublish}
         setPaused={pauseAsync}
         pausing={pausing}

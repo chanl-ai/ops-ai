@@ -265,6 +265,15 @@ validate and save warn `unknown_output_field` where a mapping reads a field a st
 `ops_engine/tests/test_output_shapes.py` runs every built type's executor on fake ports and holds what it writes to its
 declared shape; uc-401.
 
+`GET /v1/workflows/definitions/{id}/sample?step=<id>` is what the step sheet reads for "What it receives" and its field
+picker (`api/step_sample.py`): each step that can finish before `step`, from the working copy when one is open, with each
+field's label, the path a mapping stores and the value the acting team's newest succeeded run gave it, joined on the
+server. Only the acting team's runs feed it (the runs list's team rule, then `visible_run`), so a shared workflow never
+shows another team's values; values are masked when the team masks personal data for people and cut at
+`SAMPLE_VALUE_MAX_CHARS` (500). `saved: false` means the working copy does not hold the step yet. Rights: `workflows.view`,
+the same as the shapes route; there is no separate runs cell in the grid, and the runs list asks only team membership.
+Tests: `tests/api/test_engine_sample.py`.
+
 ## Run workflow waiting for its children
 
 `ops.action.workflow` with `wait` on pauses the parent until every child it started has ended, then leaves by

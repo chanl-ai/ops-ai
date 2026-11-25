@@ -105,6 +105,18 @@ Every surface that shows data has all four, reviewed with `?mock=slow`, `?mock=e
 | Error | `QueryError` with Try again | Keep whatever the person typed: a failed save leaves the dialog open with its fields and shows the error inline |
 | Partial | The page's own rows | A list that loaded keeps showing while a refetch fails; the error appears as a toast, not a blank page |
 
+## Step sheet sections
+
+The workflow step sheet (`components/workflows/definition-editor/step-sheet.tsx`) reads top to bottom: name and the
+type's plain summary with How this step works, Problems with Fix, How it starts (trigger steps only), What it receives,
+Settings, When it fails, What it gives, Try step. A trigger type's own panel goes in the How it starts slot as one entry
+of `TRIGGER_PANELS` in `trigger-panels.tsx` (props `node`, `workflowId`, `readOnly`, `onChange(parameters)`); the sheet
+never names a trigger type. A panel that saves on its own keeps its own Save button and says so. A value from an earlier
+step is picked with the field picker (`field-picker.tsx`), which reads the sample route once per sheet; nothing types a
+path except All settings. When it fails prints the engine type's `fails` text (`NodeType.fails` in
+`packages/ops_engine/src/ops_engine/node_types.py`), so the sheet says what the runner does: the Error path when the
+type has one, otherwise Stuck for a cause that can pass and Failed for any other.
+
 ## Responsive
 
 The console works from a 375 px phone to a wide monitor with no horizontal page scroll.
@@ -154,5 +166,5 @@ grep-provable ones in `apps/console/scripts/check-standards.mjs`.
 | 24 Header order | A record page's header holds, in order: save state, Save, Test, one primary action, an overflow menu. At most one filled button. Pages pass them through `RecordActions`; Save answers Cmd/Ctrl+S and is listed in the command menu | `check-standards.mjs` fails a `PageLayout` under `app/build/{agents,skills,workflows/definitions}/[id]` with inline `actions` |
 | 25 Labels | A button label is one or two words, verb first; detail goes in a tooltip | `check-standards.mjs`; `scripts/rules-baseline.json` (labels) may only shrink |
 | 26 Sizes | Size comes from the size prop; no `h-*`, `size-*`, `px-*`, `py-*`, `text-xs` or `variant="link"` with `p-0` on a Button, Input, SelectTrigger, Switch, Checkbox or ToggleGroupItem outside `components/ui` and `components/shared` | same; `rules-baseline.json` (sizes) |
-| 27 Sections | One Section shape, one spacing scale | no check yet |
+| 27 Sections | One Section shape, one spacing scale: a bordered card with a heading is `Section` (`components/shared/surface.tsx`), not a hand-built `<section>` | `check-standards.mjs` fails a `<section>` with `rounded-lg border bg-card` outside `components/ui` and `components/shared`; `rules-baseline.json` (sections) may only shrink |
 | 28 Save state | `SaveState` is the only save wording: Saved, Unsaved, Saving…, Not saved. Saving… shows only after 300 ms and stays 600 ms (`lib/save-state-gate.ts`) | `check-standards.mjs` fails "Saving soon" and "Draft vN saved" |

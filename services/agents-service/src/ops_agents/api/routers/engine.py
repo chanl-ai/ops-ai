@@ -68,7 +68,7 @@ from ...store.mailboxes import MailboxStore
 from ...store.template_copies import TemplateCopies
 from ...store.tenancy import current_team, current_tenant
 from ...store.trigger_events import TriggerEvents
-from .. import ai_steps_gate, engine_lifecycle, run_starts, run_story, step_shapes, task_view
+from .. import ai_steps_gate, engine_lifecycle, run_starts, run_story, step_sample, step_shapes, task_view
 from ..account_names import account_uses_in
 from ..actors import ActorView, NamedActors, actor_reads, named_actors, started_by_of
 from ..agent_registry import ReviewView
@@ -156,6 +156,14 @@ class NodeTypeView(Out):
     group: str
     label: str
     description: str
+    # Plain words for the step sheet: one sentence, then how it works, fails or waits and what it hands on.
+    summary: str
+    how: str
+    # What "When it fails" says about retries and the time limit for a step that waits; empty when it works.
+    tries: str = ""
+    limit: str = ""
+    # What a failure does once the retries are used: goes on by the Error path, or stops the run as Failed.
+    fails: str
     inputs: list[PortView]
     outputs: list[PortView]
     # The list parameter whose entries become the out ports (a review's options); the declared outputs are its default.
@@ -181,7 +189,9 @@ class NodeTypeView(Out):
 async def node_types(rt: Rt, me: Reader) -> JSONResponse:
     """Every registered node type at every version: ports with their connection types, parameters as JSON Schema with
     the form generated from them, effects, retry and executor, and why the acting team cannot use one now. No request
-    transaction: it reads no row, and the AI-steps policy comes from platform-service."""
+    transaction: it reads no row, and the AI-steps policy comes from platform-service. 403 for a caller without the
+    workflows view cell."""
+    require_view(caller_of(me), "workflows")
     ai_on = await ai_steps_gate.allowed(rt, current_team() or me.team_id or None)
     return ok(
         [
@@ -242,25 +252,14 @@ _CHECK_SUGGESTION = {
 }
 
 
-def _port_in(message: str) -> str | None:
-    """The port name an engine check already put in its message (`no out port maybe`, `Out port approve`)."""
-    for marker in ("out port ", "in port ", "Out port ", "port "):
-        if marker in message:
-            rest = message.split(marker, 1)[1]
-            return rest.split()[0].rstrip(".") if rest.split() else None
-    return None
-
-
 def enrich_check(check: Json) -> Json:
     """Adds path, port and suggestion from the check the engine already returned. Does not change its meaning."""
-    node, field, code, message = check.get("node"), check.get("field"), check.get("code"), check.get("message") or ""
+    node, field, code = check.get("node"), check.get("field"), check.get("code")
     path = f"nodes.{node}.parameters.{field}" if node and field else (f"nodes.{node}" if node else None)
     return {
         **check,
         "path": check.get("path") or path,
-        "port": check.get("port")
-        # The engine words every check's message as text.
-        or (_port_in(cast(str, message)) if code in {"unknown_port", "unconnected_port", "duplicate_port"} else None),
+        "port": check.get("port"),
         "suggestion": check.get("suggestion") or _CHECK_SUGGESTION.get(str(code or "")),
     }
 
@@ -467,7 +466,7 @@ async def _store_version(
             definition=d.wire(),
             digest=digest,
             now=now_iso(),
-            by=me.email,
+            by=me.actor,
             team=team,
             reopen=reopen,
         )
@@ -739,7 +738,7 @@ async def _archived(rt: Runtime, me: Principal, workflow_id: str, archived: bool
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id}")
     engine_lifecycle.require_rights(me, row, "delete")
-    await definitions(rt).set_archived(workflow_id, archived, by=me.email or me.sub, now=now_iso(), team=current_team())
+    await definitions(rt).set_archived(workflow_id, archived, by=me.actor, now=now_iso(), team=current_team())
     return await definition_view(rt, me, workflow_id)
 
 
@@ -761,6 +760,73 @@ async def definition_shapes(rt: Rt, _: Reader, workflow_id: str, version: int) -
         raise NotFound(f"Workflow definition {workflow_id} version {version}")
     steps = await step_shapes.version_shapes(rt, current_team() or "", row.definition)
     return ok({"workflowId": workflow_id, "version": version, "steps": steps})
+
+
+class SampleField(Out):
+    name: str
+    label: str
+    # The path a mapping stores: `$.input.<field>` for the trigger, `$.nodes.<step>.out.<field>` for any other step.
+    path: str
+    # The last run's value as text, masked and cut at step_sample.SAMPLE_VALUE_MAX_CHARS; null when it gave none.
+    sample: str | None = None
+
+
+class SampleStep(Out):
+    id: str
+    name: str
+    kind: str | None = None
+    installed: bool
+    fields: list[SampleField]
+
+
+class SampleRun(Out):
+    id: str
+    version: int
+    created_at: str
+
+
+class DefinitionSample(Out):
+    workflow_id: str
+    step: str | None = None
+    # False when the working copy does not hold `step` yet: the sheet asks to save before it lists fields.
+    saved: bool
+    run: SampleRun | None = None
+    steps: list[SampleStep]
+    # The step's own fields: what it gives the steps after it. Null when `step` is left out or not saved yet.
+    given: SampleStep | None = None
+
+
+@router.get("/definitions/{workflow_id}/sample", response_model=Envelope[DefinitionSample])
+async def definition_sample(
+    rt: Rt, me: Reader, workflow_id: str, step: Annotated[str | None, Query(max_length=80)] = None
+) -> JSONResponse:
+    """What `step` receives: each step that can finish before it, from the working copy when one is open, with each
+    field's name, path and the value the acting team's newest finished run gave it, so the sheet joins nothing. All
+    steps when `step` is left out. Only the acting team's runs feed it, through the runs list's own team rule and
+    `visible_run`; values are masked when the team masks personal data for people. 403 unless the caller may view the
+    team's workflows. One transaction for the run and its steps; documents-service, tools-service and the masking
+    policy are asked with none open."""
+    store = definitions(rt)
+    row = await store.row(workflow_id, team=current_team())
+    if row is None:
+        raise NotFound(f"Workflow definition {workflow_id}")
+    copy = await _open_copy(store, workflow_id, row.version)
+    held = step_sample.readable(workflow_id, copy.definition if copy is not None else row.definition)
+    team = current_team() or me.team_id or None
+    picked = None
+    steps: list[Any] = []
+    # The runs list's own rule (team_visible, in its request transaction) picks among the acting team's runs only.
+    async with isolation.request_transaction():
+        newest = await runs(rt).list(workflow_id=workflow_id, status="succeeded", limit=1)
+        if newest:
+            picked = await visible_run(rt, newest[0].id, me)
+            steps = await runs(rt).step_rows(picked.id)
+    shapes = await step_shapes.version_shapes(rt, team or "", held)
+    # The last attempt of each node; the values go through the one masker every run read uses.
+    values: Json = {"input": None, "output": {}}
+    if picked is not None:
+        values = await for_people(rt, picked, {"input": picked.input, "output": {s.node_id: s.output for s in steps}})
+    return ok(step_sample.sample_view(workflow_id, held, step, shapes=shapes, run=picked, values=values))
 
 
 @router.get("/definitions/{workflow_id}", response_model=Envelope[DefinitionView])
@@ -891,7 +957,7 @@ async def save_working_copy(rt: Rt, me: Me, workflow_id: str, body: WorkingCopyI
             checks=checks,
             base=base,
             now=now_iso(),
-            by=me.email,
+            by=me.actor,
             replaces=body.replaces_digest,
         )
     except StaleWorkingCopy as e:
@@ -1136,6 +1202,18 @@ MAILBOX_KINDS = {"gmail": "Gmail", "imap": "IMAP", "graph": "Microsoft 365", "de
 OptionSource: TypeAlias = Literal["agents", "tools", "workflows", "mailboxes"]  # noqa: UP040
 
 
+def _first_sentence(text: str) -> str:
+    """The first sentence of a description: what a list shows beside a choice."""
+    head = text.strip().split(". ", 1)[0]
+    return head if head.endswith(".") or not head else f"{head}."
+
+
+def _spoken(slug: str) -> str:
+    """An agent's slug as a name a builder reads: `branch-concierge` is "Branch concierge"."""
+    words = slug.replace("-", " ").replace("_", " ").strip().lower()
+    return words[:1].upper() + words[1:]
+
+
 @router.get("/option-sources", response_model=Envelope[list[OptionView]])
 async def option_sources(rt: Rt, me: Me, source: OptionSource) -> JSONResponse:
     """The choices a node form offers for a field with an option source (`ui.fields.*.source`): published agents,
@@ -1159,11 +1237,20 @@ async def option_sources(rt: Rt, me: Me, source: OptionSource) -> JSONResponse:
         ]
     elif source == "agents":
         agents = [a for a in await agent_registry(rt).rows() if a.published_version is not None]
-        options = [{"value": a.id, "label": a.slug, "description": f"Published v{a.published_version}"} for a in agents]
-    elif source == "tools":
-        tools = [t for t in await known_tools(rt) if not str(t["id"]).startswith("workflow:")]
         options = [
-            {"value": t["id"], "label": t["name"], "description": str(t.get("description") or "")} for t in tools
+            {"value": a.id, "label": _spoken(a.slug), "description": f"Published v{a.published_version}"}
+            for a in agents
+        ]
+    elif source == "tools":
+        # Registry operations only: a workflow or an agent is started by its own step, not called as a tool.
+        tools = [t for t in await known_tools(rt) if not str(t["id"]).startswith(("workflow:", "agent:"))]
+        options = [
+            {
+                "value": t["id"],
+                "label": str(t.get("title") or _spoken(str(t["name"]))),
+                "description": _first_sentence(str(t.get("description") or "")),
+            }
+            for t in tools
         ]
     else:
         live = [d for d in await definitions(rt).summaries(team=current_team()) if d.current_stage == "live"]
@@ -1923,7 +2010,7 @@ async def cancel_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
         raise Conflict(f"Run {run_id} has already {run.status}.", code="run_finished")
     await runs(rt).settle_parents(run_id, cancelled.created_by)
     await EventLog(rt.db).append(
-        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="cancelled", node=None, data={"by": me.email}
+        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="cancelled", node=None, data={"by": me.actor}
     )
     return ok(await for_people(rt, cancelled, await ended_view(rt, cancelled)))
 
@@ -1940,7 +2027,7 @@ async def retry_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     if not changed or retried is None:
         raise Conflict("This run is no longer stuck, so there is nothing to retry.", code="run_not_stuck")
     await EventLog(rt.db).append(
-        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="retried", node=None, data={"by": me.email}
+        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="retried", node=None, data={"by": me.actor}
     )
     return ok(
         await for_people(rt, retried, run_view(retried) | {"canCancel": can_cancel(me, retried), "canRetry": False})
@@ -1960,7 +2047,7 @@ async def redrive_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     if not changed or redriven is None:
         raise Conflict("Only a failed or stuck run can be redriven.", code="run_not_redrivable")
     await EventLog(rt.db).append(
-        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="redriven", node=None, data={"by": me.email}
+        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="redriven", node=None, data={"by": me.actor}
     )
     view = run_view(redriven) | {"canCancel": can_cancel(me, redriven), "canRetry": False, "canRedrive": False}
     return ok(await for_people(rt, redriven, view))
@@ -2027,7 +2114,7 @@ async def bulk_engine_runs(rt: Rt, me: Me, body: BulkRunsRequest) -> JSONRespons
         changed.append(run.id)
         kind = "redriven" if body.action == "redrive" else "cancelled"
         await EventLog(rt.db).append(
-            thread_id=run.id, team_id=run.team_id, run_id=run.id, type_=kind, node=None, data={"by": me.email}
+            thread_id=run.id, team_id=run.team_id, run_id=run.id, type_=kind, node=None, data={"by": me.actor}
         )
     return ok({"action": body.action, "changed": changed, "skipped": skipped})
 

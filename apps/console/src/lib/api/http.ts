@@ -95,7 +95,8 @@ function createReviewsHttp(get: Get, send: Send): OpsApi['reviews'] {
     place: (id, opts) => get(`/reviews/${encodeURIComponent(id)}/place${opts ? `?${new URLSearchParams(Object.entries(opts).filter(([, v]) => v) as [string, string][]).toString()}` : ''}`),
     decide: (id, i) => send('POST', `/reviews/${encodeURIComponent(id)}/decision`, i),
     assign: (ids, assignee) => send('POST', '/reviews/assign', { ids, assignee }),
-    withdraw: (id) => send('POST', `/publish-requests/${encodeURIComponent(id)}/withdraw`),
+    // Reviews are served unversioned (`/reviews`), but a publish request is a versioned route.
+    withdraw: (id) => send('POST', `/v1/publish-requests/${encodeURIComponent(id)}/withdraw`),
     bulkDecide: (ids, decision, reason, opts) => send('POST', '/reviews/bulk-decision', { ids, decision, reason, stepUpToken: opts?.stepUpToken }),
   };
 }

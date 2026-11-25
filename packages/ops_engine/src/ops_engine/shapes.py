@@ -16,7 +16,7 @@ from typing import Any, Protocol, cast
 from ops_service_kit.http import Json, JsonValue
 
 from . import ai_steps
-from .definition import NodeInstance, WorkflowDefinition, mappings
+from .definition import NodeInstance, WorkflowDefinition, mappings, step_name
 from .node_types import NodeType, TypeRegistry
 
 Shape = Json
@@ -315,8 +315,9 @@ async def unknown_fields(d: WorkflowDefinition, registry: TypeRegistry, lookups:
             ports = found[step].values()
             if any(is_open(s) or field in cast(Json, s.get("properties") or {}) for s in ports):
                 continue
-            message = f"{path} reads {field}, which {step} never outputs."
+            message = f"{step_name(d, registry, n.id)} reads {field}, which {step_name(d, registry, step)} never gives."
+            param = next((k for k, v in n.parameters.items() if path in set(mappings(v))), None)
             out.append(
-                {"node": n.id, "level": "warning", "code": "unknown_output_field", "message": message, "field": None}
+                {"node": n.id, "level": "warning", "code": "unknown_output_field", "message": message, "field": param}
             )
     return out

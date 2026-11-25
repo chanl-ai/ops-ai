@@ -181,6 +181,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-252 | agents-service | A builder archives a workflow: it starts no run and leaves both lists, its run kept; restored, it serves its live version again | api, ui | `agents-service/archive-a-workflow.md` |
 | uc-400 | agents-service | A workflow forks into two checks and a Join: the step after it runs once with both by the step they came from; a skipped branch is null; a fork meeting at a plain step is warned | api, ui | `agents-service/branches-join.md` |
 | uc-401 | agents-service | A never-run workflow's steps list their output fields by port, from type, settings, answer or operation; a misspelt mapping is warned on save | api | `agents-service/step-output-shapes.md` |
+| uc-512 | agents-service | A builder reads a workflow step in plain words, sees what it receives with the last run values, and picks a field by name that the next run reads | api, sdk, ui | `agents-service/step-sheet-plain-words.md` |
 | uc-402 | agents-service | A parent reads three attachments in children two at a time, one fails, and goes on once with every result in item order | api, ui | `agents-service/wait-for-children.md` |
 | uc-403 | agents-service | A workflow waits two seconds, waits until a date or goes on when it is past or not a date, and a waiting review is reminded in Activity until decided | api, ui | `agents-service/wait-and-reminders.md` |
 | uc-331 | files-service | A file is read with Detect from the Files page | api, ui | `files-service/a-file-is-read-with-detect.md` |
@@ -302,7 +303,8 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-755 | tools-service | A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it | api, ui | `tools-service/a-team-holding-only-a-workflow.md` |
 | uc-756 | agents-service | A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record | api, ui | `agents-service/a-shared-form-filled-in-signed.md` |
 | uc-757 | agents-service | A builder writes a skill with steps and an agent brief, and a chat follows the steps | api, sdk, cli, ui | `agents-service/a-builder-writes-a-skill-with.md` |
-| uc-761 | console | A builder edits a workflow that saves itself, publishes it past its problems and compares its versions | ui | `console/workflow-drafts-and-versions.md` |
+| uc-948 | agents-service | A builder edits an agent's brief and what it uses on one page | api, sdk, cli, ui | `agents-service/agent-page-in-one-editor.md` |
+| uc-761 | console | A builder edits a workflow that saves itself, publishes it past its problems and compares its versions | sdk, cli, ui | `console/workflow-drafts-and-versions.md` |
 | uc-762 | agents-service | A builder tries one path of a skill: reads run, a write is planned and sent once only when confirmed, and nothing is stored | api, ui | `agents-service/a-builder-tries-one-skill-path.md` |
 | uc-763 | agents-service | A run outlives a killed worker and redrives from its failed step | api | `agents-service/a-run-outlives-a-killed-worker.md` |
 | uc-764 | console | An agent page shows its save state, its model, knowledge, tools and skills on the main page, and a channels tab | ui | `console/agent-page-settings-and-channels.md` |

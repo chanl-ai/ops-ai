@@ -1594,6 +1594,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "workflows_definition_sample": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/workflows/definitions/{workflow_id}/sample",
+        "pathParams": ["workflow_id"],
+        "query": ["step"],
+        "stream": False,
+    },
     "workflows_definition_shapes": {
         "body": None,
         "headers": [],
@@ -3569,6 +3578,12 @@ class Operations:
             SERVICE, OPERATIONS["workflows_resume_definition"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    def workflows_definition_sample(self, workflow_id: str, *, step: str | None = None) -> DefinitionSample:
+        "Definition Sample"
+        return self._t.call(
+            SERVICE, OPERATIONS["workflows_definition_sample"], {"workflow_id": workflow_id}, {"step": step}, {}, None
+        )  # type: ignore[no-any-return]
+
     def workflows_definition_shapes(self, workflow_id: str, version: int) -> DefinitionShapes:
         "Definition Shapes"
         return self._t.call(
@@ -5329,6 +5344,12 @@ class AsyncOperations:
         "Resume Definition"
         return await self._t.call(
             SERVICE, OPERATIONS["workflows_resume_definition"], {"workflow_id": workflow_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def workflows_definition_sample(self, workflow_id: str, *, step: str | None = None) -> DefinitionSample:
+        "Definition Sample"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_definition_sample"], {"workflow_id": workflow_id}, {"step": step}, {}, None
         )  # type: ignore[no-any-return]
 
     async def workflows_definition_shapes(self, workflow_id: str, version: int) -> DefinitionShapes:

@@ -183,7 +183,9 @@ with bank_stack() as s:
     live = data(s.api.get(f"/v1/agents/{aid}", headers=me))
     check(
         "5 the agent publishes once nothing is missing, and says what it uses",
-        clear == {"canRequest": True, "problems": []}
+        clear["canRequest"] is True
+        and clear["problems"] == []
+        and clear["blockers"] == []
         and sent.status_code == 201
         and live["publishedVersion"] == now["version"]
         and live["uses"] == {"tools": 2, "knowledgeBases": 0, "skills": 3, "agents": 0, "workflows": 0},
@@ -382,6 +384,22 @@ with bank_stack() as s:
         "4 a guard written in a skill's text stops the run on the read's result and holds the write after it",
         stopped.get("running") is None and held == [(texted["id"], [write])],
         (stopped.get("running"), held, [h.get("ended") for h in stopped.get("history") or []]),
+    )
+    # The hold listed is also enforced: the write asked for in the next reply is refused, no person is asked and the bank
+    # receives no hold for the account the guard stopped on.
+    holds_before = len([r for r in s.bank.received if r["method"] == "POST" and r["path"].endswith("/holds")])
+    refused_write = s.api.post(
+        f"/chat/threads/{thread}/messages",
+        json={"content": f"call {write} {owing}"},
+        headers={**me, **STREAM},
+        timeout=120,
+    )
+    asked_after = [e for e in sse(refused_write.text) if e.get("type") == "widget" and e["widget"].get("kind") == "approval"]
+    holds_after = len([r for r in s.bank.received if r["method"] == "POST" and r["path"].endswith("/holds")])
+    check(
+        "4 the write a guard holds is refused when asked for: no person is asked and the bank receives no hold",
+        refused_write.status_code == 200 and not asked_after and holds_after == holds_before,
+        (refused_write.status_code, len(asked_after), holds_before, holds_after),
     )
 
 # 6, continued. A step that asks another agent, on the dev stack, where the team's default agent may ask a specialist.

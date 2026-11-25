@@ -40,6 +40,7 @@ WIDGETS = frozenset(
         "mappings",
         "list",
         "options",
+        "categories",
         "source",
         "json",
         "account",
@@ -150,6 +151,15 @@ class NodeType:
     ui: Mapping[str, JsonValue] = field(default_factory=lambda: {"order": [], "fields": {}})
     # How a person starts a workflow this trigger begins by hand (starts.py); None for a trigger only its source starts.
     start: StartSpec | None = None
+    # What the console's step sheet tells a person building a workflow: one plain sentence, then how it works, fails,
+    # waits and what it hands on. `description` stays the precise text models and docs read.
+    summary: str = ""
+    how: str = ""
+    # What the sheet's "When it fails" says about retries and the time limit for a step that waits rather than works:
+    # a review waits for a person, a Wait for the time it is given. Empty: the sheet words the type's retry policy and
+    # per-attempt limit.
+    tries: str = ""
+    limit: str = ""
 
     @property
     def key(self) -> tuple[str, int]:
@@ -169,6 +179,23 @@ class NodeType:
         dropped = {port for param, value, port in self.outputs_unless if _holds(parameters, param, value)}
         return [p for p in ports + [p for p in [*self.extra_outputs, *extra] if p not in ports] if p not in dropped]
 
+    def fails(self) -> str:
+        """What a failure does once the step's own retries are used, as the compiler's Wrapper and the worker do it: a
+        step with an error port goes on by it; otherwise a cause that can pass retries the run, then pauses it as
+        Stuck (MAX_PASSES), and any other cause fails the run."""
+        on_error = "It goes on by the Error path, so the steps you join to it decide what happens next."
+        stops = (
+            "If the cause can pass, such as an app not answering, the run is tried again later and then waits as "
+            "Stuck for your team to retry it. Otherwise the run stops as Failed."
+        )
+        if "error" in self.output_ports():
+            return on_error
+        if any(port == "error" for _, _, port in self.optional_outputs):
+            return (
+                f"When its settings give it an Error path, it goes on by it. Without one: {stops[0].lower()}{stops[1:]}"
+            )
+        return stops
+
     def view(self) -> Json:
         return {
             "id": self.id,
@@ -176,6 +203,11 @@ class NodeType:
             "group": self.group,
             "label": self.label,
             "description": self.description,
+            "summary": self.summary,
+            "how": self.how,
+            "tries": self.tries,
+            "limit": self.limit,
+            "fails": self.fails(),
             "inputs": [p.view() for p in self.inputs],
             "outputs": [p.view() for p in self.outputs],
             "outputsFrom": self.outputs_from,
@@ -271,9 +303,36 @@ class TypeRegistry:
 MAIN_IN = (Port("in"),)
 # A field that names what the step acts on (an operation, an agent, another step) is a literal: resolve() would read a
 # `$.` string from the run, so the input could choose what a reviewed workflow calls.
-_NOT_A_PATH: Json = {"not": {"pattern": r"^\$\."}}
+_NOT_A_PATH: Json = {
+    "not": {"pattern": r"^\$\."},
+    "x-problem": "must be typed or chosen here, not picked from another step",
+}
 CASE_PRIORITIES = ("low", "normal", "high", "urgent")
 END_RESULTS = ("succeeded", "failed")
+
+
+def _titled(*choices: tuple[str, str], **extra: JsonValue) -> Json:
+    """A setting with a closed set of values, each with the words a form shows for it: `enum` keeps the schema check,
+    `oneOf` carries the titles the console lists, so no code word reaches a builder."""
+    return {"enum": [v for v, _ in choices], "oneOf": [{"const": v, "title": t} for v, t in choices], **extra}
+
+
+_OPERATORS = (
+    ("eq", "Equal to"),
+    ("ne", "Not equal to"),
+    ("gt", "Greater than"),
+    ("gte", "At least"),
+    ("lt", "Less than"),
+    ("lte", "At most"),
+    ("contains", "Contains"),
+    ("exists", "Has a value"),
+    ("empty", "Is empty"),
+)
+_COMBINE = (("all", "All of these"), ("any", "Any of these"))
+_FIELD_TYPES = (("text", "Text"), ("number", "Number"), ("money", "Money"), ("date", "Date"))
+_TIMEOUT_WAYS = (("error", "Take the Error way out"), ("port", "Take a Timeout way out"))
+
+
 _MAPPING = (
     "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in "
     "braces are filled in: `Levy notice: {$.input.record.name}`"
@@ -283,7 +342,7 @@ _CONDITION: Json = {
     "required": ["left", "op"],
     "properties": {
         "left": {"description": _MAPPING},
-        "op": {"enum": ["eq", "ne", "gt", "gte", "lt", "lte", "contains", "exists", "empty"]},
+        "op": _titled(*_OPERATORS),
         "right": {"description": _MAPPING},
     },
 }
@@ -307,7 +366,7 @@ _MATCH_RULE: Json = {
     "required": ["left", "op", "right"],
     "properties": {
         "left": {"type": "string", "minLength": 1, "description": "The record's field", **_NOT_A_PATH},
-        "op": {"enum": ["equals", "overlaps"]},
+        "op": _titled(("equals", "Equals"), ("overlaps", "Overlaps")),
         "right": {"type": "string", "minLength": 1, "description": "The candidate's field", **_NOT_A_PATH},
         "minLength": {"type": "integer", "minimum": 1, "description": "Overlaps: the shorter value's least length"},
     },
@@ -337,9 +396,9 @@ _AI_COMMON: Json = {
     "timeoutSeconds": {"type": "number", "exclusiveMinimum": 0},
 }
 _AI_FORM = (
-    ("text", _f("Text", "mapping", "What the model reads, e.g. $.input.body")),
+    ("text", _f("Text", "mapping", "The text the model reads; pick a field or type it")),
     ("instructions", _f("Instructions", "textarea", "Anything the model should know or do besides the step's job")),
-    ("model", _f("Model", "text", "A model alias for this step; empty uses the workspace's")),
+    ("model", _f("Model", "text", "The model this step uses; empty uses the workspace's")),
 )
 
 
@@ -354,6 +413,8 @@ def _ai_step(
     outputs: tuple[Port, ...] = (Port("ok"), Port("error")),
     outputs_from: str | None = None,
     extra_outputs: tuple[str, ...] = (),
+    summary: str = "",
+    how: str = "",
 ) -> NodeType:
     """An AI step: one model call with no tools through EnginePorts.prompts (executor ai.prompt); ai_steps.JOBS holds
     what its answer looks like and which port it leaves by."""
@@ -362,6 +423,8 @@ def _ai_step(
         version=1,
         group="ai",
         label=label,
+        summary=summary,
+        how=how,
         description=description,
         executor="ai.prompt",
         effects="model",
@@ -411,6 +474,13 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="trigger",
         label="Request",
+        summary=(
+            "Starts the workflow when another app, another workflow or a person starts it with the details it needs."
+        ),
+        how=(
+            "The caller must be signed in, and what they send becomes the workflow's input. If you set an input form, "
+            "a start that does not fit it is refused. The first step can read everything the caller sent."
+        ),
         description="Starts a run from an authenticated API call or a system event; the run's input is the payload.",
         executor="trigger.payload",
         effects="none",
@@ -426,7 +496,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             },
         },
         ui=_form(
-            ("inputSchema", _f("Input schema", "json", "JSON Schema the payload must match; empty accepts any object")),
+            ("inputSchema", _f("Input form", "json", "The fields a start must send; empty takes any")),
             (
                 ONLY_FROM_WORKFLOWS,
                 _f("Only other workflows start this", "switch", "Start run and Files leave it out of their lists"),
@@ -439,6 +509,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="trigger",
         label="Email received",
+        summary="Starts the workflow when a new email arrives in a mailbox you choose.",
+        how=(
+            "It watches one folder of the mailbox and starts only for emails that match your filters. Each attachment "
+            "is saved to Files first, so later steps can read it. Past the daily cap, an email is noted on Activity "
+            "and starts nothing. The next step gets the sender, subject, body and attachments."
+        ),
         description=(
             "Starts a run when an email arrives in a watched mailbox folder and matches the filters; the run's input "
             "is the email, with each attachment stored in Files first."
@@ -490,6 +566,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="trigger",
         label="Service event",
+        summary="Starts a system workflow when something happens in the platform, such as a file being deleted.",
+        how=(
+            "Only workflows the platform maintains start this way. The details of what happened become the workflow's "
+            "input. If you set an input form, the same form appears when someone starts the workflow by hand."
+        ),
         description=(
             "Starts a run when a service reports an event, such as a file deleted or a tool access request; the run's "
             "input is the event's payload. Only a system workflow, which the platform maintains, is started by one. "
@@ -504,6 +585,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                 "event": {
                     "type": "string",
                     "pattern": EVENT_NAME,
+                    "x-problem": "must be lowercase words joined by dots, such as file.deleted",
                     "description": "The event's name, such as file.deleted",
                 },
                 "inputSchema": {
@@ -517,7 +599,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             ("event", _f("Event", "text", "The event's name, such as file.deleted", placeholder="file.deleted")),
             (
                 "inputSchema",
-                _f("Input schema", "json", "JSON Schema Start run shows; empty means only the event starts it"),
+                _f("Input form", "json", "The fields Start run asks for; empty means only the event starts it"),
             ),
         ),
         start=StartSpec(
@@ -534,6 +616,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="trigger",
         label="Schedule",
+        summary="Starts the workflow when its scheduled time comes.",
+        how=(
+            "When the clock reaches the due time, the workflow starts with the details saved with the schedule. A "
+            "scheduled start with the same name never runs twice, even if it fires again."
+        ),
         description="Starts a run when the platform clock reaches the due time. The same key fires once.",
         executor="trigger.payload",
         effects="none",
@@ -546,8 +633,8 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             },
         },
         ui=_form(
-            ("key", _f("Key", "text", "A second fire with this key starts no run")),
-            ("inputSchema", _f("Input schema", "json", "JSON Schema the payload must match; empty accepts any object")),
+            ("key", _f("Start name", "text", "A second start with the same name runs nothing")),
+            ("inputSchema", _f("Input form", "json", "The fields a start must send; empty takes any")),
         ),
         start=StartSpec(
             kind="schedule",
@@ -562,6 +649,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="data",
         label="Combine facts",
+        summary="Merges the same facts from several sources, trusting the sources in the order you set.",
+        how=(
+            "Each field takes its value from the first source that has it, and the step records where each value came "
+            "from. Where sources disagree, it lists the differences instead of choosing quietly, and can send the run "
+            "down a Disagree path for a closer look. No AI is involved."
+        ),
         description=(
             "Merges the same fields from several sources by a precedence per field, keeps which source each value "
             "came from, and lists the fields the sources disagree on instead of picking silently. No model."
@@ -598,7 +691,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                         "properties": {
                             "field": {"type": "string", "minLength": 1},
                             "from": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
-                            "type": {"enum": ["text", "number", "money", "date"]},
+                            "type": _titled(*_FIELD_TYPES),
                         },
                     },
                 },
@@ -647,6 +740,14 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="data",
         label="Calculate",
+        summary=(
+            "Works out new values with formulas, such as the smaller of two amounts or a date twenty business days on."
+        ),
+        how=(
+            "You name the values the formulas read, then write each formula; a later formula can use an earlier "
+            "result. No AI is involved. A formula that cannot be worked out goes on to the Error path; otherwise the "
+            "next step gets every result by name."
+        ),
         description=(
             "Works out new values from the step's values with formulas, such as min(levy.amount, balance) or "
             "business_days(levy.served, 20), evaluated in the tool gateway's sandbox; no model."
@@ -671,6 +772,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                         "minLength": 1,
                         "maxLength": 2000,
                         "not": {"pattern": r"\$\."},
+                        "x-problem": "must be a formula using the value names, not a value picked from a step",
                         "description": "A formula over the values by name, e.g. min(levy.amount, balance)",
                     },
                 },
@@ -679,16 +781,19 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         ui=_form(
             (
                 "values",
-                _f("Values", "mappings", "The data the formulas read, each by a name: a path to the input or a step"),
+                _f(
+                    "Values",
+                    "mappings",
+                    "The data the formulas read, each by a name: a field of the input or of an earlier step",
+                ),
             ),
             (
                 "expressions",
                 _f(
                     "Formulas",
                     "mappings",
-                    "Each result's name and its formula over the values, e.g. min(levy.amount, balance); later "
-                    "formulas can use earlier results. Functions: min, max, abs, round, floor, ceil, sum, len, "
-                    "business_days(date, n), add_days(date, n), days_between(a, b)",
+                    "Each result's name and its formula over the values, such as the smaller of two amounts; later "
+                    "formulas can use earlier results",
                 ),
             ),
         ),
@@ -698,6 +803,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="data",
         label="Set fields",
+        summary="Puts values under the names you choose, so later steps can use them.",
+        how=(
+            "Each value can be fixed text, a number, or something taken from the input or an earlier step. No AI is "
+            "involved, so it is quick and gives the same result every time. The next step gets every field you set."
+        ),
         description="Maps and renames values from the input and earlier nodes; no model.",
         executor="data.set",
         effects="none",
@@ -716,7 +826,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                 _f(
                     "Fields",
                     "mappings",
-                    "Each field's value: text, a number, or a path to the input or an earlier step",
+                    "Each field's value: text, a number, or a field of the input or of an earlier step",
                 ),
             )
         ),
@@ -726,6 +836,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="data",
         label="Match",
+        summary="Finds the records in a list that match one record, by rules on their fields.",
+        how=(
+            "A candidate matches when every All rule holds and, if you add any, at least one Any rule. Text is "
+            "compared without regard to capitals or extra spaces, and an empty value never matches. Matches go on by "
+            "the Matched path; with none, the step goes on by the None path."
+        ),
         description=(
             "Finds the candidates that match a record by rules on their fields: every All rule and, when any are "
             "given, at least one Any rule. Text is compared without case or extra spaces, an empty value never "
@@ -757,6 +873,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="data",
         label="Transform",
+        summary="Copies one value from the workflow and gives it a new name.",
+        how=(
+            "You pick the value from the input or an earlier step and name where it goes. If that value is not there, "
+            "the step goes on to the Error path instead. Otherwise the next step gets the value under its new name."
+        ),
         description="Reads one path from the run and writes it under a name. A missing path takes the error port.",
         executor="data.transform",
         effects="none",
@@ -771,7 +892,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             },
         },
         ui=_form(
-            ("expression", _f("Expression", "mapping", "A path such as $.input.a")),
+            ("expression", _f("Expression", "mapping", "A field of the input or of an earlier step")),
             ("as", _f("As", "text", "The output field name")),
         ),
     ),
@@ -780,6 +901,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="data",
         label="Filter",
+        summary="Keeps the items of a list that meet your conditions and sets the rest aside.",
+        how=(
+            "Each item is checked against the conditions you set, all of them or any one. The kept items go on by the "
+            "Kept path and the others by the Dropped path. A list that cannot be read goes on to the Error path."
+        ),
         description="Keeps or drops items of a list by field predicates. Not a second If.",
         executor="data.filter",
         effects="none",
@@ -791,7 +917,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             "properties": {
                 "items": {"description": "The list to filter: " + _MAPPING},
                 "conditions": {"type": "array", "minItems": 1, "items": _CONDITION},
-                "combine": {"enum": ["all", "any"], "default": "all"},
+                "combine": _titled(*_COMBINE, default="all"),
             },
         },
         ui=_form(
@@ -817,6 +943,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="If",
+        summary="Sends the workflow one of two ways, depending on whether your conditions hold.",
+        how=(
+            "The conditions are checked against any earlier step's results, all of them or any one. When they hold "
+            "the workflow takes the True path, otherwise the False path."
+        ),
         description="Routes by rules over any earlier node's output.",
         executor="flow.if",
         effects="none",
@@ -827,7 +958,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             "required": ["conditions"],
             "properties": {
                 "conditions": {"type": "array", "minItems": 1, "items": _CONDITION},
-                "combine": {"enum": ["all", "any"], "default": "all"},
+                "combine": _titled(*_COMBINE, default="all"),
             },
         },
         ui=_form(
@@ -852,6 +983,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Repeat",
+        summary="Runs a part of the workflow again until a condition holds, up to a limit you set.",
+        how=(
+            "Each time round, the step checks your Done when conditions. Until they hold, the workflow goes back by "
+            "the Again path; once they hold it goes on by the Done path. When the limit is reached first it takes the "
+            "Exhausted path, so a loop can never run forever."
+        ),
         description="Leaves by again until a predicate holds or the cap is hit, so a loop cannot spin.",
         executor="flow.repeat",
         effects="none",
@@ -862,7 +999,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             "required": ["conditions"],
             "properties": {
                 "conditions": {"type": "array", "minItems": 1, "items": _CONDITION},
-                "combine": {"enum": ["all", "any"], "default": "all"},
+                "combine": _titled(*_COMBINE, default="all"),
                 "max": {"type": "integer", "minimum": 1, "default": 8, "description": "Most times again may fire"},
             },
         },
@@ -889,6 +1026,13 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Ask",
+        tries="No. It waits for the reply.",
+        limit="Until the reply comes or the Time limit setting passes.",
+        summary="Asks a person a question in the conversation and waits for their reply.",
+        how=(
+            "The workflow pauses until the reply arrives, then goes on by the Replied path with what they said. If no "
+            "reply comes in time it goes on by the Timed out path; a time limit of zero times out at once."
+        ),
         description="Pauses for a reply on a conversation key, then resumes. A zero deadline times out.",
         executor="flow.ask",
         effects="human",
@@ -904,8 +1048,8 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         },
         ui=_form(
             ("prompt", _f("Prompt", "textarea", "What the person is asked")),
-            ("key", _f("Key", "text", "The conversation key the reply is posted on")),
-            ("timeoutSeconds", _f("Timeout seconds", "number", "0 times out without pausing")),
+            ("key", _f("Conversation", "text", "Names the conversation the reply is posted in")),
+            ("timeoutSeconds", _f("Time limit (seconds)", "number", "0 times out without pausing")),
         ),
     ),
     NodeType(
@@ -913,6 +1057,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Switch",
+        summary="Sends the workflow down the first of several named ways whose rules hold.",
+        how=(
+            "Each way out has its own rules over earlier steps' results, checked from top to bottom. The first way "
+            "that fits wins; when none fits, the workflow takes the Otherwise path. No AI is involved."
+        ),
         description=(
             "Several named ways out, each a set of rules over earlier steps' output; the first way whose rules hold "
             "wins, and otherwise takes the rest. No model and no code."
@@ -938,7 +1087,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                             "name": {"type": "string", "minLength": 1, "not": {"const": "otherwise"}},
                             "label": {"type": "string"},
                             "conditions": {"type": "array", "minItems": 1, "items": _CONDITION},
-                            "combine": {"enum": ["all", "any"], "default": "all"},
+                            "combine": _titled(*_COMBINE, default="all"),
                         },
                     },
                 },
@@ -977,6 +1126,13 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="action",
         label="Call a tool",
+        summary="Reads from or writes to a connected app.",
+        how=(
+            "You pick what to do in the app, which team account to use, and the values to send. A change to the app "
+            "can require a person's approval from an earlier review step first. If the app refuses, the workflow goes "
+            "on to the Refused path; if it fails or does not answer, to the Error path or a Timeout path of its own. "
+            "Otherwise the next step gets the app's answer."
+        ),
         description=(
             "Calls a registry operation through the tool gateway with mapped inputs. Its effects are the operation's "
             "access class at run time; an operation the registry does not know counts as a write."
@@ -1002,11 +1158,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                     "description": "The review node whose decision approves this write; its call and token are sent",
                 },
                 "timeoutSeconds": {"type": "number", "exclusiveMinimum": 0},
-                "onTimeout": {
-                    "enum": ["error", "port"],
-                    "default": "error",
-                    "description": "When the system does not answer in time: the error port, or a timeout port",
-                },
+                "onTimeout": _titled(
+                    *_TIMEOUT_WAYS,
+                    default="error",
+                    description="When the system does not answer in time: the Error way out, or a Timeout way out",
+                ),
                 "accounts": {
                     "type": "object",
                     "maxProperties": 20,
@@ -1017,16 +1173,25 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             },
         },
         ui=_form(
-            ("operation", _f("Operation", "source", "A registry operation the tool gateway calls", source="tools")),
+            ("operation", _f("Operation", "source", "What this step does in the app", source="tools")),
             ("accounts", _f("Account", "account", "Which of the app's team logins this step uses")),
             ("input", _f("Input", "mappings", "The operation's arguments")),
             (
                 "approvedBy",
-                _f("Approved by", "source", "A review step whose Approve authorises this write", source="steps"),
+                _f(
+                    "Approved by",
+                    "source",
+                    "The review whose Approve allows this change",
+                    source="steps",
+                    stepType="ops.flow.humanReview",
+                ),
             ),
-            ("approvalToken", _f("Approval token", "mapping", "Only for a token minted outside this workflow")),
+            ("approvalToken", _f("Outside approval", "mapping", "Only for an approval given outside this workflow")),
             _TIMEOUT,
-            ("onTimeout", _f("When it does not answer", "select", "The error port, or a Timeout port of its own")),
+            (
+                "onTimeout",
+                _f("When it does not answer", "select", "Take the Error way out, or a Timeout way out of its own"),
+            ),
         ),
     ),
     NodeType(
@@ -1034,6 +1199,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="action",
         label="Send a message",
+        summary="Replies to the person who started the workflow, on the same channel they used.",
+        how=(
+            "By default it answers the original sender and keeps the original subject. It sends once and is not "
+            "retried, so a person never gets the same message twice. If sending fails, the workflow goes on to the "
+            "Error path."
+        ),
         description="Replies on the channel that started the run, through the existing send_reply path. One attempt.",
         executor="action.send",
         effects="write",
@@ -1058,6 +1229,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="ai",
         label="Agent",
+        summary="Hands the work to one of your published agents, with its own tools and knowledge.",
+        how=(
+            "The agent reads the prompt and the values you pass, and can use its tools within the limits you set. If "
+            "you give an answer format, an answer that does not fit goes on to the Error path. Otherwise the next "
+            "step gets the agent's answer."
+        ),
         description=(
             "Runs a published agent's turn on the step's prompt and mapped input, with the agent's own tools and "
             "knowledge; with an output schema its answer must match it, or the step takes the error port."
@@ -1093,7 +1270,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             ("agent", _f("Agent", "source", "A published agent", source="agents")),
             ("prompt", _f("Prompt", "textarea")),
             ("input", _f("Input", "mappings", "Values the agent reads")),
-            ("outputSchema", _f("Answer schema", "json", "JSON Schema the answer must match; empty takes any answer")),
+            ("outputSchema", _f("Answer format", "json", "The fields the answer must have; empty takes any answer")),
             ("model", _f("Model", "text", "A model the agent allows, for this step only; empty uses the agent's")),
             ("maxToolCalls", _f("Tool calls", "number", "At most this many in the step, within the agent's own limit")),
             _TIMEOUT,
@@ -1104,6 +1281,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="ai",
         label="Retrieve from knowledge",
+        summary="Searches your team's knowledge bases for passages that answer a question.",
+        how=(
+            "It searches the knowledge bases you pick, the same way an agent that cites its sources does. When it "
+            "finds passages it goes on by the Found path with them and where they came from; otherwise by the Not "
+            "found path."
+        ),
         description="Searches the team's knowledge bases the same way a citing agent does. Citations leave by found.",
         executor="ai.knowledge",
         effects="read",
@@ -1129,6 +1312,13 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="ai",
         label="Extract from file",
+        summary="Uses AI to read the fields you define from an uploaded file, such as an invoice or a court notice.",
+        how=(
+            "Each value is checked against the page and quote it came from, and gets a confidence score from those "
+            "checks. When any field is below its threshold the workflow goes on by the Review path for a person to "
+            "check. A file it cannot read goes on by the Unreadable path. It can also read several records from one "
+            "document, scoring each the same way."
+        ),
         description=(
             "Reads a file from files-service into the fields you define; each field gets a confidence from checks on "
             "its quote, page and value, never the model's own, and the run takes the review port when any field is "
@@ -1149,6 +1339,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             "required": ["file"],
             # The fields inline, a team's document type whose version holds them, Detect, or a full-text
             # or proposed read, which names no fields.
+            "x-problem": "Say what to read: name its fields, pick a document type, or let the step detect the kind.",
             "anyOf": [
                 {"required": ["fields"]},
                 {"required": ["documentType"]},
@@ -1201,9 +1392,17 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                         "additionalProperties": False,
                         "required": ["key", "type"],
                         "properties": {
-                            "key": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"},
+                            "key": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                                "title": "Name",
+                                "x-problem": (
+                                    "must start with a lowercase letter and use only lowercase letters, digits and "
+                                    "underscores"
+                                ),
+                            },
                             "label": {"type": "string"},
-                            "type": {"enum": ["text", "number", "money", "date", "enum"]},
+                            "type": _titled(*_FIELD_TYPES, ("enum", "One of a list")),
                             "required": {"type": "boolean"},
                             "description": {"type": "string"},
                             "options": {"type": "array", "items": {"type": "string"}},
@@ -1221,7 +1420,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                     "exclusiveMinimum": 0,
                     "description": "How long a background read may take before the step gives up (default 1,200)",
                 },
-                "onTimeout": {"enum": ["error", "port"], "default": "error"},
+                "onTimeout": _titled(*_TIMEOUT_WAYS, default="error"),
             },
         },
         timeout_seconds=120.0,
@@ -1231,16 +1430,30 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             ("hint", _f("What is it?", "text", "For proposed fields: a few words, e.g. a supplier invoice")),
             ("proposePages", _f("Propose from the first pages", "number", "5 if empty")),
             ("maxPages", _f("Pages to read", "number", "Every page if empty")),
-            ("maxTokens", _f("Stop after (tokens)", "number", "Stops a long read early with what it read")),
+            (
+                "maxTokens",
+                _f(
+                    "Stop after (text pieces)",
+                    "number",
+                    "Pieces of text of about four letters each; a long read stops early with what was read",
+                ),
+            ),
             (
                 "detect",
                 _f("Detect the kind", "switch", "Read with the document type the file is; unsure goes to review"),
             ),
             (
                 "documentType",
-                _f("Document type", "json", "{id, version}: the version is pinned when the workflow is saved"),
+                _f(
+                    "Document type",
+                    "json",
+                    "The document type to read with; its version is fixed when the workflow is saved",
+                ),
             ),
-            ("fields", _f("Fields", "json", "Each field: key, label, type, required, reviewBelow, alwaysReview")),
+            (
+                "fields",
+                _f("Fields", "json", "The fields to read: each has a name, a label, a type and whether it is required"),
+            ),
             ("reviewBelow", _f("Review below", "number", "Fields under this confidence go to a person")),
             (
                 "many",
@@ -1252,7 +1465,10 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                 "waitSeconds",
                 _f("Wait for a long read (seconds)", "number", "A long file is read in the background; 1,200 if empty"),
             ),
-            ("onTimeout", _f("If the read takes longer", "select", "Leave by Error, or by a Timeout way of its own")),
+            (
+                "onTimeout",
+                _f("If the read takes longer", "select", "Take the Error way out, or a Timeout way out of its own"),
+            ),
         ),
     ),
     _ai_step(
@@ -1269,7 +1485,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                     "required": ["name"],
                     "additionalProperties": False,
                     "properties": {
-                        "name": {"type": "string", "minLength": 1, "not": {"enum": ["otherwise", "error"]}},
+                        "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "not": {"enum": ["otherwise", "error"]},
+                            "x-problem": "cannot be called Otherwise or Error; the step already has those ways out",
+                        },
                         "description": {"type": "string"},
                     },
                 },
@@ -1277,16 +1498,22 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             "minConfidence": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.6},
         },
         (
-            ("categories", _f("Categories", "options", "Each is an out port; describe what belongs in it")),
+            ("categories", _f("Categories", "categories", "Each category is a way out; describe what belongs in it")),
             (
                 "minConfidence",
-                _f("Confidence floor", "number", "Below it the step leaves by otherwise; 0.6 when empty"),
+                _f("Confidence floor", "number", "Below it the step takes the Otherwise way out; 0.6 when empty"),
             ),
         ),
         required=("categories",),
         outputs=(),
         outputs_from="categories",
         extra_outputs=("otherwise", "error"),
+        summary="Uses AI to sort text into one of the categories you define.",
+        how=(
+            "Each category is its own path out, and the workflow follows the one the text fits. When the AI is not "
+            "sure enough, or nothing fits, it takes the Otherwise path. It uses no saved agent and no tools; a "
+            "failure goes on to the Error path."
+        ),
     ),
     _ai_step(
         "ops.ai.summarise",
@@ -1294,6 +1521,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         "Summarises the text, keeping names, amounts and dates as written. No saved agent, no tools.",
         {"maxWords": {"type": "integer", "minimum": 10, "maximum": 1000, "default": 120}},
         (("maxWords", _f("Words at most", "number", "120 when empty")),),
+        summary="Uses AI to write a short summary of the text, keeping names, amounts and dates exactly as written.",
+        how=(
+            "You can set how many words the summary may use and add instructions. The next step gets the summary. It "
+            "uses no saved agent and no tools; a failure goes on to the Error path."
+        ),
     ),
     _ai_step(
         "ops.ai.extractText",
@@ -1317,8 +1549,20 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             },
         },
         (
-            ("documentType", _f("Document type", "json", '{"id": ...}: its fields; its newest version when none')),
+            (
+                "documentType",
+                _f(
+                    "Document type",
+                    "json",
+                    "The document type whose fields to read; its newest version when none is named",
+                ),
+            ),
             ("fields", _f("Fields", "json", "Fields of its own, as a document type declares them")),
+        ),
+        summary="Uses AI to pull named fields out of text, such as an email body or a note.",
+        how=(
+            "It reads the fields of a document type you pick, or fields you list yourself. A field the text does not "
+            "state is left empty, never guessed. The next step gets the fields; a failure goes on to the Error path."
         ),
     ),
     _ai_step(
@@ -1329,12 +1573,28 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         {},
         (),
         required=("instructions",),
+        summary="Uses AI to write a draft, such as a reply or a note, from the text and your instructions.",
+        how=(
+            "It sends nothing itself: a later step or a person does that. The next step gets the draft. It uses no "
+            "saved agent and no tools; a failure goes on to the Error path."
+        ),
     ),
     NodeType(
         id="ops.flow.humanReview",
         version=1,
         group="human",
         label="Human review",
+        tries="No. It waits for a person instead.",
+        limit=(
+            "Until someone decides. The Deadline setting says when it shows as overdue, and Past the deadline says "
+            "what happens then."
+        ),
+        summary="Pauses the workflow until a person decides, from Reviews, which way it goes.",
+        how=(
+            "The reviewer reads the summary, can correct values you allow, and picks one of the options, Approve and "
+            "Reject by default. Each option is its own path out. Past the deadline the review shows as overdue, or, "
+            "if you choose, expires and goes on by the Timeout path. Reminders can be sent while it waits."
+        ),
         description="Pauses for a person in Reviews; each option is an out port. Approve and Reject are the defaults.",
         executor="review.open",
         effects="human",
@@ -1364,11 +1624,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                 # A reminder while the review still waits: a task.reminder service event every N hours, which a
                 # system workflow the team configures may act on; the review keeps waiting.
                 "remindEveryHours": {"type": "number", "exclusiveMinimum": 0},
-                "onTimeout": {
-                    "enum": ["wait", "expire"],
-                    "default": "wait",
-                    "description": "Past the deadline: wait (shown overdue) or expire (leave on the timeout port)",
-                },
+                "onTimeout": _titled(
+                    ("wait", "Keep waiting, shown overdue"),
+                    ("expire", "Expire and take the Timeout way out"),
+                    default="wait",
+                    description="Past the deadline: wait (shown overdue) or expire (take the Timeout way out)",
+                ),
                 "approves": {
                     "type": "string",
                     "description": "The tool node whose write Approve authorises",
@@ -1420,7 +1681,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                                             "required": ["name"],
                                             "properties": {
                                                 "name": {"type": "string"},
-                                                "type": {"enum": ["string", "number", "integer", "boolean"]},
+                                                "type": _titled(
+                                                    ("string", "Text"),
+                                                    ("number", "Number"),
+                                                    ("integer", "Whole number"),
+                                                    ("boolean", "Yes or no"),
+                                                ),
                                                 "required": {"type": "boolean"},
                                                 "minimum": {"type": "number"},
                                                 "maximum": {"type": "number"},
@@ -1438,7 +1704,14 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         ui=_form(
             ("title", _f("Title", "text")),
             ("summary", _f("Summary", "mapping", "What the reviewer reads")),
-            ("editable", _f("Editable", "mapping", "A value the reviewer may correct, read on as `edited`")),
+            (
+                "editable",
+                _f(
+                    "Editable",
+                    "mapping",
+                    "A value the reviewer may correct; the corrected value goes on to later steps",
+                ),
+            ),
             ("slaHours", _f("Deadline (hours)", "number", "Empty: the workspace's review deadline")),
             ("notDecidedBy", _f("Not decided by", "mapping", "Who may not decide it, e.g. who saved what it approves")),
             (
@@ -1447,16 +1720,32 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             ),
             (
                 "onTimeout",
-                _f("Past the deadline", "select", "Wait shows it overdue; Expire leaves on a Timeout port"),
+                _f("Past the deadline", "select", "Wait shows it overdue; Expire takes the Timeout way out"),
             ),
             ("remindEveryHours", _f("Remind every (hours)", "number", "While it waits; empty for no reminder")),
-            ("options", _f("Options", "options", "Each option is an out port; Approve and Reject when empty")),
-            ("approves", _f("Approves", "source", "The tool step whose write Approve authorises", source="steps")),
+            ("options", _f("Options", "options", "Each option is a way out; Approve and Reject when empty")),
+            (
+                "approves",
+                _f(
+                    "Approves",
+                    "source",
+                    "The app step whose change Approve allows",
+                    source="steps",
+                    stepType="ops.action.tool",
+                ),
+            ),
             (
                 "taskType",
-                _f("Task type", "json", '{"id": ...}: the task screen; its newest version when none is named'),
+                _f("Task type", "json", "The task screen the reviewer sees; its newest version when none is named"),
             ),
-            ("params", _f("Task values", "json", "The values the task type's params read, each a value or a path")),
+            (
+                "params",
+                _f(
+                    "Task values",
+                    "json",
+                    "The values the task screen shows, each a value or a field of an earlier step",
+                ),
+            ),
         ),
     ),
     NodeType(
@@ -1464,6 +1753,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="action",
         label="Save data on file",
+        summary="Saves what an earlier Extract from file step read onto the file itself.",
+        how=(
+            "The file then shows its document type, how many fields still wait for a person, and what was read, and "
+            "the files list can filter on it. It saves as your team, so a file your team cannot see goes on to the "
+            "Error path."
+        ),
         description=(
             "Records on the file what an Extract from file step read: the document type and version, template or "
             "model, how many fields wait for a person, and the extraction. The files list shows and filters it. Writes "
@@ -1487,7 +1782,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         },
         ui=_form(
             ("file", _f("File", "mapping", "The file the read came from")),
-            ("read", _f("Read", "mapping", "The Extract from file step's output, such as $.nodes.read.out")),
+            ("read", _f("Read", "mapping", "What the Extract from file step read")),
             ("typeName", _f("Type name", "mapping", "The document type's name as the files list shows it")),
             ("checked", _f("Checked by a person", "switch", "No fields wait once a person checked them")),
         ),
@@ -1497,6 +1792,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="action",
         label="Purge what was read from a file",
+        summary="Removes everything that was read from a file after the file is deleted.",
+        how=(
+            "It clears the extracted values and examples kept for that file. Running it again removes nothing more, "
+            "so a retry is safe. A failure goes on to the Error path."
+        ),
         description=(
             "Removes the extractions and document type samples documents-service holds for a file that was deleted. "
             "Repeating it removes nothing more."
@@ -1512,13 +1812,24 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             "required": ["file"],
             "properties": {"file": {"format": "file", "description": "The deleted file's id: " + _MAPPING}},
         },
-        ui=_form(("file", _f("File", "mapping", "The deleted file, such as $.input.fileId"))),
+        ui=_form(("file", _f("File", "mapping", "The file that was deleted"))),
     ),
     NodeType(
         id="ops.action.workflow",
         version=1,
         group="action",
         label="Start workflow",
+        limit=(
+            "Starting takes a moment. With Wait for them on, the Give up after setting says how long it waits for the "
+            "started workflows."
+        ),
+        summary="Starts another of your team's workflows, once or once for each item in a list.",
+        how=(
+            "Each started workflow gets its own input, and a retry never starts the same one twice. Without waiting, "
+            "this workflow goes on straight away. With Wait for them on, it pauses until every one has finished, then "
+            "goes on with each one's outcome and result in list order, or by the Timeout path if you set a time to "
+            "give up."
+        ),
         description=(
             "Starts another workflow of the team, once or once for each item of a list, in this run's mode; each child "
             "is keyed by this run, step and item, so a retry never starts a second. In the input, `$.item` reads the "
@@ -1556,15 +1867,22 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             },
         },
         ui=_form(
-            ("workflow", _f("Workflow", "source", "The workflow each child runs", source="workflows")),
-            ("forEach", _f("For each", "mapping", "A list from an earlier step; empty starts one child")),
-            ("input", _f("Input", "mappings", "The child's input; `$.item` is the current item")),
+            ("workflow", _f("Workflow", "source", "The workflow this step starts", source="workflows")),
+            ("forEach", _f("For each", "mapping", "A list from an earlier step; empty starts one workflow")),
+            ("input", _f("Input", "mappings", "What each started workflow receives")),
             (
                 "label",
-                _f("Label", "text", "What each child is about, e.g. {$.item.name}; the item's first text when empty"),
+                _f("Label", "text", "What each started workflow is about; the item's first text when empty"),
             ),
-            ("maxItems", _f("Limit", "number", f"Most children one step starts; {DEFAULT_MAX_ITEMS} when empty")),
-            ("wait", _f("Wait for them", "switch", "Pause until every child has ended, then go on with their results")),
+            ("maxItems", _f("Limit", "number", f"Most workflows one step starts; {DEFAULT_MAX_ITEMS} when empty")),
+            (
+                "wait",
+                _f(
+                    "Wait for them",
+                    "switch",
+                    "Pause until every started workflow has ended, then go on with their results",
+                ),
+            ),
             (
                 "batchSize",
                 _f("At a time", "number", "With Wait for them: most unfinished at once; empty for all"),
@@ -1578,6 +1896,12 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="action",
         label="Open case",
+        summary="Opens a case for a customer issue in your team, with this run as its first entry.",
+        how=(
+            "You set the subject, priority, customer and who it is assigned to. If the step is retried it finds the "
+            "case it already opened instead of opening another. The next step gets the new case's id; a failure goes "
+            "on to the Error path."
+        ),
         description=(
             "Opens a case for a customer issue in this run's team, with the run as its first entry. Keyed by this run "
             "and step, so a retry finds the case instead of opening another; `caseId` is on the step's output."
@@ -1628,6 +1952,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="action",
         label="Add to case",
+        summary="Adds this run to an existing case of your team and can move the case on.",
+        how=(
+            "It adds a note and values to the case, and can mark it waiting on the customer or resolved. Only a "
+            "person closes a case. A case that belongs to another team, or does not exist, goes on to the Error path."
+        ),
         description=(
             "Adds this run to an existing case of this run's team, by its id from an earlier step or the run's input, "
             "and can move it on: waiting on the customer, or resolved when the run has done the work. Closing a case "
@@ -1651,12 +1980,14 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                     "additionalProperties": {"description": _MAPPING},
                     "description": "Values the case keeps by name, such as what was read from a document",
                 },
-                "status": {"enum": ["open", "waiting_on_customer", "resolved"]},
+                "status": _titled(
+                    ("open", "Open"), ("waiting_on_customer", "Waiting on the customer"), ("resolved", "Resolved")
+                ),
                 "timeoutSeconds": {"type": "number", "exclusiveMinimum": 0},
             },
         },
         ui=_form(
-            ("caseId", _f("Case", "mapping", "The case's id, e.g. `$.nodes.<step>.out.caseId`")),
+            ("caseId", _f("Case", "mapping", "The case's id, from an earlier step or the run input")),
             ("note", _f("Note", "mapping", "Shown on the case's timeline beside the run")),
             ("fields", _f("Fields", "mappings", "Values added to the case's own; a name it has takes the new value")),
             ("status", _f("Move the case to", "select", "Empty leaves its status; only a person closes a case")),
@@ -1668,6 +1999,13 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Join",
+        tries="No. It waits for the branches.",
+        limit="No limit of its own: it goes on once every branch that will arrive has.",
+        summary="Waits for parallel branches to finish, then goes on once with all of their results.",
+        how=(
+            "It waits for every step of the workflow that can still run, not only its own branches. The next step "
+            "gets each branch's last result; a branch that an earlier choice sent elsewhere shows as empty."
+        ),
         description=(
             "Waits for the branches connected to it, then goes on once with each branch's last step output under that "
             "step's id; a branch an earlier If or Switch sent elsewhere is null. It waits for every step of the run "
@@ -1681,7 +2019,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         parameters={
             "type": "object",
             # One value today: the Join goes on once every branch that can arrive has (no first-to-finish).
-            "properties": {"waitFor": {"enum": ["all"], "default": "all"}},
+            "properties": {"waitFor": _titled(("all", "Every branch"), default="all")},
         },
         ui=_form(
             (
@@ -1689,7 +2027,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
                 _f(
                     "Waits for",
                     "select",
-                    "Every branch that will arrive; a branch an If or Switch sent elsewhere is null. It waits for "
+                    "Every branch that will arrive; a branch an If or Switch sent elsewhere has no value. It waits for "
                     "every step of the run that can still run, not only its own branches.",
                 ),
             ),
@@ -1700,6 +2038,14 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Wait",
+        tries="No. Waiting cannot fail and be tried again.",
+        limit="As long as the time or date you set.",
+        summary="Pauses the workflow for a while, or until a date taken from an earlier step.",
+        how=(
+            "When the time is up the workflow goes on by itself. A date already past goes on at once. A value that is "
+            "not a date goes on to the Error path, naming the value. A date with no time means midnight in universal "
+            "time."
+        ),
         description=(
             "Pauses the run for a number of seconds, or until a date or date and time read from an earlier step, then "
             "goes on by `out`. A date already past goes on at once; a value that is not a date leaves by `error` with "
@@ -1714,7 +2060,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         parameters={
             "type": "object",
             "properties": {
-                "mode": {"enum": ["duration", "until"], "default": "duration"},
+                "mode": _titled(("duration", "A length of time"), ("until", "A date"), default="duration"),
                 "seconds": {"type": "number", "exclusiveMinimum": 0},
                 "until": {"description": "An ISO date or date and time: " + _MAPPING},
             },
@@ -1733,6 +2079,14 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="Wait for",
+        tries="No. It waits for the other system.",
+        limit="Until the other system answers or the Time limit setting passes.",
+        summary="Waits for another system to finish its work, then goes on with the result.",
+        how=(
+            "The workflow pauses without holding anything up. It wakes when the other system sends its answer back, "
+            "or when the event you named arrives, whichever comes first, and the next step gets that answer. With no "
+            "answer in time, it goes on by the Timeout path."
+        ),
         description=(
             "Waits for work another system finishes, holding no worker: an outside system posts its result to the "
             "step's resume URL with the step's token, or a service event `event` arrives carrying correlation key "
@@ -1769,7 +2123,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             (
                 "key",
                 _f(
-                    "Event key",
+                    "Event match",
                     "mapping",
                     "With an event: the value the event carries, such as an id an earlier step returned",
                 ),
@@ -1777,7 +2131,7 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             (
                 "outputSchema",
                 _f(
-                    "Answer schema",
+                    "Answer format",
                     "json",
                     "The fields of the answer, so later steps can pick them; empty takes any answer",
                 ),
@@ -1789,6 +2143,11 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         version=1,
         group="flow",
         label="End",
+        summary="Ends the workflow with an outcome you name.",
+        how=(
+            "You choose whether the run counts as succeeded or failed, and what its result is. Nothing runs after "
+            "this step."
+        ),
         description="Ends the run with a named outcome.",
         executor="flow.end",
         effects="none",
@@ -1798,14 +2157,14 @@ BASIC_TYPES: tuple[NodeType, ...] = (
             "properties": {
                 "outcome": {"type": "string", "default": "done"},
                 # Whether this end is a failure: the run's status reads failed, whatever the outcome is named.
-                "result": {"enum": list(END_RESULTS), "default": "succeeded"},
+                "result": _titled(("succeeded", "Succeeded"), ("failed", "Failed"), default="succeeded"),
                 "output": {"description": _MAPPING},
             },
         },
         ui=_form(
             ("outcome", _f("Outcome", "text", "The name the run ends with")),
             ("result", _f("Counts as", "select", "Failed marks the run as failed. Succeeded is the default")),
-            ("output", _f("Output", "mapping", "The run's result: a value or a path to an earlier step's output")),
+            ("output", _f("Output", "mapping", "The run's result: a value or a field of an earlier step")),
         ),
     ),
 )
