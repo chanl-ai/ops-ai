@@ -3,8 +3,9 @@
 import * as React from 'react';
 import { ChevronDown, Wrench, X } from 'lucide-react';
 
-import { AgentToolsPicker, toolsOnWords } from '@/components/agents/agent-tools-picker';
+import { AgentToolsPicker, AppStateChip, ConnectAppButton, NotAddedLine, toolsOnWords, usePickerOpen } from '@/components/agents/agent-tools-picker';
 import { AppLogo } from '@/components/shared/app-logo';
+import { EmptyState } from '@/components/shared/empty-state';
 import { QueryError } from '@/components/shared/query-states';
 import { Row, Rows, Section } from '@/components/shared/surface';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +31,7 @@ function HeldTools({ agentId, app, onChange }: { agentId: string; app: AgentTool
             <p className="break-words text-sm">{t.label}</p>
             {t.description && <p className="line-clamp-2 text-xs text-muted-foreground">{t.description}</p>}
           </div>
+          {app.kind === 'other' && <Badge variant="outline" className="border-warning/40 text-warning-text">Not offered now</Badge>}
           {t.requiresApproval && <Badge variant="outline">Review: {t.approval ?? 'every call'}</Badge>}
           <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${t.label}`} onClick={() => onChange({ remove: [t.id] })}>
             <X className="size-4" />
@@ -56,10 +58,11 @@ function AppRow({ agentId, app, onChange }: { agentId: string; app: AgentToolApp
           <AppLogo name={app.name} className="size-8" />
           <div className="min-w-40 flex-1">
             <p className="break-words text-sm font-medium">{app.name}</p>
-            <p className="text-xs text-muted-foreground tabular-nums">
-              {app.connected ? (app.signIn ?? 'Connected') : 'Not connected'} · {toolsOnWords(app)}
-            </p>
+            <p className="text-xs text-muted-foreground tabular-nums">{[app.signIn, toolsOnWords(app)].filter(Boolean).join(' · ')}</p>
+            <NotAddedLine app={app} testId={`agent-tools-not-added-${app.id}`} />
           </div>
+          <AppStateChip app={app} />
+          {!app.connected && <ConnectAppButton agentId={agentId} app={app} testId={`connect-app-${app.id}`} />}
           <CollapsibleTrigger asChild>
             <Button type="button" variant="ghost" size="sm" aria-label={`${open ? 'Hide' : 'Show'} ${app.name} tools`}>
               {open ? 'Hide tools' : 'Show tools'} <ChevronDown className={`size-4 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
@@ -93,6 +96,8 @@ export function AgentToolsByApp({
   children?: React.ReactNode;
 }) {
   const apps = useAgentToolApps(agentId, { granted: true, limit: 50 });
+  // Add tools waits for the section's own read, so the picker's first read is the only one in flight when it opens.
+  const [pickerOpen, setPickerOpen] = usePickerOpen(agentId);
   const rows = (apps.data?.pages ?? []).flatMap((p) => p.data);
   return (
     <Section
@@ -108,7 +113,7 @@ export function AgentToolsByApp({
         </span>
       }
       description="The only systems this agent may call. Tools marked review pause every call for a person."
-      actions={<AgentToolsPicker agentId={agentId} agentName={agentName} onGrant={(ids) => onChange({ add: ids })} />}
+      actions={<AgentToolsPicker hidden={apps.isPending} agentId={agentId} agentName={agentName} open={pickerOpen} onOpenChange={setPickerOpen} onGrant={(ids) => onChange({ add: ids })} />}
     >
       {apps.isPending ? (
         <Skeleton className="m-4 h-16" data-testid="agent-tools-loading" />
@@ -141,7 +146,13 @@ export function AgentToolsByApp({
           ))}
         </Rows>
       ) : (
-        <p className="p-4 text-sm text-muted-foreground">No tools. The agent can only answer from knowledge.</p>
+        <EmptyState
+          icon={Wrench}
+          title="No tools yet"
+          description="The agent can only answer from knowledge. Add an app to let it look things up or act."
+          action={{ label: 'Browse apps', onClick: () => setPickerOpen(true) }}
+          testId="agent-tools-empty"
+        />
       )}
       {apps.hasNextPage && (
         <div className="border-t p-2 text-center">

@@ -4,6 +4,8 @@ import * as React from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Check, Plus, Search } from 'lucide-react';
 
+import { AppCard } from '@/components/connections/app-card';
+import { AppStateBadge } from '@/components/connections/app-state-badge';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
 import { ConnectSystemDialog, type ConnectTarget } from '@/components/connections/connect-system-dialog';
 import { AppLogo } from '@/components/shared/app-logo';
@@ -16,26 +18,34 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAgentToolAppTools, useAgentToolApps, useRefreshAgentToolApps } from '@/hooks/agent-tool-apps-queries';
-import { useSystemCard } from '@/hooks/systems-queries';
+import { useCan } from '@/hooks/me-queries';
+import { useSystemCard, type AppState } from '@/hooks/systems-queries';
 import { appPageHref } from '@/lib/app-links';
 import { plural } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import type { AgentToolApp, AppTool } from '@/lib/types/agent-tool-apps';
 
 /** How many of an app's tools the agent holds, in the words every app row and card use. */
 export const toolsOnWords = (a: Pick<AgentToolApp, 'toolsGranted' | 'toolsOffered'>) => `${a.toolsGranted} of ${plural(a.toolsOffered, 'tool')}`;
 
-/** The app's tools the team has not added are not offered here; this says how many wait on the app's Tools tab. */
-function ToolsNotAddedNote({ app }: { app: AgentToolApp }) {
-  const waiting = app.toolsTotal - app.toolsOffered;
-  if (waiting <= 0) return null;
+/** How many of an app's tools the team has not turned on, with the way to turn them on: the app's Tools tab. */
+export function NotAddedLine({ app, testId }: { app: Pick<AgentToolApp, 'id' | 'name' | 'notAdded'>; testId?: string }) {
+  if (app.notAdded <= 0) return null;
   return (
-    <p className="text-xs text-muted-foreground" data-testid="tools-not-added">
-      {`${plural(waiting, `${app.name} tool`)} ${waiting === 1 ? 'isn’t' : 'aren’t'} added. `}
+    <p className="text-xs text-muted-foreground" data-testid={testId ?? 'tools-not-added'}>
+      {`${plural(app.notAdded, 'more tool')} not turned on. `}
       <Link href={appPageHref(app.id, 'tools')} className="underline underline-offset-2 hover:text-foreground">
-        {`Add ${waiting === 1 ? 'it' : 'them'} from ${app.name}’s Tools tab`}
+        {`Turn on from ${app.name}’s Tools tab`}
       </Link>
     </p>
   );
+}
+
+/** The app's state from its card (`appState`, the one owner of the words); a group with no card has none to show. */
+export function AppStateChip({ app }: { app: Pick<AgentToolApp, 'appState' | 'connected'> }) {
+  const manages = useCan('connections', 'manage') === true;
+  if (!app.appState) return app.connected ? null : <Badge variant="outline">Not connected</Badge>;
+  return <AppStateBadge card={{ appState: app.appState as AppState }} manages={manages} />;
 }
 
 const CardsSkeleton = () => (
@@ -46,29 +56,23 @@ const CardsSkeleton = () => (
   </div>
 );
 
-/** One app as a card; a search that matched its tools lists them under it, each added by a click. */
-function AppCard({ app, onOpen, onAddTool }: { app: AgentToolApp; onOpen: () => void; onAddTool: (id: string) => void }) {
+/** One app as the Apps page draws it; a search that matched its tools lists them under the card, each added by a click. */
+function AppTile({ app, onOpen, onAddTool }: { app: AgentToolApp; onOpen: () => void; onAddTool: (id: string) => void }) {
   return (
-    <div className="flex min-w-0 flex-col rounded-lg border bg-card">
-      <button
-        type="button"
-        data-testid={`tools-app-${app.id}`}
-        onClick={onOpen}
-        className="flex min-w-0 items-start gap-3 rounded-lg p-3 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    <div className="flex min-w-0 flex-col gap-1">
+      <AppCard
+        testId={`tools-card-${app.id}`}
+        linkTestId={`tools-app-${app.id}`}
+        state={app.appState ?? undefined}
+        name={app.name}
+        subtitle={app.signIn}
+        onOpen={onOpen}
+        footState={<AppStateChip app={app} />}
       >
-        <AppLogo name={app.name} className="size-8" />
-        <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="truncate text-sm font-medium">{app.name}</span>
-          <span className="flex flex-wrap items-center gap-1.5">
-            <Badge variant="outline" className={app.connected ? 'border-success/40 bg-success/10 text-success-text' : 'text-muted-foreground'}>
-              {app.connected ? (app.signIn ?? 'Connected') : 'Not connected'}
-            </Badge>
-          </span>
-          <span className="text-xs text-muted-foreground tabular-nums">{app.toolsGranted > 0 ? `${toolsOnWords(app)} on` : plural(app.toolsOffered, 'tool')}</span>
-        </span>
-      </button>
+        <p className="text-xs text-muted-foreground tabular-nums">{app.toolsGranted > 0 ? `${toolsOnWords(app)} on` : plural(app.toolsOffered, 'tool')}</p>
+      </AppCard>
       {app.matches.length > 0 && (
-        <ul className="flex flex-col border-t py-1" aria-label={`Matching ${app.name} tools`}>
+        <ul className="flex flex-col rounded-lg border bg-card py-1" aria-label={`Matching ${app.name} tools`}>
           {app.matches.map((m) => (
             <li key={m.id}>
               <button
@@ -114,7 +118,7 @@ function AppsStep({ agentId, search, onOpen, onAddTool }: { agentId: string; sea
           <h3 className="text-xs font-medium text-muted-foreground">{heading}</h3>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
             {list.map((a) => (
-              <AppCard key={a.id} app={a} onOpen={() => onOpen(a)} onAddTool={onAddTool} />
+              <AppTile key={a.id} app={a} onOpen={() => onOpen(a)} onAddTool={onAddTool} />
             ))}
           </div>
         </section>
@@ -133,12 +137,39 @@ function MissingApp() {
   return <AskAnAdmin testId="tools-picker-ask-admin" lead="An app missing?" />;
 }
 
-function ConnectStrip({ agentId, app, onConnected }: { agentId: string; app: AgentToolApp; onConnected: () => void }) {
+/**
+ * Connect an app that is not connected: the app's own connect dialog for a person who manages the team's apps, Ask an
+ * admin for anyone else. Pseudo-apps (Workflows, Agents) are always connected and never reach it.
+ */
+export function ConnectAppButton({ agentId, app, onConnected, testId }: { agentId: string; app: AgentToolApp; onConnected?: () => void; testId?: string }) {
   const [connecting, setConnecting] = React.useState(false);
-  // Pseudo-apps (Workflows, Agents, a module) have no card and always answer connected, so the card is read only when a connection is wanted.
-  const card = useSystemCard(app.connected ? null : app.id);
+  const card = useSystemCard(app.id);
   const refresh = useRefreshAgentToolApps(agentId);
   const target: ConnectTarget | null = card.data ? (card.data.kind === 'plugin' && card.data.plugin ? { kind: 'plugin', card: card.data } : { kind: 'module', moduleId: card.data.moduleIds[0] ?? '', name: card.data.name }) : null;
+  if (card.isPending) return <Skeleton className="h-8 w-28" />;
+  if (!card.data?.mayManage || !target) return <AskAnAdmin testId={testId ? `${testId}-ask-admin` : 'tools-app-ask-admin'} />;
+  return (
+    <>
+      <Button type="button" size="sm" onClick={() => setConnecting(true)} data-testid={testId ?? 'tools-app-connect'}>
+        Connect {app.name}
+      </Button>
+      {connecting && (
+        <ConnectSystemDialog
+          target={target}
+          mode="connect"
+          open
+          onOpenChange={(o) => !o && setConnecting(false)}
+          onConnected={() => {
+            onConnected?.();
+            void refresh();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function ConnectStrip({ agentId, app, onConnected }: { agentId: string; app: AgentToolApp; onConnected: () => void }) {
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card px-3 py-2.5" data-testid="tools-app-connection">
       <AppLogo name={app.name} className="size-8" />
@@ -146,28 +177,7 @@ function ConnectStrip({ agentId, app, onConnected }: { agentId: string; app: Age
         <p className="truncate text-sm font-medium">{app.name}</p>
         <p className="text-xs text-muted-foreground">{app.connected ? (app.signIn ?? 'Connected') : 'Needs a connection before the agent can call it'}</p>
       </div>
-      {!app.connected &&
-        (card.isPending ? (
-          <Skeleton className="h-8 w-28" />
-        ) : card.data?.mayManage && target ? (
-          <Button type="button" size="sm" onClick={() => setConnecting(true)} data-testid="tools-app-connect">
-            Connect {app.name}
-          </Button>
-        ) : (
-          <AskAnAdmin testId="tools-app-ask-admin" />
-        ))}
-      {connecting && target && (
-        <ConnectSystemDialog
-          target={target}
-          mode="connect"
-          open
-          onOpenChange={(o) => !o && setConnecting(false)}
-          onConnected={() => {
-            onConnected();
-            void refresh();
-          }}
-        />
-      )}
+      {!app.connected && <ConnectAppButton agentId={agentId} app={app} onConnected={onConnected} />}
     </div>
   );
 }
@@ -256,9 +266,14 @@ function ToolsStep({ app, search, tools, picked, setPicked }: { app: AgentToolAp
 }
 
 function PickerDialog({ agentId, agentName, onGrant, onClose }: { agentId: string; agentName: string; onGrant: (ids: string[]) => void; onClose: () => void }) {
-  const [app, setApp] = React.useState<AgentToolApp | null>(null);
-  const [search, setSearch] = React.useState('');
-  const [picked, setPicked] = React.useState<Set<string>>(new Set());
+  // Kept past a remount (a resize can rebuild the page around the dialog), so the step and the selection survive it.
+  const kept = memory.get(agentId);
+  const [app, setApp] = React.useState<AgentToolApp | null>(kept?.app ?? null);
+  const [search, setSearch] = React.useState(kept?.search ?? '');
+  const [picked, setPicked] = React.useState<Set<string>>(new Set(kept?.picked ?? []));
+  React.useEffect(() => {
+    memory.set(agentId, { open: true, app, search, picked: [...picked] });
+  }, [agentId, app, search, picked]);
   const tools = useAgentToolAppTools(agentId, app?.id ?? null, { search });
   const open = (a: AgentToolApp | null) => {
     setApp(a);
@@ -310,7 +325,7 @@ function PickerDialog({ agentId, agentName, onGrant, onClose }: { agentId: strin
       {app ? (
         <div className="flex flex-col gap-3">
           <ConnectStrip agentId={agentId} app={app} onConnected={() => setApp({ ...app, connected: true })} />
-          <ToolsNotAddedNote app={app} />
+          <NotAddedLine app={app} />
           <ToolsStep app={app} search={search} tools={tools} picked={picked} setPicked={setPicked} />
         </div>
       ) : (
@@ -325,19 +340,31 @@ function PickerDialog({ agentId, agentName, onGrant, onClose }: { agentId: strin
   );
 }
 
+/** What an open picker holds, by agent, so it comes back as it was if the page under it is rebuilt. */
+const memory = new Map<string, { open: boolean; app: AgentToolApp | null; search: string; picked: string[] }>();
+
+/** Whether the picker is open, remembered as above; closing forgets the step and the selection. */
+export function usePickerOpen(agentId: string): [boolean, (open: boolean) => void] {
+  const [open, setOpenState] = React.useState(() => memory.get(agentId)?.open ?? false);
+  const setOpen = (o: boolean) => {
+    if (!o) memory.delete(agentId);
+    setOpenState(o);
+  };
+  return [open, setOpen];
+}
+
 /**
  * Add tools to an agent: step one lists the apps (searched on the server, connected first, a search also names the
  * tools it matched), step two lists one app's tools with Select all and one Add. A grant is the page's own save of the
  * stored tool list (`onGrant`), never part of the autosaved draft.
  */
-export function AgentToolsPicker({ agentId, agentName, disabled, onGrant }: { agentId: string; agentName: string; disabled?: boolean; onGrant: (ids: string[]) => void }) {
-  const [open, setOpen] = React.useState(false);
+export function AgentToolsPicker({ agentId, agentName, disabled, hidden, open, onOpenChange, onGrant }: { agentId: string; agentName: string; disabled?: boolean; hidden?: boolean; open: boolean; onOpenChange: (open: boolean) => void; onGrant: (ids: string[]) => void }) {
   return (
     <>
-      <Button type="button" variant="outline" size="sm" className="bg-card" disabled={disabled} onClick={() => setOpen(true)} data-testid="agent-tools-picker">
+      <Button type="button" variant="outline" size="sm" className={cn('bg-card', hidden && 'hidden')} disabled={disabled} onClick={() => onOpenChange(true)} data-testid="agent-tools-picker">
         <Plus className="size-3.5" /> Add tools
       </Button>
-      {open && <PickerDialog agentId={agentId} agentName={agentName} onGrant={onGrant} onClose={() => setOpen(false)} />}
+      {open && <PickerDialog agentId={agentId} agentName={agentName} onGrant={onGrant} onClose={() => onOpenChange(false)} />}
     </>
   );
 }
