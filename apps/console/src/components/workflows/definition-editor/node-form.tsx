@@ -13,13 +13,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { useEngineOptions } from '@/hooks/engine-queries';
 import { AccountSelect } from '@/components/connections/account-select';
 import { JsonInput } from '@/components/shared/json-input';
+import { asList, asObject, NONE, schemaChoices, without, type Schema } from '@/components/shared/schema-form';
 
 import { chipFor, FieldChip, FieldPicker, FieldSourceContext } from './field-picker';
 
 import type { EngineOption, NodeForm, NodeFormField, OptionSource } from '@/lib/types/engine';
 
 type Params = Record<string, unknown>;
-type Schema = { type?: string; enum?: unknown[]; oneOf?: { const?: unknown; title?: string }[]; anyOf?: Schema[]; default?: unknown; properties?: Record<string, Schema>; items?: Schema; required?: string[] };
 
 export interface StepRef {
   id: string;
@@ -36,34 +36,13 @@ export interface StepRefs {
   earlier: StepRef[];
 }
 
-const NONE = '__none__';
 /** A saved name or id in words: `apply_tool_access` reads "Apply tool access". */
 const spoken = (id: string) => {
   const words = id.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim().toLowerCase();
   return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
-/**
- * A field's choices with the words to show for each: JSON Schema's `oneOf` of `{ const, title }` names each option,
- * and a plain `enum` value shows as written with a capital first letter. A setting that also takes a path (`anyOf`
- * of the choices and `$.…`) lists the choices.
- */
-export function schemaChoices(schema: { enum?: unknown[]; oneOf?: { const?: unknown; title?: string }[]; anyOf?: { enum?: unknown[] }[] }): { value: string; label: string }[] {
-  const upper = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
-  const titled = (schema.oneOf ?? []).filter((o) => o.const !== undefined);
-  if (titled.length) return titled.map((o) => ({ value: String(o.const), label: o.title ?? upper(String(o.const)) }));
-  return (schema.enum ?? schema.anyOf?.find((s) => s.enum)?.enum ?? []).map((v) => ({ value: String(v), label: upper(String(v)) }));
-}
-
-const asObject = (v: unknown): Params => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Params) : {});
-const asList = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
-/** Drops a cleared setting rather than storing an empty value the schema may refuse. */
-const without = (p: Params, key: string, value: unknown): Params => {
-  const next = { ...p };
-  if (value === undefined || value === '') delete next[key];
-  else next[key] = value;
-  return next;
-};
+export { schemaChoices };
 
 /**
  * A node's settings as the form its type declares (`ui`): one control per parameter, in the type's order. The form
@@ -319,7 +298,7 @@ function ListInput({ id, item, schema, value, steps, onChange }: { id: string; i
               <X />
             </Button>
           </div>
-          <NodeSettingsForm form={item} schema={schema} value={asObject(entry)} steps={steps} idPrefix={`${id}-${i}`} onChange={(next) => onChange(value.map((e, j) => (j === i ? next : e)))} />
+          <NodeSettingsForm form={item} schema={schema as Record<string, unknown>} value={asObject(entry)} steps={steps} idPrefix={`${id}-${i}`} onChange={(next) => onChange(value.map((e, j) => (j === i ? next : e)))} />
         </div>
       ))}
       <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => onChange([...value, {}])}>

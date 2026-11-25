@@ -115,6 +115,60 @@
       "personId": "<usr>",
       "teams": [
         {
+          "heldInTeam": [
+            {
+              "action": "decide",
+              "area": "secrets_egress",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": true
+            },
+            {
+              "action": "manage",
+              "area": "secrets_egress",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": true
+            },
+            {
+              "action": "view",
+              "area": "settings",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": true
+            },
+            {
+              "action": "manage",
+              "area": "settings",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": true
+            }
+          ],
           "permissions": [
             {
               "action": "view",
@@ -5597,6 +5651,60 @@
     "personId": "<usr>",
     "teams": [
       {
+        "heldInTeam": [
+          {
+            "action": "decide",
+            "area": "secrets_egress",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": true
+          },
+          {
+            "action": "manage",
+            "area": "secrets_egress",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": true
+          },
+          {
+            "action": "view",
+            "area": "settings",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": true
+          },
+          {
+            "action": "manage",
+            "area": "settings",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": true
+          }
+        ],
         "permissions": [
           {
             "action": "view",

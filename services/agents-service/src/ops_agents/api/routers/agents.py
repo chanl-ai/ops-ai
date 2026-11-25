@@ -25,7 +25,7 @@ from ops_agent_kernel.prompt_writer import Brief, Patterns
 from ops_agents.activities.agent_limits import AgentLimits, check_limits, limits_of
 from ops_agents.activities.agent_limits import wire as wire_limits
 from ops_agents.activities.tool_directory import ToolsUnavailable
-from ops_agents.app import agent_brief
+from ops_agents.app import agent_brief, instruction_sections
 from ops_agents.app.brief_draft import draft_brief
 from ops_agents.app.evals import parse_cases, run_eval
 from ops_agents.domain.evals import TRIGGER_CLI, TRIGGER_MANUAL
@@ -41,6 +41,7 @@ from ops_store import isolation
 from ...app.skill_content import Problem, blocker_of
 from ...store.agent_registry import AgentRow, digest_of, refuse_stale
 from ...store.graphs import StoredThread
+from ...store.instruction_sections import InstructionSections
 from ...store.template_copies import TemplateCopies
 from .. import eval_gate, publish_reviews
 from ..account_names import require_team_accounts
@@ -565,6 +566,7 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
         mode=body.prompt_mode,
         patterns=body.patterns,
         writes_prompt=body.instructions is not None or body.role is not None,
+        listing=await instruction_sections.effective(InstructionSections(rt.db)),
     )
     # Saved limits must still agree with the version: a changed model or a dropped tool without new limits is refused,
     # naming the limit, rather than leaving callers a choice the agent no longer has.

@@ -73,6 +73,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.thread_inbox TO ops_agents_runtime;
 REVOKE UPDATE ON dbo.chat_search FROM ops_agents_runtime;
 GRANT SELECT, INSERT, DELETE ON dbo.chat_search TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_guardrails TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.agent_instruction_sections TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.agent_memories TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.memory_audit TO ops_agents_runtime;
 REVOKE UPDATE, DELETE ON dbo.message_memory_use FROM ops_agents_runtime;

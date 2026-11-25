@@ -70,6 +70,9 @@ class TeamCells(TypedDict):
     teamId: str
     teamName: str
     permissions: list[EffectiveCell]
+    # The Security-team cells the person's roles hold in this team's own grid. They grant nothing here, except where a
+    # route holds the cell in the acting team (`can(in_team=True)`: the agent instruction sections' settings.manage).
+    heldInTeam: list[EffectiveCell]
 
 
 # Transfers, closes and restores the workspace: on Owner and no other role, moved only by a transfer (E42).
@@ -351,7 +354,8 @@ def permissions_view(
         per_team = {t: v for t, v in per_team.items() if t in teams}
     # A Security-team action is decided in the workspace's Security team whatever team a request acts in, so a
     # grid cell for it in any other team grants nothing and is not listed there; with no Security team named,
-    # nobody holds it.
+    # nobody holds it. They are kept apart per team (`heldInTeam`) for a route that holds one in the acting team.
+    in_team = {t: {c: g for c, g in held.items() if c in SECURITY_TEAM_ACTIONS} for t, held in per_team.items()}
     per_team = {
         t: {cell: g for cell, g in held.items() if t == security or cell not in SECURITY_TEAM_ACTIONS}
         for t, held in per_team.items()
@@ -383,6 +387,7 @@ def permissions_view(
                 "teamId": team,
                 "teamName": h.teams.get(team, team),
                 "permissions": rows(held),
+                "heldInTeam": rows(in_team[team]),
             }
             for team, held in per_team.items()
         ],

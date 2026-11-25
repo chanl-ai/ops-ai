@@ -411,7 +411,7 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
         }
         primary={
           <>
-            {!readOnly && <LifecycleActions lifecycle={lifecycle} changed={changed} saving={saving} onPublish={() => setPublishOpen(true)} onSetPaused={setPaused} pausing={pausing} canPublish={canPublish !== false} />}
+            {!readOnly && <LifecycleActions problemsNote={!checking && !(validation?.checks ?? []).length ? 'No problems' : undefined} lifecycle={lifecycle} changed={changed} saving={saving} onPublish={() => setPublishOpen(true)} onSetPaused={setPaused} pausing={pausing} canPublish={canPublish !== false} />}
             {readOnly && <ViewOnlyLine lifecycle={lifecycle} note={readOnlyNote} />}
             {/* Someone who may only read a draft still sees that it waits on a publish, and why they cannot start it. */}
             {readOnly && canPublish === false && lifecycle.stage === 'draft' && !lifecycle.review && <LockedReason area="workflows" action="publish" label="Publish" />}

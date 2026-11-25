@@ -87,6 +87,51 @@ export interface Agent {
 
 export type PromptMode = 'brief' | 'full';
 
+/** A section's tag: the id of a menu section in the workspace's list (what evals read), or `custom`. */
+export type BriefSectionKind = string;
+
+/** A headed section a builder adds to the brief; a custom section drives nothing. */
+export interface BriefSection {
+  kind: BriefSectionKind;
+  /** The list's label for a menu kind when it was saved, or a custom section's own name. */
+  name: string;
+  text: string;
+}
+
+export type SectionKind = 'fixed' | 'menu' | 'custom';
+export type SectionDrives = 'none' | 'handoff' | 'never-last' | 'eval-tag';
+/** The icon names a preset may carry; the console maps each to its own icon. */
+export type PresetIcon = 'smile' | 'sun' | 'scale' | 'briefcase' | 'zap' | 'message' | 'heart' | 'shield' | 'star' | 'book';
+
+/** A sentence offered as a chip above a section; picking it writes the text into the section. */
+export interface SectionPreset {
+  id: string;
+  label: string;
+  icon: PresetIcon;
+  text: string;
+}
+
+/** One entry of the workspace's agent instruction list (agents-service `/v1/agent-instruction-sections`). */
+export interface InstructionSection {
+  id: string;
+  label: string;
+  hint: string;
+  kind: SectionKind;
+  order: number;
+  required: boolean;
+  hidden: boolean;
+  drives: SectionDrives;
+  /** The Add section menu's group; empty for a section an admin added, which the menu lists under Your sections. */
+  group: string;
+  example: string;
+  presets: SectionPreset[];
+}
+
+export interface InstructionSectionList {
+  sections: InstructionSection[];
+  customMax: number;
+}
+
 export interface AgentBrief {
   purpose: string;
   goal: string;
@@ -97,6 +142,8 @@ export interface AgentBrief {
   never: string[];
   /** Kept readable on older versions; the brief no longer shows or writes them (they seed eval cases). */
   success: string[];
+  /** Sections added from the Add section menu or written by the builder; absent on a brief saved before them. */
+  sections?: BriefSection[];
 }
 
 export type Thinking = 'default' | 'low' | 'medium' | 'high';

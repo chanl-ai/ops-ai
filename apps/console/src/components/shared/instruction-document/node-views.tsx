@@ -4,12 +4,16 @@ import * as React from 'react';
 import { NodeViewContent, NodeViewWrapper, useEditorState, type ReactNodeViewProps } from '@tiptap/react';
 import { Ban, Braces, Lock, LockOpen, Play, Plus, Search, TriangleAlert, X, type LucideIcon } from 'lucide-react';
 
+import { Selection } from '@tiptap/pm/state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { PRESET_ICONS } from '@/components/shared/preset-icons';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { PublishBlocker, Ref, RefKind, ReferenceItem } from '@/lib/types/references';
 
+import { cn } from '@/lib/utils';
 import { KIND_ICON } from '@/components/shared/reference-kinds';
 
 import { type IfNot, chipFor, refToken, refsInNode, runsIndex } from './document-model';
@@ -32,6 +36,10 @@ export interface DocumentContextValue {
   /** Lines that do not block a publish, drawn like a problem in the warning colour. */
   warnings: readonly InvalidField[];
   readOnly: boolean;
+  /** Removes the block a Remove control on its heading names; left out, no block draws one. */
+  removeBlock?: (key: string) => void;
+  /** Called with a block's key and the chip picked above its text; left out, no block draws chips. */
+  pickChip?: (key: string, text: string) => void;
   /** Set where a missing reference can be given back (the agent page). */
   addBack?: (ref: Ref) => void;
   chooseAnother: (ref: Ref) => void;
@@ -88,19 +96,76 @@ function WarningLine({ message }: { message: string }) {
   );
 }
 
-/** A locked heading with the text or the list under it. */
-export function BlockView({ node }: ReactNodeViewProps) {
-  const { missing, invalid, warnings } = React.useContext(DocumentContext);
+/**
+ * A locked heading with the text or the list under it. An optional section with nothing in it is one line, its heading
+ * and an Add link, until the person adds to it (or the cursor is in it); read-only, the line says None.
+ */
+type Chip = { id: string; label: string; icon?: string; text: string };
+/** The chip whose sentence is the section's whole text, which draws pressed. */
+const chipOn = (chips: Chip[], text: string) => chips.find((c) => c.text.trim() === text.trim())?.id ?? '';
+
+export function BlockView({ node, editor, getPos }: ReactNodeViewProps) {
+  const { missing, invalid, warnings, readOnly, removeBlock, pickChip } = React.useContext(DocumentContext);
   const key = node.attrs.key as string;
   const error = invalid.find((i) => i.field === key);
   const errorId = `${React.useId()}-error`;
+  const optional = !!node.attrs.optional;
+  const empty = node.textContent.trim() === '';
+  const [asked, setAsked] = React.useState(false);
+  const inside = useEditorState({
+    editor,
+    selector: (ctx) => {
+      const at = getPos();
+      const from = ctx.editor.state.selection.from;
+      return typeof at === 'number' && from > at && from < at + node.nodeSize;
+    },
+  });
+  const collapsed = optional && empty && !asked && !inside && !error;
+  const open = () => {
+    setAsked(true);
+    requestAnimationFrame(() => {
+      const at = getPos();
+      if (typeof at !== 'number') return;
+      const { state, view } = editor;
+      view.dispatch(state.tr.setSelection(Selection.near(state.doc.resolve(at + 1))));
+      view.focus();
+    });
+  };
+  const label = node.attrs.label as string;
   return (
-    <NodeViewWrapper as="section" role="group" aria-label={node.attrs.label} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined} data-field={key} className="flex flex-col gap-2">
+    <NodeViewWrapper as="section" role="group" aria-label={label} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined} data-field={key} data-collapsed={collapsed ? 'yes' : undefined} className="flex flex-col gap-2">
       {/* A plain heading, the size and weight of every other section heading on the page. */}
-      <div contentEditable={false} role="heading" aria-level={2} className="text-sm font-semibold select-none">
-        {node.attrs.label}
+      <div contentEditable={false} className="flex items-center gap-2 select-none">
+        <div role="heading" aria-level={2} className="text-sm font-semibold">
+          {label}
+          {collapsed && !label.includes('·') && <span className="font-normal text-muted-foreground"> · optional</span>}
+        </div>
+        {!!node.attrs.note && <span className="text-xs text-muted-foreground">{node.attrs.note as string}</span>}
+        {!!node.attrs.removable && !readOnly && removeBlock && (
+          <Button type="button" variant="ghost" size="icon" className="ml-auto size-6" aria-label={`Remove ${label}`} title={`Remove ${label}`} onClick={() => removeBlock(key)} data-testid={`brief-remove-${key}`}>
+            <X className="size-3.5" />
+          </Button>
+        )}
+        {collapsed && (readOnly ? <span className="text-sm text-muted-foreground">None</span> : (
+          <Button type="button" variant="link" size="sm" onClick={open} data-testid={`brief-add-${key}`}>
+            <Plus /> Add
+          </Button>
+        ))}
       </div>
-      <NodeViewContent className={error ? 'rounded-sm ring-2 ring-destructive/40' : undefined} />
+      {!readOnly && pickChip && Array.isArray(node.attrs.chips) && (
+        <ToggleGroup type="single" variant="outline" size="sm" value={chipOn(node.attrs.chips as Chip[], node.textContent)} onValueChange={() => {}} contentEditable={false} aria-label={`${label} presets`} className="w-full flex-wrap gap-1 select-none" data-testid={`brief-chips-${key}`}>
+          {(node.attrs.chips as Chip[]).map((c) => {
+            const Icon = c.icon ? PRESET_ICONS[c.icon] : undefined;
+            return (
+              <ToggleGroupItem key={c.id} value={c.id} className="min-w-fit flex-none rounded-md border-l" onClick={() => pickChip(key, c.text)} title={c.text}>
+                {Icon && <Icon aria-hidden />}
+                {c.label}
+              </ToggleGroupItem>
+            );
+          })}
+        </ToggleGroup>
+      )}
+      <NodeViewContent className={cn(collapsed && 'hidden', error && 'rounded-sm ring-2 ring-destructive/40')} />
       {error && (
         <p id={errorId} contentEditable={false} className="text-xs text-destructive-text">
           {error.message}

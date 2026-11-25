@@ -12,7 +12,20 @@ from pathlib import Path
 from typing import Any
 
 from apps_walk import ops_cli
-from brief_steps import brief, confirm_skill, freeze_skill
+from brief_steps import (
+    COMPLIANCE_HEADINGS,
+    COMPLIANCE_TEXT,
+    SECTION_HEADINGS,
+    SECTIONS,
+    brief,
+    compliance_id,
+    compliance_sections,
+    confirm_skill,
+    freeze_skill,
+    headings,
+    sections_brief,
+    with_compliance,
+)
 from main_chains import bank_stack, publish_bank_module
 from usecase_harness import check, finish
 
@@ -68,10 +81,63 @@ with bank_stack() as s:
         and len(live_skill["content"]["steps"]) == 3
         and agent.get("promptMode") == "brief"
         and [p["id"] for p in before["problems"]] == [f"tool:{read}"]
-        and after["canRequest"] is True and after["problems"] == [] and after["blockers"] == []
+        and [(b["code"], b["field"]) for b in before.get("blockers") or []] == [("missing_reference", "brief.howToAnswer")]
+        and (after["canRequest"], after["problems"], after.get("blockers")) == (True, [], [])
         # A brief's never rules are reviewed by a second person, so the request waits for one or is live at once.
         and asked.get("status") in ("pending", "approved")
         and live["uses"]["skills"] == 2,
         (live_skill.get("publishedVersion"), agent.get("promptMode"), before, after, asked.get("status"), live.get("uses")),
+    )
+
+    # 27. The same sections from a file: `apply` takes the brief's `sections`, and `export` prints them with the
+    # prompt's start written in order (the never rules follow it on every turn, so they are not in the export).
+    desk_file = written(
+        "sections", {"name": f"Sections desk cli {RUN}", "role": "Freezes accounts", "brief": sections_brief(SECTIONS)}
+    )
+    code, desk = ops_cli("builder", "agents", "apply", desk_file)
+    stored: dict[str, Any] = {}
+    if code == 0 and isinstance(desk, dict):
+        stored = answer(ops_cli("builder", "agents", "export", str(desk["id"])))
+    replied = (stored.get("brief") or {}).get("sections")
+    check(
+        "27 opsai applies a brief with Tone and a custom section, and export prints both with the prompt in order",
+        code == 0
+        and replied == [{**SECTIONS[0]}, {"kind": "tone", "name": "Tone", "text": "Calm and plain."}]
+        and headings(str(stored.get("instructions", ""))) == SECTION_HEADINGS[:-1],
+        (code, desk if code else replied, headings(str(stored.get("instructions", "")))),
+    )
+
+    # 31. The workspace's list from files: `opsai agents sections` prints it, `sections-apply` saves a file as an
+    # admin and is refused as a viewer, an agent applied with the added section exports it in its place, and
+    # `sections-reset` brings the first list back.
+    code, listing = ops_cli("admin", "agents", "sections")
+    listing = listing if code == 0 and isinstance(listing, dict) else {}
+    list_file = written("section-list", with_compliance(listing))
+    applied, _ = ops_cli("admin", "agents", "sections-apply", list_file)
+    by_viewer, _ = ops_cli("viewer", "agents", "sections-apply", list_file)
+    _, seen = ops_cli("builder", "agents", "sections")
+    noted_file = written(
+        "compliance",
+        {
+            "name": f"Compliance desk cli {RUN}",
+            "role": "Freezes accounts",
+            "brief": sections_brief(compliance_sections(compliance_id(seen))),
+        },
+    )
+    code, noted = ops_cli("builder", "agents", "apply", noted_file)
+    stored = answer(ops_cli("builder", "agents", "export", str(noted["id"]))) if code == 0 and isinstance(noted, dict) else {}
+    names = [(x.get("name"), x.get("text")) for x in (stored.get("brief") or {}).get("sections") or []]
+    reset, _ = ops_cli("admin", "agents", "sections-reset")
+    _, restored = ops_cli("admin", "agents", "sections")
+    check(
+        "31 opsai saves the workspace's sections as an admin and is refused as a viewer, and export prints the added section in its place",
+        applied == 0
+        and by_viewer != 0
+        and names == [("Compliance notes", COMPLIANCE_TEXT), ("Voice", "Calm and plain.")]
+        and headings(str(stored.get("instructions", ""))) == COMPLIANCE_HEADINGS[:-1]
+        and reset == 0
+        and bool(listing)
+        and restored == listing,
+        (applied, by_viewer, names, headings(str(stored.get("instructions", ""))), reset, compliance_id(restored)),
     )
 finish()

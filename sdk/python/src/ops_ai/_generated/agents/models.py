@@ -288,16 +288,6 @@ NeverItem: TypeAlias = str
 Succes: TypeAlias = str
 
 
-class Brief(TypedDict, closed=True):
-    examples: NotRequired[str]
-    goal: NotRequired[str]
-    handOff: NotRequired[list[HandOffItem]]
-    howToAnswer: NotRequired[str]
-    never: NotRequired[list[NeverItem]]
-    purpose: str
-    success: NotRequired[list[Succes]]
-
-
 class BriefDraft(TypedDict, closed=True):
     examples: str
     handOff: list[str]
@@ -310,6 +300,18 @@ class BriefDraftInput(TypedDict, closed=True):
     description: str
 
 
+class BriefSection(TypedDict, closed=True):
+    kind: str
+    name: NotRequired[str]
+    text: NotRequired[str]
+
+
+class BriefSectionView(TypedDict, closed=True):
+    kind: str
+    name: NotRequired[str]
+    text: NotRequired[str]
+
+
 class BriefView(TypedDict, closed=True):
     examples: NotRequired[str]
     goal: NotRequired[str]
@@ -317,6 +319,7 @@ class BriefView(TypedDict, closed=True):
     howToAnswer: NotRequired[str]
     never: NotRequired[list[str]]
     purpose: str
+    sections: NotRequired[list[BriefSectionView]]
     success: NotRequired[list[str]]
 
 
@@ -1407,6 +1410,44 @@ class PortView(TypedDict, closed=True):
     name: str
 
 
+class Preset(TypedDict, closed=True):
+    icon: Literal[
+        "smile",
+        "sun",
+        "scale",
+        "briefcase",
+        "zap",
+        "message",
+        "heart",
+        "shield",
+        "star",
+        "book",
+    ]
+    id: str
+    label: str
+    text: str
+
+
+class PresetIn(TypedDict, closed=True):
+    icon: NotRequired[
+        Literal[
+            "smile",
+            "sun",
+            "scale",
+            "briefcase",
+            "zap",
+            "message",
+            "heart",
+            "shield",
+            "star",
+            "book",
+        ]
+    ]
+    id: NotRequired[str]
+    label: str
+    text: str
+
+
 class PreviewIn(TypedDict, closed=True):
     after: NotRequired[str | None]
     rule: dict[str, JsonValue]
@@ -1825,6 +1866,44 @@ class ScheduleView(TypedDict, closed=True):
     triggerStep: str
     words: str
     workflowId: str
+
+
+class SectionItem(TypedDict, closed=True):
+    drives: NotRequired[Literal["none", "handoff", "never-last", "eval-tag"]]
+    example: NotRequired[str]
+    group: NotRequired[str]
+    hidden: NotRequired[bool]
+    hint: NotRequired[str]
+    id: str
+    kind: Literal["fixed", "menu", "custom"]
+    label: str
+    order: int
+    presets: NotRequired[list[Preset]]
+    required: NotRequired[bool]
+
+
+class SectionItemIn(TypedDict, closed=True):
+    drives: NotRequired[Literal["none", "handoff", "never-last", "eval-tag"]]
+    example: NotRequired[str]
+    group: NotRequired[str]
+    hidden: NotRequired[bool]
+    hint: NotRequired[str]
+    id: NotRequired[str]
+    kind: Literal["fixed", "menu", "custom"]
+    label: str
+    order: NotRequired[int]
+    presets: NotRequired[list[PresetIn]]
+    required: NotRequired[bool]
+
+
+class SectionList(TypedDict, closed=True):
+    customMax: NotRequired[int]
+    sections: list[SectionItem]
+
+
+class SectionListIn(TypedDict, closed=True):
+    customMax: NotRequired[int]
+    sections: list[SectionItemIn]
 
 
 class Serves(TypedDict, closed=True):
@@ -2793,33 +2872,6 @@ class AgentLimits(TypedDict, closed=True):
     temperature: NotRequired[TemperatureLimits | None]
 
 
-class AgentPatch(TypedDict, closed=True):
-    accounts: NotRequired[dict[str, str] | None]
-    allTeamKnowledgeBases: NotRequired[bool | None]
-    baseDigest: str
-    baseVersion: int
-    brief: NotRequired[Brief | None]
-    channels: NotRequired[list[Literal["voice", "chat", "email", "api"]] | None]
-    collections: NotRequired[list[str] | None]
-    guardrailPins: NotRequired[list[GuardrailPinInput] | None]
-    guardrails: NotRequired[GuardrailsInput | None]
-    instructions: NotRequired[str | None]
-    limits: NotRequired[AgentLimits | None]
-    memory: NotRequired[MemorySettings | None]
-    model: NotRequired[str | None]
-    name: NotRequired[str | None]
-    note: NotRequired[str | None]
-    patterns: NotRequired[Patterns | None]
-    promptMode: NotRequired[Literal["brief", "full"] | None]
-    protection: NotRequired[Literal["system", "managed"] | None]
-    role: NotRequired[str | None]
-    skillMenu: NotRequired[Literal["team", "attached", "off"] | None]
-    templateId: NotRequired[str | None]
-    toolIds: NotRequired[list[str] | None]
-    widgetPins: NotRequired[list[WidgetPinInput] | None]
-    widgets: NotRequired[WidgetSettings | None]
-
-
 class AgentPublishRequest(TypedDict, closed=True):
     agentId: str
     agentName: str
@@ -2956,6 +3008,17 @@ class Branch(TypedDict, closed=True):
 class BranchOut(TypedDict, closed=True):
     otherwise: JumpOut
     test: StepCheckOut
+
+
+class Brief(TypedDict, closed=True):
+    examples: NotRequired[str]
+    goal: NotRequired[str]
+    handOff: NotRequired[list[HandOffItem]]
+    howToAnswer: NotRequired[str]
+    never: NotRequired[list[NeverItem]]
+    purpose: str
+    sections: NotRequired[list[BriefSection]]
+    success: NotRequired[list[Succes]]
 
 
 class BulkResult(TypedDict, closed=True):
@@ -3364,6 +3427,11 @@ class EnvelopeRunStarted(TypedDict, closed=True):
 
 class EnvelopeScheduleView(TypedDict, closed=True):
     data: ScheduleView
+    success: Literal[True]
+
+
+class EnvelopeSectionList(TypedDict, closed=True):
+    data: SectionList
     success: Literal[True]
 
 
@@ -4305,6 +4373,33 @@ class AgentEvalRun(TypedDict, closed=True):
     status: Literal["complete"]
     summary: EvalSummary
     unpriced: bool
+
+
+class AgentPatch(TypedDict, closed=True):
+    accounts: NotRequired[dict[str, str] | None]
+    allTeamKnowledgeBases: NotRequired[bool | None]
+    baseDigest: str
+    baseVersion: int
+    brief: NotRequired[Brief | None]
+    channels: NotRequired[list[Literal["voice", "chat", "email", "api"]] | None]
+    collections: NotRequired[list[str] | None]
+    guardrailPins: NotRequired[list[GuardrailPinInput] | None]
+    guardrails: NotRequired[GuardrailsInput | None]
+    instructions: NotRequired[str | None]
+    limits: NotRequired[AgentLimits | None]
+    memory: NotRequired[MemorySettings | None]
+    model: NotRequired[str | None]
+    name: NotRequired[str | None]
+    note: NotRequired[str | None]
+    patterns: NotRequired[Patterns | None]
+    promptMode: NotRequired[Literal["brief", "full"] | None]
+    protection: NotRequired[Literal["system", "managed"] | None]
+    role: NotRequired[str | None]
+    skillMenu: NotRequired[Literal["team", "attached", "off"] | None]
+    templateId: NotRequired[str | None]
+    toolIds: NotRequired[list[str] | None]
+    widgetPins: NotRequired[list[WidgetPinInput] | None]
+    widgets: NotRequired[WidgetSettings | None]
 
 
 class AgentPublishCheck(TypedDict, closed=True):

@@ -202,28 +202,37 @@ function chosen(rows: ChatConnector[]): Record<string, string> {
   return Object.fromEntries(rows.filter((r) => r.account).map((r) => [r.appId, r.account as string]));
 }
 
-/** The picker on a chat that exists: each change is saved on the chat at once. */
-export function ConnectorsPicker({ threadId, disabled }: { threadId: string; disabled?: boolean }) {
+/**
+ * The picker on a chat: each change is saved on the chat at once. Where the chat does not exist yet (the agent page's
+ * test panel), the opening the list makes the chat through
+ * `ensureThread`, whose list then appears; changes wait for it.
+ */
+export function ConnectorsPicker({ threadId, agentId, ensureThread, disabled }: { threadId?: string; agentId?: string; ensureThread?: () => Promise<unknown>; disabled?: boolean }) {
   const [open, setOpen] = React.useState(false);
   const found = useChatConnectors(threadId);
-  const save = useSetChatConnectors(threadId);
-  const rows = found.data?.connectors ?? [];
+  // A draft agent is not live, so the agent's list cannot be read before the test chat exists: the picker waits for the chat.
+  const fresh = useNewChatConnectors(agentId, !threadId && !!agentId && !ensureThread);
+  const save = useSetChatConnectors(threadId ?? '');
+  const source = threadId || ensureThread ? found : fresh;
+  const rows = source.data?.connectors ?? [];
   return (
     <ConnectorsMenu
       open={open}
-      setOpen={setOpen}
+      setOpen={(o) => {
+        setOpen(o);
+        if (o && !threadId) void ensureThread?.();
+      }}
       rows={rows}
-      pending={found.isPending}
-      failed={found.isError}
+      pending={source.isPending || (!threadId && !!ensureThread)}
+      failed={source.isError && (!!threadId || !ensureThread)}
       saving={save.isPending}
       disabled={disabled}
-      onToggle={(c) => save.mutate(nextOff(rows, c), { onError: (e) => toast.error(`Couldn’t change ${c.name} for this chat`, { description: e.message }) })}
-      onPick={(c, account) =>
+      onToggle={(c) => threadId && save.mutate(nextOff(rows, c), { onError: (e) => toast.error(`Couldn’t change ${c.name} for this chat`, { description: e.message }) })}
+      onPick={threadId ? (c, account) =>
         save.mutate(
           { off: rows.filter((r) => r.appGroup !== 'needs_admin' && !r.on).map((r) => r.appId), accounts: { ...chosen(rows), [c.appId]: account } },
           { onError: (e) => toast.error(`Couldn’t change ${c.name}’s account for this chat`, { description: e.message }) },
-        )
-      }
+        ) : undefined}
     />
   );
 }

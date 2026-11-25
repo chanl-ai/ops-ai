@@ -291,7 +291,7 @@ const REUSE = {
     what: 'a picker built on Command outside the shared ones (use EntityPicker or SearchSelect over an /options source, or CaretMenu at the caret)',
     // The step sheet's field picker lists one workflow's earlier steps, which the sample route returns whole and grouped
     // by step, so there is nothing more on the server to search (editors design, review S2).
-    owns: (rel) => rel.startsWith('src/components/ui/') || ['src/components/shared/entity-picker.tsx', 'src/components/shared/search-select.tsx', 'src/components/shared/caret-menu.tsx', 'src/components/workflows/definition-editor/field-picker.tsx'].includes(rel),
+    owns: (rel) => rel.startsWith('src/components/ui/') || ['src/components/shared/entity-picker.tsx', 'src/components/shared/search-select.tsx', 'src/components/shared/caret-menu.tsx', 'src/components/workflows/definition-editor/field-picker.tsx', 'src/components/shared/grouped-picker.tsx'].includes(rel),
     hit: (text) => text.search(/from ['"]@\/components\/ui\/command['"]/),
   },
   listFilter: {

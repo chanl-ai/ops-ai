@@ -18,6 +18,7 @@ import type {
   Workflow,
   WorkflowDetail,
   WorkflowGraph,
+  InstructionSectionList,
 } from '@/lib/types/domain';
 import type { ConnectionActivity, ConnectionRef, Dependant } from '@/lib/types/integrations';
 
@@ -60,7 +61,9 @@ import { createAssuranceMock } from './assurance';
 import { createAgentPublishMock, createAgentVersionStore } from './agent-publish';
 import { createMcpLinksMock } from './mcp-links';
 import { createReferencesMock } from './references';
-import { composeBrief, publishCheckOf, SEED_BRIEF } from './references/agent-brief';
+import { sectionProblem, titled } from '@/lib/brief-sections';
+import { checkedSectionList, defaultSectionList } from './references/agent-instruction-sections';
+import { composeBrief, neverSection, publishCheckOf, SEED_BRIEF } from './references/agent-brief';
 import { createAgentWrappers } from './agent-wrappers';
 import { createWikiMock } from './wiki';
 import { auditSink } from './governance';
@@ -84,13 +87,15 @@ function pushVersion(list: Version[], version: number, note: string, changes: st
 
 /** In-memory implementation of OpsApi for demos and UI review. Transport behaviour lives in ./runtime. */
 export function createMockApi(): OpsApi {
+  // The workspace's saved agent instruction list; none means the default.
+  let savedSections: InstructionSectionList | null = null;
   const policies: GatePolicy[] = F.POLICIES.map((p) => ({ ...p, workflowName: '' }));
   const workflows = F.WORKFLOWS.map((w) => ({ ...w }));
   const graphs: Record<string, WorkflowGraph> = Object.fromEntries(Object.entries(SEED_GRAPHS).map(([k, g]) => [k, { workflowId: k, ...g }]));
   const agents = F.AGENTS.map((a) => ({ ...a, guardrails: { ...a.guardrails } }));
   // One agent is written as a brief; the others are legacy text, as agents saved before briefs are.
   const briefAgent = agents.find((a) => a.id === 'ag_dispute');
-  if (briefAgent) Object.assign(briefAgent, { brief: SEED_BRIEF, promptMode: 'brief' as const, role: SEED_BRIEF.purpose, instructions: composeBrief(SEED_BRIEF) });
+  if (briefAgent) Object.assign(briefAgent, { brief: SEED_BRIEF, promptMode: 'brief' as const, role: SEED_BRIEF.purpose, instructions: composeBrief(briefAgent.name, SEED_BRIEF, defaultSectionList().sections) });
   // Which agent version is published; graph pins and agent rows read it, the agent publish flow writes it.
   const agentStore = createAgentVersionStore(agents);
   // Agent wrapper workflows and console chat deployments; assigned once the stores they read exist, read at request time.
@@ -312,7 +317,7 @@ export function createMockApi(): OpsApi {
     const controls = { channels: ['voice', 'chat', 'email', 'api'] as Channel[], guardrails: ['redactPii', 'maxToolCallsPerTurn', 'whenUnsure', 'blockedTopics'] as (keyof AgentGuardrails)[], evals: true };
     const uses = { tools: a.toolIds.length, knowledgeBases: a.collections.length, skills: a.brief ? 1 : 0, agents: 0, workflows: 0 };
     // Changes with every save, as the service's digest of the stored agent does.
-    return { ...a, digest: digestOf(JSON.stringify(a)), brief: a.brief ?? null, promptMode: a.promptMode ?? null, patterns: a.patterns ?? { thinking: 'default' as const, parallelReads: true }, uses, limits: { ...limits, publicKeyMay: [...limits.publicKeyMay] }, controls, staleToolIds, publishedVersion, availability: a.paused ? ('paused' as const) : publishedVersion !== null ? ('published' as const) : ('not_published' as const), usedIn, workflowIds: usedIn.map((u) => u.workflowId), wrapperWorkflowId: wrappers?.wrapperOf(a.id) };
+    return { ...a, digest: digestOf(JSON.stringify(a)), brief: a.brief ? { ...a.brief, sections: a.brief.sections ?? [] } : null, promptMode: a.promptMode ?? null, patterns: a.patterns ?? { thinking: 'default' as const, parallelReads: true }, uses, limits: { ...limits, publicKeyMay: [...limits.publicKeyMay] }, controls, staleToolIds, publishedVersion, availability: a.paused ? ('paused' as const) : publishedVersion !== null ? ('published' as const) : ('not_published' as const), usedIn, workflowIds: usedIn.map((u) => u.workflowId), wrapperWorkflowId: wrappers?.wrapperOf(a.id) };
   };
 
   const policyRow = (p: GatePolicy): GatePolicy => ({ ...p, workflowName: wfName(p.workflowId) });
@@ -791,8 +796,14 @@ export function createMockApi(): OpsApi {
           if (baseVersion !== a.version || baseDigest !== digestOf(JSON.stringify(a))) throw new ApiError('The draft was saved after it was read; reload and try again.', 409, undefined, 'stale_base', { version: a.version, savedBy: me, savedAt: a.updatedAt });
           // As the service answers: a brief agent's prompt is written from its brief, so text sent without one is refused.
           if (a.promptMode === 'brief' && !fields.brief && fields.promptMode !== 'full' && (fields.instructions !== undefined || fields.role !== undefined)) throw new ApiError('This agent’s prompt is written from its brief. Edit the brief, or switch to plain text.', 422, undefined, 'brief_owns_prompt');
-          if (fields.brief) Object.assign(fields, { role: fields.brief.purpose, instructions: composeBrief(fields.brief), promptMode: fields.promptMode ?? 'brief' });
-          else if (fields.promptMode === 'brief' && a.brief) Object.assign(fields, { role: a.brief.purpose, instructions: composeBrief(a.brief) });
+          if (fields.brief) {
+            // As the service answers: sections that break a rule are refused whole, and a menu section is saved under its fixed title.
+            const list = savedSections ?? defaultSectionList();
+            const problem = sectionProblem(fields.brief.sections ?? [], list.sections, list.customMax);
+            if (problem) throw new ApiError(problem, 422, undefined, 'validation_failed');
+            fields.brief = { ...fields.brief, sections: (fields.brief.sections ?? []).map((x) => titled(x, list.sections)) };
+            Object.assign(fields, { role: fields.brief.purpose, instructions: composeBrief(a.name, fields.brief, list.sections), promptMode: fields.promptMode ?? 'brief' });
+          } else if (fields.promptMode === 'brief' && a.brief) Object.assign(fields, { role: a.brief.purpose, instructions: composeBrief(a.name, a.brief, (savedSections ?? defaultSectionList()).sections) });
           if (fields.toolIds) for (const t of tools) t.grantedAgentIds = fields.toolIds.includes(t.id) ? [...new Set([...t.grantedAgentIds, aid])] : t.grantedAgentIds.filter((x) => x !== aid);
           const list = versionsOf(aid, a.version, 'agent');
           // One draft: rewrite the newest version unless it is published or a publish request names it.
@@ -827,8 +838,18 @@ export function createMockApi(): OpsApi {
       promptView: (aid) =>
         respond(() => {
           const a = agentOr404(aid);
-          const never = a.brief?.never.length ? `\n\n# Never\n${a.brief.never.map((r) => `- ${r}`).join('\n')}` : '';
-          return { version: a.version, text: `${a.instructions}${never}` };
+          return { version: a.version, text: `${a.instructions}${neverSection(a.brief)}` };
+        }),
+      instructionSections: () => respond(() => structuredClone(savedSections ?? defaultSectionList())),
+      saveInstructionSections: (list) =>
+        respond(() => {
+          savedSections = checkedSectionList(list);
+          return structuredClone(savedSections);
+        }),
+      resetInstructionSections: () =>
+        respond(() => {
+          savedSections = null;
+          return defaultSectionList();
         }),
       draftBrief: (aid, description) =>
         respond(() => {

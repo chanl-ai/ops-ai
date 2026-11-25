@@ -9,9 +9,26 @@ import json
 import time
 from typing import Any
 
-from brief_steps import CONFIRMS, brief, confirm_skill, freeze_skill, hold_skill
+from brief_steps import (
+    COMPLIANCE_HEADINGS,
+    COMPLIANCE_TEXT,
+    CONFIRMS,
+    SECTION_HEADINGS,
+    SECTIONS,
+    SECTIONS_ROUTE,
+    brief,
+    compliance_id,
+    compliance_sections,
+    confirm_skill,
+    freeze_skill,
+    headings,
+    hold_skill,
+    sections_brief,
+    warm_preset,
+    with_compliance,
+)
 from main_chains import ACCOUNT, bank_stack, holds, publish_bank_module
-from usecase_harness import agents, check, data, finish, save_agent, sse
+from usecase_harness import agents, as_role, bearer, check, data, finish, save_agent, signed_in, sse
 
 RUN = int(time.time())
 STREAM = {"Accept": "text/event-stream"}
@@ -32,6 +49,12 @@ def made(res: Any) -> dict[str, Any]:
 
 
 with bank_stack() as s:
+    # The team's two-person rule on (requesterMayDecide off; the default is on), so the builder who asks for the freeze
+    # in step 6 does not decide it himself. Tokens carry the policy, so each person signs in again after the change.
+    team_admin = bearer(signed_in(s.accounts, "w.kamau@harborpine.example"), "team_ops")
+    two_person = s.accounts.put("/v1/policies/requesterMayDecide", json={"value": False}, headers=team_admin)
+    check("setup: the admin turns the two-person rule on for the team", two_person.status_code == 200, two_person.text[:200])
+    s.who = {role: as_role(s.accounts, role) for role in s.who}
     me = s.who["builder"]
     _, read, write = publish_bank_module(s.gw, RUN, approval=True, team=me, security=s.who["security"])
     time.sleep(31)  # agents-service keeps each tenant's tool list for 30 seconds
@@ -79,6 +102,83 @@ with bank_stack() as s:
         and again["added"] == []
         and again["agentVersion"] == added["agentVersion"],
         (blocked, code_of(refused), added, again),
+    )
+
+    # 24. A builder adds Tone and one section of his own. Each is replied with its kind and title, and View prompt
+    # shows them in their places with the never rules last, whatever order they were saved in.
+    desk = data(s.api.post("/v1/agents", json={"name": f"Sections desk {RUN}", "role": "Freezes accounts"}, headers=me))
+    with_sections = data(save_agent(s.api, desk["id"], {"brief": sections_brief(SECTIONS)}, headers=me)) or {}
+    replied = (with_sections.get("brief") or {}).get("sections")
+    shown = data(s.api.get(f"/v1/agents/{desk['id']}/prompt", headers=me))["text"]
+    check(
+        "24 a brief saved with Tone and a custom section replies both, and the prompt has them in order, Never last",
+        replied == [{**SECTIONS[0]}, {"kind": "tone", "name": "Tone", "text": "Calm and plain."}]
+        and headings(shown) == SECTION_HEADINGS
+        and shown.rstrip().endswith("- Never promise when a freeze will be lifted."),
+        (replied, headings(shown), shown[-80:]),
+    )
+    # A custom section may not take a fixed heading's name: the save is refused and the stored sections stay.
+    taken = save_agent(
+        s.api, desk["id"], {"brief": sections_brief([{"kind": "custom", "name": " never ", "text": "Anything."}])}, headers=me
+    )
+    said = str((taken.json().get("error") or {}).get("message", "")) if taken.status_code >= 400 else ""
+    after_refusal = (data(s.api.get(f"/v1/agents/{desk['id']}", headers=me)).get("brief") or {}).get("sections")
+    check(
+        "24 a custom section named like a fixed heading is refused, naming brief.sections, and nothing is stored",
+        code_of(taken) == (422, "validation_failed") and "brief.sections" in said and after_refusal == replied,
+        (code_of(taken), said, after_refusal),
+    )
+    # 25. A brief saved without sections, as every brief before them: no heading is added and it replies none.
+    plain = data(s.api.post("/v1/agents", json={"name": f"Plain desk {RUN}", "role": "Freezes accounts"}, headers=me))
+    unchanged = data(save_agent(s.api, plain["id"], {"brief": sections_brief()}, headers=me)) or {}
+    plain_prompt = data(s.api.get(f"/v1/agents/{plain['id']}/prompt", headers=me))["text"]
+    check(
+        "25 a brief saved without sections writes the prompt it wrote before them and replies no sections",
+        (unchanged.get("brief") or {}).get("sections") == []
+        and headings(plain_prompt) == ["# Who you are", "# How to answer", "# Hand off when", "# Never"]
+        and plain_prompt.startswith(str(unchanged.get("instructions"))),
+        ((unchanged.get("brief") or {}).get("sections", "absent"), headings(plain_prompt)),
+    )
+
+    # 29. The list of sections is the workspace's: an admin adds Compliance notes after Tone and renames Tone, a
+    # builder adds it to a new agent, and the agent of step 24, saved before the change, keeps the prompt it had.
+    admin, viewer = as_role(s.accounts, "admin"), as_role(s.accounts, "viewer")
+    listing = data(s.api.get(SECTIONS_ROUTE, headers=admin)) or {}
+    changed = s.api.put(SECTIONS_ROUTE, json=with_compliance(listing), headers=admin)
+    read_by = {who: compliance_id(data(s.api.get(SECTIONS_ROUTE, headers=h))) for who, h in (("builder", me), ("viewer", viewer))}
+    not_theirs = [s.api.put(SECTIONS_ROUTE, json=listing, headers=h).status_code for h in (me, viewer)]
+    not_theirs += [s.api.delete(SECTIONS_ROUTE, headers=h).status_code for h in (me, viewer)]
+    check(
+        "29 an admin adds Compliance notes to the workspace's sections; a builder and a viewer read it and cannot change the list",
+        changed.status_code == 200 and all(read_by.values()) and not_theirs == [403] * 4,
+        (changed.status_code, changed.text[:200], read_by, not_theirs),
+    )
+    check("29 the list first read offers a Warm preset on Tone, with an id, an icon and a sentence", warm_preset(listing))
+    noted = data(s.api.post("/v1/agents", json={"name": f"Compliance desk {RUN}", "role": "Freezes accounts"}, headers=me))
+    saved = save_agent(s.api, noted["id"], {"brief": sections_brief(compliance_sections(read_by["builder"]))}, headers=me)
+    names = [(x.get("name"), x.get("text")) for x in ((data(saved) or {}).get("brief") or {}).get("sections") or []]
+    noted_prompt = (data(s.api.get(f"/v1/agents/{noted['id']}/prompt", headers=me)) or {}).get("text", "")
+    check(
+        "29 a brief with Compliance notes has it where the list puts it, after the renamed Tone, with Never last",
+        names == [("Compliance notes", COMPLIANCE_TEXT), ("Voice", "Calm and plain.")]
+        and headings(noted_prompt) == COMPLIANCE_HEADINGS
+        and noted_prompt.rstrip().endswith("- Never promise when a freeze will be lifted."),
+        (code_of(saved), names, headings(noted_prompt)),
+    )
+    kept = data(s.api.get(f"/v1/agents/{desk['id']}", headers=me)) or {}
+    kept_prompt = (data(s.api.get(f"/v1/agents/{desk['id']}/prompt", headers=me)) or {}).get("text", "")
+    reset = s.api.delete(SECTIONS_ROUTE, headers=admin)
+    restored = data(s.api.get(SECTIONS_ROUTE, headers=admin)) or {}
+    check(
+        "29 the agent saved before the change keeps its prompt, and Reset to default brings the first list back",
+        changed.status_code == 200
+        and kept.get("instructions") == with_sections.get("instructions")
+        and kept_prompt == shown
+        and headings(kept_prompt) == SECTION_HEADINGS
+        and reset.status_code == 200
+        and bool(listing)
+        and restored == listing,
+        (headings(kept_prompt), reset.status_code, compliance_id(restored)),
     )
 
     # 20. Two sessions hold the same agent draft: the second save is refused and loses nothing the first saved.
@@ -183,9 +283,7 @@ with bank_stack() as s:
     live = data(s.api.get(f"/v1/agents/{aid}", headers=me))
     check(
         "5 the agent publishes once nothing is missing, and says what it uses",
-        clear["canRequest"] is True
-        and clear["problems"] == []
-        and clear["blockers"] == []
+        (clear["canRequest"], clear["problems"], clear.get("blockers")) == (True, [], [])
         and sent.status_code == 201
         and live["publishedVersion"] == now["version"]
         and live["uses"] == {"tools": 2, "knowledgeBases": 0, "skills": 3, "agents": 0, "workflows": 0},
