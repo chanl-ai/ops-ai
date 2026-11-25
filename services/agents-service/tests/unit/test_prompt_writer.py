@@ -9,7 +9,10 @@ agent's stable fragment is `prompt_writer.head(name, brief)`, and the never rule
 The sections a builder adds (`brief.sections`) are read the same way, through what a save stores and what View prompt
 shows. What these tests ask beyond the design: a save's refusal of a section is raised by `agent_brief.patched` as an
 `ApiError` with status 422 and code `validation_failed` whose message names `brief.sections` (a request model's own
-refusal answers 400), and a reply's sections are `BriefView` read from the stored brief."""
+refusal answers 400), and a reply's sections are `BriefView` read from the stored brief.
+
+A workspace that renames Never: the name is read from what a save stores (View prompt) and from the turn. What this
+asks beyond the design: the heading reaches the turn as `AgentSettings.never_heading`, beside `AgentSettings.never`."""
 
 from __future__ import annotations
 
@@ -25,6 +28,7 @@ from ops_agent_kernel.prompt_writer import Brief, Now, head, tail
 from ops_agent_kernel.types import AgentSettings, PromptFragment, Skill, TurnRequest
 from ops_agents.api.schemas import BriefView
 from ops_agents.app import agent_brief
+from ops_agents.app.instruction_sections import default_list
 from ops_service_kit.errors import ApiError
 from ops_service_kit.http import Json
 from tests.unit.test_skill_steps_kernel import Script, program, reply, stepped
@@ -266,3 +270,42 @@ def test_a_saved_section_is_replied_with_its_kind_and_title_and_an_older_brief_r
 
     old: Json = {"purpose": "Answer fee questions.", "howToAnswer": "Short.", "never": [], "success": []}
     assert BriefView.model_validate(old).model_dump(by_alias=True)["sections"] == []
+
+
+async def test_a_list_that_renames_never_writes_the_never_rules_under_its_name_and_still_last() -> None:
+    listing = default_list()
+    renamed = listing.model_copy(
+        update={
+            "sections": [
+                x.model_copy(update={"label": "Hard limits"}) if x.id == "never" else x for x in listing.sections
+            ]
+        }
+    )
+    brief = Brief.model_validate({"purpose": PURPOSE, "howToAnswer": "Two short paragraphs at most.", "never": NEVER})
+    saved = agent_brief.patched(
+        {"name": "Dispute Desk"}, brief=brief, mode=None, patterns=None, writes_prompt=False, listing=renamed
+    )
+    assert agent_brief.prompt_view(saved) == (
+        "# Who you are\nYou are Dispute Desk.\nYour job: Help customers dispute a card charge.\n\n"
+        "# How to answer\nTwo short paragraphs at most.\n\n"
+        "# Hard limits\n- Never promise a refund date.\n- Never name another customer."
+    )
+
+    # With a skill step running, the renamed heading still follows the step and the skill's rules.
+    dispute = stepped(
+        "sk_open",
+        1,
+        "Open a dispute",
+        "open-a-dispute",
+        program({"do": "Ask which charge."}, {"do": "Open the dispute."}),
+        rules="Quote the charge amount back to the person.",
+    )
+    fragments = [PromptFragment(str(saved["instructions"]))]
+    settings: Any = replace(AgentSettings("ag_disputes", 1, fragments, "m", skills=[dispute]), never=NEVER)
+    settings = replace(settings, never_heading="Hard limits")
+    model = Script(("switch_skill", {"slug": "open-a-dispute"}), "Which charge is it?")
+    await reply(TurnRequest("t1", "th1", settings, [], user_turn="I want to dispute a charge."), model)
+    sent = model.instructions[1]
+    marks = ["# Now: Open a dispute, step 1 of 2", "# Rules for this skill", "# Hard limits", NEVER[0], NEVER[1]]
+    assert in_order(sent, marks) == marks, sent
+    assert "# Never" not in sent and sent.rstrip().endswith(NEVER[1]), sent[-300:]
