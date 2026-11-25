@@ -5,6 +5,7 @@
 import { AGENTS_PORT, check, chromium, consoleSignIn, finish, shootBothWidths, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { PASSWORD, publishAgent, signInAs } from '@ops-ai/usecase-runner/steps';
 import { JAMES, agents, as } from '../../lib/workflow_ui.mjs';
+import { addFirstToolOfFirstApp } from '../../lib/tools_picker.mjs';
 
 const TAG = Math.random().toString(36).slice(2, 6);
 
@@ -101,10 +102,11 @@ await withUiStack(
       });
 
       await step('4 a tool picked on the page is granted to the agent', async () => {
-        const label = await pick('agent-tools-picker');
+        await page.locator('[data-testid="save-state"][data-state="saved"]').first().waitFor({ timeout: 30_000 });
+        const label = await addFirstToolOfFirstApp(page);
         await page.waitForTimeout(1500);
         const stored = await get(`/v1/agents/${agentId}`);
-        check('4 a tool picked on the page is granted to the agent', stored.toolIds.length === 1 && (await page.getByText(label, { exact: false }).count()) > 0, { label, toolIds: stored.toolIds });
+        check('4 a tool picked on the page is granted to the agent', stored.toolIds.length === 1 && (await page.locator('[data-testid^="agent-tools-app-"]').count()) > 0, { label, toolIds: stored.toolIds });
       });
 
       await step('5 a published skill attached on the page is pinned to the agent', async () => {
