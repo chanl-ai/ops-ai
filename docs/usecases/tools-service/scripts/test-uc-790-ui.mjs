@@ -220,6 +220,43 @@ try {
           );
         }, admin);
 
+        await step('8 a schedule on a workflow that calls the each-person desk is warned at save, in the API answer and in the editor', async () => {
+          const node = (id, type, parameters = {}) => ({ id, type, typeVersion: 1, name: id, parameters });
+          const definition = {
+            schemaVersion: 2,
+            id: 'uc790_nightly',
+            name: 'Nightly record read',
+            nodes: [
+              node('start', 'ops.trigger.schedule', { key: 'nightly' }),
+              node('read', 'ops.action.tool', { operation: 'person_key_get_record', input: { id: 'rec-1042' } }),
+              node('done', 'ops.flow.end', { outcome: 'read' }),
+              node('failed', 'ops.flow.end', { outcome: 'failed' }),
+            ],
+            connections: [
+              { from: { node: 'start', port: 'payload' }, to: { node: 'read', port: 'in' } },
+              { from: { node: 'read', port: 'ok' }, to: { node: 'done', port: 'in' } },
+              { from: { node: 'read', port: 'error' }, to: { node: 'failed', port: 'in' } },
+              { from: { node: 'read', port: 'refused' }, to: { node: 'failed', port: 'in' } },
+            ],
+          };
+          const saved = await call(agents, 'POST', '/v1/workflows/definitions', priya, { definition });
+          const told = (saved.data?.warnings ?? []).find((w) => w.node === 'read' && /each person/.test(w.message ?? ''));
+          await admin.goto(`${consoleUrl}/build/workflows/definitions/uc790_nightly`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+          const chip = admin.getByTestId('definition-problems');
+          await chip.waitFor({ timeout: 90_000 });
+          await admin.waitForFunction(() => /warning/.test(document.querySelector('[data-testid="definition-problems"]')?.textContent ?? ''), null, { timeout: 60_000 }).catch(() => {});
+          await chip.click();
+          const listed = admin.getByTestId('definition-check').filter({ hasText: 'signs in as each person' });
+          const shown = await listed.first().waitFor({ timeout: 30_000 }).then(async () => ((await listed.first().innerText()) ?? '').replace(/\s+/g, ' '), () => '');
+          const cut = await shoot(admin, 'workflow-schedule-warning');
+          check(
+            '8 a schedule on a workflow that calls the each-person desk is warned at save, in the API answer and in the editor',
+            [200, 201].includes(saved.status) && /Person key desk signs in as each person, and a schedule starts this workflow/.test(told?.message ?? '') &&
+              /Set Person key desk to Everyone uses the team's login, or have a person start the run/.test(shown) && cut.length === 0,
+            { status: saved.status, told: told?.message, shown: shown.slice(0, 300), cut },
+          );
+        }, admin);
+
         check('no page errors', errors.length === 0, errors.slice(0, 3));
       } finally {
         await browser.close();

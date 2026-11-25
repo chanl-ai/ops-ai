@@ -21,6 +21,7 @@ console with the same plugins and a scripted model.
 | S5 | In chat, a team-login action says who acted under the reply, with no sign-in card | ui | 5 | 5 |
 | S6 | In chat, an each-person app shows one sign-in card, the chat carries on after it, the next ask shows none, and nothing offers the team login | ui | 6 | 6 |
 | S7 | The app page asks Who signs in with two answers, and the agent's tools row shows the app's answer | ui | 7 | 7 |
+| S8 | A schedule or event on a workflow that calls an each-person app is warned at save, in the API answer and the editor | ui | 8 | 8 |
 
 ## Preconditions
 
@@ -40,6 +41,7 @@ console with the same plugins and a scripted model.
 | 5 | Lena (chat user) asks the assistant for a record on the header key desk | The reply shows "Runs in Header key desk as … (team login). You are recorded as the person who asked." and no sign-in card |
 | 6 | Lena asks for a record on the person key desk, gives her key in the card, then asks again | One card titled "Sign in to Person key desk to continue"; after her key the chat carries on with the record; the second ask shows no card; no text offers the team login |
 | 7 | Priya opens Person desk's Settings (it allows both answers) and an agent's tools | "Who signs in" reads Everyone uses the team's login and Each person signs in; the tools row names the app's answer |
+| 8 | Priya saves a workflow a schedule starts whose step reads the person key desk, then opens it in the editor | The save answers a warning naming Person key desk and the two ways on; the editor's problems list shows it |
 
 A Human Task waiting for a person's sign-in offers that person only **Sign in to <app>**; the rule is
 `connectWaitActions` in `apps/console/src/lib/login-words.ts`, tested in `login-words.test.ts`. uc-607 ui step 45 also
@@ -50,7 +52,7 @@ reads the task Priya's run waits on and checks that no **Run with the team login
 | Layer | Script | State |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-790-api.py` | steps 1-4 |
-| ui | `tools-service/scripts/test-uc-790-ui.mjs` | steps 5-7, at 1440 and 390 |
+| ui | `tools-service/scripts/test-uc-790-ui.mjs` | steps 5-8, at 1440 and 390 |
 
 ## Non-vacuous check
 

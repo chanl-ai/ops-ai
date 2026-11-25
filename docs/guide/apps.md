@@ -62,7 +62,7 @@ list shows the same answer beside each tool's app.
 
 Nobody is asked in a chat or a Human Task to choose between their own login and the team's. Each person manages their
 own sign-ins in **My apps**. On an app each person signs in to, a run nobody started, such as a schedule, cannot call
-it: there is no person to act as, and the team's login is not used as a backup. Changing the answer takes the `connections.manage` permission (team admins by default).
+it: there is no person to act as, and the team's login is not used as a backup. The run is refused with a message naming the app and the two ways on (set it to Everyone uses the team's login, or have a person start the run), and saving a workflow that a schedule or an event starts warns about each such step before its first run. Changing the answer takes the `connections.manage` permission (team admins by default).
 
 | Login | Used by | How to add it |
 |---|---|---|

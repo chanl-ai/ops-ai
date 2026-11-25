@@ -10,7 +10,9 @@ from usecase_harness import check, data, finish
 
 with rig("uc-705") as r:
     sf = r.sf
-    retail_on(r, sign_in="person")
+    # Calls with nobody behind them (1-2) sign in with the team's login; step 3 is a person's own account, so Retail
+    # org is set to Each person signs in before it.
+    retail_on(r, sign_in="team")
     add_org(r, "EU org", sf["eu_login_url"], "kestrel.eu")
     # 1. The older single string still names the account, and the map wins over it when both are sent.
     before = r.calls_so_far()
@@ -30,6 +32,9 @@ with rig("uc-705") as r:
         ghost.text[:200],
     )
     # 3. The older add of a second own account, with no body, starts a sign-in where the first one signs in.
+    row = r.row(r.priya, r.ids["retail"])
+    r.gw.patch(f"/v1/apps/{SF}/accounts/{r.ids['retail']}", json={"revision": row.get("revision", 1), "signIn": "person"},
+               headers=r.priya)  # fmt: skip
     started = r.gw.post(f"/v1/me/accounts/{r.ids['retail']}/another", headers=r.maya)
     opened = str((data(started) or {}).get("authorizeUrl") or "")
     check(

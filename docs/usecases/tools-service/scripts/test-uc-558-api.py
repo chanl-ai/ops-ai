@@ -438,8 +438,10 @@ with ExitStack() as stack:
         timeout=30,
     )
     check(
-        "9 a call with nobody behind it is refused, the team login cannot be made a backup, and the call stays refused",
+        "9 a call with nobody behind it is refused naming the app and the two ways on, the team login cannot be made a "
+        "backup, and the call stays refused",
         "CONNECTION_NOT_LINKED" in nobody.text
+        and f"Set {conn.get('name')} to Everyone uses the team's login, or have a person start the run" in nobody.text
         and backup.status_code == 400
         and "CONNECTION_NOT_LINKED" in behind.text
         and editors(sf)[2:] == [],
