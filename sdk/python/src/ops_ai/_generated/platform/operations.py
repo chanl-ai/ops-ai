@@ -64,6 +64,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "api_keys_settings_lookups": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/settings/lookups",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "audit_read_audit": {
         "body": None,
         "headers": [],
@@ -1300,6 +1309,10 @@ class Operations:
         "Reset Role"
         return self._t.call(SERVICE, OPERATIONS["roles_reset_role"], {"role_id": role_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def api_keys_settings_lookups(self) -> SettingsLookups:
+        "Settings Lookups"
+        return self._t.call(SERVICE, OPERATIONS["api_keys_settings_lookups"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
     def members_list_members(
         self,
         *,
@@ -1967,6 +1980,10 @@ class AsyncOperations:
     async def roles_reset_role(self, role_id: str) -> RoleDetail:
         "Reset Role"
         return await self._t.call(SERVICE, OPERATIONS["roles_reset_role"], {"role_id": role_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def api_keys_settings_lookups(self) -> SettingsLookups:
+        "Settings Lookups"
+        return await self._t.call(SERVICE, OPERATIONS["api_keys_settings_lookups"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def members_list_members(
         self,

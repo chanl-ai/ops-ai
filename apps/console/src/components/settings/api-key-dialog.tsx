@@ -14,7 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { ApiKeyInput, SettingsLookups } from '@/lib/types/settings';
+import type { ApiKeyInput, ApiScope } from '@/lib/types/settings';
 import { nameError } from '@/lib/validation/names';
 
 const EXPIRY = [
@@ -36,7 +36,7 @@ export function ApiKeyDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  scopes: SettingsLookups['apiScopes'];
+  scopes: ApiScope[];
   onSubmit: (input: ApiKeyInput) => Promise<{ key: string }>;
   isPending: boolean;
   /** Platform scope only: shows a team field offering the teams the person may create keys in (`allowed`). */
@@ -45,7 +45,7 @@ export function ApiKeyDialog({
 }) {
   const [team, setTeam] = React.useState<PickedTeam | null>(defaultTeam ?? null);
   const [name, setName] = React.useState('');
-  const [picked, setPicked] = React.useState<string[]>(['runs:write']);
+  const [picked, setPicked] = React.useState<string[]>(['read', 'write']);
   const [expiry, setExpiry] = React.useState('365');
   const [error, setError] = React.useState<string | null>(null);
   const [key, setKey] = React.useState<string | null>(null);
@@ -53,7 +53,7 @@ export function ApiKeyDialog({
     if (!open) return;
     setTeam(defaultTeam ?? null);
     setName('');
-    setPicked(['runs:write']);
+    setPicked(['read', 'write']);
     setExpiry('365');
     setError(null);
     setKey(null);

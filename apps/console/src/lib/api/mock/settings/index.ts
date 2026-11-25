@@ -1,5 +1,5 @@
 import type { AuditEntry } from '@/lib/types/governance';
-import type { NotificationSettings, SettingsLookups, UsageReport, UsageRow, WebhookDelivery } from '@/lib/types/settings';
+import type { ApiScope, NotificationSettings, SettingsLookups, UsageReport, UsageRow, WebhookDelivery } from '@/lib/types/settings';
 
 import { acceptedName, registerInvite } from '../invites';
 import { currentSignInPolicy } from '../sign-in-policy';
@@ -29,14 +29,13 @@ const LOOKUPS: SettingsLookups = {
     { value: 'audit.created', label: 'Audit entry created' },
     { value: 'mailbox.disconnected', label: 'Mailbox disconnected' },
   ],
-  apiScopes: [
-    { value: 'runs:write', label: 'Start runs' },
-    { value: 'runs:read', label: 'Read runs' },
-    { value: 'logs:read', label: 'Read tool-call logs' },
-    { value: 'audit:read', label: 'Read the audit log' },
-    { value: 'usage:read', label: 'Read usage and cost' },
-  ],
 };
+
+// The service's two scopes (ops_identity KEY_SCOPES), so a key made on sample data names what a real one would.
+const API_SCOPES: ApiScope[] = [
+  { value: 'read', label: 'Read: look things up, never change them' },
+  { value: 'write', label: 'Write: start runs and change records' },
+];
 
 const ROLE_LABEL = Object.fromEntries(LOOKUPS.roles.map((r) => [r.value, r.label]));
 
@@ -272,6 +271,7 @@ export function createSettingsMock({ log, me }: { log: AuditLog; me: string }): 
           const [k] = keys.splice(i, 1);
           log({ action: 'revoked', target: { type: 'api_key', name: `${k.name} (${k.prefix}…)`, href: '/settings/team/api-keys' }, summary: 'Revoked an API key; calls using it now get 401', diff: [{ field: 'Status', before: 'Active', after: 'Revoked' }] });
         }),
+      scopes: () => respond(() => API_SCOPES),
     },
 
     usage: {

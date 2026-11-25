@@ -7,6 +7,7 @@ number; the agent's redactPii is on by default.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
@@ -44,6 +45,14 @@ def approved(api: httpx.Client, asked: httpx.Response) -> httpx.Response:
 
 def shows(text: str) -> list[str]:
     return [r for r in RAW if r in text]
+
+
+# Named as personal data by their field, as the fake bank names them: ssnLast4, accountIds and accountNumber.
+NAMED = ("4471", "CHQ-1003", "BUS-7781", "4401235567")
+
+
+def named(text: str) -> list[str]:
+    return [r for r in NAMED if r in text]
 
 
 with ai_stack("uc265") as (api, people):
@@ -93,6 +102,59 @@ with ai_stack("uc265") as (api, people):
         "3 the agent step's output is masked and keeps the name",
         "Priya Natarajan" in summary and not shows(summary),
         summary,
+    )
+
+    # Values named as personal data that no pattern finds in the value alone: a last four, lettered account ids and a
+    # number-typed account number. They are masked by their field's name.
+    tid = data(api.post("/chat/threads", json={"agentId": aid, "kbIds": []}, headers=OPS))["id"]
+    res = api.post(
+        f"/chat/threads/{tid}/messages",
+        json={"content": "UC265-RECORD show Ann's record"},
+        headers={**OPS, "Accept": "text/event-stream"},
+        timeout=120,
+    )
+    events = sse(res.text)
+    ended = [e for e in events if e.get("type") in ("tool_end", "part")]
+    streamed = json.dumps(events)
+    kept = json.dumps(data(api.get(f"/chat/threads/{tid}", headers=OPS))["messages"])
+    check(
+        "5 a tool result's ssnLast4, accountId and number-typed accountNumber show masked in chat, streamed and stored",
+        bool(ended)
+        and all(not named(t) and "[SSN]" in t and "[account]" in t and "Ann Lee" in t for t in (streamed, kept)),
+        {"types": [e.get("type") for e in events], "ended": ended[:2], "kept": kept[:900]},
+    )
+
+    ids_schema = {
+        "type": "object",
+        "required": ["name", "ssnLast4", "accountIds", "accountNumber"],
+        "properties": {
+            "name": {"type": "string"},
+            "ssnLast4": {"type": "string"},
+            "accountIds": {"type": "array", "items": {"type": "string"}},
+            "accountNumber": {"type": "number"},
+        },
+    }
+    publish(
+        api,
+        definition(
+            "uc265_ids",
+            [{**step, "parameters": {**step["parameters"], "outputSchema": ids_schema}}],
+            [("start", "payload", "sum"), ("sum", "ok", "end_done"), ("sum", "error", "end_failed")],
+        ),
+    )
+    done = run(api, "uc265_ids", "UC265-IDS Ann Lee")
+    read = json.dumps(done.get("byNode", {}).get("sum") or {})
+    check(
+        "6 the run's page masks the step's ssnLast4, accountIds and number-typed accountNumber and keeps the name",
+        done.get("status") == "succeeded" and not named(read) and "[SSN]" in read and "Ann Lee" in read,
+        read[:600],
+    )
+    frames = api.get(f"/v1/runs/{done.get('id')}/events", params={"follow": "false"}, headers=OPS, timeout=60).text
+    # A step's events say it started and ended; its values are read from the run's page, so none of them is in a frame.
+    check(
+        "7 the run's events for the step carry none of the named values",
+        '"node": "sum"' in frames and '"phase": "end"' in frames and not named(frames),
+        [line for line in frames.splitlines() if '"sum"' in line],
     )
 
     agent = data(api.get(f"/v1/agents/{aid}", headers=OPS))

@@ -21,11 +21,12 @@ from .fastapi import (
 from .http import http_current_version, http_introspect, http_jwks
 from .jwks import JwksCache
 from .principal import Principal
-from .resolve import Identity, ServiceAuth, mint_service_token, principal_of
+from .resolve import KEY_SCOPES, Identity, KeyScope, ServiceAuth, mint_service_token, principal_of
 from .service_keys import dev_service_signer, service_signer, service_verifiers
 
 __all__ = [
     "ACTING_FOR_HEADER",
+    "KEY_SCOPES",
     "ActingForPerson",
     "ActingForTokens",
     "ActingPerson",
@@ -36,6 +37,7 @@ __all__ = [
     "CurrentTenantCaller",
     "Identity",
     "JwksCache",
+    "KeyScope",
     "Principal",
     "ServiceAuth",
     "ServiceCallError",

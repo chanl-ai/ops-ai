@@ -54,7 +54,7 @@ sequenceDiagram
 |---|---|---|
 | Platform token | EdDSA JWT, 15 minutes, `aud` listing every user-facing service, claims per spec section 4 | Each service, against `GET /.well-known/jwks.json` |
 | Refresh token | `<session id>.<secret>`, rotated on every refresh; a reused one ends the session | platform-service |
-| API key | `ok_<id>.<secret>`, secret shown once, SHA-256 at rest, optional expiry, optional target (one agent or workflow) | platform-service, via `POST /v1/auth/introspect` |
+| API key | `ok_<id>.<secret>`, secret shown once, SHA-256 at rest, optional expiry, optional target (one agent or workflow); scopes `read` (GET, HEAD, OPTIONS only) and `write`, one list (`ops_identity.KEY_SCOPES`) that the key check enforces and `GET /v1/settings/lookups` serves to the keys screen | platform-service, via `POST /v1/auth/introspect` |
 | Service token | EdDSA JWT, 60 seconds, signed with the calling service's own key, `sub` bound to that key | The callee's `ServiceAuth` |
 | Step-up token | EdDSA JWT, 5 minutes, same key and `aud` as the platform token, `kind` and `typ` `step_up`, `sub` and `email` the person who re-entered their password (`POST /v1/auth/step-up`) or signed in again at their SSO provider (`POST /v1/auth/step-up/sso/*`), audited as `auth.step_up` with the method | agents-service `require_step_up`, against the cached key set; refused as a session by every service |
 

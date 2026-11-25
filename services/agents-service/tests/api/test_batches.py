@@ -185,3 +185,16 @@ async def test_the_results_download_lists_every_row_with_its_status(stack: Stack
     # The page and the download each read the batch and its rows on one connection.
     seen = await checkouts(c, [("get", f"/v1/batches/{bid}"), ("get", f"/v1/batches/{bid}/results.csv")], BUILDER)
     assert [(code, k) for _, code, k in seen] == [(200, 1), (200, 1)], seen
+
+
+async def test_the_page_and_the_download_mask_personal_data_as_a_run_read_does(stack: Stack) -> None:  # noqa: F811
+    """A row's input and output are a run's data: the run page masks them while the team masks personal data (the
+    default), so the batch page and results.csv showed the emails the run page hides."""
+    c, _ = stack
+    rt, files = wired(c)
+    bid = (await batch(c, await ready(c, files, csv(2)))).json()["data"]["id"]
+    await tick(rt)
+    page = (await c.get(f"/v1/batches/{bid}", headers=BUILDER)).text
+    download = (await c.get(f"/v1/batches/{bid}/results.csv", headers=BUILDER)).text
+    for shown in (page, download):
+        assert "@example.com" not in shown and "[email]" in shown and "HM-23000" in shown, shown

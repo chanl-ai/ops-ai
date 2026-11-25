@@ -153,7 +153,7 @@ export type DeliveryFilters = { status?: string[] };
 
 export type ApiKey = Reply<'api_keys_list_api_keys'>['data'][number];
 
-/** `scopes` names what the console offers (`runs:write`); the client sends the service its `read` and `write`. */
+/** `scopes` are the service's `read` and `write` (`apiKeys.scopes`); `write` always carries `read`. */
 export type ApiKeyInput = Narrow<Body<'api_keys_create_api_key'>, { scopes: string[] }> & {
   /** Platform scope only: the team the key acts for. Ignored inside a team. */
   teamId?: string;
@@ -195,7 +195,12 @@ export interface UsageReport {
 export interface SettingsLookups {
   roles: { value: MemberRole; label: string; description: string }[];
   webhookEvents: { value: string; label: string }[];
-  apiScopes: { value: string; label: string }[];
+}
+
+/** A scope an API key is created with, and what it lets the key call (platform-service GET /v1/settings/lookups). */
+export interface ApiScope {
+  value: 'read' | 'write';
+  label: string;
 }
 
 /** Who in a team may take an action: the roles that grant it and the people holding them (GET /v1/access/holders). */
