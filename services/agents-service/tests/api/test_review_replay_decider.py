@@ -5,11 +5,13 @@ decided review back as if they had decided it."""
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import END, START, StateGraph  # pyright: ignore[reportMissingTypeStubs]
+from langgraph.types import interrupt
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -90,3 +92,39 @@ async def test_a_non_decider_cannot_replay_a_decision_and_the_decider_still_can(
     for decision in ("approved", "rejected"):
         late = await client.post(f"/reviews/{thread}/decision", json={"decision": decision}, headers=ASKER)
         assert late.status_code == 403, late.text
+
+
+class _Asked(TypedDict, total=False):
+    answer: Any
+
+
+def _asks_a_person(checkpointer: Any) -> Any:
+    """A code graph that pauses on a step outside Reviews (a `manual` one) that names who asked for it. No shipped
+    step of that kind names its asker today; this one does, so the resume and routing routes' decider check is seen."""
+
+    async def ask(state: _Asked) -> _Asked:
+        return {"answer": interrupt({"kind": "manual", "requested_by": "dana@harborpine.example", "reason": "Check"})}
+
+    g = StateGraph(_Asked)
+    g.add_node("ask", ask)  # pyright: ignore[reportUnknownMemberType]
+    g.add_edge(START, "ask")
+    g.add_edge("ask", END)
+    return g.compile(checkpointer=checkpointer)  # pyright: ignore[reportUnknownMemberType]
+
+
+async def test_a_paused_step_is_resumed_or_routed_only_by_who_may_decide_it(stack: tuple[AsyncClient, Runtime]) -> None:
+    """The thread resume and route-to-people checked the team rule alone, so the person a paused step names as its
+    asker answered it there while the two-person rule is on."""
+    client, rt = stack
+    rt.graphs["asks_a_person"] = _asks_a_person(rt.graphs["complex_workflow"].checkpointer)
+    made = await client.post("/v1/threads", json={"graph": "asks_a_person", "metadata": {}}, headers=ASKER)
+    tid = made.json()["data"]["threadId"]
+    paused = await client.post(f"/v1/threads/{tid}/runs/stream", json={"input": {}}, headers=ASKER)
+    assert any(e.get("event") == "interrupt" for e in sse_events(paused.text)), paused.text
+    resume = {"resume": {"decision": "approved"}}
+    own = await client.post(f"/v1/threads/{tid}/runs/stream", json=resume, headers=ASKER)
+    assert own.status_code == 403, own.text
+    routed = await client.post(f"/v1/threads/{tid}/route-to-people", json={"reason": "mine"}, headers=ASKER)
+    assert routed.status_code == 403, routed.text
+    other = await client.post(f"/v1/threads/{tid}/runs/stream", json=resume, headers=APPROVER)
+    assert other.status_code == 200 and sse_events(other.text)[-1]["data"] == {"status": "done"}, other.text

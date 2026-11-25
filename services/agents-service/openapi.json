@@ -28715,7 +28715,7 @@
     },
     "/reviews/bulk-decision": {
       "post": {
-        "description": "Decides each review as one decision would. Someone whose role decides no reviews in the team they act in is\nrefused outright (403), as `assign` refuses them; anyone else gets a result per id.",
+        "description": "Decides each review as one decision would, each checked by that decision's own decider rule, so a reviewer\nof the review's team decides it whatever team they act in. Someone who decides reviews in no team and decided none\nof these (an ask-the-person asker answers their own) is refused (403), as a single decision refuses them; anyone\nelse gets a result per id.",
         "operationId": "reviews_bulk_decide",
         "parameters": [
           {
@@ -60939,7 +60939,7 @@
     },
     "/v1/threads/{thread_id}/route-to-people": {
       "post": {
-        "description": "Taking a case from the workflow to people is a decision on it: a reviewer or admin of its team.",
+        "description": "Taking a case from the workflow to people is a decision on it: a reviewer or admin of its team, and for a case\nwaiting on a step, whoever may decide that step (`_may_route`).",
         "operationId": "threads_route_one",
         "parameters": [
           {

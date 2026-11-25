@@ -15,7 +15,24 @@ from contextlib import contextmanager
 from typing import Any
 
 import httpx
-from usecase_harness import AGENTS_DIR, LOG_DIR, _env, agents, check, data, finish, pg_url, sse  # pyright: ignore[reportPrivateUsage]
+from usecase_harness import (  # pyright: ignore[reportPrivateUsage]
+    AGENTS_DIR,
+    LOG_DIR,
+    PLATFORM_INTERNAL_PORT,
+    PLATFORM_PORT,
+    TOOLS_PORT,
+    _env,
+    agents,
+    bearer,
+    check,
+    data,
+    finish,
+    people_stack,
+    pg_url,
+    signed_in,
+    sse,
+    tools,
+)
 
 # The two-person rule on (requesterMayDecide off): who asked for a write, or started a run, may not decide its review.
 os.environ["OPS_DEV_POLICIES"] = '{"requesterMayDecide": false}'
@@ -144,6 +161,99 @@ with agents() as api:
         "12 Maya's repeat answers with the approved task",
         same.status_code == 200 and data(same)["status"] == "approved",
         same.text[:300],
+    )
+
+# 13-19. Deciders outside the acting team, with the tokens platform-service signs: Wanjiru, the workspace admin (Admin
+# in every team), acting in Platform, decides Operations' publish requests; Sam, Security's admin, acting in Security,
+# decides the security reviews of Operations' tool modules. One of each through Reviews, one through a bulk decision.
+WORKFLOW = """
+schemaVersion: 2
+id: {id}
+name: Note ({id})
+nodes:
+  - {{id: start, type: ops.trigger.request, typeVersion: 1, name: Request}}
+  - {{id: done, type: ops.flow.end, typeVersion: 1, name: End}}
+connections:
+  - {{from: {{node: start, port: payload}}, to: {{node: done, port: in}}}}
+"""
+RUN = int(time.time())
+
+
+def asked_to_publish(agents: httpx.Client, joe: dict[str, str], wf: str) -> str:
+    saved = agents.post("/v1/workflows/definitions", json={"yaml": WORKFLOW.format(id=wf)}, headers=joe)
+    res = agents.post(f"/v1/workflows/definitions/{wf}/publish-requests", json={}, headers=joe)
+    asked = data(res) or {}
+    check(f"Joe saves {wf} and asks to publish it", saved.status_code == 201 and res.status_code == 201, res.text[:300])
+    return str(asked.get("id") or "") if asked.get("status") != "approved" else ""
+
+
+def module_review(gw: httpx.Client, joe: dict[str, str], n: int) -> str:
+    res = gw.post("/v1/tool-modules/blank", json={"displayName": f"Desk {RUN}-{n}", "name": f"desk-{RUN}-{n}", "type": "http"}, headers=joe)
+    made = data(res)
+    gw.post(
+        f"/v1/tool-modules/{made['id']}/operations",
+        json={"name": f"desk_lookup_{RUN}_{n}", "description": "Look up", "access": "read", "method": "GET",
+              "url": "https://desk.example/v1/lookup"},
+        headers=joe,
+    )  # fmt: skip
+    sub = gw.post(f"/v1/tool-modules/{made['id']}/reviews", json={"note": "uc-782"}, headers=joe)
+    check(f"Joe asks for the security review of desk {n}", sub.status_code in (200, 201), sub.text[:300])
+    module = data(gw.get(f"/v1/tool-modules/{made['id']}", headers=joe)) or {}
+    waiting = [v for v in module.get("versions") or [] if v.get("status") == "in_review"]
+    return str(waiting[0]["reviewId"]) if waiting else ""
+
+
+gateway = {"OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}"}
+# tools-service verifies the same people's tokens, so Joe's module and its review are his, in Operations.
+signed = {
+    "OPS_AUTH_MODE": "platform",
+    "OPS_PLATFORM_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
+    "OPS_PLATFORM_INTERNAL_PORT": str(PLATFORM_INTERNAL_PORT),
+}
+with people_stack(agents_env=gateway) as (api, agents), tools(settings=signed) as gw:
+    # Publish reviews are optional: Priya, Operations' admin, turns them on for its workflows before anyone signs in,
+    # so every token below carries the policy.
+    priya = bearer(signed_in(api, "p.shah@harborpine.example"), "team_ops")
+    on = api.put("/v1/policies/publishReview", json={"value": {"workflows": "always"}}, headers=priya)
+    check("13a Priya turns publish review on for Operations' workflows", on.status_code == 200, on.text[:200])
+    joe = bearer(signed_in(api, "j.richardson@harborpine.example"), "team_ops")
+    rohan = bearer(signed_in(api, "r.menon@harborpine.example"), "team_ops")
+    wanjiru = bearer(signed_in(api, "w.kamau@harborpine.example"), "team_platform")
+    sam = bearer(signed_in(api, "s.adeyemi@harborpine.example"), "team_security")
+
+    first, second = (asked_to_publish(agents, joe, f"uc782_note_{RUN}_{i}") for i in (1, 2))
+    check("13 Joe's two workflows wait for a publish review", bool(first and second), (first, second))
+    # Rohan, a Viewer of Operations, holds no approve cell: refused on the single and the bulk decision.
+    viewer = agents.post(f"/reviews/{first}/decision", json={"decision": "approved"}, headers=rohan)
+    check("13b Rohan, a Viewer, is refused the decision in Reviews (403)", viewer.status_code == 403, viewer.text[:300])
+    viewer_bulk = agents.post("/reviews/bulk-decision", json={"ids": [first], "decision": "approved"}, headers=rohan)
+    check("13c Rohan is refused the bulk decision (403)", viewer_bulk.status_code == 403, viewer_bulk.text[:300])
+    one = agents.post(f"/reviews/{first}/decision", json={"decision": "approved"}, headers=wanjiru)
+    check(
+        "14 Wanjiru, acting in Platform, approves one in Reviews (200)",
+        one.status_code == 200 and (data(one) or {}).get("status") == "approved",
+        one.text[:300],
+    )
+    bulk = agents.post("/reviews/bulk-decision", json={"ids": [second], "decision": "approved"}, headers=wanjiru)
+    check(
+        "15 Wanjiru approves the other in a bulk decision",
+        bulk.status_code == 200 and (data(bulk) or {}).get("updated") == [second],
+        bulk.text[:300],
+    )
+
+    a, b = module_review(gw, joe, 1), module_review(gw, joe, 2)
+    check("16 two of Operations' tool modules wait for their security review", bool(a and b), (a, b))
+    single = agents.post(f"/reviews/{a}/decision", json={"decision": "approved"}, headers=sam)
+    check(
+        "17 Sam, acting in Security, approves one in Reviews (200)",
+        single.status_code == 200 and (data(single) or {}).get("status") == "approved",
+        single.text[:300],
+    )
+    many = agents.post("/reviews/bulk-decision", json={"ids": [b], "decision": "approved"}, headers=sam)
+    check(
+        "18 Sam approves the other in a bulk decision",
+        many.status_code == 200 and (data(many) or {}).get("updated") == [b],
+        many.text[:300],
     )
 
 finish()
