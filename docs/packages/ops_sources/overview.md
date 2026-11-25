@@ -12,21 +12,28 @@ decides what a fetched item becomes: knowledge keeps a snapshot and indexes it; 
 | The contract | `packages/ops_sources/src/ops_sources/contract.py` | Names the roles a source answers (find places, changes since a place, fetch a version, access list) over the plugin's knowledge-source tools, and reads each answer (`places_of`, `listing_of`, `access_list`: None when the source did not say, `[]` when it listed nobody). `Declared` is a source as tools-service declares it; `SourceTools.of` maps a declared or stored row to its tools, keeping a null tool as None |
 | `find_places` | `places.py` | Asks the source's scopes tool for the places a person can pick, as the team's connection; the knowledge picker and Files' watched folders use it |
 | `ToolReader` | `reader.py` | tools-service as a reading service calls it: the sources a team can make, the hosts a source's values reach, and one gateway call (`POST /v1/calls`) |
-| The state port | `state.py` | `Place` (cursor, watermark, changes cursor, last full listing, what a long listing saw so far, tombstones, paused) and `SourceState` (what is held per item; save the place; keep a marker; count a gone answer) |
-| `read_changes` | `listing.py` | Every page of changes since the place, the place saved after each page; one restart when a saved page is refused; the page cap; a full listing first, weekly, or every run of a source that lists whole; a refused sign-in pauses the source |
-| `Fetcher` | `fetching.py` | The changed items fetched a few at once and paced (the source's rate, or a slower `pace_s` its listing names), each sent its held tag; an item gone twice in a row is tombstoned |
+| The state port | `state.py` | `Place` (cursor, watermark, changes cursor, last full listing, what a long listing saw so far, tombstones, failed fetches, paused) and `SourceState` (what is held per item; save the place; keep a marker; count a gone answer) |
+| `read_changes` | `listing.py` | Every page of changes since the place, the place saved after each page; one restart when a saved page is refused; the page cap; a full listing first, weekly, or every run of a source that lists whole; a refused sign-in pauses the source; an item whose fetch failed on `FETCH_TRIES` (3) runs for its marker is left, still seen, until the marker moves |
+| `Fetcher` | `fetching.py` | The changed items fetched a few at once and paced (the source's rate, or a slower `pace_s` its listing names), each sent its held tag; an item gone twice in a row is tombstoned; any other failed fetch is kept in the place for its marker, said once per marker (`Fetched.failed_first`) and tried again (`Fetched.retrying`, so the reading service ends the run partial) until `FETCH_TRIES` runs have; a rate limit or an unreachable gateway is no try, and a code the caller names `final` (too large) is left at once |
 
 ## How a service uses it
 
 1. Read the place from where it keeps the source, and give the loop a `SourceState` over its own items.
 2. `read_changes(...)` lists what changed; `Listing.full` and `Listing.whole` say whether every item was seen, so
    the service may remove what was not listed. `Listing.skipped` holds the items listed but not taken in, each with
-   its reason, so a service can record one (a file too large) as failed rather than removed.
+   its reason, so a service can record one (a file too large) as failed rather than removed. A row refused for its
+   size also carries `skipped_code: "TOO_LARGE"`, which tells it apart from one a rule left out.
 3. `Fetcher(...).fetch_changed(..., on_listed=..., on_fetched=...)` hands each new version to the service in
    listing order.
-4. `Listing.settle(place, status)` moves the place on after a finished run, then the service saves it.
+4. `Listing.settle(place, status)` moves the place on after a finished run, then the service saves it. Only a
+   run settled as success takes the watermark and the changes cursor the last page named, so a run whose fetches
+   failed lists the same changes again.
 
-kb-service's adapter is `_KnowledgeState` in `services/kb-service/src/ops_kb/tool_sources.py`: the place lives in
+`contract.refusal_of` and `contract.source_values` check a declared source before a service saves one (a team
+sign-in, the declared inputs and their types); kb-service's create and files-service's watch create both ask them.
+
+files-service's adapter is `FileState` in `services/files-service/src/ops_files/watches.py`: the place lives on the
+watch, and the held items are the watch's source files. kb-service's adapter is `_KnowledgeState` in `services/kb-service/src/ops_kb/tool_sources.py`: the place lives in
 the knowledge source's `config`, and the held items are the source's knowledge items.
 
 ## Tests

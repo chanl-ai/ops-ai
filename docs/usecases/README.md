@@ -405,3 +405,4 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-772 | kb-service | Search a long document's pieces on the server | api | draft |
 | uc-782 | agents-service | Only a person who may decide a review decides, resumes or replays it | api | current |
 | uc-790 | tools-service | A chat user never chooses between their own login and the team's | api, ui | current |
+| uc-779 | files-service | A watched folder brings files in | api, ui | draft |

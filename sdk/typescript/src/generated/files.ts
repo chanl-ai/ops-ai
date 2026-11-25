@@ -245,7 +245,7 @@ export interface paths {
         /**
          * Get Content
          * @description A clean file's bytes: the proxy download for people, and the read agent runs, knowledge ingest and tool
-         *     fixtures use with a service token.
+         *     fixtures use with a service token. `version` reads an earlier version once its own scan is clean.
          */
         get: operations["files_get_content"];
         put?: never;
@@ -459,6 +459,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/watches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Watches
+         * @description The team's watched folders by name, each with its last check and whether one is running.
+         */
+        get: operations["watches_list_watches"];
+        put?: never;
+        /**
+         * Create Watch
+         * @description Watches an app's folders; nothing is copied until the first check (Check now, or a trigger's schedule). The
+         *     plugin, source and folders are checked against what the team's apps declare, and the watch reads through the
+         *     team's connection for that app.
+         */
+        post: operations["watches_create_watch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/watches/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Watch Options
+         * @description The team's watches a picker offers (the Files changed trigger), searched and paged in the query.
+         */
+        get: operations["watches_watch_options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/watches/{watch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Watch */
+        get: operations["watches_get_watch"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Watch
+         * @description Stops watching; the files already brought in stay in Files under their own retention.
+         */
+        delete: operations["watches_delete_watch"];
+        options?: never;
+        head?: never;
+        /**
+         * Change Watch
+         * @description Renames the watch or changes its folders; new folders are listed whole on the next check.
+         */
+        patch: operations["watches_change_watch"];
+        trace?: never;
+    };
+    "/v1/watches/{watch_id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Watch
+         * @description Check now: the background process checks the watch within seconds. 409 `already_checking` while a check
+         *     is asked for or running.
+         */
+        post: operations["watches_check_watch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/watches/{watch_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Watch Events
+         * @description What the watch's checks found (new, changed, renamed, removed, failed) after event `after`, oldest first.
+         */
+        get: operations["watches_watch_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -511,6 +623,14 @@ export interface components {
             skipped: components["schemas"]["Skipped"][];
             /** Updated */
             updated: string[];
+        };
+        /** CheckAsked */
+        CheckAsked: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "asked";
         };
         /** CompletedUpload */
         CompletedUpload: {
@@ -573,6 +693,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[CheckAsked] */
+        Envelope_CheckAsked_: {
+            data: components["schemas"]["CheckAsked"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[CompletedUpload] */
         Envelope_CompletedUpload_: {
             data: components["schemas"]["CompletedUpload"];
@@ -612,6 +741,15 @@ export interface components {
         /** Envelope[FileList] */
         Envelope_FileList_: {
             data: components["schemas"]["FileList"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[WatchView]] */
+        Envelope_ListResult_WatchView__: {
+            data: components["schemas"]["ListResult_WatchView_"];
             /**
              * Success
              * @constant
@@ -672,6 +810,24 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[WatchEvents] */
+        Envelope_WatchEvents_: {
+            data: components["schemas"]["WatchEvents"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[WatchView] */
+        Envelope_WatchView_: {
+            data: components["schemas"]["WatchView"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[list[CredentialView]] */
         Envelope_list_CredentialView__: {
             /** Data */
@@ -710,6 +866,17 @@ export interface components {
              * @constant
              */
             success: false;
+        };
+        /** FailedFile */
+        FailedFile: {
+            /** Code */
+            code?: string | null;
+            /** Path */
+            path: string | null;
+            /** Reason */
+            reason: string | null;
+            /** Size */
+            size: number | null;
         };
         /**
          * FileData
@@ -801,7 +968,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
             /**
              * Referencecount
              * @default 0
@@ -824,6 +991,7 @@ export interface components {
             sensitivitySuggested: boolean;
             /** Size */
             size: number;
+            source: components["schemas"]["FileSource"] | null;
             storage: components["schemas"]["StorageLocation"] | null;
             /** Team */
             team: string;
@@ -912,7 +1080,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
             /** Referencecount */
             referenceCount: number;
             retention: components["schemas"]["FileRetention"];
@@ -948,6 +1116,29 @@ export interface components {
              */
             status: "pending" | "clean" | "infected" | "failed";
         };
+        /**
+         * FileSource
+         * @description Where a file from a watched folder came from: the watch (its name is None once the watch is deleted), its path
+         *     at the source, when the source last changed the version Files holds, when the source stopped listing it, and its
+         *     access list as last read. `access_list` None means the source never said; [] means it lists nobody. The list is
+         *     recorded, not applied (exception E57).
+         */
+        FileSource: {
+            /** Accesslist */
+            accessList: string[] | null;
+            /** Accessreadat */
+            accessReadAt: string | null;
+            /** Changedat */
+            changedAt: string | null;
+            /** Path */
+            path: string | null;
+            /** Removedat */
+            removedAt: string | null;
+            /** Watchid */
+            watchId: string | null;
+            /** Watchname */
+            watchName: string | null;
+        };
         /** FileVersion */
         FileVersion: {
             /** Current */
@@ -966,12 +1157,62 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * Folder
+         * @description One picked place of a watch: the input it was picked for, the source's id, and the name the picker showed
+         *     (the id when none was kept).
+         */
+        Folder: {
+            /** Id */
+            id: string;
+            /** Input */
+            input: string;
+            /** Name */
+            name: string;
+        };
         /** Health */
         Health: {
             /** Reason */
             reason?: string | null;
             /** Status */
             status: string;
+        };
+        JsonValue: unknown;
+        /**
+         * LastCheck
+         * @description What the last check ended as: success, partial, refused or failed, with what it brought in and why it
+         *     stopped; `failures` names the first failed files.
+         */
+        LastCheck: {
+            /**
+             * Brought
+             * @default 0
+             */
+            brought: number;
+            /**
+             * Code
+             * @default
+             */
+            code: string;
+            /**
+             * Failed
+             * @default 0
+             */
+            failed: number;
+            /** Failures */
+            failures?: components["schemas"]["FailedFile"][];
+            /**
+             * Removed
+             * @default 0
+             */
+            removed: number;
+            /** Status */
+            status: string;
+            /**
+             * Stopped
+             * @default
+             */
+            stopped: string;
         };
         /** LegalHold */
         LegalHold: {
@@ -993,6 +1234,18 @@ export interface components {
             ids: string[];
             /** Reason */
             reason: string;
+        };
+        /** ListResult[WatchView] */
+        ListResult_WatchView_: {
+            /** Data */
+            data: components["schemas"]["WatchView"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
         };
         /**
          * Option
@@ -1061,7 +1314,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
         };
         /** PurposeLimitIn */
         PurposeLimitIn: {
@@ -1073,7 +1326,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
         };
         /** PurposeRetention */
         PurposeRetention: {
@@ -1081,7 +1334,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
             /** Retentionclass */
             retentionClass: string;
         };
@@ -1091,7 +1344,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
             /** Retentionclass */
             retentionClass: string;
         };
@@ -1169,6 +1422,8 @@ export interface components {
         ScanResultIn: {
             /** Detail */
             detail?: string | null;
+            /** Digest */
+            digest?: string | null;
             /** Engine */
             engine: string;
             /** Fileid */
@@ -1178,6 +1433,8 @@ export interface components {
              * @enum {string}
              */
             status: "clean" | "infected" | "failed";
+            /** Version */
+            version?: number | null;
         };
         /** Skipped */
         Skipped: {
@@ -1297,7 +1554,7 @@ export interface components {
              */
             endpoint: string;
             /** Purpose */
-            purpose: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar") | "default";
+            purpose: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar") | "default";
             /**
              * Region
              * @default
@@ -1338,7 +1595,7 @@ export interface components {
              */
             endpoint: string;
             /** Purpose */
-            purpose: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar") | "default";
+            purpose: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar") | "default";
             /**
              * Region
              * @default
@@ -1370,7 +1627,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
             /** Retentionclass */
             retentionClass?: string | null;
             /**
@@ -1404,6 +1661,116 @@ export interface components {
             method: "PUT";
             /** Uploadurl */
             uploadUrl: string;
+        };
+        /** WatchChange */
+        WatchChange: {
+            /** Name */
+            name?: string | null;
+            /** Names */
+            names?: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            } | null;
+            /** Values */
+            values?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+        };
+        /** WatchEventView */
+        WatchEventView: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Code */
+            code?: string | null;
+            /** Fileid */
+            fileId: string | null;
+            /** Kind */
+            kind: string;
+            /** Number */
+            number: number;
+            /** Path */
+            path: string | null;
+            /** Reason */
+            reason: string | null;
+            /** Size */
+            size: number | null;
+            /** Version */
+            version: number | null;
+        };
+        /**
+         * WatchEvents
+         * @description Events after `after`, oldest first; `next_after` asks for the next page, None at the end.
+         */
+        WatchEvents: {
+            /** Data */
+            data: components["schemas"]["WatchEventView"][];
+            /** Nextafter */
+            nextAfter: number | null;
+        };
+        /** WatchIn */
+        WatchIn: {
+            /** Connectionid */
+            connectionId?: string | null;
+            /** Name */
+            name: string;
+            /** Names */
+            names?: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
+            /** Plugin */
+            plugin: string;
+            /** Source */
+            source: string;
+            /** Values */
+            values: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+        };
+        /** WatchView */
+        WatchView: {
+            /** Checking */
+            checking: boolean;
+            /** Connectionid */
+            connectionId: string | null;
+            /**
+             * Createdat
+             * Format: date-time
+             */
+            createdAt: string;
+            /** Createdby */
+            createdBy: string;
+            /** Filesinfiles */
+            filesInFiles: number;
+            /** Folders */
+            folders: components["schemas"]["Folder"][];
+            /** Id */
+            id: string;
+            /** Inuse */
+            inUse: boolean;
+            lastCheck: components["schemas"]["LastCheck"] | null;
+            /** Lastcheckat */
+            lastCheckAt: string | null;
+            /** Name */
+            name: string;
+            /** Plugin */
+            plugin: string;
+            /** Source */
+            source: string;
+            /**
+             * Updatedat
+             * Format: date-time
+             */
+            updatedAt: string;
+            /** Values */
+            values: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
         };
     };
     responses: never;
@@ -1467,7 +1834,7 @@ export interface operations {
         parameters: {
             query?: {
                 uploadedBy?: "me" | null;
-                purpose?: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar")[] | null;
+                purpose?: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar")[] | null;
                 scan?: string[] | null;
                 sensitivity?: string[] | null;
                 readAs?: string[] | null;
@@ -1613,7 +1980,7 @@ export interface operations {
         parameters: {
             query: {
                 name: string;
-                purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+                purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
                 uploadedBy?: string | null;
             };
             header: {
@@ -2926,7 +3293,9 @@ export interface operations {
     };
     files_get_content: {
         parameters: {
-            query?: never;
+            query?: {
+                version?: number | null;
+            };
             header?: never;
             path: {
                 file_id: string;
@@ -4438,6 +4807,1061 @@ export interface operations {
             };
             /** @description A target failed its test or names no credential */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    watches_list_watches: {
+        parameters: {
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ListResult_WatchView__"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Above the purpose's size limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Type not allowed */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not scanned clean */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    watches_create_watch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_WatchView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Above the purpose's size limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Type not allowed */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not scanned clean */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    watches_watch_options: {
+        parameters: {
+            query?: {
+                search?: string;
+                cursor?: string | null;
+                limit?: number;
+                ids?: string[] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_OptionsPage_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Above the purpose's size limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Type not allowed */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not scanned clean */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    watches_get_watch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_WatchView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Above the purpose's size limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Type not allowed */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not scanned clean */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    watches_delete_watch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Above the purpose's size limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Type not allowed */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not scanned clean */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    watches_change_watch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_WatchView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Above the purpose's size limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Type not allowed */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not scanned clean */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    watches_check_watch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CheckAsked_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Above the purpose's size limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Type not allowed */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not scanned clean */
+            423: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    watches_watch_events: {
+        parameters: {
+            query?: {
+                after?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                watch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_WatchEvents_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Above the purpose's size limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Type not allowed */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not scanned clean */
+            423: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -2,11 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import type { UseQueryResult } from '@tanstack/react-query';
-import type { ColumnDef } from '@tanstack/react-table';
 import { ExternalLink } from 'lucide-react';
-
-import { DataTableWithViews } from '@/components/data-table-with-views';
 
 import { SourceKindIcon } from '@/components/knowledge/knowledge-meta';
 import { PageFields } from '@/components/knowledge/page-fields';
@@ -19,24 +15,23 @@ import { Stepper } from '@/components/shared/stepper';
 import { KeyValues, Section } from '@/components/shared/surface';
 import { PRESET_LABEL } from '@/components/sources/ingest-meta';
 import { SchedulePicker } from '@/components/sources/schedule-picker';
-import { initialValues, SourceValuesForm, valueErrors } from '@/components/sources/source-values-form';
+import { SourceScopeStep, useSourceScopePreview } from '@/components/sources/source-scope-step';
+import { initialValues, valueErrors } from '@/components/sources/source-values-form';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { useApproveAiSteps, useCreateSource, usePutSourceItem, useSourceKinds, useSourcePreview } from '@/hooks/knowledge-queries';
+import { useApproveAiSteps, useCreateSource, usePutSourceItem, useSourceKinds } from '@/hooks/knowledge-queries';
 import { type AiSwitches, aiDefaults, createInput, firstSyncCalls, kindsToConnect, kindUnavailable, PIECES_HIGH, PIECES_LOW } from '@/lib/add-source';
 import { appPageHref } from '@/lib/app-links';
 import { count, plural } from '@/lib/format';
-import type { Schedule, Source, SourceKindOption, SourceKindPreview } from '@/lib/types/knowledge';
+import type { Schedule, Source, SourceKindOption } from '@/lib/types/knowledge';
 import { cn } from '@/lib/utils';
 import { slugify } from '@/lib/validation/names';
 
 const STEPS = ['Source', 'What to include', 'Review'] as const;
-const PREVIEW_DEBOUNCE_MS = 600;
-const PREVIEW_ROWS = 50;
 
 const kindKey = (k: SourceKindOption) => (k.type === 'tool' ? `${k.plugin}/${k.source}` : k.type);
 /** What each built-in kind takes in, under its title in step 1. */
@@ -51,15 +46,6 @@ function shown(v: unknown) {
   if (Array.isArray(v)) return v.filter((x) => String(x).trim()).join(', ') || '—';
   if (typeof v === 'boolean') return v ? 'On' : 'Off';
   return v === undefined || v === null || v === '' ? '—' : String(v);
-}
-
-function useDebounced<T>(value: T, ms: number) {
-  const [v, setV] = React.useState(value);
-  React.useEffect(() => {
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
-  }, [value, ms]);
-  return v;
 }
 
 /**
@@ -130,9 +116,7 @@ export function AddSourceWizard({
   const pageErrors = kind?.type === 'text' ? { title: page.title.trim() ? undefined : 'Give the page a title.', text: page.text.trim() ? undefined : 'Write the page’s text.' } : {};
   const filesError = kind?.type === 'file' ? (uploads.length ? uploadsBlocker(uploads) : undefined) ?? (fileIds.length ? undefined : 'Upload or pick at least one file.') : undefined;
 
-  const previewValues = useDebounced(values, PREVIEW_DEBOUNCE_MS);
-  const previewing = !!kind?.previews && step >= 2 && valid && Object.keys(valueErrors(inputs, previewValues)).length === 0;
-  const preview = useSourcePreview({ plugin: kind?.plugin, source: kind?.source, values: previewValues }, previewing);
+  const preview = useSourceScopePreview(kind, values, step >= 2);
 
   // A menu item that names the kind skips step 1, once per opening; with no such kind the wizard stays on step 1.
   const preset = React.useRef(false);
@@ -336,8 +320,7 @@ export function AddSourceWizard({
               </div>
             ) : (
               <>
-                <SourceValuesForm idPrefix="as" inputs={inputs} values={values} onChange={setValues} errors={shownErrors} scopeSource={kind.pickers && kind.plugin && kind.source ? { plugin: kind.plugin, source: kind.source } : undefined} />
-                {kind.previews && <PreviewPanel paused={!valid} query={preview} />}
+                <SourceScopeStep idPrefix="as" kind={kind} values={values} onChange={setValues} errors={shownErrors} valid={valid} preview={preview} />
               </>
             )}
           </div>
@@ -444,36 +427,6 @@ function AiSwitch({ id, label, hint, checked, onChange }: { id: string; label: s
         <p className="text-xs text-muted-foreground">{hint}</p>
       </div>
       <Switch id={id} checked={checked} onCheckedChange={onChange} />
-    </div>
-  );
-}
-
-type PreviewPage = SourceKindPreview['pages'][number];
-const PREVIEW_COLUMNS: ColumnDef<PreviewPage>[] = [
-  { id: 'page', header: 'Page', cell: ({ row }) => <span className="block max-w-80 truncate font-mono text-xs">{row.original.id}</span> },
-  { id: 'outcome', header: 'Outcome', cell: ({ row }) => <span className={cn('text-sm', !row.original.willFetch && 'text-muted-foreground')}>{row.original.outcome}</span> },
-];
-
-/** The live preview: each page and its outcome with the counts, or why it is paused, loading or failed. */
-function PreviewPanel({ paused, query }: { paused: boolean; query: UseQueryResult<SourceKindPreview> }) {
-  if (paused)
-    return (
-      <div className="rounded-md border border-dashed p-4 text-sm" data-testid="add-source-preview-paused">
-        <p className="font-medium">Preview paused</p>
-        <p className="text-muted-foreground">The preview runs again when the start address and the rules are valid.</p>
-      </div>
-    );
-  if (query.isPending || (query.isFetching && !query.data)) return <p className="rounded-md border p-4 text-sm text-muted-foreground">Checking what the source would fetch…</p>;
-  if (query.isError) return <p className="rounded-md border p-4 text-sm text-destructive-text">The preview could not run: {query.error.message}</p>;
-  const p = query.data;
-  return (
-    <div className="flex flex-col gap-2" data-testid="add-source-preview">
-      <p className="text-sm font-medium">
-        Live preview · {plural(p.found, 'page')} found, {count(p.willFetch)} will be fetched{p.capped ? ' (the listing stopped at its limit)' : ''}
-        {query.isFetching && <span className="ml-2 text-xs font-normal text-muted-foreground">Updating…</span>}
-      </p>
-      <DataTableWithViews columns={PREVIEW_COLUMNS} data={p.pages.slice(0, PREVIEW_ROWS)} getRowId={(r) => r.id} hideViewSwitcher hidePaginationOnOnePage rowNoun="page" />
-      <p className="text-xs text-muted-foreground">robots.txt is always obeyed. Nothing is stored until you create the source.{p.pages.length > PREVIEW_ROWS ? ` The first ${PREVIEW_ROWS} pages are listed.` : ''}</p>
     </div>
   );
 }

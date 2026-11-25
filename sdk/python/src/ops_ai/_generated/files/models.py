@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, NotRequired
+from typing import Any, Literal, NotRequired, TypeAlias
 
 from typing_extensions import TypedDict
 
@@ -28,6 +28,10 @@ class BulkDeleteIn(TypedDict, closed=True):
     ids: list[str]
 
 
+class CheckAsked(TypedDict, closed=True):
+    status: Literal["asked"]
+
+
 class CredentialInput(TypedDict, closed=True):
     kind: Literal["aws_access_key", "azure_service_principal"]
     values: dict[str, str]
@@ -48,6 +52,11 @@ class DownloadLink(TypedDict, closed=True):
     expiresAt: str
     ttlSeconds: int
     url: str
+
+
+class EnvelopeCheckAsked(TypedDict, closed=True):
+    data: CheckAsked
+    success: Literal[True]
 
 
 class EnvelopeCredentialView(TypedDict, closed=True):
@@ -78,6 +87,13 @@ class ErrorBody(TypedDict, closed=True):
 class ErrorEnvelope(TypedDict, closed=True):
     error: ErrorBody
     success: Literal[False]
+
+
+class FailedFile(TypedDict, closed=True):
+    code: NotRequired[str | None]
+    path: str | None
+    reason: str | None
+    size: int | None
 
 
 class FileData(TypedDict, closed=True):
@@ -133,6 +149,16 @@ class FileScan(TypedDict, closed=True):
     status: Literal["pending", "clean", "infected", "failed"]
 
 
+class FileSource(TypedDict, closed=True):
+    accessList: list[str] | None
+    accessReadAt: str | None
+    changedAt: str | None
+    path: str | None
+    removedAt: str | None
+    watchId: str | None
+    watchName: str | None
+
+
 class FileVersion(TypedDict, closed=True):
     current: bool
     digest: str
@@ -142,9 +168,28 @@ class FileVersion(TypedDict, closed=True):
     version: int
 
 
+class Folder(TypedDict, closed=True):
+    id: str
+    input: str
+    name: str
+
+
 class Health(TypedDict, closed=True):
     reason: NotRequired[str | None]
     status: str
+
+
+JsonValue: TypeAlias = Any
+
+
+class LastCheck(TypedDict, closed=True):
+    brought: NotRequired[int]
+    code: NotRequired[str]
+    failed: NotRequired[int]
+    failures: NotRequired[list[FailedFile]]
+    removed: NotRequired[int]
+    status: str
+    stopped: NotRequired[str]
 
 
 class LegalHold(TypedDict, closed=True):
@@ -196,6 +241,7 @@ class PurposeLimit(TypedDict, closed=True):
         "document_type_sample",
         "email_body",
         "knowledge_snapshot",
+        "source_file",
         "test_import",
         "evidence_bundle",
         "export",
@@ -214,6 +260,7 @@ class PurposeLimitIn(TypedDict, closed=True):
         "document_type_sample",
         "email_body",
         "knowledge_snapshot",
+        "source_file",
         "test_import",
         "evidence_bundle",
         "export",
@@ -230,6 +277,7 @@ class PurposeRetention(TypedDict, closed=True):
         "document_type_sample",
         "email_body",
         "knowledge_snapshot",
+        "source_file",
         "test_import",
         "evidence_bundle",
         "export",
@@ -247,6 +295,7 @@ class PurposeRetentionIn(TypedDict, closed=True):
         "document_type_sample",
         "email_body",
         "knowledge_snapshot",
+        "source_file",
         "test_import",
         "evidence_bundle",
         "export",
@@ -300,9 +349,11 @@ class RetentionClassView(TypedDict, closed=True):
 
 class ScanResultIn(TypedDict, closed=True):
     detail: NotRequired[str | None]
+    digest: NotRequired[str | None]
     engine: str
     fileId: str
     status: Literal["clean", "infected", "failed"]
+    version: NotRequired[int | None]
 
 
 class Skipped(TypedDict, closed=True):
@@ -334,6 +385,7 @@ class StorageTarget(TypedDict, closed=True):
             "document_type_sample",
             "email_body",
             "knowledge_snapshot",
+            "source_file",
             "test_import",
             "evidence_bundle",
             "export",
@@ -360,6 +412,7 @@ class StorageTargetIn(TypedDict, closed=True):
             "document_type_sample",
             "email_body",
             "knowledge_snapshot",
+            "source_file",
             "test_import",
             "evidence_bundle",
             "export",
@@ -388,6 +441,7 @@ class UploadRequest(TypedDict, closed=True):
         "document_type_sample",
         "email_body",
         "knowledge_snapshot",
+        "source_file",
         "test_import",
         "evidence_bundle",
         "export",
@@ -406,6 +460,56 @@ class UploadTicket(TypedDict, closed=True):
     headers: dict[str, str]
     method: Literal["PUT"]
     uploadUrl: str
+
+
+class WatchChange(TypedDict, closed=True):
+    name: NotRequired[str | None]
+    names: NotRequired[dict[str, dict[str, str]] | None]
+    values: NotRequired[dict[str, JsonValue] | None]
+
+
+class WatchEventView(TypedDict, closed=True):
+    at: str
+    code: NotRequired[str | None]
+    fileId: str | None
+    kind: str
+    number: int
+    path: str | None
+    reason: str | None
+    size: int | None
+    version: int | None
+
+
+class WatchEvents(TypedDict, closed=True):
+    data: list[WatchEventView]
+    nextAfter: int | None
+
+
+class WatchIn(TypedDict, closed=True):
+    connectionId: NotRequired[str | None]
+    name: str
+    names: NotRequired[dict[str, dict[str, str]]]
+    plugin: str
+    source: str
+    values: dict[str, JsonValue]
+
+
+class WatchView(TypedDict, closed=True):
+    checking: bool
+    connectionId: str | None
+    createdAt: str
+    createdBy: str
+    filesInFiles: int
+    folders: list[Folder]
+    id: str
+    inUse: bool
+    lastCheck: LastCheck | None
+    lastCheckAt: str | None
+    name: str
+    plugin: str
+    source: str
+    updatedAt: str
+    values: dict[str, JsonValue]
 
 
 class BackgroundHealthOut(TypedDict, closed=True):
@@ -442,6 +546,16 @@ class EnvelopeUploadTicket(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeWatchEvents(TypedDict, closed=True):
+    data: WatchEvents
+    success: Literal[True]
+
+
+class EnvelopeWatchView(TypedDict, closed=True):
+    data: WatchView
+    success: Literal[True]
+
+
 class FileDetail(TypedDict, closed=True):
     canDelete: bool | None
     canEdit: bool | None
@@ -461,6 +575,7 @@ class FileDetail(TypedDict, closed=True):
         "document_type_sample",
         "email_body",
         "knowledge_snapshot",
+        "source_file",
         "test_import",
         "evidence_bundle",
         "export",
@@ -474,6 +589,7 @@ class FileDetail(TypedDict, closed=True):
     sensitivity: Literal["public", "internal", "confidential", "restricted"]
     sensitivitySuggested: bool
     size: int
+    source: FileSource | None
     storage: StorageLocation | None
     team: str
     uploadedAt: str
@@ -497,6 +613,7 @@ class FileRow(TypedDict, closed=True):
         "document_type_sample",
         "email_body",
         "knowledge_snapshot",
+        "source_file",
         "test_import",
         "evidence_bundle",
         "export",
@@ -514,6 +631,12 @@ class FileRow(TypedDict, closed=True):
     uploadedAt: str
     uploadedBy: str
     versionCount: int
+
+
+class ListResultWatchView(TypedDict, closed=True):
+    data: list[WatchView]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
 
 
 class ProbeResult(TypedDict, closed=True):
@@ -561,6 +684,11 @@ class EnvelopeCompletedUpload(TypedDict, closed=True):
 
 class EnvelopeFileDetail(TypedDict, closed=True):
     data: FileDetail
+    success: Literal[True]
+
+
+class EnvelopeListResultWatchView(TypedDict, closed=True):
+    data: ListResultWatchView
     success: Literal[True]
 
 
