@@ -277,7 +277,7 @@ function PickerDialog({ agentId, agentName, onGrant, onClose }: { agentId: strin
           <Input
             data-testid="tools-picker-search"
             aria-label={app ? `Search ${app.name} tools` : 'Search apps and tools'}
-            placeholder={app ? `Search ${app.name} tools…` : 'Search apps and tools, e.g. refund'}
+            placeholder={app ? 'Search tools…' : 'Search apps and tools, e.g. refund'}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="min-w-0 flex-1 bg-card"
