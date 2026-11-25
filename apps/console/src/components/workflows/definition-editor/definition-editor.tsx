@@ -378,12 +378,13 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
   });
 
   const actions = (
-    <div className="flex flex-wrap items-center justify-end gap-2">
+    <>
       <RecordActions
         status={
           <>
-            {saveState}
             <ProblemsChip validation={validation} checking={checking} failed={validateError} nodeName={nodeName} onSelectNode={(id) => { selectNode(id); setSheetId(id); }} />
+            {/* Right beside Save. */}
+            {saveState}
           </>
         }
         save={readOnly ? undefined : save && { ...save, testId: 'definition-save' }}
@@ -404,7 +405,7 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
           </>
         }
       />
-    </div>
+    </>
   );
 
   const canvas = (
@@ -507,7 +508,7 @@ function EditorBody({ definition: initial, types, validation, validateError = nu
         frame({ actions, canvas })
       ) : (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-          {actions}
+          <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>
           {canvas}
         </div>
       )}

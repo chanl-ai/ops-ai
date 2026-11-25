@@ -289,6 +289,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
       <PageLayout
         icon={Bot}
         backHref="/build/agents"
+        recordName={agent.name}
         title={editable ? <EditableTitle value={draft.name} onChange={(v) => set('name', v)} label="Agent name" error={errors.name} /> : draft.name}
         description={agent.role}
         badge={
@@ -430,7 +431,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               <RecentRunsCard runs={runs.data} loading={runs.isPending} />
             </div>
           ) : tab === 'limits' ? (
-            <div className="flex max-w-3xl flex-col gap-4" data-testid="agent-limits">
+            <div className="flex flex-col gap-4" data-testid="agent-limits">
               <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
                 <WidgetsSection draft={draft} set={set} toolIds={agent.toolIds} />
               </BuilderFieldset>
@@ -537,7 +538,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 cardFooter={
                   <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2" data-testid="agent-brief-footer">
                     <AgentUsesLink uses={agent.uses} />
-                    <div className="flex items-center gap-1">
+                    <div className="ml-auto flex items-center gap-1">
                       {editable && mode === 'full' && <MoveIntoBrief onChoose={() => setModeAsked('brief')} disabled={dirty || update.isPending} />}
                       <ViewPromptDialog agentId={agent.id} version={agent.version} name={agent.name} />
                     </div>

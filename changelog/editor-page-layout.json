@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "Agent and workflow pages line up with the console",
+  "description": "The title, icon, save state and buttons share one row, the workflow editor has one tab strip, and every page has one heading. Agent tabs use one section style, the tab strip scrolls on a phone, and the step sheet stays inside the panel.",
+  "tag": "fix"
+}
