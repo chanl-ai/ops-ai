@@ -420,14 +420,16 @@ class OpsReads:
             lead = f"{open_} open in your team."
         else:
             lead = f"{counts.get('overdue', 0)} past their deadline."
-        data = data[:LIMIT]
+        # As Human Tasks shows each one to the person: real values only where they may decide it.
+        data = [cast(Json, hitl_facade.as_seen_by(person, r)) for r in data[:LIMIT]]
         cards = [{"type": "task", "id": str(r["id"])} for r in data]
         named = "; ".join(str(r.get("title") or r["id"]) for r in data)
         return _answer(cards, f"{lead} {named}".strip() if data else lead)
 
     async def _get_human_task(self, person: Principal, args: Json) -> ToolOutcome:
         task_id = str(args["taskId"])
-        review = await hitl_facade.get_review(self.rt, task_id)
+        # review_for says whether they may decide it now, so the asker of an ask-first step reads what they answer.
+        review = hitl_facade.as_seen_by(person, await hitl_facade.review_for(self.rt, person, task_id))
         return _answer([{"type": "task", "id": task_id}], str(review.get("title") or task_id))
 
     async def _startable(self, person: Principal) -> list[Json]:

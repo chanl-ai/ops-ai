@@ -301,6 +301,11 @@ async def thread_state(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     if pending:
         async with isolation.request_transaction():
             interrupt = await hitl_facade.interrupt_view(rt, row, pending[0])
+    # What the paused step holds is a task's data: real only to who may decide it, as its task page shows it.
+    team, asker = row.get("team_id"), hitl_facade.asker_of(pending[0].get("payload")) if pending else None
+    # Masked once encoded: a checkpoint can hold values that are not JSON, which the walk passes through as they are.
+    shown_values = hitl_facade.as_seen_in(me, team, jsonable_encoder(await _worded_failure(rt, values)), asker=asker)
+    interrupt = hitl_facade.as_seen_in(me, team, jsonable_encoder(interrupt), asker=asker)
     return ok(
         {
             "threadId": thread_id,
@@ -308,7 +313,7 @@ async def thread_state(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
             "version": row["version"],
             "digest": row["digest"],
             "status": row["status"],
-            "values": jsonable_encoder(await _worded_failure(rt, values)),
+            "values": shown_values,
             "next": list(snap.next),
             "interrupt": interrupt,
             "sla": sla,
@@ -338,10 +343,12 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
         if existing.thread_id != thread_id or existing.status == "running":
             raise Conflict("That run id is already in use.", code="run_active")
         replay = existing.events
+        team = str(row["team_id"] or "") or None
 
         async def replayed() -> AsyncIterator[dict[str, str]]:
+            # A waiting step's payload in a replayed frame is a task's data, as the run's events show it.
             for e in replay:
-                yield _frame(e)
+                yield _frame(hitl_facade.event_as_seen_in(me, team, e))
 
         return EventSourceResponse(replayed(), sep="\n", ping=15)
 

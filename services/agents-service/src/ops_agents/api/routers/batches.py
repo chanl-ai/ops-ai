@@ -16,17 +16,19 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
+from ops_agent_kernel.pii import masked
 from ops_engine import default_registry
 from ops_engine.node_types import start_form
 from ops_engine.store import DefinitionRow
 from ops_files_client import FileNotFound, FilesClient
-from ops_identity.fastapi import Tx
 from ops_ingest.parsers.spreadsheet import spreadsheet_rows
 from ops_service_kit.errors import NotFound, ServiceUnavailable, Unprocessable
 from ops_service_kit.http import Envelope, In, Json, JsonValue, Out
+from ops_store import isolation
 
 from ...store.batches import MAX_ROWS, Batches, BatchOut, BatchRowOut
 from ...store.tenancy import current_tenant
+from .. import ai_steps_gate
 from ..auth import Principal, principal, reader_of, require_builder, started_by
 from ..deps import Runtime, runtime
 from ..engine_runs import checked_input
@@ -185,11 +187,24 @@ def _status(r: BatchRowOut) -> str:
     return r.run_status or "pending"
 
 
+async def _shown_rows(rt: Runtime, me: Principal, batch_id: str) -> tuple[BatchOut, list[BatchRowOut]]:
+    """The batch and its rows as people read them. A row's input, output and error are its run's data, so they are
+    masked as the run's page masks them (aiStepsMaskPersonalData, on by default). The rows are read in one transaction,
+    and platform-service is asked for the policy once it is closed."""
+    async with isolation.request_transaction():
+        batch = await _batch(rt, me, batch_id)
+        rows = await Batches(rt.db).rows(batch_id)
+    if not await ai_steps_gate.people_see_masked(rt, batch.team_id or None):
+        return batch, rows
+    shown = [r.model_copy(update={"input": masked(r.input), "output": masked(r.output), "error": masked(r.error)})
+             for r in rows]  # fmt: skip
+    return batch, shown
+
+
 @router.get("/v1/batches/{batch_id}", response_model=Envelope[BatchView])
-async def batch_page(rt: Rt, me: Reader, _: Tx, batch_id: str) -> JSONResponse:
-    """The batch's counts and every row, failed first: what its page shows."""
-    batch = await _batch(rt, me, batch_id)
-    rows = await Batches(rt.db).rows(batch_id)
+async def batch_page(rt: Rt, me: Reader, batch_id: str) -> JSONResponse:
+    """The batch's counts and every row, failed first: what its page shows. No request transaction (`_shown_rows`)."""
+    batch, rows = await _shown_rows(rt, me, batch_id)
     statuses = [_status(r) for r in rows]
     view = {
         "id": batch.id,
@@ -228,10 +243,10 @@ async def retry_batch(rt: Rt, me: Me, batch_id: str) -> JSONResponse:
     response_class=Response,
     responses={200: {"content": {"text/csv": {"schema": {"type": "string"}}}, "description": "One line per row"}},
 )
-async def batch_results(rt: Rt, me: Reader, _: Tx, batch_id: str) -> Response:
-    """Every row as the page shows it, one line each: row, input, status, outcome, run, error and output. Input and
-    output are JSON, so a value holding a comma or a quote reads back as it was."""
-    await _batch(rt, me, batch_id)
+async def batch_results(rt: Rt, me: Reader, batch_id: str) -> Response:
+    """Every row as the page shows it, masked as the page masks it, one line each: row, input, status, outcome, run,
+    error and output. Input and output are JSON, so a value holding a comma or a quote reads back as it was."""
+    _, rows = await _shown_rows(rt, me, batch_id)
     out = io.StringIO()
     writer = csv.writer(out)
     writer.writerow(["row", "input", "status", "outcome", "runId", "error", "output"])
@@ -239,7 +254,7 @@ async def batch_results(rt: Rt, me: Reader, _: Tx, batch_id: str) -> Response:
     def as_json(value: Any) -> str:
         return json.dumps(value, ensure_ascii=False) if value is not None else ""
 
-    for r in sorted(await Batches(rt.db).rows(batch_id), key=lambda x: x.row):
+    for r in sorted(rows, key=lambda x: x.row):
         writer.writerow(
             [r.row, as_json(r.input), _status(r), r.outcome or "", r.run_id or "", r.error or "",
              as_json(r.output)]

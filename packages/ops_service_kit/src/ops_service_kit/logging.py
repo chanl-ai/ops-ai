@@ -28,7 +28,7 @@ import structlog
 from structlog.stdlib import BoundLogger, ProcessorFormatter
 from structlog.typing import EventDict, Processor, WrappedLogger
 
-from ops_pii import mask
+from ops_pii import mask, masked
 
 # The fields every line starts with, in this order; the ids are null when nothing has set them.
 SERVICE = "service.name"
@@ -102,14 +102,14 @@ def _add_trace(_: WrappedLogger, __: str, event: EventDict) -> EventDict:
     return event
 
 
-def _scrub(value: Any) -> Any:
-    if isinstance(value, str):
-        return mask(_BEARER.sub(rf"\1 {REDACTED}", _QUERY.sub("", value)))
-    if isinstance(value, Mapping):
-        return {str(k): REDACTED if _secret(str(k), v) else _scrub(v) for k, v in value.items()}  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
-    if isinstance(value, list | tuple | set | frozenset):
-        return [_scrub(v) for v in value]  # pyright: ignore[reportUnknownVariableType]
-    return value
+def _text(value: str) -> str:
+    return mask(_BEARER.sub(rf"\1 {REDACTED}", _QUERY.sub("", value)))
+
+
+def _scrub(value: Any, key: str | None = None) -> Any:
+    """`value`, logged under `key`, masked by `ops_pii.masked`: a field named as personal data (ssnLast4, account_id)
+    whole, a number included; a secret's field redacted; every text's query strings dropped and bearer tokens hidden."""
+    return masked(value, key, text=_text, hidden=lambda k, v: REDACTED if _secret(k, v) else None)
 
 
 def _secret(key: str, value: Any) -> bool:
@@ -122,7 +122,7 @@ def redact(_: WrappedLogger, __: str, event: EventDict) -> EventDict:
     for key, value in list(event.items()):
         if key in _UNMASKED:
             continue
-        event[key] = REDACTED if _secret(key, value) else _scrub(value)
+        event[key] = REDACTED if _secret(key, value) else _scrub(value, key)
     return event
 
 
