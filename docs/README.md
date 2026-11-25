@@ -573,6 +573,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `security/recovery-and-redrive.md` | Security: what a crash repeats and never repeats, Retry, Redrive, bulk actions and dead letters |
 | `guide/ops-assistant.md` | The Ops Assistant: checklist, Connect card, Think harder, Save read-back, reused reads, suggestion chips, memories |
 | `guide/whats-new.md` | What's new: every change a person would notice, newest first, built from the changelog |
+| `guide/use-cases/build-an-agent.md` | Use case: write an agent, try the draft, give it knowledge and a tool, publish it and chat, with SDK, CLI and HTTP samples in tabs |
 | `guide/use-cases/card-disputes.md` | Use case: card disputes, from the request to the approved credit, with SDK code |
 | `guide/use-cases/chat-and-human-tasks.md` | Use case: start the day from the chat home and decide Human Tasks, with SDK code |
 | `guide/use-cases/answer-from-documents.md` | Use case: put a manual into a knowledge base and get cited answers, in the console, CLI and SDK |
