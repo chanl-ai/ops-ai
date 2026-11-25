@@ -21,7 +21,7 @@ import { useCan } from '@/hooks/me-queries';
 import { useModelAliasList } from '@/hooks/model-queries';
 import { useProviderConnections } from '@/hooks/provider-connection-queries';
 import { useListParams } from '@/hooks/use-list-params';
-import { aliasWriteAccess } from '@/lib/model-forms';
+import { aliasWriteAccess, usedByLabel } from '@/lib/model-forms';
 import type { ModelAliasRow } from '@/lib/types/models';
 
 const SORT = { name: 'name' };
@@ -55,6 +55,11 @@ function columns(onEdit: ((a: ModelAliasRow) => void) | null): ColumnDef<ModelAl
       accessorKey: 'clearedSensitivity',
       header: 'Cleared for',
       cell: ({ row }) => <Badge variant="secondary">{row.original.clearedSensitivity.charAt(0).toUpperCase() + row.original.clearedSensitivity.slice(1)}</Badge>,
+    },
+    {
+      id: 'usedBy',
+      header: 'Used by',
+      cell: ({ row }) => <span className="text-sm whitespace-nowrap" data-testid="alias-used-by">{usedByLabel(row.original.usedBy)}</span>,
     },
     {
       id: 'price',

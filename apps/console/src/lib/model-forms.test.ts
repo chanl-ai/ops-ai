@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { without } from './schema-values.ts';
-import { aliasWriteAccess, connectionBody, knobProblems, settingsForAlias } from './model-forms.ts';
+import { aliasWriteAccess, usedByLabel, connectionBody, knobProblems, settingsForAlias } from './model-forms.ts';
 import type { KnobSchema, ProviderTypeInfo } from './types/models.ts';
 
 const secret = { type: 'string', 'x-secret': true } as const;
@@ -68,4 +68,12 @@ test('someone without install.manage sees aliases read only with the reason', ()
   const viewer = aliasWriteAccess(false);
   assert.equal(viewer.editable, false);
   assert.match(String(viewer.reason), /Only the workspace owner changes model aliases/);
+});
+
+// An alias whose use the service cannot count must not read "0 agents": that invites removing one that is in use.
+test('an unknown used-by count shows a dash, a known one its agents', () => {
+  assert.equal(usedByLabel(null), '–');
+  assert.equal(usedByLabel(undefined), '–');
+  assert.equal(usedByLabel(0), '0 agents');
+  assert.equal(usedByLabel(1), '1 agent');
 });

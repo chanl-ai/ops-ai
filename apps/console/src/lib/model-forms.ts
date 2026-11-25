@@ -106,3 +106,8 @@ export const ALIAS_READ_ONLY_REASON = 'Only the workspace owner changes model al
 export function aliasWriteAccess(canManageInstall: boolean | undefined): { editable: boolean; reason: string | null } {
   return canManageInstall === true ? { editable: true, reason: null } : { editable: false, reason: canManageInstall === undefined ? null : ALIAS_READ_ONLY_REASON };
 }
+
+/** The Used by cell: a count of agents, or a dash when the service does not know (never 0, which would claim it is free to remove). */
+export function usedByLabel(usedBy: number | null | undefined): string {
+  return typeof usedBy === 'number' ? `${usedBy} ${usedBy === 1 ? 'agent' : 'agents'}` : '–';
+}

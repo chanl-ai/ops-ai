@@ -88,6 +88,8 @@ export interface ModelAliasRow {
   providerId: string;
   /** The connection's name, from models-service. */
   providerName?: string | null;
+  /** How many agents use the alias; null when models-service cannot tell. */
+  usedBy?: number | null;
   modelId: string;
   clearedSensitivity: string;
   inputPerMillion: string;
