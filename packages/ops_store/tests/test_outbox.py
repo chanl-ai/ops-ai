@@ -1,6 +1,7 @@
 """The service event outbox, by failure mode: an event written in a transaction that rolls back is sent
 anyway; one the receiver refuses while it is down is dropped instead of retried; a failing event holds back the ones
-behind it; an event is sent again after it was delivered; two relays deliver the same event at once."""
+behind it; an event is sent again after it was delivered; two relays deliver the same event at once; an event that
+always fails is retried forever; a send holds the event's row lock while it waits on the receiver."""
 
 from __future__ import annotations
 
@@ -11,10 +12,11 @@ from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_service_kit.settings import Settings
-from ops_store.outbox import Relay, add, outbox_table, relay
+from ops_store.outbox import MAX_ATTEMPTS, Relay, add, outbox_table, relay
 
 
 class Receiver:
@@ -250,3 +252,42 @@ async def test_enrich_gets_the_answer_of_each_delivery_and_its_failure_keeps_the
     clock[0] += 60.0
     assert await enriched.once() == 1
     assert seen == [("r1", "agents", {"status": "started", "runIds": ["run_1"]})]
+
+
+async def test_an_event_that_always_fails_becomes_a_dead_letter_and_is_sent_again_on_redrive(
+    setup: tuple[AsyncEngine, sa.Table],
+) -> None:
+    engine, table = setup
+    clock = [10.0]
+    receiver = Receiver()
+    r = Relay(engine, table, receiver, clock=lambda: clock[0])
+    await emit(engine, table, "doomed", now=1.0)
+    for _ in range(MAX_ATTEMPTS + 5):
+        await r.once()
+        clock[0] += 120  # past any backoff
+    async with engine.connect() as c:
+        row = (await c.execute(sa.select(table.c.attempts, table.c.next_at, table.c.last_error))).one()
+    assert (row.attempts, row.next_at) == (MAX_ATTEMPTS, None) and "down" in str(row.last_error), row
+    assert await r.waiting() == 0 and await r.prune(keep_s=0) == 0, "a dead letter is kept, not waiting"
+    receiver.up = True
+    assert await r.redrive() == 1 and await r.once() == 1
+
+
+async def test_a_send_holds_no_lock_on_its_event_while_the_receiver_answers(
+    setup: tuple[AsyncEngine, sa.Table],
+) -> None:
+    engine, table = setup
+    await emit(engine, table, "slow")
+    locked: list[bool] = []
+
+    async def slow(event: dict[str, Any]) -> None:
+        # Another transaction asks for the row's lock without waiting while the send is under way.
+        async with engine.connect() as c, c.begin():
+            try:
+                await c.execute(sa.select(table.c.id).with_for_update(nowait=True))
+                locked.append(False)
+            except DBAPIError:
+                locked.append(True)
+
+    assert await Relay(engine, table, slow).once() == 1
+    assert locked == [False], "the send ran while its row was locked"

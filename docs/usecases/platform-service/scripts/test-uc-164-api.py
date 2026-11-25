@@ -3,7 +3,7 @@ docs/usecases/platform-service/workspace-admins-manage-teams.md."""
 
 from __future__ import annotations
 
-from usecase_harness import bearer, check, data, finish, platform, signed_in
+from usecase_harness import bearer, check, data, every_page, finish, platform, signed_in
 
 WANJIRU, SAM, PRIYA, RAVI = (
     "w.kamau@harborpine.example",
@@ -43,11 +43,18 @@ with platform() as (api, _):
 
     r = api.patch(f"/v1/settings/teams/{team_id}", json={"name": "Retail Lending"}, headers=admin)
     check("she renames it", r.status_code == 200 and data(r)["name"] == "Retail Lending", r.text[:200])
-    mine = data(api.get("/v1/teams", headers=bearer(signed_in(api, RAVI))))
+    his = bearer(signed_in(api, RAVI))
+    mine = every_page(api, "/v1/teams", headers=his, search="Retail Lending")
     check(
-        "Ravi's team switcher shows the new name",
+        "Ravi's team switcher finds it by its new name",
         any(t["id"] == team_id and t["name"] == "Retail Lending" for t in mine),
         mine,
+    )
+    one = data(api.get("/v1/teams", params={"pageSize": 1}, headers=his))
+    check(
+        "his teams come a page at a time with their total",
+        len(one["data"]) == 1 and one["pagination"]["total"] >= 2 and one["pagination"]["hasNext"],
+        {"rows": [t["name"] for t in one["data"]], "pagination": one["pagination"]},
     )
 
     r = api.post(f"/v1/settings/teams/{team_id}/archive", headers=admin)

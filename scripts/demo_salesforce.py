@@ -266,7 +266,15 @@ def sign_in(email: str, password: str) -> str:
 
 
 def team_id(token: str) -> str:
-    teams = data(httpx.get(f"{PLATFORM}/v1/teams", headers={"Authorization": f"Bearer {token}"}, timeout=20), "teams")
+    teams = data(
+        httpx.get(
+            f"{PLATFORM}/v1/teams",
+            params={"search": TEAM_NAME, "pageSize": 50},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=20,
+        ),
+        "teams",
+    )["data"]
     found = next((t for t in teams if t.get("name") == TEAM_NAME), None)
     if found is None:
         raise SystemExit(f"FAIL  no team named {TEAM_NAME}; run `make sample-team` first")
@@ -388,7 +396,7 @@ def add_templates() -> int:
         )
         say("MADE", "AI steps in workflows on for the team")
     print(f"As {LEAD} in {TEAM_NAME}, through the Python SDK (ops_ai):")
-    listed = [t for t in ops.raw.agents.templates_list_templates() if t["source"] == SOURCE]
+    listed = ops.templates.list(source=SOURCE)
     if not listed:
         raise SystemExit("FAIL  Salesforce brings no templates to the team: connect it for the team first (story 2)")
     for t in listed:
@@ -407,7 +415,7 @@ def add_templates() -> int:
     agent = ops.raw.agents.agents_get_agent(made["agent"]) if "agent" in made else None
     if agent and (agent.get("memory") or {}).get("enabled", True):
         # The stack's memory alias is a real model; the demo's chat stays on the fake one.
-        agent = ops.raw.agents.agents_update_agent(made["agent"], {"memory": {"enabled": False}})
+        agent = ops.agents.update(made["agent"], {"memory": {"enabled": False}})
         say("MADE", "Case helper's memory off, so the demo's chat makes no real model call")
     if agent and agent.get("publishedVersion") != agent.get("version"):
         review = ops.raw.agents.agents_request_publish(

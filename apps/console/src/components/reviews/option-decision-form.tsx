@@ -209,10 +209,21 @@ export function OptionDecisionForm({
         </FormField>
       </fieldset>
     );
+    // The button says where the choice is while nothing is picked, and why it waits when a pick is held back.
+    const names = options.map((o) => o.label ?? label(o.name));
+    const pickLabel = `Pick ${names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}` : names[0]} above`;
+    const why = chosen ? blocked?.[chosen.name] : 'Choose one of the options above, then press the button.';
     const decide = (
-      <LoadingButton type="button" className="w-full" isLoading={!!chosen && pending === chosen.name} disabled={!chosen || !!pending || !!blocked?.[chosen.name]} onClick={send} data-testid="decide">
-        {chosen ? (chosen.label ?? label(chosen.name)) : 'Pick a decision'}
-      </LoadingButton>
+      <div className="flex flex-col gap-1.5">
+        <LoadingButton type="button" className="w-full" isLoading={!!chosen && pending === chosen.name} disabled={!chosen || !!pending || !!blocked?.[chosen.name]} onClick={send} data-testid="decide" aria-describedby={why ? `decide-why-${reviewId}` : undefined}>
+          {chosen ? (chosen.label ?? label(chosen.name)) : pickLabel}
+        </LoadingButton>
+        {why && (
+          <p id={`decide-why-${reviewId}`} className="text-xs text-muted-foreground" data-testid="decide-why">
+            {why}
+          </p>
+        )}
+      </div>
     );
     return <>{parts ? parts({ choice, decide }) : (<>{choice}{decide}</>)}</>;
   }

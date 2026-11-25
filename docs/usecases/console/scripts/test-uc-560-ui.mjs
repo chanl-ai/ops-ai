@@ -163,7 +163,7 @@ await withUiStack(
       const W = await as('w.kamau@harborpine.example');
       const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
       const madeTeam = await fetch(`${platform}/v1/settings/teams`, { method: 'POST', headers: W, body: JSON.stringify({ name: `Saved screen team ${TAG}`, admin: PRIYA }) });
-      const teams = (await (await fetch(`${platform}/v1/teams`, { headers: P })).json()).data ?? [];
+      const teams = (await (await fetch(`${platform}/v1/teams?pageSize=50`, { headers: P })).json()).data?.data ?? [];
       const other = teams.findIndex((t) => t.id !== 'team_ops');
       const priya = await consoleSignIn(browser, consoleUrl, PRIYA, PASSWORD, errors);
       await priya.goto(`${consoleUrl}/workflows`, { waitUntil: 'domcontentloaded', timeout: 120_000 });

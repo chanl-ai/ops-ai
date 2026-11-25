@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-19",
+  "title": "Agents are written as a brief",
+  "description": "An agent's page now holds its purpose, goal, how to answer and never rules as one document: type @ to add a tool, a knowledge base or a skill, and the agent gets it. The test chat shows which step of a skill the agent is on, and a publish that cannot go ahead names the field that blocks it.",
+  "tag": "new"
+}

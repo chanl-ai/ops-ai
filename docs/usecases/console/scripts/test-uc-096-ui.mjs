@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { AGENTS_PORT, KB_PORT, PLATFORM_PORT, ROOT, check, chromium, finish, shootBothWidths, videoToGif, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { saveAgent } from '../../lib/agent_save.mjs';
 
 const kb = `http://127.0.0.1:${KB_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -200,7 +201,7 @@ await withUiStack(
       await step('6 James retires a base an agent cites by typing its name, and it leaves the list', async () => {
         const J = { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
         const agent = (await (await fetch(`${agents}/v1/agents`, { method: 'POST', headers: J, body: JSON.stringify({ name: `Teller desk ${TAG}`, role: 'Answers teller questions' }) })).json()).data;
-        await fetch(`${agents}/v1/agents/${agent.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ collections: [kbId] }) });
+        await saveAgent(agents, J, agent.id, { collections: [kbId] });
         await page.goto(`${consoleUrl}/data/knowledge/${kbId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await page.getByRole('button', { name: /More|Actions/ }).first().click({ timeout: 60_000 });
         await page.getByRole('menuitem', { name: /Delete|Retire/ }).click();

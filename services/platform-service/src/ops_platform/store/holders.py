@@ -14,7 +14,8 @@ from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
 from ops_store.rows import rows
 
-from .tables import members, role_assignments, role_permissions, roles, teams, users
+from .roles import named_grids
+from .tables import members, role_assignments, teams, users
 from .tenancy import TenantDb
 
 
@@ -50,16 +51,13 @@ class _Held(Out):
 class HolderStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.RLS})
 
-    async def holders(self, tenant_id: str, team_id: str, area: str, action: str) -> Holders:
+    async def holders(
+        self, tenant_id: str, team_id: str, area: str, action: str, *, excluding: str | None = None
+    ) -> Holders:
         """The roles granting `area.action` and the active people they reach in `team_id`: assigned there or in every
-        team (`*`), directly or through a team they are an active member of. Expired assignments reach nobody."""
+        team (`*`), directly or through a team they are an active member of. Expired assignments reach nobody.
+        `excluding` is a person's id left out: whoever asks whom to ask is never told to ask themselves."""
         now = now_iso()
-        granting = (
-            sa.select(roles.c.id, roles.c.name)
-            .join(role_permissions, role_permissions.c.role_id == roles.c.id)
-            .where(role_permissions.c.area == area, role_permissions.c.action == action)
-            .order_by(roles.c.builtin.desc(), roles.c.name)
-        )
         live = sa.and_(
             role_assignments.c.team_id.in_([team_id, ANY_TEAM]),
             sa.or_(role_assignments.c.expires_at.is_(None), role_assignments.c.expires_at > now),
@@ -84,7 +82,14 @@ class HolderStore(TenantDb):
         )
         held = sa.union(direct, via_team).subquery()
         async with self.tenant_tx(tenant_id) as c:
-            found = await rows(c, granting, GrantingRole)
+            # The cells come from named_grids, as the live check reads them: a built-in role with no rows holds its
+            # seed.
+            named, grids = await named_grids(c)
+            found = [
+                GrantingRole(id=i, name=n)
+                for i, n in named
+                if any((a, x) == (area, action) for a, x, _ in grids.get(i, []))
+            ]
             reached = await rows(
                 c,
                 sa.select(users.c.id, users.c.name, users.c.email, held.c.role_id, held.c.here)
@@ -106,6 +111,7 @@ class HolderStore(TenantDb):
         people = [
             RoleHolder(id=p.id, name=p.name, email=p.email, roles=roles_of[p.id], in_team=in_team[p.id])
             for p in first.values()
+            if p.id != excluding
         ]
         # Those granted in the team first, each part by name.
         return Holders(roles=found, holders=sorted(people, key=lambda h: not h.in_team))

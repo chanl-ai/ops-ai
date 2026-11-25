@@ -84,13 +84,13 @@ const columns: ColumnDef<Row>[] = [
   {
     // Whose account of the app the call signed in with: a person's own, or the team account.
     id: 'as',
-    accessorFn: (r) => (r.runAs?.kind === 'person' ? (r.runAs.email ?? '') : r.runAs?.kind === 'team' ? 'Team account' : ''),
+    accessorFn: (r) => (r.runAs?.kind === 'person' ? (r.runAs.email ?? '') : r.runAs?.kind === 'team' ? 'Team login' : ''),
     header: ({ column }) => <DataTableColumnHeader column={column} title="As" />,
     cell: ({ row }) =>
       row.original.runAs?.kind === 'person' ? (
         <span className="block max-w-48 truncate text-sm">{row.original.runAs.email}</span>
       ) : row.original.runAs?.kind === 'team' ? (
-        <Badge variant="secondary">Team account</Badge>
+        <Badge variant="secondary">Team login</Badge>
       ) : (
         <span className="text-xs text-muted-foreground">—</span>
       ),
@@ -137,12 +137,15 @@ function NameCell({ name }: { name?: string | null }) {
   );
 }
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const SORT_COLUMNS = { at: 'at', latencyMs: 'latencyMs' };
+
 /**
  * The tool-call log: every gateway call, newest first, each opening its sheet. The Tool calls page shows all of them;
  * a tool's and an app's Logs tab show the same list fixed to that tool or app, so there is one log, read in one place.
  */
 export function ToolCallsView({ fixed, run, q, totals = true, emptyText }: { fixed?: Pick<ToolCallFilters, 'tool' | 'moduleId'>; run?: string | null; q?: string | null; totals?: boolean; emptyText?: string }) {
-  const list = useListParams<ToolCallFilters>('target', 20);
+  const list = useListParams<ToolCallFilters>('target', 20, undefined, SORT_COLUMNS);
   // The log names who called what, so it is read under the audit cell; anyone else is told so without a request.
   const may = useNavAllows()(TOOL_CALL_LOG);
   const query = useToolCalls({ ...list.params, filters: { ...list.params.filters, ...fixed } }, may === true);
@@ -202,6 +205,7 @@ export function ToolCallsView({ fixed, run, q, totals = true, emptyText }: { fix
             ]}
             onColumnFiltersChange={list.onColumnFiltersChange}
             serverPagination={serverPagination(list, query)}
+            serverSorting={list.serverSort}
             emptyState={<ListEmpty icon={ScrollText} noun="calls" filtered={list.isFiltered} description={emptyText ?? (run ? `No gateway call ran for ${run} yet.` : 'Calls appear here as soon as a workflow in this team runs.')} />}
           />
         </div>

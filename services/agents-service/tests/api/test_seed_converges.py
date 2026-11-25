@@ -14,6 +14,7 @@ from httpx import ASGITransport
 from ops_agents.api.deps import Runtime
 
 from ..conftest import SEED
+from ..saves import save_agent
 from .test_agent_registry import _app  # pyright: ignore[reportPrivateUsage]
 
 
@@ -33,7 +34,7 @@ async def test_a_changed_seed_reaches_agents_seeded_before_it(tmp_path: Path) ->
         before = (await c.get("/v1/agents/ag_fraud")).json()["data"]
         assert before["collections"] == ["kb_people", "kb_eng"]
         # A person publishes their own version of the branch agent; the seed must leave it alone from now on.
-        r = await c.patch("/v1/agents/ag_branch", json={"instructions": "Answer in French.", "note": "mine"})
+        r = await save_agent(c, "ag_branch", {"instructions": "Answer in French.", "note": "mine"})
         await c.post("/v1/agents/ag_branch/publish-requests", json={"version": r.json()["data"]["version"]})
     async with _app(db, agents_seed_file=agents_file(tmp_path, ag_fraud=[], ag_branch=[])) as c:
         fraud = (await c.get("/v1/agents/ag_fraud")).json()["data"]

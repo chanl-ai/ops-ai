@@ -29,6 +29,7 @@ from ops_engine.store import NotLiveError, RunStore
 from ops_engine.worker import Worker, WorkerHost
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
+from tests.run_rows import write_run
 
 JAMES = {"X-Dev-User": "j.richardson@harborpine.example"}
 MAYA = {"X-Dev-User": "m.okafor@harborpine.example"}
@@ -381,8 +382,15 @@ async def test_a_cancel_during_a_write_lets_the_write_finish_and_journals_it(
     await publish(c, wid)
     run_id = data(await start(c, wid, 70))["runId"]
     tools = SlowWrite()
-    # Heartbeats every 0.5 s, so several pass while the write is held.
-    passing = asyncio.create_task(worker(engine, tools, ttl=1.5).work_once())
+    # Heartbeats every 0.5 s, so several pass while the write is held. The test database is shared, so work an
+    # earlier test left (a retry come due) may be claimed first: the worker keeps claiming until it reaches this write.
+    held = worker(engine, tools, ttl=1.5)
+
+    async def until_the_write() -> None:
+        while await held.work_once() and not tools.started.is_set():
+            pass
+
+    passing = asyncio.create_task(until_the_write())
     await asyncio.wait_for(tools.started.wait(), 20)
     assert data(await c.post(f"/v1/runs/{run_id}/cancel", headers=JAMES))["status"] == "cancelled"
     await asyncio.sleep(1.6)
@@ -429,4 +437,4 @@ async def test_a_start_after_a_pause_is_refused_by_the_store(
     run = {"id": f"wfrun_{uuid4().hex[:10]}", "team_id": "t", "workflow_id": wid, "version": 1}
     run |= {"digest": view["digest"], "mode": "live", "input": {}, "created_by": "a"}
     with tenant_scope(LOCAL_TENANT), pytest.raises(NotLiveError):
-        await RunStore(EngineTransactions(engine)).create(run | {"run_key": run["id"]})
+        await write_run(EngineTransactions(engine), run | {"run_key": run["id"]})

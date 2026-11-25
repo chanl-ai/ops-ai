@@ -1,73 +1,85 @@
 'use client';
 
-import * as React from 'react';
+import { PublishDialog } from '@/components/shared/publish-dialog';
+import { QueryError } from '@/components/shared/query-states';
+import { Section } from '@/components/shared/surface';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useWorkflowPublishPreview } from '@/hooks/engine-queries';
+import type { WorkflowPublishPreview } from '@/lib/types/engine';
 
-import { DialogShell } from '@/components/shared/dialog-shell';
-import { FormField } from '@/components/shared/form-field';
-import { LoadingButton } from '@/components/shared/loading-button';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { ChangesList } from './changes-list';
+import { canSubmitPublish } from './publish-state';
+
+/** What happens once Publish is pressed, from the team's publish policy as the server read it. */
+function nextStep(p: WorkflowPublishPreview): string {
+  if (p.reviewRequired) return 'Needs approval from another person in Reviews before it goes live.';
+  if (p.reviewReason === 'minor_change') return 'Only step positions or the workflow name changed: goes live at once.';
+  return 'Your team publishes without a review: goes live at once.';
+}
 
 /**
- * Sends a saved draft to Reviews. Another person approves it there, and only then does it start live runs; until
- * then a test run is the only way to run it.
+ * Publishes the working copy: makes the next version from it and opens its review, or puts it live at once where the
+ * team's policy needs none. It lists what changed against the live version and every problem the server would refuse
+ * the publish on (the same list the publish checks); Publish and Send for review stay disabled while one remains.
  */
 export function PublishDefinitionDialog({
   open,
   onOpenChange,
-  version,
-  liveVersion,
+  workflowId,
+  nodeName,
+  onFix,
   onRequest,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  version: number;
-  liveVersion: number | null;
+  workflowId: string;
+  nodeName: (id: string) => string;
+  /** Opens a step's settings, closing the dialog. */
+  onFix: (nodeId: string) => void;
   onRequest: (note: string) => Promise<unknown>;
 }) {
-  const [note, setNote] = React.useState('');
-  const [error, setError] = React.useState<string>();
-  const [pending, setPending] = React.useState(false);
-  React.useEffect(() => {
-    if (open) {
-      setNote('');
-      setError(undefined);
-    }
-  }, [open]);
-
-  const submit = async () => {
-    setPending(true);
-    try {
-      await onRequest(note.trim());
-      onOpenChange(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'The request was not sent');
-    } finally {
-      setPending(false);
-    }
-  };
+  const preview = useWorkflowPublishPreview(workflowId, open);
+  const p = preview.data;
 
   return (
-    <DialogShell
+    <PublishDialog
       open={open}
       onOpenChange={onOpenChange}
-      size="md"
-      title={`Publish version ${version}`}
-      description={liveVersion ? `Replaces version ${liveVersion} for new runs once another person approves it in Reviews. Runs under way keep their version.` : 'Goes live once another person approves it in Reviews.'}
-      footer={
-        <>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-            Cancel
-          </Button>
-          <LoadingButton type="button" onClick={submit} isLoading={pending} loadingText="Sending…" data-testid="definition-publish-submit">
-            Request publish
-          </LoadingButton>
-        </>
+      testId="definition-publish"
+      title="Publish your changes"
+      description={p ? (p.liveVersion ? `Makes the next version from your changes, to replace version ${p.liveVersion} for new runs. Runs under way keep their version.` : 'Makes the first version from your changes.') : undefined}
+      blockers={p?.blockers ?? []}
+      where={(b) => (b.node ? nodeName(b.node) : 'Whole workflow')}
+      onJump={(b) => b.node && onFix(b.node)}
+      loading={
+        preview.isPending ? (
+          <div className="flex flex-col gap-2" data-testid="definition-publish-loading">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-16 w-full" />
+          </div>
+        ) : undefined
       }
+      loadError={preview.isError ? <QueryError what="what this publish changes" error={preview.error} onRetry={() => preview.refetch()} retrying={preview.isFetching} /> : undefined}
+      note={{ label: 'Note to the reviewer', hint: 'The reviewer reads this beside the steps that changed.', placeholder: 'e.g. Refunds over 100 now wait for a review', multiline: true, required: !!p?.reviewRequired, missing: 'Say what changed, for the reviewer' }}
+      nextStep={p ? nextStep(p) : undefined}
+      submitLabel={p?.reviewRequired ? 'Send for review' : 'Publish'}
+      submittingLabel="Publishing…"
+      submitTestId="definition-publish-submit"
+      disabled={!canSubmitPublish(p, false)}
+      onSubmit={async (note) => {
+        try {
+          await onRequest(note);
+        } catch (e) {
+          void preview.refetch();
+          throw e;
+        }
+      }}
     >
-      <FormField id="definition-publish-note" label="What changed" optional hint="The reviewer reads this beside the steps that changed." error={error}>
-        <Textarea id="definition-publish-note" value={note} onChange={(e) => setNote(e.target.value)} rows={3} placeholder="e.g. Refunds over 100 now wait for a review" />
-      </FormField>
-    </DialogShell>
+      {p && (
+        <Section title="What changed" description={p.liveVersion ? `Against version ${p.liveVersion}, the live one` : 'Every step is new'} flush>
+          <ChangesList diff={p.changes} />
+        </Section>
+      )}
+    </PublishDialog>
   );
 }

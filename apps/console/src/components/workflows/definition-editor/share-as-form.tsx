@@ -89,7 +89,7 @@ export function ShareAsForm({ workflowId, schema: raw, readOnly }: { workflowId:
         actions={
           !readOnly && (
             <Button type="button" variant="outline" size="sm" disabled={noInputs} onClick={() => setOpen(true)} data-testid="share-as-form">
-              <Link2 /> Share as a form
+              <Link2 /> Share form
             </Button>
           )
         }
@@ -214,7 +214,7 @@ function SharedForm({ form, paused, readOnly, publicFormPage, onRotated }: { for
       {url ? (
         <FormField id={id} label="Link">
           <div className="flex min-w-0 items-center gap-2">
-            <Input id={id} readOnly value={url} className="min-w-0 flex-1 font-mono text-xs" onFocus={(e) => e.target.select()} data-testid="form-link" />
+            <Input id={id} readOnly value={url} className="min-w-0 flex-1 font-mono" onFocus={(e) => e.target.select()} data-testid="form-link" />
             <CopyButton text={url} variant="outline" />
           </div>
           <LinkQr url={url} slug={form.slug} />

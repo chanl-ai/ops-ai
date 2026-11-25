@@ -27,10 +27,27 @@ const teamOfOwner = (owner) => teamList.find((t) => t.scope === 'owned' && t.own
 const workflowById = Object.fromEntries(workflows.map((w) => [w.id, w]));
 // The mock's traffic numbers stay in the mock: tools-service counts calls from its call log, so seeded modules start at zero.
 const withoutTraffic = ({ calls24h, errorRate, p95Ms, ...rest }) => rest;
+// Operations' own fee-dispute workflow may call waive_fee. The mock has no such workflow and teamOfOwner reads only
+// owned-scope teams, so the approval names its workflow and team here; without it the Card Services module is not
+// Operations' to call, and the use cases that publish a waive_fee step as an Operations person are refused.
+const OPERATIONS_APPROVALS = {
+  mod_card_platform: [
+    {
+      workflowId: 'wf_ops_fee_disputes',
+      workflowName: 'Fee disputes',
+      workflowTeamId: 'team_ops',
+      operations: ['waive_fee'],
+      expiresIn: 365,
+      decidedBy: 'Grace Liu',
+      justification: 'Operations settles fee complaints it receives, with a second person approving each waiver',
+      constraints: 'Fee reversals up to $100',
+    },
+  ],
+};
 const modules = s.MODULE_SEEDS.map((m) => ({
   ...m,
   operations: m.operations.map((o) => (o.tool ? { ...o, tool: withoutTraffic(o.tool) } : o)),
-  approvals: m.approvals.map((a) => ({ ...a, workflowName: workflowById[a.workflowId]?.name ?? a.workflowId, workflowTeamId: teamOfOwner(workflowById[a.workflowId]?.owner) })),
+  approvals: m.approvals.map((a) => ({ ...a, workflowName: workflowById[a.workflowId]?.name ?? a.workflowId, workflowTeamId: teamOfOwner(workflowById[a.workflowId]?.owner) })).concat(OPERATIONS_APPROVALS[m.id] ?? []),
 }));
 
 const seed = {

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { ModuleDetailsPatch } from '@/lib/types/tool-modules';
+import { nameError } from '@/lib/validation/names';
 
 /** The module's display name and description. Its module name stays: workflows pin it. */
 export function EditModuleDialog({
@@ -39,7 +40,8 @@ export function EditModuleDialog({
   }, [open, initialName, initialDescription]);
 
   const submit = async () => {
-    if (!displayName.trim()) return setError('Give it a display name.');
+    const nameIssue = nameError(displayName, 'Give it a display name.');
+    if (nameIssue) return setError(nameIssue);
     try {
       await onSave({ displayName: displayName.trim(), description: description.trim() });
     } catch (e) {

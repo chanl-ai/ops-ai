@@ -41,8 +41,10 @@
     "body": {
       "error": {
         "code": "template_not_found",
+        "kind": "input",
         "message": "No template nowhere from plugin:test.templates for this team.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -62,8 +64,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "colour: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -104,8 +108,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "sk_missing1 is not the team's copy of plugin:test.templates:cite-policy.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -114,42 +120,53 @@
   },
   "list": {
     "body": {
-      "data": [
-        {
-          "addCell": {
-            "action": "create",
-            "area": "skills"
-          },
-          "canAdd": true,
-          "copy": null,
-          "id": "cite-policy",
-          "installed": {
-            "changed": false,
-            "copies": 0,
-            "newerAvailable": false,
-            "version": null
-          },
-          "kind": "skill",
-          "off": null,
-          "plugin": {
-            "id": "test.templates",
-            "title": "Case desk",
-            "version": "0.2.0"
-          },
-          "removeCell": null,
-          "requires": {
-            "bind": [],
-            "resources": [],
-            "tools": [
-              "templates_get_case"
-            ]
-          },
-          "source": "plugin:test.templates",
-          "state": "available",
-          "title": "Cite the policy",
-          "version": 1
+      "data": {
+        "data": [
+          {
+            "addCell": {
+              "action": "create",
+              "area": "skills"
+            },
+            "canAdd": true,
+            "copy": null,
+            "id": "cite-policy",
+            "installed": {
+              "changed": false,
+              "copies": 0,
+              "newerAvailable": false,
+              "version": null
+            },
+            "kind": "skill",
+            "off": null,
+            "plugin": {
+              "id": "test.templates",
+              "title": "Case desk",
+              "version": "0.2.0"
+            },
+            "removeCell": null,
+            "requires": {
+              "bind": [],
+              "resources": [],
+              "tools": [
+                "templates_get_case"
+              ]
+            },
+            "source": "plugin:test.templates",
+            "state": "available",
+            "title": "Cite the policy",
+            "version": 1
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 20,
+          "total": 1,
+          "totalPages": 1
         }
-      ],
+      },
       "success": true
     },
     "status": 200
@@ -200,8 +217,10 @@
             "msg": "List should have at least 1 item after validation, not 0"
           }
         ],
+        "kind": "input",
         "message": "resources: List should have at least 1 item after validation, not 0",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -299,8 +318,10 @@
             "msg": "Extra inputs are not permitted"
           }
         ],
+        "kind": "input",
         "message": "how: Extra inputs are not permitted",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false

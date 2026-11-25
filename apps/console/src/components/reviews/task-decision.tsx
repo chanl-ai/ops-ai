@@ -2,6 +2,9 @@
 
 import * as React from 'react';
 
+import Link from 'next/link';
+
+import { EvalSteps } from '@/components/agents/eval-problems';
 import { isOpen } from '@/components/reviews/review-columns';
 import { keyFieldsBlock, type ReadChecks } from '@/components/reviews/document-read';
 import { ModelValidationDecisionForm } from '@/components/reviews/model-validation';
@@ -47,7 +50,8 @@ export function TaskDecision({
   layout: 'sheet' | 'panel';
   children: (parts: TaskDecisionParts) => React.ReactNode;
 }) {
-  const { onDecide, onOption, pendingDecision, pendingOption } = decider;
+  const { onDecide, onOption, pendingDecision, pendingOption, publishBlocked } = decider;
+  const blockedHere = publishBlocked?.reviewId === review.id ? publishBlocked.problems : null;
   const panel = layout === 'panel';
   if (!isOpen(review))
     return (
@@ -70,7 +74,7 @@ export function TaskDecision({
           choice: null,
           decide: (
             <p className="text-sm text-muted-foreground" data-testid="review-decided-by">
-              A reviewer or admin of the team that reviews this decides it.
+              Only a reviewer or admin of the team that reviews this can decide it. Ask one of them, or ask a team admin for the reviewer role.
             </p>
           ),
         })}
@@ -104,6 +108,23 @@ export function TaskDecision({
       {children({
         choice: null,
         decide: (
+          <>
+            {blockedHere && (
+              <div className="mb-2 flex flex-col gap-2 rounded-md border border-destructive/40 bg-card p-3 text-sm" role="alert" data-testid="eval-blocked">
+                <p className="font-medium">This version cannot be published yet. The request stays open.</p>
+                {blockedHere.map((p, i) => (
+                  <div key={i} className="flex flex-col gap-1">
+                    <p>{p.message}</p>
+                    {p.details?.steps && <EvalSteps steps={p.details.steps} />}
+                  </div>
+                ))}
+                {review.agentPublish && (
+                  <Link href={`/build/agents/${review.agentPublish.agentId}?tab=evals`} className="text-primary underline-offset-4 hover:underline" data-testid="eval-blocked-evals-link">
+                    Open the agent’s Evals tab
+                  </Link>
+                )}
+              </div>
+            )}
           <ReviewDecisionForm
             review={review}
             currentUser={me}
@@ -114,6 +135,7 @@ export function TaskDecision({
             onDecide={(d, reason, addTestCase) => onDecide(d, reason, undefined, undefined, addTestCase)}
             platformTeam={platformTeam}
           />
+          </>
         ),
       })}
     </>

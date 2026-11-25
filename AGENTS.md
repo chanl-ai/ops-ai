@@ -2,26 +2,37 @@
 
 Status: current.
 
-Until the migration to the engineering standards closes, every change to `services/`, `packages/` or `apps/console/`
-is a component, the pilot or one lane of `docs/architecture/migration/README.md`; its pages name the files, commands
-and acceptance checks per lane, and `docs/architecture/engineering-standards.md` names the rule each check enforces.
-Its hard rules: commit subject at most 72 characters and
-body at most 3 lines; no `--no-verify`, stash or force push, never a push to `main` or `develop`; one branch and one
-pull request per lane; tests first, one per failure mode (`TS1`, `TS3`); no joins, counts or sums in the browser
-(`UI1`); every access decision through `can()` (`AC1`); a Pydantic model at every boundary (`MD1`, `MD4`).
+Every change to `services/`, `packages/` or `apps/console/` follows `docs/architecture/engineering-standards.md`,
+which names the rule each check enforces. Every folder has a `CLAUDE.md` saying what it owns and how to run, test and
+lint it; the index is the "Folder guides" section of `CLAUDE.md`. Read the guide for the folder you change.
 
-Every folder has a `CLAUDE.md` saying what it owns and how to run, test and lint it from there; the index is the
-"Folder guides" section of `CLAUDE.md`, and the rules every folder shares (onion order, one local stack, calling the
-API as a person, tests, commits) are its "Working in one folder" section. Read the guide for the folder you change.
-The table below holds for every change.
+## Branches, pull requests and commits
 
 | Rule | Detail |
 |---|---|
-| Read first | `CONTRIBUTING.md`; `apps/console/CLAUDE.md` before changing console code; `docs/README.md` for the design behind a change |
+| Branch name | `<type>/<scope>-<what-changed>`. Types: feat, fix, chore, docs, refactor, perf, test, ci. Never wip, tmp, new, v2, fixes, updates, changes, cleanup or feedback in a name |
+| Target | Every pull request targets the release train `release/current` (`release/1.1.0` until it is renamed), never `develop` or `main`. Never queue a PR, merge it or set auto-merge (`docs/deploy/release.md`) |
+| One slice | A change is the whole slice in one PR: server, SDK in both languages, CLI and screen |
+| Commits | `type(scope): subject` under 72 characters, body of at most 3 lines. A `fix` commit carries a `Siblings:` trailer. `commit-message-check.mjs` enforces this. Never `--no-verify`, stash or force push |
 | Verify | Run `pnpm verify` from the repo root before reporting work as done; it must pass |
+
+## Code and tests
+
+| Rule | Detail |
+|---|---|
+| No client joins | No joining, counting or summing in the client; the API returns joined data (`UI1`). Pages read data through hooks, hooks call the API contract, components take props only |
+| Access and boundaries | Every access decision goes through `can()` (`AC1`); a Pydantic model at every boundary (`MD1`, `MD4`) |
+| Tests | Name the failure modes first, then write one test per mode. At most 5 tests for a small change, 10 for a medium one, 15 for a large one. Assert behaviour through the public seam. Mock only the outside world. Revert the fix once and watch each test fail |
+| Run less | Run only the tests you touch: `make test PKG=... T=...` and `make usecase-test UC=... LAYER=...` |
+| Python | The Python SDK supports Python 3.11. Do not use 3.12-only syntax such as `class X[T]` |
 | Fixtures | Demo data lives only in `apps/console/src/lib/api/mock/`. Never put fixtures in types, hooks, components or pages |
-| Data flow | Pages read data through hooks; hooks call the API contract; components take props only |
 | Docs | Follow the doc standards in `CONTRIBUTING.md`; update cross-references when a file moves |
-| Branches | Work on a branch and open a PR (`CONTRIBUTING.md`); never `--no-verify`, a stash or a push to `main` |
+
+## This repository is public
+
+| Rule | Detail |
+|---|---|
+| Trailers and links | No co-author or vendor trailers, no links to agent sessions or agent web UIs |
+| Names | No internal hosts, no names of people or clients, no tracker ids, board slices or private paths in code, comments, docs, commits or PR text |
 | Secrets | Never commit `.env`, credentials or real customer data; `.env.example` is the only env file in git |
-| Names in code | A name or comment says what the thing is, never a tracker id, a board slice (`A2`) or a private path; readers have only this repo |
+| Checks | `scripts/leak_scan.py` and `scripts/check-public-paths.mjs` enforce the above; see "Everything here is public" in `CONTRIBUTING.md` |

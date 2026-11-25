@@ -232,7 +232,7 @@ is designed, not built yet; the base design is in [MCP server](../design/tools/m
 | Annotations | `readOnlyHint` from the access class, `destructiveHint` from the operation's approval policy, title always set |
 | Rate limit | Per token, in the database |
 | Personal data | Masked in everything an MCP client receives (`masked`, default true); no route in `mcp_links.py` sets it, so no permission cell covers turning it off |
-| Held writes | A pending result with a review link that lives 24 hours; approvers are the team's people with `reviews.decide`, not the requester unless the team turns `requesterMayDecide` on; on approval the call runs once as the requesting person, endpoint and account; an expired hold never runs |
+| Held writes | A pending result with a review link that lives 24 hours; approvers are the team's people with `reviews.decide`, the requester too unless the team turned the two-person rule on (`requesterMayDecide` off) and they are not an Admin of the team; on approval the call runs once as the requesting person, endpoint and account; an expired hold never runs |
 | API keys | Run reads only; a write waits for a person (register row E28) |
 | Paused endpoint, revoked key | 401 on the next call; held writes in flight are cancelled |
 | Production | Test only for outside assistants; production comes through its own URL and token with every write waiting for a person |
@@ -282,6 +282,8 @@ Designed routes. Every new route is generated into the Python and TypeScript SDK
 | `GET /v1/plugins`, `GET /v1/plugins/{id}` (version, capabilities, locked settings, dependencies) | `connections.view` | tools |
 | `POST /v1/apps/{app}/team/plan` | `connections.manage` | tools |
 | `PUT /v1/apps/{app}/team` with `{enabled, capabilities, settings}` | `connections.manage` | tools (route built, body grows) |
+| `GET /v1/apps` leaves out content packs (a plugin with no endpoint and nothing it runs on: core, starters), which have no tools and no sign-in, and gives each card its people's sign-ins counted by state (`signIns`) | `connections.view` | tools (built, `apps.py` `cards`, `page`) |
+| `GET /v1/apps/people`; `POST /v1/apps/{app}/accounts/{id}/people/{person}/sign-out` (Apps › People and End sign-in, [several accounts per app](app-accounts.md#api)) | `connections.manage` | tools (built) |
 | `GET /v1/apps?kind=provider`; `GET /v1/apps/{provider}` lists its plugins | `connections.view` | tools (routes built, `apps.py:2078`, `:2162`) |
 | `GET /v1/apps/{provider}/accounts/{id}/access` (granted vs needed scopes per plugin) | `connections.view` | tools |
 | `GET`, `POST /v1/triggers`; `GET`, `PATCH`, `DELETE /v1/triggers/{id}`; `POST …/pause`, `/resume`, `/test`; `GET …/deliveries`; `POST …/deliveries/{key}/run-again` | `webhooks` view, create, edit, run, delete, plus run access on the target | agents |

@@ -28,7 +28,16 @@ from ops_agents.activities.gateway import (
     gateway_error,
 )
 from ops_checkpointer import LeaseSupersededError
-from ops_engine.ports import AS_TEAM_ACCOUNT, STEP_ACCOUNTS, Access, LeaseBusyError, ToolResult
+from ops_engine.ports import (
+    AS_TEAM_ACCOUNT,
+    STEP_ACCOUNTS,
+    WRITE_CLASSES,
+    Access,
+    LeaseBusyError,
+    ToolResult,
+    WriteClass,
+    outside_call,
+)
 from ops_engine.store import DefinitionStore, RunStore
 from ops_identity import ServiceCallError
 from ops_policy import input_hash
@@ -133,7 +142,8 @@ class GatewayTools:
             )
         )
         try:
-            data = await self._gw().call(operation, input, key=key, approval_token=token)
+            with outside_call():
+                data = await self._gw().call(operation, input, key=key, approval_token=token)
         except GatewayRefused as e:
             # The gateway's own codes for a write under a key it already holds, read for what they say:
             # still running is pending, an abandoned key never ran, and a newer lease owns the run now.
@@ -154,19 +164,32 @@ class GatewayTools:
         return ToolResult(ok, data.get("output"), reason=None if ok else said(data.get("output")))
 
     async def access(self, operation: str) -> Access:
-        found = await self._gw().tool_access(operation)
+        with outside_call():
+            found = await self._gw().tool_access(operation)
         return found if found in ("read", "write") else "unknown"
 
     async def deadline(self, operation: str) -> float | None:
         """How long the gateway may take over one call of `operation`; the step waits at least that long."""
-        found = (await self._gw().tool_policy(operation)).get("deadlineSeconds")
+        with outside_call():
+            found = (await self._gw().tool_policy(operation)).get("deadlineSeconds")
         return float(found) if isinstance(found, (int, float)) else None
+
+    async def write_class(self, operation: str) -> WriteClass:
+        """The class `operation` declares in its policy (`writeClass`) for a write whose gateway died; `unsafe` when it
+        declares none, so a person decides."""
+        with outside_call():
+            found = (await self._gw().tool_policy(operation)).get("writeClass")
+        for kind in WRITE_CLASSES:
+            if found == kind:
+                return kind
+        return "unsafe"
 
     async def find(self, key: str, operation: str) -> ToolResult | None:
         """The gateway's record of the write sent under `key`, decided on its claim (the effect row) alone; with no
         record the gateway abandons the key, so the call cannot run if it is still in flight. The log keeps no output,
         so a write found done is recorded with its call id."""
-        found = await self._gw().abandon(key, operation, thread_of(key))
+        with outside_call():
+            found = await self._gw().abandon(key, operation, thread_of(key))
         call = cast(Json | None, found.get("call"))
         if found.get("abandoned") or call is None:
             return None
@@ -199,7 +222,8 @@ class GatewayExpressions:
         self.gateway = gateway
 
     async def evaluate(self, expressions: dict[str, str], values: Json) -> tuple[Json | None, str | None]:
-        return await self.gateway.evaluate(expressions, values)
+        with outside_call():
+            return await self.gateway.evaluate(expressions, values)
 
 
 class StarterApprovals:
@@ -221,11 +245,13 @@ class StarterApprovals:
         call = dict(cast(Json, payload["call"]))
         tool = str(call["tool"])
         try:
-            approval = dict((await self.gateway.tool_policy(tool)).get("approval") or {})
+            with outside_call():
+                policy = await self.gateway.tool_policy(tool)
+            approval = dict(policy.get("approval") or {})
             stepped = bool(await self.policies.value("stepUp")) if self.policies is not None else False
         except (ServiceCallError, PolicyUnread, KeyError, TypeError, ValueError):
             return None
-        if stepped or approval.get("stepUp") or int(approval.get("approvers") or 1) > 1:
+        if stepped or approval.get("stepUp") or int(cast(float | str, approval.get("approvers") or 1)) > 1:
             return None
         starter, digest = run.created_by, input_hash(call["input"])
         found = await ReviewStore(self.db).approve(

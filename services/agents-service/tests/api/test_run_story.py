@@ -29,6 +29,7 @@ from ops_service_kit.http import Json, JsonList
 from ops_service_kit.ids import new_id
 from tests.engine.test_run_reads_masked import Policies
 from tests.engine.test_worker import M
+from tests.run_rows import write_run
 
 INTAKE = parse(
     {
@@ -114,7 +115,7 @@ class World:
         with tenant_scope(self.tenant):
             store = RunStore(self.tx)
             row = {"id": run_id, "team_id": team, "workflow_id": flow.id, "version": self.versions[flow.id]}
-            await store.create(row | {"digest": flow.digest(), "run_key": run_id, "mode": "live", "input": given,
+            await write_run(self.tx, row | {"digest": flow.digest(), "run_key": run_id, "mode": "live", "input": given,
                                       "created_by": created_by})  # fmt: skip
             if after:
                 await store.update(run_id, **after)

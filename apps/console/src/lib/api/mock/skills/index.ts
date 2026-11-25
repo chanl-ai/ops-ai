@@ -1,5 +1,4 @@
 import type { Agent, BulkResult, Review, ReviewDecisionInput, Tool } from '@/lib/types/domain';
-import type { EvalCheckResult } from '@/lib/types/evals';
 import type {
   AgentSkillPin,
   AgentSkills,
@@ -34,7 +33,9 @@ import type {
   SkillView,
   SkillWarning,
   SkillLoading,
+  SkillCheckResult,
 } from '@/lib/types/skills';
+import type { PublishBlocker, PublishWarning } from '@/lib/types/references';
 import type { SearchHit } from '@/lib/types/search';
 
 import { plural } from '@/lib/format';
@@ -45,8 +46,10 @@ import { ApiError, type OpsApi } from '../../contract';
 import type { SkillsApi } from '../../skills-contract';
 import type { FileLinks } from '../files';
 import { auditSink } from '../governance';
+import { digestOf } from '../knowledge/ingest';
 import { pageOptions } from '../../options';
 import { field, id, list, mode, notFound, respond } from '../runtime';
+import { isOffered } from '../references';
 import { guardTeam, inTeam, teamOwner } from '../teams';
 import { packFor, type PastWorkItem, rewrite, splitSections, topicOf } from './generate';
 import { ALWAYS_ON_SEEDS, ARCHIVED_CASES, DOCUMENTS, SKILL_SEEDS, TEMPLATES } from './seed';
@@ -68,7 +71,7 @@ export interface SkillsDeps {
   me: string;
 }
 
-const LIMITS: SkillRuntimeLimits = { maxPerTurn: 2, maxAttached: 12, tokenBudget: 6000, useWhenMaxChars: 1024 };
+const LIMITS: SkillRuntimeLimits = { maxPerTurn: 2, maxAttached: 12, tokenBudget: 6000, useWhenMaxChars: 1024, instructionsMaxChars: 24000 };
 const DAY = 86_400_000;
 const ago = (days: number) => new Date(Date.now() - days * DAY).toISOString();
 const ymd = (iso: string) => iso.slice(0, 10);
@@ -85,7 +88,7 @@ function hash(key: string) {
   return ((h >>> 0) % 10_000) / 10_000;
 }
 
-interface StoredContent {
+interface StoredContent extends Pick<SkillContent, 'inputs' | 'source' | 'notWhen' | 'steps' | 'exit' | 'returns' | 'success'> {
   name: string;
   slug: string;
   useWhen: string;
@@ -109,6 +112,8 @@ interface StoredVersion {
   reviewId?: string;
   publishedAt?: string;
   publishedBy?: string;
+  requestedBy?: string | null;
+  approvedBy?: string | null;
 }
 
 interface Stored {
@@ -164,6 +169,7 @@ export function createSkillsMock(deps: SkillsDeps) {
       toolIds: sk.tools.map(toolIdOf).filter((x): x is string => !!x),
       knowledgeBases: sk.knowledgeBases,
       guardrails: sk.guardrails,
+      ...sk.program,
       resources: [
         ...(sk.templates ?? []).map((t, i): SkillResource => ({ id: `res_${sk.id}_t${i}`, kind: 'template', name: t.name, body: t.body, addedAt: ago(sk.versions[0].daysAgo), addedBy: sk.versions[0].by })),
         ...(sk.files ?? []).map((f, i): SkillResource => ({ id: `res_${sk.id}_f${i}`, kind: 'file', name: f.name, description: f.description, size: f.sizeKb * 1024, addedAt: ago(sk.versions[0].daysAgo), addedBy: sk.versions[0].by })),
@@ -186,6 +192,8 @@ export function createSkillsMock(deps: SkillsDeps) {
           savedAt: ago(v.daysAgo),
           publishedAt: ['published', 'superseded', 'deprecated'].includes(v.state) ? ago(v.daysAgo - 0.5) : undefined,
           publishedBy: ['published', 'superseded', 'deprecated'].includes(v.state) ? (v.by === 'Priya Shah' ? 'Maya Okafor' : 'Priya Shah') : undefined,
+          requestedBy: ['published', 'superseded', 'deprecated'].includes(v.state) ? v.by : undefined,
+          approvedBy: ['published', 'superseded', 'deprecated'].includes(v.state) ? (v.by === 'Priya Shah' ? 'Maya Okafor' : 'Priya Shah') : undefined,
           content: {
             ...structuredClone(base),
             instructions: v.instructions ?? base.instructions,
@@ -193,6 +201,7 @@ export function createSkillsMock(deps: SkillsDeps) {
             toolIds: v.tools ? v.tools.map(toolIdOf).filter((x): x is string => !!x) : base.toolIds,
             knowledgeBases: v.knowledgeBases ?? base.knowledgeBases,
             guardrails: v.guardrails ?? base.guardrails,
+            steps: v.steps ?? base.steps,
           },
         })),
       tests: sk.tests.map((t, i) => ({ id: `stc_${sk.id}_${i}`, name: t.name, input: t.input, checks: t.checks, source: t.source, sourceRef: t.sourceRef, createdAt: ago(sk.versions[0].daysAgo), createdBy: sk.versions[0].by, lastOutcome: null })),
@@ -244,7 +253,7 @@ export function createSkillsMock(deps: SkillsDeps) {
       const matched = matchOf(terms, t.input);
       // An always-on skill is in every turn, so every test input runs with it.
       const loaded = content.loading === 'always' || matched.length > 0;
-      const checks: EvalCheckResult[] = t.checks.map((c) => {
+      const checks: SkillCheckResult[] = t.checks.map((c) => {
         const label = c.type === 'calls_tool' ? `Calls ${c.tool}` : c.type === 'not_calls_tool' ? `Does not call ${c.tool}` : c.type === 'cites' ? `Cites ${c.source}${c.section ? ` ${c.section}` : ''}` : c.type === 'reply_contains' ? `Says “${c.text}”` : c.type === 'reply_not_contains' ? `Never says “${c.text}”` : 'Check';
         if (!loaded) return { label, status: 'fail', detail: 'The skill was not chosen for this input.' };
         if (c.type === 'calls_tool' && !toolNames.includes(c.tool ?? '')) return { label, status: 'fail', detail: `${c.tool} is not one of the skill’s tools.` };
@@ -277,7 +286,7 @@ export function createSkillsMock(deps: SkillsDeps) {
   const livePins = (sk: Stored) => pins.filter((p) => p.skillId === sk.id && agentOf(p.agentId));
   const statusOf = (sk: Stored): SkillStatus => (sk.deprecated ? 'deprecated' : openReview(sk) ? 'in_review' : published(sk) ? 'published' : 'draft');
   const runFor = (sk: Stored, version: number) => sk.runs.find((r) => r.version === version);
-  const content = (sk: Stored, c: StoredContent): SkillContent => ({ name: c.name, slug: c.slug, useWhen: c.useWhen, loading: c.loading, instructions: c.instructions, tools: refs(c.toolIds), knowledgeBases: c.knowledgeBases, guardrails: c.guardrails, resources: c.resources.map((r) => (r.fileId ? { ...r, blocked: deps.files.state(r.fileId)?.blocked } : r)) });
+  const content = (sk: Stored, c: StoredContent): SkillContent => ({ name: c.name, slug: c.slug, useWhen: c.useWhen, loading: c.loading, instructions: c.instructions, tools: refs(c.toolIds), knowledgeBases: c.knowledgeBases, guardrails: c.guardrails, resources: c.resources.map((r) => (r.fileId ? { ...r, blocked: deps.files.state(r.fileId)?.blocked } : r)), inputs: c.inputs, notWhen: c.notWhen, steps: c.steps, exit: c.exit, returns: c.returns, success: c.success });
 
   const row = (sk: Stored): Skill => {
     const n = newest(sk);
@@ -319,10 +328,38 @@ export function createSkillsMock(deps: SkillsDeps) {
     else {
       if (!sk.tests.length) blockers.push('Add at least one test case.');
       else if (!runFor(sk, n.version)) blockers.push(`Run the tests on v${n.version}.`);
-      if (!n.content.instructions.trim()) blockers.push('Write the instructions.');
+      if (!n.content.instructions.trim() && !n.content.steps?.length) blockers.push('Write the instructions.');
     }
-    return { canRequest: !blockers.length, blockers, editClass: ec, approversNeeded: ec === 're_approval' ? 2 : 1 };
+    const problems = stepProblems(n.content);
+    blockers.push(...problems.map((p) => p.message));
+    // The service's shape: one Blocker per sentence, its field taken from the problem when it has one.
+    const shaped = blockers.map((message) => {
+      const p = problems.find((q) => q.message === message);
+      return { node: null, field: p?.position?.field ?? null, level: 'error' as const, code: p?.kind ?? 'not_ready', message };
+    });
+    return { canRequest: !blockers.length, blockers: shaped, problems, warnings: stepWarnings(n.content), editClass: ec, approversNeeded: ec === 're_approval' ? 2 : 1 };
   };
+
+  /** A step that runs one tool and mentions another, which the service tells the builder about without blocking. */
+  function stepWarnings(c: StoredContent): PublishWarning[] {
+    return (c.steps ?? []).flatMap((step, i) => {
+      if (!step.use) return [];
+      const run = `${step.use.kind}:${step.use.id}`;
+      return [...new Set([...step.do.matchAll(/@(tool:[\w.-]+)/g)].map((m) => m[1]))]
+        .filter((token) => token !== run)
+        .map((token): PublishWarning => ({ kind: 'step_mentions_tool', id: token, position: { field: 'steps', step: i + 1, index: null }, message: `Step ${i + 1} mentions ${token.slice(token.indexOf(':') + 1)}, which this step does not run.` }));
+    });
+  }
+
+  /** A step that names something the team no longer offers, as the service's publish check places it. */
+  function stepProblems(c: StoredContent): PublishBlocker[] {
+    return (c.steps ?? []).flatMap((step, i) => {
+      const named = [...(step.use ? [`${step.use.kind}:${step.use.id}`] : []), ...[...`${step.do} ${step.check?.text ?? ''}`.matchAll(/@((?:tool|knowledge|skill|agent|workflow):[\w.-]+)/g)].map((m) => m[1])];
+      return [...new Set(named)]
+        .filter((token) => !isOffered(token))
+        .map((token): PublishBlocker => ({ kind: 'missing_reference', id: token, position: { field: 'steps', step: i + 1, index: null }, message: `Step ${i + 1} names ${token.slice(token.indexOf(':') + 1)}, which this team no longer offers.` }));
+    });
+  }
 
   /** The class of the newest version against what is published: tools, knowledge or guardrails need re-approval. */
   function editClassOf(sk: Stored, c: StoredContent): SkillEditClass {
@@ -389,7 +426,7 @@ export function createSkillsMock(deps: SkillsDeps) {
 
   const version = (sk: Stored, v: StoredVersion): SkillVersion => {
     const run = runFor(sk, v.version);
-    return { version: v.version, state: v.state, editClass: v.editClass, note: v.note, changes: v.changes, savedBy: v.savedBy, savedAt: v.savedAt, content: content(sk, v.content), tokens: tokensOf(v.content), reviewId: v.reviewId, publishedAt: v.publishedAt, publishedBy: v.publishedBy, testRun: run ? { runId: run.id, version: run.version, ranAt: run.ranAt, passed: run.passed, total: run.total } : null };
+    return { version: v.version, state: v.state, editClass: v.editClass, note: v.note, changes: v.changes, savedBy: v.savedBy, savedAt: v.savedAt, content: content(sk, v.content), tokens: tokensOf(v.content), reviewId: v.reviewId, publishedAt: v.publishedAt, publishedBy: v.publishedBy, requestedBy: v.requestedBy, approvedBy: v.approvedBy, testRun: run ? { runId: run.id, version: run.version, ranAt: run.ranAt, passed: run.passed, total: run.total } : null };
   };
 
   const detail = (sk: Stored): SkillDetail => {
@@ -397,6 +434,9 @@ export function createSkillsMock(deps: SkillsDeps) {
     return {
       ...row(sk),
       content: content(sk, newest(sk).content),
+      text: newest(sk).content.source ?? newest(sk).content.instructions,
+      // Changes with every save of the draft, as the service's stored digest does.
+      digest: digestOf(JSON.stringify(newest(sk).content)),
       versions: sk.versions.map((v) => version(sk, v)),
       tests: sk.tests,
       runs: sk.runs,
@@ -503,6 +543,10 @@ export function createSkillsMock(deps: SkillsDeps) {
       guardrails: n.content.guardrails,
       agents: [...new Set([...livePins(sk).map((p) => p.agentId), ...sk.targetAgentIds])].map((aid) => ({ name: agentOf(aid)?.name ?? aid, pinnedVersion: pins.find((p) => p.skillId === sk.id && p.agentId === aid)?.version ?? null })),
       approvalsNeeded: needed,
+      textBefore: pub ? (pub.content.source ?? pub.content.instructions) : '',
+      textAfter: n.content.source ?? n.content.instructions,
+      // The sample API reads nothing, so it has no hints.
+      hints: [],
     };
     const review: Review = {
       id: `SKP-${++seq}`,
@@ -563,7 +607,7 @@ export function createSkillsMock(deps: SkillsDeps) {
         return r;
       }
       for (const x of sk.versions) if (x.state === 'published') x.state = 'superseded';
-      Object.assign(v, { state: 'published', publishedAt: now, publishedBy: me });
+      Object.assign(v, { state: 'published', publishedAt: now, publishedBy: me, requestedBy: sp.requestedBy, approvedBy: me });
       Object.assign(r, { status: 'approved', decidedAt: now, decisionReason: input.reason, assignee: me });
       audit(sk, 'published', `Published v${v.version}`, { diff: [{ field: 'Published version', before: sp.fromVersion ? `v${sp.fromVersion}` : 'None', after: `v${v.version}` }], reason: input.reason });
       return r;
@@ -799,7 +843,7 @@ export function createSkillsMock(deps: SkillsDeps) {
         // Checked before anything is stored, so a refused review never leaves a half-saved skill behind.
         if (input.requestReview && !input.tests?.length) throw new ApiError('Add at least one test case before requesting review, or save as a draft.', 422);
         if (input.requestReview && !input.instructions.trim()) throw new ApiError('Write the instructions before requesting review.', 422);
-        const sk = createStored({ ...input, note: input.origin === 'generated' ? 'Generated' : 'First draft', provenance: input.provenance ? { ...input.provenance, detail: input.gatewayCallId ? `${input.provenance.detail} · AI gateway call ${input.gatewayCallId}` : input.provenance.detail } : undefined });
+        const sk = createStored({ ...input, ownerTeam: input.ownerTeam ?? deps.teams.find((t) => inTeam(t)) ?? '', note: input.origin === 'generated' ? 'Generated' : 'First draft', provenance: input.provenance ? { ...input.provenance, detail: input.gatewayCallId ? `${input.provenance.detail} · AI gateway call ${input.gatewayCallId}` : input.provenance.detail } : undefined });
         audit(sk, 'created', input.origin === 'generated' ? `Generated v1 with the AI gateway (${input.gatewayCallId ?? 'no call id'})` : 'Created v1', { diff: [{ field: 'Owner team', after: sk.ownerTeam }, { field: 'Tools', after: newest(sk).content.toolIds.map((t) => toolById(t)?.name).join(', ') || 'None' }] });
         if (sk.tests.length && input.requestReview) {
           const run = evaluate(sk, newest(sk).content, sk.tests);
@@ -818,7 +862,7 @@ export function createSkillsMock(deps: SkillsDeps) {
         const sk = find(sid);
         if (sk.deprecated) throw new ApiError('The skill is deprecated. Duplicate it to change it.', 409);
         const n = newest(sk);
-        if (patch.baseVersion !== n.version) throw new ApiError(`v${n.version} was saved by ${n.savedBy} ${n.version > patch.baseVersion ? 'after you opened the page' : ''}. Reload to see it.`.replace(' .', '.'), 409);
+        if (patch.baseVersion !== n.version || patch.baseDigest !== digestOf(JSON.stringify(n.content))) throw new ApiError('The draft was saved after it was read; reload and try again.', 409, undefined, 'stale_base', { version: n.version, savedBy: n.savedBy, savedAt: n.savedAt });
         if (n.state === 'in_review') throw new ApiError(`v${n.version} is waiting in Reviews. Withdraw it there, or wait for the decision.`, 409);
         validateContent({ ...patch, loading: patch.loading ?? n.content.loading });
         const before = n.content;
@@ -831,7 +875,14 @@ export function createSkillsMock(deps: SkillsDeps) {
           toolIds: patch.toolIds ?? before.toolIds,
           knowledgeBases: patch.knowledgeBases ?? before.knowledgeBases,
           guardrails: patch.guardrails?.filter((g) => g.trim()) ?? before.guardrails,
+          inputs: patch.inputs ?? before.inputs,
+          notWhen: patch.notWhen ?? before.notWhen,
+          steps: patch.steps ?? before.steps,
+          exit: patch.exit ?? before.exit,
+          returns: patch.returns ?? before.returns,
+          success: patch.success ?? before.success,
         };
+        const program = (c: StoredContent) => JSON.stringify([c.notWhen ?? '', c.steps ?? [], c.exit ?? {}, c.returns ?? [], c.success ?? []]);
         const changes = [
           nextContent.name !== before.name && 'Name',
           nextContent.useWhen !== before.useWhen && 'Use when',
@@ -840,6 +891,8 @@ export function createSkillsMock(deps: SkillsDeps) {
           nextContent.toolIds.join() !== before.toolIds.join() && 'Tools',
           nextContent.knowledgeBases.join() !== before.knowledgeBases.join() && 'Knowledge bases',
           nextContent.guardrails.join() !== before.guardrails.join() && 'Guardrails',
+          program(nextContent) !== program(before) && 'Steps',
+          JSON.stringify(nextContent.inputs ?? []) !== JSON.stringify(before.inputs ?? []) && 'Inputs',
         ].filter((x): x is string => !!x);
         if (!changes.length) throw new ApiError('Nothing changed.', 400);
         if (n.state === 'draft') {
@@ -884,7 +937,7 @@ export function createSkillsMock(deps: SkillsDeps) {
       respond(() => {
         const sk = find(sid);
         const check = publishCheck(sk);
-        if (!check.canRequest) throw new ApiError(check.blockers.join(' '), 422);
+        if (!check.canRequest) throw new ApiError(check.blockers.map((b) => b.message).join(' '), 422);
         if (!note.trim()) throw new ApiError('Say what changed and why.', 400);
         const r = openPublish(sk, me, note.trim());
         audit(sk, 'edited', `Requested review of v${newest(sk).version} (${r.id})`, { reason: note });
@@ -952,6 +1005,8 @@ export function createSkillsMock(deps: SkillsDeps) {
         }
         return out;
       }),
+    // The sample API reads nothing: the reader is the service's, so a sample page shows no marks or hints.
+    readText: (sid, input) => respond(() => (find(sid), { hints: [], errors: [], uses: { tools: 0, knowledge: 0, skills: 0, agents: 0, workflows: 0 }, lines: input.text.split('\n').map((_, i) => ({ line: i + 1, kind: 'text' as const, step: null, how: null, tool: null })), phrases: {}, steps: 0, stepLines: [] })),
     exportSkills: (ids, v) =>
       respond(() => {
         if (!ids.length) throw new ApiError('Choose at least one skill.', 400);
@@ -1138,7 +1193,7 @@ export function createSkillsMock(deps: SkillsDeps) {
         limits: LIMITS,
       }));
     },
-    options: () => respond(() => ({ teams: deps.teams.filter((t) => inTeam(t)), tools: refs(deps.tools().filter((t) => t.enabled).map((t) => t.id)), knowledgeBases: deps.kbNames(), limits: LIMITS })),
+    options: () => respond(() => ({ teams: deps.teams.filter((t) => inTeam(t)), ownerTeams: deps.teams.filter((t) => inTeam(t)).map((t) => ({ id: t, name: t })), tools: refs(deps.tools().filter((t) => t.enabled).map((t) => t.id)), knowledgeBases: deps.kbNames(), limits: LIMITS })),
     candidates: (scope) => respond((m) => (m === 'empty' ? { attachable: [], blocked: [], limits: LIMITS } : candidatesFor(scope))),
     previewImport: (fileId) => respond(() => parseImport(fileId)),
     importSkill: (fileId, ownerTeam) =>

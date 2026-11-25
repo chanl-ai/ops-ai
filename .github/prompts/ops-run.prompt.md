@@ -1,6 +1,6 @@
 ---
 name: ops-run
-description: Run the Ops AI stack locally, in the devcontainer or on a shared VM workspace, on the fake model or OpenAI. Use when someone asks to start, stop or set up Ops AI, or which make target runs it.
+description: Run the Ops AI stack locally, in the devcontainer or on a shared VM workspace, on the fake model or OpenAI. Use to start, stop or set up Ops AI.
 agent: agent
 ---
 

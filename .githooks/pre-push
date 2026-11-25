@@ -2,18 +2,36 @@
 # ops-ai hook: lint and format of the Python files the pushed commits change, and the console's whole unit suite when the
 # pushed commits change the console or embed app (the commit hook runs only the tests next to the staged files). A
 # checkpoint push reports a red suite and goes on: the head commit's message holds "[skip ci]", or OPS_CHECKPOINT_PUSH=1.
-# The other tests run in CI.
+# The other tests run in CI. A ref whose commits all exist on the remote already (a release branch cut at develop's head,
+# a tag on a merged commit) skips the console suite: those commits were tested before they reached the remote, and a
+# fresh worktree has no node_modules to run it with. Lint and format still run.
 cd "$(git rev-parse --show-toplevel)" || exit 1
 root=$PWD
+remote=${1:-}
 # OPS_RUFF names another ruff (scripts/tests/test_pre_push.py); by default the workspace's.
 ruff=${OPS_RUFF:-"uv run --quiet --project $root ruff"}
 refs=$(cat)
 d=$(git rev-parse --git-common-dir) || exit 1
 if [ -x "$d/hooks/pre-push.local" ]; then printf '%s\n' "$refs" | "$d/hooks/pre-push.local" "$@" || exit $?; fi
 zero=0000000000000000000000000000000000000000
-printf '%s\n' "$refs" | while read -r _local_ref local_sha _remote_ref remote_sha; do
+printf '%s\n' "$refs" | while read -r _local_ref local_sha remote_ref remote_sha; do
   [ -n "$local_sha" ] || continue
   [ "$local_sha" = "$zero" ] && continue  # a delete sends no commits
+  # A remote branch name says what changed, as <type>/<scope>-<what>: local lane branches may be named anything, and
+  # the name is checked where other people read it.
+  branch=${remote_ref#refs/heads/}
+  if [ "$branch" != "$remote_ref" ]; then
+    case "$branch" in
+      main | develop | release/* | hotfix/* | dependabot/*) ;;
+      *)
+        if ! printf '%s\n' "$branch" | grep -qE '^(feat|fix|chore|docs|refactor|perf|test|ci)/[a-z0-9]+(-[a-z0-9]+)+$' ||
+          printf '%s\n' "${branch#*/}" | grep -qE '(^|-)(wip|tmp|temp|new|old|final|v[0-9]+|misc|stuff|fixes|updates|changes|improvements|cleanup|feedback|lane)(-|$)'; then
+          echo "pre-push: remote branch '$branch' must be <type>/<scope>-<what-changed>: type one of feat fix chore docs refactor perf test ci, lowercase words joined by '-', naming the change (not wip, tmp, new, v2, fixes, updates, changes, cleanup, feedback, lane). Push under another name: git push origin HEAD:<type>/<scope>-<what>"
+          exit 1
+        fi
+        ;;
+    esac
+  fi
   since=$remote_sha
   if [ "$since" = "$zero" ] || ! git cat-file -e "$since^{commit}" 2>/dev/null; then
     since=$(git merge-base "$local_sha" origin/main 2>/dev/null || true)
@@ -21,7 +39,24 @@ printf '%s\n' "$refs" | while read -r _local_ref local_sha _remote_ref remote_sh
   [ -n "$since" ] || continue
   files=$(git diff --name-only --diff-filter=ACMR "$since" "$local_sha" -- '*.py')
   console=$(git diff --name-only "$since" "$local_sha" -- apps/console apps/embed package.json pnpm-lock.yaml)
+  [ -n "${OPS_FULL_HOOK:-}" ] || console=  # the console suite runs in CI's merge queue; OPS_FULL_HOOK=1 runs it here
+  # Skips only when rev-list succeeds and lists nothing: an unnamed remote, a URL or a failed lookup runs the suite.
+  if [ -n "$console" ] && [ -n "$remote" ] && unsent=$(git rev-list -n 1 "$local_sha" --not "--remotes=$remote" 2>/dev/null) && [ -z "$unsent" ]; then
+    echo "pre-push: every commit pushed to $remote_ref is already on $remote, so the console unit suite was skipped."
+    console=
+  fi
   [ -n "$files" ] || [ -n "$console" ] || continue
+  # A fresh worktree has no installed dependencies; the checks below would fail with a bare "test failed" that reads as a
+  # real failure. Stop with the cause instead, and never skip the checks.
+  missing=
+  if [ -n "$console" ]; then
+    for dep in node_modules apps/console/node_modules; do [ -d "$root/$dep" ] || missing="$missing $dep"; done
+  fi
+  if [ -n "$files" ] && [ -z "${OPS_RUFF:-}" ] && [ ! -x "$root/.venv/bin/ruff" ]; then missing="$missing .venv"; fi
+  if [ -n "$missing" ]; then
+    echo "pre-push: this worktree has no$missing; run pnpm install (and uv sync) in $root, then push again"
+    exit 1
+  fi
   # The pushed content, not the working tree: another builder's unfinished file must not block this push. The whole
   # commit is exported because ruff tells first-party packages from third-party ones by the folders on disk; only the
   # changed files are linted.

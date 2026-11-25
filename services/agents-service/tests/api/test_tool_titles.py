@@ -20,6 +20,7 @@ from ops_agents.api.routers.tool_catalog import known_tools, tool_options
 from ops_agents.store.agent_registry import registry_agents
 from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 from ops_contracts.chat import ApprovalWidget, ChatMessage, WidgetEvent
+from ops_service_kit.http import Json
 from tests.conftest import SEED
 
 TITLED = OperationRef(
@@ -72,7 +73,7 @@ async def db() -> AsyncIterator[AsyncEngine]:
 
 
 async def test_an_approval_card_names_a_plugin_tool_by_its_title() -> None:
-    call = {"tool": "salesforce_update_record", "input": {"object": "Case", "id": "500A"}}
+    call: Json = {"tool": "salesforce_update_record", "input": {"object": "Case", "id": "500A"}}
     told = await describe_call(cast(Any, Rt()), call, currency=None, money_key=None)
     assert told["label"] == "Update a record" and told["sentence"].startswith("Update a record"), told
     plain = await describe_call(
@@ -122,3 +123,30 @@ def test_a_chat_approval_card_names_a_plugin_tool_by_its_title() -> None:
     assert isinstance(widget, ApprovalWidget), widget
     assert (widget.title, widget.tool_label) == ("Update a record", "Update a record"), widget
     assert "salesforce_update_record" not in widget.summary + widget.action, (widget.summary, widget.action)
+
+
+class Cards:
+    """tools-service's app cards for the team: Salesforce each person signs in to."""
+
+    async def cards(self, person: str | None, team: str | None) -> list[Json]:
+        return [
+            {
+                "id": "plugin:salesforce",
+                "name": "Salesforce",
+                "moduleIds": ["mod_plugin_salesforce"],
+                "signIn": "person_or_team",
+            }
+        ]
+
+
+async def test_the_agents_tools_row_says_who_signs_in_to_its_app(monkeypatch: Any, db: AsyncEngine) -> None:
+    """An admin reads each tool's app setting where the agent's tools are listed, in the app page's words."""
+    monkeypatch.setattr("ops_agents.api.routers.tool_catalog.published_workflows", _none)
+    monkeypatch.setattr("ops_agents.api.routers.tool_catalog.engine_workflows", _none)
+    rt = Rt(db)
+    rt.app_states = cast(Any, Cards())
+    with tenant_scope(LOCAL_TENANT):
+        found = await tool_options(cast(Any, rt), ids=["salesforce_update_record", "crm_lookup_account"])
+    hints = {o["label"]: o["hint"] for o in json.loads(bytes(found.body))["data"]["data"]}
+    assert hints["Update a record"] == "Salesforce · Each person signs in", hints
+    assert hints["crm_lookup_account"] == "CRM", hints

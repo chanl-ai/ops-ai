@@ -304,7 +304,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/templates",
         "pathParams": [],
-        "query": ["kind"],
+        "query": ["kind", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
 }
@@ -544,9 +544,34 @@ class Operations:
             SERVICE, OPERATIONS["resources_take_update"], {"resource": resource, "copy": copy}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def templates_list_templates(self, *, kind: str | None = None) -> list[TemplateView]:
+    def templates_list_templates(
+        self,
+        *,
+        kind: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultTemplateView:
         "List Templates"
-        return self._t.call(SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["templates_list_templates"],
+            {},
+            {
+                "kind": kind,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
 
 class AsyncOperations:
@@ -789,6 +814,31 @@ class AsyncOperations:
             SERVICE, OPERATIONS["resources_take_update"], {"resource": resource, "copy": copy}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def templates_list_templates(self, *, kind: str | None = None) -> list[TemplateView]:
+    async def templates_list_templates(
+        self,
+        *,
+        kind: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultTemplateView:
         "List Templates"
-        return await self._t.call(SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["templates_list_templates"],
+            {},
+            {
+                "kind": kind,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]

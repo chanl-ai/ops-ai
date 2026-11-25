@@ -204,6 +204,12 @@ async def _skills_page(
         q.where(in_view(view, col), *holding(params, col["content"])),
         params,
         search=search,
+        sortable={
+            "name": col["shown_name"],
+            "status": col["status"],
+            "usedBy": col["used_by"],
+            "updatedAt": col["updated_at"],
+        },
         default_sort=col["shown_name"].asc(),
         filters={
             "status": col["status"],

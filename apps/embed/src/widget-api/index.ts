@@ -5,6 +5,7 @@ import type { ChatApi } from '@/lib/api/chat-contract';
 import { ApiError, type OpsApi } from '@/lib/api/contract';
 import { readSse } from '@/lib/api/sse';
 import { AuthError, type AuthProvider } from '@/lib/auth/provider';
+import type { SignInPolicy } from '@/lib/types/sign-in';
 
 let deployment = '';
 let session: string | null = null;
@@ -53,6 +54,8 @@ const refused = (what: string) => () => {
 
 const chat: ChatApi = {
   agents: async () => [],
+  // The widget talks to one agent, so its composer offers no @ hand-over.
+  agentOptions: async () => ({ data: [], nextCursor: null }),
   settings: new Proxy({} as ChatApi['settings'], { get: () => refused('change thread settings') }),
   // The widget talks to one agent and keeps no memories of its own; both are console features.
   defaultAgent: new Proxy({} as ChatApi['defaultAgent'], { get: () => refused('change the default agent') }),
@@ -118,6 +121,10 @@ export const authProvider: AuthProvider = {
   resetPassword: noSignIn,
   mfa: { setup: noSignIn, enrol: noSignIn, verify: noSignIn },
   reauthenticate: noSignIn,
+  ssoLinks: noSignIn,
+  startSsoLink: noSignIn,
+  unlinkSso: noSignIn,
+  completeSsoLink: noSignIn,
   startSsoStepUp: noSignIn,
   completeSsoStepUp: noSignIn,
   takeStepUp: () => null,
@@ -126,3 +133,6 @@ export const authProvider: AuthProvider = {
 
 /** The widget has no sign-in; shared console hooks import this name from @/lib/api. */
 export const demoSignInOffered = false;
+
+/** The widget has no sign-in, so no sign-in policy; shared console hooks import this name from @/lib/api. */
+export const readShellSignInPolicy = (): Promise<SignInPolicy | null> => Promise.resolve(null);

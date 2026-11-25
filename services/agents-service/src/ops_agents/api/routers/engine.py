@@ -5,6 +5,7 @@ and the runner all read, and v2 definitions (YAML or JSON in, JSON stored). Moun
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from collections.abc import AsyncGenerator, Iterable
 from dataclasses import replace
@@ -15,24 +16,31 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import Field, model_validator
 from sse_starlette import EventSourceResponse
 
+from ops_access import can, require_view
+from ops_access.check import DEFAULT as ACCESS
 from ops_agent_kernel.pii import masked
+from ops_contracts.errors import Detail, RunError, run_error
 from ops_documents_client import DocumentNotFound, DocumentsClient
 from ops_engine import default_registry
 from ops_engine.definition import InvalidDefinitionError, WorkflowDefinition, advise, parse, validate
+from ops_engine.diff import diff as definition_diff
 from ops_engine.document_types import pinned, unpinned
 from ops_engine.node_types import start_form
 from ops_engine.starts import only_from_workflows
 from ops_engine.store import (
+    REDRIVABLE,
     TERMINAL,
     DefinitionStore,
     DefinitionSummary,
     ListedRun,
     RunStore,
+    StaleWorkingCopy,
     WorkflowOwnedError,
+    WorkingCopy,
 )
 from ops_engine.store import DefinitionRow as StoredDefinition
 from ops_engine.store import RunRow as StoredRun
-from ops_engine.store.definitions import HUMAN_REVIEW
+from ops_engine.store.definitions import CURRENT, HUMAN_REVIEW
 from ops_files_client import FilesClient, FilesRefused
 from ops_identity.fastapi import ActingPerson, Tx
 from ops_service_kit.errors import (
@@ -52,7 +60,7 @@ from ops_service_kit.narrow import a_list, an_object, json_object
 from ops_store import isolation
 
 from ...store.actor_names import UNNAMED_WORKFLOW
-from ...store.agent_registry import PublishRequestRow
+from ...store.agent_registry import PublishRequestRow, digest_of, refuse_stale
 from ...store.definition_list import definitions_page
 from ...store.engine import DatabaseError, EngineTransactions
 from ...store.events import EventLog
@@ -63,13 +71,16 @@ from ...store.trigger_events import TriggerEvents
 from .. import ai_steps_gate, engine_lifecycle, run_starts, run_story, step_shapes, task_view
 from ..account_names import account_uses_in
 from ..actors import ActorView, NamedActors, actor_reads, named_actors, started_by_of
+from ..agent_registry import ReviewView
 from ..agent_registry import registry as agent_registry
 from ..auth import (
     Principal,
     approves_own_writes,
     caller,
+    caller_of,
     key_scope,
     principal,
+    reader_of,
     require_builder,
     require_key_reaches,
     require_runs_cancel,
@@ -81,8 +92,16 @@ from ..email_trigger import run_again
 from ..engine_runs import live_version, start_run
 from ..envelope import ok
 from ..file_names import named, names_asked_once
+from ..publish_policy import decide, team_document
 from ..run_story import Decision, decisions_in, files_in, steps_view
-from ..schemas import SSE_RESPONSE, DocumentRead, Out, PublishReview  # pyright: ignore[reportPrivateImportUsage]
+from ..schemas import (  # pyright: ignore[reportPrivateImportUsage]
+    SSE_RESPONSE,
+    DocumentRead,
+    Out,
+    PublishDecisionFields,
+    PublishReview,
+)
+from ..unattended_sign_in import unattended_sign_in_warnings
 from .tool_catalog import known_tools
 
 router = APIRouter(prefix="/v1/workflows", dependencies=[Depends(principal)])
@@ -91,6 +110,10 @@ REGISTRY = default_registry()
 log = get_logger("ops_agents.api.routers.engine")
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
+# Every read of a workflow, its runs and their steps: the acting team's workflows view cell, the check the agents and
+# skills routers use for their reads. Every GET on /v1/workflows and /v1/runs takes it in place of `Me`
+# (tests/engine/test_lifecycle_rights.py walks the routers); an API key is not asked and reads only its own runs.
+Reader: TypeAlias = Annotated[Principal, Depends(reader_of("workflows"))]  # noqa: UP040
 
 
 async def starter(me: Annotated[Principal, Depends(caller)], acting: ActingPerson) -> Principal:
@@ -155,7 +178,7 @@ class NodeTypeView(Out):
 
 
 @router.get("/node-types", response_model=Envelope[list[NodeTypeView]])
-async def node_types(rt: Rt, me: Me) -> JSONResponse:
+async def node_types(rt: Rt, me: Reader) -> JSONResponse:
     """Every registered node type at every version: ports with their connection types, parameters as JSON Schema with
     the form generated from them, effects, retry and executor, and why the acting team cannot use one now. No request
     transaction: it reads no row, and the AI-steps policy comes from platform-service."""
@@ -296,6 +319,34 @@ class StartFormView(Out):
     takes_files: bool
 
 
+class SaveBase(Out):
+    """The copy a save is made on: its version and digest (save-base.ts `baseOf` reads it as `baseVersion` and
+    `baseDigest`)."""
+
+    version: int
+    digest: str
+
+
+class WorkingCopyView(Out):
+    definition: dict[str, JsonValue]
+    digest: str
+    # The newest version when the copy was first saved.
+    base_version: int
+    # The checks of the last save; any error stops a version being made from it.
+    checks: list[DefinitionCheck]
+    updated_at: str
+    updated_by: str
+
+
+class OutdatedCopyView(WorkingCopyView):
+    """A working copy made on an older version than the newest, kept so its change is not lost."""
+
+    # The version saved since outside the editor, who saved it and when.
+    newer_version: int
+    newer_by: str | None
+    newer_at: str | None
+
+
 class DefinitionView(Out):
     workflow_id: str
     name: str
@@ -313,6 +364,12 @@ class DefinitionView(Out):
     archived_at: str | None = None
     # How a person starts it by hand, as its trigger declares; None for a trigger only its source starts.
     start_form: StartFormView | None = None
+    # What the editor saves to; None until the first change after the newest version.
+    working_copy: WorkingCopyView | None = None
+    # A copy older than the newest version: shown to its editor read-only, never saved over without their choice.
+    outdated_copy: OutdatedCopyView | None = None
+    # The copy the next working copy save must name: the working copy, else the newest version.
+    save_base: SaveBase
 
 
 def definitions(rt: Runtime) -> DefinitionStore:
@@ -327,21 +384,31 @@ def _parsed(body: DefinitionInput) -> WorkflowDefinition:
 
 
 @router.post("/definitions/validate", response_model=Envelope[DefinitionValidation])
-async def validate_definition(rt: Rt, body: DefinitionInput) -> JSONResponse:
+async def validate_definition(rt: Rt, me: Me, body: DefinitionInput) -> JSONResponse:
     """Per-node checks against the type registry: unknown type or version, unknown port, an out port that leads
     nowhere (End has none), an unreachable node, parameters that do not match the type's schema; and warnings that
     never refuse a save (level `warning`, e.g. a step two branches meet at without a Join). Saves nothing.
     No request transaction: it reads no row, and documents-service is asked for field shapes."""
+    raw = body.yaml if body.yaml is not None else body.definition or {}
+    d, checks = await _checked(rt, raw, team=current_team() or me.team_id or None)
+    errors = [c for c in checks if c["level"] == "error"]
+    return ok({"ok": not errors, "workflowId": d and d.id, "digest": d and d.digest(), "checks": checks})
+
+
+async def _checked(
+    rt: Runtime, raw: str | Json, *, team: str | None = None
+) -> tuple[WorkflowDefinition | None, list[Json]]:
+    """The definition parsed (None when it does not parse) and its checks: the errors that stop a version, then the
+    warnings that never do. The validate route and every working copy save answer with this list."""
     try:
-        d = parse(body.yaml if body.yaml is not None else body.definition or {})
+        d = parse(raw)
     except InvalidDefinitionError as e:
-        check = enrich_check({"node": None, "level": "error", "code": "invalid_definition", "message": str(e)})
-        return ok({"ok": False, "workflowId": None, "digest": None, "checks": [check]})
+        return None, [enrich_check({"node": None, "level": "error", "code": "invalid_definition", "message": str(e)})]
     checks = [enrich_check(c) for c in validate(d, REGISTRY)]
-    warnings = [
-        enrich_check(c) for c in advise(d, REGISTRY) + await step_shapes.field_warnings(rt, current_team() or "", d)
-    ]
-    return ok({"ok": not checks, "workflowId": d.id, "digest": d.digest(), "checks": checks + warnings})
+    team = team or current_team() or ""
+    found = advise(d, REGISTRY) + await step_shapes.field_warnings(rt, team, d)
+    warnings = [enrich_check(c) for c in found + await unattended_sign_in_warnings(rt, team, d)]
+    return d, checks + warnings
 
 
 @router.post(
@@ -358,6 +425,17 @@ async def create_definition(rt: Rt, me: Me, body: DefinitionInput) -> JSONRespon
     between its reads and its write, with none open."""
     d = _parsed(body)
     held = await definitions(rt).row(d.id, team=current_team())
+    data = await _store_version(rt, me, d, held)
+    return ok(data, status=201 if data["created"] else 200)
+
+
+async def _store_version(
+    rt: Runtime, me: Principal, d: WorkflowDefinition, held: StoredDefinition | None, *, reopen: bool = False
+) -> Json:
+    """Stores `d` as the next version of a workflow `held` is the newest version of (None for a new one), once it
+    passes every check and the AI-steps gate, with its type references pinned; returns the version as
+    DefinitionPublished. A new definition and a version made from the working copy both come here; the copy passes
+    `reopen`, so a restored older version becomes a new draft instead of returning the superseded one."""
     # A new workflow belongs to the team the caller names, or its own; a dev session acts across teams, so with neither
     # it is refused rather than saved as no team's, which every team would see.
     new_team = current_team() or me.team_id or None
@@ -377,9 +455,7 @@ async def create_definition(rt: Rt, me: Me, body: DefinitionInput) -> JSONRespon
     owner = held.team_id if held is not None else current_team() or me.team_id or None
     if (uses := ai_steps_gate.ai_nodes(d, REGISTRY)) and not await ai_steps_gate.allowed(rt, owner):
         raise Unprocessable(ai_steps_gate.OFF, code="ai_steps_off", details={"nodes": uses})
-    if wanted := unpinned(d.wire()):
-        acting = current_team() or (held.team_id if held is not None else None) or me.team_id
-        d = parse(pinned(d.wire(), await _newest_versions(rt, wanted, team=acting)))
+    d = await _pinned_types(rt, me, d, held)
     digest = d.digest()
     # An existing workflow keeps its owner, a shared one (no team) included, so a team's builder edits a shared
     # workflow through review instead of being told it is another team's.
@@ -393,14 +469,32 @@ async def create_definition(rt: Rt, me: Me, body: DefinitionInput) -> JSONRespon
             now=now_iso(),
             by=me.email,
             team=team,
+            reopen=reopen,
         )
     except WorkflowOwnedError as e:
         raise Conflict(f"{d.id} is another team's workflow; choose another id.", code="workflow_owned") from e
-    found = advise(d, REGISTRY) + await step_shapes.field_warnings(rt, team or current_team() or "", d)
+    acting = team or current_team() or ""
+    found = advise(d, REGISTRY) + await step_shapes.field_warnings(rt, acting, d)
+    found += await unattended_sign_in_warnings(rt, acting, d)
     advice = [{"node": w["node"], "field": w["field"], "message": w["message"]} for w in found]
     warnings = await task_view.step_warnings(rt, d.wire()) + advice
-    data = {"workflowId": d.id, "version": version, "digest": digest, "created": created, "warnings": warnings}
-    return ok(data, status=201 if created else 200)
+    return {
+        "workflowId": d.id,
+        "version": version,
+        "digest": digest,
+        "created": created,
+        "warnings": cast(JsonList, warnings),
+    }
+
+
+async def _pinned_types(
+    rt: Runtime, me: Principal, d: WorkflowDefinition, held: StoredDefinition | None
+) -> WorkflowDefinition:
+    """`d` with each document type it names unpinned set to that type's newest version, as its version is stored."""
+    if not (wanted := unpinned(d.wire())):
+        return d
+    acting = current_team() or (held.team_id if held is not None else None) or me.team_id
+    return parse(pinned(d.wire(), await _newest_versions(rt, wanted, team=acting)))
 
 
 async def _newest_versions(rt: Runtime, type_ids: set[str], *, team: str | None) -> dict[str, int]:
@@ -452,24 +546,25 @@ class AccountUses(Out):
 @router.get("/definitions/account-uses", response_model=Envelope[AccountUses])
 async def account_uses(
     rt: Rt,
-    me: Me,
+    me: Reader,
     _: Tx,
     app: Annotated[str, Query(min_length=1, max_length=120)],
     name: Annotated[str, Query(min_length=1, max_length=200)],
 ) -> JSONResponse:
-    """The team's workflow drafts and published versions, and agents, that name the account `name` of `app`."""
+    """The team's workflow drafts and published versions, and agents, that name the account `name` of `app`. 403 unless
+    the caller may view the team's workflows."""
     found = await account_uses_in(rt, current_team() or me.team_id, app, name)
     return ok(AccountUses(**found).model_dump(by_alias=True))
 
 
 @router.get("/definitions", response_model=Envelope[ListResult[DefinitionRow]])
 async def list_definitions(
-    *, rt: Rt, _: Tx, q: ListQuery, status: Annotated[list[str] | None, Query()] = None
+    *, rt: Rt, _me: Reader, _: Tx, q: ListQuery, status: Annotated[list[str] | None, Query()] = None
 ) -> JSONResponse:
     """The team's v2 workflows on the shared list contract, each at its latest version: search over name and id,
     `status` facets (draft, in review, live, paused, archived) under the search and before the status filter, sorted
     by `sortBy` then by the key, a page at a time; an archived workflow is listed only when `status` asks for it.
-    v1 workflows stay on /v1/workflows."""
+    v1 workflows stay on /v1/workflows. 403 unless the caller may view the team's workflows."""
     del status  # read from `q.filters`; declared so the document and the SDKs name it
     listed = await definitions_page(rt.db, q)
     rows = [
@@ -645,7 +740,7 @@ async def _archived(rt: Runtime, me: Principal, workflow_id: str, archived: bool
         raise NotFound(f"Workflow definition {workflow_id}")
     engine_lifecycle.require_rights(me, row, "delete")
     await definitions(rt).set_archived(workflow_id, archived, by=me.email or me.sub, now=now_iso(), team=current_team())
-    return await definition_view(rt, workflow_id)
+    return await definition_view(rt, me, workflow_id)
 
 
 class DefinitionShapes(Out):
@@ -656,9 +751,10 @@ class DefinitionShapes(Out):
 
 
 @router.get("/definitions/{workflow_id}/versions/{version}/shapes", response_model=Envelope[DefinitionShapes])
-async def definition_shapes(rt: Rt, workflow_id: str, version: int) -> JSONResponse:
+async def definition_shapes(rt: Rt, _: Reader, workflow_id: str, version: int) -> JSONResponse:
     """What each step of a saved version outputs, by port, before it has run: fixed by its type, built from
-    its settings, or read from its document type or operation. A mapping picker reads it.
+    its settings, or read from its document type or operation. A mapping picker reads it. 403 unless the caller may
+    view the team's workflows.
     No request transaction: the version is read, then documents-service is asked with none open."""
     row = await definitions(rt).row(workflow_id, version, team=current_team())
     if row is None:
@@ -668,18 +764,29 @@ async def definition_shapes(rt: Rt, workflow_id: str, version: int) -> JSONRespo
 
 
 @router.get("/definitions/{workflow_id}", response_model=Envelope[DefinitionView])
-async def get_definition(rt: Rt, _: Tx, workflow_id: str, version: int | None = None) -> JSONResponse:
-    """One definition at a version (its newest when left out), its versions and its open review."""
-    return ok(await definition_view(rt, workflow_id, version))
+async def get_definition(rt: Rt, me: Reader, _: Tx, workflow_id: str, version: int | None = None) -> JSONResponse:
+    """One definition at a version (its newest when left out), its versions, its open review and its working copy.
+    403 unless the caller may view the team's workflows; an API key reads it without its working copy."""
+    return ok(await definition_view(rt, me, workflow_id, version))
 
 
-async def definition_view(rt: Runtime, workflow_id: str, version: int | None = None) -> dict[str, Any]:
+async def _open_copy(store: DefinitionStore, workflow_id: str, newest: int) -> WorkingCopy | None:
+    """The working copy while it was made on the newest version `newest`. One made on an older version (a version saved
+    through the API or CLI since) is left out: its next save is refused as stale and made again on the newest."""
+    copy = await store.working_copy(workflow_id, team=current_team())
+    return copy if copy is not None and copy.base_version >= newest else None
+
+
+async def definition_view(rt: Runtime, me: Principal, workflow_id: str, version: int | None = None) -> dict[str, Any]:
     store = definitions(rt)
     row = await store.row(workflow_id, version, team=current_team())
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id}")
     request = await engine_lifecycle.pending(rt, workflow_id)
-    current = await store.serving(workflow_id, team=current_team())
+    stored = await store.versions(workflow_id)
+    # The serving version is read from the versions listed here, not by a statement of its own: all versions of an id
+    # belong to one team, which `row` has already checked, so `serving` would pick the same one.
+    current = next((v for v in reversed(stored) if v.stage in CURRENT), None)
     versions = [
         {
             "version": v.version,
@@ -688,7 +795,7 @@ async def definition_view(rt: Runtime, workflow_id: str, version: int | None = N
             "createdBy": v.created_by,
             "stage": engine_lifecycle.stage_of(v, request),
         }
-        for v in await store.versions(workflow_id)
+        for v in stored
     ]
     review = request and {
         "id": request.id,
@@ -696,6 +803,13 @@ async def definition_view(rt: Runtime, workflow_id: str, version: int | None = N
         "requestedBy": request.requested_by,
         "createdAt": request.created_at,
     }
+    newest = versions[-1] if versions else {"version": row.version, "digest": row.digest}
+    viewer = ACCESS.may(caller_of(me), "workflows", "view", team=row.team_id or current_team())
+    held = await store.working_copy(workflow_id, team=current_team()) if viewer else None
+    copy = held if held is not None and held.base_version >= int(newest["version"]) else None
+    # A copy made on an older version than the newest (one saved through the API or CLI since) is kept and shown, so
+    # its unpublished change is never lost; saves are made on the newest version.
+    outdated = held if held is not None and copy is None else None
     return {
         "workflowId": workflow_id,
         "name": row.name,
@@ -709,13 +823,264 @@ async def definition_view(rt: Runtime, workflow_id: str, version: int | None = N
         "review": review,
         "archivedAt": row.archived_at,
         "startForm": start_form(row.definition, REGISTRY),
+        "workingCopy": copy and _copy_view(copy),
+        "saveBase": _save_base(copy) if copy else {"version": newest["version"], "digest": newest["digest"]},
+        "outdatedCopy": outdated
+        and _copy_view(outdated)
+        | {"newerVersion": newest["version"], "newerBy": newest.get("createdBy"), "newerAt": newest.get("createdAt")},
     }
+
+
+def _copy_view(copy: WorkingCopy) -> Json:
+    return {
+        "definition": copy.definition,
+        "digest": copy.digest,
+        "baseVersion": copy.base_version,
+        "checks": copy.checks,
+        "updatedAt": copy.updated_at,
+        "updatedBy": copy.updated_by,
+    }
+
+
+def _save_base(copy: WorkingCopy) -> Json:
+    return {"version": copy.base_version, "digest": copy.digest}
+
+
+class WorkingCopyInput(In):
+    """The definition as the editor holds it, and the copy it was made on (`saveBase` of the view last read)."""
+
+    definition: dict[str, JsonValue]
+    base_version: int
+    base_digest: str
+    # The digest of another person's outdated copy (the view's `outdatedCopy`) this save replaces; a save on the
+    # newest version without it is refused with 409 `stale_base` while that copy is kept.
+    replaces_digest: str | None = None
+
+
+class WorkingCopySaved(Out):
+    working_copy: WorkingCopyView
+    # What the next save names.
+    save_base: SaveBase
+
+
+async def _editable(rt: Runtime, me: Principal, workflow_id: str) -> StoredDefinition:
+    """The workflow's newest version, for a person who may change it: 404 when the acting team cannot see it, 403
+    without the save right in its team (a viewer, a reviewer)."""
+    row = await definitions(rt).row(workflow_id, team=current_team())
+    if row is None:
+        raise NotFound(f"Workflow definition {workflow_id}")
+    engine_lifecycle.require_rights(me, row, "save")
+    return row
+
+
+@router.put("/definitions/{workflow_id}/working-copy", response_model=Envelope[WorkingCopySaved])
+async def save_working_copy(rt: Rt, me: Me, workflow_id: str, body: WorkingCopyInput) -> JSONResponse:
+    """Saves the editor's working copy as it is, failing checks and all, and answers with its checks. It makes no
+    version: publishing does. 409 `stale_base` when `baseVersion` and `baseDigest` are not the newest copy, with who
+    saved it and when: read the workflow again and repeat the change. No request transaction: documents-service is
+    asked for field shapes before the write."""
+    held = await _editable(rt, me, workflow_id)
+    definition: Json = {**body.definition, "id": workflow_id}
+    _, checks = await _checked(rt, definition, team=held.team_id)
+    base = (body.base_version, body.base_digest)
+    try:
+        copy = await definitions(rt).put_working_copy(
+            workflow_id,
+            definition=definition,
+            digest=digest_of(definition),
+            checks=checks,
+            base=base,
+            now=now_iso(),
+            by=me.email,
+            replaces=body.replaces_digest,
+        )
+    except StaleWorkingCopy as e:
+        refuse_stale(base, e.version, e.digest, saved_by=e.saved_by, saved_at=e.saved_at)
+        raise
+    except LookupError as e:
+        raise NotFound(f"Workflow definition {workflow_id}") from e
+    return ok({"workingCopy": _copy_view(copy), "saveBase": _save_base(copy)})
+
+
+async def _publish_copy(rt: Runtime, me: Principal, workflow_id: str, base: tuple[int, str], note: str) -> ReviewView:
+    """Makes the next version from the working copy saved on `base`, opens its publish request and removes the copy.
+    Every refusal comes first, so a refused publish leaves the versions and the copy as they were: the publish right,
+    a stale base, then each blocker the publish preview lists."""
+    held = await _editable(rt, me, workflow_id)
+    engine_lifecycle.require_rights(me, held, "publish")
+    store = definitions(rt)
+    copy = await store.working_copy(workflow_id, team=current_team())
+    if copy is None:
+        raise Conflict("There are no unpublished changes to make a version from.", code="nothing_to_publish")
+    if copy.base_version < held.version:
+        refuse_stale(base, held.version, held.digest, saved_by=held.created_by, saved_at=held.created_at)
+    refuse_stale(base, copy.base_version, copy.digest, saved_by=copy.updated_by, saved_at=copy.updated_at)
+    d, found = await _publishable(rt, me, held, copy.definition)
+    engine_lifecycle.refuse(found)
+    # Read before the version is made: a failure after it would leave a draft the copy is outdated behind.
+    reads = await engine_lifecycle.policy_reads(rt)
+    data = await _store_version(rt, me, cast(WorkflowDefinition, d), held, reopen=True)
+    version = cast(int, data["version"])
+    review = await engine_lifecycle.request_publish(rt, me, workflow_id, version, note, checked=True, reads=reads)
+    # Removed only once the request is open; a save made since stays, as a change on the new version.
+    if not await store.drop_working_copy(workflow_id, digest=copy.digest):
+        await store.rebase_working_copy(workflow_id, version)
+    return review
+
+
+async def _publishable(
+    rt: Runtime, me: Principal, held: StoredDefinition, definition: Json
+) -> tuple[WorkflowDefinition | None, list[engine_lifecycle.Blocker]]:
+    """`definition` as its version would be stored (document types pinned; None when it does not parse), and every
+    blocker to publishing it. The preview and the publish both read this, so the dialog lists each refusal the
+    publish can give."""
+    try:
+        d = parse(definition)
+    except InvalidDefinitionError:
+        return None, await engine_lifecycle.blockers(rt, me, held, definition)
+    pin: list[engine_lifecycle.Blocker] = []
+    try:
+        d = await _pinned_types(rt, me, d, held)
+    except Unprocessable as e:
+        pin.append(engine_lifecycle.Blocker({"node": None, "level": "error", "code": e.code, "message": e.message}, e))
+    return d, pin + await engine_lifecycle.blockers(rt, me, held, definition, digest=None if pin else d.digest())
+
+
+# A side of a comparison: a version number, `live` or `working-copy`.
+DIFF_SIDE = r"^(\d+|live|working-copy)$"
+
+
+async def _side(rt: Runtime, workflow_id: str, side: str) -> Json | None:
+    """A definition to compare: a version number, `live` (None before the first publish) or `working-copy` (the
+    newest version while there is none). 404 for a version the acting team cannot see."""
+    store = definitions(rt)
+    if side == "live":
+        live = await store.serving(workflow_id, team=current_team())
+        return live.definition if live else None
+    if side == "working-copy":
+        newest = await store.row(workflow_id, team=current_team())
+        copy = await _open_copy(store, workflow_id, newest.version) if newest else None
+        if copy is not None:
+            return copy.definition
+        row = await store.row(workflow_id, team=current_team())
+    else:
+        row = await store.row(workflow_id, int(side), team=current_team())
+    if row is None:
+        raise NotFound(f"{side if side.isdigit() else 'A version'} of workflow definition {workflow_id}")
+    return row.definition
+
+
+class FieldChangeView(Out):
+    # `name`, `type`, `typeVersion`, `onError`, or `parameters.<key>` for one of the step's settings.
+    field: str
+    before: JsonValue = None
+    after: JsonValue = None
+
+
+class StepRefView(Out):
+    id: str
+    name: str
+    type: str
+
+
+class StepChangeView(StepRefView):
+    fields: list[FieldChangeView]
+
+
+class DefinitionDiffView(Out):
+    added: list[StepRefView]
+    removed: list[StepRefView]
+    changed: list[StepChangeView]
+    # Steps that only moved on the canvas.
+    moved: list[StepRefView]
+    connected: list[str]
+    disconnected: list[str]
+    workflow: list[FieldChangeView]
+
+
+@router.get("/definitions/{workflow_id}/diff", response_model=Envelope[DefinitionDiffView])
+async def diff_definitions(
+    rt: Rt,
+    me: Reader,
+    workflow_id: str,
+    from_: Annotated[str, Query(alias="from", pattern=DIFF_SIDE)],
+    to: Annotated[str, Query(pattern=DIFF_SIDE)],
+) -> JSONResponse:
+    """The steps added, removed, changed (every setting that differs, old and new) and moved between two versions of
+    a workflow, its live version or its working copy. 403 unless the caller may view the team's workflows."""
+    row = await definitions(rt).row(workflow_id, team=current_team())
+    if row is None:
+        raise NotFound(f"Workflow definition {workflow_id}")
+    # An API key reads the team's versions, never a person's unpublished working copy, as on GET /definitions/{id}.
+    if "working-copy" in (from_, to):
+        can(caller_of(me), "workflows", "view", team=row.team_id or current_team(), what="this workflow's working copy")
+    return ok(definition_diff(await _side(rt, workflow_id, from_), await _side(rt, workflow_id, to) or {}))
+
+
+class PublishPreview(PublishDecisionFields):
+    """What publishing the working copy (or the newest draft, without one) would do."""
+
+    # The version live runs use now; None before the first publish.
+    live_version: int | None
+    # The working copy's changes against that live version.
+    changes: DefinitionDiffView
+    # The errors that stop the publish; empty when it can go.
+    blockers: list[DefinitionCheck]
+
+
+@router.get("/definitions/{workflow_id}/publish-preview", response_model=Envelope[PublishPreview])
+async def publish_preview(rt: Rt, me: Reader, workflow_id: str) -> JSONResponse:
+    """What a publish of the working copy would change, what stops it (each error check), and whether the team's
+    publish policy would wait for a review; a change of step positions alone needs none. Nothing is made or opened.
+    No request transaction: the policy is read from platform-service."""
+    row = await definitions(rt).row(workflow_id, team=current_team())
+    if row is None:
+        raise NotFound(f"Workflow definition {workflow_id}")
+    engine_lifecycle.require_rights(me, row, "publish")
+    store = definitions(rt)
+    copy = await _open_copy(store, workflow_id, row.version)
+    live = await store.serving(workflow_id, team=current_team())
+    new = copy.definition if copy else row.definition
+    # Decided on the definition as its version will store it, as open_publish decides: a copy the editor saved without
+    # its defaults filled in would otherwise differ from the live version in more than step positions.
+    with contextlib.suppress(InvalidDefinitionError):
+        new = parse(new).wire()
+    _, found = await _publishable(rt, me, row, copy.definition if copy else row.definition)
+    old = live.definition if live else None
+    decision = await decide(
+        rt,
+        area="workflows",
+        team_id=row.team_id or current_team() or "",
+        old=old,
+        new=new,
+        document=await team_document(rt),
+    )
+    return ok(
+        decision.record()
+        | {
+            "liveVersion": live.version if live else None,
+            "changes": definition_diff(old, new),
+            "blockers": [enrich_check(b.check) for b in found],
+        }
+    )
 
 
 class DefinitionPublishInput(In):
     # The draft to publish; the newest version when left out.
     version: int | None = None
     note: str = Field(default="", max_length=2000)
+    # The working copy to publish, as `saveBase` named it when it was read: its next version is made and its request
+    # opened in one call, refused before anything is made while a blocker remains. Both or neither, with no `version`.
+    base_version: int | None = None
+    base_digest: str | None = None
+
+    @model_validator(mode="after")
+    def _one_source(self) -> DefinitionPublishInput:
+        if (self.base_version is None) != (self.base_digest is None):
+            raise ValueError("baseVersion and baseDigest go together")
+        if self.base_version is not None and self.version is not None:
+            raise ValueError("Name a draft's version or the working copy's base, not both")
+        return self
 
 
 @router.post("/definitions/{workflow_id}/publish-requests", response_model=Envelope[PublishReview], status_code=201)
@@ -723,9 +1088,16 @@ async def request_definition_publish(rt: Rt, me: Me, workflow_id: str, body: Def
     """Opens a publish request for a draft in Reviews; the version goes live when a second person approves it (at once
     under the dev auto-approve setting). 409 when the version is not a draft or a request is already open, 422 when it
     no longer passes its checks, 403 unless the caller is a builder or admin of the owning team (an admin for a
-    workflow no team owns). The request lists what each step acts on: its operation, agent and approver.
+    workflow no team owns). With `baseVersion` and `baseDigest` it publishes the working copy: every blocker the
+    publish preview lists refuses it (422, or 403 for a mailbox the caller may not watch) before any version is made,
+    then the next version is made and its request opened. The request lists what each step acts on: its operation,
+    agent and approver.
     No request transaction: the team's accounts (tools-service) and the review deadline (platform-service) are asked
     with none open."""
+    if body.base_version is not None and body.base_digest is not None:
+        return ok(
+            await _publish_copy(rt, me, workflow_id, (body.base_version, body.base_digest), body.note), status=201
+        )
     return ok(await engine_lifecycle.request_publish(rt, me, workflow_id, body.version, body.note), status=201)
 
 
@@ -736,7 +1108,7 @@ async def set_paused(rt: Runtime, me: Principal, workflow_id: str, paused: bool)
     engine_lifecycle.require_rights(me, row, "pause" if paused else "resume")
     if await definitions(rt).set_paused(workflow_id, paused, team=current_team()) is None:
         raise Conflict(f"{workflow_id} has no live version to {'pause' if paused else 'resume'}.", code="not_live")
-    return await definition_view(rt, workflow_id)
+    return await definition_view(rt, me, workflow_id)
 
 
 @router.post("/definitions/{workflow_id}/pause", response_model=Envelope[DefinitionView])
@@ -769,8 +1141,11 @@ async def option_sources(rt: Rt, me: Me, source: OptionSource) -> JSONResponse:
     """The choices a node form offers for a field with an option source (`ui.fields.*.source`): published agents,
     registry operations, live v2 workflows, the acting team's mailboxes (Channels > Email). `steps` comes from
     the definition being edited; `knowledge` is not served yet, since no built node type reads a knowledge base.
+    403 for agents, tools or workflows without that area's view cell, as its own list answers.
     No request transaction: the tools source is asked of tools-service."""
     options: list[dict[str, str]]
+    if source != "mailboxes":
+        require_view(caller_of(me), source)
     if source == "mailboxes":
         # The team the caller acts in (X-Team-Id), also for a dev-password session, which reads across teams.
         found = await MailboxStore(rt.db).list(team=me.team_id) if me.team_id else []
@@ -836,16 +1211,24 @@ class RunWaiting(Out):
 
 
 class RunFailure(Out):
-    """The failing step as a builder reads it: the same sentence as `error`, plus where and whether a retry helps."""
+    """Why a run failed, in the one error model (ops_contracts.errors): a kind, a stable code, the builder's
+    message, a sentence safe for a customer and whether a retry helps, with the failing step and attempt."""
 
-    code: str | None = None
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"]
+    code: str
     message: str
+    user_message: str
+    retryable: bool
+    retry_after_seconds: float | None = None
     node_id: str | None = None
     node_name: str | None = None
-    field: str | None = None
     attempt: int | None = None
-    retryable: bool | None = None
+    of: int | None = None
+    trace_id: str | None = None
+    # What to do next, for the builder: Retry, Redrive from the failed step, or fix the step.
     suggestion: str | None = None
+    # The error's plain values: which clock ran out, which End the run reached, a code the table did not know.
+    details: dict[str, Detail] = Field(default_factory=dict)
 
 
 class RunRow(Out):
@@ -856,6 +1239,8 @@ class RunRow(Out):
     can_cancel: bool | None = None
     # Whether the caller may retry it now: a Stuck run, by whoever may cancel it.
     can_retry: bool | None = None
+    # Whether the caller may redrive it now: a Failed or Stuck run, by whoever may cancel it.
+    can_redrive: bool | None = None
     workflow_id: str
     version: int
     digest: str
@@ -1083,6 +1468,17 @@ def can_retry(me: Principal, run: StoredRun) -> bool:
     return run.status == "stuck" and can_cancel(me, run)
 
 
+def can_redrive(me: Principal, run: StoredRun) -> bool:
+    """Redrive for the caller: a Failed or Stuck run, by whoever may cancel the run."""
+    if run.status not in REDRIVABLE:
+        return False
+    try:
+        require_runs_cancel(me, team_id=run.team_id, started_by=run.created_by, what="this run")
+    except ApiError:
+        return False
+    return True
+
+
 def can_cancel(me: Principal, run: StoredRun) -> bool:
     """runs/cancel for the caller on an unfinished run, by the rule the cancel route applies."""
     if run.status in ("succeeded", "failed", "cancelled"):
@@ -1097,14 +1493,19 @@ def can_cancel(me: Principal, run: StoredRun) -> bool:
 class RunFailureView(TypedDict):
     """Why a run failed (`run_failure`), keys in reply order."""
 
-    code: None
+    kind: str
+    code: str
     message: str
-    nodeId: JsonValue
-    nodeName: None
-    field: None
-    attempt: JsonValue
+    userMessage: str
     retryable: bool
+    retryAfterSeconds: float | None
+    nodeId: str | None
+    nodeName: str | None
+    attempt: int | None
+    of: int | None
+    traceId: str | None
     suggestion: str
+    details: dict[str, Detail]
 
 
 class RunWaitingView(TypedDict):
@@ -1165,25 +1566,43 @@ class RunResultView(TypedDict):
 
 
 def run_failure(run: StoredRun, steps: list[Json]) -> RunFailureView | None:
-    """The stored error sentence plus the last step that failed, so a builder does not parse `error` themselves."""
-    message = run.error
-    if not message:
+    """The run's error as the error model recorded it. A run that failed before the record existed (agents
+    migration 0124) reads as `stuck` when it is Stuck and `internal_error` otherwise, with the last failing step."""
+    if not run.error:
         return None
-    failed = next((s for s in reversed(steps) if s.get("error")), None)
-    attempts = list(cast(Iterable[JsonValue], (failed or {}).get("attempts") or []))
+    if run.failure:
+        err = RunError.model_validate(run.failure)
+    else:
+        failed = next((s for s in reversed(steps) if s.get("error")), None)
+        attempts = list(cast(Iterable[JsonValue], (failed or {}).get("attempts") or []))
+        node = (failed or {}).get("nodeId")
+        err = run_error(
+            "stuck" if run.status == "stuck" else "internal_error",
+            run.error,
+            step=node if isinstance(node, str) else None,
+            attempt=cast(int, an_object(attempts[-1], "a step's attempt")["attempt"]) if attempts else None,
+        )
+    if run.status == "stuck":
+        suggestion = "Retry this stuck run from its last recorded step."
+    elif err.retryable:
+        suggestion = "Retry the run; the step that failed runs again."
+    else:
+        suggestion = "Fix the failing step's input or resource, then start a test run."
     return {
-        "code": None,
-        "message": message,
-        "nodeId": (failed or {}).get("nodeId"),
-        "nodeName": None,
-        "field": None,
-        "attempt": an_object(attempts[-1], "a step's attempt")["attempt"] if attempts else None,
-        "retryable": run.status == "stuck",
-        "suggestion": (
-            "Retry this stuck run from its last recorded step."
-            if run.status == "stuck"
-            else "Inspect the failing step, fix its input or resource, then start a test run."
-        ),
+        "kind": err.kind,
+        "code": err.code,
+        "message": err.message,
+        "userMessage": err.user_message,
+        # A Stuck run is left for Retry whatever its code.
+        "retryable": err.retryable or run.status == "stuck",
+        "retryAfterSeconds": err.retry_after_seconds,
+        "nodeId": err.step.id if err.step else None,
+        "nodeName": err.step.name if err.step else None,
+        "attempt": err.attempt,
+        "of": err.of,
+        "traceId": err.trace_id,
+        "suggestion": suggestion,
+        "details": err.details,
     }
 
 
@@ -1295,15 +1714,12 @@ async def start_engine_run(rt: Rt, me: Starter, body: EngineRunInput) -> JSONRes
     one workflow starts that one only, on the version it pins when it pins one.
     No request transaction: the run and its work row keep start_run's own transaction, which a worker claims from."""
     stored = await startable(rt, me, body.workflow_id, body.version, body.mode)
-    form = start_form(stored.definition, REGISTRY)
-    # A Schedule trigger's input schema is held to the same check as Fire now (POST /v1/runs/start).
-    payload = run_starts.filled(form, body.input) if form and form.get("kind") in ("form", "schedule") else body.input
     run, created = await start_run(
         runs(rt),
         stored,
         team_id=me.team_id,
         mode=body.mode,
-        input=payload,
+        input=body.input,
         run_key=body.run_key,
         created_by=started_by(me),
         started_by_approver=approves_own_writes(me),
@@ -1316,7 +1732,7 @@ async def start_engine_run(rt: Rt, me: Starter, body: EngineRunInput) -> JSONRes
 async def list_engine_runs(
     *,
     rt: Rt,
-    me: Me,
+    me: Reader,
     q: ListQuery,
     workflow_id: Annotated[list[str] | None, Query(alias="workflowId")] = None,
     status: Annotated[list[str] | None, Query()] = None,
@@ -1351,6 +1767,7 @@ async def list_engine_runs(
             "outcomeText": ended.get(r.id),
             "canCancel": can_cancel(me, r),
             "canRetry": can_retry(me, r),
+            "canRedrive": can_redrive(me, r),
             "workflowName": r.workflow_name or UNNAMED_WORKFLOW,
             "startedBy": who.get(started_by_of(raw)),
         }
@@ -1360,7 +1777,7 @@ async def list_engine_runs(
 
 
 @runs_router.get("/{run_id}", response_model=Envelope[RunDetail])
-async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
+async def get_engine_run(rt: Rt, me: Reader, run_id: str) -> JSONResponse:
     """The run with every step from the journal: per node its input, output, port, attempts and errors.
     No request transaction. One transaction reads the run (a run the caller may not see is not found before any other
     service is asked) and what it is told from; names, the masking policy and file names come from platform-service and
@@ -1398,6 +1815,7 @@ async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
         "result": run_result(raw, steps, reads.stored, decided=decided, names=who),
         "canCancel": can_cancel(me, run),
         "canRetry": can_retry(me, run),
+        "canRedrive": can_redrive(me, run),
         "startedBy": who.get(started_by_of(raw)),
         "story": told,
     }
@@ -1529,6 +1947,91 @@ async def retry_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     )
 
 
+@runs_router.post("/{run_id}/redrive", response_model=Envelope[RunRow])
+async def redrive_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
+    """Queues a Failed or Stuck run again from its failed step, on the version the run pinned: steps it recorded are
+    not run again. A failed write is sent again, on its earlier approval, only when its answer proves it did nothing
+    (refused, never sent, or refused before acting); any other is reconciled by its key at the gateway first. Who may
+    cancel the run may redrive it; a run neither Failed nor Stuck is refused (409 run_not_redrivable).
+    No request transaction: the masking policy (platform-service) is asked after the write, with none open."""
+    run = await visible_run(rt, run_id, me)
+    require_runs_cancel(me, team_id=run.team_id, started_by=run.created_by, what=f"run {run_id}")
+    redriven, changed = await runs(rt).redrive(run_id)
+    if not changed or redriven is None:
+        raise Conflict("Only a failed or stuck run can be redriven.", code="run_not_redrivable")
+    await EventLog(rt.db).append(
+        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="redriven", node=None, data={"by": me.email}
+    )
+    view = run_view(redriven) | {"canCancel": can_cancel(me, redriven), "canRetry": False, "canRedrive": False}
+    return ok(await for_people(rt, redriven, view))
+
+
+class RunsFilter(In):
+    """Which runs a bulk action takes: each given field narrows it. `kind` and `code` are the run's recorded error
+    (ops_contracts.errors); `createdFrom` and `createdTo` bound when the run started, ISO times, the end excluded."""
+
+    workflow_id: str | None = None
+    kind: str | None = None
+    code: str | None = None
+    created_from: str | None = None
+    created_to: str | None = None
+
+
+class BulkRunsRequest(In):
+    action: Literal["redrive", "cancel"]
+    filter: RunsFilter = Field(default_factory=RunsFilter)
+
+
+class BulkRunsResult(Out):
+    action: str
+    # The runs the action changed, and those the filter matched that the caller may not act on or that moved first.
+    changed: list[str]
+    skipped: list[str]
+
+
+@runs_router.post("/bulk", response_model=Envelope[BulkRunsResult])
+async def bulk_engine_runs(rt: Rt, me: Me, body: BulkRunsRequest) -> JSONResponse:
+    """Redrives every Failed or Stuck run, or cancels every unfinished one, of the acting team that the filter
+    matches, oldest first and at most BULK_LIMIT in one call. Each run is checked as its single route checks it: one
+    the caller may not cancel is skipped and listed, never acted on.
+    No request transaction: each run is changed in its own, as the single routes change it."""
+    f = body.filter
+    statuses = REDRIVABLE if body.action == "redrive" else ("queued", "running", "waiting", "stuck")
+    pinned = scope[1] if (scope := key_scope(me)) is not None and scope[0] == "workflow" else None
+    if pinned is not None and f.workflow_id not in (None, pinned):
+        return ok({"action": body.action, "changed": [], "skipped": []})
+    store = runs(rt)
+    matched = await store.matching(
+        statuses,
+        workflow_id=pinned or f.workflow_id,
+        kind=f.kind,
+        code=f.code,
+        created_from=f.created_from,
+        created_to=f.created_to,
+    )
+    changed: list[str] = []
+    skipped: list[str] = []
+    for run in matched:
+        if not (can_redrive(me, run) if body.action == "redrive" else can_cancel(me, run)):
+            skipped.append(run.id)
+            continue
+        if body.action == "redrive":
+            _, moved = await store.redrive(run.id)
+        else:
+            cancelled, moved = await store.cancel(run.id, reason="by_user")
+            if moved and cancelled is not None:
+                await store.settle_parents(run.id, cancelled.created_by)
+        if not moved:
+            skipped.append(run.id)
+            continue
+        changed.append(run.id)
+        kind = "redriven" if body.action == "redrive" else "cancelled"
+        await EventLog(rt.db).append(
+            thread_id=run.id, team_id=run.team_id, run_id=run.id, type_=kind, node=None, data={"by": me.email}
+        )
+    return ok({"action": body.action, "changed": changed, "skipped": skipped})
+
+
 @runs_router.post(
     "/set-aside-emails/{event_id}/run",
     response_model=Envelope[RunStarted],
@@ -1576,7 +2079,9 @@ async def event_frames(
 
 
 @runs_router.get("/{run_id}/events", response_model=None, responses=SSE_RESPONSE)
-async def engine_run_events(rt: Rt, me: Me, run_id: str, after: int = 0, follow: bool = True) -> EventSourceResponse:
+async def engine_run_events(
+    rt: Rt, me: Reader, run_id: str, after: int = 0, follow: bool = True
+) -> EventSourceResponse:
     """The run's events with `seq` above `after`; the SSE `id` is the seq to resume from. With `follow` it keeps
     polling until the run ends or waits for a person.
     No request transaction: the masking policy comes from platform-service, and each frame's read opens its own."""

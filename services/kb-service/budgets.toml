@@ -12,6 +12,10 @@ queries = 0
 ["GET /v1/items/{item_id}"]
 queries = 6
 
+# The item, the page's count, the page, and the page's index units.
+["GET /v1/items/{item_id}/chunks"]
+queries = 4
+
 # The page, its count, the health GROUP BY, the page's links, and its sources with their item counts.
 ["GET /v1/knowledge-bases"]
 queries = 6

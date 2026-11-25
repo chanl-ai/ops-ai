@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from ops_tools.modules.openapi import discover
-from ops_tools.modules.schemas import DiscoveryResult
+from ops_tools.modules.schemas import DiscoveredOperation, DiscoveryResult
 from ops_tools.modules.service import ModuleService
 
 URL = "https://api.bank.test/v1/openapi.json"
@@ -82,7 +82,11 @@ def test_a_head_operation_is_skipped_with_a_warning_and_the_rest_still_discover(
     )
     assert [o["name"] for o in found["operations"]] == ["list_accounts"]
     assert any(w.startswith("HEAD /accounts was skipped") for w in found["warnings"])
-    DiscoveryResult.model_validate(ModuleService._public(found))  # pyright: ignore[reportPrivateUsage]
+    public = ModuleService._public(found)  # pyright: ignore[reportPrivateUsage]
+    meta = {k: v for k, v in public.items() if k != "operations"}
+    DiscoveryResult.model_validate({**meta, "id": "disc_1", "operationTotal": len(public["operations"])})
+    for op in public["operations"]:
+        DiscoveredOperation.model_validate(op)
 
 
 def test_a_declared_result_shape_is_kept_and_an_unknown_one_is_ignored_with_a_warning() -> None:

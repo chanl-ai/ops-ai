@@ -16,6 +16,7 @@ from typing import Any, cast
 from urllib.parse import urljoin, urlsplit
 
 from ops_service_kit.http import Json
+from ops_service_kit.names import slugify
 
 from ..store.modules import Header, InputField
 from .discovered import DiscoveredOpenApi, DiscoveredOperation
@@ -38,7 +39,7 @@ def snake(value: str) -> str:
 
 
 def kebab(value: str) -> str:
-    return re.sub(r"^-|-$", "", re.sub(r"[^a-z0-9]+", "-", value.lower()))
+    return slugify(value, width=200)
 
 
 def _deref(spec: Json, node: Any, depth: int = 0) -> Json:

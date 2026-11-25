@@ -333,7 +333,15 @@ async def test_the_apps_list_holds_each_card_once_by_name_ignoring_case(
         ({}, [*custom, *plugins, "plugin:test.header-key"]),
         (
             {"include": "builtin"},
-            [*custom, *plugins, *builtins, "plugin:test.header-key", "builtin:knowledge", "builtin:mailboxes"],
+            [
+                *custom,
+                *plugins,
+                *builtins,
+                "plugin:test.header-key",
+                "builtin:knowledge",
+                "builtin:mailboxes",
+                "builtin:workspace",
+            ],
         ),
         # The card an account belongs to, so the console needs no paging to find it; another team's account none.
         ({"accountId": made["Alpha desk"]}, [made["Alpha desk"]]),

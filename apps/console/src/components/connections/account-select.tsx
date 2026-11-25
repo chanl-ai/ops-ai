@@ -12,11 +12,12 @@ const NONE = '__none__';
 /**
  * Which of an app's team accounts a step or an agent uses (app id to account name): the app, then its account, with Default first.
  * Only the team's live accounts are listed (a step's run may act for nobody); the publish check confirms the name.
+ * `withTestAccounts` also lists the app's test account, marked, for a try, which runs on whichever account is picked.
  */
-export function AccountSelect({ id, value, onChange }: { id: string; value: Record<string, unknown>; onChange: (v: Record<string, string>) => void }) {
+export function AccountSelect({ id, value, onChange, withTestAccounts = false }: { id: string; value: Record<string, unknown>; onChange: (v: Record<string, string>) => void; withTestAccounts?: boolean }) {
   const [app, setApp] = React.useState<string>(Object.keys(value)[0] ?? '');
   const chosen = useSystemCard(app || undefined);
-  const accounts = useAppAccounts(app || undefined);
+  const accounts = useAppAccounts(app || undefined, { withTest: withTestAccounts });
   // A package app (one that runs inside another, such as a loan package in a Salesforce org) has no accounts: the API
   // lists the accounts of the app it runs on, under that app's id, which is the key the step names the account by.
   const key = accounts.data?.[0]?.appId ?? app;
@@ -56,11 +57,11 @@ export function AccountSelect({ id, value, onChange }: { id: string; value: Reco
                 <SelectItem key={a.id} value={a.name} disabled={(a.missingObjects ?? []).length > 0} data-testid={`${id}-account-${a.name}`}>
                   <span className="truncate">{a.name}</span>
                   <span className="ml-2 truncate text-xs text-muted-foreground">
-                    {(a.missingObjects ?? []).length > 0 ? `${appName} not installed` : (a.identity ?? []).map((e) => e.shown).join(' · ')}
+                    {(a.missingObjects ?? []).length > 0 ? `${appName} not installed` : a.sandbox ? 'Test account' : (a.identity ?? []).map((e) => e.shown).join(' · ')}
                   </span>
                 </SelectItem>
               ))}
-            {named && !(accounts.data ?? []).some((a) => a.name === named) && <SelectItem value={named}>{`${named} · not one of the team’s accounts`}</SelectItem>}
+            {named && !(accounts.data ?? []).some((a) => a.name === named) && <SelectItem value={named}>{`${named} · not an account of this team`}</SelectItem>}
           </SelectContent>
         </Select>
       )}

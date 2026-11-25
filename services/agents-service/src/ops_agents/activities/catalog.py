@@ -21,11 +21,15 @@ from ops_agent_kernel.types import (
     Guardrail,
     PromptFragment,
     Skill,
+    SkillInput,
     ToolGrant,
     WidgetTemplate,
 )
 from ops_contracts.chat import EffectiveSettings
+from ops_contracts.skill_run import ReturnField, SkillProgram, SkillStep
+from ops_service_kit.http import Json, JsonList
 
+from ..app.skill_content import program_of
 from .agent_limits import AgentLimits
 
 
@@ -56,6 +60,14 @@ class GuardrailRule(_Model):
     hold: bool = Field(default=False, alias="holdUntilChecked")
 
 
+class SkillInputRule(_Model):
+    """One input a pinned skill version declares; its type and description are for the page, not the turn."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+    name: str
+    required: bool = False
+
+
 class SkillPinRule(_Model):
     """A pinned skill version, as the agent version snapshotted it (spec 11)."""
 
@@ -75,17 +87,50 @@ class SkillPinRule(_Model):
     tool_ids: list[str] = Field(default_factory=list[str], alias="toolIds")
     # The skill's named parts ({slug, name, useWhen, instructions, budget?}); each is offered as its own entry.
     parts: list[dict[str, Any]] = []
+    # The skill's steps and what it ends with (SkillProgram, as stored); absent on a pin saved before steps, which
+    # then loads as text as it always has.
+    not_when: str = Field(default="", alias="notWhen")
+    steps: list[SkillStep] = []
+    exit: dict[str, str] = {}
+    returns: list[ReturnField] = []
+    success: list[str] = []
+    # What the version needs to start ({name, required}); a skill with steps does not start while one is missing.
+    inputs: list[SkillInputRule] = []
+
+    def content(self) -> Json:
+        """The pin as the stored skill version it was taken from, for `kernel_skills`."""
+        program = SkillProgram(
+            not_when=self.not_when, steps=self.steps, exit=self.exit, returns=self.returns, success=self.success
+        )
+        return {
+            "name": self.name,
+            "useWhen": self.use_when,
+            "loading": self.loading,
+            "instructions": self.instructions,
+            "guardrails": [*self.guardrails],
+            "refusal": self.refusal,
+            "parts": [*self.parts],
+            "inputs": [i.model_dump() for i in self.inputs],
+            **(program.model_dump(mode="json", by_alias=True, exclude_none=True) if self.steps else {}),
+        }
 
 
-def kernel_skills(skill_id: str, version: int, slug: str, content: dict[str, Any], tokens: int = 0) -> list[Skill]:
+def kernel_skills(skill_id: str, version: int, slug: str, content: Json, tokens: int = 0) -> list[Skill]:
     """A skill version as the kernel reads it: the whole skill, or one entry per part (`<skill>/<part>`) whose body is
     the shared instructions and then the part's. The one place a skill's parts become what a turn can load."""
     guardrails = tuple(str(g) for g in cast(list[Any], content.get("guardrails") or []))
     refusal = str(content.get("refusal") or "")
-    loading = content.get("loading") or "on_match"
+    loading = cast(Literal["on_match", "always"], content.get("loading") or "on_match")
     shared = str(content.get("instructions") or "")
-    parts: list[dict[str, Any]] = list(content.get("parts") or [])
+    # A stored version's parts are objects (the skill route checks them); any other value fails below as it did.
+    parts = cast(list[Json], list(cast(JsonList, content.get("parts") or [])))
     if not parts:
+        # A version with steps is started and run step by step; one without has no program and loads as text.
+        program = program_of(content)
+        inputs = tuple(
+            SkillInput(str(i["name"]), bool(i.get("required")))
+            for i in cast(list[Json], list(cast(JsonList, content.get("inputs") or [])))
+        )
         return [
             Skill(
                 skill_id,
@@ -98,6 +143,8 @@ def kernel_skills(skill_id: str, version: int, slug: str, content: dict[str, Any
                 guardrails,
                 tokens or max(1, len(shared) // 4),
                 refusal,
+                program=program,
+                inputs=inputs,
             )
         ]
     out: list[Skill] = []
@@ -116,7 +163,7 @@ def kernel_skills(skill_id: str, version: int, slug: str, content: dict[str, Any
                 max(1, (len(body) + 3) // 4),
                 refusal,
                 str(p["slug"]),
-                int(p.get("budget") or 0),
+                int(cast(int, p.get("budget") or 0)),
             )
         )
     return out
@@ -181,6 +228,11 @@ class AgentDefinition(_Model):
     # Which skills a person may pick for one reply in a chat with this agent: any published team skill whose tools it
     # holds, only its attached skills, or none.
     skill_menu: Literal["team", "attached", "off"] = "team"
+    # The brief's never rules, written last in the prompt in both prompt modes; none on a version without a brief.
+    never: list[str] = []
+    # How hard the model thinks (low, medium, high); None sends no setting. Off: one tool call at a time.
+    thinking: str | None = None
+    parallel_reads: bool = True
 
 
 class ApprovalTemplate(_Model):
@@ -335,24 +387,11 @@ class Catalog(_Model):
                 if not g.enabled
             ],
             skills=[
-                s
-                for k in agent.skills
-                for s in kernel_skills(
-                    k.skill_id,
-                    k.version,
-                    k.slug,
-                    {
-                        "name": k.name,
-                        "useWhen": k.use_when,
-                        "loading": k.loading,
-                        "instructions": k.instructions,
-                        "guardrails": k.guardrails,
-                        "refusal": k.refusal,
-                        "parts": k.parts,
-                    },
-                    k.tokens,
-                )
+                s for k in agent.skills for s in kernel_skills(k.skill_id, k.version, k.slug, k.content(), k.tokens)
             ],
+            never=list(agent.never),
+            thinking=agent.thinking,
+            parallel_reads=agent.parallel_reads,
             # Callers narrow widgets only: pinned ones switched off, composing off, a lower cap (resolver-checked).
             widgets=[w.template() for w in agent.widgets if not effective or w.widget_id not in effective.widgets_off],
             compose=agent.compose and not (effective and effective.compose_off),

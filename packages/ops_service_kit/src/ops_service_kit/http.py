@@ -22,9 +22,11 @@ from starlette.middleware import Middleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from typing_extensions import TypeVar
 
-from .errors import ApiError, TooManyRequests
+from ops_contracts.errors import Code, ErrorKind
+
+from .errors import ApiError, TooManyRequests, error_row
 from .ids import new_id
-from .listing import page_sizes
+from .listing import ListParams, page_sizes
 from .logging import get_logger
 from .request_timing import RequestTimingMiddleware, current_request_id
 from .settings import Settings
@@ -89,6 +91,10 @@ class ErrorBody(Out):
     message: str
     status: int
     request_id: str
+    # The error model's kind and whether trying the same call again can help (ops_contracts.errors.CODES), so no
+    # caller keeps its own table of what a status means.
+    kind: ErrorKind
+    retryable: bool
     details: Any = None
 
 
@@ -284,14 +290,85 @@ def paged(
     return out
 
 
+def page_rows(
+    rows: list[R],
+    params: ListParams,
+    *,
+    search: Callable[[R], str],
+    key: Callable[[R], str],
+    filters: Mapping[str, Callable[[R], str | None]] | None = None,
+    sortable: Mapping[str, Callable[[R], Any]] | None = None,
+) -> ListPage[R]:
+    """The ListResult JSON of rows a service holds in memory rather than in a table (the templates the team's plugins
+    ship), with the same `ids`, search, filters, facets, sort and page window as `ops_store.listing.list_page`, which
+    every list kept in a database uses instead. `search` gives a row's searchable text, `key` its id; rows keep the
+    order given unless `sortBy` names a `sortable` entry, and equal values stay in that order."""
+    filters = filters or {}
+    if params.ids is not None:
+        wanted = set(params.ids)
+        chosen = [r for r in rows if key(r) in wanted]
+    else:
+        words = (params.search or "").strip().casefold()
+        chosen = [r for r in rows if words in search(r).casefold()] if words else list(rows)
+
+    def kept(r: R, skip: str | None = None) -> bool:
+        return all(str(filters[k](r)) in v for k, v in params.filters.items() if k in filters and v and k != skip)
+
+    facets = {
+        name: {
+            str(value): sum(1 for r in chosen if kept(r, name) and str(read(r)) == str(value))
+            for value in {read(r) for r in chosen if kept(r, name)}
+            if value is not None
+        }
+        for name, read in filters.items()
+    }
+    listed = [r for r in chosen if kept(r)]
+    by = (sortable or {}).get(params.sort_by or "")
+    if by is not None:
+        listed.sort(key=by, reverse=params.sort_order != "asc")
+    page, offset = page_window(len(listed), params.page, params.page_size)
+    return paged(listed[offset : offset + params.page_size], len(listed), page, params.page_size, facets=facets)
+
+
 def ok(data: Any, status: int = 200) -> JSONResponse:
     return JSONResponse({"success": True, "data": data}, status_code=status)
 
 
-def error_body(status: int, code: str, message: str) -> dict[str, Any]:
+class ErrorJSON(TypedDict):
+    """`ErrorBody` as `error_body` builds it. `details` is added by whoever has some, any value `ErrorBody.details`
+    documents (an error's details, a validation error list, a refused call's reasons)."""
+
+    code: str
+    message: str
+    status: int
+    requestId: str
+    kind: ErrorKind
+    retryable: bool
+    details: NotRequired[object]
+
+
+class ErrorBodyJSON(TypedDict):
+    """`ErrorEnvelope` as `error_body` builds it."""
+
+    success: Literal[False]
+    error: ErrorJSON
+
+
+def error_body(status: int, code: str, message: str, *, row: Code | None = None) -> ErrorBodyJSON:
+    """The error envelope; `kind` and `retryable` come from `row` (an ApiError's `row`), else the code's own row or
+    its status's (ops_service_kit.errors.error_row)."""
     # The request's own id, so a reported error leads to its log lines; minted when built outside a request.
     request_id = current_request_id() or new_id("req")
-    return {"success": False, "error": {"code": code, "message": message, "status": status, "requestId": request_id}}
+    said = row or error_row(status, code)
+    error: ErrorJSON = {
+        "code": code,
+        "message": message,
+        "status": status,
+        "requestId": request_id,
+        "kind": said.kind,
+        "retryable": said.retryable,
+    }
+    return {"success": False, "error": error}
 
 
 class _UnhandledAsEnvelope:
@@ -339,7 +416,7 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(ApiError)
     async def api_error(_: Request, e: ApiError) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        body = error_body(e.status, e.code, e.message)
+        body = error_body(e.status, e.code, e.message, row=e.row)
         if e.details:
             body["error"]["details"] = e.details
         wait = e.retry_after_s if isinstance(e, TooManyRequests) else None

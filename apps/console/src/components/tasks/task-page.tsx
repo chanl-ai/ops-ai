@@ -19,11 +19,13 @@ import type { Review } from '@/lib/types/domain';
  * What the person decides on: the task's regions, or today's body for a type with none, and Details folded below.
  * One component for the task's page and the queue's quick view, so both say the same thing in the same words.
  */
-export function TaskDecide({ review, view, edits, onEdit, checks }: { review: Review; view: TaskView; edits: ReadEdits; onEdit?: (record: number, key: string, text: string) => void; checks?: ReadChecks }) {
+export function TaskDecide({ review, view, edits, onEdit, checks, between }: { review: Review; view: TaskView; edits: ReadEdits; onEdit?: (record: number, key: string, text: string) => void; checks?: ReadChecks; between?: React.ReactNode }) {
   const fieldEdits = { open: !!onEdit || !!checks, edits, onEdit: onEdit ?? (() => {}), checks };
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="task-decide">
       {view.legacy ? <ReviewDetailBody review={review} edits={edits} onEdit={onEdit} checks={checks} /> : view.decide.map((node, i) => <KindView key={i} node={node} fieldEdits={fieldEdits} />)}
+      {/* The choice sits between what decides the task and the folded Details, so it is in view without opening them. */}
+      {between}
       {!view.legacy && (view.details.length > 0 || !!view.technical?.length) && (
         <Collapsible className="rounded-lg border" data-testid="task-details">
           <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium" data-testid="task-details-toggle">

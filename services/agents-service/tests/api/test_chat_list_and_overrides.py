@@ -122,7 +122,7 @@ async def test_a_page_read_does_not_load_every_thread(
     async def every_thread(*_a: Any, **_k: Any) -> list[dict[str, Any]]:
         raise AssertionError("the list read every thread to serve one page")
 
-    monkeypatch.setattr(GraphStore, "threads", every_thread)
+    monkeypatch.setattr(GraphStore, "thread_rows", every_thread)
     page = (await client.get("/chat/threads", params={"pageSize": 5})).json()["data"]
     assert [t["id"] for t in page["data"]] == made[:6:-1]
     assert page["pagination"]["total"] == 12 and page["nextCursor"]

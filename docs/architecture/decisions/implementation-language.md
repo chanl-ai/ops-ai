@@ -77,7 +77,7 @@ not its code.
 - The bank's platform engineering standard is Java or Kotlin with a large team to own it: then D,
   with Python kept for agent and eval activities.
 - Measured Python interpreter throughput under the Temporal Python sandbox falls short of the
-  bank's peak intake (to be load-tested in the [implementation plan](../../plan/implementation-plan.md), phase 1).
+  bank's peak intake (to be load-tested).
 
 ## Phase 1 vs later
 

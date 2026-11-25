@@ -20,9 +20,10 @@ from ops_agents.api.task_type_seeds import StoredTaskTypes, seeded_store
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
-from ops_engine.store import DefinitionStore, RunStore
+from ops_engine.store import DefinitionStore
 from ops_service_kit.ids import new_id
 from tests.engine.test_worker import CountingTools, drain, worker
+from tests.run_rows import write_run
 
 FLOW = parse(
     {
@@ -54,7 +55,7 @@ FLOW = parse(
 
 def _bank_change(question: str) -> dict[str, Any]:
     """A team's copy of write_approval whose header asks `question`, a template over the step's params."""
-    seed = next(s for s in tt.seeds() if s["id"] == "write_approval")
+    seed: Any = next(s for s in tt.seeds() if s["id"] == "write_approval")
     props = {**seed["params"]["properties"], "vendor": {"type": "string"}}
     regions = [{"region": "header", "bind": {"title": question}}, *seed["regions"][1:]]
     return {**seed, "name": "Bank change", "params": {**seed["params"], "properties": props}, "regions": regions}
@@ -86,8 +87,9 @@ async def test_an_open_task_keeps_its_version_when_the_type_moves_on(engine: Asy
         run_id = new_id("wfrun")
         facts = [{"label": "New account", "value": "****4410"}]
         run = {"id": run_id, "team_id": "team_a", "workflow_id": FLOW.id, "version": version, "digest": FLOW.digest()}
-        await RunStore(tx).create(
-            run | {"run_key": run_id, "mode": "live", "input": {"vendor": "Acme", "facts": facts}, "created_by": "a@x"}
+        await write_run(
+            tx,
+            run | {"run_key": run_id, "mode": "live", "input": {"vendor": "Acme", "facts": facts}, "created_by": "a@x"},
         )
     w = worker(engine, CountingTools(), InMemorySaver())
     w.host.ports.task_types = StoredTaskTypes(engine)
@@ -96,7 +98,8 @@ async def test_an_open_task_keeps_its_version_when_the_type_moves_on(engine: Asy
     with tenant_scope(tenant):
         await types.save_draft("bank_change", _bank_change("Approve new bank details for {vendor}"), by="b@x")
         await types.publish("bank_change", 2, by="b@x")
-        task = (await engine_reviews.get(rt, run_id))["task"]
+        review: Any = await engine_reviews.get(rt, run_id)
+        task = review["task"]
     assert task["type"] == {"id": "bank_change", "version": 1, "name": "Bank change"}
     regions = {r["region"]: r["data"] for r in task["regions"]}
     assert regions["header"] == {"title": "Change the bank account for Acme?"}

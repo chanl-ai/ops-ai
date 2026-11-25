@@ -32,6 +32,11 @@ class AddCell(TypedDict, closed=True):
     area: str
 
 
+class AddReference(TypedDict, closed=True):
+    id: str
+    kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
+
+
 class AgentControls(TypedDict, closed=True):
     channels: list[Literal["voice", "chat", "email", "api"]]
     evals: bool
@@ -56,6 +61,11 @@ class AgentInput(TypedDict, closed=True):
     protection: NotRequired[Literal["system", "managed"] | None]
     role: str
     templateId: NotRequired[str | None]
+
+
+class AgentPrompt(TypedDict, closed=True):
+    text: str
+    version: int
 
 
 class AgentRef(TypedDict, closed=True):
@@ -87,6 +97,14 @@ class AgentSkillPin(TypedDict, closed=True):
     upgradeAvailable: bool
     upgradeBlocked: NotRequired[str | None]
     useWhen: str
+
+
+class AgentUses(TypedDict, closed=True):
+    agents: NotRequired[int]
+    knowledgeBases: NotRequired[int]
+    skills: NotRequired[int]
+    tools: NotRequired[int]
+    workflows: NotRequired[int]
 
 
 class AgentUsing(TypedDict, closed=True):
@@ -241,10 +259,65 @@ class BlockedBy(TypedDict, closed=True):
     when: Literal["before", "after"]
 
 
+class Blocker(TypedDict, closed=True):
+    code: str
+    field: NotRequired[str | None]
+    level: NotRequired[Literal["error", "warning"]]
+    message: str
+    node: NotRequired[str | None]
+
+
+class BlockerPosition(TypedDict, closed=True):
+    field: str
+    index: NotRequired[int | None]
+    step: NotRequired[int | None]
+
+
 class BoundWorkflow(TypedDict, closed=True):
     id: str
     name: str
     version: int
+
+
+HandOffItem: TypeAlias = str
+
+
+NeverItem: TypeAlias = str
+
+
+Succes: TypeAlias = str
+
+
+class Brief(TypedDict, closed=True):
+    examples: NotRequired[str]
+    goal: NotRequired[str]
+    handOff: NotRequired[list[HandOffItem]]
+    howToAnswer: NotRequired[str]
+    never: NotRequired[list[NeverItem]]
+    purpose: str
+    success: NotRequired[list[Succes]]
+
+
+class BriefDraft(TypedDict, closed=True):
+    examples: str
+    handOff: list[str]
+    howToAnswer: str
+    job: str
+    never: list[str]
+
+
+class BriefDraftInput(TypedDict, closed=True):
+    description: str
+
+
+class BriefView(TypedDict, closed=True):
+    examples: NotRequired[str]
+    goal: NotRequired[str]
+    handOff: NotRequired[list[str]]
+    howToAnswer: NotRequired[str]
+    never: NotRequired[list[str]]
+    purpose: str
+    success: NotRequired[list[str]]
 
 
 class BudgetCaps(TypedDict, closed=True):
@@ -269,6 +342,12 @@ class BulkDecisionInput(TypedDict, closed=True):
     ids: list[str]
     reason: NotRequired[str | None]
     stepUpToken: NotRequired[str | None]
+
+
+class BulkRunsResult(TypedDict, closed=True):
+    action: str
+    changed: list[str]
+    skipped: list[str]
 
 
 class BulkSkip(TypedDict, closed=True):
@@ -406,9 +485,18 @@ class CopiedFrom(TypedDict, closed=True):
 
 
 class CopyRef(TypedDict, closed=True):
-    detachedAt: NotRequired[str | None]
+    detachedAt: str | None
     id: str
-    kind: Literal["agent", "skill", "workflow", "guardrail", "case_type", "task_type"]
+    kind: Literal[
+        "agent",
+        "skill",
+        "workflow",
+        "document_type",
+        "case_type",
+        "task_type",
+        "guardrail",
+        "knowledge_source",
+    ]
     recordId: str
     source: str
     templateId: str
@@ -458,6 +546,8 @@ class DefinitionCheck(TypedDict, closed=True):
 
 
 class DefinitionPublishInput(TypedDict, closed=True):
+    baseDigest: NotRequired[str | None]
+    baseVersion: NotRequired[int | None]
     note: NotRequired[str]
     version: NotRequired[int | None]
 
@@ -588,6 +678,11 @@ class EnvelopeAccountUses(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeAgentPrompt(TypedDict, closed=True):
+    data: AgentPrompt
+    success: Literal[True]
+
+
 class EnvelopeAppToolsGiven(TypedDict, closed=True):
     data: AppToolsGiven
     success: Literal[True]
@@ -595,6 +690,16 @@ class EnvelopeAppToolsGiven(TypedDict, closed=True):
 
 class EnvelopeApproval(TypedDict, closed=True):
     data: Approval
+    success: Literal[True]
+
+
+class EnvelopeBriefDraft(TypedDict, closed=True):
+    data: BriefDraft
+    success: Literal[True]
+
+
+class EnvelopeBulkRunsResult(TypedDict, closed=True):
+    data: BulkRunsResult
     success: Literal[True]
 
 
@@ -641,8 +746,10 @@ class EnvelopeListAgentVersion(TypedDict, closed=True):
 class ErrorBody(TypedDict, closed=True):
     code: str
     details: NotRequired[Any]
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"]
     message: str
     requestId: str
+    retryable: bool
     status: int
 
 
@@ -656,13 +763,16 @@ class EvalCaseContextInput(TypedDict, closed=True):
 
 
 class EvalCheckInput(TypedDict, closed=True):
+    rubric: NotRequired[str | None]
     text: NotRequired[str | None]
     tool: NotRequired[str | None]
     type: str
 
 
 class EvalCheckResult(TypedDict, closed=True):
+    confidence: NotRequired[float | None]
     label: str
+    reason: NotRequired[str | None]
     status: Literal["pass", "fail"]
 
 
@@ -872,6 +982,20 @@ class HeldTool(TypedDict, closed=True):
     reviewers: NotRequired[str | None]
 
 
+class IfNot(TypedDict, closed=True):
+    action: NotRequired[Literal["retry", "goto", "exit"]]
+    exit: NotRequired[str | None]
+    retries: NotRequired[int]
+    step: NotRequired[int | None]
+
+
+class IfNotOut(TypedDict, closed=True):
+    action: NotRequired[Literal["retry", "goto", "exit"]]
+    exit: NotRequired[str | None]
+    retries: NotRequired[int]
+    step: NotRequired[int | None]
+
+
 class InboxInput(TypedDict, closed=True):
     kind: Literal["customer_reply"]
     messageKey: str
@@ -912,7 +1036,7 @@ class Installation(TypedDict, closed=True):
 
 
 class Installed(TypedDict, closed=True):
-    changed: NotRequired[bool]
+    changed: bool
     copies: int
     newerAvailable: bool
     version: int | None
@@ -935,6 +1059,16 @@ class JobInput(TypedDict, closed=True):
 
 
 JsonValue: TypeAlias = Any
+
+
+class Jump(TypedDict, closed=True):
+    exit: NotRequired[str | None]
+    step: NotRequired[int | None]
+
+
+class JumpOut(TypedDict, closed=True):
+    exit: NotRequired[str | None]
+    step: NotRequired[int | None]
 
 
 class KindRow(TypedDict, closed=True):
@@ -1147,6 +1281,18 @@ class OptionsPage(TypedDict, closed=True):
     nextCursor: NotRequired[str | None]
 
 
+class OutdatedCopyView(TypedDict, closed=True):
+    baseVersion: int
+    checks: list[DefinitionCheck]
+    definition: dict[str, JsonValue]
+    digest: str
+    newerAt: str | None
+    newerBy: str | None
+    newerVersion: int
+    updatedAt: str
+    updatedBy: str
+
+
 class OverviewCaseRow(TypedDict, closed=True):
     customerName: NotRequired[str | None]
     id: str
@@ -1185,6 +1331,16 @@ class Pagination(TypedDict, closed=True):
     pageSize: int
     total: int
     totalPages: int
+
+
+class Patterns(TypedDict, closed=True):
+    parallelReads: NotRequired[bool]
+    thinking: NotRequired[Literal["default", "low", "medium", "high"]]
+
+
+class PatternsView(TypedDict, closed=True):
+    parallelReads: NotRequired[bool]
+    thinking: NotRequired[Literal["default", "low", "medium", "high"]]
 
 
 class PauseInput(TypedDict, closed=True):
@@ -1277,6 +1433,7 @@ class PublishIn(TypedDict, closed=True):
 
 
 class PublishRequestInput(TypedDict, closed=True):
+    follows: NotRequired[str | None]
     note: NotRequired[str]
     version: int
 
@@ -1314,9 +1471,30 @@ class Received(TypedDict, closed=True):
     runId: NotRequired[str | None]
 
 
-class Ref(TypedDict, closed=True):
+class RefInput(TypedDict, closed=True):
+    id: str
+    kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
+
+
+class RefOutput(TypedDict, closed=True):
     id: str
     kind: Literal["run", "thread", "chat", "review", "email", "case", "workflow", "process"]
+
+
+class RefOut(TypedDict, closed=True):
+    id: str
+    kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
+
+
+class ReferenceItem(TypedDict, closed=True):
+    adds: NotRequired[str | None]
+    disabled: NotRequired[str | None]
+    held: NotRequired[bool | None]
+    hint: NotRequired[str | None]
+    id: str
+    kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
+    label: str
+    needsApproval: NotRequired[bool]
 
 
 class RemoveCell(TypedDict, closed=True):
@@ -1364,6 +1542,20 @@ class Retried(TypedDict, closed=True):
 class RetryView(TypedDict, closed=True):
     attempts: int
     backoffSeconds: list[float]
+
+
+class ReturnField(TypedDict, closed=True):
+    description: NotRequired[str]
+    name: str
+    required: NotRequired[bool]
+    type: Literal["text", "number", "yes_no"]
+
+
+class ReturnFieldOut(TypedDict, closed=True):
+    description: NotRequired[str]
+    name: str
+    required: NotRequired[bool]
+    type: Literal["text", "number", "yes_no"]
 
 
 class ReviewDecisionInput(TypedDict, closed=True):
@@ -1470,13 +1662,18 @@ class RunChild(TypedDict, closed=True):
 
 class RunFailure(TypedDict, closed=True):
     attempt: NotRequired[int | None]
-    code: NotRequired[str | None]
-    field: NotRequired[str | None]
+    code: str
+    details: NotRequired[dict[str, str | int | float | bool | None]]
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"]
     message: str
     nodeId: NotRequired[str | None]
     nodeName: NotRequired[str | None]
-    retryable: NotRequired[bool | None]
+    of: NotRequired[int | None]
+    retryAfterSeconds: NotRequired[float | None]
+    retryable: bool
     suggestion: NotRequired[str | None]
+    traceId: NotRequired[str | None]
+    userMessage: str
 
 
 class RunFile(TypedDict, closed=True):
@@ -1541,7 +1738,21 @@ class RunWaiting(TypedDict, closed=True):
     payload: dict[str, JsonValue]
 
 
+class RunsFilter(TypedDict, closed=True):
+    code: NotRequired[str | None]
+    createdFrom: NotRequired[str | None]
+    createdTo: NotRequired[str | None]
+    kind: NotRequired[str | None]
+    workflowId: NotRequired[str | None]
+
+
+class SaveBase(TypedDict, closed=True):
+    digest: str
+    version: int
+
+
 class SavedCaseCheck(TypedDict, closed=True):
+    rubric: NotRequired[str | None]
     text: NotRequired[str | None]
     tool: NotRequired[str | None]
     type: str
@@ -1642,11 +1853,9 @@ class SkillProvenance(TypedDict, closed=True):
     origin: str
 
 
-class SkillPublishCheck(TypedDict, closed=True):
-    approversNeeded: int
-    blockers: list[str]
-    canRequest: bool
-    editClass: Literal["free", "re_test", "re_approval"]
+class SkillPublishAgent(TypedDict, closed=True):
+    name: str
+    pinnedVersion: int | None
 
 
 class SkillRenderInput(TypedDict, closed=True):
@@ -1675,6 +1884,48 @@ class SkillResource(TypedDict, closed=True):
     kind: Literal["file", "template"]
     name: str
     size: NotRequired[int | None]
+
+
+class SkillTextError(TypedDict, closed=True):
+    id: str
+    line: int
+    message: str
+
+
+class SkillTextInput(TypedDict, closed=True):
+    exit: NotRequired[dict[str, str]]
+    hasParts: NotRequired[bool]
+    loading: NotRequired[Literal["on_match", "always"]]
+    text: str
+
+
+class SkillTextKeyword(TypedDict, closed=True):
+    end: int
+    start: int
+    word: Literal["if", "else", "stop"]
+
+
+class SkillTextLine(TypedDict, closed=True):
+    depth: NotRequired[int]
+    how: NotRequired[Literal["checked", "agent"] | None]
+    keyword: NotRequired[SkillTextKeyword | None]
+    kind: Literal["text", "step", "if", "else", "stop", "blank"]
+    line: int
+    step: NotRequired[int | None]
+    tool: NotRequired[str | None]
+
+
+class SkillTextNote(TypedDict, closed=True):
+    line: int
+    message: str
+
+
+class SkillTextUses(TypedDict, closed=True):
+    agents: int
+    knowledge: int
+    skills: int
+    tools: int
+    workflows: int
 
 
 class SkillToolRef(TypedDict, closed=True):
@@ -1769,6 +2020,22 @@ class StepAttempt(TypedDict, closed=True):
     port: str | None
     startedAt: str
     status: str
+
+
+class StepCheck(TypedDict, closed=True):
+    by: NotRequired[Literal["rule", "model"] | None]
+    text: str
+
+
+class StepCheckOut(TypedDict, closed=True):
+    by: NotRequired[Literal["rule", "model"] | None]
+    text: str
+
+
+class StepRefView(TypedDict, closed=True):
+    id: str
+    name: str
+    type: str
 
 
 class StepUpInput(TypedDict, closed=True):
@@ -1931,6 +2198,11 @@ class TaskWarning(TypedDict, closed=True):
     severity: Literal["warning", "error"]
 
 
+class TeamChoice(TypedDict, closed=True):
+    id: str
+    name: str | None
+
+
 class TeamUsage(TypedDict, closed=True):
     liveWorkflows: list[str]
     runsInProgress: int
@@ -1950,7 +2222,7 @@ class TemplatePlugin(TypedDict, closed=True):
 
 class TemplateRequires(TypedDict, closed=True):
     bind: list[dict[str, str]]
-    resources: NotRequired[list[str]]
+    resources: list[str]
     tools: list[str]
 
 
@@ -1999,6 +2271,11 @@ class TestView(TypedDict, closed=True):
     steps: list[TestStepView]
 
 
+class TextHint(TypedDict, closed=True):
+    line: int
+    message: str
+
+
 class ThreadCreated(TypedDict, closed=True):
     created: bool
     digest: NotRequired[str | None]
@@ -2017,7 +2294,6 @@ class ThreadInput(TypedDict, closed=True):
     externalKey: NotRequired[str | None]
     graph: str
     metadata: NotRequired[dict[str, Any]]
-    parentThreadId: NotRequired[str | None]
     version: NotRequired[int | None]
 
 
@@ -2091,6 +2367,26 @@ class ToolsNotAdded(TypedDict, closed=True):
     name: str
 
 
+class TryStep(TypedDict, closed=True):
+    access: NotRequired[str | None]
+    accounts: NotRequired[dict[str, str]]
+    do: str
+    holds: NotRequired[bool | None]
+    input: NotRequired[dict[str, JsonValue]]
+    key: str
+    number: int
+    sample: NotRequired[JsonValue]
+    sampleFrom: NotRequired[Literal["last_run", "schema", "none"]]
+    test: NotRequired[str | None]
+    tool: NotRequired[str | None]
+
+
+class TurnUsage(TypedDict, closed=True):
+    inputTokens: int
+    model: str
+    outputTokens: int
+
+
 class TypeRef(TypedDict, closed=True):
     id: str
     version: NotRequired[int | None]
@@ -2138,6 +2434,7 @@ class UploadedFile(TypedDict, closed=True):
 
 
 class UsedIn(TypedDict, closed=True):
+    channel: NotRequired[Literal["email"] | None]
     own: NotRequired[bool | None]
     pinnedVersion: int
     status: Literal["live", "draft", "paused"]
@@ -2266,6 +2563,22 @@ class WorkflowTestRun(TypedDict, closed=True):
     pausesApproved: int
     status: Literal["completed", "stopped"]
     visited: list[str]
+
+
+class WorkingCopyInput(TypedDict, closed=True):
+    baseDigest: str
+    baseVersion: int
+    definition: dict[str, JsonValue]
+    replacesDigest: NotRequired[str | None]
+
+
+class WorkingCopyView(TypedDict, closed=True):
+    baseVersion: int
+    checks: list[DefinitionCheck]
+    definition: dict[str, JsonValue]
+    digest: str
+    updatedAt: str
+    updatedBy: str
 
 
 class WouldPause(TypedDict, closed=True):
@@ -2418,6 +2731,9 @@ class AgentLimits(TypedDict, closed=True):
 class AgentPatch(TypedDict, closed=True):
     accounts: NotRequired[dict[str, str] | None]
     allTeamKnowledgeBases: NotRequired[bool | None]
+    baseDigest: str
+    baseVersion: int
+    brief: NotRequired[Brief | None]
     channels: NotRequired[list[Literal["voice", "chat", "email", "api"]] | None]
     collections: NotRequired[list[str] | None]
     guardrailPins: NotRequired[list[GuardrailPinInput] | None]
@@ -2428,6 +2744,8 @@ class AgentPatch(TypedDict, closed=True):
     model: NotRequired[str | None]
     name: NotRequired[str | None]
     note: NotRequired[str | None]
+    patterns: NotRequired[Patterns | None]
+    promptMode: NotRequired[Literal["brief", "full"] | None]
     protection: NotRequired[Literal["system", "managed"] | None]
     role: NotRequired[str | None]
     skillMenu: NotRequired[Literal["team", "attached", "off"] | None]
@@ -2490,6 +2808,7 @@ class AgentTestTurn(TypedDict, closed=True):
     tookMs: int
     toolCalls: list[ToolCallView]
     tools: NotRequired[list[HeldTool]]
+    usage: TurnUsage
     wouldPause: NotRequired[WouldPause | None]
 
 
@@ -2564,9 +2883,24 @@ class BatchView(TypedDict, closed=True):
     workflowId: str
 
 
+class Branch(TypedDict, closed=True):
+    otherwise: Jump
+    test: StepCheck
+
+
+class BranchOut(TypedDict, closed=True):
+    otherwise: JumpOut
+    test: StepCheckOut
+
+
 class BulkResult(TypedDict, closed=True):
     skipped: list[BulkSkip]
     updated: list[str]
+
+
+class BulkRunsRequest(TypedDict, closed=True):
+    action: Literal["redrive", "cancel"]
+    filter: NotRequired[RunsFilter]
 
 
 class CaseEventView(TypedDict, closed=True):
@@ -2733,13 +3067,16 @@ class DefinitionView(TypedDict, closed=True):
     digest: str
     liveVersion: int | None
     name: str
+    outdatedCopy: NotRequired[OutdatedCopyView | None]
     paused: bool
     review: OpenPublishRequest | None
+    saveBase: SaveBase
     stage: Literal["draft", "in_review", "live", "paused", "superseded"]
     startForm: NotRequired[StartFormView | None]
     version: int
     versions: list[DefinitionVersion]
     workflowId: str
+    workingCopy: NotRequired[WorkingCopyView | None]
 
 
 class DryRun(TypedDict, closed=True):
@@ -3015,11 +3352,6 @@ class EnvelopeListMailboxView(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListMemoryView(TypedDict, closed=True):
-    data: list[MemoryView]
-    success: Literal[True]
-
-
 class EnvelopeListModelAlias(TypedDict, closed=True):
     data: list[ModelAlias]
     success: Literal[True]
@@ -3037,11 +3369,6 @@ class EnvelopeListPromptVariable(TypedDict, closed=True):
 
 class EnvelopeListRunJournalEntry(TypedDict, closed=True):
     data: list[RunJournalEntry]
-    success: Literal[True]
-
-
-class EnvelopeListTemplateView(TypedDict, closed=True):
-    data: list[TemplateView]
     success: Literal[True]
 
 
@@ -3072,16 +3399,64 @@ class EvalCaseOutcome(TypedDict, closed=True):
 class EvalCaseResult(TypedDict, closed=True):
     caseName: str
     draft: EvalCaseOutcome
+    judgeUnpriced: NotRequired[bool]
     live: NotRequired[EvalCaseOutcome | None]
     regression: NotRequired[bool]
+    unpriced: NotRequired[bool]
 
 
 class EvalCasesInput(TypedDict, closed=True):
     cases: NotRequired[list[EvalCaseInput]]
 
 
+class EvalGate(TypedDict, closed=True):
+    blocked: bool
+    steps: list[GateStep]
+
+
+class EvalGateDetails(TypedDict, closed=True):
+    steps: list[GateStep]
+
+
 class EvalRunInput(TypedDict, closed=True):
     cases: NotRequired[list[EvalCaseInput] | None]
+    trigger: NotRequired[str | None]
+
+
+class EvalRunRecord(TypedDict, closed=True):
+    agentId: str
+    costUsd: float
+    gate: NotRequired[EvalGate | None]
+    id: str
+    liveVersion: int | None
+    ranAt: str
+    results: list[EvalCaseResult]
+    startedBy: str
+    status: Literal["complete"]
+    summary: EvalSummary
+    trigger: str
+    unpriced: bool
+    version: int
+
+
+class EvalRunRow(TypedDict, closed=True):
+    agentId: str
+    costUsd: float
+    id: str
+    liveVersion: int | None
+    ranAt: str
+    startedBy: str
+    status: Literal["complete"]
+    summary: EvalSummary
+    trigger: str
+    unpriced: bool
+    version: int
+
+
+class FieldChangeView(TypedDict, closed=True):
+    after: NotRequired[JsonValue]
+    before: NotRequired[JsonValue]
+    field: str
 
 
 class FieldRead(TypedDict, closed=True):
@@ -3180,14 +3555,32 @@ class ListResultDefinitionRow(TypedDict, closed=True):
     pagination: Pagination
 
 
+class ListResultEvalRunRow(TypedDict, closed=True):
+    data: list[EvalRunRow]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
 class ListResultFormView(TypedDict, closed=True):
     data: list[FormView]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
 
+class ListResultMemoryView(TypedDict, closed=True):
+    data: list[MemoryView]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
 class ListResultTaskTypeView(TypedDict, closed=True):
     data: list[TaskTypeView]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultTemplateView(TypedDict, closed=True):
+    data: list[TemplateView]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -3282,6 +3675,33 @@ class PublicForm(TypedDict, closed=True):
     title: str
 
 
+class PublishBlocker(TypedDict, closed=True):
+    details: NotRequired[EvalGateDetails | None]
+    id: NotRequired[str | None]
+    kind: Literal[
+        "missing_field",
+        "missing_reference",
+        "unavailable_reference",
+        "bad_step",
+        "bad_check",
+        "bad_exit",
+        "sub_skill_not_held",
+        "prompt_rule_in_text",
+        "review_open",
+        "already_published",
+        "deprecated",
+        "too_long",
+        "mention",
+        "hint",
+        "eval_failed",
+        "eval_not_run",
+        "eval_no_cases",
+        "eval_setting_unread",
+    ]
+    message: str
+    position: NotRequired[BlockerPosition | None]
+
+
 class PublishRequestInfo(TypedDict, closed=True):
     changes: list[str]
     digest: str
@@ -3307,41 +3727,25 @@ class PublishRequestInfo(TypedDict, closed=True):
     workflowId: str
 
 
-class PublishReview(TypedDict, closed=True):
-    actionTool: str
-    agentName: str | None
-    agentPublish: NotRequired[AgentPublishRequest | None]
-    agentSlug: str
-    approvals: list[str]
-    assignee: NotRequired[str | None]
-    canDecide: NotRequired[bool | None]
-    confidence: float
-    createdAt: str
-    currency: str
-    customer: str
-    decidedAt: NotRequired[str | None]
-    decidedBy: NotRequired[str | None]
-    decisionReason: NotRequired[str | None]
-    egressHost: NotRequired[EgressHostRef | None]
-    evidence: list[Evidence]
-    id: str
-    kind: Literal["agent_publish", "publish_request", "egress_host"]
-    policy: ReviewPolicy
-    proposal: str
-    publish: NotRequired[PublishRequestInfo | None]
-    reasoning: list[str]
-    risk: Literal["critical", "high", "medium", "low"]
-    slaMinutes: NotRequired[int | None]
-    status: Literal["pending", "in_review", "approved", "rejected", "returned"]
-    title: str
-    toolModule: NotRequired[ToolModuleReviewRef | None]
-    workflowId: str
-    workflowName: str
-
-
 class ReadRecord(TypedDict, closed=True):
     fields: dict[str, FieldRead]
     values: dict[str, JsonValue]
+
+
+class ReferenceAdded(TypedDict, closed=True):
+    added: list[ReferenceItem]
+    agentVersion: int
+
+
+class ReferenceGroup(TypedDict, closed=True):
+    items: list[ReferenceItem]
+    kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
+    label: str
+    nextCursor: NotRequired[str | None]
+
+
+class ReferenceSearch(TypedDict, closed=True):
+    groups: list[ReferenceGroup]
 
 
 class RunDecision(TypedDict, closed=True):
@@ -3364,6 +3768,7 @@ class RunList(TypedDict, closed=True):
 
 class RunRow(TypedDict, closed=True):
     canCancel: NotRequired[bool | None]
+    canRedrive: NotRequired[bool | None]
     canRetry: NotRequired[bool | None]
     createdAt: str
     createdBy: str
@@ -3415,6 +3820,7 @@ class Skill(TypedDict, closed=True):
     needs: NotRequired[list[str] | None]
     origin: Literal["blank", "generated", "imported", "duplicated"]
     ownerTeam: str
+    ownerTeamName: NotRequired[str | None]
     parts: NotRequired[list[SkillPartSummary]]
     pendingReviewId: NotRequired[str | None]
     publishedVersion: int | None
@@ -3437,82 +3843,89 @@ class SkillActivity(TypedDict, closed=True):
     successRate: float | None
 
 
-class SkillContent(TypedDict, closed=True):
-    guardrails: list[str]
-    inputs: NotRequired[list[SkillInputField]]
-    instructions: str
-    knowledgeBases: list[str]
-    loading: Literal["on_match", "always"]
-    name: str
-    parts: NotRequired[list[SkillPart]]
-    refusal: NotRequired[str | None]
-    resources: list[SkillResource]
-    slug: str
-    tools: list[SkillToolRef]
-    useWhen: str
-
-
-class SkillCreateInput(TypedDict, closed=True):
-    guardrails: NotRequired[list[str]]
-    inputs: NotRequired[list[SkillInput]]
-    instructions: str
-    knowledgeBases: NotRequired[list[str]]
-    loading: NotRequired[Literal["on_match", "always"]]
-    name: str
-    origin: NotRequired[Literal["blank", "generated", "imported", "duplicated"]]
-    ownerTeam: str
-    parts: NotRequired[list[SkillPartInput]]
-    refusal: NotRequired[str]
-    requestReview: NotRequired[bool]
-    reviewNote: NotRequired[str]
-    slug: NotRequired[str | None]
-    toolIds: NotRequired[list[str]]
-    useWhen: NotRequired[str]
-
-
-class SkillDraftPatch(TypedDict, closed=True):
-    baseVersion: int
-    guardrails: NotRequired[list[str] | None]
-    inputs: NotRequired[list[SkillInput] | None]
-    instructions: NotRequired[str | None]
-    knowledgeBases: NotRequired[list[str] | None]
-    loading: NotRequired[Literal["on_match", "always"] | None]
-    name: NotRequired[str | None]
-    note: NotRequired[str]
-    parts: NotRequired[list[SkillPartInput] | None]
-    refusal: NotRequired[str | None]
-    toolIds: NotRequired[list[str] | None]
-    useWhen: NotRequired[str | None]
-
-
 class SkillList(TypedDict, closed=True):
     data: list[Skill]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
+    teamNames: NotRequired[dict[str, str]]
     viewCounts: dict[str, int]
 
 
 class SkillOptions(TypedDict, closed=True):
     knowledgeBases: list[str]
     limits: dict[str, int]
+    ownerTeams: list[TeamChoice]
     teams: list[str]
     tools: list[SkillToolRef]
 
 
-class SkillVersion(TypedDict, closed=True):
-    changes: list[str]
-    content: SkillContent
+class SkillPublishCheck(TypedDict, closed=True):
+    approversNeeded: int
+    blockers: list[Blocker]
+    canRequest: bool
     editClass: Literal["free", "re_test", "re_approval"]
+    problems: NotRequired[list[PublishBlocker]]
+    warnings: NotRequired[list[PublishBlocker]]
+
+
+class SkillPublishInfo(TypedDict, closed=True):
+    agents: list[SkillPublishAgent]
+    approvalsNeeded: int
+    changes: list[str]
+    editClass: str
+    failing: list[str]
+    fromVersion: int | None
+    guardrails: list[str]
+    hints: list[TextHint]
+    kbsAdded: list[str]
     note: str
-    publishedAt: NotRequired[str | None]
-    publishedBy: NotRequired[str | None]
-    reviewId: NotRequired[str | None]
-    savedAt: str
-    savedBy: str
-    state: Literal["draft", "in_review", "published", "superseded", "deprecated", "rejected"]
-    testRun: None
-    tokens: int
-    version: int
+    ownerTeam: str
+    ownerTeamName: NotRequired[str | None]
+    requestedBy: str
+    skillId: str
+    skillName: str
+    testRun: NotRequired[None]
+    textAfter: NotRequired[str | None]
+    textBefore: NotRequired[str | None]
+    toVersion: int
+    toolsAdded: list[str]
+
+
+class SkillStep(TypedDict, closed=True):
+    branch: NotRequired[Branch | None]
+    check: NotRequired[StepCheck | None]
+    do: str
+    ifNot: NotRequired[IfNot | None]
+    locked: NotRequired[bool | None]
+    next: NotRequired[Jump | None]
+    use: NotRequired[RefInput | None]
+
+
+class SkillStepOut(TypedDict, closed=True):
+    branch: NotRequired[BranchOut | None]
+    check: NotRequired[StepCheckOut | None]
+    do: str
+    ifNot: NotRequired[IfNotOut | None]
+    locked: NotRequired[bool | None]
+    next: NotRequired[JumpOut | None]
+    use: NotRequired[RefOut | None]
+
+
+class SkillTextReading(TypedDict, closed=True):
+    errors: list[SkillTextError]
+    hints: list[SkillTextNote]
+    lines: list[SkillTextLine]
+    phrases: dict[str, list[str]]
+    stepLines: list[int]
+    steps: int
+    uses: SkillTextUses
+
+
+class StepChangeView(TypedDict, closed=True):
+    fields: list[FieldChangeView]
+    id: str
+    name: str
+    type: str
 
 
 class StoryCase(TypedDict, closed=True):
@@ -3635,6 +4048,21 @@ class ToolUsedBy(TypedDict, closed=True):
     workflows: list[ToolUserRef]
 
 
+class TryPath(TypedDict, closed=True):
+    ends: str
+    id: str
+    label: str
+    steps: list[TryStep]
+
+
+class TryTargets(TypedDict, closed=True):
+    id: str
+    kind: Literal["skill", "workflow_step"]
+    more: NotRequired[bool]
+    name: str
+    paths: list[TryPath]
+
+
 class UpdateReview(TypedDict, closed=True):
     changes: list[str]
     copy: CopyRef
@@ -3691,6 +4119,11 @@ class WorkflowGraph(TypedDict, closed=True):
     workflowId: str
 
 
+class WorkingCopySaved(TypedDict, closed=True):
+    saveBase: SaveBase
+    workingCopy: WorkingCopyView
+
+
 class ActivityRow(TypedDict, closed=True):
     actor: ActorView
     at: str
@@ -3711,7 +4144,7 @@ class ActivityRow(TypedDict, closed=True):
     ]
     outcome: str | None
     outcomeText: NotRequired[str | None]
-    ref: Ref
+    ref: RefOutput
     source: Source
     status: Literal["running", "waiting", "done", "failed", "skipped"]
     teamId: str | None
@@ -3723,12 +4156,14 @@ class Agent(TypedDict, closed=True):
     allTeamKnowledgeBases: NotRequired[bool]
     autoResolvedRate: float
     availability: Literal["published", "not_published", "paused"]
+    brief: NotRequired[BriefView | None]
     canDelete: NotRequired[bool | None]
     canEdit: NotRequired[bool | None]
     canPublish: NotRequired[bool | None]
     channels: list[str]
     collections: list[str]
     controls: AgentControls
+    digest: NotRequired[str | None]
     guardrailPins: list[GuardrailPin]
     guardrails: GuardrailsOutput
     id: str
@@ -3737,7 +4172,9 @@ class Agent(TypedDict, closed=True):
     memory: NotRequired[MemorySettings]
     model: str
     name: str
+    patterns: NotRequired[PatternsView]
     paused: bool
+    promptMode: NotRequired[Literal["brief", "full"] | None]
     protection: NotRequired[Literal["system", "managed"] | None]
     publishedVersion: int | None
     role: str
@@ -3751,6 +4188,7 @@ class Agent(TypedDict, closed=True):
     toolIds: list[str]
     updatedAt: str
     usedIn: list[UsedIn]
+    uses: NotRequired[AgentUses]
     version: int
     widgetPins: NotRequired[list[WidgetPin]]
     widgets: NotRequired[WidgetSettings]
@@ -3760,10 +4198,18 @@ class Agent(TypedDict, closed=True):
 
 class AgentEvalRun(TypedDict, closed=True):
     agentId: str
+    costUsd: float
     id: str
     results: list[EvalCaseResult]
     status: Literal["complete"]
     summary: EvalSummary
+    unpriced: bool
+
+
+class AgentPublishCheck(TypedDict, closed=True):
+    blockers: NotRequired[list[Blocker]]
+    canRequest: bool
+    problems: NotRequired[list[PublishBlocker]]
 
 
 class CaseDetail(TypedDict, closed=True):
@@ -3850,6 +4296,16 @@ class ChannelPage(TypedDict, closed=True):
     pagination: Pagination
 
 
+class DefinitionDiffView(TypedDict, closed=True):
+    added: list[StepRefView]
+    changed: list[StepChangeView]
+    connected: list[str]
+    disconnected: list[str]
+    moved: list[StepRefView]
+    removed: list[StepRefView]
+    workflow: list[FieldChangeView]
+
+
 class DocumentRead(TypedDict, closed=True):
     corrected: list[dict[str, JsonValue]] | None
     editable: bool
@@ -3861,8 +4317,8 @@ class DocumentRead(TypedDict, closed=True):
     sources: NotRequired[list[str]]
 
 
-class EnvelopeAgentEvalRun(TypedDict, closed=True):
-    data: AgentEvalRun
+class EnvelopeAgentPublishCheck(TypedDict, closed=True):
+    data: AgentPublishCheck
     success: Literal[True]
 
 
@@ -3888,6 +4344,16 @@ class EnvelopeCaseTypeDetail(TypedDict, closed=True):
 
 class EnvelopeChannelPage(TypedDict, closed=True):
     data: ChannelPage
+    success: Literal[True]
+
+
+class EnvelopeDefinitionDiffView(TypedDict, closed=True):
+    data: DefinitionDiffView
+    success: Literal[True]
+
+
+class EnvelopeEvalRunRecord(TypedDict, closed=True):
+    data: EvalRunRecord
     success: Literal[True]
 
 
@@ -3921,13 +4387,28 @@ class EnvelopeListResultDefinitionRow(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListResultEvalRunRow(TypedDict, closed=True):
+    data: ListResultEvalRunRow
+    success: Literal[True]
+
+
 class EnvelopeListResultFormView(TypedDict, closed=True):
     data: ListResultFormView
     success: Literal[True]
 
 
+class EnvelopeListResultMemoryView(TypedDict, closed=True):
+    data: ListResultMemoryView
+    success: Literal[True]
+
+
 class EnvelopeListResultTaskTypeView(TypedDict, closed=True):
     data: ListResultTaskTypeView
+    success: Literal[True]
+
+
+class EnvelopeListResultTemplateView(TypedDict, closed=True):
+    data: ListResultTemplateView
     success: Literal[True]
 
 
@@ -3956,8 +4437,13 @@ class EnvelopePublicForm(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopePublishReview(TypedDict, closed=True):
-    data: PublishReview
+class EnvelopeReferenceAdded(TypedDict, closed=True):
+    data: ReferenceAdded
+    success: Literal[True]
+
+
+class EnvelopeReferenceSearch(TypedDict, closed=True):
+    data: ReferenceSearch
     success: Literal[True]
 
 
@@ -3983,6 +4469,11 @@ class EnvelopeSkillList(TypedDict, closed=True):
 
 class EnvelopeSkillOptions(TypedDict, closed=True):
     data: SkillOptions
+    success: Literal[True]
+
+
+class EnvelopeSkillTextReading(TypedDict, closed=True):
+    data: SkillTextReading
     success: Literal[True]
 
 
@@ -4016,6 +4507,16 @@ class EnvelopeToolOptionsPage(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeTryTargets(TypedDict, closed=True):
+    data: TryTargets
+    success: Literal[True]
+
+
+class EnvelopeUnionEvalRunRecordAgentEvalRun(TypedDict, closed=True):
+    data: EvalRunRecord | AgentEvalRun
+    success: Literal[True]
+
+
 class EnvelopeUnionValidationRunNoneType(TypedDict, closed=True):
     data: ValidationRun | None
     success: Literal[True]
@@ -4038,6 +4539,11 @@ class EnvelopeWidgetTemplateList(TypedDict, closed=True):
 
 class EnvelopeWorkflow(TypedDict, closed=True):
     data: Workflow
+    success: Literal[True]
+
+
+class EnvelopeWorkingCopySaved(TypedDict, closed=True):
+    data: WorkingCopySaved
     success: Literal[True]
 
 
@@ -4087,40 +4593,143 @@ class Plan(TypedDict, closed=True):
     ready: bool
 
 
-class SkillDetail(TypedDict, closed=True):
-    activity: SkillActivity
-    content: SkillContent
-    draftVersion: int | None
+class PublishPreview(TypedDict, closed=True):
+    blockers: list[DefinitionCheck]
+    changes: DefinitionDiffView
+    liveVersion: int | None
+    majorChange: NotRequired[bool | None]
+    policy: NotRequired[Literal["always", "major", "never"] | None]
+    reviewReason: NotRequired[
+        Literal[
+            "policy_always",
+            "security_change",
+            "policy_never",
+            "major_change",
+            "dev_auto_approve",
+            "minor_change",
+        ]
+        | None
+    ]
+    reviewRequired: NotRequired[bool | None]
+
+
+class PublishReview(TypedDict, closed=True):
+    actionTool: str
+    agentName: str | None
+    agentPublish: NotRequired[AgentPublishRequest | None]
+    agentSlug: str
+    approvals: list[str]
+    assignee: NotRequired[str | None]
+    canDecide: NotRequired[bool | None]
+    confidence: float
+    createdAt: str
+    currency: str
+    customer: str
+    decidedAt: NotRequired[str | None]
+    decidedBy: NotRequired[str | None]
+    decisionReason: NotRequired[str | None]
+    egressHost: NotRequired[EgressHostRef | None]
+    evidence: list[Evidence]
+    follows: NotRequired[str | None]
     id: str
+    kind: Literal["agent_publish", "publish_request", "skill_publish", "egress_host"]
+    policy: ReviewPolicy
+    proposal: str
+    publish: NotRequired[PublishRequestInfo | None]
+    reasoning: list[str]
+    risk: Literal["critical", "high", "medium", "low"]
+    skillPublish: NotRequired[SkillPublishInfo | None]
+    slaMinutes: NotRequired[int | None]
+    status: Literal["pending", "in_review", "approved", "rejected", "returned", "withdrawn"]
+    title: str
+    toolModule: NotRequired[ToolModuleReviewRef | None]
+    workflowId: str
+    workflowName: str
+
+
+class SkillContent(TypedDict, closed=True):
+    exit: NotRequired[dict[str, str]]
+    guardrails: list[str]
     inputs: NotRequired[list[SkillInputField]]
-    kbCount: int
-    lastEvalPassRate: float | None
-    liveAgents: int
+    instructions: str
+    knowledgeBases: list[str]
     loading: Literal["on_match", "always"]
-    locked: NotRequired[bool | None]
     name: str
-    needs: NotRequired[list[str] | None]
-    origin: Literal["blank", "generated", "imported", "duplicated"]
-    ownerTeam: str
-    parts: NotRequired[list[SkillPartSummary]]
-    pendingReview: NotRequired[SkillPendingReview | None]
-    pendingReviewId: NotRequired[str | None]
-    provenance: SkillProvenance
-    publishCheck: SkillPublishCheck
-    publishedVersion: int | None
-    runs: list[JsonValue]
+    notWhen: NotRequired[str]
+    parts: NotRequired[list[SkillPart]]
+    refusal: NotRequired[str | None]
+    resources: list[SkillResource]
+    returns: NotRequired[list[ReturnFieldOut]]
     slug: str
-    status: Literal["draft", "in_review", "published", "deprecated"]
-    tests: list[JsonValue]
-    tokens: int
-    toolCount: int
-    updatedAt: str
-    updatedBy: str
-    usage: list[SkillUsage]
+    source: NotRequired[str | None]
+    steps: NotRequired[list[SkillStepOut]]
+    success: NotRequired[list[str]]
+    tools: list[SkillToolRef]
     useWhen: str
-    usedBy: int
+
+
+class SkillCreateInput(TypedDict, closed=True):
+    exit: NotRequired[dict[str, str]]
+    guardrails: NotRequired[list[str]]
+    inputs: NotRequired[list[SkillInput]]
+    instructions: str
+    knowledgeBases: NotRequired[list[str]]
+    loading: NotRequired[Literal["on_match", "always"]]
+    name: str
+    notWhen: NotRequired[str]
+    origin: NotRequired[Literal["blank", "generated", "imported", "duplicated"]]
+    ownerTeam: NotRequired[str | None]
+    parts: NotRequired[list[SkillPartInput]]
+    refusal: NotRequired[str]
+    requestReview: NotRequired[bool]
+    returns: NotRequired[list[ReturnField]]
+    reviewNote: NotRequired[str]
+    slug: NotRequired[str | None]
+    source: NotRequired[str | None]
+    steps: NotRequired[list[SkillStep]]
+    success: NotRequired[list[Succes]]
+    toolIds: NotRequired[list[str]]
+    useWhen: NotRequired[str]
+
+
+class SkillDraftPatch(TypedDict, closed=True):
+    baseDigest: str
+    baseVersion: int
+    exit: NotRequired[dict[str, str] | None]
+    guardrails: NotRequired[list[str] | None]
+    inputs: NotRequired[list[SkillInput] | None]
+    instructions: NotRequired[str | None]
+    knowledgeBases: NotRequired[list[str] | None]
+    loading: NotRequired[Literal["on_match", "always"] | None]
+    name: NotRequired[str | None]
+    notWhen: NotRequired[str | None]
+    note: NotRequired[str]
+    parts: NotRequired[list[SkillPartInput] | None]
+    refusal: NotRequired[str | None]
+    returns: NotRequired[list[ReturnField] | None]
+    source: NotRequired[str | None]
+    steps: NotRequired[list[SkillStep] | None]
+    success: NotRequired[list[Succes] | None]
+    toolIds: NotRequired[list[str] | None]
+    useWhen: NotRequired[str | None]
+
+
+class SkillVersion(TypedDict, closed=True):
+    approvedBy: NotRequired[str | None]
+    changes: list[str]
+    content: SkillContent
+    editClass: Literal["free", "re_test", "re_approval"]
+    note: str
+    publishedAt: NotRequired[str | None]
+    publishedBy: NotRequired[str | None]
+    requestedBy: NotRequired[str | None]
+    reviewId: NotRequired[str | None]
+    savedAt: str
+    savedBy: str
+    state: Literal["draft", "in_review", "published", "superseded", "deprecated", "rejected"]
+    testRun: None
+    tokens: int
     version: int
-    versions: list[SkillVersion]
 
 
 class StoryRead(TypedDict, closed=True):
@@ -4170,7 +4779,7 @@ class ThreadReview(TypedDict, closed=True):
     runId: NotRequired[str | None]
     slaMinutes: int | None
     sourceFile: NotRequired[str | None]
-    status: Literal["pending", "in_review", "approved", "rejected", "returned"]
+    status: Literal["pending", "in_review", "approved", "rejected", "returned", "withdrawn"]
     stepName: NotRequired[str | None]
     stepUp: bool
     stepUpRef: NotRequired[str | None]
@@ -4234,8 +4843,13 @@ class EnvelopePlan(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeSkillDetail(TypedDict, closed=True):
-    data: SkillDetail
+class EnvelopePublishPreview(TypedDict, closed=True):
+    data: PublishPreview
+    success: Literal[True]
+
+
+class EnvelopePublishReview(TypedDict, closed=True):
+    data: PublishReview
     success: Literal[True]
 
 
@@ -4268,6 +4882,45 @@ class RunStory(TypedDict, closed=True):
     email: StoryEmail | None
     lines: list[StoryLine]
     reads: list[StoryRead]
+
+
+class SkillDetail(TypedDict, closed=True):
+    activity: SkillActivity
+    content: SkillContent
+    digest: str
+    draftVersion: int | None
+    id: str
+    inputs: NotRequired[list[SkillInputField]]
+    kbCount: int
+    lastEvalPassRate: float | None
+    liveAgents: int
+    loading: Literal["on_match", "always"]
+    locked: NotRequired[bool | None]
+    name: str
+    needs: NotRequired[list[str] | None]
+    origin: Literal["blank", "generated", "imported", "duplicated"]
+    ownerTeam: str
+    ownerTeamName: NotRequired[str | None]
+    parts: NotRequired[list[SkillPartSummary]]
+    pendingReview: NotRequired[SkillPendingReview | None]
+    pendingReviewId: NotRequired[str | None]
+    provenance: SkillProvenance
+    publishCheck: SkillPublishCheck
+    publishedVersion: int | None
+    runs: list[JsonValue]
+    slug: str
+    status: Literal["draft", "in_review", "published", "deprecated"]
+    tests: list[JsonValue]
+    text: str
+    tokens: int
+    toolCount: int
+    updatedAt: str
+    updatedBy: str
+    usage: list[SkillUsage]
+    useWhen: str
+    usedBy: int
+    version: int
+    versions: list[SkillVersion]
 
 
 class ToolList(TypedDict, closed=True):
@@ -4310,6 +4963,11 @@ class EnvelopeReviewList(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeSkillDetail(TypedDict, closed=True):
+    data: SkillDetail
+    success: Literal[True]
+
+
 class EnvelopeToolList(TypedDict, closed=True):
     data: ToolList
     success: Literal[True]
@@ -4322,6 +4980,7 @@ class EnvelopeWorkflowDetail(TypedDict, closed=True):
 
 class RunDetail(TypedDict, closed=True):
     canCancel: NotRequired[bool | None]
+    canRedrive: NotRequired[bool | None]
     canRetry: NotRequired[bool | None]
     children: NotRequired[list[RunChild]]
     createdAt: str

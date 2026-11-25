@@ -296,7 +296,7 @@ export function createTemplatesMock(deps: TemplatesDeps) {
         return { agentId: a.id, agentName: a.name, tests: input.includeStarterTests ? t.starterTests : [], skills: pins.length };
       });
       // Starter tests are written through the evals API so they land in the agent's own test set.
-      await Promise.all(created.tests.map((c) => deps.addCase(created.agentId, { ...c, context: { ...c.context, collections: c.context.collections.filter((k) => input.collections.includes(k)) } })));
+      await Promise.all(created.tests.map((c) => deps.addCase(created.agentId, { ...c, collections: c.collections.filter((k) => input.collections.includes(k)) })));
       return { agentId: created.agentId, agentName: created.agentName, testsAdded: created.tests.length, skillsAttached: created.skills };
     },
     submit: (input) =>

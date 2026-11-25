@@ -5,7 +5,7 @@ import * as React from 'react';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
-import { TeamSelectField } from '@/components/shared/team-select-field';
+import { type PickedTeam, TeamSelectField } from '@/components/shared/team-select-field';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { InviteInput, MemberRole, SettingsLookups } from '@/lib/types/settings';
 
 /**
- * Invites people by email with one role: to the current team, or to a picked team when `teams` is given. No email goes
+ * Invites people by email with one role: to the current team, or to a picked team when `pickTeam` is set. No email goes
  * out; the host shows each person's link once (`InviteLinksDialog`) after `onSubmit` resolves. Reusable by any page that
  * adds people to a team: the Access page owns it (roles-and-permissions, "Reusable parts").
  */
@@ -24,8 +24,8 @@ export function InviteDialog({
   roles,
   onSubmit,
   isPending,
-  teams,
-  defaultTeamId,
+  pickTeam,
+  defaultTeam,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -34,10 +34,10 @@ export function InviteDialog({
   onSubmit: (input: InviteInput) => Promise<unknown>;
   isPending: boolean;
   /** Shows a team field. Leave it out when the service invites to the team the request is made for. */
-  teams?: { id: string; name: string }[];
-  defaultTeamId?: string;
+  pickTeam?: boolean;
+  defaultTeam?: PickedTeam;
 }) {
-  const [teamId, setTeamId] = React.useState(defaultTeamId ?? '');
+  const [team, setTeam] = React.useState<PickedTeam | null>(defaultTeam ?? null);
   const [emails, setEmails] = React.useState('');
   // Builder, so an invited person can make and change agents from their first day without approval rights; Viewer
   // stays one click away for someone who only reads.
@@ -45,11 +45,11 @@ export function InviteDialog({
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => {
     if (!open) return;
-    setTeamId(defaultTeamId ?? '');
+    setTeam(defaultTeam ?? null);
     setEmails('');
     setRole('builder');
     setError(null);
-  }, [open, defaultTeamId]);
+  }, [open, defaultTeam?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const list = emails
     .split(/[\s,;]+/)
@@ -59,7 +59,7 @@ export function InviteDialog({
   const submit = async () => {
     if (!list.length) return setError('Enter at least one email address.');
     try {
-      await onSubmit({ emails: list, role, ...(teams ? { teamId } : {}) });
+      await onSubmit({ emails: list, role, ...(pickTeam ? { teamId: team?.id ?? '' } : {}) });
       onOpenChange(false);
     } catch (e) {
       setError((e as Error).message);
@@ -71,7 +71,7 @@ export function InviteDialog({
       open={open}
       onOpenChange={onOpenChange}
       size="md"
-      title={teams ? `Invite to ${teams.find((t) => t.id === teamId)?.name ?? 'a team'}` : `Invite to ${teamName}`}
+      title={pickTeam ? `Invite to ${team?.label ?? 'a team'}` : `Invite to ${teamName}`}
       description="No email is sent. You get a link for each person to pass on yourself; it is shown once and works for 7 days."
       onSubmit={submit}
       footer={
@@ -86,7 +86,7 @@ export function InviteDialog({
       }
     >
       <div className="flex flex-col gap-4">
-        {teams && <TeamSelectField id="invite-team" teams={teams} value={teamId} onChange={setTeamId} hint="Their role applies within this team." />}
+        {pickTeam && <TeamSelectField id="invite-team" value={team} onChange={setTeam} hint="Their role applies within this team." />}
         <FormField id="invite-emails" label="Email addresses" hint="Separate several with commas or new lines. Only the domains allowed in Settings → Sign-in." error={error ?? undefined}>
           <Textarea id="invite-emails" rows={3} value={emails} onChange={(e) => (setEmails(e.target.value), setError(null))} placeholder="e.g. first.last@harborpine.example" aria-invalid={!!error} />
         </FormField>

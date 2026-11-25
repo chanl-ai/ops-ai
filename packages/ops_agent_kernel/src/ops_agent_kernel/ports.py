@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from pydantic_ai.models import Model
 
+from ops_contracts.chat import SignedIn
 from ops_service_kit.http import Json
 
 from .tool_cache import ToolCaches
@@ -25,12 +29,42 @@ class ToolOutcome:
     # What the model is told in place of `output`, when the person is shown the outcome another way (a Connect card):
     # a plain line with no code, link or address to repeat. `output` stays on the call record for the card.
     for_model: Any = None
+    # Whose login of the app the call ran as (the gateway's `signedIn`: the team's or the person's), for the chat card.
+    signed_in: SignedIn | None = None
 
 
 class ToolExecutor(Protocol):
     async def execute(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> ToolOutcome:
         """Runs one granted tool. `key` is the idempotency key; writes carry the approval token."""
         ...
+
+
+class BudgetReachedError(Exception):
+    """Raised by the model port in place of a model call the turn's budget no longer covers. The kernel ends the
+    reply: `closing` says whether it may first make one more call, with no tools, to answer from what it has."""
+
+    def __init__(self, *, closing: bool) -> None:
+        super().__init__("The budget this reply spends from is spent.")
+        self.closing = closing
+
+
+# Set while the kernel finishes a reply already under way: the closing answer at the budget, and the checks and
+# corrections of an answer already written. A model port that refuses calls at a budget lets these through.
+_FINISHING: ContextVar[bool] = ContextVar("ops_kernel_finishing", default=False)
+
+
+@contextmanager
+def finishing() -> Generator[None]:
+    """Never held across a yield of the turn's event stream: it wraps single awaited calls."""
+    token = _FINISHING.set(True)
+    try:
+        yield
+    finally:
+        _FINISHING.reset(token)
+
+
+def is_finishing() -> bool:
+    return _FINISHING.get()
 
 
 class ModelSource(Protocol):

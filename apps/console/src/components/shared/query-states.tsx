@@ -1,13 +1,16 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { AlertCircle, ChevronDown, LogIn, SearchX, ShieldOff, Users, type LucideIcon } from 'lucide-react';
+import { AlertCircle, LogIn, SearchX, ShieldOff, Users, type LucideIcon } from 'lucide-react';
 
+import { actionLabel, areaLabel } from '@/components/access/access-words';
 import { EmptyState } from '@/components/shared/empty-state';
-import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { SearchSelect } from '@/components/shared/search-select';
+import { teamOptions } from '@/hooks/options-queries';
 import { teamOfError, useTeam } from '@/hooks/use-team';
 import { errorKind } from '@/lib/session-gate';
+
+const TEAMS = teamOptions();
 
 /**
  * The one state for a failed query, chosen by the answer's status so every page says the same thing for the
@@ -69,8 +72,7 @@ function SignedOut({ what }: { what: string }) {
 }
 
 function NotFound({ what, back }: { what: string; back?: { label: string; href: string } }) {
-  const { teams, teamId, switchTeam } = useTeam();
-  const others = teams.filter((t) => t.id !== teamId);
+  const { switchTeam } = useTeam();
   return (
     <EmptyState
       icon={SearchX}
@@ -79,22 +81,8 @@ function NotFound({ what, back }: { what: string; back?: { label: string; href: 
       secondaryAction={back}
       testId="query-not-found"
     >
-      {others.length > 0 && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button size="sm">
-              Switch team <ChevronDown className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="center">
-            {others.map((t) => (
-              <DropdownMenuItem key={t.id} onSelect={() => switchTeam(t.id)}>
-                {t.name}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+      {/* The person's teams, searched on the server: one holding thousands still finds the one it is in. */}
+      <SearchSelect source={TEAMS} value={null} onChange={(id) => switchTeam(id)} placeholder="Switch team" searchPlaceholder="Search teams…" emptyText="No team matches." testId="query-switch-team" />
     </EmptyState>
   );
 }
@@ -153,6 +141,8 @@ export function ListEmpty({
  * The person's roles do not open `what`: shown by a page that checks the cell before asking, so no refused request is
  * made, and by QueryError when a service refuses one anyway. One wording for both.
  */
-export function NoAccess({ what, back }: { what: string; back?: { label: string; href: string } }) {
-  return <EmptyState icon={ShieldOff} title="You don’t have access here" description={`Your role in this team doesn’t let you see ${what}. A team admin can change that.`} action={back} testId="query-forbidden" />;
+export function NoAccess({ what, back, needs }: { what: string; back?: { label: string; href: string }; needs?: { area: string; action: string } }) {
+  // The permission the page needs, in the roles page's words ("Manage on Connections"), when the page names one.
+  const named = needs ? ` It needs ${actionLabel(needs.action)} on ${areaLabel(needs.area)}.` : '';
+  return <EmptyState icon={ShieldOff} title="You don’t have access here" description={`Your role in this team doesn’t let you see ${what}.${named} A team admin can change that.`} action={back} testId="query-forbidden" />;
 }

@@ -2,8 +2,9 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { AlertTriangle, ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, ChevronDown, FlaskConical, Plus, Trash2 } from 'lucide-react';
 
+import { TryPanel } from '@/components/agents/try-panel';
 import { ConnectMailbox } from '@/components/channels/connect-mailbox';
 import { MailboxStatusDot } from '@/components/channels/mailbox-panels';
 import { DetailSheet } from '@/components/shared/detail-sheet';
@@ -62,11 +63,14 @@ export function StepSheet({ node, type, workflowId, steps, checks, order, readOn
       onOpenChange={(o) => !o && onClose()}
       modal={false}
       // Starts at the canvas's top edge (--step-sheet-top, set by the editor) so Save version and Test run stay in view.
-      widthClass="sm:max-w-xl sm:top-[var(--step-sheet-top,0px)] sm:h-[calc(100dvh-var(--step-sheet-top,0px))]"
+      // It sits inside the console panel (8px in from the window's right and bottom edge, rounded like it), and keeps the
+      // page's 16px margin on a phone. The canvas pads 16px, so the sheet does too.
+      widthClass="sm:max-w-xl sm:right-2 sm:top-[var(--step-sheet-top,0px)] sm:h-[calc(100dvh-var(--step-sheet-top,0px)-0.5rem)] sm:rounded-br-xl max-sm:right-4 max-sm:w-[calc(100%-2rem)]"
+      padX="px-4"
       testId="step-sheet"
       scrollKey={node?.id}
       title={node ? node.name || type?.label || node.id : ''}
-      description={type ? `${type.label} · ${type.description}` : node ? `${node.type} version ${node.typeVersion} · unknown type` : undefined}
+      description={type ? `${type.label} · ${type.description.replace(/`/g, '')}` : node ? `${node.type} version ${node.typeVersion} · unknown type` : undefined}
       tags={
         node && (
           <>
@@ -117,12 +121,32 @@ export function StepSheet({ node, type, workflowId, steps, checks, order, readOn
           <StepFields key={node.id} node={node} type={type} steps={steps} errors={byField} onChange={onChange} />
         </fieldset>
       )}
+      {node && node.type === TOOL_STEP && !readOnly && <TryThisStep key={node.id} workflowId={workflowId} nodeId={node.id} />}
 
     </DetailSheet>
   );
 }
 
 const EMAIL_TRIGGER = 'ops.trigger.email';
+const TOOL_STEP = 'ops.action.tool';
+
+/** Try this one step on the saved working copy, folded until asked for so opening a step reads nothing more. */
+function TryThisStep({ workflowId, nodeId }: { workflowId: string; nodeId: string }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="mt-6 flex flex-col gap-3 border-t pt-4" data-testid="step-try">
+      <CollapsibleTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="self-start" data-testid="step-try-open">
+          <FlaskConical className="size-4" /> Try step
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <p className="mb-3 text-xs text-muted-foreground">Tries the step as last saved. Reads run; a write is shown first and sent only when you confirm.</p>
+        {open && <TryPanel target={{ kind: 'workflow_step', workflowId, step: nodeId }} canTry />}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 /** The run input an Email received trigger gives every run: the email, with each attachment already in Files. */
 const EMAIL_INPUT: [string, string][] = [
@@ -182,7 +206,7 @@ function EmailTriggerDetails({ parameters, readOnly, onConnected }: { parameters
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>The mailbox isn’t listed?</span>
           <Button type="button" variant="outline" size="sm" onClick={() => setConnecting(true)} data-testid="trigger-connect-mailbox">
-            <Plus className="size-4" /> Connect a mailbox
+            <Plus className="size-4" /> Connect
           </Button>
           <ConnectMailbox shell="dialog" open={connecting} onOpenChange={setConnecting} onConnected={(m) => onConnected(m.address)} />
         </div>

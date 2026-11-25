@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-21",
+  "title": "Success checks become eval cases",
+  "description": "Success checks written on an agent's brief now appear on its Evals tab, each with Make case to turn it into a graded case.",
+  "tag": "improved"
+}

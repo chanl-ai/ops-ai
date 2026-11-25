@@ -32,6 +32,7 @@ from starlette.types import Receive, Scope, Send
 
 from ops_access import can
 from ops_agent_kernel.ports import ToolOutcome
+from ops_contracts.skill_run import WORKFLOW_TOOL_PREFIX
 from ops_identity import ActingForTokens, Auth, Principal, ServiceClient, service_signer
 from ops_service_kit.errors import ApiError, NotFound, ServiceUnavailable, Unauthorized
 from ops_service_kit.http import Json, error_body
@@ -50,7 +51,7 @@ from .store.mcp_links import McpLink, McpLinks
 _PATH = re.compile(r"^(?:/mcp)?/(?P<team>[^/]+)(?:/(?P<link>[^/]+))?/?$")
 _CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
 # A published workflow picked on a link is listed as `workflow__<id>`, the name agents call one by.
-WORKFLOW_PREFIX = "workflow__"
+WORKFLOW_PREFIX = WORKFLOW_TOOL_PREFIX
 # Starting a picked workflow's live version: it makes a run, and the workflow's own review steps are its gate, as
 # agents-service decides for a workflow an agent calls (tool_catalog.py, requiresApproval False), so it does not wait
 # as other MCP writes do.
@@ -379,22 +380,23 @@ def platform_tools(settings: Settings, agents_url: str | None = None) -> Platfor
         signer = service_signer(settings)
     except ValueError:
         signer = None
-    return PlatformTools(
-        {"agents": agents_url or settings.agents_url or ""}, signer, people=_acting_for(settings, signer)
-    )
+    bases = {"agents": agents_url or settings.agents_url or "", "platform": settings.platform_url or ""}
+    people = {s: p for s in bases if (p := _acting_for(settings, signer, s)) is not None}
+    return PlatformTools(bases, signer, people=people)
 
 
-def _acting_for(settings: Settings, signer: Any) -> ActingForTokens | None:
-    """Whom an operation that makes a record acts for, as agents-service's tool calls name theirs
-    (ops_agents.api.acting_for): minted by platform-service on a platform stack, self-signed in dev."""
+def _acting_for(settings: Settings, signer: Any, audience: str) -> ActingForTokens | None:
+    """Whom an operation that makes a record in `audience` acts for, as agents-service's tool calls name theirs
+    (ops_agents.api.acting_for): minted by platform-service on a platform stack, self-signed in dev. A dev token
+    carries no role, so a Workspace tool that needs a cell is refused in dev."""
     if signer is None:
         return None
     if settings.auth_mode != "platform":
-        return ActingForTokens.for_dev(signer, service="tools", audience="agents")
+        return ActingForTokens.for_dev(signer, service="tools", audience=audience)
     internal = settings.endpoint("platform_internal").base
     platform = httpx.AsyncClient(base_url=internal, timeout=10)
     return ActingForTokens.from_platform(
-        ServiceClient.for_settings(settings, platform, service="tools", audience="platform")
+        ServiceClient.for_settings(settings, platform, service="tools", audience="platform"), audience=audience
     )
 
 
@@ -427,7 +429,7 @@ def _structured(output: Any) -> Json:
 
 
 async def _refuse(send: Send, e: ApiError, metadata_url: str | None = None) -> None:
-    body = error_body(e.status, e.code, e.message)
+    body = error_body(e.status, e.code, e.message, row=e.row)
     headers = [(b"content-type", b"application/json")]
     if e.status == 401:
         challenge = 'Bearer realm="ops-ai-tools"' + (f', resource_metadata="{metadata_url}"' if metadata_url else "")

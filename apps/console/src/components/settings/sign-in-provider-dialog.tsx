@@ -5,6 +5,7 @@ import * as React from 'react';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
+import { SearchSelect } from '@/components/shared/search-select';
 import { CopyField } from '@/components/shared/setting/copy-field';
 import { TagInput } from '@/components/shared/tag-input';
 import { Button } from '@/components/ui/button';
@@ -13,8 +14,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { teamOptions } from '@/hooks/options-queries';
+import { useTeamsNamed } from '@/hooks/use-team';
 import { ApiError } from '@/lib/api/contract';
 import type { JitRole, SignInProvider, SignInProviderInput, SignInProviderKind } from '@/lib/types/sign-in';
+import { nameError } from '@/lib/validation/names';
 
 export const KIND_LABEL: Record<SignInProviderKind, string> = { oidc: 'OpenID Connect', saml: 'SAML 2.0', password: 'Email and password' };
 export const ROLE_LABEL: Record<JitRole, string> = { chat_user: 'Chat user', viewer: 'Viewer', builder: 'Builder', approver: 'Approver' };
@@ -73,7 +77,6 @@ export function SignInProviderDialog({
   open,
   onOpenChange,
   provider,
-  teams,
   secretNames,
   metadataUrl,
   pending,
@@ -82,7 +85,6 @@ export function SignInProviderDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   provider?: SignInProvider | null;
-  teams: { id: string; name: string }[];
   secretNames: string[];
   /** Where the bank's identity provider reads this installation's SAML metadata. */
   metadataUrl?: string;
@@ -97,11 +99,12 @@ export function SignInProviderDialog({
     setErrors({});
   }, [open, provider]);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => (setF((x) => ({ ...x, [k]: v })), setErrors({}));
+  const picked = useTeamsNamed([f.team === DEFAULT_TEAM ? null : f.team]);
   const sso = f.kind !== 'password';
 
   const submit = async () => {
     const found: Errors = {
-      label: f.label.trim() ? undefined : 'Name the provider as people will see it on the sign-in page.',
+      label: nameError(f.label, 'Name the provider as people will see it on the sign-in page.'),
       issuer: f.kind === 'oidc' && !/^https?:\/\//.test(f.issuer.trim()) ? 'Give the issuer URL, e.g. https://login.bank.com.' : undefined,
       clientId: f.kind === 'oidc' && !f.clientId.trim() ? 'Give the client ID the identity provider issued.' : undefined,
       entity: f.kind === 'saml' && !f.entity.trim() ? 'Give the identity provider’s entity ID.' : undefined,
@@ -279,19 +282,18 @@ export function SignInProviderDialog({
                 </Select>
               </FormField>
               <FormField id="provider-team" label="In team">
-                <Select value={f.team} onValueChange={(v) => set('team', v)} disabled={f.role === NONE}>
-                  <SelectTrigger id="provider-team" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={DEFAULT_TEAM}>The workspace’s default team</SelectItem>
-                    {[...teams, ...(f.team !== DEFAULT_TEAM && !teams.some((t) => t.id === f.team) ? [{ id: f.team, name: f.team }] : [])].map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
-                        {t.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchSelect
+                  id="provider-team"
+                  source={teamOptions()}
+                  value={f.team === DEFAULT_TEAM ? null : { id: f.team, label: picked.get(f.team)?.name ?? f.team }}
+                  onChange={(id) => set('team', id || DEFAULT_TEAM)}
+                  placeholder="The workspace’s default team"
+                  noneLabel="The workspace’s default team"
+                  searchPlaceholder="Search teams…"
+                  emptyText="No team matches."
+                  disabled={f.role === NONE}
+                  className="w-full"
+                />
               </FormField>
             </div>
             {provider?.groups?.map.length ? <p className="text-xs text-muted-foreground">{provider.groups.map.length} group mappings set through the API are kept as they are.</p> : null}

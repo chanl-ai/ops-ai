@@ -6,16 +6,40 @@ Ops AI is an operational AI platform: Python services in `services/`, libraries 
 
 ## Rules for coding agents
 
+Every change to `services/`, `packages/` or `apps/console/` follows `docs/architecture/engineering-standards.md`,
+which names the rule each check enforces. Every folder has a `CLAUDE.md` saying what it owns and how to run, test and
+lint it; the index is the "Folder guides" section of `CLAUDE.md`. Read the guide for the folder you change.
+
+## Branches, pull requests and commits
+
 | Rule | Detail |
 |---|---|
-| Read first | `CONTRIBUTING.md`; `apps/console/CLAUDE.md` before changing console code; `docs/README.md` for the design behind a change |
+| Branch name | `<type>/<scope>-<what-changed>`. Types: feat, fix, chore, docs, refactor, perf, test, ci. Never wip, tmp, new, v2, fixes, updates, changes, cleanup or feedback in a name |
+| Target | Every pull request targets the release train `release/current` (`release/1.1.0` until it is renamed), never `develop` or `main`. Never queue a PR, merge it or set auto-merge (`docs/deploy/release.md`) |
+| One slice | A change is the whole slice in one PR: server, SDK in both languages, CLI and screen |
+| Commits | `type(scope): subject` under 72 characters, body of at most 3 lines. A `fix` commit carries a `Siblings:` trailer. `commit-message-check.mjs` enforces this. Never `--no-verify`, stash or force push |
 | Verify | Run `pnpm verify` from the repo root before reporting work as done; it must pass |
+
+## Code and tests
+
+| Rule | Detail |
+|---|---|
+| No client joins | No joining, counting or summing in the client; the API returns joined data (`UI1`). Pages read data through hooks, hooks call the API contract, components take props only |
+| Access and boundaries | Every access decision goes through `can()` (`AC1`); a Pydantic model at every boundary (`MD1`, `MD4`) |
+| Tests | Name the failure modes first, then write one test per mode. At most 5 tests for a small change, 10 for a medium one, 15 for a large one. Assert behaviour through the public seam. Mock only the outside world. Revert the fix once and watch each test fail |
+| Run less | Run only the tests you touch: `make test PKG=... T=...` and `make usecase-test UC=... LAYER=...` |
+| Python | The Python SDK supports Python 3.11. Do not use 3.12-only syntax such as `class X[T]` |
 | Fixtures | Demo data lives only in `apps/console/src/lib/api/mock/`. Never put fixtures in types, hooks, components or pages |
-| Data flow | Pages read data through hooks; hooks call the API contract; components take props only |
 | Docs | Follow the doc standards in `CONTRIBUTING.md`; update cross-references when a file moves |
-| Branches | Work on a branch and open a PR (`CONTRIBUTING.md`); never `--no-verify`, a stash or a push to `main` |
+
+## This repository is public
+
+| Rule | Detail |
+|---|---|
+| Trailers and links | No co-author or vendor trailers, no links to agent sessions or agent web UIs |
+| Names | No internal hosts, no names of people or clients, no tracker ids, board slices or private paths in code, comments, docs, commits or PR text |
 | Secrets | Never commit `.env`, credentials or real customer data; `.env.example` is the only env file in git |
-| Names in code | A name or comment says what the thing is, never a tracker id, a board slice (`A2`) or a private path; readers have only this repo |
+| Checks | `scripts/leak_scan.py` and `scripts/check-public-paths.mjs` enforce the above; see "Everything here is public" in `CONTRIBUTING.md` |
 
 ## Four rules every change follows
 
@@ -28,17 +52,6 @@ Ops AI is an operational AI platform: Python services in `services/`, libraries 
 
 ## Prompts for common tasks
 
-Each runs the make targets it names; the same steps are Claude Code skills of the same name.
+Each runs the make targets it names and is a Claude Code skill of the same name; its file in `.github/prompts/` says when to use it.
 
-| Prompt | Use it to |
-|---|---|
-| `/ops-commit` | Get a change through Ops AI's commit checks: the console and docs checks, the Python verify, a What's new entry for a person using the console, and a commit message that says what was wrong and how it was proven. Use before committing or when the pre-commit hook fails. |
-| `/ops-database` | Point Ops AI at another database: our container, an existing PostgreSQL 15 to 17 (Azure Database for PostgreSQL among them), and later Azure SQL. Use when someone asks which database Ops AI needs or how to use their own. |
-| `/ops-debug` | Diagnose a failing Ops AI service: which one is down, its log, its port, a stale process, or a second stack in the way. Use when a page errors, a make target fails, or a service will not start. |
-| `/ops-mirror` | Install and build Ops AI through a company package mirror (Nexus, Artifactory): set the mirror, test it, find the locked versions it does not serve, and install through it. Use when installs fail behind a proxy or a bank's network has no public internet. |
-| `/ops-run` | Run the Ops AI stack locally, in the devcontainer or on a shared VM workspace, on the fake model or OpenAI. Use when someone asks to start, stop or set up Ops AI, or which make target runs it. |
-| `/ops-sample-team` | Install the sample team (people, knowledge, agents, tools, workflows, mailbox) on a running stack and walk the email demo end to end. Use when someone wants demo data, a team to try the console with, or to check the stack works from chat to the second reply. |
-| `/ops-tool-module` | Add a tool module (OpenAPI, MCP, HTTP or a Python code tool) with its credential as a secret and its host on the egress list, then publish it through review. Use when someone wants an agent or workflow to call a new system. |
-| `/ops-workflow-step` | Add a new workflow step type (node kind) to the engine: its definition, ports, parameters and form, its executor, and its tests. Use when someone needs a step that no existing type can be configured to do. |
-| `/usecase` | List, add, update and run end-to-end use cases (docs/usecases) as plain user stories at the api, sdk or cli layer. Use when someone asks to prove a change end to end, says which stories work, or types /usecase list|add|update|run. |
-| `/wf-builder` | Draw a workflow from what a developer describes, check it with the engine, create it on the profile they name and start a test run. Use when someone asks to build, sketch or draft a workflow, or types /wf-builder. |
+`/ops-commit`, `/ops-database`, `/ops-debug`, `/ops-docs-edit`, `/ops-docs-review`, `/ops-docs-write`, `/ops-fix-the-class`, `/ops-mirror`, `/ops-run`, `/ops-sample-team`, `/ops-tool-module`, `/ops-workflow-step`, `/usecase`, `/wf-builder`.

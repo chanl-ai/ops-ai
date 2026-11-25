@@ -15,14 +15,18 @@ import json
 import os
 from typing import Any
 
+# The team's two-person rule on (requesterMayDecide off; the default is on), so the asker does not decide her own
+# request. The dev identity carries the policy as a platform token would.
+os.environ["OPS_DEV_POLICIES"] = '{"requesterMayDecide": false}'
+
 import httpx
-from usecase_harness import DEMO_JAMES, DEMO_MAYA, chat, check, data, demo, finish, turn_text
+from usecase_harness import DEMO_JAMES, DEMO_MAYA, chat, check, data, demo, finish, save_agent, turn_text
 
 AGENT = "ag_advisor"
 UNGRANTED = "open_dispute"
 OPS = {"X-Team-Id": "team_ops"}
 MAYA = {**OPS, "X-Dev-User": DEMO_MAYA}
-# Maya asks in chat; the asker does not decide her own request (requesterMayDecide is off by default), so James does.
+# Maya asks in chat; the asker does not decide her own request (the two-person rule, pinned on above), so James does.
 JAMES = {**OPS, "X-Dev-User": DEMO_JAMES}
 
 
@@ -39,7 +43,7 @@ def grant_bank(api: httpx.Client) -> list[str]:
         if not str(t["id"]).startswith("workflow:")
     ]
     held = [t for t in tools if t != UNGRANTED]
-    patched = data(api.patch(f"/v1/agents/{AGENT}", json={"toolIds": held}, headers=OPS))
+    patched = data(save_agent(api, AGENT, {"toolIds": held}, headers=OPS))
     body = {"version": patched["version"], "note": "uc-610 many tools"}
     published = api.post(f"/v1/agents/{AGENT}/publish-requests", json=body, headers=OPS)
     assert published.status_code < 300, published.text[:300]

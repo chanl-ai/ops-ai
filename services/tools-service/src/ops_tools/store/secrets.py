@@ -4,9 +4,9 @@ change it records. Values are put and read through `secrets.SecretResolver`; thi
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
@@ -48,9 +48,9 @@ tool_secrets = sa.Table(
     # short value, whose ending would give too much away.
     sa.Column("ends", sa.String(4)),
     sa.Column("created_by", sa.String(200), nullable=False),
-    sa.Column("created_at", _TS, nullable=False),
-    sa.Column("rotated_at", _TS),
-    sa.Column("last_used_at", _TS),
+    sa.Column("created_at", _TS, nullable=False, info=LISTED),
+    sa.Column("rotated_at", _TS, info=LISTED),
+    sa.Column("last_used_at", _TS, info=LISTED),
     # The template slot a provisioned record fills, found again by it on the next run, and what a person may change:
     # `system` nothing, `managed` anything. Null on a record no template made.
     sa.Column("template_id", sa.String(120), index=True, info=LISTED),
@@ -61,6 +61,10 @@ tool_secrets = sa.Table(
     # The team's app credential whose client secret this is: changed with the credential under Credentials, never on
     # its own, and not listed as a value tools reference. Null for every other secret.
     sa.Column("credential_id", sa.String(64)),
+    # The secrets list sorts by when each was made, rotated and last used.
+    sa.Index("ix_tool_secrets_created_at", "tenant_id", "team_id", "created_at"),
+    sa.Index("ix_tool_secrets_rotated_at", "tenant_id", "team_id", "rotated_at"),
+    sa.Index("ix_tool_secrets_last_used_at", "tenant_id", "team_id", "last_used_at"),
     # Held to its team by the database: only a transaction run as ROLE in the row's team reads it.
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
@@ -159,7 +163,9 @@ class SecretStore(Store):
     role = ROLE
     system_role = SYSTEM_ROLE
 
-    async def _audit(self, c: AsyncConnection, tenant_id: str, team_id: str, change: dict[str, Any]) -> None:
+    async def _audit(
+        self, c: AsyncConnection, tenant_id: str, team_id: str, change: Mapping[str, str | int | datetime | None]
+    ) -> None:
         await c.execute(secret_audit.insert().values(tenant_id=tenant_id, team_id=team_id, **change))
         if change["action"] in NAMES_CHANGED:
             # Whether an auth config's client secret is held decides its app's card state (store/app_cards.py).
@@ -194,13 +200,20 @@ class SecretStore(Store):
             # are matched here: every read names one team, so a name is one row.
             q = q.where(tool_secrets.c.name.in_(params.ids))
             params = params.model_copy(update={"ids": None, "search": None})
+        by_name = sa.func.lower(tool_secrets.c.name)
         async with self.tx() as c:
             page = await list_page(
                 c,
                 q,
                 params,
                 search=[tool_secrets.c.name],
-                default_sort=sa.func.lower(tool_secrets.c.name),
+                sortable={
+                    "name": by_name,
+                    "createdAt": tool_secrets.c.created_at,
+                    "rotatedAt": tool_secrets.c.rotated_at,
+                    "lastUsedAt": tool_secrets.c.last_used_at,
+                },
+                default_sort=by_name,
                 filters={"templateId": tool_secrets.c.template_id, "readOnly": held},
             )
         return page, [SecretMeta.model_validate(r) for r in page["data"]]

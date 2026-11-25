@@ -3,7 +3,7 @@
 - waiting on a person (a pending interrupt): delivered now, and the human step's SLA clock restarts (E5);
 - mid-run (its lease is held, or held by a crashed owner the sweeper will recover): the deployment's multitask rule
   decides, enqueue by default, and queued messages are delivered in arrival order when the run ends;
-- closed (the graph has finished): refused, so the channel opens a follow-up case linked to it.
+- closed (the graph has finished): refused, so the channel opens a new case.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ async def deliver(rt: Runtime, thread_id: str, *, key: str, kind: str, payload: 
             )
             return ("queued" if status == "queued" else "delivered"), seq
         else:
-            raise ThreadClosedError("This case has finished; open a follow-up case linked to it.")
+            raise ThreadClosedError("This case has finished; open a new case.")
     if kind == "customer_reply" and await waiting_with_sla(rt, thread_id):
         await restart_on_customer_reply(rt, thread_id)
     return "delivered", seq

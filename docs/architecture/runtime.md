@@ -1,6 +1,6 @@
 # Inside the runtime
 
-Status: current, updated 2026-10-16. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
+Status: current, checked against the code on 2026-11-18. Designed and not built: worker pools per tier, and chat and agent threads running on the engine. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md).
 
 The runtime is `agents-service` (`services/agents-service`, module `ops_agents`), one FastAPI process on port 8700.
 Detail on the kernel is in agent-kernel, on nodes in
@@ -17,13 +17,13 @@ Detail on the kernel is in agent-kernel, on nodes in
 | Workflows as tools | `api/child_runs.py`, `graphs/common.py` (`WorkflowRunner`, `WorkflowTools`) | An agent granted `workflow:<id>` calls a published workflow as a tool; a child thread on it is linked by `parent_thread_id`, and its result or review handle comes back as the tool result ([workflows-as-tools.md](workflows-as-tools.md)) |
 | Graphs | `ops_agents/graphs/` | Three code graphs and the definition compiler; `common.py` bridges a kernel turn into a node |
 | Definition compiler | `graphs/definition.py` | Validates a definition, builds a LangGraph `StateGraph`, caches compiled graphs by digest |
-| Checkpointer | `packages/ops_checkpointer` | `CheckpointSaver`: LangGraph checkpoints on SQLAlchemy Core, on PostgreSQL and SQL Server, under the tables' tenant and team policies, with a per-thread fence |
-| Leases and sweeper | `api/leases.py`, `api/sweeper.py` | Per-thread lease with generation; takeover of expired leases; recovery from the last checkpoint |
+| Checkpointer | `packages/ops_checkpointer` | `CheckpointSaver`: LangGraph checkpoints on SQLAlchemy Core, on PostgreSQL (SQL Server partial), under the tables' tenant and team policies, with a per-thread fence |
+| Leases, sweeper and chat turns | `store/leases.py`, `api/sweeper.py`, `api/chat_turns.py` | Per-thread lease with generation; a chat reply is an `engine_work` turn a workflow worker takes over when its process dies; the sweeper recovers the other runs from their last checkpoint. The runtime a turn runs on is built once, by `open_runtime` (`api/app.py`), for the API and the worker |
 | Timers | `api/timers.py`, `api/timer_port.py`, `graphs/sla.py` | SLA timers, the poller, `fire()` |
 | Activities | `ops_agents/activities/` | Seed catalogue, local tools, keyword knowledge store, `GatewayToolExecutor` for tools-service |
-| Channels | `api/channels/` | Mailbox adapter, deployment and inbox store |
+| Channels | `api/channels/inbox.py`, `store/channels.py` | Input delivered to a busy thread; the deployments store |
 | Metering | `graphs/metering.py`, `api/metering.py`, `api/usage.py`, `packages/ops_metering` | A usage row per model call; the budget check before each call, which pauses the thread when spent |
-| Model-call ledger | `api/model_ledger.py` | Records each completed model response by thread and request hash, under the alias it ran on; a node re-run after a crash replays it instead of calling the model again |
+| Model-call ledger | `api/model_ledger.py` | Records each completed model response by thread, replay key and request hash, under the alias it ran on: a chat turn's key is its LangGraph task, a workflow step's its step id (`step_calls`); a re-run after a crash replays it instead of calling the model again |
 | Model source | `ops_agent_kernel/models.py`, `ports.py` (`ModelSource`), `api/model_ledger.py` (`LedgerSource`) | The model a turn runs on, by its agent's alias: through models-service when it is configured, else the one direct model ([Which model a turn runs on](#which-model-a-turn-runs-on)) |
 | Route to people | `api/routing.py`, `routers/routing.py` | Stops a definition workflow at the next step end with no write in flight, journals the skipped steps, and raises the built-in `manual_handling` step |
 
@@ -44,6 +44,38 @@ resumes the kernel with `DeferredToolResults`.
 | A gating interrupt carries `call = {tool, input, step}` | The approval token must bind to exactly what will run; rebuilding the call from state could bind to something else |
 | The kernel builds its agent per turn | No hidden state survives a process restart |
 | State holds references to attachments and model outputs | A checkpoint stores the whole state per superstep ([durability-failure-and-audit.md](durability-failure-and-audit.md)) |
+
+## Skills that run step by step
+
+A skill version with `steps` is started, never loaded as text. The kernel keeps one running-skill record per
+conversation (`ops_contracts.skill_run.SkillRunState`) and moves it as tool results arrive. The kernel decides
+every move of a running skill; the model chooses which skill fits, fills in a tool's arguments and writes the words.
+
+| Job | Owner | Never |
+|---|---|---|
+| Which skill fits the request | The model, or the person from the chat menu | |
+| Whether a tool may be offered, found by search or called now | The kernel, one function (`steps.barred`) | Prompt wording |
+| Whether a step passed | The kernel, on a rule | The answering model, for a rule |
+| What happens when it did not pass | The kernel, from the step's "if not" | The answering model |
+| Whether an ended skill may start again | The kernel (`steps.final`) | The answering model |
+| How a skill ended, where and why | The record (`EndedSkill`: the exit, the step, `why`, the check, the author's meaning, `inReply`) | The model's text, the console |
+| Showing the step and the ending in chat | The console, from the record | The model's text |
+
+| Part | What happens | Where |
+|---|---|---|
+| Start | The model calls `switch_skill`, or a person picks the skill from the chat menu. A skill already running ends as `switched`; nothing stacks. A skill the kernel ended in this reply (a check that did not pass, a denied call, a step that could not be done, a held tool) is refused until the person's next message; one the model exited itself may start again | `packages/ops_agent_kernel/src/ops_agent_kernel/step_tools.py` |
+| A skill's tools | Every tool a step of an attached skill runs that is not a read, and every tool that asks another agent (`agent__<id>`; `ops_contracts.skill_run` owns that spelling for the service and the kernel), is reachable only as that step: it is not offered, found by search or run with no skill running or on another step. The same function answers when tools are offered and again when one is called, before any approval is asked for, so a call sent in the model step that starts or leaves a skill is refused. A read, and a write no step runs, stay free | `steps.py` (`owned`, `barred`), `kernel.py` (`_tool`) |
+| One step at a time | While a step names a tool, that tool and knowledge search are the only systems offered. A rule check (`result.amount <= 500`) runs in code on the tool's result and holds only when it is known true: a comparison with a missing value has no answer, and neither has its `not`, so `result.frozen is not false` fails on a result without the field. A sentence check, and a branch test written as a sentence, is decided by a separate judge model (`judge.verdict` on the `judge` alias, the turn's model while that alias is unbound), never by the answering model: the kernel asks it when the step's tool result arrives, with only the sentence, the result as the tool returned it and the skill's inputs. On a step with no tool, `step_done` is a claim and the judge reads what the person wrote and the tools returned in that reply; on a step that runs a skill, it reads what that skill handed back. Every verdict, a rule's or the judge's, goes through one function (`steps._verdict`): yes moves on, no or no verdict (the judge failed or answered outside its schema) takes the step's if-not, the hold and the ending as a failed rule does. `step_done` with `holds` on a judged step is refused, an exit as done is refused while the last step's check has no passing verdict, the step's result keeps `judgedBy` and the judge's `reason`, and the judge's tokens are added to the turn's `usage`. A step runs the tool stored as its `use` and no other: the editor stores the builder's pick wherever it is typed, and nothing reads a tool out of a sentence. A save refuses a rule that reads `result` on a step that runs no tool (`check_needs_tool`), and a step that runs a tool that changes something (`steps.changes`: not a read, or another agent) without a rule check (`write_needs_rule`). The publish check blocks a step that runs nothing and names exactly one tool, and lists other mentions as `warnings`. An attach and an agent's publish check run the same two checks on the published version (`skill_content.unrunnable`), so a version published before a check existed, or whose tool has since become a write, cannot be attached or go live on an agent. A builder can lock a read to its step (`locked` on the step); `steps.owned` then keeps it to the step as it does a write. A skill written as text (`source`) is read into steps by `ops_agents.app.skill_text`: a step may carry a `branch` (a test, and where to go when it does not hold) and a `next` jump; a branch that does not hold counts no attempt and takes no hold unless it ends the skill with an exit other than done (a guard: a branch on a tool result, decided by a rule or the judge). A text skill is held to none of the two save and publish checks above; only a mention of something that no longer exists blocks its publish. The skill index lists the tools each skill's steps call | `packages/ops_agent_kernel/src/ops_agent_kernel/steps.py`, `expr.py` |
+| A step that runs a skill | The kernel starts it from the agent's own pins and returns to the parent step when it ends; one level only | `steps.py` |
+| The prompt | The stable start is the agent's instructions (written from its brief when it has one). The current step, the skill's notes and the brief's never rules are written again before every model request, never rules last, in both prompt modes | `packages/ops_agent_kernel/src/ops_agent_kernel/prompt_writer.py` |
+| Between replies | Each reply journals the record as a `skill_run` event; the chat message carries it as `skillRun`, and the next turn reads it from the newest reply that has one (`TurnRequest.carried_run`) | `services/agents-service/src/ops_agents/graphs/common.py`, `graphs/agent_wrapper.py`, `api/chat_threads.py` |
+| An approval pause | The paused turn keeps the record and the tools held for that reply in its checkpoint; the resumed turn goes on at the same step, and a rejected call ends the skill as failed | `graphs/common.py` (`pending_approval`) |
+| Endings | A failed check takes the step's "if not"; when that ends the skill, the ending is final for the reply and the record says why. The model is told the exit, the step, the check that did not pass and the author's meaning for the exit, and not to say the action was or will be done | `steps.py` (`_end`, `ending`) |
+| Holds | A failed check or a denied call keeps the later steps' tools from every other skill until the holder passes that step; a hold is dropped when the agent no longer pins that version of the holder | `packages/ops_agent_kernel/CLAUDE.md`, "Contract with callers" |
+
+A skill without steps behaves as before, except that loading one on-match skill replaces the one carried from the
+reply before. Tools that are not reads run one at a time on every agent; `patterns.parallelReads: false` also asks the
+model for one tool call at a time, and `patterns.thinking` sets how hard the model thinks.
 
 ## Which model a turn runs on
 
@@ -71,7 +103,7 @@ The hop costs 7 ms at p50 on a local server (E13, [models-service-hop.md](../ser
 | `agent_wrapper` | agent turn → approval → resumed turn | Before a gated tool | An agent deployed on a channel; and console chat: each conversation is a thread on it, each message a run |
 | `simple_workflow` | classify → answer with citation | None | Reference for a workflow with no pause |
 | `complex_workflow` | classify → extract per attachment (Send fan-out, at most 20) → collect → draft → grade (redraft until 0.8 or 3 attempts) → human → send reply | Human review of the draft | Reference for a days-long case |
-| Definition-built | Node kinds agent, extract, collect, draft, grade, condition, human, tool, end; built-in `route_to_people` and `manual_handling` | `human` nodes, with SLA settings; `manual_handling` after a route to people | Workflows published as JSON |
+| Definition-built | Node kinds agent, extract, collect, draft, grade, condition, human, tool, end, pass, agent_turn, extract_records, match, open_cases; built-in `route_to_people` and `manual_handling` | `human` nodes, with SLA settings; `manual_handling` after a route to people | Workflows published as JSON |
 
 Every run, resume and state read compiles the thread's pinned version and refuses if the stored digest no longer
 matches. Compile takes about 3 ms; a cache hit 0.06 ms. The cache matters for memory: each pinned version stays
@@ -91,24 +123,26 @@ compiled in each process while any thread can resume on it
 | | Find-or-create by external key and an inbox for input on a busy thread |
 | | Usage and budgets per thread, a model-call ledger replayed on re-run, route to people |
 
-Designed and not built: a work queue table for enqueued runs and worker pools per tier, a stored event log with
-per-thread `seq`, recovery handed to its own task with a cap (today recovery runs inside the sweep loop, one thread at
-a time).
+Chat and agent threads have no work queue: they run in the API process, and their recovery runs inside the sweep loop,
+one thread at a time. Workflows run on the engine from `engine_work` in the worker process. The per-thread event log
+with `seq` is `thread_events`. Designed and not built: worker pools per tier, and recovery handed to its own task
+with a cap.
 
 ## Process types
 
 | Process | Today | Designed |
 |---|---|---|
 | `api` | One process serves routes and runs the sweeper and the poller | Serves routes and streams; scales with edits and chat connections |
-| `worker` | None | Takes runs from the work queue; owns timers and the poller; scales with concurrent runs |
+| `worker` | Runs workflows from `engine_work`, with no HTTP and no model of its own (`services/agents-service/src/ops_agents/api/worker.py`); chat and agent threads stay in the API process | Takes every run from the work queue; owns timers and the poller; scales with concurrent runs |
 | tools-service | Separate process on 8720 | Own deployable under its own user, so egress stays separate on one machine |
 
 ## The engine
 
 Temporal was removed on 2026-10-16. The engine is `packages/ops_engine`: a step journal, a Postgres work queue,
 worker processes, leases with generation fencing and reconcile-by-key, with LangGraph as the runner on PostgreSQL
-([workflow-runner.md](workflow-runner.md)). Slice 1 is in code and runs inside agents-service; the agent and
-chat routes still call LangGraph directly. The conformance suite, 13 tests from spec 16 §9 and ADR-0016, runs on the
+([workflow-runner.md](workflow-runner.md)). Workflows run on the engine inside agents-service, with retries by
+effects class, a run reconciler (`packages/ops_engine/src/ops_engine/store/reconciler.py`) and review deadlines and
+reminders; chat and agent threads still run on the LangGraph graphs above. The conformance suite, 13 tests from spec 16 §9 and ADR-0016, runs on the
 LangGraph adapter (`services/agents-service/tests/conformance/`,
 [conformance-suite](../services/agents-service/experiments/conformance-suite.md)). Plans must keep every side-effecting node idempotent by key
 or a single attempt with a reconciliation read, carry no engine-specific settings, and wait only through `delay`,

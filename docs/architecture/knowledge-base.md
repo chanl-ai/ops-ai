@@ -45,7 +45,7 @@ and this page links to it instead of repeating them. Table layout is in [data](d
 | Filters on collection, source, tags and metadata applied to search, each base its own, in both lanes; a per-request collection | Built | `retrieval.py` (`Scope`); `store/fulltext.py` (`scope_sql`); `store/vectors.py` (`nearest`); `schemas.py` (`SearchIn.collection`) |
 | Filters from conversation variables; freshness and trust boosts | Designed, not built yet | |
 | Keyword lane on the shared `ops_store.dialect.full_text` | Designed, not built yet | the lane has its own PostgreSQL query (`store/fulltext.py:1-2`) |
-| Search on SQL Server | Designed, not built yet | |
+| Search on SQL Server | Designed, not built yet | kb-service has no vector table or full-text index on SQL Server, so a search there returns no passages and each result names both lanes as skipped |
 | Who-can-see enforced per item | Designed, not built yet | stored, not enforced |
 | Query log, unanswered list, gap job, evals over retrieval | Designed, not built yet | |
 | Draft then publish for knowledge content | Designed, not built yet | |

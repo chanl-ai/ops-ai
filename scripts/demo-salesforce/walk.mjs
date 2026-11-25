@@ -99,7 +99,7 @@ async function step(name, page, body) {
 }
 
 const admin = await tokenFor(ADMIN.OPS_BOOTSTRAP_ADMIN_EMAIL, ADMIN.OPS_BOOTSTRAP_ADMIN_PASSWORD);
-const team = (await call(PLATFORM, 'GET', '/v1/teams', { Authorization: `Bearer ${admin}` })).data?.find((t) => t.name === TEAM_NAME)?.id;
+const team = (await call(PLATFORM, 'GET', `/v1/teams?search=${encodeURIComponent(TEAM_NAME)}`, { Authorization: `Bearer ${admin}` })).data?.data?.find((t) => t.name === TEAM_NAME)?.id;
 const as = async (email) => ({ Authorization: `Bearer ${await tokenFor(email, PASSWORD)}`, 'X-Team-Id': team });
 const lead = await as(LEAD);
 const salesforceCard = async () => ((await call(TOOLS, 'GET', '/v1/systems', lead)).data ?? []).find((c) => c.pluginId === PLUGIN);
@@ -185,7 +185,7 @@ try {
     await lp.getByTestId(`connect-plugin:${PLUGIN}`).click();
     const dialog = lp.getByTestId('connect-dialog');
     await dialog.waitFor({ timeout: 30_000 });
-    await dialog.locator('#who-person_or_team').click();
+    await dialog.locator('label[for="who-each"]').click();
     await dialog.locator('#app-own').click();
     const section = dialog.getByTestId('env-production');
     await section.locator('#production-clientId').waitFor({ timeout: 30_000 });
@@ -218,7 +218,7 @@ try {
     await appPage(lp, '2-app-connected-team');
     check(
       '2 Team admin: Connect dialog, "Each person, team account as backup", the team account signs in and Test passes',
-      closed && health === 'ok' && saved && card?.plugin?.teamOn && detail.signIn === 'person_or_team' && detail.teamBackup === true,
+      closed && health === 'ok' && saved && card?.plugin?.teamOn && detail.signIn === 'person' && detail.teamBackup === false,
       { closed, health, saved, teamOn: card?.plugin?.teamOn, signIn: detail.signIn, teamBackup: detail.teamBackup },
     );
   });

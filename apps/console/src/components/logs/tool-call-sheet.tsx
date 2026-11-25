@@ -65,7 +65,11 @@ export function ToolCallSheet({
               rows={[
                 // Whose account of the app the call signed in with, worded as the As column on the list.
                 ...(c.runAs?.kind === 'person' || c.runAs?.kind === 'team'
-                  ? ([['As', c.runAs.kind === 'person' ? (c.runAs.email ?? 'A person’s own account') : 'Team account']] as [string, ReactNode][])
+                  ? ([
+                      ['As', c.runAs.kind === 'person' ? (c.runAs.email ?? 'A person’s own login') : c.runAs.login ? `${c.runAs.login} (team login)` : 'Team login'],
+                      // The team's login acted for whoever asked: the audit names both.
+                      ...(c.runAs.kind === 'team' && c.runAs.askedBy ? [['Asked by', c.runAs.askedBy]] : []),
+                    ] as [string, ReactNode][])
                   : []),
                 ['Workflow', <Link key="w" href={`/build/workflows/${c.workflowId}`} className="underline-offset-4 hover:underline">{c.workflowName}</Link>],
                 ['Agent', c.agentName],

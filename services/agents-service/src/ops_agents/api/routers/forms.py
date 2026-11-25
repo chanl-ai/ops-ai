@@ -47,13 +47,14 @@ from ops_service_kit.errors import (
 )
 from ops_service_kit.http import Envelope, In, Json, JsonValue, ListResult, Out
 from ops_service_kit.listing import ListQuery
+from ops_service_kit.names import Name, slugify
 from ops_store import isolation
 
 from ...store.engine import EngineTransactions
 from ...store.form_links import FormLinkRow, FormLinks, source_of
 from ...store.tenancy import current_tenant
 from ...store.trigger_events import TriggerEvent, TriggerEvents
-from ..auth import Principal, principal, require_builder, started_by
+from ..auth import Principal, principal, reader_of, require_builder, started_by
 from ..deps import Runtime, runtime
 from ..engine_runs import live_version, start_run
 from ..envelope import ok
@@ -63,6 +64,8 @@ from ..widget_sessions import RateLimit
 router = APIRouter(tags=["forms"])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
+# A workflow's forms are read with the workflows view cell, as every GET under /v1/workflows is.
+Reader: TypeAlias = Annotated[Principal, Depends(reader_of("workflows"))]  # noqa: UP040
 
 # The isolation context of a link submission: the tenant and team its signed token names.
 FORM = "form"
@@ -81,7 +84,7 @@ class FormIn(In):
     mode: Literal["link", "members"] = "link"
     expires_in_days: int = Field(default=DEFAULT_DAYS, ge=1, le=90)
     daily_cap: int = Field(default=DEFAULT_CAP, ge=1, le=10_000)
-    title: str | None = Field(default=None, max_length=200)
+    title: Name | None = None
     description: str = Field(default="", max_length=1000)
     after_text: str = Field(default="", max_length=1000)
 
@@ -194,7 +197,7 @@ def _token(tenant: str, team: str, form_id: str) -> tuple[str, str]:
 
 
 def _slug(title: str) -> str:
-    words = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60] or "form"
+    words = slugify(title, width=60, fallback="form")
     return f"{words}-{secrets.token_hex(3)}"
 
 
@@ -276,7 +279,7 @@ async def create_form(rt: Rt, me: Me, _: Tx, workflow_id: str, body: FormIn) -> 
 
 
 @router.get("/v1/workflows/{workflow_id}/forms", response_model=Envelope[ListResult[FormView]])
-async def workflow_forms(rt: Rt, me: Me, _: Tx, workflow_id: str, q: ListQuery) -> JSONResponse:
+async def workflow_forms(rt: Rt, me: Reader, _: Tx, workflow_id: str, q: ListQuery) -> JSONResponse:
     """The workflow's forms in the caller's team on the shared list contract: newest first, then by id; `search`
     matches the title and slug, `ids` names forms."""
     listed = await _links(rt).page(workflow_id, q)

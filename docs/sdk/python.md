@@ -1,7 +1,6 @@
 # Python SDK
 
-Status: current. Built and tested against the local stack; not yet published to PyPI, so install it from the
-repository until the first release.
+Status: current, version 1.0.0.
 
 Call Ops AI from Python: start workflow runs and wait for them, decide the human tasks they open, and work with agents,
 cases, tools, knowledge and files, as one person acting in one team.
@@ -9,8 +8,12 @@ cases, tools, knowledge and files, as one person acting in one team.
 ## Install
 
 ```bash
-pip install ./sdk/python        # from a clone of the repository, until the package is on PyPI
+pip install ops-ai
 ```
+
+The package holds the SDK and the `opsai` command line. It is not on the public package index yet (planned), so install
+it from your company's package mirror or from a clone of the repository, as [Install the CLI](../guide/install-cli.md)
+shows.
 
 ## Connect
 
@@ -28,8 +31,9 @@ ops = OpsAI(api_key="ok_...", base_url="https://ops.example.com", team="team_cla
 | API key | `api_key` | `OPS_API_KEY` |
 | Team the calls act in | `team` | `OPS_TEAM` |
 
-Arguments win over the environment, which wins over the profile the `opsai` CLI saves (`OpsAI(profile="builder")` names another). On a local stack with no proxy,
-pass `services={"agents": "http://127.0.0.1:8700", ...}` to reach each service on its own port.
+Arguments win over the environment, which wins over the profile `opsai login` saves (`OpsAI(profile="builder")` names
+another). On an install with no proxy in front, pass `services={"agents": "<address>", ...}` with each area's own
+address.
 
 ## Run a workflow and decide its task
 
@@ -64,7 +68,7 @@ print(run["status"], run.get("outcome"))
 Every list takes the shared query: `page`, `page_size` (at most 50), `search`, `sort_by`, `sort_order` (`asc` or
 `desc`), `ids` and the list's own filters, which take a list of values. The nouns' `list` passes them on and follows
 every page. A `raw` operation returns one page as a dictionary with `data`, `pagination` and `facets`; read
-`pagination["hasNext"]` to go on. The query and the reply are described in [Lists and errors](../architecture/api.md#lists-and-errors).
+`pagination["hasNext"]` to go on. The query and the reply are described on the [HTTP API](../reference/http-api.md#how-it-works) page.
 
 ```python
 page = ops.raw.agents.agents_list_agents(page=1, page_size=20, sort_by="name", sort_order="asc", search="claims")
@@ -87,7 +91,7 @@ custom app's connection id); an account is a connection id.
 | `secrets` | `list()`, `create(name, value)`, `rotate(name, value)`, `rename(name, new_name)`, `delete(name)`; no answer carries a value |
 | `policies` | `get(key)`, `set(key, value)`: the team's policies a Security admin changes, such as `toolWritesNeedApproval` (use `with_team` to act in another team) |
 | `egress` | `list()`, `allow_host(host)`, `allow_range(cidr)`, `remove_host`, `remove_range`; Security admins only |
-| `agents` | `tool_options(search)` (what may be granted), `grant_tools(id, tool_ids)` (kept beside the ones it holds) |
+| `agents` | `update(id, fields, base=)` (saves fields on the draft, naming the copy last read; refused with `stale_base` when it has been saved since), `tool_options(search)` (what may be granted), `grant_tools(id, tool_ids)` (kept beside the ones it holds), `references(search, for_agent=)` (what a brief can mention with `@`), `add_reference(id, kind, ref_id)` (grants it as a new draft; a skill brings its tools and knowledge bases), `publish_check(id)` (what stops the draft from publishing, each with its field). `apply` carries `brief`, `promptMode` and `patterns`: a file with a `brief` has its role and instructions written from it |
 | `resources` | `list(app)`, `add(resource)` (a copy in the team) |
 | `usage` | `list(**filters)`: this team's tool calls |
 
@@ -112,31 +116,8 @@ ops.me.connectors.finish(state, code)             # the state and code in the ad
 
 ## The command line
 
-`opsai` ships with the Python package and uses the same saved sign-in as `OpsAI(profile=...)`. Add `--json` after the
-verb for machine output.
-
-| Command | What it does |
-|---|---|
-| `opsai agents list [--search]`, `opsai skills list [--search] [--id ID]`, `opsai guardrails list`, `opsai widgets list`, `opsai kb bases\|sources [--search]`, `kb documents KB [--search]`, `kb items SOURCE [--search]` | List every page of a resource; `--id` (repeatable) names exact rows |
-| `opsai kb create NAME [--owner]`, `set KB [--rerank on\|off] [--query-model] [--rewrite]`, `delete KB` | Make, tune and retire a knowledge base |
-| `opsai kb add-source NAME --kb KB [--plugin P --source S --value NAME=ID]`, `scopes --plugin P --source S` | Add a source; list what its picker offers |
-| `opsai kb push SOURCE --name N --title T --text TEXT` | Put one item into a push source |
-| `opsai kb add-file KB [PATH...] [--file-id ID]` | Upload files, or take ones already in Files, and sync them |
-| `opsai templates list [--kind] [--source]`, `install REF [--kind] [--fields]` | See the offered templates; add one as the team's copy |
-| `opsai secrets list [--search]\|create NAME\|rotate NAME\|rename NAME NEW\|delete NAME` | The team's secrets; the value comes from `--value` or standard input |
-| `opsai policies get\|set KEY [VALUE]` | The team's policies |
-| `opsai egress list\|allow-host H\|allow-range R\|remove-host H\|remove-range R` | Hosts and ranges tools may reach |
-| `opsai tools discover SPEC`, `import MODULE SPEC [--operation N]`, `request-review MODULE`, `create NAME --display-name N`, `decide-review REVIEW [--decision]`, `publish MODULE`, `run --module MODULE TOOL` | Take an OpenAPI document to a published module |
-| `opsai agents tool-options [--search]`, `grant-tools ID TOOL...`; `opsai tasks approve TASK [--password-stdin]` | Grant tools to an agent; approve a held write (asks for your password, without echo, when the write asks you to confirm it is you) |
-| `opsai connectors list`, `connect APP [--link] [--account]`, `finish --state S --code C`, `accounts`, `disconnect APP` | Your own sign-ins on apps |
-
-```bash
-SOURCE=$(opsai kb add-source Policies --kb "$BRANCH" --json | jq -r .id)
-opsai kb push "$SOURCE" --name fees/overdraft --title "Overdraft fees" --text "Fees are waived on the first day."
-opsai kb add-file "$BRANCH" --file-id "$SHEET" --file-id "$MANUAL"
-opsai templates install plugin:opsai.starters:doc-coauthoring
-opsai connectors connect "Person desk"
-```
+`opsai` ships with this package and uses the same saved sign-in as `OpsAI(profile=...)`. Every area and verb is on
+[the opsai command line](../reference/cli.md) page.
 
 Moving from 0.1.0: see [Upgrading to 1.0.0](upgrading.md).
 
@@ -144,8 +125,13 @@ Moving from 0.1.0: see [Upgrading to 1.0.0](upgrading.md).
 
 A refused call raises a subclass of `OpsError` with `status`, `code`, `message`, `request_id` and `details`: `BadRequest` (400,
 422), `Unauthorized` (401), `Forbidden` (403), `NotFound` (404), `Conflict` (409), `RateLimited` (429) and
-`ServerError` (5xx). The fields come from the API's one error body, described in [Lists and errors](../architecture/api.md#lists-and-errors). Branch on `code`, and quote
-`request_id` when asking for help.
+`ServerError` (5xx). The fields come from the API's one error body, described on the [HTTP API](../reference/http-api.md#how-it-works) page. Branch on `code`, and quote
+`request_id` when asking for help. Each also has `.kind` (`input`, `refused`, `upstream`, `timeout` or `internal`).
+
+A run that failed raises `RunFailed` from `ops.runs.wait(run_id, check=True)`, with `kind`, `code`, `message` (for the
+builder), `user_message` (safe to show a customer), `retryable`, `retry_after`, `trace_id`, `step`, `attempt` and `of`.
+Without `check=True` the failed run is returned and its `failure` holds the same fields. The `opsai` command prints one
+line for either and exits with a status per kind: input 2, refused 3, upstream 4, timeout 5, internal 6.
 
 ```python
 from ops_ai import NotFound
@@ -163,8 +149,9 @@ sends one.
 
 `AsyncOpsAI` has the same attributes with every call awaited, and `list` is an async iterator.
 
-## Where it lives
+## Next
 
-The package is `sdk/python`; its lower layer, `ops_ai/_generated`, is written by `sdk/generate.py` from the services'
-OpenAPI documents. `make sdk` regenerates it after a route changes, and `make sdk-check` fails until it is. The
-example `sdk/python/examples/seed_team.py` seeds a fresh team end to end.
+<!-- site: cards -->
+- **[TypeScript SDK](typescript.md)**: The same client for Node and the browser.
+- **[HTTP API](../reference/http-api.md)**: The routes under every call, for `raw` operations.
+- **[Upgrading to 1.0.0](upgrading.md)**: Paging, closed bodies and the one error format.

@@ -1,4 +1,4 @@
-"""`opsai skills`, `guardrails`, `widgets` and `threads`: the lists the Build and Work pages show, every page, with the
+"""`opsai guardrails`, `widgets` and `threads`: the lists the Build and Work pages show, every page, with the
 search each one has."""
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ from .common import client, emit, parser, refuse, table, verb_options
 
 # area -> (what it holds, the client noun, the columns of a row)
 LISTS: dict[str, tuple[str, str, tuple[str, ...]]] = {
-    "skills": ("skills", "skills", ("id", "name", "status", "liveAgents")),
     "guardrails": ("guardrails", "guardrails", ("id", "name", "status", "owner")),
     "widgets": ("widget templates", "widgets", ("widgetId", "name", "status", "version")),
 }
@@ -41,7 +40,6 @@ def _list_area(area: str) -> Callable[[list[str]], int]:
     return main
 
 
-skills_main = _list_area("skills")
 guardrails_main = _list_area("guardrails")
 widgets_main = _list_area("widgets")
 

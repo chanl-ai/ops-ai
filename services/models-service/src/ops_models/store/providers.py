@@ -77,7 +77,14 @@ class Providers(Store):
         given = {"name": name, "key_ref": key_ref}
         query = sa.select(t).where(*(t.c[column] == value for column, value in given.items() if value is not None))
         async with self.install_tx(CONNECTIONS, tables=(t,)) as c:
-            page = await list_page(c, query, params, search=(t.c.name, t.c.type), default_sort=t.c.name.asc())
+            page = await list_page(
+                c,
+                query,
+                params,
+                search=(t.c.name, t.c.type),
+                sortable={"name": t.c.name, "type": t.c.type},
+                default_sort=t.c.name.asc(),
+            )
         return ListResult[ProviderRow].model_validate(page)
 
     async def get(self, provider_id: str) -> ProviderRow | None:

@@ -85,9 +85,9 @@ async def reattach(
     found for a run of a thread the caller may not read (`may_read_thread`). No request transaction: a run's stream
     holds none while it streams, and each poll reads the log afresh as the worker writes it."""
     store = graph_store(rt)
-    thread = await store.thread(thread_id)
+    thread = await store.thread_row(thread_id)
     run = await store.run(run_id)
-    if thread is None or not may_read_thread(thread, me) or run is None or run.thread_id != thread_id:
+    if thread is None or not may_read_thread(thread.model_dump(), me) or run is None or run.thread_id != thread_id:
         raise NotFound("Run")
     return EventSourceResponse(run_frames(rt, thread_id, run_id, after, follow=follow), sep="\n", ping=15)
 

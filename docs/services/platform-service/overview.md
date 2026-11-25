@@ -1,16 +1,54 @@
-# platform-service
+# Platform service
 
-Status: first slice and sign-in providers built, checked 2026-10-17. `services/platform-service` (`ops_platform`), public app on :8710 and
-internal app on :8711 (localhost only), with its own migration chain (`alembic_version_platform`). `make up` starts it
-and lists it in `make health`. Tests: `services/platform-service/tests`; use cases uc-021, uc-023, uc-025, uc-026.
-Design: this page, service map row `platform-service`.
+Status: current, checked against the code on 2026-11-18. Built: password, OIDC and SAML sign-in, sessions, teams, roles, API keys, policies and the audit log. Not built: MFA and sending invitations by mail.
 
-## What it does
+The platform service decides who someone is and what teams they belong to. It owns the workspace, its teams, people,
+their roles, sign-in, sessions, API keys, the workspace's policies and the audit log, and it is the only service that
+issues identity tokens. It routes no other service's traffic: every other service checks a caller's token itself
+against the public keys this service publishes.
 
-It is the identity issuer and nothing else: it owns tenants, teams, users, members, sessions, invites, API keys and
-the audit log, and it is the only service that mints identity tokens. It routes no other service's traffic. Every
-other service verifies callers locally with `packages/ops_identity`: platform tokens against the published key set,
-API keys through introspection on the internal app, service tokens on internal routes only.
+## At a glance
+
+| Item | Detail |
+|---|---|
+| Owns | Tenants, teams, users, members, roles and their assignments, sessions, invites, password credentials and resets, API keys, sign-in providers, domains, certificates and group rules, policies, the audit log |
+| Ports | 8710 for the public app; 8711 for the internal app, bound to localhost (`OPS_PLATFORM_PORT`, `OPS_PLATFORM_INTERNAL_PORT`) |
+| Code | `services/platform-service` (`ops_platform`), with `ops_signin` for OIDC and SAML, `ops_access` for `can()` and the policies, `ops_email` for reset links |
+| Database | Own migration chain (`alembic_version_platform`, `services/platform-service/migrations`). Tables: `tenants`, `teams`, `users`, `members`, `roles`, `role_permissions`, `role_assignments`, `sessions`, `password_credentials`, `password_resets`, `api_keys`, `policies`, `audit_entries`, `platform_outbox`, `oauth_clients`, `oauth_address_counts`, and the sign-in tables `signin_providers`, `signin_domains`, `signin_identities`, `signin_flows`, `signin_certificates`, `signin_group_rules`, `signin_grants`, `signin_break_glass`, `signin_lockouts`, `signin_email_failures`, `signin_secrets` |
+| Isolation | The service logs in as a role that owns no table and switches every transaction to `ops_platform_tenant` (`services/platform-service/src/ops_platform/store/tenancy.py:31`), with row-level security forced on every table; lookups before a tenant is known are SECURITY DEFINER functions ("Operations" below). Tests: `services/platform-service/tests/test_least_privilege.py`, `test_rls.py` |
+| Secrets it holds | The token signing key (`OPS_PLATFORM_SIGNING_KEY`), the key that seals each workspace's sign-in secrets (`OPS_SECRETS_KEY`), the SAML service provider's key pair, the mail provider's settings. Passwords are PBKDF2-SHA256 hashes; API keys and refresh tokens are stored as hashes |
+| Calls out to | agents-service (`GET /v1/teams/usage` before a team delete or a workspace close, and the platform events); tools-service (the platform events it subscribes to); each workspace's identity providers (OIDC discovery, SAML metadata, token endpoints); DNS for domain proof; the mail provider for reset links |
+| Called by | The console and the SDK for sign-in and settings; every service for the key set (`GET /.well-known/jwks.json`), API key introspection and audit entries on the internal app, and names and summaries (`GET /v1/people-names`, `GET /v1/api-key-summaries`) |
+| Events it sends | Through `platform_outbox` and the `platform_relay` process to `/v1/platform-events`: `member.removed` to tools-service, `team.created` to tools-service and agents-service, `policy.changed` and `api_key.changed` to agents-service (`services/platform-service/src/ops_platform/store/relay.py:23-30`) |
+| Events it receives | Audit entries other services record with their own changes, on the internal `POST /v1/audit-events` (`ops_store.audit`) |
+| When something is down | Other services keep verifying tokens against the cached key set, so a person stays signed in elsewhere until the token expires (15 minutes). Without an answer from agents-service, a team delete or workspace close is refused 503 `usage_unavailable`, never taken |
+| Routes | API reference tab, HTTP API › Platform, built from `services/platform-service/openapi.json`; `make -C services/platform-service openapi-check` fails on drift. The internal app serves only `POST /v1/auth/introspect` and `POST /v1/audit-events`, both for service tokens, with each service's scopes capped by `OPS_SERVICE_SCOPES` |
+| Use cases | uc-021, uc-023, uc-025, uc-026 |
+
+```mermaid
+sequenceDiagram
+  participant C as Console
+  participant P as platform-service
+  participant S as Any other service
+  C->>P: POST /v1/auth/sign-in (or the SSO round trip)
+  P-->>C: platform token (EdDSA, 15 min) and refresh token
+  C->>S: request with the platform token
+  S->>P: GET /.well-known/jwks.json (cached, refetched on an unknown kid)
+  S-->>C: answer, decided by can() on the token's roles
+```
+
+## Run and test it alone
+
+| Task | Command |
+|---|---|
+| Serve both apps in the foreground | `make -C services/platform-service run`; on the stack, `make restart SVC=platform` |
+| Apply its migrations | `make -C services/platform-service migrate` |
+| Tests on the test database | `make -C services/platform-service test` (`T=` names files) |
+| Lint, strict types, tests and the OpenAPI gate | `make -C services/platform-service verify` |
+| Regenerate `openapi.json` | `uv run python scripts/check_openapi.py --write` in `services/platform-service` (this service has no `openapi` target) |
+| A local identity provider for SSO tests | `uv run python -m ops_signin.fake_idp --port 8790` |
+
+## Credentials it issues
 
 | Credential | Shape | Verified by |
 |---|---|---|
@@ -19,16 +57,6 @@ API keys through introspection on the internal app, service tokens on internal r
 | API key | `ok_<id>.<secret>`, secret shown once, SHA-256 at rest, optional expiry, optional target (one agent or workflow) | platform-service, via `POST /v1/auth/introspect` |
 | Service token | EdDSA JWT, 60 seconds, signed with the calling service's own key, `sub` bound to that key | The callee's `ServiceAuth` |
 | Step-up token | EdDSA JWT, 5 minutes, same key and `aud` as the platform token, `kind` and `typ` `step_up`, `sub` and `email` the person who re-entered their password (`POST /v1/auth/step-up`) or signed in again at their SSO provider (`POST /v1/auth/step-up/sso/*`), audited as `auth.step_up` with the method | agents-service `require_step_up`, against the cached key set; refused as a session by every service |
-
-## Routes
-
-| Mount | Operations |
-|---|---|
-| Public :8710 | `GET /v1/health`, `GET /.well-known/jwks.json`, `POST /v1/auth/sign-in`, `GET /v1/auth/session`, `POST /v1/auth/refresh`, `POST /v1/auth/step-up`, `POST /v1/auth/sign-out`, `GET /v1/me`, `GET /v1/teams`, `GET /v1/settings/members`, `POST /v1/settings/members/invite`, `.../role`, `.../delete`, `GET /v1/api-keys`, `POST /v1/api-keys`, `POST /v1/api-keys/{id}/revoke`, `GET /v1/api-key-summaries` (service token with `settings:view`: every team's keys and their targets, for the Channels list), `GET /v1/audit`, `GET /v1/invites/{token}`, `POST /v1/invites/{token}/accept`, `POST /v1/auth/options`, `POST /v1/auth/sso/start`, `GET /v1/auth/oidc/callback`, `POST /v1/auth/saml/acs`, `GET /v1/auth/saml/metadata`, `POST /v1/auth/saml/acs/{spId}`, `GET /v1/auth/saml/metadata/{spId}`, `POST /v1/auth/sso/complete`, `POST /v1/auth/step-up/sso/start`, `.../complete`, `POST /v1/auth/password/forgot`, `POST /v1/auth/password/reset`, `GET /v1/settings/sign-in/providers`, `PUT`/`DELETE /v1/settings/sign-in/providers/{id}`, `POST /v1/settings/sign-in/providers/metadata`, `POST /v1/settings/sign-in/providers/{id}/refresh`, `POST /v1/settings/sign-in/providers/{id}/test`, `GET /v1/settings/sign-in/test-results/{flowId}`, `GET /v1/settings/sign-in/break-glass`, `PUT`/`DELETE /v1/settings/sign-in/break-glass/{userId}`, `POST /v1/settings/sign-in/domains/{domain}/verify`, `GET /v1/settings/sign-in/secret-names`, `GET`/`POST /v1/settings/teams`, `PATCH /v1/settings/teams/{id}`, `POST /v1/settings/teams/{id}/archive`, `.../restore`, `GET /v1/settings/members/options`, `POST /v1/access/check`, `GET /v1/me/why`, `GET /v1/roles`, `GET /v1/roles/{id}`, `GET /v1/people/{id}/permissions`, `POST /v1/workspace/transfer`, `.../leave`, `.../close`, `.../restore`, `POST /v1/settings/teams/{id}/leave`, `GET /v1/settings/teams/{id}/delete-check`, `DELETE /v1/settings/teams/{id}`, `GET /health/background` |
-| Internal :8711 | `POST /v1/auth/introspect` (service token, no tenant claim); `POST /v1/audit-events` (service token with `audit:create`, naming tenant and team): an audit entry another service recorded with its change (`ops_store.audit`), kept once by its id, shown on the Audit page with the line the service wrote. The internal mount caps each service's scopes by `OPS_SERVICE_SCOPES` |
-
-Every operation is typed in `services/platform-service/openapi.json`; `make -C services/platform-service
-openapi-check` fails on drift.
 
 ## Settings
 
@@ -57,28 +85,36 @@ openapi-check` fails on drift.
 ## Policies
 
 The workspace's rules, read and changed at `GET /v1/policies`, `GET /v1/policies/{key}` and `PUT /v1/policies/{key}`
-(Govern › Policies in the console). They are defined once in `packages/ops_access/src/ops_access/policies.py`, which
-this table is generated from. A per-team policy holds a value per team; a team with none set takes the default.
+(Govern › Policies in the console). They are defined once in `packages/ops_access/src/ops_access/policies.py`; this
+table lists them as that file holds them on the date in the status line. A per-team policy holds a value per team; a team with none set takes the default.
 
 | Key | Name | Scope | Default | What it does |
 |---|---|---|---|---|
-| `requesterMayDecide` | Requester may decide | workspace | False | The person who asked for a decision may also make it. Off (the default): someone else has to decide. |
+| `requesterMayDecide` | Requester may decide | team | on | The person who asked for a decision may also make it. Off is the two-person rule (Approvals › Advanced): someone else has to decide, unless the person is an Admin of the team. |
 | `extractionFloor` | Extraction confidence floor | workspace | 0.8 | The lowest confidence an Extract from file step may accept; no step can ask for less. |
-| `stepUp` | Step-up on every approval | workspace | False | Every approver confirms their sign-in again before deciding. Off: only operations that ask for it. |
-| `publishReview` | Publish reviews | per team | off in every team | Which of a team's publishes wait for review: always, major changes only (the default), or never. |
-| `chatThreadsOwnerOnly` | Private chat threads | workspace | True | Each chat thread is read only by the person who started it. Off: the team's admins read them too. |
-| `memoryRetentionDays` | Memory retention | workspace | None | How long agents keep what they remember about each person. Unset: kept until the person removes it. |
+| `stepUp` | Step-up on every approval | workspace | off | Every approver confirms their sign-in again before deciding. Off: only operations that ask for it. |
+| `publishReview` | Publish reviews | per team | major changes | Which of a team's publishes wait for review: always, major changes only (the default), or never. |
+| `companySignInRequired` | Company sign-in required | workspace | off | People on the workspace's verified company domains sign in only through the company's provider; named break-glass Security admins keep a password. Off: passwords follow the sign-in providers. |
+| `chatThreadsOwnerOnly` | Private chat threads | workspace | on | Each chat thread is read only by the person who started it. Off: the team's admins read them too. |
+| `memoryRetentionDays` | Memory retention | workspace | none | How long agents keep what they remember about each person. Unset: kept until the person removes it. |
 | `reviewSlaHours` | Review deadline | workspace | 8 | How long a publish review may wait, in wall-clock hours, before it shows as overdue. |
-| `toolWritesNeedApproval` | Approve every tool write | per team | off in every team | Every tool write by the team waits for a person's approval, including the ones a tool lets run at once. |
-| `aiSteps` | AI steps in workflows | per team | off in every team | The team's workflows may use AI steps: Classify, Summarise, Extract from text, Draft. Off until turned on. |
-| `taskAssist` | Task assist | per team | off in every team | A typed task opens with AI help: its question, a summary, doubtful fields and a suggestion. Off until on. |
-| `checkBeforeSend` | Check before sending | per team | off in every team | Every write the team sends is checked against its sending policy first; a failure waits for a person. |
-| `pageImages` | Page images to the model | per team | off in every team | Document types in the team may show the model the page image of a scan or a doubtful field. Off until on. |
-| `aiStepsMaskPersonalData` | Mask personal data in AI steps | per team | off in every team | People see SSNs, card and account numbers, emails and phones masked in AI steps' output and in document type examples. A team may turn it off. |
-| `securityTeamAddsSecrets` | Only Security adds secrets | workspace | False | Only the security team adds secrets. Off: builders add and use their own team's secrets. |
+| `appChanges` | Ask before an agent changes anything in an app | per team | off | Ask before an agent changes anything in an app. Off: agents change apps without asking. On: the person in the chat confirms, or a reviewer of a chosen role approves. |
+| `appChangesByApp` | Approval by app | per team | none: each app follows the team | Per app: use the team setting, or change without asking, ask the person, or ask a reviewer. |
+| `toolWritesNeedApproval` | Approve every tool write | per team | off | Every tool write by the team waits for a person's approval, including the ones a tool lets run at once. |
+| `appWritesNeedApproval` | Approve writes of these apps | per team | none listed | Writes from the listed apps wait for a person's approval. Other writes run unless their tool asks for one. |
+| `appsChangeWithoutAsking` | Apps that change without asking | per team | none listed | Writes from the listed apps run in chat without asking the person first. Every other app asks before changes. |
+| `aiSteps` | AI steps in workflows | per team | off | The team's workflows may use AI steps: Classify, Summarise, Extract from text, Draft. Off until turned on. |
+| `taskAssist` | Task assist | per team | off | A typed task opens with AI help: its question, a summary, doubtful fields and a suggestion. Off until on. |
+| `checkBeforeSend` | Check before sending | per team | off | Every write the team sends is checked against its sending policy first; a failure waits for a person. |
+| `pageImages` | Page images to the model | per team | off | Document types in the team may show the model the page image of a scan or a doubtful field. Off until on. |
+| `aiStepsMaskPersonalData` | Mask personal data in AI steps | per team | on | People see SSNs, card and account numbers, emails and phones masked in AI steps' output and in document type examples. A team may turn it off. |
+| `egressNewHosts` | New app addresses | workspace | `ask_security` | What happens when an app or tool names an address the account has not allowed yet. |
+| `mcpConnectionHours` | Assistant connection length | workspace | 8 | How long an assistant stays connected to a team's MCP address before the person signs in again. |
+| `securityTeamAddsSecrets` | Only Security adds secrets | workspace | off | Only the security team adds secrets. Off: builders add and use their own team's secrets. |
 
-Three are off until a team turns them on: `aiSteps`, `taskAssist` and `checkBeforeSend`. agents-service and
-tools-service read them per team when a step runs, a task opens or a write is about to be sent.
+The AI and sending policies `aiSteps`, `taskAssist`, `checkBeforeSend` and `pageImages` are off until a team turns them
+on. agents-service, tools-service and documents-service read them per team when a step runs, a task opens, a write is
+about to be sent or a page image would go to a model.
 
 ## Sign-in
 
@@ -108,8 +144,6 @@ lock; one person is sent at most three reset links an hour. The limits are `OPS_
 | Complete | `POST /v1/auth/sso/complete` takes the code and the starting browser's `flowKey`, once, and issues a session whose `authMethod` is `oidc` or `saml` and whose `provider_id` is kept |
 | Step-up | A password session re-enters its password; an SSO session goes back to its own provider with `prompt=login` or `ForceAuthn`, and the answer must be the same person with a fresh login |
 
-Local identity providers for tests and the dev stack: `uv run python -m ops_signin.fake_idp --port 8790`.
-
 ## Teams
 
 Workspace admins, people with the Admin role in every team (`*`; the dev seed's Wanjiru Kamau), create a team with its
@@ -136,7 +170,7 @@ workspace is seeded or bootstrapped, and migration 0026 chose the earliest one f
 
 Closing a workspace and deleting a team first ask agents-service's `GET /v1/teams/usage` for the team (runs in progress,
 live workflow names). With no answer the action is refused with 503 `usage_unavailable`, never taken. Other services'
-records of a deleted team or purged workspace stay unreachable until each service purges them (the follow-up card).
+records of a deleted team or purged workspace stay unreachable until each service purges them, which is not built yet.
 
 ## Access checks
 
@@ -173,9 +207,9 @@ as picker choices by email (a Human Task sent back to a person), searched in the
 
 | Item | Where it goes |
 |---|---|
-| agents-service and tools-service resolving callers through `ops_identity`, with RLS on their tables (uc-022, uc-024) | The adoption card |
-| MFA; a limit per client address on sign-in | Later slices of [sign-in library](../../packages/ops_signin/overview.md) |
+| MFA; a limit per client address on sign-in | Later slices of the [sign-in library](../../packages/ops_signin/overview.md) |
 | SAML single logout; accepting an unsolicited assertion directly (tiles go round a normal sign-in instead) | Proposed |
 | The Add SAML provider wizard, "Continue with <provider>" copy and the three member error messages, the CLI | In progress on the SAML sign-in design |
 | Sending invitations by mail | The notifications slice; today the admin shares the link from the invite response |
 | A pushed revocation list | Only if 15 minutes of reach after sign-out proves too long |
+| Purging a deleted team's or a closed workspace's records in other services | Each service keeps them unreachable until it purges them |

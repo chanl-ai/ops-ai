@@ -7,7 +7,8 @@ import { api } from '@/lib/api';
 import { sdk } from '@/lib/api/ops-sdk';
 import type { OpsAI } from '@chanl-ai/ops-ai';
 import type { BulkResult } from '@/lib/types/domain';
-import type { EngineDefinition, EngineRunInput, EngineRunsParams, OptionSource, StartWorkflowInput } from '@/lib/types/engine';
+import type { DefinitionView, DiffSide, EngineDefinition, EngineRunInput, EngineRunsParams, OptionSource, StartWorkflowInput, WorkingCopySaved } from '@/lib/types/engine';
+import type { SaveBase } from '@/lib/save-base';
 import { useTeamQuery } from './team-query';
 
 const ek = {
@@ -38,6 +39,65 @@ export function usePublishDefinition() {
   });
 }
 
+/** The checks of a stored definition, for a workflow with no working copy yet; nothing is saved. */
+export const useDefinitionChecks = (definition: EngineDefinition | undefined, digest: string | undefined) =>
+  useTeamQuery({ queryKey: ['engine', 'checks', digest ?? 'none'], queryFn: () => api.engine.validate(definition as EngineDefinition), enabled: !!definition && !!digest, staleTime: 60_000 });
+
+/**
+ * Saves the working copy. The reply carries the copy and the base the next save names, so the cached workflow takes
+ * them without a second read; a refused save (409 `stale_base`) leaves the cache as it was.
+ */
+export function useSaveWorkingCopy(workflowId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ definition, base }: { definition: EngineDefinition; base: SaveBase & { replacesDigest?: string } }) => api.engine.saveWorkingCopy(workflowId, definition, base),
+    onSuccess: (saved: WorkingCopySaved) =>
+      qc.setQueriesData<DefinitionView>({ queryKey: ['engine', 'definition', workflowId, 'latest'] }, (view) => view && { ...view, workingCopy: saved.workingCopy, saveBase: saved.saveBase }),
+  });
+}
+
+/**
+ * Writes an older version's steps over the working copy, naming the copy the page read; nothing goes live until it is
+ * published. A copy saved by someone since is refused (409 `stale_base`) and kept.
+ */
+export function useRestoreAsWorkingCopy(workflowId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ version, base }: { version: number; base: SaveBase }) => api.engine.saveWorkingCopy(workflowId, (await api.engine.definition(workflowId, version)).definition, base),
+    onSuccess: (saved: WorkingCopySaved) =>
+      qc.setQueriesData<DefinitionView>({ queryKey: ['engine', 'definition', workflowId, 'latest'] }, (view) => view && { ...view, workingCopy: saved.workingCopy, saveBase: saved.saveBase }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['engine', 'definition', workflowId] }),
+  });
+}
+
+/** What changed between two sides of a workflow: version numbers, `live` or `working-copy`. */
+export const useDefinitionDiff = (workflowId: string, from: DiffSide | undefined, to: DiffSide | undefined) =>
+  useTeamQuery({ queryKey: ['engine', 'diff', workflowId, from, to], queryFn: () => api.engine.diff(workflowId, from as DiffSide, to as DiffSide), enabled: from !== undefined && to !== undefined, retry: false });
+
+/** What publishing the working copy would change, what blocks it and whether it waits for a review; read when the dialog opens. */
+export const useWorkflowPublishPreview = (workflowId: string, enabled: boolean) =>
+  useTeamQuery({ queryKey: ['engine', 'publish-preview', workflowId], queryFn: () => api.engine.publishPreview(workflowId), enabled, retry: false, staleTime: 0 });
+
+/**
+ * Publishes the working copy in one call: the server refuses on any problem the preview lists before making a
+ * version, then makes it and opens its publish request, which goes live at once where the team's policy needs no
+ * review. Without a working copy it asks to publish the newest draft.
+ */
+export function usePublishWorkingCopy(workflowId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ view, note }: { view: DefinitionView; note: string }) =>
+      api.engine.requestPublish(workflowId, view.workingCopy ? { note, baseVersion: view.saveBase.version, baseDigest: view.saveBase.digest } : { note }),
+    onSettled: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ['engine', 'definition', workflowId] }),
+        qc.invalidateQueries({ queryKey: ['engine', 'publish-preview', workflowId] }),
+        qc.invalidateQueries({ queryKey: ['workflows'] }),
+        qc.invalidateQueries({ queryKey: ['reviews'] }),
+      ]),
+  });
+}
+
 /** Opens a publish request for a draft; the Workflows list and Reviews show it at once. */
 export function useRequestDefinitionPublish(workflowId: string) {
   const qc = useQueryClient();
@@ -65,7 +125,8 @@ export const useEngineOptions = (source: OptionSource | undefined) =>
   useTeamQuery({
     queryKey: ek.options(source ?? 'none'),
     queryFn: () => api.engine.options(source as Exclude<OptionSource, 'steps'>),
-    enabled: !!source && source !== 'steps',
+    // Knowledge bases are not a list the engine's option route answers (it refuses with 400); the field stays free.
+    enabled: !!source && source !== 'steps' && source !== 'knowledge',
     staleTime: 60_000,
   });
 
@@ -82,6 +143,15 @@ export function useRetryEngineRun() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (runId: string) => api.engine.retryRun(runId),
+    onSettled: (_r, _e, runId) => Promise.all([qc.invalidateQueries({ queryKey: ek.run(runId) }), qc.invalidateQueries({ queryKey: ['engine', 'runs'] })]),
+  });
+}
+
+/** Redrive on a Failed run: it is queued again from its failed step, on its own version, and the page polls it on. */
+export function useRedriveEngineRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) => api.engine.redriveRun(runId),
     onSettled: (_r, _e, runId) => Promise.all([qc.invalidateQueries({ queryKey: ek.run(runId) }), qc.invalidateQueries({ queryKey: ['engine', 'runs'] })]),
   });
 }
@@ -119,7 +189,7 @@ export type EngineRunRow = Awaited<ReturnType<OpsAI['raw']['agents']['workflows_
 export const useEngineRuns = (p: EngineRunsParams) =>
   usePagedQuery({ queryKey: ek.runs(p), queryFn: () =>
       sdk((ops) =>
-        ops.raw.agents.workflows_list_engine_runs({ query: { workflowId: p.workflowId ? [p.workflowId] : undefined, status: p.status?.length ? p.status : undefined, page: p.page ?? 1, pageSize: p.pageSize ?? 20 } }),
+        ops.raw.agents.workflows_list_engine_runs({ query: { workflowId: p.workflowId ? [p.workflowId] : undefined, status: p.status?.length ? p.status : undefined, page: p.page ?? 1, pageSize: p.pageSize ?? 20, sortBy: p.sortBy, sortOrder: p.sortOrder } }),
       ),
     refetchInterval: 5_000,
   });

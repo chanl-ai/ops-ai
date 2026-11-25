@@ -70,8 +70,10 @@ Run from the repo root; `make help` lists them with their arguments.
 | `make release-package TAG=<ref>` | `release/package.sh`: images, bundle, tarball, checksums in `dist/` | Slow; builds every image |
 | `make release-proof PACKAGE=…` | `release/proof.sh`: installs a tarball alone and walks it | Slow |
 | `make install-proof` | `release/install_proof.sh`: a fresh clone through `./install.sh` on GHCR images | Slow; pulls images |
-| `make release-tag` | `scripts/release-tag.sh`: tags a release or hotfix merge `vX.Y.Z`; `DRY=1` prints the tag name only | Pushes a tag without `DRY=1` |
+| `make release-tag` | `scripts/release-tag.sh`: tags the develop merge of `release: X.Y.Z into develop` (or `hotfix:`) `vX.Y.Z`; `DRY=1` prints the tag name only | Pushes a tag without `DRY=1` |
+| `make release-main` | `scripts/release-main.sh`: fast-forwards `main` to the tagged commit, never forced; prints the owner's command when the push is refused | Pushes `main` without `DRY=1` |
 | `make stg-deploy`, `stg-rollback`, `stg-health` | `fly/stg_deploy.sh` on the app named by `STG_APP` in your staging config | Changes a live Fly app |
+| `make stg-smoke` | `fly/stg_smoke.sh`: the deploy's smoke check alone, no deploy | Writes to staging (makes and removes records in the roles team); only the owner runs it |
 | `make stg-deploy-ci REF=` | `fly/stg_deploy_ci.sh`: starts `.github/workflows/deploy-staging.yml` on GitHub and watches it | Changes a live Fly app |
 | `make uc-sql-server` | `fly/mssql/run-usecases.sh` on a SQL Server test machine | Starts paid machines |
 | `make qa-mirror`, `mirror-down` | `mirror-test/lane.sh` | Yes; its own compose project, slow |
@@ -119,7 +121,7 @@ Edit the generator, regenerate, and commit both; never hand-edit a generated fil
 |---|---|
 | Compose install | [docs/deploy/compose.md](../docs/deploy/compose.md) |
 | One-command install, upgrade, backup, behind a mirror | [docs/deploy/install.md](../docs/deploy/install.md) |
-| Release package and its install guide | [docs/deploy/release-package.md](../docs/deploy/release-package.md), [docs/deploy/install-guide.md](../docs/deploy/install-guide.md) |
+| Release package and its install guide | [docs/deploy/release-package.md](../docs/deploy/release-package.md), [docs/deploy/package-install.md](../docs/deploy/package-install.md) (the package's INSTALL.md) |
 | Kubernetes | [docs/deploy/kubernetes.md](../docs/deploy/kubernetes.md) |
 | Fly, one app per image | [docs/deploy/fly.md](../docs/deploy/fly.md) |
 | Fly, one machine (what `make stg-deploy` runs) | [docs/deploy/fly-staging.md](../docs/deploy/fly-staging.md) |

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-19",
+  "title": "Refused events show in the team's Activity",
+  "description": "When an event does not match a workflow's inputs, the team's Activity and its account admins' Background page list a failed job saying which workflow did not run and which field was wrong.",
+  "tag": "fix"
+}

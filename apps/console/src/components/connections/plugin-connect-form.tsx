@@ -226,7 +226,7 @@ export function PluginConnectForm({
       const next = !kind.signsIn
         ? undefined
         : card.signIn === 'team'
-          ? `Sign the team account in from the Accounts tab when you are ready.`
+          ? `Sign the team login in from the Accounts tab when you are ready.`
           : 'Members connect their own account from Connectors › Mine.';
       toast.success(sandbox ? `${accountName.trim()} is saved` : `Saved. ${card.name} is on for the team`, { description: next });
       onClose();

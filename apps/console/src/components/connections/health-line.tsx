@@ -60,7 +60,7 @@ export function HealthLine({ health, testId = 'health', who = true }: { health: 
       {health.message && <p className="text-sm break-words text-muted-foreground">{health.message}</p>}
       <p className="text-xs text-muted-foreground">
         {relativeTime(health.at)}
-        {who && health.account && `, ${health.account === 'team' ? 'with the team account' : 'with your own account'}`}
+        {who && health.account && `, ${health.account === 'team' ? 'with the team login' : 'with your own login'}`}
       </p>
     </div>
   );

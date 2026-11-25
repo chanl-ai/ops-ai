@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0088_app_card_account
+-- tools-service, stamped at 20261125_0039_call_signed_in_as
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -31,6 +31,7 @@ CREATE TABLE gateway_calls (
 	connection_id VARCHAR(64) NULL, 
 	acting_for VARCHAR(320) NULL, 
 	credential VARCHAR(16) NULL, 
+	signed_in_as VARCHAR(320) NULL, 
 	channel VARCHAR(16) NULL, 
 	client_name VARCHAR(120) NULL, 
 	client_id VARCHAR(64) NULL, 
@@ -38,6 +39,10 @@ CREATE TABLE gateway_calls (
 	caller_name VARCHAR(320) NULL, 
 	CONSTRAINT gateway_calls_pkey PRIMARY KEY (id)
 );
+GO
+CREATE INDEX ix_gateway_calls_created_at ON gateway_calls (tenant_id, created_at);
+GO
+CREATE INDEX ix_gateway_calls_latency_ms ON gateway_calls (tenant_id, latency_ms);
 GO
 CREATE INDEX ix_gateway_calls_link_created ON gateway_calls (link_id, created_at);
 GO
@@ -261,6 +266,21 @@ CREATE TABLE connection_audit (
 GO
 CREATE INDEX ix_connection_audit_connection ON connection_audit (tenant_id, connection_id);
 GO
+CREATE TABLE tool_discoveries (
+	tenant_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	person VARCHAR(128) NOT NULL, 
+	module_id VARCHAR(64) NULL, 
+	meta NVARCHAR(max) NOT NULL, 
+	operation_total INTEGER NOT NULL, 
+	created_at DATETIMEOFFSET NOT NULL, 
+	expires_at DATETIMEOFFSET NOT NULL, 
+	CONSTRAINT tool_discoveries_pkey PRIMARY KEY (tenant_id, id)
+);
+GO
+CREATE INDEX ix_tool_discoveries_expires ON tool_discoveries (tenant_id, team_id, expires_at);
+GO
 CREATE TABLE egress_hosts (
 	tenant_id VARCHAR(64) NOT NULL, 
 	host VARCHAR(253) NOT NULL, 
@@ -271,6 +291,8 @@ CREATE TABLE egress_hosts (
 	protection VARCHAR(16) NULL, 
 	CONSTRAINT egress_hosts_pkey PRIMARY KEY (tenant_id, host)
 );
+GO
+CREATE INDEX ix_egress_hosts_added_at ON egress_hosts (tenant_id, added_at);
 GO
 CREATE INDEX ix_egress_hosts_template_id ON egress_hosts (template_id);
 GO
@@ -284,6 +306,8 @@ CREATE TABLE egress_ranges (
 	protection VARCHAR(16) NULL, 
 	CONSTRAINT egress_ranges_pkey PRIMARY KEY (tenant_id, cidr)
 );
+GO
+CREATE INDEX ix_egress_ranges_added_at ON egress_ranges (tenant_id, added_at);
 GO
 CREATE INDEX ix_egress_ranges_template_id ON egress_ranges (template_id);
 GO
@@ -325,6 +349,12 @@ CREATE TABLE tool_secrets (
 	credential_id VARCHAR(64) NULL, 
 	CONSTRAINT tool_secrets_pkey PRIMARY KEY (tenant_id, team_id, name)
 );
+GO
+CREATE INDEX ix_tool_secrets_created_at ON tool_secrets (tenant_id, team_id, created_at);
+GO
+CREATE INDEX ix_tool_secrets_last_used_at ON tool_secrets (tenant_id, team_id, last_used_at);
+GO
+CREATE INDEX ix_tool_secrets_rotated_at ON tool_secrets (tenant_id, team_id, rotated_at);
 GO
 CREATE INDEX ix_tool_secrets_template_id ON tool_secrets (template_id);
 GO
@@ -527,6 +557,8 @@ CREATE TABLE connection_tokens (
 	pinned BIT NOT NULL DEFAULT 0, 
 	test NVARCHAR(max) NULL, 
 	person_name VARCHAR(200) NULL, 
+	last_used_at DATETIMEOFFSET NULL, 
+	ended_by VARCHAR(200) NULL, 
 	CONSTRAINT connection_tokens_pkey PRIMARY KEY (tenant_id, connection_id, person_id), 
 	CONSTRAINT connection_tokens_tenant_id_connection_id_fkey FOREIGN KEY(tenant_id, connection_id) REFERENCES connections (tenant_id, id) ON DELETE CASCADE
 );
@@ -548,6 +580,28 @@ CREATE TABLE connect_links (
 );
 GO
 CREATE INDEX ix_connect_links_connection ON connect_links (tenant_id, connection_id);
+GO
+CREATE TABLE tool_discovery_operations (
+	tenant_id VARCHAR(64) NOT NULL, 
+	discovery_id VARCHAR(64) NOT NULL, 
+	position INTEGER NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	name VARCHAR(120) NOT NULL, 
+	description VARCHAR(max) NOT NULL, 
+	access VARCHAR(16) NOT NULL, 
+	method VARCHAR(8) NULL, 
+	path VARCHAR(max) NULL, 
+	op_group VARCHAR(200) NOT NULL, 
+	input NVARCHAR(max) NOT NULL, 
+	CONSTRAINT tool_discovery_operations_pkey PRIMARY KEY (tenant_id, discovery_id, position), 
+	CONSTRAINT tool_discovery_operations_tenant_id_discovery_id_fkey FOREIGN KEY(tenant_id, discovery_id) REFERENCES tool_discoveries (tenant_id, id) ON DELETE CASCADE
+);
+GO
+CREATE INDEX ix_tool_discovery_operations_access ON tool_discovery_operations (tenant_id, team_id, access, discovery_id);
+GO
+CREATE INDEX ix_tool_discovery_operations_group ON tool_discovery_operations (tenant_id, team_id, op_group, discovery_id);
+GO
+CREATE INDEX ix_tool_discovery_operations_name ON tool_discovery_operations (tenant_id, discovery_id, name);
 GO
 IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
 GO
@@ -625,6 +679,12 @@ CREATE SECURITY POLICY ops_security.connection_audit_isolation
     ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.connection_audit,
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connection_audit AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connection_audit AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.tool_discoveries_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.tool_discoveries,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.tool_discoveries AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.tool_discoveries AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.egress_hosts_tenant
@@ -723,10 +783,16 @@ CREATE SECURITY POLICY ops_security.connect_links_isolation
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connect_links AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.tool_discovery_operations_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.tool_discovery_operations,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.tool_discovery_operations AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.tool_discovery_operations AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE TABLE alembic_version_tools (
     version_num VARCHAR(32) NOT NULL, 
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0088_app_card_account');
+INSERT INTO alembic_version_tools (version_num) VALUES ('20261125_0039_call_signed_in_as');
 GO

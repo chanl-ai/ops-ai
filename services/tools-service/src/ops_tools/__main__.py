@@ -7,7 +7,6 @@ import asyncio
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import httpx
 import uvicorn
@@ -20,6 +19,7 @@ from ops_files_client import FilesClient
 from ops_identity import Auth, ServiceClient
 from ops_identity.fastapi import DEV_TENANT
 from ops_service_kit.credentials import credential_store
+from ops_service_kit.http import Json
 from ops_service_kit.logging import configure_logging, get_logger
 from ops_service_kit.model_calls import ModelCalls
 from ops_service_kit.settings import Settings, require_keys
@@ -48,6 +48,7 @@ from .header_keys import move_at_start
 from .knowledge_tools import KnowledgeSearch
 from .mailboxes import MailboxSenders, mailboxes_router
 from .mcp_links import mcp_links_router
+from .mcp_server import platform_tools
 from .mock_routes import mocks_router
 from .modules.directory import Directory
 from .modules.policy import CheckBeforeSend, PublishPolicy, RequesterMayDecide, WriteApprovals
@@ -90,7 +91,7 @@ MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 log = get_logger("ops_tools")
 
 
-async def _seed(settings: Settings, seed: dict[str, Any], catalog: list[dict[str, Any]] | None) -> None:
+async def _seed(settings: Settings, seed: Json, catalog: list[Json] | None) -> None:
     engine = open_database(settings.database_url)
     # The dev seed's modules belong to the tenant dev sign-in acts in.
     added = await load(ModuleStore(engine), seed, tenant_id=DEV_TENANT, now=datetime.now(UTC), catalog=catalog)
@@ -269,6 +270,8 @@ def main() -> None:
             ),
             # search_knowledge searches the calling team's knowledge bases through kb-service.
             knowledge=KnowledgeSearch(client("kb", settings.kb_url, ["knowledge:view"])) if settings.kb_url else None,
+            # The Workspace app's tools call the console's routes as the person (mcp_tools.WORKSPACE).
+            workspace=platform_tools(settings, agents_url),
         ),
         review_key=settings.review_key.get_secret_value(),
         auth=Auth.from_settings(settings, audience="tools"),

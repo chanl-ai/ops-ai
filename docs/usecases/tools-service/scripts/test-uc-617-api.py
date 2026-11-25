@@ -79,7 +79,7 @@ with (
         "3 a run James started waits for his own Person key desk account instead of failing",
         paused.get("status") == "waiting"
         and wait.get("event") == "app_account.connected"
-        and wait.get("title") == "Connect your Person key desk account to continue",
+        and wait.get("title") == "Sign in to Person key desk to continue",
         (live.status_code, started.text[:200], paused.get("status"), paused.get("error"), wait),
     )
     # 3b. Human Tasks lists the wait for James as a connect_account task naming the app.
@@ -110,7 +110,7 @@ with (
         and "role_required" in by_james.text
         and "an Admin can" in by_james.text
         and by_priya.status_code == 409
-        and "no team account" in by_priya.text
+        and "no team login" in by_priya.text
         and decided.status_code == 409
         and "connect_wait" in decided.text,
         (by_james.status_code, by_james.text[:160], by_priya.text[:200], decided.text[:200]),
@@ -130,13 +130,13 @@ with (
         (given.status_code, given.text[:200], went_on.get("status"), went_on.get("error")),
     )
 
-    # 3d. On a desk whose team account backs runs nobody started, a run Priya starts still waits for her own account;
-    # its task offers the team account, and choosing Run as the team account reads the record.
+    # 3d. Who signs in has two answers: a desk each person signs in to cannot take the team login as a backup, so a run
+    # Priya starts waits for her own login and its task offers no team login.
     own = w.credential("admin", "test.person", "multi-app", w.m["clients"]["multi-app"])
-    backed = w.turn_on("admin", "test.person", signIn="person_or_team", credentialId=own)
+    backed = w.turn_on("admin", "test.person", signIn="person", credentialId=own)
     backed_path = account_path("plugin:test.person", backed)
     revision = (data(w.gw.get(backed_path, headers=w.who["admin"])) or {}).get("revision")
-    w.gw.patch(
+    as_backup = w.gw.patch(
         backed_path,
         json={"revision": revision, "signIn": "person_or_team", "teamBackup": True},
         headers=w.who["admin"],
@@ -151,7 +151,7 @@ with (
         if team.status_code == 200
         else {}
     )
-    signed = w.gw.post(
+    w.gw.post(
         "/v1/sign-ins/complete",
         json={"state": back.get("state", ""), "code": back.get("code", "")},
         headers=w.who["admin"],
@@ -179,17 +179,13 @@ with (
         (r for r in (tasks.get("data") if isinstance(tasks, dict) else tasks) or [] if r.get("runId") == team_run), {}
     )
     chose = api.post(f"/reviews/{team_task.get('id') or team_run}/team-account", headers=w.who["admin"])
-    finished = until(lambda: (r := run_of(team_run)).get("status") in ("succeeded", "failed") and r, timeout=60) or {}
     check(
-        "3d with a team account for runs nobody started, Priya's own run waits for her account, offers the team "
-        "account, and reads the record once she chooses it",
-        signed.status_code == 200
+        "3d the team login cannot be made a backup; Priya's own run waits for her login and offers no team login",
+        as_backup.status_code == 400
         and held.get("status") == "waiting"
-        and (team_task.get("connect") or {}).get("teamAccount") is True
-        and chose.status_code == 200
-        and finished.get("status") == "succeeded"
-        and finished.get("outcome") == "read",
-        (signed.text[:200], held.get("status"), team_task.get("connect"), chose.text[:200], finished.get("error")),
+        and (team_task.get("connect") or {}).get("teamAccount") is not True
+        and chose.status_code != 200,
+        (as_backup.text[:200], held.get("status"), team_task.get("connect"), chose.text[:200]),
     )
 
     # 4. An app's first address on a host nobody listed is held for a Security admin, nothing saved.

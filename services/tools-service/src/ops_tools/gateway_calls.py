@@ -13,16 +13,16 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, NotRequired, TypedDict, cast
 
-from ops_access import BY_KEY, Access
+from ops_access import Access, policy, requester_may_decide
 from ops_agent_kernel.ports import ToolOutcome
-from ops_identity import ActingForPerson, Principal
+from ops_identity import ActingForPerson, Principal, principal_of
 from ops_policy import input_hash
 from ops_service_kit.errors import ApiError, Forbidden
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
 
-from .auth import SIGNED_WITH, Authenticator
+from .auth import SIGNED_AS, SIGNED_WITH, Authenticator, SignedAs
 from .environments import TEST
 from .executor import ConsoleRan, ConsoleRefused, Executor, Trial, invalid_fields
 from .limits import amount_refusal
@@ -98,6 +98,7 @@ class CallLogRow(TypedDict):
     decision: NotRequired[str]
     reasons: NotRequired[list[str]]
     credential: NotRequired[str | None]
+    signed_in_as: NotRequired[str | None]
 
 
 @dataclass(frozen=True)
@@ -107,6 +108,10 @@ class Allowed:
     output: Any
     view: Any = None
     replay_of: str | None = None
+    # Whose login of the app the call ran as (the team's or the person's), for the chat's card; None with no account.
+    signed_in: SignedAs | None = None
+    # A write asked for as a plan only (`call(plan_only=True)`): what it would send, and nothing was sent or logged.
+    planned: Json | None = None
 
 
 @dataclass(frozen=True)
@@ -282,7 +287,7 @@ class GatewayCalls:
         clock: Callable[[], float] = time.time,
         approvals: WriteApprovals | None = None,
         approver: Callable[[Principal], bool] | None = None,
-        requester_may_decide: Callable[[str], Awaitable[bool]] | None = None,
+        requester_may_decide: Callable[[str, str | None], Awaitable[bool]] | None = None,
     ) -> None:
         self.registry = registry
         # The tenant's requesterMayDecide, read live at each call; without it the policy's default (off) holds.
@@ -319,10 +324,15 @@ class GatewayCalls:
         trial: Trial,
         secret_values: dict[str, str] | None,
         confirmed: bool = False,
+        plan_only: bool = False,
+        key: str | None = None,
+        accounts: dict[str, str] | None = None,
     ) -> ConsoleRan | ConsoleRefused:
         """A tool page's Real run as one gateway call, so it meets every rule an agent's call meets: approvals,
         limits, the egress policy, the team's account and the call log. The answer is plain data, so the module
-        service needs no gateway types: {callId, ok, output} when it ran, {callId, status, code, reasons} when not."""
+        service needs no gateway types: {callId, ok, output} when it ran, {callId, status, code, reasons} when not.
+        With `plan_only` a write comes back as {callId, ok, output: None, planned} and is not sent; `key` sends a
+        confirmed plan under the plan's own key, so a second confirm replays the first instead of sending again."""
         # The person who pressed Run is whom the call acts for: their own sign-in signs it on an app each person
         # signs in to, and Usage names them.
         person = (
@@ -333,21 +343,40 @@ class GatewayCalls:
         req = CallRequest(
             tool=tool,
             input=args,
-            key=new_id("console"),
-            run_context={"environment": environment, "act": act},
+            key=key or new_id("console"),
+            run_context=cast(
+                Json,
+                {
+                    "environment": environment,
+                    "act": act,
+                    # A confirmed plan's key is its step too: the one-write index holds on the step, and a step left
+                    # empty never conflicts, so a second confirm would send again.
+                    **({"step": key} if key else {}),
+                    **({"accounts": accounts} if accounts else {}),
+                },
+            ),
             acting_for=person,
             confirmed=confirmed,
         )
-        out = await self.call(caller, req, channel=CONSOLE, trial=trial, secret_values=secret_values)
+        out = await self.call(
+            caller, req, channel=CONSOLE, trial=trial, secret_values=secret_values, plan_only=plan_only
+        )
         if isinstance(out, Refused):
             return {"callId": out.call_id, "status": out.status, "code": out.code, "reasons": out.reasons}
-        return {"callId": out.call_id, "ok": out.ok, "output": out.output}
+        ran: ConsoleRan = {"callId": out.call_id, "ok": out.ok, "output": out.output}
+        if out.planned is not None:
+            ran["planned"] = out.planned
+        if out.replay_of:
+            ran["replayOf"] = out.replay_of
+        return ran
 
-    async def _with_live_policy(self, caller: Principal) -> Principal:
-        """`caller` carrying the tenant's requesterMayDecide as read at this call, in place of the token's copy."""
+    async def _with_live_policy(self, caller: Principal, team: str | None) -> Principal:
+        """`caller` carrying `team`'s requesterMayDecide as read at this call, in place of the token's copy. `team` is
+        the team the call asks in: a caller with no team of its own would otherwise read the workspace's value where
+        the team turned it off."""
         if self.requester_may_decide is None:
             return caller
-        may_decide = await self.requester_may_decide(caller.tenant_id)
+        may_decide = await self.requester_may_decide(caller.tenant_id, team)
         return caller.model_copy(update={"policies": {**caller.policies, "requesterMayDecide": may_decide}})
 
     async def _asker_refusal(self, tenant_id: str, req: CallRequest) -> Forbidden | None:
@@ -356,10 +385,14 @@ class GatewayCalls:
         have changed after it was minted."""
         if req.acting_for is None:
             return None
+        # With no live reader (dev sign-in) the asker's own token decides, as `can` reads it everywhere else.
+        asker = principal_of(req.acting_for, tenant_id)
         may_decide = (
-            await self.requester_may_decide(tenant_id)
+            await self.requester_may_decide(tenant_id, req.acting_for.team_id)
             if self.requester_may_decide is not None
-            else BY_KEY["requesterMayDecide"].default is True
+            else requester_may_decide(
+                policy(asker, "requesterMayDecide"), req.acting_for.team_id, "reviews", policy(asker, "approvalsFloor")
+            )
         )
         approvers = _approvers(req.approval_token)
         return asker_refusal(ACCESS, req.acting_for, tenant_id, approvers, may_decide=may_decide)
@@ -378,13 +411,17 @@ class GatewayCalls:
         secret_values: dict[str, str] | None = None,
         operation: tuple[Resolved, Run] | None = None,
         link_id: str | None = None,
+        plan_only: bool = False,
     ) -> Outcome:
         """One call for `caller`, the verified principal of whichever route took it. `generation` is a run's lease
         generation (writes are fenced on it); `channel` and `client_name` say where the call came from, for the log.
         `sees` is the caller's team's view of the modules: an operation of a module outside it is refused. A tool page's
         Real run passes `trial`, which records the request as sent with its secrets hidden, and `secret_values`, values
         typed for this one call in place of unset secrets (never stored or logged). `operation` is an operation the
-        route owns and no registry module holds, with how it runs: it meets the same log, approval and rate checks."""
+        route owns and no registry module holds, with how it runs: it meets the same log, approval and rate checks.
+        `plan_only` is the one dry-run seam: a write that passes the team, input and limit checks comes back as
+        `Allowed.planned`, what it would send, before any approval, claim, rate spend, sign-in or executor runs, and
+        no row is logged; a read is not affected and runs."""
         call_id = new_id("gwc")
         shown = {"trial": trial, "secret_values": secret_values} if trial is not None else {}
         started = time.monotonic()
@@ -498,6 +535,9 @@ class GatewayCalls:
                 **row, outcome="refused", latency_ms=elapsed(), error={"code": code, "message": reason}
             )
             return Refused(call_id, status, code, [reason], details)
+        if plan_only and access in WRITES:
+            plan = await self.executor.plan(resolved or Resolved(access, "local"), req.tool, args)
+            return Allowed(call_id, True, None, planned=plan)
         policy = await self.registry.policy_for(req.tool, caller.tenant_id, caller.team_id) if resolved else None
         # From the registry and the team's settings, never the caller: whether this write needs an approval token.
         # `effective_answer` is the one rule: the tool's own setting, then its app's, then the team's; MCP always waits.
@@ -556,7 +596,11 @@ class GatewayCalls:
             needs
             and req.approval_token is None
             and self.approver
-            and self.approver(await self._with_live_policy(caller))
+            and self.approver(
+                await self._with_live_policy(
+                    caller, caller.team_id or (req.acting_for.team_id if req.acting_for else None) or row["team_id"]
+                )
+            )
         )
         if (
             needs
@@ -624,7 +668,7 @@ class GatewayCalls:
         if access not in WRITES:
             if (limited := await over_rate()) is not None:
                 return limited
-            signing = SIGNED_WITH.set(None)
+            signing, signed = SIGNED_WITH.set(None), SIGNED_AS.set(None)
             outcome = await self._run(
                 resolved or Resolved(access, "local"),
                 req.tool,
@@ -635,13 +679,15 @@ class GatewayCalls:
                 environment=ctx.get("environment"),
                 **shown,
             )
-            row["credential"] = SIGNED_WITH.get()
+            row["credential"], signed_in = SIGNED_WITH.get(), SIGNED_AS.get()
+            row["signed_in_as"] = signed_in["login"] if signed_in else None
             SIGNED_WITH.reset(signing)
+            SIGNED_AS.reset(signed)
             if hide:
                 outcome = ToolOutcome(outcome.ok, scrub(outcome.output, hide), outcome.view)
             failed = _error_of(outcome)
             await self.log.record(**row, outcome="ok" if outcome.ok else "error", latency_ms=elapsed(), error=failed)
-            return Allowed(call_id, outcome.ok, outcome.output, outcome.view)
+            return Allowed(call_id, outcome.ok, outcome.output, outcome.view, signed_in=signed_in)
         try:
             # The caller's lease generation arrives as the X-Lease-Generation header; the fence is checked in the
             # claim's own transaction, before the dedup lookup (ADR-0016).
@@ -670,7 +716,7 @@ class GatewayCalls:
         if (limited := await over_rate()) is not None:
             return limited
         approvers = (caller.email,) if self_approved else tuple(_approvers(req.approval_token))
-        signing = SIGNED_WITH.set(None)
+        signing, signed = SIGNED_WITH.set(None), SIGNED_AS.set(None)
         outcome = await self._run(
             resolved or Resolved(access, "local"),
             req.tool,
@@ -681,8 +727,9 @@ class GatewayCalls:
             environment=ctx.get("environment"),
             **shown,
         )
-        credential = SIGNED_WITH.get()
+        credential, signed_in = SIGNED_WITH.get(), SIGNED_AS.get()
         SIGNED_WITH.reset(signing)
+        SIGNED_AS.reset(signed)
         failed = _error_of(outcome)
         await self.log.finish(
             call_id,
@@ -692,8 +739,9 @@ class GatewayCalls:
             latency_ms=elapsed(),
             error=failed,
             credential=credential,
+            signed_in_as=signed_in["login"] if signed_in else None,
             # Refused at sign-in for a person with no account of their own: nothing was sent, and the run waiting for
             # them sends this write again under its key once they connect.
             unsent=(failed or {}).get("code") == NOT_LINKED,
         )
-        return Allowed(call_id, outcome.ok, outcome.output, outcome.view)
+        return Allowed(call_id, outcome.ok, outcome.output, outcome.view, signed_in=signed_in)

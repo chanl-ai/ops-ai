@@ -1,11 +1,24 @@
-"""The kernel's model wrapper: every model request of a graph run recorded once, replayed on a crashed node's re-run.
+"""The kernel's model wrapper: every model request of a graph run checked against its budget, recorded once, and
+replayed on a crashed node's re-run.
+
+Before a request that no record answers, the wrapper reserves the call in the ledger against the budget it counts
+against: the thread's own, or for a specialist's thread the one its chain started on. The reservation is held while
+the provider answers, so requests made at once are each counted from the moment they are admitted; the request's
+record replaces it, and a request that fails releases it. A spent budget raises the kernel's `BudgetReachedError` in
+place of the call, and the kernel ends the reply. Only the thread the chain started on may
+make its one closing call; a specialist returns what it has to the agent that asked it. A replayed request is never
+refused: its call was paid for.
 
 The spec's agent activity keeps a step ledger in its heartbeat; on the LangGraph adapter a resume node that
 crashes after its turn runs again from its start, and without a ledger it calls the model again. `LedgerModel`
 wraps the kernel's model: inside a graph run (a LangGraph config with a thread) each response is recorded under the
-thread and a hash of the request, and the same request on the same thread is answered from the record. Outside a
-graph run (chat turns) it passes through. The request hash leaves out timestamps and run ids, which differ between
-the first run and the re-run while the conversation is the same.
+thread, a replay key and a hash of the request, and the same request under the same key is answered from the record.
+A workflow step's key is its own step id (run:node:iteration, `step_calls`), which every attempt and every re-run of
+the step after a crash or a Retry repeats, so none of them pays for the call again. A chat turn's key is the
+LangGraph task it ran in, which a crashed node's re-run keeps and a regenerate does not. Outside a graph run (the AI
+step route's test call) it passes through. The request hash leaves out timestamps and run ids, which differ between
+the first run and the re-run while the conversation is the same, and a changed request has a new hash, so it is
+never answered from an older record.
 """
 
 from __future__ import annotations
@@ -26,14 +39,16 @@ from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.settings import ModelSettings
 
-from ops_agent_kernel.ports import ModelSource
+from ops_agent_kernel.ports import BudgetReachedError, ModelSource, is_finishing
 from ops_agents.graphs.common import emit
-from ops_agents.graphs.metering import CallSite, call_site
+from ops_agents.graphs.metering import STEP_KEY, CallSite, Refused, Reservation, call_site, step_calls, turn_ids
 from ops_metering import Usage
 from ops_service_kit.http import Json
 from ops_store import isolation
 
-_VOLATILE = frozenset({"timestamp", "run_id", "provider_response_id", "provider_details"})
+# Fields that differ between a request and its re-run though the conversation is the same: pydantic-ai gives every
+# agent run its own conversation_id, so a hash that kept it would never match a re-run.
+_VOLATILE = frozenset({"timestamp", "run_id", "conversation_id", "provider_response_id", "provider_details"})
 
 
 def _stable(value: Any) -> Any:
@@ -57,11 +72,13 @@ class _Site:
 
 
 def _site() -> _Site | None:
-    """Where the request runs: the graph call site and the LangGraph task, which a crashed node's re-run keeps and a
-    new step does not. None outside a graph run."""
+    """Where the request runs: the graph call site and its replay key, a workflow step's id or else the LangGraph
+    task, which a crashed node's re-run keeps and a new step does not. None outside a graph run."""
     call = call_site()
     if call is None:
         return None
+    if (key := STEP_KEY.get()) is not None:
+        return _Site(call, key)
     cfg = get_config()
     task = (cfg.get("configurable") or {}).get("checkpoint_ns") or (cfg.get("metadata") or {}).get(
         "langgraph_checkpoint_ns"
@@ -74,6 +91,12 @@ class ModelCallRecorder(Protocol):
 
     async def recorded_response(self, thread_id: str, task: str, request_hash: str) -> Any: ...
 
+    async def reserve_model_call(
+        self, site: CallSite, alias: str, *, max_output_tokens: int | None
+    ) -> Reservation | Refused | None: ...
+
+    async def release(self, reservation: Reservation) -> None: ...
+
     async def record_model_call(
         self,
         site: CallSite,
@@ -84,6 +107,7 @@ class ModelCallRecorder(Protocol):
         task: str | None,
         request_hash: str,
         response: Any,
+        settles: Reservation | None = None,
     ) -> bool: ...
 
 
@@ -141,7 +165,28 @@ class LedgerModel(WrapperModel):
         raw = await self.recorder.recorded_response(site.call.thread_id, site.task, digest)
         return ModelMessagesTypeAdapter.validate_python([raw])[0] if raw else None  # type: ignore[return-value]
 
-    async def _record(self, site: _Site, digest: str, response: ModelResponse, started: float) -> None:
+    async def _reserve(self, site: _Site, settings: ModelSettings | None) -> Reservation | None:
+        """Reserves the call against the budget it counts against and refuses it when that budget is spent, unless
+        the kernel is finishing a reply already under way (its closing answer, or the check of an answer already
+        written): that call is neither refused nor reserved."""
+        if is_finishing():
+            return None
+        most = (settings or {}).get("max_tokens")
+        held = await self.recorder.reserve_model_call(site.call, self.alias, max_output_tokens=most)
+        if isinstance(held, Refused):
+            raise BudgetReachedError(closing=held.thread_id == site.call.thread_id)
+        return held
+
+    async def _release(self, held: Reservation | None) -> None:
+        """Gives back the reservation of a request that raised. A release that fails leaves the reservation to lapse
+        (store/usage.py RESERVED_SECONDS) and never hides the request's own error."""
+        if held is not None:
+            with contextlib.suppress(Exception):
+                await self.recorder.release(held)
+
+    async def _record(
+        self, site: _Site, digest: str, response: ModelResponse, started: float, held: Reservation | None
+    ) -> None:
         latency_ms = int((time.perf_counter() - started) * 1000)
         u = response.usage
         usage = Usage(u.input_tokens, u.output_tokens, 1)
@@ -154,6 +199,7 @@ class LedgerModel(WrapperModel):
             task=site.task,
             request_hash=digest,
             response=dumped,
+            settles=held,
         )
         emit(
             "model_call",
@@ -179,11 +225,16 @@ class LedgerModel(WrapperModel):
         digest = request_hash(messages)
         if (recorded := await self._recorded(site, digest)) is not None:
             return recorded
+        held = await self._reserve(site, model_settings)
         started = time.perf_counter()
-        response = await super().request(
-            messages, self._with_call_headers(model_settings, site, digest), model_request_parameters
-        )
-        await self._record(site, digest, response, started)
+        try:
+            response = await super().request(
+                messages, self._with_call_headers(model_settings, site, digest), model_request_parameters
+            )
+            await self._record(site, digest, response, started, held)
+        except BaseException:
+            await self._release(held)
+            raise
         return response
 
     @asynccontextmanager
@@ -197,14 +248,20 @@ class LedgerModel(WrapperModel):
         site = _site()
         digest = request_hash(messages) if site else ""
         recorded = await self._recorded(site, digest) if site else None
+        held = await self._reserve(site, model_settings) if site and recorded is None else None
         source: Model = _replay(recorded) if recorded is not None else self.wrapped
         started = time.perf_counter()
         settings = self._with_call_headers(model_settings, site, digest)
-        async with source.request_stream(messages, settings, model_request_parameters, run_context) as stream:
-            yield stream
-        # Recorded once the stream has been read to the end, so a response cut off by a crash is never replayed.
-        if site and recorded is None:
-            await self._record(site, digest, stream.get(), started)
+        try:
+            async with source.request_stream(messages, settings, model_request_parameters, run_context) as stream:
+                yield stream
+            # Recorded once the stream has been read to the end, so a response cut off by a crash is never replayed.
+            if site and recorded is None:
+                await self._record(site, digest, stream.get(), started, held)
+        except BaseException:
+            # A stream that failed, or that its reader left early, holds no budget.
+            await self._release(held)
+            raise
 
 
 class LedgerSource:
@@ -220,3 +277,6 @@ class LedgerSource:
         if alias not in self.models:
             self.models[alias] = LedgerModel(self.source.model_for(alias), self.recorder, alias, call_headers=True)
         return self.models[alias]
+
+
+__all__ = ["LedgerModel", "LedgerSource", "request_hash", "step_calls", "turn_ids"]

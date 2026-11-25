@@ -163,8 +163,10 @@ Check: `deploy/database/tests/test_indexes.py` fails on a foreign key column, or
 
 ## DA8 One migration chain per service, one head
 
-Rule: each service has one Alembic chain with its own version table; revisions are numbered `NNNN_<what_it_changes>.py`
-in order, a chain has one head, and two branches that both add a revision are joined by a merge revision before merge.
+Rule: each service has one Alembic chain with its own version table; a new revision is made by `make migration` and is
+named `YYYYMMDD_HHMM_<what_it_changes>.py` (UTC), so two branches never take the same number; the revisions already in
+the chains keep their `NNNN_` names. A chain has one head, and two branches that both follow the same revision are joined
+by a merge revision before merge.
 Why: two heads stop `alembic upgrade head` on every database at once.
 
 Today: no breach.
@@ -172,8 +174,9 @@ Today: no breach.
 Pattern (`services/agents-service/migrations/versions/0103_eval_cases_runs.py:1`): a docstring saying what the revision
 changes and why, then `revision`, `down_revision`.
 
-Check: each service's test setup upgrades an empty database to head (only for services in the CI plan). Needed: a
-`checks` step that asserts one head per chain.
+Check: `scripts/check_migration_heads.py` (`migration-heads` in `make checks`) fails on a chain with two heads;
+`scripts/new_migration.py --self-test` (`new-migration-self-test`) checks the timestamped id; each service's test setup
+upgrades an empty database to head (only for services in the CI plan).
 
 ## DA9 Every migration downgrades and runs on both databases
 

@@ -8,6 +8,8 @@ loaded, guardrails; it never adds a tool.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from ops_service_kit.http import Json, JsonList
 
 from .events import SkillLoaded
@@ -23,16 +25,24 @@ MATCHED_MAX = 200
 ALWAYS = "Always on"
 
 
-def grant(skills: list[Skill]) -> ToolGrant | None:
-    """The built-in, offered only when the agent pins an on-match skill; its slug argument is one of theirs."""
-    slugs: JsonList = [s.slug for s in skills if s.loading == "on_match"]
+def grant(skills: list[Skill], stepped: Sequence[Skill] = ()) -> ToolGrant | None:
+    """The built-in, offered when the agent pins an on-match skill without steps or holds a skill with steps
+    (`stepped`); its slug argument is one of theirs. A skill with steps is never loaded as text: loading it starts it
+    at its first step, as switch_skill does (step_tools.py)."""
+    slugs: JsonList = [s.slug for s in skills if s.loading == "on_match" and s.program is None]
+    slugs += [s.slug for s in stepped if s.slug not in slugs]
     if not slugs:
         return None
+    does = (
+        "Loads one of your skills by its slug when the task matches its use-when line. Follow the steps and rules "
+        "it returns for the rest of this reply."
+    )
+    if stepped:
+        does += " A skill that runs step by step starts at its first step instead."
     return ToolGrant(
         NAME,
         "platform",
-        "Loads one of your skills by its slug when the task matches its use-when line. Follow the steps and rules "
-        "it returns for the rest of this reply.",
+        does,
         "read",
         {
             "type": "object",
@@ -47,13 +57,27 @@ def grant(skills: list[Skill]) -> ToolGrant | None:
 
 
 def prompt(skills: list[Skill]) -> str:
-    """What the system prompt adds: the always-on bodies in pin order, then the index of on-match skills."""
-    parts = [f"## {s.name}\n\n{s.instructions}" for s in skills if s.loading == "always"]
-    index = [f"- {s.slug}: {s.use_when}" for s in skills if s.loading == "on_match"]
+    """What the system prompt adds: the always-on bodies in pin order, the index of on-match skills to load, then the
+    index of skills with steps to start."""
+    parts = [f"## {s.name}\n\n{s.instructions}" for s in skills if s.loading == "always" and s.program is None]
+    index = [f"- {s.slug}: {s.use_when}" for s in skills if s.loading == "on_match" and s.program is None]
     if index:
         parts.append(
             "## Skills you can load\n\nWhen a request matches one of these, call load_skill with its slug before "
             "answering, then follow what it returns.\n" + "\n".join(index)
+        )
+    started = [
+        f"- {s.slug}: {s.use_when}"
+        + (f" Not when: {s.program.not_when}" if s.program.not_when else "")
+        + (f" Its steps call: {', '.join(sorted(tools))}." if (tools := s.program.targets()) else "")
+        for s in skills
+        if s.program is not None
+    ]
+    if started:
+        parts.append(
+            "## Skills you can start\n\nThese run one step at a time. Call switch_skill with a skill's slug to start "
+            "it; you are then given its current step. A tool its steps call that changes something, or hands to "
+            "another agent, is available only as that step.\n" + "\n".join(started)
         )
     return "\n\n".join(parts)
 
@@ -106,7 +130,7 @@ def load(
 ) -> tuple[Skill | None, str | None]:
     """The skill to load for `slug`, or why the load is refused. `carried` skills, loaded by an earlier turn, are
     already loaded but count against neither of this turn's caps."""
-    skill = next((s for s in skills if s.slug == slug and s.loading == "on_match"), None)
+    skill = next((s for s in skills if s.slug == slug and s.loading == "on_match" and s.program is None), None)
     if skill is None:
         return None, f"No skill named {slug} is attached to this agent."
     if skill in loaded:

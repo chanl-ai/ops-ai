@@ -53,7 +53,7 @@ export function StepList({ types, open, onOpenChange, onAdd, startTab = 'all' }:
     >
       <PopoverTrigger asChild>
         <Button type="button" variant="outline" size="sm" className="bg-card shadow-sm" data-testid="definition-add-step">
-          <Plus /> <span className="max-sm:sr-only">Add a step</span>
+          <Plus /> <span className="max-sm:sr-only">Add step</span>
           <Badge variant="outline" className="font-mono max-sm:hidden">
             N
           </Badge>

@@ -8,6 +8,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
+from ._agents import based
 from ._io import (
     Definition,
     as_folder,
@@ -137,8 +138,31 @@ class Workflows:
         view = self.get_definition(id, version=version)
         return dump_definition(view["definition"], format)
 
-    def publish(self, id: str, *, note: str = "") -> Any:
-        return self._raw.agents.workflows_request_definition_publish(id, {"note": note})
+    def save_working_copy(self, id: str, definition: Definition, *, base: dict[str, Any] | None = None) -> Any:
+        """Saves `definition` as the workflow's working copy, failing checks and all, and returns it with its checks.
+        It makes no version. `base` is the `saveBase` of the workflow as last read; left out, the workflow is read
+        first. A save made on an older copy is refused with `stale_base`."""
+        read = base or self.get_definition(id)["saveBase"]
+        body = based({"definition": load_definition(definition)}, read)
+        return self._raw.agents.workflows_save_working_copy(id, body)
+
+    def diff(self, id: str, *, from_: str | int = "live", to: str | int = "working-copy") -> Any:
+        """The steps added, removed, changed (each setting, old and new) and moved between two versions, `live` or
+        `working-copy`."""
+        return self._raw.agents.workflows_diff_definitions(id, from_=str(from_), to=str(to))
+
+    def publish_preview(self, id: str) -> Any:
+        """What publishing the working copy would change, what stops it, and whether it waits for a review."""
+        return self._raw.agents.workflows_publish_preview(id)
+
+    def publish(self, id: str, *, note: str = "", working_copy: bool = False) -> Any:
+        """Requests the publish of the newest draft or, with `working_copy`, makes the next version from the working
+        copy and requests its publish in one call, refused before any version is made while the publish preview
+        lists a blocker."""
+        body: dict[str, Any] = {"note": note}
+        if working_copy:
+            body = based(body, self.get_definition(id)["saveBase"])
+        return self._raw.agents.workflows_request_definition_publish(id, body)
 
     def pause(self, id: str) -> Any:
         return self._raw.agents.workflows_pause_definition(id)
@@ -273,8 +297,22 @@ class AsyncWorkflows:
         view = await self.get_definition(id, version=version)
         return dump_definition(view["definition"], format)
 
-    async def publish(self, id: str, *, note: str = "") -> Any:
-        return await self._raw.agents.workflows_request_definition_publish(id, {"note": note})
+    async def save_working_copy(self, id: str, definition: Definition, *, base: dict[str, Any] | None = None) -> Any:
+        read = base or (await self.get_definition(id))["saveBase"]
+        body = based({"definition": load_definition(definition)}, read)
+        return await self._raw.agents.workflows_save_working_copy(id, body)
+
+    async def diff(self, id: str, *, from_: str | int = "live", to: str | int = "working-copy") -> Any:
+        return await self._raw.agents.workflows_diff_definitions(id, from_=str(from_), to=str(to))
+
+    async def publish_preview(self, id: str) -> Any:
+        return await self._raw.agents.workflows_publish_preview(id)
+
+    async def publish(self, id: str, *, note: str = "", working_copy: bool = False) -> Any:
+        body: dict[str, Any] = {"note": note}
+        if working_copy:
+            body = based(body, (await self.get_definition(id))["saveBase"])
+        return await self._raw.agents.workflows_request_definition_publish(id, body)
 
     async def pause(self, id: str) -> Any:
         return await self._raw.agents.workflows_pause_definition(id)

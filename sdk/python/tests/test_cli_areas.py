@@ -244,6 +244,45 @@ def test_kb_add_file_uploads_for_knowledge_and_adds_it_to_the_base(
     assert json.loads(seen[-1].content) == {"fileIds": ["fil_1"]}
 
 
+def test_skills_apply_saves_the_named_skill_as_a_draft_and_an_export_applies_again(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    step = {"do": "Look up", "use": {"kind": "tool", "id": "lookup"}, "check": {"text": "result.ok", "by": "rule"}}
+    stored = {
+        "id": "sk_1",
+        "name": "Recall",
+        "slug": "recall",
+        "ownerTeam": "Retail",
+        "version": 4,
+        "digest": "d4",
+        "status": "published",
+        "versions": [{"version": 5, "state": "draft"}, {"version": 4, "state": "published"}],
+        "content": {"name": "Recall", "useWhen": "", "tools": [{"toolId": "lookup"}], "steps": [step]},
+    }
+
+    def answer(r: httpx.Request) -> httpx.Response:
+        if r.method == "GET" and r.url.path.endswith("/v1/skills"):
+            return _ok({"data": [stored, {"id": "sk_2", "slug": "recall-notes", "version": 9}]})
+        return _ok(stored)
+
+    seen: list[httpx.Request] = []
+    _use(monkeypatch, "skills", _client(seen, answer))
+    assert main(["skills", "export", "sk_1", "--format", "json"]) == 0
+    file = tmp_path / "recall.json"
+    file.write_text(capsys.readouterr().out)
+    exported = json.loads(file.read_text())
+    assert exported["toolIds"] == ["lookup"] and exported["steps"] == [step] and "tools" not in exported
+
+    file.write_text(json.dumps({**{k: v for k, v in exported.items() if k != "id"}, "status": "published"}))
+    assert main(["skills", "apply", str(file), "--note", "tighter check"]) == 0
+    saved = seen[-1]
+    assert (saved.method, saved.url.path) == ("PUT", "/api/agents/v1/skills/sk_1/draft"), "the slug names the skill"
+    body = json.loads(saved.content)
+    sent = {"name": "Recall", "toolIds": ["lookup"], "steps": [step], "note": "tighter check"}
+    assert body == {**sent, "baseVersion": 4, "baseDigest": "d4"}, "the save names the copy the file was applied to"
+    assert capsys.readouterr().out.split()[-2:] == ["v5", "draft"], "the line names the draft it made, not the skill"
+
+
 def test_people_invite_sends_nothing_without_send(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[httpx.Request] = []
     _use(monkeypatch, "people", _client(seen, lambda _r: _ok({"invited": 1})))
@@ -503,7 +542,7 @@ def test_apps_on_turns_the_app_on_as_the_window_does_and_prints_the_sign_in_link
     assert main(["apps", "on", "plugin:opsai.salesforce", "--place", place]) == 0
     out = capsys.readouterr().out
     turned = next(r for r in seen if r.url.path.endswith("/team"))
-    assert json.loads(turned.content) == {"enabled": True, "signIn": "person_or_team", "settings": {"login_url": place}}
+    assert json.loads(turned.content) == {"enabled": True, "signIn": "person", "settings": {"login_url": place}}
     gave = next(r for r in seen if r.url.path.endswith("/team-assistant/app-tools"))
     assert json.loads(gave.content) == {"moduleIds": ["mod_plugin_salesforce"]}
     signed = next(r for r in seen if r.url.path.endswith("/sign-in"))

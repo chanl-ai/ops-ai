@@ -33,6 +33,7 @@ from .. import engine_reviews, hitl_facade, service_events
 from ..auth import (
     Principal,
     principal,
+    reader_of,
     reader_teams,
     require_reviews_decide,
     require_step_up,
@@ -49,6 +50,10 @@ from ..tool_access import one_read_per_tool, policy_of
 router = APIRouter(prefix="/v1/threads", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
+# The console's reads of Human Tasks name customers, proposals and evidence, so they need reviews.view where the request
+# acts; a chat user holds none and reads its own task cards inside its chat thread. The decisions keep `Me`: who decides
+# is checked per review (check_thread_decider), which lets the person a chat card asks decide it.
+Reader: TypeAlias = Annotated[Principal, Depends(reader_of("reviews"))]  # noqa: UP040
 
 
 class ApprovalInput(In):
@@ -153,7 +158,7 @@ class ReviewsQuery(BaseModel):
 
 
 @console_router.get("", response_model=Envelope[ReviewList])
-async def list_reviews(rt: Rt, me: Me, q: Annotated[ReviewsQuery, Query()]) -> JSONResponse:
+async def list_reviews(rt: Rt, me: Reader, q: Annotated[ReviewsQuery, Query()]) -> JSONResponse:
     """Human Tasks: one page of every review the team may see, with counts per view, facets and stats. The page is cut
     after merging three sources in Python (hitl_facade.list_reviews): graph threads waiting on a person, agent and
     workflow publish requests, and workflow runs waiting on a review step. They live in different tables (a thread's
@@ -183,14 +188,16 @@ async def list_reviews(rt: Rt, me: Me, q: Annotated[ReviewsQuery, Query()]) -> J
     return ok(rows)
 
 
-async def _with_can_decide(rt: Runtime, me: Principal, review: Json) -> Json:
+async def _with_can_decide(rt: Runtime, me: Principal, review: hitl_facade.Review) -> hitl_facade.Review:
     """The review with whether the caller may decide it now: the console shows Approve and Reject only then."""
     waiting = review.get("status") in ("pending", "in_review")
-    return review | {"canDecide": waiting and await hitl_facade.can_decide(rt, me, str(review["id"]))}
+    out = review.copy()
+    out["canDecide"] = waiting and await hitl_facade.can_decide(rt, me, str(review["id"]))
+    return out
 
 
 @console_router.get("/by-run-key/{run_key:path}", response_model=Envelope[Review])
-async def get_review_by_run_key(rt: Rt, me: Me, run_key: str) -> JSONResponse:
+async def get_review_by_run_key(rt: Rt, me: Reader, run_key: str) -> JSONResponse:
     """The review of the run a service event started in its handler, by its run key `<event>:<key>`: the step
     it waits on, else its latest decision. A service links to it before the run exists, so it names the key, not the
     step; a team that cannot see the run gets not found, as for the step itself."""
@@ -213,7 +220,9 @@ class QueuePlace(Out):
 
 
 @console_router.get("/{review_id}/place", response_model=Envelope[QueuePlace])
-async def get_queue_place(rt: Rt, me: Me, review_id: str, view: str = "open", group: str | None = None) -> JSONResponse:
+async def get_queue_place(
+    rt: Rt, me: Reader, review_id: str, view: str = "open", group: str | None = None
+) -> JSONResponse:
     """Where the review sits in a Human Tasks view (open by default): position, total and the reviews either side;
     `group=case` in the order the queue grouped by case lists them."""
     with one_read_per_tool():
@@ -229,7 +238,7 @@ async def get_queue_place(rt: Rt, me: Me, review_id: str, view: str = "open", gr
 
 
 @console_router.get("/{thread_id}", response_model=Envelope[Review])
-async def get_review(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
+async def get_review(rt: Rt, me: Reader, thread_id: str) -> JSONResponse:
     with one_read_per_tool():
         return ok(await hitl_facade.review_for(rt, me, thread_id))
 
@@ -271,6 +280,10 @@ class AssignInput(In):
 
 @console_router.post("/bulk-decision", response_model=Envelope[BulkResult])
 async def bulk_decide(rt: Rt, me: Me, body: BulkDecisionInput) -> JSONResponse:
+    """Decides each review as one decision would, each checked by that decision's own decider rule, so a reviewer
+    of the review's team decides it whatever team they act in. Someone who decides reviews in no team and decided none
+    of these (an ask-the-person asker answers their own) is refused (403), as a single decision refuses them; anyone
+    else gets a result per id."""
     updated: list[str] = []
     skipped: list[dict[str, str]] = []
     for thread_id in body.ids:
@@ -286,6 +299,8 @@ async def bulk_decide(rt: Rt, me: Me, body: BulkDecisionInput) -> JSONResponse:
             updated.append(thread_id)
         except ApiError as e:
             skipped.append({"id": thread_id, "reason": e.message})
+    if not updated and not (teams := review_teams(me)):
+        require_reviews_decide(teams, me.team_id or "", "these tasks")
     return ok({"updated": updated, "skipped": skipped})
 
 

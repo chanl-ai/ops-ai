@@ -42,7 +42,8 @@ async def test_a_tool_the_module_does_not_have_is_not_found(gateway: Gateway) ->
 
 
 async def test_a_real_run_acts_for_the_person_who_pressed_run(gateway: Gateway) -> None:  # noqa: F811
-    # Their own sign-in signs it where each person signs in, and Usage names them when no team account signed it.
+    # Their own sign-in signs it where each person signs in; where the team's login (here a key) signed it, Usage names
+    # that login and them as the person who asked.
     r = await gateway.client.post(
         url(gateway, "get_account"), json={"mode": "real", "input": {"accountId": "P"}}, headers=TEAM
     )
@@ -50,6 +51,8 @@ async def test_a_real_run_acts_for_the_person_who_pressed_run(gateway: Gateway) 
     rows = (await gateway.client.get("/v1/executions", params={"tool": gateway.tool("get_account")})).json()["data"]
     row = next(x for x in rows["data"] if x["id"] == call_id)
     assert row.get("actingFor"), row
-    signed_by_team = row.get("credential") == "team"
-    want = {"kind": "team"} if signed_by_team else {"kind": "person", "email": row["actingFor"]}
-    assert row["runAs"] == want, row
+    run_as = row["runAs"]
+    if run_as["kind"] == "person":
+        assert run_as == {"kind": "person", "email": row["actingFor"]}, row
+    else:
+        assert run_as.get("askedBy") == row["actingFor"] and run_as.get("login"), row

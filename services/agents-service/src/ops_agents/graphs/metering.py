@@ -1,12 +1,16 @@
 """Meters every model call a graph makes and pauses the thread for a person when its budget is spent (E12).
 
-A call is checked against the thread's budget before it runs and recorded after it returns. The model adapter reports
-its usage through `report_usage`; the wrapper collects it, so call sites and test fakes stay unchanged. A fake that
-reports nothing counts as one call with zero tokens."""
+A call is reserved against the thread's budget before it runs and recorded after it returns, when its reservation
+becomes its record. The reservation is what makes the check hold for calls made at once: each is counted from the
+moment it is admitted, not from when its provider answers. The model adapter reports its usage through
+`report_usage`; the wrapper collects it, so call sites and test fakes stay unchanged. A fake that reports nothing
+counts as one call with zero tokens."""
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Generator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Protocol
@@ -17,11 +21,21 @@ from langgraph.types import interrupt
 from ops_metering import Budget, Exhausted, Usage
 from ops_service_kit import narrow
 from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.ids import new_id
 
 from .models import Facts, Grade, GraphModels
 from .usage import collecting, report_usage
 
-__all__ = ["BudgetStoppedError", "CallSite", "Meter", "MeteredModels", "metered", "report_usage"]
+__all__ = [
+    "BudgetStoppedError",
+    "CallSite",
+    "Meter",
+    "MeteredModels",
+    "Refused",
+    "Reservation",
+    "metered",
+    "report_usage",
+]
 
 
 @dataclass(frozen=True)
@@ -31,14 +45,61 @@ class CallSite:
     node: str
 
 
+@dataclass(frozen=True)
+class Reservation:
+    """One call admitted against a budget and counted there until it is recorded or released."""
+
+    id: str
+    # The thread whose budget holds it: the caller's own, or the thread its chain started on.
+    thread_id: str
+
+
+@dataclass(frozen=True)
+class Refused:
+    """A call the budget of `thread_id` no longer covers, with the cap that is reached."""
+
+    thread_id: str
+    spent: Exhausted
+
+
 class Meter(Protocol):
     async def exhausted(self, thread_id: str) -> Exhausted | None: ...
     async def update_budget(self, thread_id: str, budget: Budget) -> None: ...
-    async def record(self, site: CallSite, kind: str, alias: str, usage: Usage) -> None: ...
+    async def reserve(self, site: CallSite, kind: str, alias: str) -> Reservation | Refused | None: ...
+    async def record(
+        self, site: CallSite, kind: str, alias: str, usage: Usage, *, settles: Reservation | None = None
+    ) -> None: ...
 
 
 class BudgetStoppedError(Exception):
     """A person rejected raising an exhausted budget; the run ends with this error."""
+
+
+# The replay key of a workflow step (engine_agents.py) or a chat turn (api/chat_turns.py) while it runs, in place
+# of the LangGraph task.
+STEP_KEY: ContextVar[str | None] = ContextVar("ops_agents_ledger_step_key", default=None)
+
+
+@contextmanager
+def step_calls(key: str) -> Generator[None]:
+    """Records and replays the model calls made inside under `key`, a workflow step's id (run:node:iteration): the
+    LangGraph task a re-run gets is new whenever the run continues from another checkpoint, while the step id is not."""
+    token = STEP_KEY.set(key)
+    try:
+        yield
+    finally:
+        STEP_KEY.reset(token)
+
+
+def turn_ids(node: str) -> tuple[str, str]:
+    """(run_id, turn_id) for a kernel turn a graph node starts. Inside a chat turn's `step_calls` they are its turn
+    id with the thread and the node, so a re-run of the turn on another process gives its writes the keys they had
+    (the gateway then answers a sent write from its record) and its model calls the ledger key they had; elsewhere
+    they are new each time."""
+    key, site = STEP_KEY.get(), call_site()
+    if key is None or site is None:
+        return new_id("run"), new_id("turn")
+    return f"{key}:{site.thread_id}", node
 
 
 def call_site() -> CallSite | None:
@@ -70,11 +131,25 @@ def budget_from(raw: Mapping[str, JsonValue]) -> Budget:
     )
 
 
-async def guard(meter: Meter, site: CallSite) -> None:
+async def guard(meter: Meter, site: CallSite, kind: str, alias: str, *, hold: bool) -> Reservation | None:
     """Pauses the thread while its budget is exhausted, through the same interrupt a human step uses. An approved
     decision carrying a `budget` raises the caps and the call goes ahead; a rejection stops the run. LangGraph restarts
-    the node on resume, so calls the node made before this point run, and are recorded, again."""
-    while (spent := await meter.exhausted(site.thread_id)) is not None:
+    the node on resume, so calls the node made before this point run, and are recorded, again.
+
+    `hold` reserves the call it admits, so two steps that reach a budget's last call at once are not both let
+    through; the caller settles the reservation with the call's record. Without it the budget is only read, calls in
+    flight included: a kernel turn holds nothing at its start, since each of its model requests reserves its own
+    (api/model_ledger.py)."""
+    while True:
+        if hold:
+            held = await meter.reserve(site, kind, alias)
+            if not isinstance(held, Refused):
+                return held
+            spent = held.spent
+        elif (over := await meter.exhausted(site.thread_id)) is None:
+            return None
+        else:
+            spent = over
         answer: Any = interrupt(
             {
                 "kind": "budget_exhausted",
@@ -101,7 +176,7 @@ async def metered[T](
     site = call_site()
     if meter is None or site is None:
         return await call()
-    await guard(meter, site)
+    held = await guard(meter, site, kind, alias, hold=record)
     if not record:
         return await call()
     with collecting() as got:
@@ -115,7 +190,7 @@ async def metered[T](
                 if got
                 else Usage()
             )
-            await meter.record(site, kind, alias, usage)
+            await meter.record(site, kind, alias, usage, settles=held)
 
 
 class MeteredModels:

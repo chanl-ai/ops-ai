@@ -94,7 +94,7 @@ async function startFrom(href, { withFile }) {
 await page.goto(`${origin}/workflows`, { waitUntil: 'domcontentloaded' });
 await settle();
 const listed = await page
-  .locator('main table tbody tr a[href^="/workflows/"], main [role="row"] a[href^="/workflows/"]')
+  .locator('main table tbody tr a[href^="/build/workflows/"], main [role="row"] a[href^="/build/workflows/"]')
   .evaluateAll((as) => [...new Map(as.map((a) => [a.getAttribute('href'), (a.innerText || '').split('\n')[0].trim().slice(0, 60)])).entries()].slice(0, 8));
 if (listed.length) {
   let started = null;

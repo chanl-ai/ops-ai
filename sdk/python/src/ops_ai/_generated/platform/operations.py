@@ -213,12 +213,48 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "auth_sso_link_complete": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/auth/sso/link/complete",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "auth_sso_link_start": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/auth/sso/link/start",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "auth_sso_links": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/auth/sso/links",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "auth_sso_start": {
         "body": "json",
         "headers": [],
         "method": "POST",
         "path": "/v1/auth/sso/start",
         "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "auth_sso_unlink": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/auth/sso/links/{provider_id}",
+        "pathParams": ["provider_id"],
         "query": [],
         "stream": False,
     },
@@ -314,7 +350,7 @@ OPERATIONS: dict[str, Operation] = {
     },
     "members_change_roles": {
         "body": "json",
-        "headers": [],
+        "headers": ["x-acting-for"],
         "method": "POST",
         "path": "/v1/settings/members/role",
         "pathParams": [],
@@ -323,7 +359,7 @@ OPERATIONS: dict[str, Operation] = {
     },
     "members_invite_members": {
         "body": "json",
-        "headers": [],
+        "headers": ["x-acting-for"],
         "method": "POST",
         "path": "/v1/settings/members/invite",
         "pathParams": [],
@@ -348,11 +384,29 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["search", "cursor", "limit", "ids"],
         "stream": False,
     },
+    "members_reinvite_members": {
+        "body": "json",
+        "headers": ["x-acting-for"],
+        "method": "POST",
+        "path": "/v1/settings/members/reinvite",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "members_remove_members": {
         "body": "json",
         "headers": [],
         "method": "POST",
         "path": "/v1/settings/members/delete",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "members_unlink_members": {
+        "body": "json",
+        "headers": ["x-acting-for"],
+        "method": "POST",
+        "path": "/v1/settings/members/unlink",
         "pathParams": [],
         "query": [],
         "stream": False,
@@ -408,7 +462,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/people-names",
         "pathParams": [],
-        "query": [],
+        "query": ["emails"],
         "stream": False,
     },
     "people_person_permissions": {
@@ -492,6 +546,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "roles_give_role_to_holder": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/roles/{role_id}/holders",
+        "pathParams": ["role_id"],
+        "query": [],
+        "stream": False,
+    },
     "roles_list_roles": {
         "body": None,
         "headers": [],
@@ -526,6 +589,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/roles/{role_id}/reset",
         "pathParams": ["role_id"],
         "query": [],
+        "stream": False,
+    },
+    "roles_role_holder_options": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/roles/{role_id}/holder-options",
+        "pathParams": ["role_id"],
+        "query": ["search", "cursor", "limit", "ids"],
         "stream": False,
     },
     "roles_role_holders": {
@@ -714,7 +786,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/teams",
         "pathParams": [],
-        "query": [],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "teams_list_workspace_teams": {
@@ -777,7 +849,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/team-names",
         "pathParams": [],
-        "query": [],
+        "query": ["ids"],
         "stream": False,
     },
     "workspace_close_workspace": {
@@ -990,6 +1062,22 @@ class Operations:
         "Sso Complete"
         return self._t.call(SERVICE, OPERATIONS["auth_sso_complete"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def auth_sso_link_complete(self, body: SsoCompleteIn) -> SsoLinked:
+        "Sso Link Complete"
+        return self._t.call(SERVICE, OPERATIONS["auth_sso_link_complete"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def auth_sso_link_start(self, body: SsoLinkStartIn) -> SsoStarted:
+        "Sso Link Start"
+        return self._t.call(SERVICE, OPERATIONS["auth_sso_link_start"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def auth_sso_links(self) -> list[SsoLink]:
+        "Sso Links"
+        return self._t.call(SERVICE, OPERATIONS["auth_sso_links"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def auth_sso_unlink(self, provider_id: str) -> Any:
+        "Sso Unlink"
+        return self._t.call(SERVICE, OPERATIONS["auth_sso_unlink"], {"provider_id": provider_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def auth_sso_start(self, body: SsoStartIn) -> SsoStarted:
         "Sso Start"
         return self._t.call(SERVICE, OPERATIONS["auth_sso_start"], {}, {}, {}, body)  # type: ignore[no-any-return]
@@ -1046,9 +1134,9 @@ class Operations:
         "Oauth Disconnect"
         return self._t.call(SERVICE, OPERATIONS["oauth_oauth_disconnect"], {"grant_id": grant_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def people_people_names(self) -> list[PersonName]:
+    def people_people_names(self, *, emails: list[str] | None = None) -> list[PersonName]:
         "People Names"
-        return self._t.call(SERVICE, OPERATIONS["people_people_names"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["people_people_names"], {}, {"emails": emails}, {}, None)  # type: ignore[no-any-return]
 
     def people_person_permissions(self, person_id: str) -> PermissionsOut:
         "Person Permissions"
@@ -1153,6 +1241,25 @@ class Operations:
             SERVICE, OPERATIONS["roles_delete_role"], {"role_id": role_id}, {"moveTo": move_to}, {}, None
         )  # type: ignore[no-any-return]
 
+    def roles_role_holder_options(
+        self,
+        role_id: str,
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        ids: list[str] | None = None,
+    ) -> OptionsPage:
+        "Role Holder Options"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["roles_role_holder_options"],
+            {"role_id": role_id},
+            {"search": search, "cursor": cursor, "limit": limit, "ids": ids},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def roles_role_holders(
         self,
         role_id: str,
@@ -1180,6 +1287,10 @@ class Operations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    def roles_give_role_to_holder(self, role_id: str, body: RoleHolderIn) -> RoleHolderOut:
+        "Give Role To Holder"
+        return self._t.call(SERVICE, OPERATIONS["roles_give_role_to_holder"], {"role_id": role_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def roles_edit_role(self, role_id: str, body: RoleCellsIn) -> RoleDetail:
         "Edit Role"
@@ -1224,9 +1335,9 @@ class Operations:
         "Remove Members"
         return self._t.call(SERVICE, OPERATIONS["members_remove_members"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def members_invite_members(self, body: InviteIn) -> InviteBulkOut:
+    def members_invite_members(self, body: InviteIn, *, x_acting_for: str | None = None) -> InviteBulkOut:
         "Invite Members"
-        return self._t.call(SERVICE, OPERATIONS["members_invite_members"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["members_invite_members"], {}, {}, {"x-acting-for": x_acting_for}, body)  # type: ignore[no-any-return]
 
     def members_member_options(
         self,
@@ -1246,9 +1357,19 @@ class Operations:
             None,
         )  # type: ignore[no-any-return]
 
-    def members_change_roles(self, body: RoleIn) -> BulkOut:
+    def members_reinvite_members(self, body: ReinviteIn, *, x_acting_for: str | None = None) -> ReinviteBulkOut:
+        "Reinvite Members"
+        return self._t.call(
+            SERVICE, OPERATIONS["members_reinvite_members"], {}, {}, {"x-acting-for": x_acting_for}, body
+        )  # type: ignore[no-any-return]
+
+    def members_change_roles(self, body: RoleIn, *, x_acting_for: str | None = None) -> BulkOut:
         "Change Roles"
-        return self._t.call(SERVICE, OPERATIONS["members_change_roles"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["members_change_roles"], {}, {}, {"x-acting-for": x_acting_for}, body)  # type: ignore[no-any-return]
+
+    def members_unlink_members(self, body: DeleteIn, *, x_acting_for: str | None = None) -> BulkOut:
+        "Unlink Members"
+        return self._t.call(SERVICE, OPERATIONS["members_unlink_members"], {}, {}, {"x-acting-for": x_acting_for}, body)  # type: ignore[no-any-return]
 
     def sign_in_providers_list_break_glass(self) -> list[BreakGlassOut]:
         "List Break Glass"
@@ -1395,13 +1516,36 @@ class Operations:
         "Set Workspace Teams"
         return self._t.call(SERVICE, OPERATIONS["teams_set_workspace_teams"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def teams_team_names(self) -> list[TeamName]:
+    def teams_team_names(self, *, ids: list[str] | None = None) -> list[TeamName]:
         "Team Names"
-        return self._t.call(SERVICE, OPERATIONS["teams_team_names"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["teams_team_names"], {}, {"ids": ids}, {}, None)  # type: ignore[no-any-return]
 
-    def teams_list_teams(self) -> list[TeamOut]:
+    def teams_list_teams(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultTeamOut:
         "List Teams"
-        return self._t.call(SERVICE, OPERATIONS["teams_list_teams"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["teams_list_teams"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def workspace_close_workspace(self, body: WorkspaceCloseIn) -> WorkspaceStateOut:
         "Close Workspace"
@@ -1584,6 +1728,22 @@ class AsyncOperations:
         "Sso Complete"
         return await self._t.call(SERVICE, OPERATIONS["auth_sso_complete"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def auth_sso_link_complete(self, body: SsoCompleteIn) -> SsoLinked:
+        "Sso Link Complete"
+        return await self._t.call(SERVICE, OPERATIONS["auth_sso_link_complete"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def auth_sso_link_start(self, body: SsoLinkStartIn) -> SsoStarted:
+        "Sso Link Start"
+        return await self._t.call(SERVICE, OPERATIONS["auth_sso_link_start"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def auth_sso_links(self) -> list[SsoLink]:
+        "Sso Links"
+        return await self._t.call(SERVICE, OPERATIONS["auth_sso_links"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def auth_sso_unlink(self, provider_id: str) -> Any:
+        "Sso Unlink"
+        return await self._t.call(SERVICE, OPERATIONS["auth_sso_unlink"], {"provider_id": provider_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     async def auth_sso_start(self, body: SsoStartIn) -> SsoStarted:
         "Sso Start"
         return await self._t.call(SERVICE, OPERATIONS["auth_sso_start"], {}, {}, {}, body)  # type: ignore[no-any-return]
@@ -1640,9 +1800,9 @@ class AsyncOperations:
         "Oauth Disconnect"
         return await self._t.call(SERVICE, OPERATIONS["oauth_oauth_disconnect"], {"grant_id": grant_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def people_people_names(self) -> list[PersonName]:
+    async def people_people_names(self, *, emails: list[str] | None = None) -> list[PersonName]:
         "People Names"
-        return await self._t.call(SERVICE, OPERATIONS["people_people_names"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["people_people_names"], {}, {"emails": emails}, {}, None)  # type: ignore[no-any-return]
 
     async def people_person_permissions(self, person_id: str) -> PermissionsOut:
         "Person Permissions"
@@ -1749,6 +1909,25 @@ class AsyncOperations:
             SERVICE, OPERATIONS["roles_delete_role"], {"role_id": role_id}, {"moveTo": move_to}, {}, None
         )  # type: ignore[no-any-return]
 
+    async def roles_role_holder_options(
+        self,
+        role_id: str,
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        ids: list[str] | None = None,
+    ) -> OptionsPage:
+        "Role Holder Options"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["roles_role_holder_options"],
+            {"role_id": role_id},
+            {"search": search, "cursor": cursor, "limit": limit, "ids": ids},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     async def roles_role_holders(
         self,
         role_id: str,
@@ -1776,6 +1955,10 @@ class AsyncOperations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    async def roles_give_role_to_holder(self, role_id: str, body: RoleHolderIn) -> RoleHolderOut:
+        "Give Role To Holder"
+        return await self._t.call(SERVICE, OPERATIONS["roles_give_role_to_holder"], {"role_id": role_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def roles_edit_role(self, role_id: str, body: RoleCellsIn) -> RoleDetail:
         "Edit Role"
@@ -1820,9 +2003,11 @@ class AsyncOperations:
         "Remove Members"
         return await self._t.call(SERVICE, OPERATIONS["members_remove_members"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def members_invite_members(self, body: InviteIn) -> InviteBulkOut:
+    async def members_invite_members(self, body: InviteIn, *, x_acting_for: str | None = None) -> InviteBulkOut:
         "Invite Members"
-        return await self._t.call(SERVICE, OPERATIONS["members_invite_members"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE, OPERATIONS["members_invite_members"], {}, {}, {"x-acting-for": x_acting_for}, body
+        )  # type: ignore[no-any-return]
 
     async def members_member_options(
         self,
@@ -1842,9 +2027,23 @@ class AsyncOperations:
             None,
         )  # type: ignore[no-any-return]
 
-    async def members_change_roles(self, body: RoleIn) -> BulkOut:
+    async def members_reinvite_members(self, body: ReinviteIn, *, x_acting_for: str | None = None) -> ReinviteBulkOut:
+        "Reinvite Members"
+        return await self._t.call(
+            SERVICE, OPERATIONS["members_reinvite_members"], {}, {}, {"x-acting-for": x_acting_for}, body
+        )  # type: ignore[no-any-return]
+
+    async def members_change_roles(self, body: RoleIn, *, x_acting_for: str | None = None) -> BulkOut:
         "Change Roles"
-        return await self._t.call(SERVICE, OPERATIONS["members_change_roles"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE, OPERATIONS["members_change_roles"], {}, {}, {"x-acting-for": x_acting_for}, body
+        )  # type: ignore[no-any-return]
+
+    async def members_unlink_members(self, body: DeleteIn, *, x_acting_for: str | None = None) -> BulkOut:
+        "Unlink Members"
+        return await self._t.call(
+            SERVICE, OPERATIONS["members_unlink_members"], {}, {}, {"x-acting-for": x_acting_for}, body
+        )  # type: ignore[no-any-return]
 
     async def sign_in_providers_list_break_glass(self) -> list[BreakGlassOut]:
         "List Break Glass"
@@ -1995,13 +2194,36 @@ class AsyncOperations:
         "Set Workspace Teams"
         return await self._t.call(SERVICE, OPERATIONS["teams_set_workspace_teams"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def teams_team_names(self) -> list[TeamName]:
+    async def teams_team_names(self, *, ids: list[str] | None = None) -> list[TeamName]:
         "Team Names"
-        return await self._t.call(SERVICE, OPERATIONS["teams_team_names"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["teams_team_names"], {}, {"ids": ids}, {}, None)  # type: ignore[no-any-return]
 
-    async def teams_list_teams(self) -> list[TeamOut]:
+    async def teams_list_teams(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultTeamOut:
         "List Teams"
-        return await self._t.call(SERVICE, OPERATIONS["teams_list_teams"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["teams_list_teams"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def workspace_close_workspace(self, body: WorkspaceCloseIn) -> WorkspaceStateOut:
         "Close Workspace"

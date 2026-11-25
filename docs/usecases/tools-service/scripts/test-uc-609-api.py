@@ -26,6 +26,7 @@ from usecase_harness import (
     data,
     finish,
     platform,
+    save_agent,
     service_headers,
     signed_in,
     tools,
@@ -176,9 +177,10 @@ with ExitStack() as stack:
             "data", []
         )
         agent = next(iter(agents_list), {})
-        granted = ag.patch(
-            f"/v1/agents/{agent.get('id')}",
-            json={"toolIds": [*agent.get("toolIds", []), "fields_post_message", "fields_transfer"]},
+        granted = save_agent(
+            ag,
+            agent.get("id"),
+            {"toolIds": [*agent.get("toolIds", []), "fields_post_message", "fields_transfer"]},
             headers=priya,
         )
         uses = (

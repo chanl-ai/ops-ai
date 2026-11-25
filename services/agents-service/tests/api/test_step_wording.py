@@ -53,14 +53,16 @@ async def _tool_steps(s: Stack, run: str, calls: list[tuple[str, str, dict[str, 
 
 
 class _Directory:
-    """The tool directory with no operations, counting its reads."""
+    """The team's tool directory, counting its reads. It keeps the team's operations, so the run's workflow, whose
+    step calls get_customer, still publishes."""
 
-    def __init__(self) -> None:
+    def __init__(self, inner: Any) -> None:
+        self.inner = inner
         self.reads = 0
 
     async def operations(self) -> list[Any]:
         self.reads += 1
-        return []
+        return list(await self.inner.operations())
 
 
 async def test_activity_never_titles_a_call_with_its_tool_name(stack: Stack) -> None:  # noqa: F811
@@ -91,7 +93,7 @@ async def test_activity_describes_a_page_of_calls_in_fixed_reads(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     c, rt = stack
-    directory = _Directory()
+    directory = _Directory(rt.directory())
     monkeypatch.setattr(rt, "directory", lambda: directory)
     statements: list[str] = []
 
@@ -146,8 +148,9 @@ async def test_a_task_list_reads_the_directory_once(
     for _ in range(3):
         await drafted(dev_platform, james)
     transport = cast(ASGITransport, dev_platform._transport)  # pyright: ignore[reportPrivateUsage]
-    directory = _Directory()
-    monkeypatch.setattr(cast(Any, transport.app).state.runtime, "directory", lambda: directory)
+    runtime = cast(Any, transport.app).state.runtime
+    directory = _Directory(runtime.directory())
+    monkeypatch.setattr(runtime, "directory", lambda: directory)
     listed = await dev_platform.get("/reviews", headers=james)
     assert listed.status_code == 200 and len(listed.json()["data"]["data"]) >= 3, listed.text
     assert directory.reads == 1, directory.reads
@@ -278,8 +281,8 @@ async def test_a_call_carrying_an_object_reads_without_it(stack: Stack) -> None:
     """A webhook step's story line read "payload case id case_2379…, customer id CUS-1001, account …": the object the
     call carries flattened into the sentence."""
     _, rt = stack
-    payload = {"caseId": "case_2379bac6ca62", "customerId": "CUS-1001", "account": "CHQ-2219", "amount": 2140.55}
-    call = {"tool": "notify_webhook", "input": {"hook": "holds", "event": "hold.placed", "payload": payload}}
+    payload: Json = {"caseId": "case_2379bac6ca62", "customerId": "CUS-1001", "account": "CHQ-2219", "amount": 2140.55}
+    call: Json = {"tool": "notify_webhook", "input": {"hook": "holds", "event": "hold.placed", "payload": payload}}
     with tenant_scope(TENANT):
         told = await describe_call(rt, call, currency=None, money_key=None)
     assert told["sentence"] == "Notify webhook: hook holds, event hold.placed", told
@@ -289,7 +292,10 @@ async def test_a_record_change_shows_each_field_it_writes(stack: Stack) -> None:
     """An approver of a record change saw nothing of what would change: the object of changed fields was dropped from
     the card. Each field is a row, though never part of the sentence."""
     _, rt = stack
-    call = {"tool": "crm_update", "input": {"object": "Case", "fields": {"Status": "Escalated", "Priority": "High"}}}
+    call: Json = {
+        "tool": "crm_update",
+        "input": {"object": "Case", "fields": {"Status": "Escalated", "Priority": "High"}},
+    }
     with tenant_scope(TENANT):
         told = await describe_call(rt, call, currency=None, money_key=None)
     rows = {f["label"]: f["value"] for f in told["fields"]}

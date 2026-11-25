@@ -13,10 +13,11 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store.dialect import json_array_has, json_fragment, json_text
+from ops_store.rows import Select, rows
 from ops_store.team_scope import team_visible
 
 from .chat_search import chat_search, matching_query
-from .graphs import graph_threads, mine
+from .graphs import StoredThread, graph_threads, mine
 from .tenancy import tenant_tx
 
 _T = graph_threads.c
@@ -118,7 +119,7 @@ def _after(keys: list[sa.ColumnElement[Any]], after: tuple[list[Any], str], desc
 
 @dataclass
 class ChatPage:
-    rows: list[dict[str, Any]]
+    rows: list[StoredThread]
     total: int
     more: bool
     remaining: int | None
@@ -154,13 +155,13 @@ async def chat_page(
     One row beyond the page is read to know whether more follow. `remaining` counts the rows past `after`."""
     page, total_q, remaining_q = page_queries(q, limit=limit, offset=offset, after=after)
     async with tenant_tx(engine) as c:
-        got = [dict(r) for r in (await c.execute(page)).mappings()]
+        got = await rows(c, page, StoredThread)
         total = int((await c.execute(total_q)).scalar_one())
         remaining = int((await c.execute(remaining_q)).scalar_one()) if remaining_q is not None else None
     return ChatPage(got[:limit], total, len(got) > limit, remaining)
 
 
-def facet_queries(q: ChatListQuery) -> dict[str, Any]:
+def facet_queries(q: ChatListQuery) -> dict[str, Select]:
     """Per-agent and per-state counts, and the kb id arrays to tally. The grouping is a subquery's column: grouping
     by an expression with bound parameters fails on SQL Server (error 8120, the select list's parameters differ)."""
     where = [team_visible(graph_threads), *_visible(q)]
@@ -188,7 +189,7 @@ async def chat_facets(engine: AsyncEngine, q: ChatListQuery) -> dict[str, dict[s
     return out
 
 
-async def unsummarised_rows(engine: AsyncEngine, q: ChatListQuery, *, limit: int) -> list[dict[str, Any]]:
+async def unsummarised_rows(engine: AsyncEngine, q: ChatListQuery, *, limit: int) -> list[StoredThread]:
     """The caller's own chat threads written before summaries or search rows were kept (no `messageCount` in meta or
     no search row), at most `limit` of them, so a list backfills a batch at a time."""
     indexed = sa.exists().where(chat_search.c.thread_id == _T.id)
@@ -200,4 +201,4 @@ async def unsummarised_rows(engine: AsyncEngine, q: ChatListQuery, *, limit: int
         .limit(limit)
     )
     async with tenant_tx(engine) as c:
-        return [dict(r) for r in (await c.execute(stmt)).mappings()]
+        return await rows(c, stmt, StoredThread)

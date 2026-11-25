@@ -107,11 +107,9 @@ async def test_the_requester_does_not_decide() -> None:
     refused("own_request", ACCESS.can, p, "reviews", "decide", team="team_a", not_by=[None, "a@bank.test"])
 
 
-async def test_the_requester_does_not_decide_unless_the_tenant_switched_requester_may_decide_on() -> None:
-    loosened = await person(access={"team_a": ["reviewer"]}, policies={"requesterMayDecide": True})
-    assert ACCESS.can(loosened, "reviews", "decide", team="team_a", requested_by=["a@bank.test"]) == "all"
+async def test_a_reviewers_own_request_is_refused_only_while_the_teams_two_person_rule_is_on() -> None:
     default = await person(access={"team_a": ["reviewer"]})
-    refused("own_request", ACCESS.can, default, "reviews", "decide", team="team_a", requested_by=["a@bank.test"])
+    assert ACCESS.can(default, "reviews", "decide", team="team_a", requested_by=["a@bank.test"]) == "all"
     strict = await person(access={"team_a": ["reviewer"]}, policies={"requesterMayDecide": False})
     assert ACCESS.can(strict, "reviews", "decide", team="team_a", requested_by=["b@bank.test"]) == "all"
     refused("own_request", ACCESS.can, strict, "reviews", "decide", team="team_a", requested_by=["a@bank.test"])
@@ -130,6 +128,37 @@ async def test_the_requester_does_not_decide_unless_the_tenant_switched_requeste
         policies={"requesterMayDecide": False},
     )
     refused("own_request", ACCESS.can, dev, "reviews", "decide", requested_by=["dana@bank.test"])
+
+
+async def test_a_team_that_saved_nothing_lets_the_requester_decide_and_the_floor_takes_it_back() -> None:
+    """A team with no saved part (a new team, the sample team) reads the default: the two-person rule off. A team that
+    turned it on keeps it; the Security team's floor (`approvalsFloor`) takes it back from everyone but an Admin."""
+    others_saved = {"requesterMayDecide": {"team_a": False}}
+    new_team = await person(
+        team="team_b", team_ids=["team_a", "team_b"], access={"team_b": ["reviewer"]}, policies=others_saved
+    )
+    asked = ["a@bank.test"]
+    assert ACCESS.can(new_team, "reviews", "decide", team="team_b", requested_by=asked) == "all"
+    turned_on = await person(access={"team_a": ["reviewer"]}, policies=others_saved)
+    refused("own_request", ACCESS.can, turned_on, "reviews", "decide", team="team_a", requested_by=asked)
+    floored = await person(access={"team_a": ["reviewer"]}, policies={"approvalsFloor": {"requesterMayDecide": False}})
+    refused("own_request", ACCESS.can, floored, "reviews", "decide", team="team_a", requested_by=asked)
+
+
+async def test_an_admin_decides_her_own_request_whatever_the_rule_but_not_one_she_already_approved() -> None:
+    strict = {"requesterMayDecide": False, "approvalsFloor": {"requesterMayDecide": False}}
+    admin = await person(access={"team_a": ["admin"]}, policies=strict)
+    assert ACCESS.can(admin, "agents", "decide", team="team_a", requested_by=["a@bank.test"]) == "all"
+    # An earlier approver of a two-person decision still does not approve it twice.
+    refused("own_request", ACCESS.can, admin, "agents", "decide", team="team_a", not_by=["a@bank.test"])
+    # An Admin of another team is not one here.
+    elsewhere = await person(
+        team="team_b",
+        team_ids=["team_a", "team_b"],
+        access={"team_a": ["admin"], "team_b": ["reviewer"]},
+        policies=strict,
+    )
+    refused("own_request", ACCESS.can, elsewhere, "reviews", "decide", team="team_b", requested_by=["a@bank.test"])
 
 
 async def test_a_token_without_the_access_claim_maps_its_membership_roles() -> None:
@@ -364,7 +393,8 @@ def test_a_grid_encodes_into_a_short_claim_and_back() -> None:
     grants: list[Grant] = [("agents", "view", "all"), ("memory", "edit", "own"), ("chat", "view", "own")]
     claim = encode_grid(grants)
     assert sorted(decode_grid(claim)) == sorted(grants)
-    assert len(str(encode_grid([(a, x, "all") for a in AREAS for x in ACTIONS]))) < 600
+    # Every cell of the catalogue's 26 areas: one more area adds about 22 characters.
+    assert len(str(encode_grid([(a, x, "all") for a in AREAS for x in ACTIONS]))) < 640
 
 
 async def test_a_refusal_names_the_roles_the_workspaces_edited_grid_gives_the_cell() -> None:

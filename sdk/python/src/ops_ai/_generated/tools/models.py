@@ -157,8 +157,10 @@ class CallIdentity(TypedDict, closed=True):
 
 
 class CallRunAs(TypedDict, closed=True):
+    askedBy: NotRequired[str | None]
     email: NotRequired[str | None]
     kind: Literal["person", "team"]
+    login: NotRequired[str | None]
 
 
 class CardCredential(TypedDict, closed=True):
@@ -265,12 +267,31 @@ class ConnectorUse(TypedDict, closed=True):
     workflows: NotRequired[int]
 
 
+class CopyRef(TypedDict, closed=True):
+    detachedAt: str | None
+    id: str
+    kind: Literal[
+        "agent",
+        "skill",
+        "workflow",
+        "document_type",
+        "case_type",
+        "task_type",
+        "guardrail",
+        "knowledge_source",
+    ]
+    recordId: str
+    source: str
+    templateId: str
+    version: int
+
+
 class CredentialAccount(TypedDict, closed=True):
     connectedAt: NotRequired[str | None]
     id: str
     name: str
     sandbox: NotRequired[bool]
-    signIn: Literal["team", "person", "person_or_team"]
+    signIn: Literal["team", "person"]
     state: Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
     stateReason: NotRequired[str | None]
     status: str
@@ -287,6 +308,37 @@ class CredentialSecretIn(TypedDict, closed=True):
 class DecisionIn(TypedDict, closed=True):
     decision: Literal["approved", "rejected"]
     reason: NotRequired[str | None]
+
+
+class DiscoverIn(TypedDict, closed=True):
+    connectionId: NotRequired[str | None]
+    fileId: NotRequired[str | None]
+    fileName: NotRequired[str | None]
+    kind: Literal["mcp", "openapi"]
+    moduleId: NotRequired[str | None]
+    specUrl: NotRequired[str | None]
+    url: NotRequired[str | None]
+
+
+class DiscoveredName(TypedDict, closed=True):
+    access: Literal["read", "write"]
+    name: str
+
+
+class DiscoveredNames(TypedDict, closed=True):
+    data: list[DiscoveredName]
+
+
+class DiscoveryResult(TypedDict, closed=True):
+    endpoint: str
+    id: str
+    noAuth: NotRequired[bool]
+    operationTotal: int
+    suggestedName: str
+    system: str
+    type: Literal["mcp", "openapi", "http", "code"]
+    version: str
+    warnings: list[str]
 
 
 class EntryIn(TypedDict, closed=True):
@@ -316,11 +368,23 @@ class EnvelopeCredentialDeleted(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeDiscoveredNames(TypedDict, closed=True):
+    data: DiscoveredNames
+    success: Literal[True]
+
+
+class EnvelopeDiscoveryResult(TypedDict, closed=True):
+    data: DiscoveryResult
+    success: Literal[True]
+
+
 class ErrorBody(TypedDict, closed=True):
     code: str
     details: NotRequired[Any]
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"]
     message: str
     requestId: str
+    retryable: bool
     status: int
 
 
@@ -393,6 +457,13 @@ class InputChanges(TypedDict, closed=True):
     added: list[str]
     changed: list[str]
     removed: list[str]
+
+
+class Installed(TypedDict, closed=True):
+    changed: bool
+    copies: int
+    newerAvailable: bool
+    version: int | None
 
 
 class InvalidField(TypedDict, closed=True):
@@ -628,7 +699,7 @@ class NewAppIn(TypedDict, closed=True):
     name: NotRequired[str | None]
     sandbox: NotRequired[bool]
     serverUrl: NotRequired[str | None]
-    signIn: NotRequired[Literal["team", "person", "person_or_team"]]
+    signIn: NotRequired[Literal["team", "person"]]
 
 
 class NoteIn(TypedDict, closed=True):
@@ -685,6 +756,28 @@ class Permission(TypedDict, closed=True):
     id: str
     label: str
     required: NotRequired[bool]
+
+
+class PersonAppSignInView(TypedDict, closed=True):
+    account: NotRequired[str | None]
+    accountId: str
+    accountName: str
+    appId: str
+    appName: str
+    endedBy: NotRequired[str | None]
+    expiresAt: NotRequired[str | None]
+    lastUsedAt: NotRequired[str | None]
+    logo: NotRequired[str | None]
+    refusedAt: NotRequired[str | None]
+    refusedReason: NotRequired[str | None]
+    since: NotRequired[str | None]
+    state: Literal["connected", "expired", "refused"]
+
+
+class PersonAppView(TypedDict, closed=True):
+    appId: str
+    logo: NotRequired[str | None]
+    name: str
 
 
 class PersonCredentialsIn(TypedDict, closed=True):
@@ -744,22 +837,6 @@ class RemoveIn(TypedDict, closed=True):
 
 class RenameIn(TypedDict, closed=True):
     name: str
-
-
-class ResourceCopy(TypedDict, closed=True):
-    id: str
-    kind: str
-    recordId: str
-    source: str
-    templateId: str
-    version: int
-
-
-class ResourceInstalled(TypedDict, closed=True):
-    changed: NotRequired[bool]
-    copies: int
-    newerAvailable: bool
-    version: int | None
 
 
 class ReviewDecisionIn(TypedDict, closed=True):
@@ -881,6 +958,22 @@ class SignInCompleteIn(TypedDict, closed=True):
     state: str
 
 
+class SignInCounts(TypedDict, closed=True):
+    connected: NotRequired[int]
+    expired: NotRequired[int]
+    refused: NotRequired[int]
+
+
+class SignInEnded(TypedDict, closed=True):
+    accountId: str
+    appId: str
+    changed: bool
+    endedBy: NotRequired[str | None]
+    personId: str
+    refusedReason: str
+    state: Literal["refused"]
+
+
 class SignInIn(TypedDict, closed=True):
     account: NotRequired[Literal["self", "team"] | None]
 
@@ -899,13 +992,6 @@ class SignInValue(TypedDict, closed=True):
     name: str
     shown: str
     value: str
-
-
-class SignedIn(TypedDict, closed=True):
-    account: NotRequired[str | None]
-    expiresAt: NotRequired[str | None]
-    scopes: list[str]
-    since: NotRequired[str | None]
 
 
 class SigningCertificate(TypedDict, closed=True):
@@ -976,7 +1062,7 @@ class TeamPluginIn(TypedDict, closed=True):
 
 class TemplateRequires(TypedDict, closed=True):
     bind: list[dict[str, str]]
-    resources: NotRequired[list[str]]
+    resources: list[str]
     tools: list[str]
 
 
@@ -1194,6 +1280,13 @@ class ToolTeamStateChanged(TypedDict, closed=True):
     waits: NotRequired[list[str]]
 
 
+class ToolTryIn(TypedDict, closed=True):
+    accounts: NotRequired[dict[str, str]]
+    input: NotRequired[dict[str, JsonValue]]
+    planId: NotRequired[str | None]
+    tool: str
+
+
 class ToolUser(TypedDict, closed=True):
     id: str
     name: str
@@ -1201,6 +1294,12 @@ class ToolUser(TypedDict, closed=True):
 
 class ToolsAddIn(TypedDict, closed=True):
     tools: list[str]
+
+
+class TryPlanRequest(TypedDict, closed=True):
+    body: NotRequired[str | None]
+    method: str
+    url: str
 
 
 class ValidationError(TypedDict):
@@ -1225,6 +1324,19 @@ class WaitIn(TypedDict, closed=True):
 
 class WaitOut(TypedDict, closed=True):
     changed: bool
+
+
+class OpsToolsAppSignedIn(TypedDict, closed=True):
+    app: str
+    login: str
+    whose: Literal["team", "person"]
+
+
+class OpsToolsConnectionsSchemasSignedIn(TypedDict, closed=True):
+    account: NotRequired[str | None]
+    expiresAt: NotRequired[str | None]
+    scopes: list[str]
+    since: NotRequired[str | None]
 
 
 class AbandonedCall(TypedDict, closed=True):
@@ -1276,8 +1388,8 @@ class AccountPatchIn(TypedDict, closed=True):
     sandbox: NotRequired[bool | None]
     secretValues: NotRequired[dict[str, str]]
     settings: NotRequired[dict[str, JsonValue] | None]
-    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
-    teamBackup: NotRequired[bool | None]
+    signIn: NotRequired[Literal["person", "team"] | None]
+    teamBackup: NotRequired[Literal[False] | None]
 
 
 class AnotherOwnIn(TypedDict, closed=True):
@@ -1302,12 +1414,23 @@ class AppCredential(TypedDict, closed=True):
     type: Literal["ops_ai", "own"]
 
 
+class AppPerson(TypedDict, closed=True):
+    apps: list[PersonAppView]
+    connected: int
+    expired: int
+    lastUsedAt: NotRequired[str | None]
+    name: str
+    personId: str
+    refused: int
+    signIns: list[PersonAppSignInView]
+
+
 class AppResource(TypedDict, closed=True):
     canAdd: bool
     canRemove: NotRequired[bool]
-    copy: NotRequired[ResourceCopy | None]
+    copy: NotRequired[CopyRef | None]
     id: str
-    installed: NotRequired[ResourceInstalled | None]
+    installed: NotRequired[Installed | None]
     kind: Literal[
         "agent",
         "skill",
@@ -1362,6 +1485,7 @@ class CallResult(TypedDict, closed=True):
     ok: bool
     output: JsonValue
     replayOf: NotRequired[str | None]
+    signedIn: NotRequired[OpsToolsAppSignedIn | None]
     view: NotRequired[JsonValue]
 
 
@@ -1441,35 +1565,25 @@ class CredentialField(TypedDict, closed=True):
     required: NotRequired[bool]
 
 
-class DiscoveredOperation(TypedDict, closed=True):
+class DiscoveredOperationIn(TypedDict, closed=True):
     access: Literal["read", "write"]
+    description: NotRequired[str]
+    group: NotRequired[str]
+    input: NotRequired[list[SchemaFieldIn]]
+    method: NotRequired[Literal["GET", "POST", "PUT", "PATCH", "DELETE"] | None]
+    name: str
+    path: NotRequired[str | None]
+
+
+class DiscoveredOperationRow(TypedDict, closed=True):
+    access: Literal["read", "write"]
+    added: bool
     description: str
     group: str
     input: list[SchemaField]
     method: NotRequired[Literal["GET", "POST", "PUT", "PATCH", "DELETE"] | None]
     name: str
     path: NotRequired[str | None]
-
-
-class DiscoveredOperationIn(TypedDict, closed=True):
-    access: Literal["read", "write"]
-    description: str
-    group: str
-    input: list[SchemaFieldIn]
-    method: NotRequired[Literal["GET", "POST", "PUT", "PATCH", "DELETE"] | None]
-    name: str
-    path: NotRequired[str | None]
-
-
-class DiscoveryResult(TypedDict, closed=True):
-    endpoint: str
-    noAuth: NotRequired[bool]
-    operations: list[DiscoveredOperation]
-    suggestedName: str
-    system: str
-    type: Literal["mcp", "openapi", "http", "code"]
-    version: str
-    warnings: list[str]
 
 
 class EnvelopeBulkResult(TypedDict, closed=True):
@@ -1489,11 +1603,6 @@ class EnvelopeCatalogPage(TypedDict, closed=True):
 
 class EnvelopeConnectionKinds(TypedDict, closed=True):
     data: ConnectionKinds
-    success: Literal[True]
-
-
-class EnvelopeDiscoveryResult(TypedDict, closed=True):
-    data: DiscoveryResult
     success: Literal[True]
 
 
@@ -1539,6 +1648,11 @@ class EnvelopePlatformEventOut(TypedDict, closed=True):
 
 class EnvelopeSendPolicyView(TypedDict, closed=True):
     data: SendPolicyView
+    success: Literal[True]
+
+
+class EnvelopeSignInEnded(TypedDict, closed=True):
+    data: SignInEnded
     success: Literal[True]
 
 
@@ -2004,6 +2118,16 @@ class ToolUsedBy(TypedDict, closed=True):
     workflows: list[ToolUser]
 
 
+class TryPlan(TypedDict, closed=True):
+    access: str
+    connectionId: NotRequired[str | None]
+    input: JsonValue
+    request: NotRequired[TryPlanRequest | None]
+    system: NotRequired[str | None]
+    testAccount: NotRequired[bool]
+    tool: str
+
+
 class AbandonResult(TypedDict, closed=True):
     abandoned: bool
     call: AbandonedCall | None
@@ -2033,8 +2157,8 @@ class AccountDetail(TypedDict, closed=True):
     sandbox: bool
     secrets: dict[str, SecretPart]
     settings: dict[str, str]
-    signIn: NotRequired[Literal["team", "person", "person_or_team"]]
-    signedIn: NotRequired[SignedIn | None]
+    signIn: NotRequired[Literal["team", "person"]]
+    signedIn: NotRequired[OpsToolsConnectionsSchemasSignedIn | None]
     status: Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
     statusDetail: NotRequired[str | None]
     teamBackup: NotRequired[bool]
@@ -2082,7 +2206,7 @@ class AppAccount(TypedDict, closed=True):
     rowId: str
     samePlaceAs: NotRequired[str | None]
     sandbox: bool
-    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
+    signIn: NotRequired[Literal["person", "team"] | None]
     signInValues: NotRequired[list[SignInValue]]
     state: Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
     stateReason: NotRequired[str | None]
@@ -2138,6 +2262,13 @@ class AppCredentialDetail(TypedDict, closed=True):
     updated: NotRequired[str | None]
 
 
+class AppPeopleList(TypedDict, closed=True):
+    data: list[AppPerson]
+    facets: dict[str, dict[str, int]]
+    labels: dict[str, dict[str, str]]
+    pagination: Pagination
+
+
 class AppTool(TypedDict, closed=True):
     access: str
     added: NotRequired[bool]
@@ -2169,6 +2300,13 @@ class Change(TypedDict, closed=True):
     value: str
 
 
+class DiscoveredOperationList(TypedDict, closed=True):
+    addedTotal: int
+    data: list[DiscoveredOperationRow]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
 class EnvelopeAbandonResult(TypedDict, closed=True):
     data: AbandonResult
     success: Literal[True]
@@ -2194,6 +2332,11 @@ class EnvelopeAppCredentialDetail(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeAppPeopleList(TypedDict, closed=True):
+    data: AppPeopleList
+    success: Literal[True]
+
+
 class EnvelopeAppTool(TypedDict, closed=True):
     data: AppTool
     success: Literal[True]
@@ -2201,6 +2344,11 @@ class EnvelopeAppTool(TypedDict, closed=True):
 
 class EnvelopeChange(TypedDict, closed=True):
     data: Change
+    success: Literal[True]
+
+
+class EnvelopeDiscoveredOperationList(TypedDict, closed=True):
+    data: DiscoveredOperationList
     success: Literal[True]
 
 
@@ -2338,7 +2486,8 @@ class SystemCard(TypedDict, closed=True):
     plugin: NotRequired[SystemPlugin | None]
     pluginId: NotRequired[str | None]
     sandboxId: NotRequired[str | None]
-    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
+    signIn: NotRequired[Literal["person", "team"] | None]
+    signIns: NotRequired[SignInCounts | None]
     state: NotRequired[Literal["connected", "not_signed_in", "expired", "refused", "revoked"] | None]
     status: NotRequired[str | None]
     toolsAdded: NotRequired[int | None]
@@ -2350,6 +2499,23 @@ class SystemCardList(TypedDict, closed=True):
     facets: dict[str, dict[str, int]]
     pagination: Pagination
     viewCounts: AppViewCounts
+
+
+class ToolTryResult(TypedDict, closed=True):
+    access: Literal["read", "write"]
+    account: NotRequired[str | None]
+    callId: str
+    kind: Literal["ran", "planned", "sent", "refused"]
+    live: bool
+    log: NotRequired[list[TestLogLine]]
+    ok: NotRequired[bool | None]
+    output: NotRequired[JsonValue]
+    plan: NotRequired[TryPlan | None]
+    planId: NotRequired[str | None]
+    reasons: NotRequired[list[str]]
+    replayOf: NotRequired[str | None]
+    request: NotRequired[TestRequestOut | None]
+    status: NotRequired[int | None]
 
 
 class AppPage(TypedDict, closed=True):
@@ -2391,4 +2557,9 @@ class EnvelopeSystemCardList(TypedDict, closed=True):
 
 class EnvelopeSystemCard(TypedDict, closed=True):
     data: SystemCard
+    success: Literal[True]
+
+
+class EnvelopeToolTryResult(TypedDict, closed=True):
+    data: ToolTryResult
     success: Literal[True]

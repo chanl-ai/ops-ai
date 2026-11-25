@@ -38,6 +38,8 @@ function useSettingsWrite<A, R>(fn: (a: A) => Promise<R>) {
 export const useInvitesToCurrentTeam = () => invitesToCurrentTeam;
 export const useInviteMembers = () => useSettingsWrite((i: InviteInput) => api.settings.members.invite(i));
 export const useSetMemberRole = () => useSettingsWrite(({ ids, role }: { ids: string[]; role: MemberRole }) => api.settings.members.setRole(ids, role));
+export const useReinviteMembers = () => useSettingsWrite((ids?: string[]) => api.settings.members.reinvite(ids));
+export const useUnlinkMembers = () => useSettingsWrite((ids: string[]) => api.settings.members.unlink(ids));
 export const useRemoveMembers = () => useSettingsWrite((ids: string[]) => api.settings.members.remove(ids));
 export const useSaveNotifications = () => useSettingsWrite((i: NotificationSettingsInput) => api.settings.notifications.update(i));
 export const useCreateWebhook = () => useSettingsWrite((i: WebhookInput) => api.settings.webhooks.create(i));

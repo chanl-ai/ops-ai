@@ -116,6 +116,17 @@ export default function HumanTasksPage() {
     moveOn();
   };
 
+  const assignToMe = async () => {
+    if (!active) return;
+    try {
+      await assign.mutateAsync({ ids: [active.id] });
+    } catch (e) {
+      toast.error('Couldn’t assign the task', { description: (e as Error).message });
+      return;
+    }
+    toast.success('Assigned to you', { description: `${active.title} is in your Assigned to me.` });
+  };
+
   const twoPanes = !!task?.evidence.some((n) => n.type === 'viewer');
   const allTasks = (
     <Button variant="outline" asChild>
@@ -177,7 +188,8 @@ export default function HumanTasksPage() {
               ) : null
             ) : (
               task && (
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+                // `review-sheet` names the open task wherever it opens, as on /govern/reviews; both decide through TaskDecision.
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3" data-testid="review-sheet">
                   {twoPanes && (
                     <Tabs value={pane} onValueChange={(v) => setPane(v as 'decide' | 'evidence')} className="lg:hidden">
                       <TabsList className="w-full">
@@ -212,6 +224,7 @@ export default function HumanTasksPage() {
                       reviewers={(lookups?.reviewers ?? []).filter((p) => p !== active.assignee)}
                       platformTeam={team?.scope === 'all'}
                       onReassign={(to) => void reassign(to)}
+                      onAssignToMe={() => void assignToMe()}
                       className={cn(twoPanes && pane !== 'decide' ? 'hidden' : 'flex', 'lg:flex')}
                     />
                   </div>

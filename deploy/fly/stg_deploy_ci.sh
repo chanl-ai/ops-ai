@@ -3,7 +3,7 @@
 # the run fails. The deploy runs on a runner with the staging environment's secrets, so nothing is needed locally but
 # `gh` signed in with write access.
 #   REF        branch, tag or commit to deploy (default develop); it must be pushed
-#   SKIP_WALK  1 leaves out the click walk (the signed-in request still runs)
+#   SKIP_WALK  1 leaves out the click walk and the smoke check (the signed-in request still runs)
 #   REASON     shown in the run's summary
 #   WORKFLOW_REF  the branch whose copy of the workflow runs (default develop); a different thing from REF
 set -eu

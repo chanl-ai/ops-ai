@@ -9,21 +9,22 @@ use case or test; Partial names what runs and what does not; Planned means desig
 |---|---|
 | Chat with an agent: streamed answers, citations, tables and charts in the conversation | Built |
 | Tool calls from chat, with a person approving each write and a fresh sign-in for payments | Built |
-| Knowledge bases with answers cited by page and section | Built: search by meaning and keywords together, each result saying which ran; on PostgreSQL with pgvector, keywords only on SQL Server |
+| Knowledge bases with answers cited by page and section | Built: search by meaning and keywords together, each result saying which ran, on PostgreSQL with pgvector only; not built on SQL Server |
 | Skills: versioned instructions an agent loads when they match, published through review | Built |
 | Guardrails: blocked topics with a written scope, checked before and after each answer, failing closed | Partial: blocked topics; other kinds, such as required citations or an output shape, planned |
 | Personal data masked in what people see | Built: emails, national ID, card, phone and account numbers; names planned |
 | Agent memories, with a retention setting | Built |
 | Testing a draft agent on its own page before publishing | Built |
 | An agent as a workflow step, and a published workflow as an agent's tool | Built |
-| Chat widgets on your other web pages | Partial: widgets are configured, published and keyed in the console; the app that serves them has no image yet |
-| Agents that run on a schedule toward a goal and report back, with no chat | Planned |
+| Starting a published agent from code, waiting for it, streaming it or running it in the background | Built: REST API, Python and the command line; TypeScript planned. A background run is lost if the program that started it exits first |
+| Chat widgets on your other web pages ([Chat on your own pages](../console/embedding-the-chat.md)) | Partial: widgets are configured, published and keyed in the console, and the embed app is built; the installer does not run it yet |
+| Agents that run on a schedule toward a goal and report back, with no chat | Partial: one run at a due time, once per key; repeating schedules planned |
 
 ## Workflows, tasks and cases
 
 | Capability | Status |
 |---|---|
-| A visual editor over typed steps: triggers, data steps, branches, joins, waits, AI steps, human tasks, tool calls, child workflows, cases | Built: 25 step types |
+| A visual editor over typed steps: triggers, data steps, branches, joins, waits, AI steps, human tasks, tool calls, child workflows, cases | Built: 33 step types ([workflow example coverage](workflow-example-coverage.md)) |
 | AI steps with no saved agent: classify, summarise, extract from text, draft | Built |
 | Human tasks from versioned task types: what the person sees and the actions they can take | Built |
 | Cases from versioned case types: one record per piece of work, with its tasks, actions and history | Built |
@@ -32,7 +33,8 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | Crash safety: every step journaled, a write made once, a dead worker's run taken over | Built |
 | Versions pinned per run; publishing through a second person's review | Built |
 | Triggers: an API request, a team mailbox, an event from another service | Built |
-| Triggers: a schedule, an incoming webhook, polling a system | Planned |
+| Triggers: a due time on the platform clock, one run per key | Built |
+| Triggers: a recurring schedule, an incoming webhook, polling a system | Planned |
 | Code steps | Partial: formulas and transforms in a bounded sandbox; no general code runtime |
 | Load figures for many concurrent runs | Planned |
 
@@ -67,13 +69,15 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | Tool modules from OpenAPI 3.0 and 3.1, from an MCP server, or written in the console; versions and a Security review for major changes | Built |
 | App accounts, with a sandbox account for test runs: API key, basic, bearer, OAuth client credentials, OAuth authorization code, an app's signed client assertion in place of a secret, a signed service-account grant, client certificate | Built |
 | Each person connecting their own Account of an App, used by the Tools they run and the agents acting for them | Built |
-| The Apps menu: the catalog, Connect in a small window, each App's page with its Accounts, Tools, Resources, Secrets, Usage and Settings, Credentials, My accounts, and Turn off ([Apps](apps.md)) | Built |
-| A run waiting for a person's own Account is a Human Task: Connect my account, or Run as the team account | Built |
+| Apps in the console: the catalog, Connect in a small window, each App's page with its Accounts, Tools, Auth configs, Resources, Logs and Settings, each person's own sign-ins, and Turn off ([Tools and apps](apps.md)) | Built |
+| A run waiting for a person's own login is a Human Task that asks them only to sign in; someone else may run it with the team login | Built |
+| An admin sets each app once: Everyone uses the team's login, or Each person signs in; chat never asks whose login | Built |
 | Approvals off by default; a team turns them on for every write, the writes of picked Apps, or one Tool | Built |
 | Approval tokens bound to the exact input, approver counts, step-up, rate and amount limits | Built |
 | The outbound allow-list, the encrypted credential store, the call log | Built |
 | Check before sending: a model judges a write against the team's sending policy | Built |
-| Mock answers for tests, with writes in tests always answered from the mock | Built |
+| Mock answers for tests: a test call with a saved mock answer for its input gets that answer | Built |
+| Code tools: a Python function run in a sandbox with no network, files or secrets | Partial: runs on the runner service; writing one in the console is planned |
 
 ## AI gateway
 
@@ -93,7 +97,7 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | Six built-in roles over a grid of areas and actions, and a page that explains each decision | Built |
 | Custom roles | Planned |
 | Teams as the data boundary, enforced in every service's store layer | Built |
-| Teams enforced in the database as well | In progress |
+| Teams enforced in the database as well | Partial: files and documents; the other services in progress |
 | Tenants enforced in the database | Partial: agents and platform tables; the other five services planned |
 | A publish review for every definition, with a team policy for which publishes need one | Built |
 | The audit log and the security audits | Built |
@@ -112,4 +116,5 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | The install script: `git clone` and `./install.sh`, with questions, flags or an answers file; then upgrade (rolled back on a failed check), back up, restore, status, logs and uninstall | Built: proven on one machine; a Linux server and an upgrade across two releases that change the schema are still to be run ([Install](install.md)) |
 | Images pulled from `ghcr.io/chanl-ai/ops-ai` for x86-64 and ARM64, or loaded from a release's offline image file, or built from source | Built |
 | DBA mode: the install writes the database scripts, waits for your DBA, and checks the schema before it goes on | Built |
-| Structured JSON logs, metrics | Planned |
+| Logs: one JSON line per event on standard output, with request ids and secrets redacted | Built |
+| Metrics | Planned |

@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from ops_service_kit.ids import now_iso
+
 from ..store.connections import Account, ServiceEvent
 
 NEEDS_RECONNECT = "app_account.needs_reconnect"
@@ -35,6 +37,8 @@ def needs_reconnect_event(
             "app": str(conn.name),
             "appId": conn.app_id,
             "sandbox": bool(conn.sandbox),
+            # The notice workflow's input schema requires it and shows it to the admins.
+            "environment": "sandbox" if conn.sandbox else "production",
             "state": state,
             "reason": reason,
             "at": at.isoformat(),
@@ -60,5 +64,6 @@ def connected_event(conn: Account, person: str) -> ServiceEvent:
         "team_id": str(conn.team_id),
         "name": CONNECTED,
         "key": connected_key(connection_id, person),
-        "payload": {"connectionId": connection_id, "app": str(conn.name)},
+        # `at`, on the clock the refusals' `after` reads: a run refused after this sign-in keeps waiting for the next.
+        "payload": {"connectionId": connection_id, "app": str(conn.name), "at": now_iso()},
     }

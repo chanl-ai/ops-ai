@@ -31,8 +31,8 @@ interface MockAccount {
 export function createConnectionsMock(deps: { me: string }): ConnectionsApi {
   const at = new Date(Date.now() - 86_400_000 * 12).toISOString();
   const rows: MockAccount[] = [
-    { id: 'conn_crm', appId: 'conn_crm', name: 'Salesforce', authKind: 'oauth2_auth_code', kindLabel: 'OAuth 2.0 sign-in', status: 'healthy', signIn: 'person_or_team', sandbox: false },
-    { id: 'conn_crm_sandbox', appId: 'conn_crm', name: 'Salesforce sandbox', authKind: 'oauth2_auth_code', kindLabel: 'OAuth 2.0 sign-in', status: 'healthy', signIn: 'person_or_team', sandbox: true },
+    { id: 'conn_crm', appId: 'conn_crm', name: 'Salesforce', authKind: 'oauth2_auth_code', kindLabel: 'OAuth 2.0 sign-in', status: 'healthy', signIn: 'person', sandbox: false },
+    { id: 'conn_crm_sandbox', appId: 'conn_crm', name: 'Salesforce sandbox', authKind: 'oauth2_auth_code', kindLabel: 'OAuth 2.0 sign-in', status: 'healthy', signIn: 'person', sandbox: true },
     { id: 'conn_desk', appId: 'conn_desk', name: 'Freshdesk', authKind: 'api_key', kindLabel: 'API key', status: 'healthy', signIn: 'person', sandbox: false },
     { id: 'conn_cases', appId: 'conn_cases', name: 'Case desk', authKind: 'basic', kindLabel: 'Username and password', status: 'healthy', signIn: 'person', sandbox: false },
     { id: 'conn_itsm', appId: 'conn_itsm', name: 'ServiceNow', authKind: 'oauth2_client_credentials', kindLabel: 'OAuth 2.0 client credentials', status: 'healthy', signIn: 'team', sandbox: false },

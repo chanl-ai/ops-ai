@@ -144,6 +144,32 @@ export class Apps {
     return call(this.raw, 'tools', 'apps_app_users', { path: { app_id: app } });
   }
 
+  /**
+   * Apps > People, page after page: each person holding their own sign-ins on the team's apps, with the apps, their
+   * sign-ins counted by state (connected, expired, refused), the last call any of them signed and every sign-in. `app`
+   * keeps their sign-ins to those apps, `state` the people with a sign-in in any of those states, `search` matches the
+   * name. Needs permission to manage the team's apps.
+   */
+  people({ app, state, search }: { app?: string[]; state?: string[]; search?: string } = {}): Promise<Obj[]> {
+    return everyPage((query) => call(this.raw, 'tools', 'apps_list_app_people', { query }), { app, state, search });
+  }
+
+  /**
+   * Ends a person's own sign-in to an app, so their next call asks them to connect; recorded in the audit log.
+   * `account` names one of the app's accounts; left out, every account of the app the person signed in to is ended.
+   * Ending one again changes nothing (`changed` false). Needs permission to manage the team's apps.
+   */
+  async endSignIn(app: string, person: string, { account }: { account?: string } = {}): Promise<Obj[]> {
+    const end = (id: string) => call(this.raw, 'tools', 'apps_end_sign_in', { path: { app_id: app, account_id: id, person_id: person } });
+    if (account !== undefined) return [await end(account)];
+    const people = await this.people({ app: [app] });
+    const held = people.filter((p) => p.personId === person).flatMap((p) => (p.signIns as Obj[]).filter((s) => s.appId === app));
+    if (held.length === 0) throw new Error(`${person} holds no sign-in to ${app}.`);
+    const ended: Obj[] = [];
+    for (const s of held) ended.push(await end(String(s.accountId)));
+    return ended;
+  }
+
   /** A custom app (rest, openapi or mcp) as its first account, holding the base address and the key its tools use. */
   async addCustom(
     kind: string,

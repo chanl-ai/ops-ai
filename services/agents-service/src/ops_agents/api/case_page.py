@@ -29,7 +29,7 @@ from .auth import Principal, caller_of, key_scope
 from .case_story import CaseFeed, CaseOrigin, FeedReads, OriginReads
 from .case_type_seeds import seeded_case_types
 from .deps import Runtime
-from .engine_reviews import ask_policies, titles_by_run, tools_of, view
+from .engine_reviews import Titles, ask_policies, titles_by_run, tools_of, view
 from .file_names import named
 from .review_sla import sla_hours
 from .review_text import operations
@@ -162,9 +162,10 @@ def _review_steps(runs: list[Json], decisions: dict[str, list[Json]]) -> list[tu
 
 
 async def _reviews(rt: Runtime, case_id: str, reads: CaseReads) -> list[Json]:
-    """The Human Tasks of the case's runs as review views, built from what `case_reads` read."""
+    """The Human Tasks of the case's runs as review views, built from what `case_reads` read. The page's readers take
+    each as the JSON reply it is (`waiting_of`, `actions_of`)."""
     return [
-        await view(rt, run, decided, case_id=case_id, titles=reads.titles[str(run["id"])])
+        cast(Json, await view(rt, run, decided, case_id=case_id, titles=reads.titles[str(run["id"])]))
         for run, decided in _review_steps(reads.runs, reads.decisions)
     ]
 
@@ -207,9 +208,10 @@ def _called_step(review: Json) -> str | None:
 
 
 async def failed_calls(rt: Runtime, runs: list[Json]) -> set[str]:
-    """The step keys of the case's runs' calls that answered an error, read in one query for every run."""
+    """The step keys of the case's runs' calls that answered an error, read in one query for every run; an attempt a
+    Redrive set aside (`redriven`) answered one too."""
     steps = await RunStore(EngineTransactions(rt.db)).steps_of([str(r["id"]) for r in runs])
-    return {s.key for rows in steps.values() for s in rows if s.status == "error"}
+    return {s.key for rows in steps.values() for s in rows if s.status in ("error", "redriven")}
 
 
 def actions_of(reviews: list[Json], failed: set[str]) -> list[Json]:
@@ -286,7 +288,7 @@ class CaseReads:
 
     runs: list[Json]
     decisions: dict[str, list[Json]]
-    titles: dict[str, Json]
+    titles: dict[str, Titles]
     case_type: Json | None
     typed: list[Json]
     deadline: tuple[str, str] | None

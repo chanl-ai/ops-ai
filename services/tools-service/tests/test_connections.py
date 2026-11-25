@@ -283,18 +283,20 @@ async def test_each_team_holding_a_seeded_module_signs_in_with_its_own_connectio
     with_connection = [m for m in await store.all(tenant) if m["connection_id"]]
     assert with_connection, "the seed binds modules to its connections"
     for m in with_connection:
-        conn = await conns.get(tenant, m["connection_id"])
+        conn = await conns.get(tenant, str(m["connection_id"]))
         assert conn is not None and conn.team_id == m["team_id"], (m["id"], m["team_id"], conn and conn.team_id)
 
 
-async def test_a_connection_made_each_person_with_the_team_as_backup_has_the_backup_on(
-    client: httpx.AsyncClient, tenant: str
-) -> None:
-    """The console's and a plugin's create send only `signIn`; made as person_or_team with the backup off, a workflow
-    run with nobody behind it was refused CONNECTION_NOT_LINKED though the team account was signed in."""
+async def test_an_app_offers_two_answers_and_no_team_backup(client: httpx.AsyncClient, tenant: str) -> None:
+    """Who signs in has two answers; the old third (each person, team as backup) and the backup flag are refused on
+    create and on change, so no request makes an app that quietly signs with the team's login."""
     body = {"name": "Case desk", "authKind": "oauth2_auth_code", "signIn": "person_or_team"}
-    made = await client.post("/v1/apps", json=body, headers=admin(tenant))
-    assert made.status_code == 201, made.text
-    assert made.json()["data"]["signIn"] == "person_or_team" and made.json()["data"]["teamBackup"] is True, made.text
-    team_only = await client.post("/v1/apps", json={**body, "signIn": "team"}, headers=admin(tenant))
-    assert team_only.json()["data"]["teamBackup"] is False, team_only.text
+    refused = await client.post("/v1/apps", json=body, headers=admin(tenant))
+    assert refused.status_code == 400, refused.text
+    made = await client.post("/v1/apps", json={**body, "signIn": "person"}, headers=admin(tenant))
+    assert made.status_code == 201 and made.json()["data"]["teamBackup"] is False, made.text
+    data = made.json()["data"]
+    for change in ({"signIn": "person_or_team"}, {"teamBackup": True}):
+        url = f"/v1/apps/{data['appId']}/accounts/{data['id']}"
+        r = await client.patch(url, json={"revision": data["revision"], **change}, headers=admin(tenant))
+        assert r.status_code == 400, (change, r.text)

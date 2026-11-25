@@ -1,7 +1,7 @@
 // uc-115 a run shows its workflow graph read-only with what passed, failed and was skipped, ui layer:
 // docs/usecases/console/run-on-the-canvas.md. withUiStack's demo stack with a workflow runner worker: the
-// seeded v2 customer summary workflow runs twice, for Priya Natarajan (the scripted model summarises her) and for a
-// customer it does not know (its agent step fails on its output schema and the run ends at No summary). Signed in
+// seeded v2 customer summary workflow runs for Priya Natarajan (the scripted model summarises her), and a second
+// workflow hands a name with no record to the agent (its step fails on its output schema; the run ends at No summary). Signed in
 // through platform-service as James. A third workflow is saved with no node positions, as an API caller or YAML import
 // leaves it, to check the canvas lays it out as the editor does. Each step is checked on its own.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
@@ -36,6 +36,40 @@ connections:
   - {from: {node: fields, port: out}, to: {node: done, port: in}}
 `;
 
+// The seeded workflow ends at No such customer for a name the bank lacks, so no step of it fails; this one hands the
+// name straight to the agent, which cannot answer its output schema without a record and fails on its error port.
+const FAILS = `
+schemaVersion: 2
+id: uc115_fails
+name: Summary with no record (uc-115)
+nodes:
+  - {id: start, type: ops.trigger.request, typeVersion: 1, name: Request, position: {x: 0, y: 0}}
+  - id: summarise
+    type: ops.ai.agent
+    typeVersion: 1
+    name: Summarise the customer
+    position: {x: 384, y: 0}
+    parameters:
+      agent: ag_advisor
+      prompt: Summarise this customer for a banker from the record given; read nothing else.
+      input: {customer: "$.input.customer"}
+      outputSchema: {type: object, properties: {customerId: {type: string}, summary: {type: string}}, required: [customerId, summary]}
+      maxToolCalls: 3
+  - {id: done, type: ops.flow.end, typeVersion: 1, name: Summarised, position: {x: 768, y: -100}, parameters: {outcome: summarised}}
+  - {id: failed, type: ops.flow.end, typeVersion: 1, name: No summary, position: {x: 768, y: 100}, parameters: {outcome: no_summary, result: failed}}
+connections:
+  - {from: {node: start, port: payload}, to: {node: summarise, port: in}}
+  - {from: {node: summarise, port: ok}, to: {node: done, port: in}}
+  - {from: {node: summarise, port: error}, to: {node: failed, port: in}}
+`;
+
+/** Saves a workflow from YAML and puts it live; James's publish of a new workflow needs no review. */
+async function live(J, yaml, id) {
+  const saved = await fetch(`${agents}/v1/workflows/definitions`, { method: 'POST', headers: J, body: JSON.stringify({ yaml }) });
+  const out = await (await fetch(`${agents}/v1/workflows/definitions/${id}/publish-requests`, { method: 'POST', headers: J, body: '{}' })).json();
+  if (!saved.ok || out.data?.status !== 'approved') throw new Error(`setup: ${id} ${saved.status} ${JSON.stringify(out).slice(0, 300)}`);
+}
+
 /** Starts a live run and waits until the worker has finished it. */
 async function runFor(J, customer, workflowId = WORKFLOW) {
   const started = await (await fetch(`${agents}/v1/runs`, { method: 'POST', headers: J, body: JSON.stringify({ workflowId, input: { customer } }) })).json();
@@ -53,10 +87,9 @@ await withUiStack(
     await stack.startWorker();
     const J = as(await tokenFor(JAMES));
     const good = await runFor(J, 'Priya Natarajan');
-    const bad = await runFor(J, 'Nobody Known');
-    const saved = await fetch(`${agents}/v1/workflows/definitions`, { method: 'POST', headers: J, body: JSON.stringify({ yaml: UNPLACED }) });
-    const live = await (await fetch(`${agents}/v1/workflows/definitions/uc115_unplaced/publish-requests`, { method: 'POST', headers: J, body: '{}' })).json();
-    if (!saved.ok || live.data?.status !== 'approved') throw new Error(`setup: unplaced workflow ${saved.status} ${JSON.stringify(live).slice(0, 300)}`);
+    await live(J, FAILS, 'uc115_fails');
+    const bad = await runFor(J, 'Nobody Known', 'uc115_fails');
+    await live(J, UNPLACED, 'uc115_unplaced');
     const plain = await runFor(J, 'Priya Natarajan', 'uc115_unplaced');
     console.log('runs', JSON.stringify({ good: [good.status, good.steps.map((s) => `${s.nodeId}:${s.status}:${s.port}`)], bad: [bad.status, bad.steps.map((s) => `${s.nodeId}:${s.status}:${s.port}`)] }));
 

@@ -39,7 +39,7 @@ same transaction that spent the old one.
 | 6 | In the console as an Operations admin, open the app's page and press Sign in on the team account's row | The pop-up signs in and closes |
 | 7 | Press Test on Settings › Keys | Working, 200 |
 
-Step 6 uses the page's Connect the team account button, shown on a kind that signs in when the team's account is
+Step 6 uses the page's Sign in the team login button, shown on a kind that signs in when the team's account is
 used (`apps/console/src/app/tools/connections/[id]/page.tsx`).
 
 ## Acceptance layers

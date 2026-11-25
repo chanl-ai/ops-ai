@@ -11,7 +11,7 @@ from collections.abc import Callable, Sequence
 from . import __version__
 from ._cli.agents import main as agents_main
 from ._cli.apps import main as apps_main
-from ._cli.catalog import guardrails_main, skills_main, threads_main, widgets_main
+from ._cli.catalog import guardrails_main, threads_main, widgets_main
 from ._cli.chat import main as chat_main
 from ._cli.connectors import main as connectors_main
 from ._cli.kb import main as kb_main
@@ -22,6 +22,7 @@ from ._cli.records import cases_main, documents_main, files_main
 from ._cli.resources import main as resources_main
 from ._cli.runs import runs_main, tasks_main
 from ._cli.secrets import egress_main, policies_main, secrets_main
+from ._cli.skills import main as skills_main
 from ._cli.templates import main as templates_main
 from ._cli.testdata import main as testdata_main
 from ._cli.tools import main as tools_main
@@ -56,7 +57,7 @@ AREAS: dict[str, tuple[Area, str]] = {
         templates_main,
         "what a team can start from, by kind: list, install",
     ),
-    "skills": (skills_main, "skills: list, show"),
+    "skills": (skills_main, "skills: list, show, versions, apply, export, publish, references"),
     "guardrails": (guardrails_main, "guardrails: list, show"),
     "widgets": (widgets_main, "widget templates: list, show"),
     "threads": (threads_main, "threads: list, show, inbox"),

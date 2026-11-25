@@ -662,6 +662,18 @@
      "constraints": "Fee reversals up to $100",
      "workflowName": "Card services inbox",
      "workflowTeamId": "team_cards"
+    },
+    {
+     "workflowId": "wf_ops_fee_disputes",
+     "operations": [
+      "waive_fee"
+     ],
+     "expiresIn": 365,
+     "decidedBy": "Grace Liu",
+     "justification": "Operations settles fee complaints it receives, with a second person approving each waiver",
+     "constraints": "Fee reversals up to $100",
+     "workflowName": "Fee disputes",
+     "workflowTeamId": "team_ops"
     }
    ]
   },

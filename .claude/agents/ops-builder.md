@@ -55,6 +55,9 @@ files"), and a file with no owner is a design gap.
 | The whole change | `make test`, the use cases per layer, `make agent-test-audit`, `make docs-verify` |
 | Standards cited | every rule id a specialist cites exists (`node scripts/check-standards-refs.mjs`) |
 
+## Fixes
+Fixes follow the ops-fix-the-class skill (`docs/guide/skills/ops-fix-the-class.md`): sweep for the same fault, fix every place once in the layer that owns the job, and end the commit with a `Siblings:` trailer.
+
 ## Report (at most 12 lines)
 The lanes and their specialists; commits per lane; results per layer (what ran and what it printed); each new test's
 first failure in one line; the audit's mutation score and survivors; hand-offs still open; anything not run.

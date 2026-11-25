@@ -57,6 +57,10 @@ TOOLS_UNTIL_C509 = {
 BACKGROUND = {
     "engine_definitions": "background process: the event workflows and the customer summary stay account-level; "
     "every other definition has a team (agents 0075)",
+    "engine_working_copies": "background process: a working copy takes its workflow's team, so an account-level "
+    "event workflow's copy has none, as engine_definitions (agents 0121)",
+    "engine_work": "background process: the queue is claimed by the engine's workers across every team, and a claim "
+    "reads the team column to cap each team's live claims; a row's team is its run's, set at enqueue (agents 0125)",
     "service_events": "background process: the update notices of the account-level event workflows have no team and "
     "show to every team; every other event carries its team",
 }

@@ -7,16 +7,13 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_tools.auth import AuthFailed
-from ops_tools.store.connections import SHARED
 from ops_tools.store.modules import ModuleStore
 
 from . import test_personal_sign_in
 from .conftest import Api
-from .test_personal_sign_in import TEAM, connection, module, rig
+from .test_personal_sign_in import TEAM
 from .test_review_decisions import person
 
 # The people-signed-in app of test_personal_sign_in, as a fixture here.
@@ -75,17 +72,6 @@ async def test_a_module_takes_only_a_connection_whose_sign_in_it_supports(
     assert mismatch(changed), changed.text
 
 
-async def test_an_operation_that_needs_a_person_never_takes_the_team_backup(engine: AsyncEngine, tenant: str) -> None:
-    store, tokens, auth = rig(engine)
-    conn = await connection(store, tenant, "person_or_team", backup=True)
-    await tokens.store_answer(tenant, conn, {"access_token": "at-team", "expires_in": 3600}, SHARED)
-    with pytest.raises(AuthFailed) as e:
-        await auth.prepare(module(tenant, conn), "test", tool="crm_update", actor="t", needs_person=True)
-    assert e.value.code == "CONNECTION_NOT_LINKED" and e.value.details["reason"] == "needs_person"
-    prepared = await auth.prepare(module(tenant, conn), "test", tool="crm_read", actor="t")
-    assert prepared is not None and prepared.headers["Authorization"] == "Bearer at-team"
-
-
 async def test_turning_needs_person_off_waits_for_security(api: Api, engine: AsyncEngine) -> None:
     """Off lets a run with nobody behind it use the team's account, so Security reviews it; on only tightens."""
     store = ModuleStore(engine)
@@ -121,7 +107,7 @@ async def test_a_module_reads_in_its_connections_names_whichever_it_was_saved_wi
     its connection's own name, not a second spelling of it."""
     security = person(tenant, "Sam Adeyemi", {"team_security": "admin"})
     await client.post("/v1/egress/hosts", json={"value": "crm.test"}, headers=security)
-    conn = await made(client, tenant, "person_or_team")
+    conn = await made(client, tenant, "person")
     builder = person(tenant, "James Richardson", {TEAM: "builder"})
     r = await client.post("/v1/tool-modules", json=module_in(conn, "either"), headers=builder)
     assert r.status_code == 201 and r.json()["data"]["signIn"] == "person_or_team", r.text

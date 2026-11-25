@@ -59,7 +59,7 @@ test('on an app each person signs in to, the badge is the person’s own and the
   assert.equal(whoseState({ ownSignIn: 'none', appGroup: 'needs_you' }), 'You');
   assert.equal(whoseState({ ownSignIn: null, appGroup: 'on' }), null);
   assert.equal(whoseState({ ownSignIn: 'connected', appGroup: 'gone' }), null);
-  assert.equal(accountOwnerWords('team'), 'Team account');
+  assert.equal(accountOwnerWords('team'), 'Team login');
   assert.equal(accountOwnerWords('each'), null);
 });
 

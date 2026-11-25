@@ -115,3 +115,14 @@ async def test_the_approvals_route_holds_the_same_deciders_as_the_chat_card(answ
         assert card is not None
         outside = await chat.post(f"/v1/threads/{thread}/approvals", json={}, headers=maya)
         assert outside.status_code == 403, outside.text
+
+
+async def test_the_asker_with_no_approve_cell_answers_their_own_card_in_a_bulk_decision(answered: Chat) -> None:
+    """A bulk decision refused a person whose role decides no reviews before any id was read, so the asker, the only
+    one who may answer an ask-the-person card, could not answer it there."""
+    async for chat in answered({"answer": "person", "reviewerRole": None, "source": "team"}):
+        vera = person("usr_vera", ["team_ops"], role="viewer", policies=NO_SELF)
+        thread, card, _ = await _ask(chat, vera)
+        assert card is not None
+        bulk = await chat.post("/reviews/bulk-decision", json={"ids": [thread], "decision": "approved"}, headers=vera)
+        assert bulk.status_code == 200 and bulk.json()["data"]["updated"] == [thread], bulk.text

@@ -145,6 +145,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "apps_end_sign_in": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/apps/{app_id}/accounts/{account_id}/people/{person_id}/sign-out",
+        "pathParams": ["app_id", "account_id", "person_id"],
+        "query": [],
+        "stream": False,
+    },
     "apps_finish_sign_in": {
         "body": "json",
         "headers": [],
@@ -226,6 +235,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["app"],
         "stream": False,
     },
+    "apps_list_app_people": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/apps/people",
+        "pathParams": [],
+        "query": ["app", "state", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
+        "stream": False,
+    },
     "apps_list_apps": {
         "body": None,
         "headers": ["x-acting-for"],
@@ -273,7 +291,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/me/connections",
         "pathParams": [],
-        "query": [],
+        "query": ["app"],
         "stream": False,
     },
     "apps_open_connect_link": {
@@ -726,6 +744,24 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "tool_modules_list_discovered_names": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/tool-modules/discoveries/{discovery_id}/names",
+        "pathParams": ["discovery_id"],
+        "query": ["group", "access", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
+        "stream": False,
+    },
+    "tool_modules_list_discovered_operations": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/tool-modules/discoveries/{discovery_id}/operations",
+        "pathParams": ["discovery_id"],
+        "query": ["group", "access", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
+        "stream": False,
+    },
     "tool_modules_list_grants": {
         "body": None,
         "headers": [],
@@ -843,6 +879,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "POST",
         "path": "/v1/tool-modules/{module_id}/test",
         "pathParams": ["module_id"],
+        "query": [],
+        "stream": False,
+    },
+    "tool_modules_try_one_tool": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/tool-modules/tries",
+        "pathParams": [],
         "query": [],
         "stream": False,
     },
@@ -966,6 +1011,37 @@ class Operations:
         "Add App"
         return self._t.call(SERVICE, OPERATIONS["apps_add_app"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def apps_list_app_people(
+        self,
+        *,
+        app: list[str] | None = None,
+        state: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> AppPeopleList:
+        "List App People"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["apps_list_app_people"],
+            {},
+            {
+                "app": app,
+                "state": state,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def apps_get_app(self, app_id: str) -> AppPage:
         "Get App"
         return self._t.call(SERVICE, OPERATIONS["apps_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -1017,6 +1093,17 @@ class Operations:
         "Pin Default"
         return self._t.call(
             SERVICE, OPERATIONS["apps_pin_default"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def apps_end_sign_in(self, app_id: str, account_id: str, person_id: str) -> SignInEnded:
+        "End Sign In"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["apps_end_sign_in"],
+            {"app_id": app_id, "account_id": account_id, "person_id": person_id},
+            {},
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     def apps_start_sign_in(self, app_id: str, account_id: str, body: SignInIn) -> SignInStart:
@@ -1258,9 +1345,9 @@ class Operations:
         "Give Own Credentials"
         return self._t.call(SERVICE, OPERATIONS["apps_give_own_credentials"], {"account_id": account_id}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def apps_my_connections(self) -> list[MyConnector]:
+    def apps_my_connections(self, *, app: str | None = None) -> list[MyConnector]:
         "My Connections"
-        return self._t.call(SERVICE, OPERATIONS["apps_my_connections"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["apps_my_connections"], {}, {"app": app}, {}, None)  # type: ignore[no-any-return]
 
     def plugins_list_plugin_templates(self, *, kind: str | None = None) -> list[PluginTemplate]:
         "List Plugin Templates"
@@ -1374,9 +1461,73 @@ class Operations:
         "Bulk Remove Modules"
         return self._t.call(SERVICE, OPERATIONS["tool_modules_bulk_remove_modules"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def tool_modules_discover(self, body: ModuleSourceIn) -> DiscoveryResult:
+    def tool_modules_discover(self, body: DiscoverIn) -> DiscoveryResult:
         "Discover"
         return self._t.call(SERVICE, OPERATIONS["tool_modules_discover"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def tool_modules_list_discovered_names(
+        self,
+        discovery_id: str,
+        *,
+        group: list[str] | None = None,
+        access: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> DiscoveredNames:
+        "List Discovered Names"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["tool_modules_list_discovered_names"],
+            {"discovery_id": discovery_id},
+            {
+                "group": group,
+                "access": access,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    def tool_modules_list_discovered_operations(
+        self,
+        discovery_id: str,
+        *,
+        group: list[str] | None = None,
+        access: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> DiscoveredOperationList:
+        "List Discovered Operations"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["tool_modules_list_discovered_operations"],
+            {"discovery_id": discovery_id},
+            {
+                "group": group,
+                "access": access,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def tool_modules_list_grants(
         self,
@@ -1406,6 +1557,10 @@ class Operations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    def tool_modules_try_one_tool(self, body: ToolTryIn) -> ToolTryResult:
+        "Try One Tool"
+        return self._t.call(SERVICE, OPERATIONS["tool_modules_try_one_tool"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     def tool_modules_get_module(self, module_id: str) -> ToolModuleDetail:
         "Get Module"
@@ -1660,6 +1815,37 @@ class AsyncOperations:
         "Add App"
         return await self._t.call(SERVICE, OPERATIONS["apps_add_app"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def apps_list_app_people(
+        self,
+        *,
+        app: list[str] | None = None,
+        state: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> AppPeopleList:
+        "List App People"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["apps_list_app_people"],
+            {},
+            {
+                "app": app,
+                "state": state,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     async def apps_get_app(self, app_id: str) -> AppPage:
         "Get App"
         return await self._t.call(SERVICE, OPERATIONS["apps_get_app"], {"app_id": app_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -1711,6 +1897,17 @@ class AsyncOperations:
         "Pin Default"
         return await self._t.call(
             SERVICE, OPERATIONS["apps_pin_default"], {"app_id": app_id, "account_id": account_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def apps_end_sign_in(self, app_id: str, account_id: str, person_id: str) -> SignInEnded:
+        "End Sign In"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["apps_end_sign_in"],
+            {"app_id": app_id, "account_id": account_id, "person_id": person_id},
+            {},
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     async def apps_start_sign_in(self, app_id: str, account_id: str, body: SignInIn) -> SignInStart:
@@ -1956,9 +2153,9 @@ class AsyncOperations:
             SERVICE, OPERATIONS["apps_give_own_credentials"], {"account_id": account_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def apps_my_connections(self) -> list[MyConnector]:
+    async def apps_my_connections(self, *, app: str | None = None) -> list[MyConnector]:
         "My Connections"
-        return await self._t.call(SERVICE, OPERATIONS["apps_my_connections"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["apps_my_connections"], {}, {"app": app}, {}, None)  # type: ignore[no-any-return]
 
     async def plugins_list_plugin_templates(self, *, kind: str | None = None) -> list[PluginTemplate]:
         "List Plugin Templates"
@@ -2078,9 +2275,73 @@ class AsyncOperations:
         "Bulk Remove Modules"
         return await self._t.call(SERVICE, OPERATIONS["tool_modules_bulk_remove_modules"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def tool_modules_discover(self, body: ModuleSourceIn) -> DiscoveryResult:
+    async def tool_modules_discover(self, body: DiscoverIn) -> DiscoveryResult:
         "Discover"
         return await self._t.call(SERVICE, OPERATIONS["tool_modules_discover"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def tool_modules_list_discovered_names(
+        self,
+        discovery_id: str,
+        *,
+        group: list[str] | None = None,
+        access: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> DiscoveredNames:
+        "List Discovered Names"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["tool_modules_list_discovered_names"],
+            {"discovery_id": discovery_id},
+            {
+                "group": group,
+                "access": access,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    async def tool_modules_list_discovered_operations(
+        self,
+        discovery_id: str,
+        *,
+        group: list[str] | None = None,
+        access: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> DiscoveredOperationList:
+        "List Discovered Operations"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["tool_modules_list_discovered_operations"],
+            {"discovery_id": discovery_id},
+            {
+                "group": group,
+                "access": access,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def tool_modules_list_grants(
         self,
@@ -2110,6 +2371,10 @@ class AsyncOperations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    async def tool_modules_try_one_tool(self, body: ToolTryIn) -> ToolTryResult:
+        "Try One Tool"
+        return await self._t.call(SERVICE, OPERATIONS["tool_modules_try_one_tool"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def tool_modules_get_module(self, module_id: str) -> ToolModuleDetail:
         "Get Module"

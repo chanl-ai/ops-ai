@@ -9,7 +9,9 @@ Team-defined environments are planned as rows of this list; until then the rows 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
+
+from ops_service_kit.http import Json
 
 
 @dataclass(frozen=True)
@@ -21,7 +23,7 @@ class EnvironmentRow:
     # Whether a call is made in it: a test run or a live one. Only a module's versions are promoted through the rest.
     runs: bool = False
 
-    def view(self) -> dict[str, Any]:
+    def view(self) -> Json:
         return {"id": self.id, "label": self.label, "production": self.production}
 
 

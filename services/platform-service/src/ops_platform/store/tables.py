@@ -7,12 +7,13 @@ SHA-256 hashes. Every reference to a team or user carries `tenant_id` too (migra
 checked without row-level security. Audit entries are append only: the tenant role may not update or delete them.
 `team_id` is null for tenant-level events such as sign-in.
 
-Roles are data (migration 0006): `roles` holds the five built-in roles per tenant and any custom ones,
-`role_permissions` one row per (area, action) a role grants with scope `all` or `own`, and `role_assignments` who holds
-which role in which team. An assignment's subject is a person or a team (`subject_kind`, `subject_id`), and its
-`team_id` is the team it applies in or `*` for every team the subject belongs to; both are never null so the unique
-index dedupes on every database. `tenants.permission_version` rises with every change to any of these or to a
-membership, and the platform token carries it so services can cache what a person may do.
+Roles are data (migration 0006): `roles` holds the seven built-in roles per tenant (five people are given, plus
+Security admin and Owner, attached by rule) and any custom ones, `role_permissions` one row per (area, action) a role
+grants with scope `all` or `own`, and `role_assignments` who holds which role in which team. An assignment's subject
+is a person, a team or a group (`subject_kind`, `subject_id`; groups and their people are `groups` and
+`group_members`, migration 0046), and its `team_id` is the team it applies in or `*` for every team; both are never
+null so the unique index dedupes on every database. `tenants.permission_version` rises with every change to any of
+these or to a membership, and the platform token carries it so services can cache what a person may do.
 """
 
 from __future__ import annotations
@@ -123,17 +124,17 @@ api_keys = sa.Table(
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), nullable=False, index=True),
     sa.Column("team_id", sa.String(64), nullable=False, index=True),
-    sa.Column("name", sa.String(200), nullable=False),
+    sa.Column("name", sa.String(200), nullable=False, info=LISTED),
     sa.Column("prefix", sa.String(64), nullable=False, unique=True),  # the key's id, looked up before the hash
     sa.Column("secret_hash", sa.String(64), nullable=False),
     sa.Column("scopes", sa.JSON, nullable=False),  # read | write
     sa.Column("created_by", sa.String(64), nullable=False),
-    sa.Column("created_at", sa.String(40), nullable=False),
-    sa.Column("last_used_at", sa.String(40)),
+    sa.Column("created_at", sa.String(40), nullable=False, info=LISTED),
+    sa.Column("last_used_at", sa.String(40), info=LISTED),
     sa.Column("revoked_at", sa.String(40)),
     # Set when the creator leaves the team or is suspended (I10); a disabled key verifies as revoked.
     sa.Column("disabled_at", sa.String(40)),
-    sa.Column("expires_at", sa.String(40)),  # null: the key does not expire
+    sa.Column("expires_at", sa.String(40), info=LISTED),  # null: the key does not expire
     # What the key may start: agent or workflow, its id, and a pinned workflow version (null: the live one). No
     # target: any live workflow of the key's team.
     sa.Column("target_kind", sa.String(16), info=LISTED),
@@ -146,6 +147,11 @@ api_keys = sa.Table(
     # The keys list keeps the keys made for one target (an MCP link's Keys tab).
     sa.Index("ix_api_keys_team_target_kind", "team_id", "target_kind"),
     sa.Index("ix_api_keys_team_target_id", "team_id", "target_id"),
+    # The keys list sorts by name, creation, last use and expiry.
+    sa.Index("ix_api_keys_team_name", "team_id", "name"),
+    sa.Index("ix_api_keys_team_created_at", "team_id", "created_at"),
+    sa.Index("ix_api_keys_team_last_used_at", "team_id", "last_used_at"),
+    sa.Index("ix_api_keys_team_expires_at", "team_id", "expires_at"),
     info=TENANT_SCOPED,
 )
 
@@ -191,9 +197,11 @@ audit_entries = sa.Table(
     sa.Column("target_kind", sa.String(40), nullable=False),
     sa.Column("target_id", sa.String(64), nullable=False),
     sa.Column("request_id", sa.String(64), nullable=False),
-    sa.Column("at", sa.String(40), nullable=False),
+    sa.Column("at", sa.String(40), nullable=False, info=LISTED),
     sa.Column("detail", sa.JSON(none_as_null=True), nullable=False),
     sa.ForeignKeyConstraint(["tenant_id", "team_id"], ["teams.tenant_id", "teams.id"], name="fk_audit_entries_team"),
+    # The audit list is newest first and sorts by time.
+    sa.Index("ix_audit_entries_at", "tenant_id", "at"),
     info=TENANT_SCOPED,
 )
 
@@ -202,12 +210,14 @@ roles = sa.Table(
     metadata,
     sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), primary_key=True),
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("name", sa.String(200), nullable=False),
+    sa.Column("name", sa.String(200), nullable=False, info=LISTED),
     sa.Column("builtin", sa.Boolean, nullable=False, info=LISTED),
     sa.Column("description", sa.String(500), nullable=False),
     sa.Column("created_at", sa.String(40), nullable=False),
     # The roles list filters on built-in or custom (`builtin`).
     sa.Index("ix_roles_builtin", "tenant_id", "builtin"),
+    # The roles list, and a person's own grants, sort by the role's name.
+    sa.Index("ix_roles_name", "tenant_id", "name"),
     info=TENANT_SCOPED,
 )
 
@@ -228,8 +238,8 @@ role_assignments = sa.Table(
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), nullable=False),
-    sa.Column("subject_kind", sa.String(8), nullable=False),  # person | team
-    sa.Column("subject_id", sa.String(64), nullable=False),  # a user id or a team id
+    sa.Column("subject_kind", sa.String(8), nullable=False),  # person | team | group
+    sa.Column("subject_id", sa.String(64), nullable=False),  # a user id, a team id or a group id
     sa.Column("role_id", sa.String(64), nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),  # the team it applies in, or * for every team
     sa.Column("expires_at", sa.String(40)),  # null: no expiry
@@ -263,6 +273,45 @@ sa.Index(
 # identity provider: its state and its handoff code are stored hashed and used once; the PKCE verifier is kept as is
 # because the code exchange needs it, and it lives ten minutes. Password credentials and reset tokens are stored as
 # hashes only.
+groups = sa.Table(
+    "groups",
+    metadata,
+    # A set of people a role is given to (migration 0046). A group a sign-in provider keeps names the provider and the
+    # exact value it sends (`external_value`); one kept by hand names neither. A group's assignment never carries a
+    # privileged cell (`ops_access.PRIVILEGED`): the store refuses one and `holdings_with` leaves one out.
+    # The key is named so SQL Server keeps one name across a down and up (it names an unnamed one at random).
+    sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id", name="groups_tenant_id_fkey"), primary_key=True),
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("name", sa.String(200), nullable=False),
+    sa.Column("provider_id", sa.String(64)),
+    sa.Column("external_value", sa.String(255)),
+    sa.Column("created_by", sa.String(320), nullable=False),
+    sa.Column("created_at", sa.String(40), nullable=False),
+    # A group is picked by name, as a role is.
+    sa.UniqueConstraint("tenant_id", "name", name="uq_groups_name"),
+    info=TENANT_SCOPED,
+)
+group_members = sa.Table(
+    "group_members",
+    metadata,
+    # Who is in a group: `source` is `manual` (an admin added them) or `provider` (their last sign-in said so), so a
+    # sign-in removes only the people it added.
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("group_id", sa.String(64), primary_key=True),
+    sa.Column("user_id", sa.String(64), primary_key=True),
+    sa.Column("source", sa.String(16), nullable=False),
+    sa.Column("added_by", sa.String(320), nullable=False),
+    sa.Column("added_at", sa.String(40), nullable=False),
+    # A person's groups, read on every token issue (`holdings_with`).
+    sa.Index("ix_group_members_user", "tenant_id", "user_id"),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "group_id"], ["groups.tenant_id", "groups.id"], name="fk_group_members_group", ondelete="CASCADE"
+    ),
+    sa.ForeignKeyConstraint(
+        ["tenant_id", "user_id"], ["users.tenant_id", "users.id"], name="fk_group_members_user", ondelete="CASCADE"
+    ),
+    info=TENANT_SCOPED,
+)
 signin_providers = sa.Table(
     "signin_providers",
     metadata,
@@ -432,6 +481,8 @@ signin_identities = sa.Table(
     sa.Column("last_used_at", sa.String(40), nullable=False),
     # One person per provider subject: two first sign-ins racing each other link one person.
     sa.UniqueConstraint("tenant_id", "provider_id", "subject", name="uq_signin_identities_subject"),
+    # One provider subject per person: a second account at the provider never becomes another way into the person.
+    sa.UniqueConstraint("tenant_id", "provider_id", "user_id", name="uq_signin_identities_person"),
     sa.ForeignKeyConstraint(
         ["tenant_id", "provider_id"],
         ["signin_providers.tenant_id", "signin_providers.id"],
@@ -450,7 +501,7 @@ signin_flows = sa.Table(
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), nullable=False, index=True),
     sa.Column("provider_id", sa.String(64), nullable=False),
-    sa.Column("purpose", sa.String(16), nullable=False),  # sign_in | step_up | test
+    sa.Column("purpose", sa.String(16), nullable=False),  # sign_in | step_up | test | link
     sa.Column("state_hash", sa.String(64), nullable=False, unique=True),
     # The hash of the key the starting browser holds; completing the flow needs it.
     sa.Column("browser_hash", sa.String(64), nullable=False),
@@ -468,6 +519,10 @@ signin_flows = sa.Table(
     # A test sign-in's result (0033): state, subject, email, name, groups, or the check that failed. Read only by the
     # admin who started it (`user_id`); a test flow never gets a handoff, so it can never become a session.
     sa.Column("test_result", sa.JSON(none_as_null=True)),
+    # A link flow's provider subject, kept from the provider's answer until the session that started it completes.
+    sa.Column("subject", sa.String(255)),
+    # The hash of the invite a sign-in was started from; the answer may then link the invited person.
+    sa.Column("invite_hash", sa.String(64)),
     sa.ForeignKeyConstraint(
         ["tenant_id", "provider_id"],
         ["signin_providers.tenant_id", "signin_providers.id"],

@@ -1,9 +1,7 @@
-# Embedding the chat on a bank page
+# Chat on your own pages
 
-Status: current. The server side, the loader and the embed app are built, and an end-to-end check drives them on a
-sample bank page.
-
-<!-- The embed app is apps/embed; the check is uc-119. -->
+Status: current. The server side, the loader and the embed app are built and checked end to end on a sample page. The
+installer does not run the embed app yet; adding it to the Compose and Kubernetes installs is planned.
 
 A bank team puts its Ops AI agent on an intranet page: a launcher in the corner opens the same chat people use in the
 console, with sources, answer widgets, tool cards and approval cards (an approver decides them in Human Tasks). The chat
@@ -14,12 +12,12 @@ and the person is identified by a short session the bank's server mints for them
 
 | Piece | Where it runs | What it holds |
 |---|---|---|
-| Widget deployment | Ops AI (agents-service) | The agent, the allowed page origins, paused or not |
+| Widget deployment | Ops AI | The agent, the allowed page origins, paused or not |
 | The bank's session endpoint | The bank's server | The widget's mint key (never sent to the page) |
 | Loader script | The intranet page | Nothing secret: the deployment id and the current 15-minute session |
-| Embed app | An iframe from the Ops AI host | The conversation; it talks to agents-service with the session |
+| Embed app | An iframe from the Ops AI host | The conversation; it talks to Ops AI with the session |
 
-## 1. Create a widget deployment (Built)
+## 1. Create a widget deployment
 
 In the console, open the agent's **Channels** tab and choose **Embed on a page** (or Deployments > New deployment > Chat
 widget, which asks for the agent), and list every page origin that will embed it, for example
@@ -31,7 +29,7 @@ no paths). The API is `POST /v1/widget-deployments` with `{ name, agentId, origi
 Pausing the deployment stops every embedded conversation: new sessions are refused with 409 `widget_paused`, and so is
 every request of a session already open.
 
-## 2. Mint a session on the bank's server (Built)
+## 2. Mint a session on your server
 
 The bank's server already knows who is signed in to the intranet. It asks Ops AI for a session for that person, with the
 widget's **mint key**, and hands only the session to the page. A mint key mints sessions for one widget deployment and
@@ -137,17 +135,24 @@ The host page never receives message text: the conversation stays inside the ifr
 | Property | How |
 |---|---|
 | The page cannot read the conversation | The chat runs in a cross-origin iframe; events carry no text |
-| Only listed pages can frame the chat | The embed app answers with `Content-Security-Policy: frame-ancestors` built from the deployment's origins (Built, `apps/embed/src/proxy.ts`); with no listed page to read the config for, `'none'` |
-| Messages between page and iframe cannot be forged | Both sides check `event.origin` and `event.source` and post to one exact origin, never `'*'` (Built: the loader, `tests/loader/loader.browser.mjs`, and the frame, `apps/embed/src/frame.tsx`) |
-| A copied session expires soon | 15 minutes, bound to the deployment, the origin and the person (Built) |
-| No empty conversations | A thread is created on the first message, not on open (Built, uc-119) |
+| Only listed pages can frame the chat | The embed app answers with `Content-Security-Policy: frame-ancestors` built from the deployment's origins; with no listed page, `'none'` |
+| Messages between page and iframe cannot be forged | Both sides check `event.origin` and `event.source` and post to one exact origin, never `'*'` |
+| A copied session expires soon | 15 minutes, bound to the deployment, the origin and the person |
+| No empty conversations | A thread is created on the first message, not on open |
 
-## 7. Test it locally
+## 7. Try it before you go live
 
-1. `make up` and sign in to the console as an admin.
-2. In **Widgets**, create a widget for an agent with origin `http://localhost:5500`, and create its mint key
-   (`POST /v1/widget-deployments/{id}/keys`).
-3. Serve a page on `http://localhost:5500` with the script tag above and a session endpoint that calls step 2's route
-   with the mint key (`OPS_URL=http://127.0.0.1:8700`).
-4. Open the page: the launcher shows; opening it shows the agent's greeting. Check an unlisted origin
-   (`http://127.0.0.1:5500`) loads nothing, and that the browser console shows no message text reaching the page.
+<!-- site: steps -->
+1. Create a widget for an agent on a test install, listing the origin of the page you will test from, and create its
+   mint key.
+2. Serve a test page from that origin with the script tag above, and a session endpoint that calls step 2's route with
+   the mint key.
+3. Open the page: the launcher shows, and opening it shows the agent's greeting. Check that a page on an origin you did
+   not list loads nothing, and that the browser console shows no message text reaching the page.
+
+## Next
+
+<!-- site: cards -->
+- **[Chat and channels](../guide/ops-assistant.md)**: what the chat does once it is open.
+- **[Agents](../guide/agents.md)**: publish the agent the widget serves.
+- **[Security](../security/README.md)**: sign-in, isolation and audit for a security review.

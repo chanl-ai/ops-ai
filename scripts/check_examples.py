@@ -201,7 +201,7 @@ def render_surface(metas: list[dict[str, Any]]) -> str:
         ("workflow.replay", "planned", "planned", "planned", "planned", "planned"),
         ("agent.apply", "built", "built", "built", "built", "built"),
         ("agent.chat", "built", "built", "built", "built", "built"),
-        ("agent.eval", "built", "built", "built", "built", "planned"),
+        ("agent.eval", "built", "built", "planned", "planned", "planned"),
         ("agent.run", "built", "built", "planned", "built", "planned"),
     ]
     for row in operations:

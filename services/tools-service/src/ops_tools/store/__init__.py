@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from . import connections as connections  # registers the connection tables on the modules metadata
+from . import discoveries as discoveries  # and what a discovery found, kept for the picker
 from . import egress as egress  # registers the allow-list tables on the modules metadata, for migrations
 from . import mocks as mocks  # registers the operations' mock answers
 from . import rate_windows as rate_windows  # and the gateway's per-operation rate counters

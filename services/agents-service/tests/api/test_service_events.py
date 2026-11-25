@@ -19,6 +19,7 @@ from sqlalchemy.pool import StaticPool
 
 from ops_access import Grant
 from ops_access.check import DEFAULT
+from ops_agents.api import service_events
 from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
 from ops_agents.store.base import metadata
@@ -38,7 +39,7 @@ from ops_store.outbox import Event, ToolChanged, ToolOperation, ToolPublished, a
 from tests.api.test_action_roles import introspect
 from tests.api.test_team_default_agent import Stack, jwks
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
-from tests.engine.test_lifecycle_rights import BUILDER, PLATFORM, TENANT
+from tests.engine.test_lifecycle_rights import BUILDER, PLATFORM, TENANT, person
 
 EVENT = "file.deleted"
 
@@ -310,3 +311,97 @@ async def test_tool_catalogue_events_keep_the_copy_by_revision_and_tombstone(sta
         assert r.status_code == 202, r.text
         with isolation.scope(TENANT, "team_ops"):
             assert [t.name for t in await ToolCopies(rt.db).visible("team_ops")] == want, event
+
+
+async def test_a_payload_a_listeners_input_schema_refuses_starts_no_run_and_the_event_is_still_taken(
+    stack: Stack,
+) -> None:
+    c, rt = stack
+    needs_reason = event_workflow()
+    needs_reason["nodes"][0]["parameters"]["inputSchema"] = {
+        "type": "object",
+        "required": ["reason"],
+        "properties": {"reason": {"type": "string", "title": "Reason"}},
+    }
+    rt.event_workflows = [needs_reason]
+    got = await emit(c, "fil_20")
+    assert got["runIds"] == [] and got["status"] == "unhandled", got
+
+
+def account_admin(tenant: str) -> dict[str, str]:
+    claims: dict[str, Any] = {
+        "sub": "priya",
+        "email": "priya@harborpine.example",
+        "name": "priya",
+        "kind": "person",
+        "security_team": "team_security",
+        "aud": ["agents"],
+        "tenant_id": tenant,
+        "team_ids": ["team_ops"],
+        "roles": {"team_ops": "admin"},
+        "access": {"*": ["admin"]},
+    }
+    return {"Authorization": f"Bearer {mint(claims, PLATFORM, ttl_s=TEST_TOKEN_TTL_S)}", "X-Team-Id": "team_ops"}
+
+
+async def test_a_refused_event_is_a_failed_job_of_its_team_and_another_tenant_reads_nothing_of_it(
+    stack: Stack,
+) -> None:
+    c, rt = stack
+    needs_reason = event_workflow()
+    needs_reason["nodes"][0]["parameters"]["inputSchema"] = {
+        "type": "object",
+        "required": ["reason"],
+        "properties": {"reason": {"type": "string", "title": "Reason"}},
+    }
+    rt.event_workflows = [needs_reason]
+    await emit(c, "fil_22")
+    own = await c.get("/v1/background", headers=account_admin(TENANT))
+    assert own.status_code == 200, own.text
+    failed = [j for j in own.json()["data"]["jobs"] if j["outcome"] == "failed"]
+    assert [(j["process"], j["teamId"]) for j in failed] == [("event_workflows", "team_ops")], own.text
+    assert "reason does not match its input schema" in failed[0]["summary"], failed
+    # Its own team reads it as failed in Activity; another team of the same workspace does not read it at all.
+    for who, statuses in ((BUILDER, ["failed"]), (person("omar", "team_fraud", "builder"), [])):
+        r = await c.get("/v1/activity", params={"kind": "background"}, headers=who)
+        assert r.status_code == 200, r.text
+        assert [row["status"] for row in r.json()["data"]["data"]] == statuses, r.text
+    other = await c.get("/v1/background", headers=account_admin("ten_elsewhere"))
+    assert other.status_code == 200, other.text
+    page = other.json()["data"]
+    [line] = [p for p in page["processes"] if p["key"] == "event_workflows"]
+    # The process did its work: the payload was wrong, and whose it was is not the process's to say.
+    assert line["lastError"] is None and line["state"] == "running", line
+    assert page["jobs"] == [], page["jobs"]
+    assert "fil_22" not in other.text and "Purge a deleted file" not in other.text, other.text
+
+
+async def test_an_event_payload_with_a_number_that_is_not_finite_is_refused_before_it_is_stored(stack: Stack) -> None:
+    c, _ = stack
+    body = '{"name": "file.deleted", "key": "fil_30", "teamId": "team_ops", "payload": {"size": 1e999}}'
+    r = await c.post("/v1/events", content=body, headers={**service(), "Content-Type": "application/json"})
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["code"] == "payload_not_finite", r.text
+
+
+async def test_a_delivery_that_crashes_is_its_teams_failed_job_and_another_tenant_reads_nothing_of_it(
+    stack: Stack, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    c, rt = stack
+    rt.event_workflows = [event_workflow()]
+
+    async def crash(*_: Any, **__: Any) -> None:
+        raise RuntimeError("no row for customer Ana Ruiz, file fil_40")
+
+    monkeypatch.setattr(service_events, "start_run", crash)
+    await emit(c, "fil_40", status=500)
+    own = await c.get("/v1/background", headers=account_admin(TENANT))
+    assert own.status_code == 200, own.text
+    failed = [(j["process"], j["teamId"]) for j in own.json()["data"]["jobs"] if j["outcome"] == "failed"]
+    assert failed == [("event_workflows", "team_ops")], own.text
+    other = await c.get("/v1/background", headers=account_admin("ten_elsewhere"))
+    assert other.status_code == 200, other.text
+    [line] = [p for p in other.json()["data"]["processes"] if p["key"] == "event_workflows"]
+    # The process failed and says so, with the kind of error and nothing a tenant's records put in its message.
+    assert line["state"] != "running" and "RuntimeError" in (line["lastError"] or ""), line
+    assert "Ana Ruiz" not in other.text and "fil_40" not in other.text, other.text

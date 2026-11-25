@@ -9,8 +9,8 @@ from __future__ import annotations
 import hashlib
 import time
 from collections.abc import Awaitable, Callable, Iterable
-from dataclasses import dataclass, field
-from typing import Literal
+from dataclasses import dataclass, field, replace
+from typing import Annotated, Literal
 
 from fastapi import Depends
 
@@ -19,6 +19,7 @@ from ops_access import reader_of as shared_reader_of
 from ops_access.check import DEFAULT as ACCESS
 from ops_identity import CurrentCaller, CurrentPrincipal, CurrentService
 from ops_identity import Principal as Caller
+from ops_identity.fastapi import ActingPerson
 from ops_policy import STEP_UP_TTL_S, HmacSigner, TokenError, header_of, verify, verify_step_up
 from ops_policy.step_up import STEP_UP_TYPE
 from ops_service_kit.errors import Forbidden, StepUpRequired
@@ -59,6 +60,15 @@ async def caller(p: CurrentCaller) -> Principal:
     """A person, an API key, or a service token scoped to one team, for the routes the provisioning service calls; every
     check on them goes through `can`, which reads a service's scopes."""
     return _principal(p)
+
+
+async def maker(me: Annotated[Principal, Depends(caller)], acting: ActingPerson) -> Principal:
+    """The caller, named as the person a service's call acts for (X-Acting-For, verified by ops_identity), so a copy
+    tools-service makes over MCP records that person as its maker. The rights checked stay the service token's, which
+    carries only the cells the person holds."""
+    if acting is None or me.identity is None or me.identity.kind != "service":
+        return me
+    return replace(me, email=acting.email, name=acting.name or acting.email, sub=acting.sub)
 
 
 def caller_in(area: str) -> Callable[..., Awaitable[Principal]]:
@@ -203,10 +213,16 @@ def reader_teams(me: Principal) -> list[str]:
 def review_teams(me: Principal) -> list[str]:
     """The teams whose reviews a person decides (`reviews.decide` held there); the dev header caller decides in the
     team it acts in, an API key in none."""
+    return teams_holding(me, "reviews", "decide")
+
+
+def teams_holding(me: Principal, area: str, action: str) -> list[str]:
+    """The teams of a person where `can` grants `area.action`, whichever team the request acts in; the dev header
+    caller holds it in the team it acts in, an API key in none."""
     if me.dev:
         return list(me.team_ids)
     who = caller_of(me)
-    return [t for t in me.team_ids if not me.is_key and _held(who, "reviews", "decide", t)]
+    return [t for t in me.team_ids if not me.is_key and _held(who, area, action, t)]
 
 
 def _held(who: Caller, area: str, action: str, team: str) -> Scope | None:
@@ -237,7 +253,8 @@ def workspace_step_up(me: Principal) -> bool:
 
 def require_not_own(me: Principal, requested_by: Iterable[str | None], *, team: str | None, what: str) -> None:
     """Separation of duties on a decision, decided by `can`: whoever asked for, saved or started what `me`
-    decides does not decide it while the tenant's requesterMayDecide policy is off. Runs after the role check; `team` is
+    decides does not decide it while the team's two-person rule is on (requesterMayDecide off), unless `me` is an Admin
+    of the team; `can` holds that one rule. Runs after the role check; `team` is
     a team the decision's role is held in, or None for one of the caller's reviewing teams. A workflow's own principal
     (`workflow:<id>`) asking is refused whatever the policy: no person holds that identity, so only a forged one could
     decide with it."""
@@ -307,7 +324,8 @@ def started_by(me: Principal) -> str:
 
 def approves_own_writes(me: Principal) -> bool:
     """Whether `me` is their own approver in the team they act in: reviews.decide there, while the
-    requesterMayDecide policy lets an asker decide. An API key never is: a key acts for nobody who could approve."""
+    requesterMayDecide policy lets an asker decide or they are an Admin of the team (`can`). An API key never is: a key
+    acts for nobody who could approve."""
     if me.is_key:
         return False
     return ACCESS.may(caller_of(me), "reviews", "decide", team=me.team_id, requested_by=(me.email,))

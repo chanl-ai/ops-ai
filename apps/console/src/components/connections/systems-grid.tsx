@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { CircleCheck, Plug, Plus, PlugZap } from 'lucide-react';
+import { CircleCheck, CircleX, Clock, Plug, Plus, PlugZap } from 'lucide-react';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
@@ -28,6 +28,8 @@ import { appPageHref } from '@/lib/app-links';
 import { appStateFor } from '@/lib/app-state';
 import { APP_STATE_LOOK, AppStateBadge } from '@/components/connections/app-state-badge';
 import { AddAuthConfigButton, TurnOnButton } from '@/components/connections/app-actions';
+import { AppsTabs } from '@/components/connections/apps-tabs';
+import { signInChoiceWords } from '@/lib/login-words';
 
 export type { ConnectMode };
 
@@ -117,6 +119,35 @@ function SystemAppCard({ system, onConnect }: { system: SystemCard; onConnect: (
   );
 }
 
+/** How people sign in to an app, in the words of its Turn on window. */
+const SIGN_IN_WORDS: Record<NonNullable<SystemCard['signIn']>, string> = {
+  team: signInChoiceWords('team'),
+  person: signInChoiceWords('person'),
+};
+
+/**
+ * An app's sign-in health: its people's own sign-ins that work, ended and failed, counted by the server. An app the
+ * team signs in to with one shared login has none.
+ */
+function SignInHealth({ id, counts }: { id: string; counts?: SystemCard['signIns'] }) {
+  const parts = [
+    { n: counts?.connected ?? 0, label: 'connected', icon: CircleCheck, className: 'text-success-text' },
+    { n: counts?.expired ?? 0, label: 'ended', icon: Clock, className: 'text-warning-text' },
+    { n: counts?.refused ?? 0, label: 'couldn’t connect', icon: CircleX, className: 'text-destructive-text' },
+  ].filter((p) => p.n > 0);
+  if (!parts.length) return <span className="text-sm text-muted-foreground" data-testid={`app-${id}-sign-ins`}>No sign-ins</span>;
+  return (
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" data-testid={`app-${id}-sign-ins`}>
+      {parts.map(({ n, label, icon: Icon, className }) => (
+        <span key={label} className="inline-flex items-center gap-1 whitespace-nowrap tabular-nums">
+          <Icon className={`size-4 ${className}`} aria-hidden />
+          {n} {label}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 type Row = SystemCard & { onRowClick: (s: SystemCard) => void; href: string };
 
 const columns = (onConnect: (s: SystemCard, mode: ConnectMode) => void): ColumnDef<Row>[] => [
@@ -134,13 +165,29 @@ const columns = (onConnect: (s: SystemCard, mode: ConnectMode) => void): ColumnD
         </Avatar>
         <div className="min-w-0">
           <div className="truncate font-medium">{row.original.name}</div>
-          {row.original.description && <div className="max-w-md text-xs text-muted-foreground break-words">{row.original.description}</div>}
+          <div className="text-xs text-muted-foreground">
+            {plural(row.original.toolsCount, 'tool')}
+            {row.original.category ? ` · ${row.original.category}` : ''}
+          </div>
         </div>
       </div>
     ),
     enableHiding: false,
   },
-  { accessorKey: 'category', header: ({ column }) => <DataTableColumnHeader column={column} title="Category" />, enableSorting: false, filterFn: facetFilterFn, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{row.original.category}</span> },
+  // Only the Category filter reads this column; the category shows under the app's name.
+  { accessorKey: 'category', header: 'Category', enableSorting: false, filterFn: facetFilterFn, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{row.original.category}</span> },
+  {
+    id: 'signIn',
+    enableSorting: false,
+    header: 'How people sign in',
+    cell: ({ row }) => <span className="whitespace-nowrap text-sm">{row.original.signIn ? SIGN_IN_WORDS[row.original.signIn] : '–'}</span>,
+  },
+  {
+    id: 'signIns',
+    enableSorting: false,
+    header: 'Sign-ins',
+    cell: ({ row }) => <SignInHealth id={row.original.id} counts={row.original.signIns} />,
+  },
   {
     accessorKey: 'appState',
     enableSorting: false,
@@ -155,7 +202,6 @@ const columns = (onConnect: (s: SystemCard, mode: ConnectMode) => void): ColumnD
   },
   // Only the Kind filter reads this column; the server filters on it.
   { accessorKey: 'kind', enableSorting: false, filterFn: facetFilterFn, header: 'Kind', cell: ({ row }) => <span className="text-muted-foreground">{row.original.kindLabel}</span> },
-  { accessorKey: 'toolsCount', enableSorting: false, header: ({ column }) => <DataTableColumnHeader column={column} title="Tools" />, cell: ({ row }) => <span className="tabular-nums">{row.original.toolsCount}</span> },
   {
     id: 'actions',
     meta: { className: 'w-28 text-right' },
@@ -192,7 +238,8 @@ export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, m
       icon={Plug}
       title="Apps"
       switcher
-      description="Team setup: turn on the apps your agents and workflows use, and choose whose account their tools use."
+      description="Team setup: turn on the apps your agents and workflows use, choose how people sign in, and see whose sign-ins need attention."
+      tabs={<AppsTabs />}
       contentClassName="flex flex-col gap-4"
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -235,12 +282,12 @@ export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, m
             columns={cols}
             data={rows}
             getRowId={(r) => r.id}
-            defaultView="grid"
+            defaultView="table"
             gridClassName={APP_CARD_GRID}
             renderGridItem={(s) => <SystemAppCard system={s} onConnect={onConnect} />}
             searchColumn="name"
             searchPlaceholder="Search apps"
-            initialColumnVisibility={{ kind: false }}
+            initialColumnVisibility={{ kind: false, category: false }}
             filters={[
               { column: 'appState', title: 'State', options: facetOptions('appState', (v) => APP_STATE_LOOK[v as keyof typeof APP_STATE_LOOK]?.label ?? v) },
               { column: 'category', title: 'Category', options: facetOptions('category', (v) => v) },

@@ -135,3 +135,65 @@ test('SSO completes only in the tab that started it, with that tab’s flow key,
   await provider.signOut();
   delete (globalThis as { window?: unknown }).window;
 });
+
+const STEP = 'step-up-token-0123456789';
+
+test('a link round trip runs under the session that started it with its flow key, and a taken account is a 409', async () => {
+  tab();
+  const calls: { path: string; auth: string | undefined; body: unknown }[] = [];
+  let taken = false;
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    const path = String(url).replace('http://platform', '');
+    const headers = init?.headers as Record<string, string> | undefined;
+    calls.push({ path, auth: headers?.Authorization, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    if (path === '/v1/auth/sign-in') return Response.json({ success: true, data: issued });
+    if (path === '/v1/auth/sso/link/start') return Response.json({ success: true, data: { redirectUrl: 'http://idp/link', flowKey: 'link-key-1' } });
+    if (path === '/v1/auth/sso/link/complete')
+      return taken ? Response.json({ success: false, error: { code: 'already_linked', message: 'Linked already.' } }, { status: 409 }) : Response.json({ success: true, data: { providerId: 'sp_1', kind: 'oidc' } });
+    return Response.json({ success: false, error: { code: 'not_found', message: 'no' } }, { status: 404 });
+  }) as typeof fetch;
+  const provider = createPlatformProvider('http://platform');
+  await assert.rejects(provider.startSsoLink({ returnTo: '/settings/account/security', stepUp: STEP }), (e: unknown) => e instanceof AuthError && e.code === 'no_session');
+  await provider.signInWithPassword('m.okafor@harborpine.example', 'northfield-demo');
+  await provider.startSsoLink({ returnTo: '/settings/account/security', stepUp: STEP });
+  await provider.completeSsoLink('code-1');
+  assert.deepEqual(calls.slice(-2), [
+    { path: '/v1/auth/sso/link/start', auth: 'Bearer session-token', body: { next: '/settings/account/security', stepUp: STEP } },
+    { path: '/v1/auth/sso/link/complete', auth: 'Bearer session-token', body: { code: 'code-1', flowKey: 'link-key-1' } },
+  ]);
+  taken = true;
+  await provider.startSsoLink({ returnTo: '/settings/account/security', stepUp: STEP });
+  await assert.rejects(provider.completeSsoLink('code-2'), (e: unknown) => e instanceof AuthError && e.status === 409);
+  await provider.signOut();
+  delete (globalThis as { window?: unknown }).window;
+});
+
+test('an invite page sign-in sends the invite token with the email', async () => {
+  tab();
+  const calls: unknown[] = [];
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    calls.push(JSON.parse(String(init?.body)));
+    return Response.json({ success: true, data: { redirectUrl: 'http://idp/sso', flowKey: 'k' } });
+  }) as typeof fetch;
+  await createPlatformProvider('http://platform').startSso({ email: 'li@bank.test', invite: 'inv_abcdefgh12' });
+  assert.deepEqual(calls[0], { email: 'li@bank.test', invite: 'inv_abcdefgh12' });
+  delete (globalThis as { window?: unknown }).window;
+});
+
+test('unlinking a provider is a DELETE under the session, and nobody signed in calls nothing', async () => {
+  tab();
+  const calls: { path: string; method: string | undefined; auth: string | undefined }[] = [];
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    const path = String(url).replace('http://platform', '');
+    calls.push({ path, method: init?.method, auth: (init?.headers as Record<string, string> | undefined)?.Authorization });
+    return path === '/v1/auth/sign-in' ? Response.json({ success: true, data: issued }) : new Response(null, { status: 204 });
+  }) as typeof fetch;
+  const provider = createPlatformProvider('http://platform');
+  await assert.rejects(provider.unlinkSso('sp_1'), (e: unknown) => e instanceof AuthError && e.code === 'no_session');
+  assert.equal(calls.length, 0);
+  await provider.signInWithPassword('m.okafor@harborpine.example', 'northfield-demo');
+  await provider.unlinkSso('sp_1');
+  assert.deepEqual(calls.at(-1), { path: '/v1/auth/sso/links/sp_1', method: 'DELETE', auth: 'Bearer session-token' });
+  await provider.signOut();
+  delete (globalThis as { window?: unknown }).window;
+});

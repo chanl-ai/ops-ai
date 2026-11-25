@@ -48,10 +48,8 @@ from ..auth import (
     principal,
     require_builder,
     require_key_reaches,
-    require_reviews_decide,
     require_runs_start,
     require_step_up,
-    review_teams,
     started_by,
 )
 from ..chat_budget import cap_at_agent, run_api_answer
@@ -103,7 +101,6 @@ class ThreadInput(In):
     # Channels: the key of what started the case. A thread with this key is returned instead of a new one (E6).
     external_key: str | None = None
     deployment_id: str | None = None
-    parent_thread_id: str | None = None
     # Pauses the thread for a person when spent (E12); a deployment's default applies when left out.
     budget: BudgetInput | None = None
 
@@ -241,7 +238,6 @@ async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONRespons
         now_iso(),
         external_key=body.external_key,
         deployment_id=body.deployment_id,
-        parent_thread_id=body.parent_thread_id,
         version=version,
         digest=digest,
     )
@@ -375,11 +371,12 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
             if budget_pause
             else None
         )
-        # Any other paused step is a decision: a reviewer or admin of the thread's team, never a key. Review
-        # steps go to Reviews and a chat's budget to its budget route above, each with its own rule.
+        # Any other paused step is a decision, checked as Reviews checks one (hitl_facade.check_thread_decider): a
+        # reviewer or admin of the thread's team, never a key. Review steps go to Reviews and a chat's budget to its
+        # budget route above, each with its own rule.
         if answered is None:
-            require_reviews_decide(
-                review_teams(me), str(row["team_id"] or me.team_id), f"the step thread {thread_id} waits on"
+            await hitl_facade.check_thread_decider(
+                rt, me, {**row, "team_id": row["team_id"] or me.team_id}, json_object(waiting[0]["payload"]), []
             )
         if (
             body.resume.decision == "approved" and isinstance(payload, dict) and payload.get("step_up")  # pyright: ignore[reportUnknownMemberType]
@@ -571,7 +568,8 @@ async def publish_version(rt: Rt, me: Me, name: str, body: PublishInput) -> JSON
 
 
 # Thread metadata the server writes and later trusts: who started it, its budget allotment, its chat and widget
-# state, its child-run links and its routing flag. A caller's copy of any of these is dropped, never stored.
+# state, its child-run links, the agent that asked it with its chain record, and its routing flag. A caller's copy
+# of any of these is dropped, never stored.
 SERVER_META = frozenset(
     {
         "startedBy",
@@ -582,6 +580,9 @@ SERVER_META = frozenset(
         "attachments",
         "budget",
         "budgetAllotment",
+        "calledBy",
+        "calledByName",
+        "chain",
         "channel",
         "chat",
         "children",

@@ -8,6 +8,7 @@ import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { saveAgent } from '../../lib/agent_save.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agentsUrl = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -94,7 +95,7 @@ try {
       const sam = as(await tokenFor('s.adeyemi@harborpine.example'), 'team_security');
       const priya = as(await tokenFor(PRIYA), 'team_ops');
       await call('POST', '/v1/egress/ranges', sam, { value: sf.range, note: 'uc-703' });
-      const on = await call('PUT', `/v1/apps/${encodeURIComponent(APP)}/team`, priya, { enabled: true, signIn: 'person_or_team', accountName: 'Retail org', settings: { login_url: sf.login_url } });
+      const on = await call('PUT', `/v1/apps/${encodeURIComponent(APP)}/team`, priya, { enabled: true, signIn: 'person', accountName: 'Retail org', settings: { login_url: sf.login_url } });
       const eu = await call('POST', `/v1/apps/${encodeURIComponent(APP)}/accounts`, priya, { name: 'EU org', settings: { login_url: sf.eu_login_url } });
       check('0 Salesforce has Retail org and EU org', on.status === 200 && eu.status === 201, { on: on.text, eu: eu.text });
       const browser = await chromium.launch();
@@ -149,10 +150,10 @@ try {
             await step('8 changing who signs in warns with the count of what names the account before saving', async () => {
               // An agent naming Retail org, so the warning counts it.
               const desk = (await (await fetch(`${agentsUrl}/v1/agents`, { method: 'POST', headers: priya, body: JSON.stringify({ name: 'Claims desk', role: 'Answers about claims' }) })).json())?.data;
-              await fetch(`${agentsUrl}/v1/agents/${desk?.id}`, { method: 'PATCH', headers: priya, body: JSON.stringify({ accounts: { [APP]: 'Retail org' } }) });
+              await saveAgent(agentsUrl, priya, desk?.id, { accounts: { [APP]: 'Retail org' } });
               await page.keyboard.press('Escape');
               await settings('Retail org');
-              await page.getByText('Shared team login').click();
+              await page.getByText('Everyone uses the team’s login').click();
               const warn = page.getByTestId('account-who-uses');
               await warn.waitFor({ timeout: 30_000 });
               await page.waitForFunction(() => !document.querySelector('[data-testid="account-who-uses"]')?.textContent?.startsWith('Checking'), null, { timeout: 30_000 });

@@ -3,7 +3,8 @@
   "teams": [
     { "id": "team_ops", "name": "Operations", "ownerGroups": ["operations"], "scope": "all" },
     { "id": "team_security", "name": "Security", "ownerGroups": ["security"], "scope": "all" },
-    { "id": "team_platform", "name": "Platform", "ownerGroups": ["platform"], "scope": "all" }
+    { "id": "team_platform", "name": "Platform", "ownerGroups": ["platform"], "scope": "all" },
+    { "id": "team_cards", "name": "Card Services", "ownerGroups": ["Card Services"], "scope": "owned" }
   ],
   "people": [
     { "id": "usr_admin", "name": "Priya Shah", "email": "p.shah@harborpine.example", "teams": { "team_ops": "admin" } },

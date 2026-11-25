@@ -19,6 +19,7 @@ import type { DeployChannel, DeploymentInput, DeployEnvironment, Workflow } from
 import { cn } from '@/lib/utils';
 
 import { CHANNELS } from './deployment-meta';
+import { nameError } from '@/lib/validation/names';
 
 /**
  * MCP hands off to the MCP tab instead of continuing (see `onChooseMcp`). Console chat is not offered: the platform
@@ -126,7 +127,7 @@ export function CreateDeploymentDialog({
   const wf = workflows.find((w) => w.id === v.workflowId);
   const domains = v.domains.split(',').map((d) => d.trim()).filter(Boolean);
   const errors = {
-    name: v.name.trim() ? undefined : 'Name the deployment, e.g. Website chat.',
+    name: nameError(v.name, 'Name the deployment, e.g. Website chat.'),
     workflowId: v.workflowId ? (wf?.status === 'draft' ? 'Publish this workflow first.' : undefined) : 'Choose a published workflow.',
     domains: v.channel !== 'widget' ? undefined : !domains.length ? 'Add at least one domain the widget may load on.' : domains.find((d) => !DOMAIN_RE.test(d)) ? `${domains.find((d) => !DOMAIN_RE.test(d))} is not a domain.` : undefined,
     rateLimit: v.channel !== 'api' ? undefined : Number(v.rateLimit) > 0 ? undefined : 'Enter requests per minute.',

@@ -24,7 +24,7 @@ from ops_access import can
 from ops_engine.compiler import DEFAULT_OPTIONS
 from ops_engine.store import RunStore
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import Envelope, In, JsonValue, Out
+from ops_service_kit.http import Envelope, In, Json, JsonValue, Out
 from ops_service_kit.ids import new_id
 
 from ... import task_types as tt
@@ -146,7 +146,7 @@ async def create_task(
     return ok(created.model_dump(mode="json", by_alias=True), 201)
 
 
-def _action(review: dict[str, Any], resume: dict[str, Any]) -> str:
+def _action(review: engine_reviews.EngineReview, resume: engine_reviews.Decision) -> str:
     """The out port the decision left by, as the review step reads it: the option chosen, else Approve or Reject."""
     option = review.get("option") or resume.get("option")
     return str(option or DEFAULT_OPTIONS.get(str(resume.get("decision")), resume.get("decision")))
@@ -156,7 +156,7 @@ def _action(review: dict[str, Any], resume: dict[str, Any]) -> str:
 async def get_task(rt: Rt, me: Me, task_id: str) -> JSONResponse:
     """The task's status and, once decided, the action, reason, values and decider."""
     review = await engine_reviews.get(rt, task_id)
-    resume = cast(dict[str, Any] | None, review.get("resume")) or {}
+    resume: engine_reviews.Decision = review.get("resume") or {}
     decided = review.get("status") not in ("pending", "in_review")
     state = TaskState(
         id=task_id,
@@ -165,6 +165,6 @@ async def get_task(rt: Rt, me: Me, task_id: str) -> JSONResponse:
         reason=cast(str | None, review.get("decisionReason")),
         decided_by=cast(str | None, review.get("decidedBy")),
         decided_at=cast(str | None, review.get("decidedAt")),
-        values=cast(dict[str, Any] | None, resume.get("edited") or resume.get("values")) if decided else None,
+        values=cast(Json | None, resume.get("edited") or resume.get("values")) if decided else None,
     )
     return ok(state.model_dump(mode="json", by_alias=True))

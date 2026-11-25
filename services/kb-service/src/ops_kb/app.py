@@ -8,7 +8,7 @@ import asyncio
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 
 import httpx
 from fastapi import APIRouter, Body, Depends, FastAPI, Query, Request, Response
@@ -71,6 +71,7 @@ from .schemas import (
     DraftEdit,
     FileIdsIn,
     Item,
+    ItemChunk,
     ItemWithDetail,
     KnowledgeBase,
     KnowledgeBaseDetail,
@@ -106,7 +107,7 @@ from .schemas import (
     WrittenItemIn,
 )
 from .search import HybridRetriever
-from .service import KnowledgeService, Who
+from .service import BaseInput, ItemInput, KnowledgeService, SourceInput, SourcePatchInput, Who
 from .store import AsyncEngine, KnowledgeStore, reachable
 from .store.knowledge import outbox_relay
 from .store.vectors import PgVectorStore
@@ -430,7 +431,7 @@ def create_kb_app(
 
     @kbs.post("", status_code=201, response_model=Envelope[KnowledgeBase])
     async def create_knowledge_base(body: KnowledgeBaseIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return ok(await service.create_base(who, body.model_dump(by_alias=True)), 201)
+        return ok(await service.create_base(who, cast(BaseInput, body.model_dump(by_alias=True))), 201)
 
     @kbs.patch("/{kb_id}", response_model=Envelope[KnowledgeBase])
     async def update_knowledge_base(kb_id: str, body: KnowledgeBasePatch, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -523,7 +524,7 @@ def create_kb_app(
 
     @sources.post("", status_code=201, response_model=Envelope[Source])
     async def create_source(body: SourceIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return ok(await service.create_source(who, body.model_dump(by_alias=True)), 201)
+        return ok(await service.create_source(who, cast(SourceInput, body.model_dump(by_alias=True))), 201)
 
     @sources.post("/preview", response_model=Envelope[SourcePreview])
     async def preview_source(body: PreviewIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -577,7 +578,11 @@ def create_kb_app(
 
     @sources.patch("/{source_id}", response_model=Envelope[Source])
     async def update_source(source_id: str, body: SourcePatch, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return ok(await service.update_source(who, source_id, body.model_dump(exclude_none=True, by_alias=True)))
+        return ok(
+            await service.update_source(
+                who, source_id, cast(SourcePatchInput, body.model_dump(exclude_none=True, by_alias=True))
+            )
+        )
 
     @sources.post("/{source_id}/pause", response_model=Envelope[Source])
     async def pause_source(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -591,7 +596,7 @@ def create_kb_app(
     async def put_item(source_id: str, body: WrittenItemIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Writes one item into a typed text or push source by its name, kept as a file and indexed at once. Sending
         the same name and content again changes nothing and starts no sync; new content is the item's next version."""
-        return ok(await service.put_item(who, source_id, body.model_dump(exclude_none=True)))
+        return ok(await service.put_item(who, source_id, cast(ItemInput, body.model_dump(exclude_none=True))))
 
     @sources.get("/{source_id}/items", response_model=Envelope[ListResult[Item]])
     async def list_items(source_id: str, who: Person, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -612,6 +617,11 @@ def create_kb_app(
     @items.put("/{item_id}/owner", response_model=Envelope[Item])
     async def set_item_owner(item_id: str, body: OwnerIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.set_item_owner(who, item_id, body.owner))
+
+    @items.get("/{item_id}/chunks", response_model=Envelope[ListResult[ItemChunk]])
+    async def list_item_chunks(item_id: str, who: Caller, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """A page of the document's pieces in reading order; `search` matches a piece's text and section."""
+        return ok(await service.item_chunks(who, item_id, q))
 
     @items.get("/{item_id}", response_model=Envelope[ItemWithDetail])
     async def get_item(item_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

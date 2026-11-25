@@ -47,6 +47,7 @@ from ops_service_kit.errors import (
 )
 from ops_service_kit.http import Envelope, In, Json, JsonList, Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.names import Name
 from ops_service_kit.narrow import json_object
 from ops_store import isolation
 
@@ -109,7 +110,7 @@ limits = RateLimit()
 
 
 class WidgetDeploymentInput(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     agent_id: str
     origins: list[str] = Field(min_length=1, max_length=20)
 
@@ -118,7 +119,7 @@ class SessionInput(In):
     """A session the bank's server mints for one person on one page."""
 
     email: str = Field(min_length=3, max_length=320)
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     origin: str
 
 
@@ -309,7 +310,7 @@ async def _owned(rt: Runtime, me: Principal, deployment_id: str) -> Json:
 
 
 class MintKeyInput(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     # As platform keys: every mint key ends; 90 days unless the builder picks another span up to a year.
     expires_in_days: int = Field(default=90, ge=1, le=365)
 
@@ -373,7 +374,7 @@ async def create_mint_key(rt: Rt, me: Me, _: Tx, deployment_id: str, body: MintK
 async def list_mint_keys(rt: Rt, me: Deployments, _: Tx, deployment_id: str) -> JSONResponse:
     """A deployment's keys, newest first, unpaged: a deployment holds a handful."""
     await _owned(rt, me, deployment_id)
-    return ok([_wire(_key_view(k)) for k in await _key_store(rt).for_deployment(deployment_id)])
+    return ok([_wire(_key_view(k.model_dump())) for k in await _key_store(rt).for_deployment(deployment_id)])
 
 
 @deployments_router.post("/{deployment_id}/keys/{key_id}/revoke", response_model=Envelope[MintKeyRevokedOut])
@@ -407,7 +408,7 @@ async def mint_key_audit(rt: Rt, me: Deployments, _: Tx, deployment_id: str) -> 
     """Who created, revoked and previewed with this deployment's mint keys, newest first; unpaged, as the keys."""
     await _owned(rt, me, deployment_id)
     rows = await _key_store(rt).audit(deployment_id)
-    return ok([_wire(KeyAuditOut(key_id=r["key_id"], action=r["action"], actor=r["actor"], at=r["at"])) for r in rows])
+    return ok([_wire(KeyAuditOut(key_id=r.key_id, action=r.action, actor=r.actor, at=r.at)) for r in rows])
 
 
 def _key_refused() -> Forbidden:
@@ -436,11 +437,11 @@ async def mint_key_caller(rt: Rt, deployment_id: str, authorization: Annotated[s
     isolation.enter(tenant, None, kind=WIDGET)
     key = await _key_store(rt).get(key_id)
     digest = hashlib.sha256(secret.encode()).hexdigest()
-    if key is None or key["revoked_at"] is not None or not hmac.compare_digest(digest, str(key["secret_hash"])):
+    if key is None or key.revoked_at is not None or not hmac.compare_digest(digest, str(key.secret_hash)):
         raise Unauthorized("That mint key is not valid or was revoked.", code="widget_key_invalid")
-    if key["expires_at"] and str(key["expires_at"]) <= datetime.now(UTC).isoformat():
+    if key.expires_at and str(key.expires_at) <= datetime.now(UTC).isoformat():
         raise Unauthorized("That mint key has expired; create a new one.", code="widget_key_expired")
-    if key["deployment_id"] != deployment_id:
+    if key.deployment_id != deployment_id:
         raise Forbidden("That mint key is for another widget deployment.", code="widget_key_other_deployment")
     row = await _named_deployment(rt, deployment_id)
     if row is None:
@@ -593,7 +594,7 @@ async def page_session(
 
 async def _widget_thread(rt: Runtime, session: WidgetSession, thread_id: str) -> None:
     row = await chat_row(rt, thread_id, session.principal())
-    meta = cast(Json, row["meta"] or {}) if row is not None else {}
+    meta = row.meta_object() if row is not None else {}
     if row is None or meta.get("deploymentId") != session.deployment_id:
         raise NotFound("Conversation")
 

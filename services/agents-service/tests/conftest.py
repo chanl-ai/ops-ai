@@ -32,6 +32,7 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from ops_agent_kernel import judge
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.api.app import create_app
 from ops_agents.api.apps_line import HEAD as APPS_HEAD
@@ -103,6 +104,19 @@ def remembered(text: str) -> dict[str, Any]:
     return {"memories": found}
 
 
+# A judge rubric's quoted words: the scripted judge passes a check whose quoted words all appear in the evidence.
+_QUOTED = re.compile(r"[“\"]([^”\"]+)[”\"]")
+
+
+def judged(text: str) -> dict[str, Any]:
+    """The scripted judge's verdict on a `judge.prompt`, so a test can make it say yes (quote words the reply holds)
+    and no (quote words it does not)."""
+    check, _, evidence = text.removeprefix(judge.PROMPT_HEAD).partition("\n\nEvidence:\n")
+    words = _QUOTED.findall(check)
+    passed = bool(words) and all(w.lower() in evidence.lower() for w in words)
+    return {"passed": passed, "reason": f"The reply {'says' if passed else 'does not say'} {', '.join(words) or 'it'}."}
+
+
 # A widget button's reply: "<text> (action: <tool>, key: value, ...)" asks for one granted tool.
 _ACTION = re.compile(r"\(action: (\w+)((?:, [^:,()]+: [^,()]+)*)\)")
 _IMAGE = re.compile(r"\bshow image (\S+)")
@@ -125,6 +139,16 @@ def _last_user_text(messages: list[ModelMessage]) -> str:
                 if isinstance(p, UserPromptPart) and isinstance(p.content, str):
                     return p.content
     return ""
+
+
+# What the scripted model proposes for a brief draft (POST /v1/agents/{id}/brief-draft), one text per heading.
+DRAFTED_BRIEF: dict[str, Any] = {
+    "job": "Tells branch staff where a loan application stands.",
+    "howToAnswer": "Look the application up, then say its stage and the next step.",
+    "handOff": ["The customer disputes a decision."],
+    "examples": "Q: Where is LN-20418? A: In underwriting; a decision is due Friday.",
+    "never": ["Promise an approval."],
+}
 
 
 def structured(info: AgentInfo, args: dict[str, Any]) -> ModelResponse:
@@ -166,10 +190,15 @@ def scripted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         return ModelResponse(parts=[TextPart("Here is what I found.")])
     text = _last_user_text(messages)
     tools = {t.name for t in info.function_tools}
+    # First: the evidence a judge is shown is a reply, which can hold any keyword below.
+    if text.startswith(judge.PROMPT_HEAD):
+        return structured(info, judged(text))
     # Repeats the apps line the turn was given, so a use case reads what the model is told about each app (uc-704).
     if "which apps can you reach" in text.lower() and APPS_HEAD in (prompt := _prompt_text(messages)):
         told = prompt.split(APPS_HEAD, 1)[1].split("\n\n", 1)[0].strip()
         return ModelResponse(parts=[TextPart(told)])
+    if text.startswith("<draft-brief>") and info.model_request_parameters.output_mode in ("native", "tool"):
+        return structured(info, DRAFTED_BRIEF)
     if text.startswith("<remember>") and info.model_request_parameters.output_mode in ("native", "tool"):
         return structured(info, remembered(text))
     if "<knowledge>" in text and "limit" in text.lower():

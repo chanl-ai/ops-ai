@@ -1,11 +1,11 @@
-# 43 boundaries crossed without a model in packages/ops_engine (scripts/check_typed_boundaries.py). A row may only fall.
+# 41 boundaries crossed without a model in packages/ops_engine (scripts/check_typed_boundaries.py). A row may only fall.
 2 dict-any packages/ops_engine/src/ops_engine/compiler.py
 4 dict-any packages/ops_engine/src/ops_engine/definition.py
 2 dict-any packages/ops_engine/src/ops_engine/store/definitions.py
 2 store-dict packages/ops_engine/src/ops_engine/store/definitions.py
 6 dict-any packages/ops_engine/src/ops_engine/store/reconciler.py
-13 dict-any packages/ops_engine/src/ops_engine/store/runs.py
+12 dict-any packages/ops_engine/src/ops_engine/store/runs.py
 6 store-dict packages/ops_engine/src/ops_engine/store/runs.py
-2 dict-any packages/ops_engine/src/ops_engine/store/work.py
+1 dict-any packages/ops_engine/src/ops_engine/store/work.py
 1 store-dict packages/ops_engine/src/ops_engine/store/work.py
 5 task packages/ops_engine/src/ops_engine/worker.py

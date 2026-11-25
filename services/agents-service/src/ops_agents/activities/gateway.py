@@ -14,11 +14,12 @@ from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
-from typing import Any, NotRequired, Protocol, TypedDict, cast
+from typing import NotRequired, Protocol, TypedDict, cast
 
 import httpx
 
 from ops_agent_kernel.ports import ToolOutcome
+from ops_contracts.chat import SignedIn
 from ops_identity import ServiceCallError, ServiceClient, segment
 from ops_service_kit.http import Json, JsonValue
 
@@ -133,17 +134,37 @@ class ActingForHeaders(Protocol):
 
 class GatewayAnswer(TypedDict):
     """tools-service's answer to a call (POST /v1/calls): whether it ran, the tool's own output, and a view when the
-    tool drew one."""
+    tool drew one, and whose login of the app it ran as."""
 
     ok: bool
     output: JsonValue
     view: NotRequired[Json | None]
+    signedIn: NotRequired[Json | None]
 
 
 class Fence(TypedDict):
     """tools-service's answer to raising a thread's write fence (POST /v1/fences)."""
 
     generation: int
+
+
+class ToolApproval(TypedDict, total=False):
+    """A tool's write approval policy as tools-service answers it: how many people approve, and whether approving asks
+    for a step-up."""
+
+    approvers: JsonValue
+    stepUp: JsonValue
+
+
+class ToolPolicy(TypedDict):
+    """tools-service's answer for one tool (GET /v1/tools/{name}), as this service reads it: its access class, its
+    write approval policy, how long one call may take and what it returns. Not checked here: each reader reads a key
+    as it reads any other answer, so an approval that is not an object fails at its first read."""
+
+    access: JsonValue
+    approval: NotRequired[ToolApproval | None]
+    deadlineSeconds: NotRequired[JsonValue]
+    outputSchema: NotRequired[JsonValue]
 
 
 class GatewayClient:
@@ -165,7 +186,7 @@ class GatewayClient:
         """The tool's access class as tools-service's registry has it; "unknown" when it is not registered."""
         return str((await self.tool_policy(tool))["access"])
 
-    async def tool_policy(self, tool: str) -> dict[str, Any]:
+    async def tool_policy(self, tool: str) -> ToolPolicy:
         """The tool's access class and write approval policy (`approval`: approvers, stepUp) as
         tools-service's registry has them; access "unknown" and no policy when it is not registered."""
         try:
@@ -262,16 +283,17 @@ class GatewayClient:
 # What the model is told when the chat shows the person a card for the refusal (connection-required-card.tsx): what
 # to ask of them in plain words, never the code, the link or whom it names, which the card already shows.
 CARD_LINES: dict[str, str] = {
-    "not_connected": "Not run: the person has not connected their own {app} account. Reply with one sentence saying "
-    "you carry on with this ask once they connect it from the card above; offer no other steps or help.",
-    "needs_person": "Not run: this tool acts as the person, who has not connected their own {app} account. Reply "
-    "with one sentence saying you carry on with this ask once they connect it from the card above; offer no other "
+    "not_connected": "Not run: the person has not signed in to {app} with their own login. Reply with one sentence "
+    "saying you carry on with this ask once they sign in from the card above; offer no other steps or help.",
+    "needs_person": "Not run: this tool acts as the person, who has not signed in to {app} with their own login. "
+    "Reply with one sentence saying you carry on with this ask once they sign in from the card above; offer no other "
     "steps or help.",
     "refused": "Not run: the person's {app} sign-in has ended. Reply with one sentence saying you carry on with this "
     "ask once they sign in again from the card above; offer no other steps or help.",
     "insufficient_scope": "Not run: the person's {app} sign-in does not allow this yet. Reply with one sentence "
-    "saying you carry on with this ask once they connect again from the card above; offer no other steps or help.",
-    "no_person": "Not run: {app} signs in as each person, and this call acts for nobody, so it cannot run here.",
+    "saying you carry on with this ask once they sign in again from the card above; offer no other steps or help.",
+    "no_person": "Not run: {app} signs in as each person, and a run nobody started acts for no one. Say in one line "
+    "that an admin can set {app} to Everyone uses the team's login, or a person can start the run.",
 }
 # An app the team has off: the card above asks a team admin to turn it on.
 APP_OFF_LINE = (
@@ -288,7 +310,7 @@ CHOICE = "ACCOUNT_CHOICE_NEEDED"
 # The team signs in with one account and nobody has yet: the card above sends an admin to connect it.
 TEAM_SIGN_IN = "NOT_SIGNED_IN"
 TEAM_SIGN_IN_LINE = (
-    "Not run: {app} is on for this team, but its team account is not signed in yet. Reply with one sentence saying a "
+    "Not run: {app} is on for this team, but its team login is not signed in yet. Reply with one sentence saying a "
     "team admin connects it from the card above, then you carry on with this ask; offer no other steps or help."
 )
 # A team account whose sign-in ended (tools-service auth._team_account_stopped, which names the event its next sign-in
@@ -381,14 +403,17 @@ class GatewayToolExecutor:
             refused = {"error": gateway_error(e)}
             return ToolOutcome(False, refused, for_model=carded(refused))
         view = data.get("view")
+        # Whose login the call ran as: kept beside the view, which a chat validates as a widget when it has no part.
+        signed = data.get("signedIn")
+        signed_in = SignedIn.model_validate(signed) if isinstance(signed, dict) else None
         if not data["ok"]:
-            return ToolOutcome(False, data["output"], for_model=carded(data["output"]))
+            return ToolOutcome(False, data["output"], for_model=carded(data["output"]), signed_in=signed_in)
         if data["ok"] and view is None:
             # A shaped result is drawn by the console's widget registry; the chat names it after the call (wp_<id>).
             op = await self._operation(tool)
             if op is not None and op.output_shape == NO_CARD:
                 # The tool draws no card of its own: a save the agent reports with its own card, for one.
-                return ToolOutcome(True, data["output"], None)
+                return ToolOutcome(True, data["output"], None, signed_in=signed_in)
             part = shape_part(
                 data["output"],
                 part_id="",
@@ -396,7 +421,7 @@ class GatewayToolExecutor:
                 title=(op.title or None) if op else None,
             )
             view = {"part": part} if part is not None else None
-        return ToolOutcome(bool(data["ok"]), data["output"], view)
+        return ToolOutcome(bool(data["ok"]), data["output"], view, signed_in=signed_in)
 
     async def _operation(self, tool: str) -> OperationRef | None:
         """The operation's declared result shape and title, or None without a directory or when it is down."""

@@ -15,21 +15,22 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal, TypedDict
 from urllib.parse import urlsplit
 
 from ops_identity import ActingForPerson
-from ops_service_kit.http import Json
+from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.ids import now_iso
 
 from ..connections.account_events import CONNECTED, connected_key, needs_reconnect_event
 from ..connections.records import EXPIRED, REFUSED
 from ..environments import LIVE
 from ..secrets import SecretMissing, SecretResolver
-from ..store.connections import SHARED, Account, AuditEvent, ConnectionStore, TokenRow
+from ..store.connections import ENDED_BY_ADMIN, SHARED, Account, AuditEvent, ConnectionStore, TokenRow
 from ..store.modules import Module, ModuleRef
 from .assertion import SigningError, read_certificate
 from .kinds import Kind, kind_of, origin
@@ -64,6 +65,19 @@ class ClientCertificate:
 SIGNED_WITH: ContextVar[str | None] = ContextVar("ops_tools_signed_with", default=None)
 
 
+class SignedAs(TypedDict):
+    """Whose login of an app a call ran as, in words a chat card shows: the team's login or the person's own, the
+    login's name (who signed it in, else the account's name) and the app's account it belongs to."""
+
+    whose: Literal["team", "person"]
+    login: str
+    app: str
+
+
+# The same call's login for the call's answer and its log row, set beside SIGNED_WITH; None for a call with no account.
+SIGNED_AS: ContextVar[SignedAs | None] = ContextVar("ops_tools_signed_as", default=None)
+
+
 @dataclass
 class Prepared:
     connection_id: str
@@ -80,13 +94,16 @@ class Prepared:
     credential: str | None = None
     # The person whose own row signed the call, so a refusal marks theirs alone; None for the team's.
     person: str | None = None
+    # Who a token or a username says signed in (the strategy sets it), and the login the call ran as in words.
+    login: str | None = None
+    signed_as: SignedAs | None = None
 
 
 @dataclass(frozen=True)
 class StrategyInput:
     tenant_id: str
     connection_id: str
-    settings: dict[str, Any]
+    settings: Mapping[str, JsonValue]
     secrets: dict[str, str]
     tokens: Tokens
     stale_rotation: int | None
@@ -113,6 +130,7 @@ async def _basic(i: StrategyInput, p: Prepared) -> None:
     pair = f"{i.settings.get('username') or ''}:{i.secrets['password']}".encode()
     encoded = base64.b64encode(pair).decode()
     p.headers["Authorization"] = f"Basic {encoded}"
+    p.login = str(i.settings.get("username") or "") or None
     # An upstream that repeats the header shows the encoded pair, not the password.
     p.values.append(encoded)
 
@@ -155,7 +173,7 @@ def _token_strategy(grant: str) -> Strategy:
             p.values.extend(proof.signed)
         p.headers["Authorization"] = f"Bearer {token.access}"
         p.values.append(token.access)
-        p.rotation, p.renewable = token.rotation, True
+        p.rotation, p.renewable, p.login = token.rotation, True, token.account
 
     return apply
 
@@ -172,7 +190,7 @@ STRATEGIES: dict[str, Strategy] = {
 }
 
 
-def certificate_of(settings: dict[str, Any], secrets: dict[str, str]) -> ClientCertificate | None:
+def certificate_of(settings: Json, secrets: dict[str, str]) -> ClientCertificate | None:
     """The account's TLS settings: a client certificate (both its PEM and its private key) and a CA to trust."""
     cert, key, ca = settings.get("clientCertificate"), secrets.get("clientKey"), settings.get("trustedCa")
     if not cert or not key:
@@ -255,7 +273,7 @@ class Authenticator:
             )
         # A credential goes to its own system only: the module's address must be the account's, scheme, host and
         # port, before any secret is read; another allow-listed host gets nothing.
-        plain: dict[str, Any] = dict(conn.settings or {})
+        plain: Json = dict(conn.settings or {})
         base = str(plain.get("baseUrl") or "")
         target = str(module.get("endpoint") or "")
         if not base:
@@ -287,8 +305,12 @@ class Authenticator:
             raise AuthFailed("CONNECTION_NOT_SET", f"{name} has no {', '.join(missing)}.")
         settings = plain
         if person != SHARED and acting_for is not None and held_own is not None and held_own.refused_at:
-            # The system refused this key or sign-in before: ask for a new one rather than send it again.
-            raise await self._not_linked(conn, acting_for, settings, scopes=list(scopes), reason="refused")
+            # The system refused this key or sign-in before, or an admin ended it: ask for a new one rather than send
+            # it again.
+            ended = (held_own.ended_by or "an admin") if held_own.refused_reason == ENDED_BY_ADMIN else None
+            raise await self._not_linked(
+                conn, acting_for, settings, scopes=list(scopes), reason="refused", ended_by=ended
+            )
         if person != SHARED and kind.person_fields:
             own = await self.tokens.own(tenant_id, str(connection_id), person, row=held_own)
             if own is None:
@@ -336,6 +358,14 @@ class Authenticator:
         prepared.credential = "person" if person != SHARED else ("team" if kind.holds_token else None)
         prepared.person = person if person != SHARED else None
         SIGNED_WITH.set(prepared.credential)
+        # A team API key names no person: the login reads as the account's own name ("EU org"), else the app's.
+        login = prepared.login or str(conn.account_name or "") or str(name)
+        whose: Literal["team", "person"] = "person" if person != SHARED else "team"
+        prepared.signed_as = SignedAs(whose=whose, login=login, app=str(name))
+        SIGNED_AS.set(prepared.signed_as)
+        if prepared.credential is not None:
+            # Apps > People's "last used": the row this call signs with, at most one write a minute (the store's WHERE).
+            await self.connections.used(tenant_id, str(connection_id), person, at=datetime.now(UTC))
         prepared.certificate = certificate_of(settings, values)
         return prepared
 
@@ -347,7 +377,7 @@ class Authenticator:
         conn = await self.connections.get(tenant_id, connection_id)
         if conn is None or conn.status == "revoked" or not kind_of(str(conn.auth_kind)).holds_token:
             return False
-        settings: dict[str, Any] = dict(conn.settings or {})
+        settings: Json = dict(conn.settings or {})
         values = await self._secret_values(
             tenant_id, str(conn.team_id), dict(conn.secrets or {}), tool="sign-in keep-alive", actor=actor
         )
@@ -387,7 +417,7 @@ class Authenticator:
         if e.side == "upstream":
             state, why, since = REFUSED, str(e), (held.refreshed_at if held is not None else None)
         elif e.code == "NOT_SIGNED_IN" and ended is not None and ended <= at:
-            state, why, since = EXPIRED, f"the team account's sign-in ended on {ended.day} {ended:%b %Y}.", ended
+            state, why, since = EXPIRED, f"the team login's sign-in ended on {ended.day} {ended:%b %Y}.", ended
         else:
             return None
         notice = needs_reconnect_event(conn, state=state, reason=why, since=since, at=at)
@@ -396,13 +426,14 @@ class Authenticator:
             event: AuditEvent = {"action": "refresh_failed", "actor": actor, "at": at}
             await self.connections.note(tenant_id, connection_id, {**event, "detail": {"code": e.code}})
         message = (
-            f"{name} needs reconnecting: {why} An admin reconnects its team account under Apps, then runs it again."
+            f"{name} needs reconnecting: {why} An admin signs its team login in again under Apps, then runs it again."
         )
         details: Json = {
             "connectionId": connection_id, "appId": str(conn.app_id), "app": name, "connection": name,
             "account": "team", "state": state,
             # What a run waits on until an admin signs the team account in again: that sign-in reports it.
-            "connectedEvent": {"name": CONNECTED, "key": connected_key(connection_id, SHARED)},
+            # `after`: a sign-in from before this refusal leaves the run waiting (engine_resume.wake_parked).
+            "connectedEvent": {"name": CONNECTED, "key": connected_key(connection_id, SHARED), "after": now_iso()},
         }  # fmt: skip
         return AuthFailed(e.code, message, side=e.side, status=e.status, details=details)
 
@@ -428,7 +459,10 @@ class Authenticator:
         message = (
             f"This operation signs in to {name} as a person only, and this call acts for nobody."
             if backed
-            else f"{name} signs in as each person, and this call acts for nobody."
+            else (
+                f"{name} signs in as each person, and a run nobody started acts for no one. Set {name} to Everyone "
+                "uses the team's login, or have a person start the run."
+            )
         )
         reason: NotLinkedReason = "needs_person" if backed else "no_person"
         details: Json = {
@@ -457,7 +491,7 @@ class Authenticator:
         settings = conn.settings
         return await self._not_linked(conn, acting_for, settings, scopes=[], reason="refused")
 
-    async def sign_in_request(self, tenant_id: str, connection_id: str, person: ActingForPerson) -> dict[str, Any]:
+    async def sign_in_request(self, tenant_id: str, connection_id: str, person: ActingForPerson) -> Json:
         """What a CONNECTION_NOT_LINKED refused before the sign-in step carries, as one refused here does: the account,
         its app and a link only `person` can use to connect their own; nothing when the account is gone."""
         conn = await self.connections.get(tenant_id, connection_id)
@@ -470,16 +504,18 @@ class Authenticator:
         self,
         conn: Account,
         person: ActingForPerson,
-        settings: dict[str, Any],
+        settings: Json,
         *,
         scopes: list[str],
         reason: NotLinkedReason = "not_connected",
+        ended_by: str | None = None,
     ) -> AuthFailed:
         """CONNECTION_NOT_LINKED with a link only `person` can use to sign in their own account, asking for the
-        connection's scopes and `scopes` (the operation's, and on insufficient_scope those already granted)."""
+        connection's scopes and `scopes` (the operation's, and on insufficient_scope those already granted).
+        `ended_by`: the admin who ended the person's sign-in (Apps > People), said in place of a refusal."""
         kind = kind_of(str(conn.auth_kind))
         # The kind and the fields a person gives, so the console asks for a key in place of a sign-in it cannot start.
-        details: dict[str, Any] = {
+        details: Json = {
             "connectionId": str(conn.id),
             # The account's app: the console's Connect my account opens the account under it.
             "appId": str(conn.app_id),
@@ -488,7 +524,7 @@ class Authenticator:
             "authKind": kind.id,
             "personFields": list(kind.person_fields),
             # What a run that waits for this person to connect waits on: their connecting reports it.
-            "connectedEvent": {"name": CONNECTED, "key": connected_key(str(conn.id), person.sub)},
+            "connectedEvent": {"name": CONNECTED, "key": connected_key(str(conn.id), person.sub), "after": now_iso()},
             # Whether the team account serves runs nobody started (`_whose`); a call this person started never uses it.
             "teamAccount": str(conn.sign_in or "team") == "person_or_team" and bool(conn.team_backup),
         }
@@ -506,6 +542,9 @@ class Authenticator:
             "insufficient_scope": f"{conn.name} needs {who} to connect their own account again, allowing more.",
             "refused": f"{conn.name} refused the key or sign-in of {who}; they connect again to go on.",
         }.get(reason, f"{conn.name} needs {who} to connect their own account.")
+        if ended_by is not None:
+            details["endedBy"] = ended_by
+            message = f"{ended_by} ended the {conn.name} sign-in of {who}; they connect again to go on."
         return AuthFailed("CONNECTION_NOT_LINKED", message, details=details)
 
     async def _secret_values(

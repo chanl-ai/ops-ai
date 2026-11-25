@@ -1,7 +1,8 @@
 # pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
 """Turns through models-service, by failure mode: a turn that runs on the runtime's alias instead of its agent's, a
 request without this service's model key, a record that names a different alias or request than models-service
-logged, and a refusal whose message models-service wrote for a person that the turn drops or replaces."""
+logged, a refusal whose message models-service wrote for a person that the turn drops or replaces, and a turn that
+breaks with no code and tells the person the assistant could not be reached."""
 
 from __future__ import annotations
 
@@ -50,9 +51,13 @@ class FakeModelsService:
         self.said: str | None = None
         self.raw: str | None = None
         self.proxy: dict[str, object] | None = None
+        # An exception's text for every call to break with: a fault that is no refusal and carries no code.
+        self.broken: str | None = None
 
     def handle(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
+        if self.broken is not None:
+            raise RuntimeError(self.broken)
         if self.raw is not None:
             return httpx2.Response(502, text=self.raw, headers={"content-type": "text/html"})
         if self.proxy is not None:
@@ -187,6 +192,8 @@ async def test_a_refusal_ends_a_streamed_turn_with_its_code_and_a_reload_keeps_i
     thread = await new_thread(client)
     _, events = await send(client, thread["id"], {"content": "What is the daily wire limit for a personal account?"})
     assert (events[-1]["type"], events[-1].get("code")) == ("error", "rate_limited")
+    # The error model's kind and retryable reach the chat, so it offers Try again for a busy model.
+    assert (events[-1].get("kind"), events[-1].get("retryable")) == ("upstream", True), events[-1]
     reloaded = (await client.get(f"/chat/threads/{thread['id']}")).json()["data"]
     assert reloaded["messages"][-1]["errorCode"] == "rate_limited", "a reload keeps the refusal's code"
 
@@ -206,6 +213,24 @@ async def test_the_message_models_service_wrote_reaches_the_test_turn_and_the_ch
     assert (events[-1]["type"], events[-1].get("message")) == ("error", SAID)
     reloaded = (await client.get(f"/chat/threads/{thread['id']}")).json()["data"]
     assert reloaded["messages"][-1]["error"] == SAID, "a reload reads the same sentence as the stream"
+
+
+BROKEN = "pool exhausted on db-7.internal"
+
+
+async def test_a_turn_that_breaks_with_no_code_streams_internal_error_and_never_the_exception(
+    stack: tuple[AsyncClient, Runtime, FakeModelsService],
+) -> None:
+    client, _, models = stack
+    models.broken = BROKEN
+    thread = await new_thread(client)
+    raw, events = await send(client, thread["id"], {"content": "What is the daily wire limit for a personal account?"})
+    reloaded = (await client.get(f"/chat/threads/{thread['id']}")).json()["data"]
+    assert BROKEN in reloaded["messages"][-1]["error"], "the stored message keeps the exception for the builder"
+    last = events[-1]
+    assert last["type"] == "error" and BROKEN not in last["message"], last
+    assert (last.get("code"), last.get("kind"), last.get("retryable")) == ("internal_error", "internal", False), last
+    assert BROKEN not in raw, "the stream carries the exception text beside the sentence"
 
 
 @pytest.mark.parametrize(

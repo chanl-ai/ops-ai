@@ -2,7 +2,7 @@
 // Builds the client guide from its one source, the Markdown in docs/guide/:
 //   docs/deploy/client-install-guide.html  one self-contained page (contents rail, light and dark, status badges, copy
 //                                          buttons, Mermaid pre-rendered to inline SVG that follows the page theme);
-//   docs/deploy/install-guide.md           shipped in the release package as INSTALL.md: the install and operate
+//   docs/deploy/install-guide.md           for a source clone (the package ships package-install.md as INSTALL.md): the install and operate
 //                                          sections, written only once the install section is no longer a placeholder.
 // Usage: node scripts/docs/build_guide.mjs [--check]
 //   --check  writes nothing; exits 1 when either output differs from what the build would write.
@@ -372,7 +372,7 @@ ${body}
   </main>
 </div>
 
-<footer>Ops AI by Chanl AI, <a href="https://chanl.ai">chanl.ai</a>. This page is generated from the Markdown in <a href="${REPO_URL}docs/guide/README.md"><code>docs/guide/</code></a> of the Ops AI repository; the install and operate sections also ship in the release package as <code>INSTALL.md</code>.</footer>
+<footer>Ops AI by Chanl AI, <a href="https://chanl.ai">chanl.ai</a>. This page is generated from the Markdown in <a href="${REPO_URL}docs/guide/README.md"><code>docs/guide/</code></a> of the Ops AI repository; the install and operate sections are also <code>docs/deploy/install-guide.md</code>. The release package ships its own <code>INSTALL.md</code>.</footer>
 
 <script>
 // A copy button on each command block; when the clipboard is refused, the command is selected for a manual copy.
@@ -415,7 +415,7 @@ async function main() {
   const outputs = [[HTML_OUT, page(index, sections)]];
   const install = installMarkdown(index);
   if (install) outputs.push([INSTALL_OUT, install]);
-  else console.log('build_guide: install.md is a placeholder, so INSTALL.md (docs/deploy/install-guide.md) is left as it is');
+  else console.log('build_guide: install.md is a placeholder, so docs/deploy/install-guide.md is left as it is');
 
   let stale = 0;
   for (const [path, content] of outputs) {

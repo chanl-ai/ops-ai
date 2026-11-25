@@ -51,11 +51,19 @@ function hostColumns(canEdit: boolean, onRemove: (v: string) => void): ColumnDef
       cell: ({ row }) =>
         row.original.modules.length ? (
           <div className="flex flex-wrap gap-1">
-            {row.original.modules.map((m) => (
-              <Badge key={m.id} variant="outline" className="text-xs font-normal" asChild>
-                <Link href={`/data/tools/${encodeURIComponent(m.id)}`}>{m.name}</Link>
-              </Badge>
-            ))}
+            {row.original.modules.map((m) =>
+              // A module of a team the reader is not acting in comes back named by its id: its name and page are that
+              // team's records, so it is shown without a link to a page that would refuse the reader.
+              m.name === m.id ? (
+                <Badge key={m.id} variant="outline" className="font-mono text-xs font-normal">
+                  {m.id}
+                </Badge>
+              ) : (
+                <Badge key={m.id} variant="outline" className="text-xs font-normal" asChild>
+                  <Link href={`/data/tools/${encodeURIComponent(m.id)}`}>{m.name}</Link>
+                </Badge>
+              ),
+            )}
           </div>
         ) : (
           <span className="text-xs text-muted-foreground">No module yet</span>
@@ -90,10 +98,13 @@ function actions<T>(onRemove: (row: T) => void): ColumnDef<T> {
 }
 
 
+/** The table's columns the server sorts by, each with its `sortBy` value. */
+const SORT_COLUMNS = { host: 'host', addedAt: 'addedAt' };
+
 export default function EgressPage() {
   const query = useEgress();
   // Hosts grow with every module and page on the server; private ranges stay few and come whole with the list.
-  const hostList = useListParams('host');
+  const hostList = useListParams('host', undefined, undefined, SORT_COLUMNS);
   const hostPage = useEgressHosts(hostList.params);
   const newHosts = useCreatedRows<ListedHost>();
   const newRanges = useCreatedRows<ListedRange>();
@@ -150,6 +161,7 @@ export default function EgressPage() {
                 searchPlaceholder="Search hosts or notes…"
                 onColumnFiltersChange={hostList.onColumnFiltersChange}
                 serverPagination={serverPagination(hostList, hostPage)}
+                serverSorting={hostList.serverSort}
                 filterResetKey={hostFilterResetKey}
                 hideViewSwitcher
                 emptyState={<ListEmpty icon={Globe} noun="hosts" filtered={hostList.isFiltered} onClear={() => setHostFilterResetKey((k) => k + 1)} createLabel={canEdit ? 'Add host' : undefined} onCreate={() => setAdding('host')} description="Until a host is listed, no tool call or discovery leaves the bank." />}

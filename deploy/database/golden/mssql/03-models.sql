@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- models-service, stamped at models_0013
+-- models-service, stamped at 20261122_2017_list_sort_indexes
 CREATE TABLE provider_connections (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(120) NOT NULL, 
@@ -15,6 +15,8 @@ CREATE TABLE provider_connections (
 	CONSTRAINT provider_connections_name_key UNIQUE (name)
 );
 GO
+CREATE INDEX ix_provider_connections_type ON provider_connections (type);
+GO
 CREATE TABLE provider_keys (
 	tenant_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(120) NOT NULL, 
@@ -25,6 +27,10 @@ CREATE TABLE provider_keys (
 	rotated_at DATETIMEOFFSET NULL, 
 	CONSTRAINT provider_keys_pkey PRIMARY KEY (tenant_id, name)
 );
+GO
+CREATE INDEX ix_provider_keys_created_at ON provider_keys (tenant_id, created_at);
+GO
+CREATE INDEX ix_provider_keys_rotated_at ON provider_keys (tenant_id, rotated_at);
 GO
 CREATE TABLE model_keys (
 	id VARCHAR(200) NOT NULL, 
@@ -182,5 +188,5 @@ CREATE TABLE alembic_version_models (
     CONSTRAINT alembic_version_models_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_models (version_num) VALUES ('models_0013');
+INSERT INTO alembic_version_models (version_num) VALUES ('20261122_2017_list_sort_indexes');
 GO

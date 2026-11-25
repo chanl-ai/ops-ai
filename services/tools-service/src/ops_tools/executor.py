@@ -28,7 +28,7 @@ import ssl
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, TypedDict, cast
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
 from urllib.parse import parse_qsl, quote, quote_plus, urlencode, urlsplit
 
 import httpx
@@ -139,7 +139,9 @@ def _failure(code: str, message: str, status: int | None = None, side: str | Non
     return ToolOutcome(False, {"error": error})
 
 
-def with_access(e: AuthFailed, op: Mapping[str, Any], module: Mapping[str, Any]) -> AuthFailed:
+def with_access(
+    e: AuthFailed, op: Operation | Mapping[str, JsonValue], module: Module | Mapping[str, JsonValue]
+) -> AuthFailed:
     """A person's sign-in request names the app and whether the call reads or changes something, so the chat asks in
     those words ("reads Salesforce as you", "makes the change in your name")."""
     if e.code == "CONNECTION_NOT_LINKED":
@@ -240,6 +242,10 @@ class ConsoleRan(TypedDict):
     callId: str
     ok: bool
     output: JsonValue
+    # A write run as a plan only: what it would send (Executor.plan); nothing was sent.
+    planned: NotRequired[JsonValue]
+    # A confirmed plan sent again under the same key: the first send's call, whose answer this is.
+    replayOf: NotRequired[str]
 
 
 class ConsoleRefused(TypedDict):
@@ -743,6 +749,34 @@ class Executor:
         self.code = code
         # A plugin's Python tools; without it they fail.
         self.plugins = plugins
+
+    async def plan(self, resolved: Resolved, tool: str, args: Json) -> Json:
+        """What a call would send, built without sending it: the tool, its access, the values, the account it would
+        sign in with, and for an http operation the method, address and body. Nothing here resolves a secret, signs
+        in or opens a connection to the system: a `{{NAME}}` reference stays as written."""
+        op, module = resolved.operation, resolved.module
+        out: Json = {"tool": tool, "access": resolved.access, "input": args}
+        if op is None or module is None:
+            return out
+        out["system"] = str(module.get("name") or module.get("display_name") or "")
+        out["connectionId"] = cast(JsonValue, module.get("connection_id"))
+        out["testAccount"] = bool(module.get("sandbox"))
+        if resolved.executor == "http":
+            if self.http.auth is not None and plugin_id_of(module) is None:
+                module = await self.http.auth.addressed(module)
+            req = build_request(module, op, args)
+            request: Json = {
+                "method": req.method,
+                "url": str(httpx.URL(req.url, params=cast(Query, req.params) or None)),
+            }
+            if req.json_body is not None:
+                request["body"] = json.dumps(req.json_body)
+            elif req.form is not None:
+                request["body"] = urlencode(req.form)
+            elif req.content is not None:
+                request["body"] = req.content
+            out["request"] = request
+        return out
 
     async def _mocked(self, module: Module, op: Operation, mock: MockRow) -> ToolOutcome:
         """A test call answered as the system would have, before any egress: the same failures a real answer

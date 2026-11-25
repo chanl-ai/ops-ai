@@ -20,12 +20,23 @@ The agents service runs on the scripted model, seeded with Branch Concierge (`ag
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Start a chat with no agent before any default is set | 409 `no_default_agent` |
+| 1 | Start a chat with no agent before any default is set | 201, the chat is on the team's own Ops Assistant |
 | 2 | Set Branch Concierge as the default, start a chat with no agent | 201, the chat is on Branch Concierge |
 | 3 | Ask it to call `agent__ag_dispute` | One tool call, answered by Card Dispute Resolver's own turn, run for the person |
 | 4 | Hand the chat to Card Dispute Resolver, send a message, hand it back | The thread names the start agent while handed over; after Back it does not |
 | 5 | Reload the chat | Each reply names the agent that wrote it |
 | 6 | Grep the default path for an agent id | None: the default comes from the stored setting only |
+| 7 | Grant Branch Concierge `agent:ag_dispute`, publish, and schedule a run of it that asks Card Dispute Resolver | The run acts as its agent: Card Dispute Resolver, an agent of the run's own team, answers, and the run's events hold no `agent_call_refused`. An agent of another team is withheld with code `other_team` (unit suite) |
+| 8 | Ask the same in a new chat with Branch Concierge | One tool call, answered by Card Dispute Resolver |
+| 9 | Start a run of Branch Concierge capped at 3 model calls, ask it to call Card Dispute Resolver, then send a second message | The tool result names the path Branch Concierge, Card Dispute Resolver; the run's cost is 3 calls (its own two and the specialist's one); the second message waits on `budget_exhausted` for calls |
+| 10 | Continue the budget | The waiting turn finishes and the cost rises above 3 |
+| 11 | Start a run of Branch Concierge capped at 1 model call and ask it to call Card Dispute Resolver | The tool result is `budget_reached`: the specialist made no model call. The run's cost is 2 calls: the cap and the asking agent's one closing answer. The run does not wait on a budget card |
+| 12 | Give Wire Fraud Sentinel `agent:ag_dispute` without publishing, ask it to call Card Dispute Resolver in its Test panel, then in a chat | The Test panel runs the draft: one tool call, answered, on a chain that names the draft's version. The chat runs the published version, which holds no such grant, and makes no call |
+
+A budget is checked before every model call, against the conversation the chain started on, and the call is reserved
+there while it runs, so specialists asked at once cannot pass the cap together (unit suite, `test_chain_budget_reserve.py`). A specialist stopped at
+the cap returns what it has written, the asking agent makes one closing call with no tools, and the next turn of the
+first conversation waits on its budget card.
 
 In the console (ui layer), signed in through platform-service:
 

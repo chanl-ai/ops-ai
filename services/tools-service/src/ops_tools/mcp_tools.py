@@ -14,7 +14,7 @@ Adding an operation is one entry in OPERATIONS."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from typing import Any, cast
 from urllib.parse import quote
@@ -30,6 +30,7 @@ from ops_service_kit.errors import ApiError
 from ops_service_kit.http import Json
 
 from .executor import Query
+from .modules.seed import WORKSPACE_TOOLS
 from .registry import Resolved, platform_operation
 
 TIMEOUT = 15.0
@@ -61,7 +62,12 @@ class Operation:
 
 
 def _templates(args: Json) -> tuple[str, Json]:
-    return "/v1/templates", {k: v for k, v in args.items() if k in ("kind", "source") and v}
+    return "/v1/templates", {k: v for k, v in args.items() if k in ("kind", "source", "search", "page") and v}
+
+
+def _body(path: str, keep: tuple[str, ...]) -> Callable[[Json], tuple[str, Json]]:
+    """A route that takes no path arguments: `keep` are the body fields the console sends it."""
+    return lambda args: (path, {k: v for k, v in args.items() if k in keep and v is not None})
 
 
 def _install(args: Json) -> tuple[str, Json]:
@@ -78,7 +84,7 @@ SKILLS_VIEW = ("skills:view",)
 RUN_WORKFLOW = ("workflows:run",)
 ACCESS = Access()
 
-OPERATIONS: tuple[Operation, ...] = (
+_TEMPLATES: tuple[Operation, ...] = (
     Operation(
         name="list_templates",
         description="List the templates this team can start from (agents, skills, workflows, guardrails, case types "
@@ -88,6 +94,12 @@ OPERATIONS: tuple[Operation, ...] = (
             "properties": {
                 "kind": {"type": "string", "enum": [*KINDS], "description": "Keep one kind."},
                 "source": {"type": "string", "description": "Keep one pack or app, as plugin:<id>."},
+                "search": {"type": "string", "description": "Words in the template's or its app's title."},
+                "page": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "The page to read; the reply says if more follow.",
+                },
             },
             "additionalProperties": False,
         },
@@ -95,7 +107,6 @@ OPERATIONS: tuple[Operation, ...] = (
         method="GET",
         route=_templates,
         read_only=True,
-        wrap="templates",
         cells=CREATE,
     ),
     Operation(
@@ -119,6 +130,28 @@ OPERATIONS: tuple[Operation, ...] = (
         draft=True,
     ),
 )
+# The Workspace built-in app's tools (seed.WORKSPACE_TOOLS holds their names, descriptions and inputs): the route
+# each calls, as the console does, and the cells it may use. Agents run them through the gateway's module call
+# (tools.LocalToolRunner), the MCP address through its platform-tool call.
+_WORKSPACE_ROUTES: dict[str, tuple[str, str, Callable[[Json], tuple[str, Json]], tuple[str, ...]]] = {
+    "draft_agent": ("agents", "POST", _body("/v1/agents", ("name", "role", "instructions")), ("agents:create",)),
+    "invite_people": ("platform", "POST", _body("/v1/settings/members/invite", ("emails", "role")), ("access:create",)),
+}
+WORKSPACE: tuple[Operation, ...] = tuple(
+    Operation(
+        name=t["name"],
+        description=t["description"],
+        input_schema=t["input_schema"],
+        service=_WORKSPACE_ROUTES[t["name"]][0],
+        method=_WORKSPACE_ROUTES[t["name"]][1],
+        route=_WORKSPACE_ROUTES[t["name"]][2],
+        read_only=t["access"] == "read",
+        cells=_WORKSPACE_ROUTES[t["name"]][3],
+        draft=t.get("approval_mode") == "none",
+    )
+    for t in WORKSPACE_TOOLS
+)
+OPERATIONS: tuple[Operation, ...] = (*_TEMPLATES, *WORKSPACE)
 
 BY_NAME = {o.name: o for o in OPERATIONS}
 
@@ -150,9 +183,13 @@ class PlatformTools:
         signer: Ed25519Signer | None,
         http: httpx.AsyncClient | None = None,
         *,
-        people: ActingForTokens | None = None,
+        people: ActingForTokens | Mapping[str, ActingForTokens] | None = None,
     ) -> None:
-        self.people = people
+        # One token source per service the calls go to, so a cached token is never sent to another; a single source
+        # is agents-service's.
+        self.people: Mapping[str, ActingForTokens] = (
+            {"agents": people} if isinstance(people, ActingForTokens) else dict(people or {})
+        )
         self.bases = {k: v.rstrip("/") for k, v in bases.items() if v} if signer is not None else {}
         self.http = http
         # Mints the token only; the call itself goes out on `http` so a refusal's body reaches the assistant.
@@ -173,12 +210,13 @@ class PlatformTools:
         signed = replace(self.client, audience=service, scopes=held)
         return {**signed.headers(team=team, tenant=who.tenant_id), "Accept": "application/json"}
 
-    async def _acting_for(self, who: Principal, team: str) -> dict[str, str]:
-        """The person a write acts for, as a token platform-service signs, so the record it makes names them as its
-        maker rather than this service; none for a caller who is not a person."""
-        if self.people is None or who.kind != "person" or not who.email:
+    async def _acting_for(self, who: Principal, team: str, service: str = "agents") -> dict[str, str]:
+        """The person a write acts for, as a token platform-service signs for `service`, so the record it makes names
+        them as its maker rather than this service; none for a caller who is not a person."""
+        people = self.people.get(service)
+        if people is None or who.kind != "person" or not who.email:
             return {}
-        token = await self.people.token(tenant_id=who.tenant_id, email=who.email, team_id=team)
+        token = await people.token(tenant_id=who.tenant_id, email=who.email, team_id=team)
         return {ACTING_FOR_HEADER: token}
 
     def tools(self) -> list[types.Tool]:
@@ -219,7 +257,7 @@ class PlatformTools:
         try:
             headers = self._headers(who, team, o.service, o.cells)
             if not o.read_only:
-                headers.update(await self._acting_for(who, team))
+                headers.update(await self._acting_for(who, team, o.service))
             async with _Client(self.http) as http:
                 r = await http.request(
                     o.method,

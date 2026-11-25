@@ -32,6 +32,7 @@ from ops_service_kit.settings import Settings
 
 from ..conftest import SEED, FakeGraphModels
 from ..engine.test_lifecycle_rights import person
+from ..saves import save_skill_draft
 from .role_app import ok, role_app
 from .test_reply_pins import FIXTURES, answer, compare
 from .test_template_install import AGENT, SOURCE, TOOLS, wire
@@ -81,7 +82,7 @@ async def add_skill(client: AsyncClient) -> str:
 async def edit_skill(client: AsyncClient, sid: str, **fields: Any) -> None:
     held = ok(await client.get(f"/v1/skills/{sid}", headers=OPS))
     body = {"baseVersion": held["version"], "note": "", **fields}
-    ok(await client.put(f"/v1/skills/{sid}/draft", json=body, headers=OPS))
+    ok(await save_skill_draft(client, sid, body, headers=OPS))
 
 
 async def publish_skill(client: AsyncClient, sid: str) -> int:
@@ -118,7 +119,7 @@ async def test_a_skill_the_team_edited_keeps_its_edit_takes_the_rest_and_asks_ag
     published = await publish_skill(client, sid)
     before = {v.version: v.digest for v in await versions(client, sid)}
     wire(client, [pack(2, instructions="Quote the section and link it.", use_when="A customer disputes a fee")])
-    listed = ok(await client.get("/v1/templates", params={"kind": "skill"}, headers=OPS))
+    listed = ok(await client.get("/v1/templates", params={"kind": "skill"}, headers=OPS))["data"]
     assert listed[0]["state"] == "update_available"
     review = ok(await client.get(path(sid), headers=OPS))
     assert outcomes(review) == {"useWhen": "taken", "instructions": "conflict"} and review["draftOpen"] is False
@@ -208,7 +209,7 @@ async def test_a_detached_copy_takes_no_update_and_its_template_is_offered_again
     wire(client, [pack(2, use_when="A customer disputes a fee")])
     refused = await client.get(path(sid), headers=OPS)
     assert refused.status_code == 409 and refused.json()["error"]["code"] == "detached", refused.text
-    listed = ok(await client.get("/v1/templates", params={"kind": "skill"}, headers=OPS))
+    listed = ok(await client.get("/v1/templates", params={"kind": "skill"}, headers=OPS))["data"]
     assert listed[0]["state"] == "available"
 
 
@@ -291,7 +292,7 @@ async def test_an_edited_workflow_keeps_its_definition_and_is_not_offered_the_sa
     assert taken["version"] is None and taken["copy"]["version"] == 2
     kept = ok(await client.get(f"/v1/workflows/definitions/{wid}", headers=OPS))
     assert kept["definition"].get("description") == "Reads the case before the review meeting"
-    listed = ok(await client.get("/v1/templates", params={"kind": "workflow"}, headers=OPS))
+    listed = ok(await client.get("/v1/templates", params={"kind": "workflow"}, headers=OPS))["data"]
     assert listed[0]["state"] == "added"
 
 

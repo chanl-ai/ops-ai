@@ -11,7 +11,7 @@ import { Kbd } from '@/components/ui/kbd';
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarInput, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, useSidebar } from '@/components/ui/sidebar';
 import { SidebarRowAction } from '@/components/shared/sidebar-row-action';
 import { useNavAllows } from '@/hooks/me-queries';
-import type { SidebarTree } from '@/lib/settings-tree';
+import { offeredGroups, type SidebarTree } from '@/lib/settings-tree';
 
 /**
  * Folded off-canvas, this sidebar leaves settings with no Back, Find or sections on screen, and the app sidebar starts
@@ -55,7 +55,7 @@ export function SettingsSidebar({ tree, ...props }: React.ComponentProps<typeof 
   // A page the person's roles do not open is not offered, in the tree or in Find (lib/settings-tree.ts `needs`).
   const allows = useNavAllows();
   const hits = tree.find(query).filter((h) => allows(h.needs) === true);
-  const groups = tree.groups.map((g) => ({ ...g, items: g.items.filter((i) => allows(i.needs) === true).map((i) => ({ ...i, children: i.children?.filter((c) => allows(c.needs) === true) })) }));
+  const groups = offeredGroups(tree, allows);
   // The longest matching route is the current page, so /settings/team lights for General and not for Webhooks beneath it.
   // Matched against every page, offered or not: a row hidden while roles load, or from this reader, never hands its
   // light to the parent page above it.

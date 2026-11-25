@@ -51,12 +51,14 @@ async def test_a_policy_refusal_is_reported_as_the_policy_not_the_grid(signin: S
     team = await _team_of(signin, approver)
     h = await _headers(signin, await _admin_email(signin), team)
     asked = {"personId": approver, "area": "reviews", "action": "decide", "requestedBy": approver_email}
-    on = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": True}, headers=signin.admin)
+    # Per team: turned on in the approver's team, by its workspace admin.
+    in_team = h
+    on = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": True}, headers=in_team)
     assert on.status_code == 200, on.text
     assert (await _check(signin, h, **asked))["allowed"] is True, (
         "a workspace that turned it on lets a requester decide"
     )
-    off = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": False}, headers=signin.admin)
+    off = await signin.public.put("/v1/policies/requesterMayDecide", json={"value": False}, headers=in_team)
     assert off.status_code == 200, off.text
     refused = await _check(signin, h, **asked)
     assert (refused["allowed"], refused["refusedBy"]["code"]) == (False, "own_request"), refused
@@ -94,3 +96,17 @@ async def test_a_locked_action_says_why_and_who_can_grant_it(signin: SignInRig) 
     assert why["askable"], "the workspace admin reaches every team and can give roles"
     mine = await signin.public.get("/v1/me/why?area=agents&action=view", headers=h)
     assert mine.json()["data"]["allowed"] is True, mine.text
+
+
+async def test_whom_to_ask_never_names_the_caller(signin: SignInRig) -> None:
+    # The workspace admin holds access.manage, so a list that kept the caller would name her to herself.
+    email = await _admin_email(signin)
+    me = await signin.public.get("/v1/me", headers={"Authorization": signin.admin["Authorization"]})
+    name = str(me.json()["data"]["user"]["name"])
+    why = await signin.public.get("/v1/me/why?area=agents&action=publish", headers=signin.admin)
+    assert why.status_code == 200, why.text
+    assert why.json()["data"]["allowed"] is True, why.text
+    assert name not in why.json()["data"]["askable"], why.json()["data"]["askable"]
+    held = await signin.public.get("/v1/access/holders?area=access&action=manage", headers=signin.admin)
+    assert held.status_code == 200, held.text
+    assert email not in [h["email"] for h in held.json()["data"]["holders"]], held.json()["data"]["holders"]

@@ -1,14 +1,54 @@
-# kb-service
+# Knowledge service
 
-Status: first slice built, 2026-10-15; checked 2026-10-16. `services/kb-service` (`ops_kb`), on :8740, with its
-own migration chain (`alembic_version_kb`, kb_0001 to kb_0004). Tests: `services/kb-service/tests`. Designed surface:
-this page section 6. Use case: uc-080
-(`docs/usecases/kb-service/knowledge-cited-answers.md`).
+Status: current, checked against the code on 2026-11-18. Built: bases, four source kinds, sync, keyword and meaning search, rerank and rewrite. Not built: search on SQL Server, per-item access from a connector.
 
-## What it does
+The knowledge service holds a team's knowledge bases. A department adds files, typed pages or a connected app's pages
+as sources; the service reads them, splits them into passages, indexes each passage for keyword and meaning search,
+and answers a question with cited passages. An agent searches only the knowledge bases it was granted, and every
+answer names the document, version, page and section it came from.
 
-A department uploads text PDFs (or markdown and text files) into a file source, a knowledge base reads that source,
-and an agent granted the knowledge base cites passages from it by document, version, page and section.
+## At a glance
+
+| Item | Detail |
+|---|---|
+| Owns | Knowledge bases, sources, items and their versions, passages and their index units, vectors, sync runs, the changes queue |
+| Port | 8740 |
+| Code | `services/kb-service` (`ops_kb`), on the `ops_ingest` library for reading and splitting |
+| Database | Own migration chain (`alembic_version_kb`, `services/kb-service/migrations`). Tables: `kb_bases`, `kb_base_sources`, `kb_sources`, `kb_items`, `kb_item_versions`, `kb_chunks`, `kb_units`, `kb_unit_vectors` (PostgreSQL with pgvector), `kb_changes`, `kb_runs`, `kb_retired_bases`, `kb_outbox` |
+| Isolation | Every transaction runs as `ops_kb_tenant` under the generated tenant and team policy (`services/kb-service/src/ops_kb/store/knowledge.py:57`); tests `services/kb-service/tests/test_kb_isolation.py` and `services/kb-service/tests/test_team_isolation.py` |
+| Secrets it holds | Its own model key (`OPS_MODELS_KEY`) for embeddings and AI steps, and its service signing key. It holds no app credential: a connected app's pages are read through tools-service |
+| Calls out to | files-service (store and read source files and snapshots), documents-service (each file's reading), models-service (embeddings, likely questions, FAQ drafts, rerank and rewrite), tools-service (a connected app's knowledge source; only when the install has plugins) |
+| Called by | The console; agents-service for grounding and the `search_knowledge` tool (`OPS_KB_URL`); tools-service for the knowledge tools |
+| Events it sends | `knowledge.source.failing` and `kb.changed` to agents-service, and audit entries (`audit.recorded`) to platform-service, through `kb_outbox` and the `kb_relay` process (`services/kb-service/src/ops_kb/store/knowledge.py:410`) |
+| Events it receives | `reading.finished` and `reading.failed` from documents-service, which start indexing of the items waiting on a reading |
+| When something is down | A model that is down leaves units for the `kb_embed` process to embed later, and a rerank or rewrite that cannot run leaves the search as it would have been, saying why. Without `OPS_FILES_URL` it keeps files in a local directory instead of files-service (tests and runs without files-service) |
+| Routes | API reference tab, HTTP API › Knowledge, built from `services/kb-service/openapi.json` |
+| Use case | uc-080 ([knowledge-cited answers](../../usecases/kb-service/knowledge-cited-answers.md)) |
+
+```mermaid
+flowchart LR
+  src[Source: files, typed pages, an app] --> files[files-service stores the bytes]
+  files --> read[documents-service reads each file]
+  read --> split[kb-service splits and indexes]
+  split --> embed[models-service embeds each unit]
+  q[Agent or Playground question] --> search[Keyword and meaning lanes]
+  embed --> search
+  search --> cited[Cited passages]
+```
+
+## Run and test it alone
+
+| Task | Command |
+|---|---|
+| Serve on :8740 in the foreground | `make -C services/kb-service run`; on the stack, `make restart SVC=kb` |
+| Apply its migrations | `make -C services/kb-service migrate` |
+| Tests on the test database | `make -C services/kb-service test` (needs `make db-up`; `T=` names files) |
+| Lint, strict types, tests and the OpenAPI gate | `make -C services/kb-service verify` |
+| Regenerate `openapi.json` | `make -C services/kb-service openapi` |
+| Seed the demo bases | `uv run python scripts/seed_demo_knowledge.py` in `services/kb-service` |
+| The cited-answer path end to end | `make usecase-test UC=uc-080` |
+
+## How it works
 
 | Part | Detail |
 |---|---|
@@ -35,7 +75,7 @@ and an agent granted the knowledge base cites passages from it by document, vers
 | Source settings | Each source keeps its stages' settings in `kb_sources.settings` (`source_settings.py`): `parsing.ocr` (`off`, `auto`, `always`; the environment's `OPS_KB_OCR` is the default), `cleaning` (furniture, main content, lines repeated across the site, duplicates), `ingest` (the `ops_ingest` split: preset, strategies, piece size and overlap, child size, questions, table columns, model, AI-step approval), `rules` (include and exclude on path, title, type, modified date, size) and `metadataMapping`. A save is merged key by key and validated as a whole (400 `invalid_settings` naming the setting); it never changes the AI-step approval, and an AI step added since is pending again. Defaults by kind: files split at headings with context headers (what every file source was indexed with before), web sources clean furniture and keep main content. A sync reads with the source's OCR mode, splits with its ingest settings and leaves out what its rules exclude, removing an excluded item already indexed. Each item records the settings digest it was built under (`indexed_with`); `reindexNeeded` on the source is true while any item was built under other settings or read with another OCR mode, and the next sync rebuilds those items from their stored readings |
 | Audit | A change to a knowledge base's or a source's settings writes one entry naming each changed field before and after (a nested setting, its changed keys) to `kb_outbox` in the change's transaction; the `kb_relay` process delivers it to platform-service's audit log (`ops_store.audit`), where the Audit page shows it. A save that changes nothing writes none |
 | Changes | `GET /v1/knowledge-changes` lists who replaced which document, from and to which version, with the first changed section before and after, and the FAQ drafts waiting for review. The view (open, mine, resolved, all), base, search and origin are filtered, counted and paged in the database (`KnowledgeStore.change_page`), and the sources and bases a page names are read once for it (`test_the_queue_pages_in_the_database_and_reads_sources_once_per_page`) |
-| Team | A base, a source and everything under them (links, documents, versions, chunks, changes, runs) belong to one team, and the database holds every kb transaction to it (kb_0011, role `ops_kb_tenant`). A base's name is unique in its team; an id another team holds answers 409 with no team named. "Used by" names and counts the acting team's agents only | `store/knowledge.py`, `tests/test_kb_isolation.py` |
+| Team | A base, a source and everything under them (links, documents, versions, chunks, changes, runs) belong to one team, and the database holds every kb transaction to it (kb_0011, role `ops_kb_tenant`, `services/kb-service/src/ops_kb/store/knowledge.py:57`). A base's name is unique in its team; an id another team holds answers 409 with no team named. "Used by" names and counts the acting team's agents only (`services/kb-service/tests/test_kb_isolation.py`, `services/kb-service/tests/test_team_isolation.py`) |
 | Who may change what | A knowledge base: its owner or a tenant admin (update, attach and detach, refresh, delete). A source: its owner or an admin (upload, sync, edit, pause, remove). A document: its owner, its source's owner or an admin (verify, owner). An admin is an admin in any of the caller's teams; there is no tenant-wide role yet |
 
 ## How agents use it
@@ -48,24 +88,14 @@ agent with no knowledge bases works as before. Unit tests inject a fixture store
 a kb-service per run and fill it with the agents fixtures' knowledge through this API
 (`docs/usecases/lib/seed_fixture_knowledge.py`).
 
-## Run it
+## Not built yet
 
-| Do | How |
+| Designed in the [knowledge base](../../architecture/knowledge-base.md) page | State |
 |---|---|
-| Serve | `make up` runs it on the shared stack; alone, `make -C services/kb-service run` |
-| Migrate | `make -C services/kb-service migrate` |
-| Verify | `make -C services/kb-service verify` (lint, strict pyright, tests on the test database, OpenAPI gate) |
-| Seed the demo | `uv run python scripts/seed_demo_knowledge.py` in `services/kb-service` |
-
-## Not built
-
-| Designed in knowledge.md | State |
-|---|---|
-| Connectors | website, SharePoint and Confluence plugins built; none run against a real tenant; per-item access from `allowed` is stored and not enforced |
-| Search on SQL Server | not started (decision D17): `ops_store.dialect` holds the vector SQL's SQL Server form, but kb-service makes no vector table or full-text index there yet, so a search returns no passages and names both lanes skipped (`no_vector_store`, `no_full_text`) instead of failing (`test_off_postgresql_the_keyword_lane_says_it_was_skipped`) |
-| Filters from conversation details, freshness and trust, rewrite templates with variables | not started; rerank and rewrite with an instruction are built |
-| OCR | off: a scanned page fails with `no_text_layer` |
-| Curation queue, golden sets, evaluations, metadata profiles, precedence across knowledge bases | not started |
-| Answer writing in K12 | the playground answer is the top passage quoted; no model writes an answer here |
-| Knowledge calls through the data gateway | agents-service calls kb-service directly with its service token |
-| A files-service server | files go through the files-service library in process; the upload route moves when a server exists |
+| Connectors against a real tenant | partial: the website, SharePoint and Confluence plugins sync; none has run against a real tenant; per-item access from `allowed` is stored and not enforced |
+| Search on SQL Server | not built (decision D17): `ops_store.dialect` holds the vector SQL's SQL Server form, but kb-service makes no vector table or full-text index there yet, so a search returns no passages and names both lanes skipped (`no_vector_store`, `no_full_text`) instead of failing (`test_off_postgresql_the_keyword_lane_says_it_was_skipped`) |
+| Filters from conversation details, freshness and trust, rewrite templates with variables | not built; rerank and rewrite with an instruction are built |
+| Curation queue, golden sets, evaluations, metadata profiles, precedence across knowledge bases | not built |
+| Answer writing in K12 | not built: the Playground answer is the top passage quoted; no model writes an answer here |
+| Knowledge calls through the data gateway | not built: agents-service calls kb-service directly with its service token |
+| A tenant-wide admin role | not built: an admin here is an admin in any of the caller's teams |

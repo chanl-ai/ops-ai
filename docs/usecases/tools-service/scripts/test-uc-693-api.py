@@ -19,7 +19,7 @@ def shown(row: dict[str, Any]) -> list[str]:
 
 with git_rig("uc-693") as r:
     gh = r.gh
-    github_on(r, sign_in="person_or_team")
+    github_on(r, sign_in="person")
     made = r.gw.post(
         f"/v1/apps/{GH}/accounts",
         json={"name": "Corp server", "settings": {"web_url": gh["corp_url"]}},

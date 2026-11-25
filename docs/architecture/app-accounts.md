@@ -23,6 +23,8 @@ the layers around accounts (providers, plugins, triggers) are in [integrations i
 | Delete refused while a definition names the account | Built | `services/tools-service/src/ops_tools/connections/service.py:676-700` |
 | "Who signs in" choice and "Use only for test runs" | Built | `apps/console/src/components/connections/who-signs-in.tsx:38`, `apps/console/src/components/connections/connect-window.tsx:390` |
 | Apps that run inside another app (`runs_on`, `requires`) | Built | `packages/ops_plugin_sdk/src/ops_plugin_sdk/manifest.py:147-151`, `services/tools-service/src/ops_tools/plugins/host.py:201`, `:955-958` |
+| Every person's sign-ins across the team's apps, counted by state with last used (Apps › People), and End sign-in by an admin | Built | `services/tools-service/src/ops_tools/connections/service.py` (`people`, `end_sign_in`), `services/tools-service/src/ops_tools/store/connections.py` (`people_page`, `end_sign_in`); `apps/console/src/components/connections/people-page.tsx` |
+| Last used on each sign-in, written by the call that signs with it, at most once a minute | Built | `services/tools-service/src/ops_tools/auth/__init__.py` (`prepare`), `services/tools-service/src/ops_tools/store/connections.py` (`used`) |
 | Sharing an account with other teams | Designed, not built yet | — |
 | Limiting an account to chosen roles | Designed, not built yet | — |
 | Read-only account (refuse every write through it) | Designed, not built yet | — |
@@ -35,7 +37,7 @@ An account is one row of the tools service's `connections` table for one app in 
 | Field | Meaning | Built |
 |---|---|---|
 | Name (`account_name`) | What people, steps and agents call it: "EU org", "Platform org", "Logistics site". One per app per owner (the team, or one person's own accounts), compared case-folded, so a person's own account may take a team account's name; a call naming it prefers the caller's own | Built. The stored `account_key` and the filtered unique index over owner and key (`0076_account_owner_key.py`, PostgreSQL and SQL Server) hold the rule. The routes raise `account_name_taken` with the same message everywhere (`store/connections.py:304-307`) |
-| Who signs in | Shared team login, or each person signs in with their own login | Built (`who-signs-in.tsx:38`) |
+| Who signs in | Everyone uses the team's login, or each person signs in with their own login; set per app by `connections.manage`, never asked in a chat | Built (`who-signs-in.tsx`, `lib/login-words.ts`) |
 | Test only | A test account is used only by test runs and cannot be the team default | Built (`connect-window.tsx:390`, `:513`; `plugins/routes.py:326`) |
 | Auth config | Ops AI's app, or the team's own OAuth app | Built |
 | Where it signs in | The sign-in address the account keeps for itself, when the app allows one per account | Built. The first turn-on on Ops AI's app keeps the address as a default, so a second org signs in at its own address (`plugins/routes.py:302`). A binding that already holds the address as fixed stays fixed |
@@ -165,6 +167,9 @@ and the names of the workflows and agents (`connections/service.py:676-700`).
 | `GET /v1/me/accounts` | The caller's own accounts | `connections/routes.py:112` |
 | `POST /v1/me/accounts/{id}/another` | Another own account, with an optional name and address; no body keeps the older behaviour | `connections/routes.py:126` |
 | `PUT /threads/{id}/connectors` with `accounts` | The chat's pick per app | `chat_connectors.py:85-87`, `:207` |
+| `GET /v1/apps/people` | Apps › People: one page of the people holding their own sign-ins, each with their apps, counts connected, expired and refused, last used and every sign-in; `search`, repeatable `app` and `state`, facets per app and state; `connections.manage` | `apps.py` (`list_app_people`) |
+| `POST /v1/apps/{app}/accounts/{id}/people/{person}/sign-out` | End sign-in: the person's sign-in is refused with `ended_by_admin` and `endedBy`, one `sign_in_ended` audit row, `changed` false on a second End; the person's next call answers `CONNECTION_NOT_LINKED` (reason `refused`) and My apps reads "Ended by an admin"; `connections.manage` | `connections/routes.py` (`end_sign_in`) |
+| CLI `opsai apps people [--app] [--state] [--search]`, `opsai apps end-sign-in APP PERSON [--account]` | Each person's sign-ins; end one, or every one of the app the person holds | `sdk/python/src/ops_ai/_cli/apps.py` |
 | CLI `opsai apps accounts APP`, `opsai apps default APP ACCOUNT [--mine]` | List with what each points at; set a default | `sdk/python/src/ops_ai/_cli/apps.py:35-37` |
 
 ## Errors

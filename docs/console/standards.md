@@ -46,10 +46,15 @@ to its count in `apps/console/scripts/palette-baseline.json` and a file not list
 new one. A conversion lowers the count and runs `node scripts/check-standards.mjs --write-baseline` to lock it in.
 
 One component per job: a table is the data table, a status is a badge from `components/status-badges.tsx`, and the chat
-composer and message renderers live in `components/chat`. A link to an app's page comes from `appPageHref` in
+composer and message renderers live in `components/chat`. A list someone picks from is one of three shared pickers,
+each searched on the server and paged as it scrolls through an `/options` source in `hooks/options-queries.ts`:
+`EntityPicker` (an add button with chips), `SearchSelect` (one field) and `CaretMenu` (`components/shared/caret-menu.tsx`,
+the list a typed `@`, `/` or `if ` opens, capped at 18rem with sticky group headings and a "More …" row per group). A
+short fixed list goes through `fixedOptions`. A link to an app's page comes from `appPageHref` in
 `lib/app-links.ts` (`/integrations/apps/<encoded id>`, with an optional tab), never a hand-built `/integrations/${…}`
-string. `check-standards` rule 16 fails a raw `<Table>`, a local `*StatusBadge`, a composer or message renderer, or a
-hand-built app link anywhere else. The files that already did so are listed per rule in
+string. `check-standards` rule 16 fails a raw `<Table>`, a local `*StatusBadge`, a composer or message renderer, a
+hand-built app link, a picker built on `Command` outside the three shared ones, or a list filtered in the browser
+(`.filter(… .toLowerCase().includes(…))`) anywhere else. The files that already did so are listed per rule in
 `apps/console/scripts/reuse-baseline.json`; the list only shrinks, because a listed file that is fixed fails until
 `--write-baseline` takes it off, and that mode never adds one.
 
@@ -64,6 +69,8 @@ else, with no baseline.
 | Surface | Primitive | Where | The rule |
 |---|---|---|---|
 | Page header | `PageLayout` | `components/page-layout.tsx` | Icon, title, one-line description, actions on the right; record pages pass `backHref` |
+| Section card | `Section` (`components/shared/surface.tsx`); `SettingsSection` for a settings form | `components/shared/surface.tsx` | One heading: `text-sm font-semibold` at the card's 16px padding, its actions on the heading row, the description under both; an agent's Limits fills the page width like the other tabs; the brief's headings are plain, not bands |
+| One tab strip | `PageLayout` `tabs` slot | `components/page-layout.tsx` | A page that brings its own tabs (a record's Canvas and Versions) does not also show its section's sibling pages; the strip scrolls sideways and starts at its first tab. The page title is the page's one h1 |
 | Sibling pages of one section | `TitleSwitcher` via `PageLayout switcher` | `components/shared/title-switcher.tsx` | Pages come from `sectionFor` in `lib/nav.ts`; no tab strip of sibling routes under the header |
 | Route tabs inside one record or area | `RouteTabs` | `components/shared/route-tabs.tsx` | Each tab is a URL, so a reload or a shared link lands on it |
 | List | `DataTableWithViews` + `DataTableColumnHeader` + `selectColumn` | `components/data-table-with-views.tsx` | Faceted filters with counts from the API, server pagination through `useListParams`, bulk actions in the selection bar; a row added in place shows first, marked New, through `created` (`useCreatedRows`) until the person pages, searches, filters or sorts, or a later write removes or changes it |
@@ -139,3 +146,13 @@ grep-provable ones in `apps/console/scripts/check-standards.mjs`.
 | 8 | States are designed | Load the page with `?mock=slow`, `?mock=error`, `?mock=empty` | A spinner alone, a blank page, an empty list with no action, or a failed save that clears the form |
 | 9 | Fits a phone | Chrome device toolbar at 375 px | The page scrolls sideways or text overflows its cell |
 | 10 | No console errors | Load every changed route in Chrome | Any error in the console, or a route that is not 200 |
+
+## Record page header, labels, sizes and save state (rules 24-28)
+
+| Rule | Text | Check |
+|---|---|---|
+| 24 Header order | A record page's header holds, in order: save state, Save, Test, one primary action, an overflow menu. At most one filled button. Pages pass them through `RecordActions`; Save answers Cmd/Ctrl+S and is listed in the command menu | `check-standards.mjs` fails a `PageLayout` under `app/build/{agents,skills,workflows/definitions}/[id]` with inline `actions` |
+| 25 Labels | A button label is one or two words, verb first; detail goes in a tooltip | `check-standards.mjs`; `scripts/rules-baseline.json` (labels) may only shrink |
+| 26 Sizes | Size comes from the size prop; no `h-*`, `size-*`, `px-*`, `py-*`, `text-xs` or `variant="link"` with `p-0` on a Button, Input, SelectTrigger, Switch, Checkbox or ToggleGroupItem outside `components/ui` and `components/shared` | same; `rules-baseline.json` (sizes) |
+| 27 Sections | One Section shape, one spacing scale | no check yet |
+| 28 Save state | `SaveState` is the only save wording: Saved, Unsaved, Saving…, Not saved. Saving… shows only after 300 ms and stays 600 ms (`lib/save-state-gate.ts`) | `check-standards.mjs` fails "Saving soon" and "Draft vN saved" |

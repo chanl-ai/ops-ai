@@ -30,7 +30,7 @@ from ...store.cases import CaseNotFound, CaseRecord, CaseStore, Priority, Status
 from ...store.engine import EngineTransactions
 from ...store.tenancy import current_team
 from ..actors import actor_reads, named_actors
-from ..auth import Principal, caller_in, caller_of
+from ..auth import Principal, caller_in, caller_of, reader_of
 from ..case_page import ask_case, assembled, case_reads
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -41,6 +41,8 @@ from .engine import StoryLine
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(caller_in("cases"))]  # noqa: UP040
+# The list and one case name customers, so a person reads them with cases.view; a chat user holds none.
+Reader: TypeAlias = Annotated[Principal, Depends(reader_of("cases"))]  # noqa: UP040
 
 router = APIRouter(prefix="/v1/cases")
 # The kinds a caller adds by hand; `opened`, `field` and `link` are written by the store as the case changes.
@@ -381,7 +383,7 @@ async def open_case(rt: Rt, me: Me, _: Tx, body: CaseIn) -> JSONResponse:
 async def list_cases(
     *,
     rt: Rt,
-    me: Me,
+    me: Reader,
     q: ListQuery,
     status: Annotated[list[Status] | None, Query()] = None,
     priority: Annotated[list[Priority] | None, Query()] = None,
@@ -408,7 +410,7 @@ async def list_cases(
 
 
 @router.get("/{case_id}", response_model=Envelope[CasePage])
-async def get_case(rt: Rt, me: Me, case_id: str) -> JSONResponse:
+async def get_case(rt: Rt, me: Reader, case_id: str) -> JSONResponse:
     """The case assembled for its page: its timeline, oldest entry first, and who owns it, its clocks, what
     it waits on and the actions drafted there, its fields in its case type's order, what it links to, its newest
     activity and what the caller may do. Two transactions by design: the first reads the case, its runs and everything
@@ -457,8 +459,8 @@ async def _ref_team(rt: Runtime, kind: str, ref: str) -> str | None:
         run = await RunStore(EngineTransactions(rt.db)).row(run_id)
         if run is not None:
             return run.team_id or None
-    thread = await graph_store(rt).thread(run_id)
-    return str(thread["team_id"]) if thread is not None and thread.get("team_id") else None
+    thread = await graph_store(rt).thread_row(run_id)
+    return thread.team_id if thread is not None and thread.team_id else None
 
 
 @router.post("/{case_id}/events", response_model=Envelope[CaseDetail], status_code=201)

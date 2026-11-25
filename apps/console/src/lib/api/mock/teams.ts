@@ -2,7 +2,9 @@ import type { Team, TeamInput } from '@/lib/types/team';
 
 import { ApiError } from '../contract';
 import { currentTeamId, DEFAULT_TEAM_ID } from '../team-context';
-import { id, respond } from './runtime';
+import type { ListParams } from '@/lib/types/query';
+
+import { id, list, respond } from './runtime';
 
 /**
  * Teams and the scoping every mock list applies. Owner groups include the knowledge-source owners each team
@@ -49,7 +51,7 @@ export function guardTeam(owners: string | (string | undefined)[] | undefined, w
 }
 
 export const teamsApi = {
-  list: () => respond(() => teams),
+  list: (p: ListParams) => respond((m) => list([...teams].sort((a, b) => a.name.localeCompare(b.name)), p, { text: (t) => t.name, value: () => '', facetKeys: [], id: (t) => t.id }, m)),
   create: (input: TeamInput) =>
     respond(() => {
       const name = input.name.trim();

@@ -14,20 +14,24 @@ import binascii
 import json
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, cast
 
 from ops_engine.store import RunStore, WorkQueue
 from ops_engine.store.clock import now_iso
 from ops_policy.tokens import HmacSigner
 from ops_service_kit.http import Json
+from ops_service_kit.logging import get_logger
 
 from ..store.engine import AsyncEngine, EngineTransactions
 from ..store.events import EventLog
 
 RESUME_PURPOSE = "workflow-resume"
 
+_log = get_logger("ops_agents.engine_resume")
 
-def resume_key(run_id: str, waiting: dict[str, Any]) -> str:
+
+def resume_key(run_id: str, waiting: Json) -> str:
     return f"resume:{run_id}:{waiting['node']}:{waiting['iteration']}"
 
 
@@ -85,7 +89,8 @@ def read_token(review_key: str, token: str, *, now: float | None = None) -> Resu
     """The claim a valid, unexpired token carries; BadResumeToken otherwise."""
     try:
         head, sig = token.split(".", 1)
-        claim = ResumeClaim(**cast(dict[str, Any], json.loads(_unb64(head))))
+        # A claim that is not an object fails here as any malformed token does (TypeError, so BadResumeToken).
+        claim = ResumeClaim(**json.loads(_unb64(head)))
         signature = _unb64(sig)
     except (ValueError, TypeError, binascii.Error) as e:
         raise BadResumeToken("not a resume token") from e
@@ -97,7 +102,7 @@ def read_token(review_key: str, token: str, *, now: float | None = None) -> Resu
 
 
 def resume_link(
-    review_key: str, *, tenant: str, team: str, run_id: str, waiting: dict[str, Any], seconds: float
+    review_key: str, *, tenant: str, team: str, run_id: str, waiting: Json, seconds: float
 ) -> dict[str, str]:
     """The URL and token an outside system posts its result to, valid a day past the step's own limit."""
     claim = ResumeClaim(
@@ -105,7 +110,7 @@ def resume_link(
         team=team,
         run_id=run_id,
         node=str(waiting["node"]),
-        iteration=int(waiting["iteration"]),
+        iteration=int(cast(int, waiting["iteration"])),
         interrupt_id=str(waiting["interruptId"]),
         expires_at=int(time.time() + seconds + 86400),
     )
@@ -136,9 +141,22 @@ async def resumed(
     return True
 
 
-async def wake_parked(db: AsyncEngine, *, name: str, key: str, team_id: str, payload: dict[str, Any]) -> list[str]:
+def _before(at: object, after: object) -> bool:
+    """Whether the event happened at `at` before the refusal its wait names at `after`; False when either is unknown,
+    so an event or a wait without a time wakes as it always has."""
+    try:
+        return datetime.fromisoformat(str(at)) < datetime.fromisoformat(str(after))
+    except ValueError:
+        return False
+
+
+async def wake_parked(
+    db: AsyncEngine, *, name: str, key: str, team_id: str, payload: Json, at: object = None
+) -> list[str]:
     """Resumes every step of `team_id` parked on event `name` with correlation key `key`; the runs woken. A
-    wait row whose run has moved on is cleared instead."""
+    wait row whose run has moved on is cleared instead. `at`: when this delivery's event happened. A step parked by a
+    refusal made after it keeps waiting: one person's sign-ins all share a key, and the relay can deliver an earlier
+    one after a later call of theirs was refused, which would send that call again into the same refusal."""
     if not key:
         return []
     runs = RunStore(EngineTransactions(db))
@@ -150,6 +168,9 @@ async def wake_parked(db: AsyncEngine, *, name: str, key: str, team_id: str, pay
         waiting = (run.waiting if run is not None else None) or {}
         if run is None or run.status != "waiting" or waiting.get("interruptId") != wait["interrupt_id"]:
             await runs.unpark(str(wait["run_id"]), str(wait["node_id"]), int(wait["iteration"]))
+            continue
+        if at is not None and _before(at, cast(Json, waiting.get("payload") or {}).get("after")):
+            _log.info("event_older_than_wait", event_name=name, key=key, run_id=run.id)
             continue
         if await resumed(db, run.id, run.team_id, waiting, {"event": payload}, source="event"):
             woken.append(run.id)

@@ -16,7 +16,7 @@ skipped, with its input and output one click away, so a failure is found in seco
 | # | Step | Expected |
 |---|---|---|
 | 1 | Run customer summary for Priya Natarajan; open the run | Request, Summarise and Summarised passed; No summary skipped |
-| 2 | Run it for a customer the scripted model does not know; open the run | Summarise failed; No summary passed; Summarised skipped |
+| 2 | Run a workflow that hands the agent a name with no record (the seeded one ends at No such customer instead); open the run | Summarise failed; No summary passed; Summarised skipped |
 | 3 | Click the failed step | The step sheet shows its input (the customer) and its error |
 | 4 | Save a three-step workflow with no node positions, run it and open the run | The canvas lays it out as the editor does: no two nodes on one spot |
 | 5 | Open that run while the workflow cannot be read (the request answers 500) | The Graph section shows an error with Retry; while it loads it shows a placeholder |

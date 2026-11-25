@@ -10,6 +10,7 @@ import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { agentBase } from '../../lib/agent_save.mjs';
 
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -137,7 +138,7 @@ try {
       const retailIn = await signIn(priya, on.data?.connectionId, 'kestrel.integration');
       const euIn = await signIn(priya, eu.data?.id, 'kestrel.eu');
       const agent = await call(agents, 'POST', '/v1/agents', priya, { name: 'Case desk', role: 'Answers the team about cases' });
-      const draft = await call(agents, 'PATCH', `/v1/agents/${agent.data?.id}`, priya, { toolIds: ['salesforce_query'] });
+      const draft = await call(agents, 'PATCH', `/v1/agents/${agent.data?.id}`, priya, { toolIds: ['salesforce_query'], ...(await agentBase(agents, priya, agent.data?.id)) });
       const asked = await call(agents, 'POST', `/v1/agents/${agent.data?.id}/publish-requests`, priya, { version: draft.data?.version, note: 'uc-697' });
       check(
         '0 Salesforce has Retail org (default) and EU org, both signed in, and Case desk holds salesforce_query',

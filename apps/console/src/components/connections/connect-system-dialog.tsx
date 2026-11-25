@@ -196,7 +196,7 @@ function ConnectForm({
       if (!opened.current) return;
       opened.current = false;
       dispatch({ type: 'signed-in' });
-      toast.success(`${m.connection} is connected with the team account`);
+      toast.success(`${m.connection} is connected with the team login`);
       // Save opened this window, so the account signing in is the last step: the dialog closes.
       dispatch({ type: 'done' });
       if (latest.current) connected.current?.(latest.current);
@@ -283,7 +283,7 @@ function ConnectForm({
       const a = await ensure();
       if (ready) await save(a);
       if (detail && kind.perPerson && who !== detail.signIn) {
-        keep(await change.mutateAsync({ ...a, body: { revision: revision.current, signIn: who, teamBackup: who === 'person_or_team' } }));
+        keep(await change.mutateAsync({ ...a, body: { revision: revision.current, signIn: who } }));
       }
       if (w) {
         const begin = async () => {

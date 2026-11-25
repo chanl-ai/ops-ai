@@ -2,7 +2,7 @@
 
 Status: current. Table lists and isolation facts are read from the release's schema scripts.
 
-Ops AI keeps everything in one PostgreSQL database. Each of the seven services owns its own tables, applies its own
+Ops AI keeps everything in one PostgreSQL database. Each of the seven services that keep data owns its own tables, applies its own
 migration history and connects with its own login, which can read and write rows in that service's tables and nothing
 else. File bytes live outside the database, on a volume or in object storage.
 
@@ -88,7 +88,7 @@ do inside a team; they never open another team's data.
 | Tenant, in the database, for tools, models, kb, files and documents | Every store query filters by tenant in the service's code. In tools-service, a connection's saved sign-ins (tokens and keys, sign-ins in progress, environment settings, connect links) are also held to their tenant and team by database policies, run as `ops_tools_tenant`; policies for the other tools tables and for models are still to come | Partial |
 | Background loops | The agents service's lease sweeper, timer poller and thread inbox loops claim work before they know its tenant through one system role that may read across tenants; each then does the work under the row's own tenant. No request ever runs as that role | Built |
 | Team, in the services | Every read of a team-owned table goes through one team filter in the store layer, so a person sees only the teams they belong to; another team's record answers 404 | Built |
-| Team, in the database | A database-level team policy beneath the store filter. Built for files and documents, including each file's reading (`documents_readings`, `documents_reading_pages`, `documents_reading_files`): two teams holding the same bytes each read them once and never see the other's reading | In progress |
+| Team, in the database | A database-level team policy beneath the store filter. Built for files and documents, including each file's reading (`documents_readings`, `documents_reading_pages`, `documents_reading_files`): two teams holding the same bytes each read them once and never see the other's reading. The other services are in progress | Partial |
 | Installation-wide records | Model aliases, provider connections and model keys belong to the installation, so every tenant in one installation shares them (see [Deployment options](deployment-options.md#single-tenant-and-multi-tenant)) | Built |
 
 ## Files and knowledge
@@ -98,7 +98,7 @@ do inside a team; they never open another team's data.
 | Files | A volume on the host until a Security admin points each upload purpose at a target: local, S3 or an S3-compatible store, or Azure Blob Storage. Each target is tested with a write, a read and a delete before it is saved | Type judged from the bytes; size and type limits per tenant; one stored copy per content per team; storage credentials encrypted with AES-256-GCM; a reference from a case or a run blocks deletion | Built |
 | Malware scanning | A hook your scanner calls back on, with files held as pending until it answers; a test engine that recognises the EICAR test file. Scanning cannot be turned off outside development | No scanner ships in the package | Partial |
 | Knowledge | Source files on the knowledge volume; their text split into chunks in the database. PDF (each file is read once, with OCR for scanned pages, half-scanned pages and images, and filled form fields), Word, Excel, CSV, HTML, text and Markdown, up to 50 MB each | Search with PostgreSQL full-text ranking and by meaning (below); every answer cites page and section; a knowledge base belongs to one team | Built |
-| Vector search | Each knowledge piece embedded through the environment's embedding alias on the AI gateway, stored in PostgreSQL with pgvector | Searched by meaning and keywords together, each result saying which ran; on SQL Server keywords only for now | Built on PostgreSQL |
+| Vector search | Each knowledge piece embedded through the environment's embedding alias on the AI gateway, stored in PostgreSQL with pgvector | Searched by meaning and keywords together, each result saying which ran | Built on PostgreSQL; not built on SQL Server |
 | Documents | Page layouts, extracted fields with the place each came from, corrections. The documents service never holds the bytes and reads them from files | A model may see page images only where the document type, the team's policy and the alias all allow it | Built |
 
 ## Retention

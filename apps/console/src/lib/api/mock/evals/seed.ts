@@ -1,4 +1,4 @@
-import type { EvalCase, EvalCheck, EvalSuiteKind } from '@/lib/types/evals';
+import type { EvalCase, EvalCheck, EvalSuiteKind } from './model';
 
 /**
  * Seed eval cases. Platform sets (injection, data leakage, refusals) are templates instantiated for every agent,

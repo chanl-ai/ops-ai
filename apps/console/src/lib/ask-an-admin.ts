@@ -7,12 +7,11 @@ export interface Holder {
 }
 
 /**
- * Whom an "Ask an admin" line names: the first person granted in the team itself, never the caller, with how many more
- * may; with nobody granted in the team, no name, so a grant in every team (the install's first admin) is never named
- * and the line says to ask the team's admins.
+ * Whom an "Ask an admin" line names: the first person granted in the team itself, with how many more may; with nobody
+ * granted in the team, no name, so a grant in every team (the install's first admin) is never named and the line says
+ * to ask the team's admins. platform-service never lists the caller among the holders.
  */
-export function askWhom(holders: Holder[], me?: string): { first: Holder | null; more: number; all: Holder[] } {
-  const others = holders.filter((h) => h.email.toLowerCase() !== (me ?? '').toLowerCase());
-  const here = others.filter((h) => h.inTeam);
-  return { first: here[0] ?? null, more: Math.max(0, here.length - 1), all: here.length ? here : others };
+export function askWhom(holders: Holder[]): { first: Holder | null; more: number; all: Holder[] } {
+  const here = holders.filter((h) => h.inTeam);
+  return { first: here[0] ?? null, more: Math.max(0, here.length - 1), all: here.length ? here : holders };
 }

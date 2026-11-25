@@ -1,13 +1,16 @@
 # The statement budget of each agents-service GET at 5 and 50 rows (ops_service_kit.testing.budget_check, data-access
 # standard DA1 and DA6), measured on PostgreSQL by tests/api/test_statement_budget.py. Each row is today's count at 50
 # rows. The seed adds rows to agents (each holding a tool and an account), skills, guardrails, widgets, cases, workflows
-# of each engine, runs of the registry workflow (each waiting at its review), queued engine runs and a batch of `n`
-# rows only; a chat thread, a live form workflow with a link and a members form, and a publish request are made once;
+# of each engine, runs of the registry workflow (each waiting at its review), queued engine runs, kept eval runs of
+# the first agent and a batch of `n` rows only; a chat thread, a live form workflow with a link and a members form, and a publish request are made once;
 # a row for any other list proves its count, not that it stays flat as rows grow. Rows listing more than one
 # transaction or connection open one per store read and are budgeted as they run until their route is converted. A
 # `not_budgeted` row that grows names its counts.
 
 ["GET /chat/agents"]
+queries = 1
+
+["GET /chat/agents/options"]
 queries = 1
 
 ["GET /chat/connectors"]
@@ -77,6 +80,10 @@ queries = 17
 ["GET /v1/agents/{agent_id}/eval-cases"]
 queries = 2
 
+["GET /v1/agents/{agent_id}/eval-runs"]
+# The agent, the count, the page and the trigger facet.
+queries = 4
+
 ["GET /v1/agents/{agent_id}/live"]
 queries = 9
 
@@ -86,6 +93,13 @@ query = { version = "1" }
 
 ["GET /v1/agents/{agent_id}/runs"]
 queries = 3
+
+["GET /v1/agents/{agent_id}/prompt"]
+queries = 2
+
+["GET /v1/agents/{agent_id}/publish-check"]
+queries = 3
+query = { version = "1" }
 
 ["GET /v1/agents/{agent_id}/skills"]
 queries = 3
@@ -149,6 +163,9 @@ queries = 2
 ["GET /v1/chat/agents"]
 queries = 1
 
+["GET /v1/chat/agents/options"]
+queries = 1
+
 ["GET /v1/chat/connectors"]
 queries = 2
 
@@ -167,6 +184,9 @@ queries = 2
 ["GET /v1/document-type-uses"]
 queries = 1
 query = { types = "dt_budget" }
+
+["GET /v1/eval-runs/{run_id}"]
+queries = 1
 
 # A stream holds no transaction while it is open: each read it makes opens and closes its own, so the count is
 # the reads of one pass with `follow=false`.
@@ -202,7 +222,7 @@ queries = 9
 queries = 1
 
 ["GET /v1/me/memories"]
-queries = 1
+queries = 2
 
 ["GET /v1/me/memories/export"]
 queries = 3
@@ -225,6 +245,14 @@ queries = 0
 queries = 2
 transactions = 2
 connections = 2
+
+# Two transactions by design: the agent and the caller's rights first, then (tools-service and kb-service asked with
+# none open) the team's workflows, skills and agents.
+["GET /v1/references"]
+queries = 8
+transactions = 2
+connections = 2
+query = { forAgent = "ag_fraud" }
 
 ["GET /v1/resources/{resource}/copies/{copy}/update"]
 not_budgeted = "needs an installed template copy; the budget seed installs none yet"
@@ -291,6 +319,9 @@ query = { follow = "false" }
 ["GET /v1/threads/{thread_id}/state"]
 queries = 5
 
+["GET /v1/try-targets"]
+not_budgeted = "needs a skill with steps: the seed's skills have none, so it answers 400 no_steps and measures nothing"
+
 ["GET /v1/tool-uses"]
 queries = 14
 query = { tools = "lookup_account" }
@@ -344,6 +375,20 @@ query = { app = "salesforce", name = "Main" }
 
 ["GET /v1/workflows/definitions/{workflow_id}"]
 queries = 4
+
+["GET /v1/workflows/definitions/{workflow_id}/diff"]
+# Each side is its own store read in its own transaction (the definition row, then the two sides); a fixed count.
+queries = 5
+transactions = 5
+connections = 5
+query = { from = "live", to = "working-copy" }
+
+["GET /v1/workflows/definitions/{workflow_id}/publish-preview"]
+# No request transaction by design: the publish policy is read from platform-service between the store reads. The
+# blocker list adds two reads, the open publish request and the stored versions (a copy equal to the live one).
+queries = 5
+transactions = 5
+connections = 5
 
 ["GET /v1/workflows/definitions/{workflow_id}/versions/{version}/shapes"]
 queries = 1

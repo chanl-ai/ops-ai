@@ -1,6 +1,6 @@
 # Human in the loop
 
-Status: current, updated 2026-10-18. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
+Status: current, checked against the code on 2026-11-18. Designed and not built: parallel interrupts resumed as one map, review policies pinned at publish, and decision buttons in mail or Teams. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md).
 
 A pause is an interrupt in a graph: state is saved, nothing runs, and the thread waits for one decision. A two-person
 approval, an SLA timeout and a customer reply all use the same shape; only what the interrupt needs and what decides
@@ -16,7 +16,7 @@ code are in [identity-and-tenancy.md](identity-and-tenancy.md).
 | Review of a draft | Workflow `human` node | Draft, evidence, citations, the call it gates | A review decision |
 | Question to the chat user | An agent node, owned by no policy | The question | The user, through `runs` |
 | Timeout | The timer poller through `fire()` | `{"decision": "timeout", "timer": "breach" or "maxWait"}` | The runtime alone, from the pinned plan |
-| Budget exhausted | A metered model call on a thread whose budget is spent, before the call (`graphs/metering.py`) | `{kind: "budget_exhausted", node, limit, spent, cap}` | A person through `runs`: approved with a higher `budget` continues; rejected ends the run in error |
+| Budget exhausted | A metered model call on a thread whose budget is spent, before the call (`graphs/metering.py`); calls already admitted and still running count as spent | `{kind: "budget_exhausted", node, limit, spent, cap}` | A person through `runs`: approved with a higher `budget` continues; rejected ends the run in error |
 | Manual handling | `POST /v1/threads/{id}/route-to-people` (definition workflows only); designed also for a run past its retry budget or recursion limit | The reason; remaining steps journaled as `route.skipped` | A person, at the built-in `manual_handling` step |
 
 ## Rules for the human step
@@ -24,11 +24,11 @@ code are in [identity-and-tenancy.md](identity-and-tenancy.md).
 | Rule | State |
 |---|---|
 | The approval interrupt is its own node, before any side effect, so resume never re-runs a write | In code |
-| Decide is the only door for a policy-owned interrupt; `runs` answers 409 for it | Partial. `POST /reviews/{threadId}/decision` records the decision keyed by the interrupt id, then resumes; a repeat with the same decision resumes at most once (uc-008). `POST /v1/threads/{id}/runs/stream` still accepts a resume |
+| Decide is the only door for a policy-owned interrupt; `runs` answers 409 for it | In code. `POST /reviews/{threadId}/decision` records the decision keyed by the interrupt id, then resumes; a repeat with the same decision resumes at most once (uc-008). `POST /v1/threads/{id}/runs/stream` answers 409 `resume_via_review` for a review-owned step (`services/agents-service/src/ops_agents/api/routers/graphs.py:358-363`) |
 | One signed approval token per action, bound to one call's input hash | In code ([token facts](identity-and-tenancy.md#approval-and-step-up-token-facts)) |
 | Any edit to the input after approval invalidates every approval of it | In code: only approvals with the current hash count |
-| The requester cannot decide | Being changed: no hard-coded rule; the team's `requesterMayDecide` policy decides (off by default, so the asker does not decide), and a step's `notDecidedBy` carries the people it excludes. Today, in code for workflow reviews: `POST /reviews/{id}/decision` refuses the person recorded on the interrupt, or the workflow's process principal, with 403. In chat, the person who asked answers a write whose app asks before changes (`appsChangeWithoutAsking`, a team setting; default: no app asks, so writes run, row E49). `POST /v1/threads/{id}/approvals` runs the same decider check as decide (row E51) |
-| Step-up authenticates the approver and approves nothing by itself | In code: verified for signature, subject and five-minute age on every money decision ([token facts](identity-and-tenancy.md#approval-and-step-up-token-facts)) |
+| The requester cannot decide | Being changed: no hard-coded rule; the team's `requesterMayDecide` policy decides (on by default, so the asker decides; the two-person rule turns it off for everyone but the team's Admins), and a step's `notDecidedBy` carries the people it excludes. Today, in code for workflow reviews: `POST /reviews/{id}/decision` refuses the person recorded on the interrupt, or the workflow's process principal, with 403. In chat, the person who asked answers a write whose app asks before changes (`appsChangeWithoutAsking`, a team setting; default: no app asks, so writes run, row E49). `POST /v1/threads/{id}/approvals` runs the same decider check as decide (row E51) |
+| Step-up authenticates the approver and approves nothing by itself | In code: verified for signature, subject and five-minute age whenever the operation's approval policy sets `stepUp` (two approvers imply it) or the workspace's `stepUp` policy is on ([token facts](identity-and-tenancy.md#approval-and-step-up-token-facts)) |
 | Money needs two distinct approvers; the API collects both, then resumes once | In code: the approvals route returns a token only at two approvers and refuses the same approver twice (403); OPA refuses one |
 | Parallel interrupts resume as one map `{interrupt id: decision}` collected by the API | Designed |
 | A timeout never approves | In code |
@@ -56,12 +56,12 @@ screen is written for one of them.
 
 | Part | What the code does |
 |---|---|
-| Task API | `POST /v1/tasks` takes `{type, version?, params}` (`services/agents-service/src/ops_agents/api/routers/tasks.py:101`). It needs `workflows.run` in the acting team (`X-Team-Id`, else the caller's team). A value of the wrong kind is 422 `invalid_task_params` naming the field; a missing required value is accepted with a warning. It records a `task.requested` event ([service-map](service-map.md#service-events)), which starts the `api_task` workflow. The reply holds the task id (the run id), the console `url`, `status` (`waiting` once the run reaches the step, `starting` if it has not within 5 s), the pinned version and the warnings. 422 `task_unhandled` when no workflow handles the event |
+| Task API | `POST /v1/tasks` takes `{type, version?, params}` (`services/agents-service/src/ops_agents/api/routers/tasks.py:103`). It needs `workflows.run` in the acting team (`X-Team-Id`, else the caller's team). A value of the wrong kind is 422 `invalid_task_params` naming the field; a missing required value is accepted with a warning. It records a `task.requested` event ([service-map](service-map.md#service-events)), which starts the `api_task` workflow. The reply holds the task id (the run id), the console `url`, `status` (`waiting` once the run reaches the step, `starting` if it has not within 5 s), the pinned version and the warnings. 422 `task_unhandled` when no workflow handles the event |
 | Reading the decision | `GET /v1/tasks/{id}` returns `status`, and once decided the `action` (the out port), `reason`, `decidedBy`, `decidedAt` and `values` (a reviewer's corrections or an action's inputs). There is no webhook; the caller polls |
 | Task types | `GET /v1/task-types`, `GET /v1/task-types/{id}`, `POST /v1/task-types`, `PUT /v1/task-types/{id}/draft`, `POST /v1/task-types/{id}/publish` (`api/routers/task_types.py`). Every member of the tenant reads every type; create, save and publish need `workflows.create`, `workflows.edit`, `workflows.publish` in the owning team. A seeded type is read-only and is copied to change it |
-| Task assist | Off until the team turns on the `taskAssist` policy. When a typed review step pauses, `TaskAssist.write` (`api/task_assist.py`) makes one prompt-only model call over the task's bound regions and writes `{question, summary, doubtful, suggestion{action, reason}}` to `task_assists`, keyed by step id and written once. The task view inserts it as an `assist` region marked `ai`, after the header (`api/task_view.py:52`). A suggestion naming an action the type lacks is dropped on read. It decides nothing |
+| Task assist | Off until the team turns on the `taskAssist` policy. When a typed review step pauses, `TaskAssist.write` (`api/task_assist.py`) makes one prompt-only model call over the task's bound regions and writes `{question, summary, doubtful, suggestion{action, reason}}` to `task_assists`, keyed by step id and written once. The task view inserts it as an `assist` region marked `ai`, after the header (`api/task_view.py:125`). A suggestion naming an action the type lacks is dropped on read. It decides nothing |
 | Task assist limits | The pause waits at most 20 s for the call; on a failure or timeout the task opens without an assist. |
-| Queue place | `GET /reviews/{id}/place?view=open` (`api/routers/reviews.py:188`) returns `position`, `total`, `previous` and `next` for a review in a Human Tasks view, from `hitl_facade.queue_place` (`api/hitl_facade.py:654`). A run id resolves to the review it waits on. `position` is null when the review is not in the view. It builds the list of every review in the view on each call (`all_reviews`) It reads the views' rows by id and status alone, in the list's order, and builds no review, except for `view=overdue`, which needs each review's deadline |
+| Queue place | `GET /reviews/{id}/place?view=open` (`api/routers/reviews.py:215`) returns `position`, `total`, `previous` and `next` for a review in a Human Tasks view, from `hitl_facade.queue_place` (`api/hitl_facade.py:976`). A run id resolves to the review it waits on. `position` is null when the review is not in the view. It builds the list of every review in the view on each call (`all_reviews`) It reads the views' rows by id and status alone, in the list's order, and builds no review, except for `view=overdue`, which needs each review's deadline |
 
 ## Decide then resume
 
@@ -123,9 +123,9 @@ Proof: `services/agents-service/tests/engine/test_review_deadline.py`, `test_wai
 | Channel | The pause shows as | The decision arrives from |
 |---|---|---|
 | Console chat | An approval widget in the reply; money opens "Confirm it is you" | The widget, or the Reviews page |
-| Mailbox | A review task with an SLA; nothing is sent until approval | Reviews page, or a mail or Teams button (planned) |
+| Email | The Human review of the workflow the mail started, with its SLA; nothing is sent until approval | Reviews page, or a mail or Teams button (planned) |
 | API | `status: waiting_review`, polled or sent by webhook | The caller's review client |
 | MCP | A result with status pending and a review id only; the case stays in the console | Reviews page |
 | Schedule, webhook | A review task | Reviews page |
 
-Every one of these sends the same decide call. Whether a chat user may approve their own drafted write is a team setting: `requesterMayDecide` (default off) and, for a write in a chat, the app's "Ask before changes" switch (`appsChangeWithoutAsking`, default off: no app asks, row E49). See [Approval settings](../guide/security-and-governance.md#approval-settings).
+Every one of these sends the same decide call. Whether a chat user may approve their own drafted write is a team setting: `requesterMayDecide` (default on; off is the two-person rule, which never binds an Admin of the team) and, for a write in a chat, the app's "Ask before changes" switch (`appsChangeWithoutAsking`, default off: no app asks, row E49). See [Approval settings](../guide/security-and-governance.md#approval-settings).

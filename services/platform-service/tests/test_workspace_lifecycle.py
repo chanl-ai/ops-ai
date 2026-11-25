@@ -178,7 +178,7 @@ async def test_a_member_leaves_the_workspace_and_loses_every_team(signin: SignIn
     assert r.status_code == 204, r.text
     assert (await signin.public.get("/v1/teams", headers=h)).status_code == 401, "their session ended"
     again = await _signed_in(signin, email)
-    assert (await signin.public.get("/v1/teams", headers=again)).json()["data"] == [], "no team is left"
+    assert (await signin.public.get("/v1/teams", headers=again)).json()["data"]["data"] == [], "no team is left"
     assert await _audit(signin, "workspace.leave") == 1
 
 
@@ -220,7 +220,9 @@ async def test_a_closed_workspace_answers_only_its_owner_until_restored(signin: 
     assert me["workspace"]["status"] == "closed" and me["workspace"]["purgeAfter"], me
     r = await signin.public.get("/v1/settings/members", headers=in_ops)
     assert r.status_code == 403 and _code(r) == "workspace_closed", r.text
-    r = await signin.public.get("/v1/team-names", headers={"Authorization": f"Bearer {service}"})
+    r = await signin.public.get(
+        "/v1/team-names", params={"ids": "team_x"}, headers={"Authorization": f"Bearer {service}"}
+    )
     assert r.status_code == 403 and _code(r) == "workspace_closed", r.text
     async with signin.engine.connect() as c:
         disabled = (
@@ -273,13 +275,13 @@ async def test_the_last_admin_cannot_leave_a_team(signin: SignInRig, usage: Fake
     email = f"solo@{signin.zone}"
     await signin.person(email, role="admin")
     h = await _signed_in(signin, email)
-    team = (await signin.public.get("/v1/teams", headers=h)).json()["data"][0]["id"]
+    team = (await signin.public.get("/v1/teams", headers=h)).json()["data"]["data"][0]["id"]
     r = await signin.public.post(f"/v1/settings/teams/{team}/leave", headers=h)
     assert r.status_code == 409 and _code(r) == "last_admin", r.text
     builder = f"b2@{signin.zone}"
     await signin.person(builder, role="builder")
     bh = await _signed_in(signin, builder)
-    bteam = (await signin.public.get("/v1/teams", headers=bh)).json()["data"][0]["id"]
+    bteam = (await signin.public.get("/v1/teams", headers=bh)).json()["data"]["data"][0]["id"]
     r = await signin.public.post(f"/v1/settings/teams/{bteam}/leave", headers=bh)
     assert r.status_code == 204, r.text
     assert await _audit(signin, "team.leave") == 1

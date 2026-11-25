@@ -602,7 +602,8 @@ export interface paths {
          * List Templates
          * @description The document types the team's plugins bring, each with its state for the team, the copies the team holds of
          *     it and whether the caller may add it. A copy whose template the app no longer ships, while the app is still on,
-         *     is listed too, as `removed_upstream`; a copy of an app turned off for the team reads `added`.
+         *     is listed too, as `removed_upstream`; a copy of an app turned off for the team reads `added`. A page of the
+         *     shared list query; `search` matches the title and the plugin's title.
          */
         get: operations["templates_list_templates"];
         put?: never;
@@ -690,7 +691,10 @@ export interface components {
              */
             ocr: boolean;
         };
-        /** CopyRef */
+        /**
+         * CopyRef
+         * @description A team's copy of a template: where it came from and the record it made.
+         */
         CopyRef: {
             /** Detachedat */
             detachedAt: string | null;
@@ -698,9 +702,9 @@ export interface components {
             id: string;
             /**
              * Kind
-             * @constant
+             * @enum {string}
              */
-            kind: "document_type";
+            kind: "agent" | "skill" | "workflow" | "document_type" | "case_type" | "task_type" | "guardrail" | "knowledge_source";
             /** Recordid */
             recordId: string;
             /** Source */
@@ -1029,6 +1033,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[TemplateView]] */
+        Envelope_ListResult_TemplateView__: {
+            data: components["schemas"]["ListResult_TemplateView_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[Purged] */
         Envelope_Purged_: {
             data: components["schemas"]["Purged"];
@@ -1112,26 +1125,23 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[list[TemplateView]] */
-        Envelope_list_TemplateView__: {
-            /** Data */
-            data: components["schemas"]["TemplateView"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
         /** ErrorBody */
         ErrorBody: {
             /** Code */
             code: string;
             /** Details */
             details?: unknown;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "input" | "refused" | "upstream" | "timeout" | "internal";
             /** Message */
             message: string;
             /** Requestid */
             requestId: string;
+            /** Retryable */
+            retryable: boolean;
             /** Status */
             status: number;
         };
@@ -1420,7 +1430,10 @@ export interface components {
                 [key: string]: string;
             }[];
         };
-        /** Installed */
+        /**
+         * Installed
+         * @description The live copies a team holds of one template. A copy never changes by itself.
+         */
         Installed: {
             /**
              * Changed
@@ -1525,6 +1538,18 @@ export interface components {
         ListResult_Extraction_: {
             /** Data */
             data: components["schemas"]["Extraction"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[TemplateView] */
+        ListResult_TemplateView_: {
+            /** Data */
+            data: components["schemas"]["TemplateView"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -1846,7 +1871,10 @@ export interface components {
             /** Version */
             version: string;
         };
-        /** TemplateRequires */
+        /**
+         * TemplateRequires
+         * @description What a copy of a template needs before it can run.
+         */
         TemplateRequires: {
             /** Bind */
             bind: {
@@ -5270,6 +5298,12 @@ export interface operations {
         parameters: {
             query?: {
                 kind?: "document_type" | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -5283,7 +5317,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_TemplateView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_TemplateView__"];
                 };
             };
             /** @description Invalid request */

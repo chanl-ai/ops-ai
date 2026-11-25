@@ -25,7 +25,7 @@ with people_stack() as (api, _):
     ops = bearer(invited(api, priya, ops_email, "admin"), "team_ops")
     r = api.put("/v1/settings/sign-in/providers/password", json=PASSWORD_PROVIDER, headers=ops)
     check("an admin of another team cannot set sign-in providers (403)", r.status_code == 403, r.text[:200])
-    r = api.put("/v1/policies/requesterMayDecide", json={"value": True}, headers=ops)
+    r = api.put("/v1/policies/stepUp", json={"value": True}, headers=ops)
     check("an admin of another team cannot change a workspace policy (403)", r.status_code == 403, r.text[:200])
 
     wanjiru = bearer(signed_in(api, WANJIRU))

@@ -1,8 +1,10 @@
 """The workflow runner's worker process: `python -m ops_agents.api.worker` (`make -C services/agents-service worker`).
 
-It claims engine_work rows and runs v2 workflows (ops_engine.worker) with this service's adapters (engine_host.py).
-It serves no HTTP and needs no model. The API process keeps its own sweeper and timer poller for v1 threads; v2
-runs are recovered here, by claiming a row whose claim lapsed. Settings come from the environment as for the API:
+It claims engine_work rows and runs v2 workflows (ops_engine.worker) with this service's adapters (engine_host.py),
+and takes over a chat reply whose process died (chat_turns.py) on the chat runtime the API builds (open_runtime);
+with no model configured it leaves turns to a worker that has one. It serves no HTTP. The API process keeps its own
+sweeper and timer poller for v1 threads; v2 runs and chat turns are recovered here, by claiming a row whose claim
+lapsed. Settings come from the environment as for the API:
 OPS_DATABASE_URL, OPS_GATEWAY_URL, OPS_LEASE_TTL_SECONDS, OPS_ENGINE_POLL_SECONDS, OPS_ENGINE_CONCURRENCY.
 """
 
@@ -43,8 +45,9 @@ from ..store.tool_copies import RESYNC_KEY
 from .acting_for import CallPeople, acting_for_tokens
 from .ai_steps_gate import RunTeamRules
 from .api_key_copy import keep_in_step as keep_keys_in_step
-from .app import instance_owner, required_client, service_client
+from .app import instance_owner, open_runtime, required_client, service_client
 from .batches import start_forever as start_batches_forever
+from .chat_turns import end_late, take_over
 from .email_trigger import EmailTriggers
 from .engine_agents import kernel_agents
 from .engine_cases import RunCases
@@ -165,6 +168,9 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
                 ports.reviews = assisted_reviews(stack, db, agents, policies, StarterApprovals(db, gateway, policies))
                 # AI steps run only where the run's team allows them, masked unless it turned that off.
                 agents.rules = RunTeamRules(db, policies)
+        # The chat runtime, as the API builds it: a reply whose process died is continued here (chat_turns.py).
+        rt, _ = await stack.enter_async_context(open_runtime(settings, engine=db, checkpointer=saver, owner=owner))
+        chats = rt.graph_deps is not None
         host = WorkerHost(
             tx=EngineTransactions(db),
             registry=default_registry(),
@@ -175,9 +181,13 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             run_scope=engine_pass,
             owner=owner,
             concurrency=settings.engine_concurrency,
+            team_cap=settings.engine_team_cap,
             enter_run=enter_run,
             review_hours=review_sla.hours if review_sla is not None else None,
             remind=reminders(db),
+            turn=take_over(rt) if chats else None,
+            end_turn=end_late(rt) if chats else None,
+            turn_limit_s=settings.turn_deadline_seconds,
             resume_link=lambda run, waiting, seconds: resume_link(
                 settings.review_key.get_secret_value(),
                 tenant=run.tenant_id,

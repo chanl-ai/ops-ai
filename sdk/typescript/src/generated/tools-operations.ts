@@ -165,6 +165,19 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "apps_end_sign_in": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/apps/{app_id}/accounts/{account_id}/people/{person_id}/sign-out",
+    "pathParams": [
+      "app_id",
+      "account_id",
+      "person_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "apps_finish_sign_in": {
     "body": "json",
     "headers": [],
@@ -263,6 +276,24 @@ export const toolsOperations = {
     ],
     "stream": false
   },
+  "apps_list_app_people": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/apps/people",
+    "pathParams": [],
+    "query": [
+      "app",
+      "state",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
+    "stream": false
+  },
   "apps_list_apps": {
     "body": null,
     "headers": [
@@ -317,7 +348,9 @@ export const toolsOperations = {
     "method": "GET",
     "path": "/v1/me/connections",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "app"
+    ],
     "stream": false
   },
   "apps_open_connect_link": {
@@ -865,6 +898,46 @@ export const toolsOperations = {
     "query": [],
     "stream": false
   },
+  "tool_modules_list_discovered_names": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/tool-modules/discoveries/{discovery_id}/names",
+    "pathParams": [
+      "discovery_id"
+    ],
+    "query": [
+      "group",
+      "access",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
+    "stream": false
+  },
+  "tool_modules_list_discovered_operations": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/tool-modules/discoveries/{discovery_id}/operations",
+    "pathParams": [
+      "discovery_id"
+    ],
+    "query": [
+      "group",
+      "access",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
+    "stream": false
+  },
   "tool_modules_list_grants": {
     "body": null,
     "headers": [],
@@ -1020,6 +1093,15 @@ export const toolsOperations = {
     "pathParams": [
       "module_id"
     ],
+    "query": [],
+    "stream": false
+  },
+  "tool_modules_try_one_tool": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/tool-modules/tries",
+    "pathParams": [],
     "query": [],
     "stream": false
   },

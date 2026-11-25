@@ -21,6 +21,7 @@ from usecase_harness import (
     kb,
     platform,
     put_in_files,
+    save_agent,
 )
 
 PASSWORD = "northfield-demo"
@@ -33,7 +34,6 @@ SKILL = {
     "name": "Address change 099",
     "useWhen": "The customer asks to change their postal address.",
     "instructions": "Confirm the customer, then record the new address.",
-    "ownerTeam": "Retail",
 }
 DEFINITION = {
     "schemaVersion": 2,
@@ -99,7 +99,13 @@ with platform() as (api, _), tempfile.TemporaryDirectory(prefix="usecase-kb-") a
 
         writes: list[tuple[str, httpx.Client, str, str, dict[str, Any] | None]] = [
             ("create an agent", svc, "POST", "/v1/agents", {"name": "Ravi's agent", "role": "Anything"}),
-            ("edit an agent", svc, "PATCH", f"/v1/agents/{agent['id']}", {"role": "Changed"}),
+            (
+                "edit an agent",
+                svc,
+                "PATCH",
+                f"/v1/agents/{agent['id']}",
+                {"role": "Changed", "baseVersion": agent["version"], "baseDigest": agent["digest"]},
+            ),
             (
                 "ask to publish an agent",
                 svc,
@@ -121,7 +127,13 @@ with platform() as (api, _), tempfile.TemporaryDirectory(prefix="usecase-kb-") a
             ("edit a guardrail", svc, "PATCH", f"/v1/guardrails/{rule['id']}", {"topics": ["tax"]}),
             ("deprecate a guardrail", svc, "POST", f"/v1/guardrails/{rule['id']}/status", {"status": "deprecated"}),
             ("create a skill", svc, "POST", "/v1/skills", {**SKILL, "name": "Ravi's skill"}),
-            ("save a skill draft", svc, "PUT", f"/v1/skills/{skill['id']}/draft", {"note": "", "baseVersion": 1}),
+            (
+                "save a skill draft",
+                svc,
+                "PUT",
+                f"/v1/skills/{skill['id']}/draft",
+                {"note": "", "baseVersion": skill["version"], "baseDigest": skill["digest"]},
+            ),
             ("create a knowledge base", know, "POST", "/v1/knowledge-bases", {"name": "Ravi's base", "owner": RAVI}),
             ("create a source", know, "POST", "/v1/sources", {**SOURCE, "name": "Ravi's source"}),
         ]
@@ -137,7 +149,7 @@ with platform() as (api, _), tempfile.TemporaryDirectory(prefix="usecase-kb-") a
         # The control after the refusals: James's edits to the same records go through.
         check(
             "James edits the agent",
-            svc.patch(f"/v1/agents/{agent['id']}", json={"role": "Changed"}, headers=james).status_code == 200,
+            save_agent(svc, agent["id"], {"role": "Changed"}, headers=james).status_code == 200,
         )
         check(
             "James saves the workflow draft",

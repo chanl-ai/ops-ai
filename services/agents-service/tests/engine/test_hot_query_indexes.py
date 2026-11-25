@@ -92,7 +92,9 @@ async def test_a_claim_seeks_both_due_work_and_lapsed_leases(
         await analyse(engine, "engine_work")
         recorded.clear()
         await WorkQueue(tx, owner="plan", ttl=5).claim()
-        [plan] = await plans(tx, [s for s in about(recorded, "engine_work") if "FOR UPDATE" in s[0]], bitmaps=True)
+        # The claim's read of its candidates: the locking read after it seeks them by id.
+        read = [s for s in about(recorded, "engine_work") if "ORDER BY engine_work.priority" in s[0]]
+        [plan] = await plans(tx, read[:1], bitmaps=True)
     assert seeks("ix_engine_work_lease", "status", "build", "lease_expires_at")(plan), plan
     assert seeks("ix_engine_work_due", "status", "build", "available_at")(plan), plan
 
@@ -171,7 +173,7 @@ async def test_a_teams_thread_list_and_event_poll_lead_with_the_tenant_and_team(
         await analyse(engine, "thread_events")
         with isolation.scope(current_tenant(), "team_1"):
             recorded.clear()
-            await GraphStore(engine).threads(None)
+            await GraphStore(engine).thread_rows(None)
             await EventLog(engine).team_events("team_1", 0)
         [listed] = await plans(EngineTransactions(engine), about(recorded, "graph_threads"))
         [polled] = await plans(EngineTransactions(engine), about(recorded, "thread_events"))

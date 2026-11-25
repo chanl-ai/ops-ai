@@ -4,12 +4,12 @@ is `all` (the platform team). Entries are written by each store in the transacti
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import TypedDict
 
 from ops_access import ANY_TEAM
 from ops_access.catalogue import BUILTIN_ROLES, MEMBER_ROLE_TO_BUILTIN
 from ops_service_kit.errors import Forbidden
-from ops_service_kit.http import Json
+from ops_service_kit.http import Json, PageJSON
 from ops_service_kit.listing import ListParams
 
 from .store.audit import EVERYTHING_BUT, KIND, VIEWS, AuditEntryRow, AuditLog
@@ -80,6 +80,15 @@ def summary(row: AuditEntryRow) -> str:
     return line() if line else str(d.get("summary") or row.action)
 
 
+class AuditPage(TypedDict):
+    """One page of the Audit page's entries, with its facets and the count of each view."""
+
+    data: list[Json]
+    pagination: PageJSON
+    facets: dict[str, dict[str, int]]
+    viewCounts: dict[str, int]
+
+
 def shown(row: AuditEntryRow) -> Json:
     return {
         "id": row.id,
@@ -113,7 +122,7 @@ class AuditReader:
             return False
         return True
 
-    async def page(self, actor: Actor, filters: dict[str, str | None], params: ListParams) -> dict[str, Any]:
+    async def page(self, actor: Actor, filters: dict[str, str | None], params: ListParams) -> AuditPage:
         await self.members.require_admin(actor, "audit", "view")
         # The acting team's entries; the account's own (no team) only for whoever reads audit in every team, the
         # account admin. No team reads another team's.

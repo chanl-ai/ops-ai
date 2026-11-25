@@ -7,6 +7,9 @@ import { toast } from 'sonner';
 import { Composer } from '@/components/chat/composer';
 import { ThreadMessages, visibleMessages } from '@/components/chat/thread-messages';
 import { useThreadActions } from '@/components/chat/use-thread-actions';
+import { DocumentPanel } from '@/components/knowledge/document-panel';
+import { RetrievalTraceView } from '@/components/knowledge/retrieval-trace';
+import { DetailSheet } from '@/components/shared/detail-sheet';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -71,7 +74,10 @@ function Side({ label, threadId, open }: { label: string; threadId?: string; ope
  */
 export function TestCompare({ agentId, agentName, newest, versions, open }: { agentId: string; agentName: string; newest: number; versions: AgentVersion[]; open: Openers }) {
   const others = versions.filter((v) => v.version !== newest);
-  const [against, setAgainst] = React.useState<number | undefined>(others.find((v) => v.state === 'published')?.version ?? others[0]?.version);
+  // The person's pick, else the published version, else the newest other one. Derived on every render: on a page opened
+  // by its address the versions arrive after the first render, and a default fixed then would stay empty.
+  const [chosen, setAgainst] = React.useState<number | undefined>();
+  const against = others.some((v) => v.version === chosen) ? chosen : (others.find((v) => v.state === 'published')?.version ?? others[0]?.version);
   const [threads, setThreads] = React.useState<{ draft?: string; other?: string }>({});
   const create = useCreateThread();
   const chat = useSendMessage();
@@ -99,7 +105,7 @@ export function TestCompare({ agentId, agentName, newest, versions, open }: { ag
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span className="shrink-0">Newest v{newest} against</span>
         <Select value={against !== undefined ? String(against) : undefined} onValueChange={(v) => setAgainst(Number(v))}>
-          <SelectTrigger className="h-8 w-auto" aria-label="Version to compare with" data-testid="compare-version">
+          <SelectTrigger className="w-auto" aria-label="Version to compare with" data-testid="compare-version">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -113,7 +119,7 @@ export function TestCompare({ agentId, agentName, newest, versions, open }: { ag
         </Select>
       </div>
       {threads.draft ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto lg:flex-row">
           <Side label={`v${newest} (newest)`} threadId={threads.draft} open={open} />
           <Side label={`v${against}`} threadId={threads.other} open={open} />
         </div>
@@ -121,6 +127,22 @@ export function TestCompare({ agentId, agentName, newest, versions, open }: { ag
         <EmptyState icon={GitCompare} title="Ask both versions" description="The same question goes to each version on its own test thread." />
       )}
       <Composer placeholder={`Ask v${newest} and v${against ?? '?'}…`} streaming={create.isPending} onStop={() => undefined} onSend={(text) => void ask(text)} />
+    </div>
+  );
+}
+
+/** The full-width Compare page: the compare with its own document viewer and trace sheet. */
+export function AgentCompareView({ agentId, agentName, newest, versions }: { agentId: string; agentName: string; newest: number; versions: AgentVersion[] }) {
+  const [docId, setDocId] = React.useState<string | null>(null);
+  const [docPage, setDocPage] = React.useState<number | undefined>();
+  const [trace, setTrace] = React.useState<RetrievalTrace | null>(null);
+  return (
+    <div className="flex min-h-[32rem] flex-col" data-testid="agent-compare">
+      <TestCompare agentId={agentId} agentName={agentName} newest={newest} versions={versions} open={{ onOpenDocument: (id, page) => (setDocId(id), setDocPage(page)), onOpenTrace: setTrace }} />
+      <DocumentPanel itemId={docId} page={docPage} onClose={() => setDocId(null)} onOpenItem={(id) => (setDocId(id), setDocPage(undefined))} />
+      <DetailSheet open={!!trace} onOpenChange={(o) => !o && setTrace(null)} title="How this answer was found" description={trace ? `“${trace.question}”` : undefined} widthClass="sm:max-w-3xl" testId="compare-trace-sheet">
+        {trace && <RetrievalTraceView trace={trace} />}
+      </DetailSheet>
     </div>
   );
 }

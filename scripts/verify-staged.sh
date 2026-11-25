@@ -12,6 +12,12 @@ if [ "$(uname -s)" = Darwin ] && [ "$(uname -m)" = x86_64 ] && [ "$(sysctl -n sy
 fi
 root="$(git rev-parse --show-toplevel)"
 git_dir="$(git -C "$root" rev-parse --absolute-git-dir)"
+# A fresh worktree has no .venv; every Python check below would then fail with a missing-interpreter error that the
+# scrub check's own message would hide. Name the cause and stop.
+if [ ! -x "$root/.venv/bin/python" ]; then
+  echo "verify-staged: this worktree has no .venv; run pnpm install (and uv sync) in $root, then commit again"
+  exit 1
+fi
 index="${GIT_INDEX_FILE:-$git_dir/index}"
 case "$index" in /*) ;; *) index="$PWD/$index" ;; esac
 # The export of the index lives in the worktree's git folder and is brought up to date by changed paths only
@@ -76,11 +82,18 @@ mapfile -t present < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --na
 touches() { [ "${#staged[@]}" -gt 0 ] && grep -qE "$1" <<<"$(printf '%s\n' "${staged[@]}")"; }
 # The console's typecheck, standards and tests (apps/console/CLAUDE.md), and the embed app's typecheck, which draws the
 # console's chat components.
+# Static checks run on every commit (ruff, pyright on the staged Python, incremental console typecheck, the console
+# standards); the slow ones (console unit tests, the standards self-test, make checks) run only with OPS_FULL_HOOK=1,
+# because CI's merge queue runs them once per group of pull requests.
 if touches '^apps/(console|embed)/|^package\.json$|^pnpm-lock\.yaml$'; then
   # The same steps as `pnpm --filter @ops-ai/console verify` (apps/console/package.json), with two differences that do not
   # change what is judged. The type checks are incremental: their state lives next to the persistent export, so only the
   # files that changed since the last commit check, and their dependents, are checked again, with the same errors.
   # The unit tests are the ones next to the staged sources (the whole suite runs in .githooks/pre-push).
+  if [ ! -d "$root/node_modules" ] || [ ! -d "$root/apps/console/node_modules" ]; then
+    echo "verify-staged: this worktree has no node_modules; run pnpm install (and uv sync) in $root, then commit again"
+    exit 1
+  fi
   mkdir -p "$tsc_state"
   tsc="$tmp/apps/console/node_modules/.bin/tsc"
   (
@@ -88,8 +101,9 @@ if touches '^apps/(console|embed)/|^package\.json$|^pnpm-lock\.yaml$'; then
     "$tsc" --noEmit --incremental --tsBuildInfoFile "$tsc_state/console.tsbuildinfo"
     "$tsc" --noEmit -p ../embed --incremental --tsBuildInfoFile "$tsc_state/embed.tsbuildinfo"
     GIT_DIR="$git_dir" GIT_WORK_TREE="$tmp" GIT_INDEX_FILE="$index" node scripts/check-standards.mjs
-    GIT_DIR="$git_dir" GIT_WORK_TREE="$tmp" GIT_INDEX_FILE="$index" node scripts/check-standards.mjs --self-test
+    if [ -n "${OPS_FULL_HOOK:-}" ]; then GIT_DIR="$git_dir" GIT_WORK_TREE="$tmp" GIT_INDEX_FILE="$index" node scripts/check-standards.mjs --self-test; fi
   )
+  [ -n "${OPS_FULL_HOOK:-}" ] || tests_skip=1
   tests=(); sources=0
   for f in "${staged[@]}"; do
     case "$f" in
@@ -100,7 +114,8 @@ if touches '^apps/(console|embed)/|^package\.json$|^pnpm-lock\.yaml$'; then
         case "$f" in *.ts|*.tsx) sib="${f%.*}.test.ts"; if [ -f "$tmp/$sib" ]; then tests+=("$tmp/$sib"); fi ;; esac ;;
     esac
   done
-  if [ "${#tests[@]}" -gt 0 ]; then
+  if [ -n "${tests_skip:-}" ]; then :
+  elif [ "${#tests[@]}" -gt 0 ]; then
     mapfile -t tests < <(printf '%s\n' "${tests[@]}" | sort -u)
     (cd "$tmp/apps/console" && node --test "${tests[@]}")
   elif [ "$sources" = 1 ]; then
@@ -134,17 +149,63 @@ real_uv="$(command -v uv || echo uv)"
 mkdir -p "$run/.bin"
 printf '#!/bin/sh\nif [ "$1" = run ]; then shift; exec "$@"; fi\nexec "%s" "$@"\n' "$real_uv" > "$run/.bin/uv"
 chmod +x "$run/.bin/uv"
-if ! PATH="$run/.bin:$root/.venv/bin:$PATH" GIT_DIR="$git_dir" PYTHONPATH="$export_path" make -s -C "$tmp" checks STAGED=1 STAGED_FILES="$run/.staged" \
+if [ -n "${OPS_FULL_HOOK:-}" ] && ! PATH="$run/.bin:$root/.venv/bin:$PATH" GIT_DIR="$git_dir" PYTHONPATH="$export_path" make -s -C "$tmp" checks STAGED=1 STAGED_FILES="$run/.staged" \
   PY="$root/.venv/bin/python" PYRIGHT="$root/.venv/bin/pyright" LINT_IMPORTS="$root/.venv/bin/lint-imports --no-logo" >"$run/.checks.log" 2>&1; then
   tail -60 "$run/.checks.log"; echo "verify-staged: make checks failed (above); fix what it names"; exit 1
 fi
 # Python files in the commit are linted and format-checked; a second each.
 mapfile -t py < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only --diff-filter=ACMR -- '*.py' || true)
+# A merge commit is checked on what it resolves: a file staged exactly as the other side has it came in with that side,
+# so only files that differ from both parents are linted and type-checked here.
+if [ "${#py[@]}" -gt 0 ] && git -C "$root" rev-parse -q --verify MERGE_HEAD >/dev/null; then
+  mapfile -t theirs < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only --diff-filter=ACMR MERGE_HEAD -- '*.py' || true)
+  kept=()
+  for f in "${py[@]}"; do [[ " ${theirs[*]} " == *" $f "* ]] && kept+=("$f"); done
+  py=("${kept[@]}")
+fi
 if [ "${#py[@]}" -gt 0 ]; then
   fixhint="verify-staged: ruff refused the files above; run uv run ruff check --fix <file> and uv run ruff format <file>, stage the file, commit again"
   if [ "${#fix_skipped[@]}" -gt 0 ]; then fixhint="$fixhint (not fixed here because the working copy differs from the staged copy: ${fix_skipped[*]})"; fi
   "$root/.venv/bin/ruff" check "${py[@]}" || { echo "$fixhint"; exit 1; }
   "$root/.venv/bin/ruff" format --check "${py[@]}" || { echo "$fixhint"; exit 1; }
+  # Types on the staged Python files only (the project config decides strictness), from the checkout's environment.
+  # Only files under the root config's `include` or an execution environment's root: pyright given any other file
+  # checks it with no project settings, so a staging script or the SDK (its own project) fails on rules not its own.
+  mapfile -t typed < <(cd "$root" && "$root/.venv/bin/python" -c 'import sys, tomllib; c = tomllib.load(open("pyproject.toml", "rb"))["tool"]["pyright"]; inc = c["include"] + [e["root"] for e in c.get("executionEnvironments", [])]; [print(f) for f in sys.argv[1:] if any(f == i or f.startswith(i.rstrip("/") + "/") for i in inc)]' "${py[@]}")
+  if [ "${#typed[@]}" -eq 0 ]; then :
+  elif [ -x "$root/.venv/bin/pyright" ]; then
+    # In the export, so the staged content is what is checked (a file staged in a private index is not in the checkout);
+    # imports resolve through the checkout's interpreter.
+    # The venv's editable installs name the checkout's sources, so an absolute `import ops_agents...` would read the
+    # checkout while a relative import reads the export, and one class then reads as two types. A project file for this
+    # run puts the export's own source folders first in every environment (extraPaths come before site-packages).
+    "$root/.venv/bin/python" - "$tmp" "$root" "$run/pyrightconfig.json" <<'PY'
+import json, sys, tomllib
+from pathlib import Path
+
+# Resolved: pyright reports real paths, and a root under a symlinked /var would not match them.
+tmp, root, out = Path(sys.argv[1]).resolve(), Path(sys.argv[2]), Path(sys.argv[3])
+cfg = tomllib.loads((tmp / "pyproject.toml").read_text())["tool"]["pyright"]
+src = [str(d) for pat in ("packages/*/src", "services/*/src") for d in sorted(tmp.glob(pat))]
+src += [str(tmp / "deploy/database")]
+absolute = lambda p: str(tmp / p)
+cfg.pop("include", None)  # the files are named on the command line; an absolute include is ignored with a warning
+cfg["exclude"] = [e if e.startswith("**") else absolute(e) for e in cfg.get("exclude", [])]
+envs = []
+for e in cfg.get("executionEnvironments", []):
+    e = dict(e)
+    e["root"] = absolute(e["root"])
+    e["extraPaths"] = [absolute(x) for x in e.get("extraPaths", [])] + src
+    envs.append(e)
+cfg["executionEnvironments"] = envs
+cfg["extraPaths"] = [absolute(x) for x in cfg.get("extraPaths", [])] + src
+cfg["venvPath"] = str(root)
+out.write_text(json.dumps(cfg))
+PY
+    (cd "$tmp" && "$root/.venv/bin/pyright" --project "$run/pyrightconfig.json" --venvpath "$root" "${typed[@]}") || { echo "verify-staged: pyright refused the staged files above"; exit 1; }
+  else
+    echo "verify-staged: WARNING pyright is not installed in $root/.venv, so the staged Python was not type-checked; run uv sync"
+  fi
 fi
 # Slower checks that build each service (OpenAPI documents, the generated SDKs, import directions, strict types, the
 # SQL Server DDL and store tests) run in CI on every pull request and in `make verify`, not on each commit. After a route

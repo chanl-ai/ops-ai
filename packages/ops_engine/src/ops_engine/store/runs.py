@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any, ClassVar, cast
 
 import sqlalchemy as sa
-from sqlalchemy.exc import IntegrityError
 
 from ops_service_kit.http import Json, JsonValue, Out
 from ops_service_kit.listing import ListParams
@@ -15,12 +14,17 @@ from ops_store.listing import ListPage, list_page
 from ops_store.rows import one, rows
 from ops_store.team_scope import acting_team, team_visible
 
-from .clock import db_now, now_iso
-from .tables import ENGINE_BUILD, engine_definitions, engine_runs, engine_steps, engine_waits, engine_work
+from ..journal import FAILING_PORTS, definitely_not_done, error_of
+from .clock import now_iso
+from .tables import engine_definitions, engine_runs, engine_steps, engine_waits, engine_work
 from .tx import Transactions
 from .work import WorkQueue
 
 TERMINAL = ("succeeded", "failed", "cancelled")
+# The statuses Redrive takes a run back from.
+REDRIVABLE = ("failed", "stuck")
+# The most runs one bulk redrive or cancel takes; a larger set is narrowed by its filter or sent again.
+BULK_LIMIT = 500
 # A run that another run's step started names that run in created_by: `run:<parent id>`.
 CHILD_PREFIX = "run:"
 
@@ -42,6 +46,8 @@ class RunRow(Out):
     outcome: str | None = None
     output: JsonValue = None
     error: str | None = None
+    # The error model's record of `error` (ops_contracts.errors.RunError, on the wire's camelCase keys).
+    failure: Json | None = None
     # While waiting: {node, iteration, interruptId, payload}; its own model comes later.
     waiting: Json | None = None
     created_by: str
@@ -92,63 +98,16 @@ class NotLiveError(PermissionError):
         self.stage = stage
 
 
+# The node type of a step that calls one tool (node_types.py), whose journalled input names it as `operation`.
+TOOL_NODE = "ops.action.tool"
+
+
 class RunStore:
     # A run and its start row commit together (TRANSACTION); a repeated run key loses on the unique key (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
 
     def __init__(self, tx: Transactions) -> None:
         self.tx = tx
-
-    async def create(self, run: dict[str, Any]) -> tuple[RunRow, bool]:
-        """Writes the run (status queued) and its start work row; a run with the same key is returned instead.
-        A live run is refused (NotLiveError) unless the version it pins is live, read under the same lock a pause
-        takes, so a pause and a start cannot both pass. Returns (run, created)."""
-        at = now_iso()
-        delay = float(run.pop("after_seconds", 0) or 0)
-        values = {**run, "tenant_id": self.tx.tenant(), "status": "queued", "created_at": at, "updated_at": at}
-        d = engine_definitions
-        try:
-            async with self.tx.tenant_tx() as c:
-                # The pinned version, locked until the run commits: a delete of the workflow waits for this start
-                # (and then sees its run), or ran first and the start finds the version gone.
-                pinned = await c.execute(
-                    sa.select(d.c.stage, d.c.archived_at)
-                    .where(
-                        d.c.tenant_id == values["tenant_id"],
-                        d.c.workflow_id == run["workflow_id"],
-                        d.c.version == run["version"],
-                        d.c.digest == run["digest"],
-                    )
-                    .with_for_update()
-                )
-                found = pinned.first()
-                if found is None:
-                    raise DefinitionGoneError(f"{run['workflow_id']} version {run['version']} no longer exists")
-                if found.archived_at is not None:
-                    raise NotLiveError("archived")
-                if run["mode"] == "live" and found.stage != "live":
-                    raise NotLiveError(str(found.stage))
-                await c.execute(engine_runs.insert().values(**values))
-                await c.execute(
-                    engine_work.insert().values(
-                        tenant_id=values["tenant_id"],
-                        run_id=run["id"],
-                        kind="start",
-                        payload=None,
-                        dedupe_key=f"start:{run['id']}",
-                        status="queued",
-                        build=ENGINE_BUILD,
-                        available_at=db_now(c) + delay,
-                        attempts=0,
-                        created_at=at,
-                    )
-                )
-        except IntegrityError:
-            found = await self.by_key(str(run["workflow_id"]), str(run["run_key"]))
-            if found is None:
-                raise
-            return found, False
-        return await self.row(str(run["id"])) or RunRow.model_validate(values), True
 
     async def by_key(self, workflow_id: str, run_key: str) -> RunRow | None:
         q = engine_runs.select().where(
@@ -205,6 +164,39 @@ class RunStore:
         async with self.tx.tenant_tx() as c:
             return await rows(c, q, RunRow)
 
+    async def matching(
+        self,
+        statuses: tuple[str, ...],
+        *,
+        workflow_id: str | None = None,
+        kind: str | None = None,
+        code: str | None = None,
+        created_from: str | None = None,
+        created_to: str | None = None,
+        limit: int = BULK_LIMIT,
+    ) -> list[RunRow]:
+        """The acting team's runs a bulk action takes, oldest first, at most `limit`: in one of `statuses`, and when
+        given on `workflow_id`, created in [`created_from`, `created_to`), and failed with error `kind` or `code` (the
+        run's recorded failure; a run with none matches neither)."""
+        r = engine_runs
+        q = r.select().where(r.c.tenant_id == self.tx.tenant(), team_visible(r), r.c.status.in_(statuses))
+        if workflow_id:
+            q = q.where(r.c.workflow_id == workflow_id)
+        if created_from:
+            q = q.where(r.c.created_at >= created_from)
+        if created_to:
+            q = q.where(r.c.created_at < created_to)
+        async with self.tx.tenant_tx() as c:
+            found = await rows(c, q.order_by(r.c.created_at, r.c.id), RunRow)
+        # The failure is a JSON column; its kind and code are read here, so the query stays portable.
+        picked = [
+            run
+            for run in found
+            if (kind is None or (run.failure or {}).get("kind") == kind)
+            and (code is None or (run.failure or {}).get("code") == code)
+        ]
+        return picked[:limit]
+
     async def page(
         self,
         *,
@@ -255,6 +247,8 @@ class RunStore:
                 c,
                 q,
                 params,
+                search=[engine_definitions.c.name, r.c.id],
+                sortable={"createdAt": r.c.created_at, "status": r.c.status},
                 default_sort=r.c.created_at.desc(),
                 filters={"status": r.c.status, "workflowId": r.c.workflow_id},
                 facets={"status": r.c.status, "workflowId": r.c.workflow_id},
@@ -340,7 +334,15 @@ class RunStore:
         return bool(gone.rowcount)
 
     async def finish(
-        self, run_id: str, *, generation: int | None, failed: bool, outcome: str, output: Any, error: str | None
+        self,
+        run_id: str,
+        *,
+        generation: int | None,
+        failed: bool,
+        outcome: str,
+        output: Any,
+        error: str | None,
+        failure: Json | None = None,
     ) -> str:
         """Records the End the run's graph reached and returns the status written. A failure End fails the run. A
         run whose graph ended while runs it started are still going is not done: it reads waiting while one of them
@@ -352,7 +354,7 @@ class RunStore:
             mine = sa.and_(
                 r.c.id == run_id, r.c.tenant_id == self.tx.tenant(), team_visible(r), r.c.status != "cancelled"
             )
-            await c.execute(sa.select(r.c.id).where(mine).with_for_update())
+            await c.execute(locked(sa.select(r.c.id).where(mine), r))
             status = "failed" if failed else (await self._children_left(c, run_id) or "succeeded")
             done = status in TERMINAL
             await c.execute(
@@ -363,6 +365,7 @@ class RunStore:
                     outcome=outcome,
                     output=output,
                     error=error,
+                    failure=failure,
                     waiting=None,
                     finished_at=at if done else None,
                     updated_at=at,
@@ -386,7 +389,9 @@ class RunStore:
                 return False
             finished = at if status in TERMINAL else None
             await c.execute(
-                r.update().where(mine).values(status=status, error=None, finished_at=finished, updated_at=at)
+                r.update()
+                .where(mine)
+                .values(status=status, error=None, failure=None, finished_at=finished, updated_at=at)
             )
         return True
 
@@ -404,7 +409,7 @@ class RunStore:
             wake: tuple[str, str, str | None] | None = None
             async with self.tx.tenant_tx() as c:
                 mine = sa.and_(r.c.id == parent_id, r.c.tenant_id == self.tx.tenant(), team_visible(r))
-                query = sa.select(r.c.status, r.c.outcome, r.c.waiting).where(mine).with_for_update()
+                query = locked(cast(sa.Select[Any], sa.select(r.c.status, r.c.outcome, r.c.waiting)).where(mine), r)
                 found = (await c.execute(query)).first()
                 if found is None or found.status in TERMINAL:
                     return
@@ -480,7 +485,7 @@ class RunStore:
         r, w = engine_runs, engine_work
         async with self.tx.tenant_tx() as c:
             mine = sa.and_(r.c.id == run_id, r.c.tenant_id == self.tx.tenant(), team_visible(r))
-            found = (await c.execute(sa.select(r.c.status).where(mine).with_for_update())).first()
+            found = (await c.execute(locked(sa.select(r.c.status).where(mine), r))).first()
             if found is None:
                 return None, False
             changed = found.status not in TERMINAL
@@ -497,11 +502,14 @@ class RunStore:
                 )
         return await self.row(run_id), changed
 
-    async def retry(self, run_id: str) -> tuple[RunRow | None, bool]:
+    async def retry(
+        self, run_id: str, *, statuses: tuple[str, ...] = ("stuck",), failed_step: bool = False
+    ) -> tuple[RunRow | None, bool]:
         """Queues a Stuck run again: its set-aside work rows are closed and one new row goes on under the
         current engine build. A run paused at a step is resumed at that step, which reads its state again; any other
         continues from its last checkpoint, where recorded steps return their record and a write reconciles by its
-        last attempt's key, so nothing is sent twice. Returns (run, changed); changed is False for a run not Stuck."""
+        last attempt's key, so nothing is sent twice. Returns (run, changed); changed is False for a run whose status
+        is not in `statuses`."""
         at = now_iso()
         r, w = engine_runs, engine_work
         async with self.tx.tenant_tx() as c:
@@ -509,9 +517,15 @@ class RunStore:
             found = (await c.execute(locked(sa.select(r).where(mine), r))).first()
             if found is None:
                 return None, False
-            if found.status != "stuck":
+            if found.status not in statuses:
                 return await self.row(run_id), False
-            await c.execute(r.update().where(mine).values(status="queued", error=None, updated_at=at))
+            if failed_step and found.status == "failed":
+                await self._set_aside_failed_step(c, found)
+            await c.execute(
+                r.update()
+                .where(mine)
+                .values(status="queued", error=None, failure=None, outcome=None, finished_at=None, updated_at=at)
+            )
             await c.execute(
                 w.update()
                 .where(w.c.run_id == run_id, w.c.tenant_id == self.tx.tenant(), w.c.status.in_(("stuck", "queued")))
@@ -525,6 +539,55 @@ class RunStore:
         else:
             await queue.enqueue(run_id, "retry", f"retry:{run_id}:{at}")
         return await self.row(run_id), True
+
+    async def redrive(self, run_id: str) -> tuple[RunRow | None, bool]:
+        """Queues a Failed or Stuck run again from its failed step, on the version it pinned (the run row keeps it;
+        a later publish is never read). A failed run's checkpoints are gone, so its pass starts the graph over:
+        every step the journal recorded returns its record instead of running, the failed step takes its next
+        attempt, and a write whose outcome was unknown reconciles by its last key before any second send."""
+        return await self.retry(run_id, statuses=REDRIVABLE, failed_step=True)
+
+    async def _set_aside_failed_step(self, c: Any, run: Any) -> None:
+        """Sets the failed step's recorded failing attempt aside, in the redrive's own transaction. Every recorded port
+        is returned on a re-run (compiler.recorded), so without this a step that left by its error or refused port
+        returns that record and the run walks to the same failure End without running it. A definite answer is marked
+        `redriven` and the step takes its next attempt. A write is set aside only when its recorded error proves it did
+        nothing (journal.definitely_not_done); any other write (its timeout port, a 5xx, a plugin failure, an unknown
+        code) may have run, so it is made a dangling write instead (status error, no port): the wrapper reconciles it by
+        its key before any second send. An attempt with no port is left as it is, for the same reason. The step is the
+        one the run's failure names, at its latest iteration and attempt; a failure that names no step (a run failed
+        before the record existed) sets one aside only when the run ended at a failure End, at its last failing step,
+        as the worker's reason names it."""
+        s = engine_steps
+        mine = sa.and_(s.c.run_id == run.id, s.c.tenant_id == self.tx.tenant())
+        failure = cast(Json | None, run.failure) or {}
+        step = cast(Json | None, failure.get("step")) or {}
+        if step.get("id"):
+            named = sa.and_(mine, s.c.node_id == str(step["id"]))
+            latest = (s.c.iteration.desc(), s.c.attempt.desc())
+        elif run.outcome is not None:
+            named = sa.and_(mine, s.c.port.in_(FAILING_PORTS))
+            latest = (s.c.started_at.desc(), s.c.iteration.desc(), s.c.attempt.desc())
+        else:
+            return
+        cols = (s.c.node_id, s.c.iteration, s.c.attempt, s.c.port, s.c.effects, s.c.status, s.c.output)
+        last = (await c.execute(sa.select(*cols).where(named).order_by(*latest).limit(1))).first()
+        if last is None or last.port not in FAILING_PORTS or last.status not in ("ok", "error"):
+            return
+        row = sa.and_(
+            mine,
+            s.c.node_id == last.node_id,
+            s.c.iteration == last.iteration,
+            s.c.attempt == last.attempt,
+            # Unchanged since it was read: a worker that recorded the step since keeps its record.
+            s.c.status == last.status,
+            s.c.port == last.port,
+        )
+        done = last.port == "refused" or (last.port == "error" and definitely_not_done(error_of(last.output)))
+        if last.effects == "write" and not done:
+            await c.execute(s.update().where(row).values(status="error", port=None))
+        else:
+            await c.execute(s.update().where(row).values(status="redriven"))
 
     async def step_rows(self, run_id: str) -> list[RunStep]:
         """Every attempt of every node, in the order they started."""
@@ -555,6 +618,32 @@ class RunStore:
             for step in await rows(c, q, RunStep):
                 out[step.run_id].append(step)
         return out
+
+    async def last_tool_output(self, team_id: str, tool: str, *, scan: int = 200) -> JsonValue | None:
+        """The answer `tool` gave the newest finished tool step of one of `team_id`'s live runs, for a try's sample:
+        a live run's call reached the system, where a test run's may have been a mock's answer. Only the newest `scan`
+        tool steps are read, so a tool not called lately has none; another team's runs are never read."""
+        s, r = engine_steps, engine_runs
+        q = (
+            sa.select(s.c.input, s.c.output)
+            .select_from(s.join(r, sa.and_(r.c.id == s.c.run_id, r.c.tenant_id == s.c.tenant_id)))
+            .where(
+                s.c.tenant_id == self.tx.tenant(),
+                r.c.team_id == team_id,
+                r.c.mode == "live",
+                s.c.node_type == TOOL_NODE,
+                s.c.status == "ok",
+                s.c.output.is_not(None),
+            )
+            .order_by(s.c.finished_at.desc())
+            .limit(scan)
+        )
+        async with self.tx.tenant_tx() as c:
+            for row in (await c.execute(q)).mappings():
+                given = row["input"]
+                if isinstance(given, dict) and cast(Json, given).get("operation") == tool:
+                    return cast(JsonValue, row["output"])
+        return None
 
     async def work(self, run_id: str) -> list[dict[str, Any]]:
         q = (

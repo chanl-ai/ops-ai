@@ -44,6 +44,11 @@ queries = 1
 ["GET /v1/auth/session"]
 queries = 1
 
+["GET /v1/auth/sso/links"]
+queries = 3
+transactions = 3   # listed: a bearer route like /v1/auth/session; the session, its person and the provider are each read by their own store call, owed one request transaction
+connections = 3
+
 ["GET /v1/health"]
 queries = 0
 
@@ -74,6 +79,7 @@ transactions = 2   # listed: the assistants' names are the install's own rows (o
 connections = 2
 
 ["GET /v1/people-names"]
+query = { emails = "ana@example.com" }
 queries = 8   # the access.view decision a Chat user fails reads the caller's roles
 
 ["GET /v1/people/{person_id}/permissions"]
@@ -92,16 +98,19 @@ queries = 8   # the access.view decision a Chat user fails reads the caller's ro
 queries = 8   # the access.view decision a Chat user fails reads the caller's roles
 
 ["GET /v1/roles"]
-queries = 9
+queries = 10   # one more: each role's cells are read through named_grids (the one reader), not counted off the table
 
 ["GET /v1/roles/{role_id}"]
 queries = 14
+
+["GET /v1/roles/{role_id}/holder-options"]
+queries = 9
 
 ["GET /v1/roles/{role_id}/holders"]
 queries = 9
 
 ["GET /v1/settings/members"]
-queries = 12
+queries = 17   # listed: which shown members who need a new invite manage access (linksOwnSession), read once for the page
 
 ["GET /v1/settings/members/options"]
 queries = 8
@@ -133,7 +142,8 @@ connections = 3
 queries = 9
 
 ["GET /v1/team-names"]
+query = { ids = "team_x" }
 queries = 8   # the access.view decision a Chat user fails reads the caller's roles
 
 ["GET /v1/teams"]
-queries = 10
+queries = 9

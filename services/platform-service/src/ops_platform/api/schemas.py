@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints,
 from ops_access.catalogue import INVITE_ROLES
 from ops_service_kit.flags import FlagName
 from ops_service_kit.http import In, ListResult, Out
+from ops_service_kit.names import Name, Name80
 
 
 class SignIn(In):
@@ -66,6 +67,8 @@ class ActingForIn(In):
     """The person a tool call acts for, by the email a run or chat turn records; the team is the service token's."""
 
     email: str = Field(min_length=3, max_length=320)
+    # The service the token is to be sent to; unset, the calling service's default (acting_for.AUDIENCES).
+    audience: str | None = Field(default=None, max_length=32)
 
 
 class ActingForOut(Out):
@@ -235,7 +238,7 @@ class TransferIn(In):
 class WorkspaceCloseIn(In):
     """The workspace's name, typed by its owner to confirm the delete."""
 
-    name: str = Field(min_length=1, max_length=80)
+    name: Name80
 
 
 class TeamDeleteCheckOut(Out):
@@ -305,6 +308,12 @@ class MemberOut(Out):
     user_id: str | None = None
     # Roles the person holds in every team (`*`), by name: where access beyond their team role comes from.
     workspace_roles: list[str] = Field(default_factory=list[str])
+    # Active, but with no provider link and no password in a workspace that signs in only through a provider: they
+    # cannot sign in until a new invite (`/v1/settings/members/reinvite`) links them.
+    needs_invite: bool = False
+    # Would need an invite, but manages access or is on the break-glass list: a link invite never opens their
+    # account, so they link from their own session after a password reset.
+    links_own_session: bool = False
 
 
 class InviteIn(In):
@@ -329,7 +338,7 @@ class RoleCellsIn(In):
 
 
 class RoleCreateIn(In):
-    name: str = Field(min_length=1, max_length=80)
+    name: Name80
     description: str = Field(default="", max_length=500)
     # Start from another role's cells (less those a custom role may not hold), or from `permissions`, or from none.
     copy_of: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")
@@ -337,7 +346,7 @@ class RoleCreateIn(In):
 
 
 class RolePatchIn(In):
-    name: str = Field(min_length=1, max_length=80)
+    name: Name80
     description: str | None = Field(default=None, max_length=500)
 
 
@@ -365,6 +374,24 @@ class InviteBulkOut(BulkOut):
     invites: list[InviteLink]
 
 
+class Mailed(Out):
+    member_id: str
+    email: str
+
+
+class ReinviteBulkOut(BulkOut):
+    """Who a link invite was mailed to; the link itself goes only to their mailbox."""
+
+    mailed: list[Mailed]
+
+
+class ReinviteIn(In):
+    # Omitted: every member of the team who needs a new invite.
+    ids: list[Annotated[str, StringConstraints(pattern=MEMBER_ID)]] | None = Field(
+        default=None, min_length=1, max_length=100
+    )
+
+
 class InvitePreview(Out):
     token: str
     email: str
@@ -379,7 +406,7 @@ class InvitePreview(Out):
 
 
 class AcceptIn(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     # Set for a new person in a workspace that signs in by password; stored as a hash.
     password: str | None = Field(default=None, max_length=200)
 
@@ -421,7 +448,7 @@ class KeyTargetIn(In):
 
 
 class ApiKeyIn(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     scopes: list[Literal["read", "write"]] = Field(min_length=1, max_length=2)
     expires_in_days: int | None = Field(default=None, ge=1, le=730)
     # The one agent or workflow the key may start; left out, any live workflow of the team.
@@ -508,6 +535,13 @@ class RoleGrantIn(In):
     role_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
 
 
+class RoleHolderIn(In):
+    """Who the role is given to, in the team the request acts in (X-Team-Id): a person by user id or a group."""
+
+    kind: Literal["person", "group"]
+    id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
+
+
 class RoleGrantOut(Out):
     id: str
     role_id: str
@@ -519,7 +553,7 @@ class RoleGrantOut(Out):
 
 
 class RoleHolderOut(Out):
-    kind: Literal["person", "team"]
+    kind: Literal["person", "team", "group"]
     id: str
     team_id: str
     name: str
@@ -529,7 +563,7 @@ class RoleHolderOut(Out):
 class GrantingRole(Out):
     id: str
     name: str
-    via: Literal["person", "team"]
+    via: Literal["person", "team", "group"]
 
 
 class EffectivePermission(Out):
@@ -638,11 +672,15 @@ class SsoStartIn(In):
     email: str | None = Field(default=None, min_length=3, max_length=320, pattern=EMAIL)
     provider: str | None = Field(default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9_-]+$")
     next: str | None = Field(default=None, pattern=NEXT_PATH)
+    # The invite link's token, when the person signs in from their invite: the sign-in may then link them.
+    invite: str | None = Field(default=None, pattern=r"^inv_[A-Za-z0-9_-]{8,64}$")
 
     @model_validator(mode="after")
     def _one_of(self) -> SsoStartIn:
         if (self.email is None) == (self.provider is None):
             raise ValueError("give either email or provider")
+        if self.invite is not None and self.email is None:
+            raise ValueError("an invite signs in with its email")
         return self
 
 
@@ -653,6 +691,30 @@ class StepUpSsoStartIn(In):
 class SsoStarted(Out):
     redirect_url: str
     flow_key: str
+
+
+class SsoLink(Out):
+    """A provider the signed-in person can sign in with, and whether their account there is linked."""
+
+    provider_id: str
+    kind: str
+    label: str
+    linked: bool
+    linked_at: str | None
+
+
+class SsoLinkStartIn(In):
+    """The step-up token this session took in the last minutes (`/v1/auth/step-up` or its SSO form)."""
+
+    step_up: str = Field(min_length=20, max_length=4000)
+    next: str | None = Field(default=None, pattern=NEXT_PATH)
+
+
+class SsoLinked(Out):
+    """The provider the session's person can now sign in with."""
+
+    provider_id: str
+    kind: str
 
 
 class SsoCompleteIn(In):
@@ -725,7 +787,7 @@ class GroupSettings(In):
 
 class ProviderIn(In):
     kind: Literal["password", "oidc", "saml"]
-    label: str = Field(min_length=1, max_length=200)
+    label: Name
     enabled: bool = True
     domains: list[Annotated[str, StringConstraints(to_lower=True, max_length=253, pattern=DOMAIN)]] = Field(
         default_factory=list[str], max_length=50
@@ -888,8 +950,9 @@ class PolicyOut(Out):
     changed_by: str
     effect: str
     kind: Literal[
-        "bool", "floor", "days", "hours", "publish_modes", "names", "choice", "app_changes", "app_changes_by_app"
-    ]
+        "bool", "floor", "days", "hours", "publish_modes", "names", "choice", "app_changes", "app_changes_by_app",
+        "by_area", "floor_rules",
+    ]  # fmt: skip
     title: str
     # A "choice" policy's options, in order.
     choices: list[PolicyChoice] | None = None

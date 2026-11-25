@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { AlertTriangle, CheckCircle2, FileArchive, FileText, XCircle } from 'lucide-react';
 
+import { PublishDialog, type BlockerRow } from '@/components/shared/publish-dialog';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FileUpload, type UploadItem, uploadsBlocker, uploadsReady } from '@/components/shared/file-upload';
 import { FormField } from '@/components/shared/form-field';
@@ -13,12 +14,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { plural } from '@/lib/format';
-import type { SkillCreateInput, SkillDetail, SkillImportPreview, SkillLoading, SkillVersion } from '@/lib/types/skills';
+import type { SkillCreateInput, SkillDetail, SkillImportPreview, SkillLoading, SkillVersion, TeamChoice } from '@/lib/types/skills';
 
-import { DiffView, EDIT_CLASS, EditClassBadge, joinSections } from './skill-meta';
+import { DiffView, EDIT_CLASS, EditClassBadge, UNWRITTEN_SECTIONS, WORKED_EXAMPLE } from './skill-meta';
 import { SkillLoadingField } from './skill-loading';
+import { nameError } from '@/lib/validation/names';
 
-function TeamSelect({ id, teams, value, onChange, error }: { id: string; teams: string[]; value: string; onChange: (v: string) => void; error?: string }) {
+/** The owner team, chosen by name; the value sent is the team's id. */
+function TeamSelect({ id, teams, value, onChange, error }: { id: string; teams: TeamChoice[]; value: string; onChange: (v: string) => void; error?: string }) {
   return (
     <FormField id={id} label="Owner team" error={error} hint="Owns the skill, its reviews and its versions.">
       <Select value={value} onValueChange={onChange}>
@@ -27,8 +30,8 @@ function TeamSelect({ id, teams, value, onChange, error }: { id: string; teams: 
         </SelectTrigger>
         <SelectContent>
           {teams.map((t) => (
-            <SelectItem key={t} value={t}>
-              {t}
+            <SelectItem key={t.id} value={t.id}>
+              {t.name ?? t.id}
             </SelectItem>
           ))}
         </SelectContent>
@@ -38,7 +41,7 @@ function TeamSelect({ id, teams, value, onChange, error }: { id: string; teams: 
 }
 
 /** A blank skill: name, when to use it and the owner team. The instructions are written on the skill page. */
-export function NewSkillDialog({ open, onOpenChange, teams, defaultTeam, maxUseWhen, isPending, onSubmit }: { open: boolean; onOpenChange: (o: boolean) => void; teams: string[]; defaultTeam?: string; maxUseWhen: number; isPending: boolean; onSubmit: (i: SkillCreateInput) => Promise<unknown> }) {
+export function NewSkillDialog({ open, onOpenChange, teams, defaultTeam, maxUseWhen, isPending, onSubmit }: { open: boolean; onOpenChange: (o: boolean) => void; teams: TeamChoice[]; defaultTeam?: string; maxUseWhen: number; isPending: boolean; onSubmit: (i: SkillCreateInput) => Promise<unknown> }) {
   const [name, setName] = React.useState('');
   const [useWhen, setUseWhen] = React.useState('');
   const [loading, setLoading] = React.useState<SkillLoading>('on_match');
@@ -55,15 +58,15 @@ export function NewSkillDialog({ open, onOpenChange, teams, defaultTeam, maxUseW
   }, [open]);
   // Teams can arrive after the dialog opens; pick the default once they do.
   React.useEffect(() => {
-    if (open && !team && teams.length) setTeam(defaultTeam && teams.includes(defaultTeam) ? defaultTeam : teams[0]);
+    if (open && !team && teams.length) setTeam(defaultTeam && teams.some((t) => t.id === defaultTeam) ? defaultTeam : teams[0].id);
   }, [open, team, teams, defaultTeam]);
 
   const submit = async () => {
-    const e = { name: name.trim() ? undefined : 'Name the skill.', useWhen: !useWhen.trim() && loading === 'on_match' ? 'Say when an agent should use it.' : useWhen.length > maxUseWhen ? `Keep it under ${maxUseWhen} characters.` : undefined, team: team ? undefined : 'Choose the owner team.' };
+    const e = { name: nameError(name, 'Name the skill.'), useWhen: !useWhen.trim() && loading === 'on_match' ? 'Say when an agent should use it.' : useWhen.length > maxUseWhen ? `Keep it under ${maxUseWhen} characters.` : undefined, team: team ? undefined : 'Choose the owner team.' };
     setErrors(e);
     if (e.name || e.useWhen || e.team) return;
     try {
-      await onSubmit({ name: name.trim(), useWhen: loading === 'always' ? '' : useWhen.trim(), loading, instructions: joinSections({ steps: '1. ', rules: '- ', examples: '', output_format: '' }), ownerTeam: team, toolIds: [], knowledgeBases: [], guardrails: [], origin: 'blank' });
+      await onSubmit({ name: name.trim(), useWhen: loading === 'always' ? '' : useWhen.trim(), loading, instructions: loading === 'always' ? UNWRITTEN_SECTIONS : WORKED_EXAMPLE, ownerTeam: team, toolIds: [], knowledgeBases: [], guardrails: [], origin: 'blank' });
       onOpenChange(false);
     } catch (err) {
       setErrors({ submit: (err as Error).message });
@@ -123,7 +126,7 @@ export function ImportSkillDialog({
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  teams: string[];
+  teams: TeamChoice[];
   defaultTeam?: string;
   /** The uploaded file's id once it passed the scan, so the page can read the preview. */
   onFile: (fileId: string | undefined) => void;
@@ -147,7 +150,7 @@ export function ImportSkillDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   React.useEffect(() => {
-    if (open && !team && teams.length) setTeam(defaultTeam && teams.includes(defaultTeam) ? defaultTeam : teams[0]);
+    if (open && !team && teams.length) setTeam(defaultTeam && teams.some((t) => t.id === defaultTeam) ? defaultTeam : teams[0].id);
   }, [open, team, teams, defaultTeam]);
   const fileId = uploadsReady(upload) ? upload[0].fileId : undefined;
   React.useEffect(() => {
@@ -182,7 +185,7 @@ export function ImportSkillDialog({
             }}
             data-testid="import-skill-submit"
           >
-            Import as draft
+            Import
           </LoadingButton>
         </div>
       }
@@ -236,49 +239,26 @@ function ImportPreview({ preview: p }: { preview: SkillImportPreview }) {
 }
 
 /** Sends the newest draft to Reviews. Shows what the reviewer will see: edit class, approvers needed and the test result. */
-export function RequestReviewDialog({ open, onOpenChange, skill, isPending, onSubmit }: { open: boolean; onOpenChange: (o: boolean) => void; skill: SkillDetail; isPending: boolean; onSubmit: (note: string) => Promise<unknown> }) {
-  const [note, setNote] = React.useState('');
-  const [error, setError] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    if (open) {
-      setNote(skill.versions[0]?.note ?? '');
-      setError(null);
-    }
-  }, [open, skill.versions]);
+export function RequestReviewDialog({ open, onOpenChange, skill, isPending, onSubmit, onJump }: { open: boolean; onOpenChange: (o: boolean) => void; skill: SkillDetail; isPending: boolean; onSubmit: (note: string) => Promise<unknown>; onJump?: (b: BlockerRow) => void }) {
   const v = skill.versions[0];
   const check = skill.publishCheck;
   const run = v?.testRun;
   return (
-    <DialogShell
+    <PublishDialog
       open={open}
       onOpenChange={onOpenChange}
-      size="md"
+      testId="request-review"
       title={`Request review of v${v?.version}`}
-      description={`A publisher in ${skill.ownerTeam} other than you decides it in Reviews. Agents keep their pinned version until someone moves them.`}
-      footer={
-        <div className="flex w-full items-center justify-end gap-2">
-          <span className="mr-auto text-xs text-destructive-text">{error}</span>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isPending}>
-            Cancel
-          </Button>
-          <LoadingButton
-            isLoading={isPending}
-            disabled={!check.canRequest}
-            onClick={async () => {
-              if (!note.trim()) return setError('Say what changed and why.');
-              try {
-                await onSubmit(note.trim());
-                onOpenChange(false);
-              } catch (e) {
-                setError((e as Error).message);
-              }
-            }}
-            data-testid="request-review-submit"
-          >
-            Send to Reviews
-          </LoadingButton>
-        </div>
-      }
+      description={`A publisher in ${skill.ownerTeamName ?? skill.ownerTeam} other than you decides it in Reviews. Agents keep their pinned version until someone moves them.`}
+      blockers={[...check.blockers, ...(check.warnings ?? []).map((w) => ({ node: null, field: w.position?.field ?? null, level: 'warning', code: w.kind, message: w.message }))]}
+      onJump={onJump}
+      note={{ label: 'What changed and why', placeholder: 'e.g. Adds the posted-payment warning Lending Servicing asked for.', multiline: true, required: true, missing: 'Say what changed and why.' }}
+      submitLabel="Send"
+      submittingLabel="Sending…"
+      submitTestId="request-review-submit"
+      disabled={!check.canRequest}
+      pending={isPending}
+      onSubmit={onSubmit}
     >
       <div className="flex flex-col gap-4 text-sm">
         <div className="flex flex-wrap items-center gap-2">
@@ -295,18 +275,8 @@ export function RequestReviewDialog({ open, onOpenChange, skill, isPending, onSu
             'No test run on this version.'
           )}
         </p>
-        {!check.canRequest && (
-          <ul className="flex flex-col gap-1 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-destructive-text" data-testid="request-review-blockers">
-            {check.blockers.map((b) => (
-              <li key={b}>{b}</li>
-            ))}
-          </ul>
-        )}
-        <FormField id="rr-note" label="What changed and why">
-          <Textarea id="rr-note" value={note} onChange={(e) => (setNote(e.target.value), setError(null))} className="min-h-20" placeholder="e.g. Adds the posted-payment warning Lending Servicing asked for." />
-        </FormField>
       </div>
-    </DialogShell>
+    </PublishDialog>
   );
 }
 
@@ -403,7 +373,8 @@ export function VersionDiffDialog({ open, onOpenChange, versions, from, to, onCh
                 field('Resources', a.content.resources.map((r) => r.name).join(', '), b.content.resources.map((r) => r.name).join(', ')),
               ]}
             </div>
-            <DiffView before={a.content.instructions} after={b.content.instructions} testId="version-diff" />
+            {/* A skill written as text compares its text; its stored instructions are empty once the text has steps. */}
+            <DiffView before={a.content.source ?? a.content.instructions} after={b.content.source ?? b.content.instructions} testId="version-diff" />
           </>
         )}
       </div>

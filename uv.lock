@@ -1490,6 +1490,7 @@ version = "0.1.0"
 source = { editable = "packages/ops_agent_kernel" }
 dependencies = [
     { name = "jsonschema" },
+    { name = "ops-contracts" },
     { name = "ops-pii" },
     { name = "ops-service-kit" },
     { name = "pydantic-ai-slim", extra = ["anthropic", "openai"] },
@@ -1498,6 +1499,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "jsonschema", specifier = ">=4.23" },
+    { name = "ops-contracts", editable = "packages/contracts" },
     { name = "ops-pii", editable = "packages/ops_pii" },
     { name = "ops-service-kit", editable = "packages/ops_service_kit" },
     { name = "pydantic-ai-slim", extras = ["anthropic", "openai"], specifier = ">=2.51,<3" },
@@ -1811,6 +1813,7 @@ dependencies = [
     { name = "langgraph" },
     { name = "ops-agent-kernel" },
     { name = "ops-checkpointer" },
+    { name = "ops-contracts" },
     { name = "ops-service-kit" },
     { name = "ops-store" },
     { name = "pyyaml" },
@@ -1823,6 +1826,7 @@ requires-dist = [
     { name = "langgraph", specifier = ">=1.0" },
     { name = "ops-agent-kernel", editable = "packages/ops_agent_kernel" },
     { name = "ops-checkpointer", editable = "packages/ops_checkpointer" },
+    { name = "ops-contracts", editable = "packages/contracts" },
     { name = "ops-service-kit", editable = "packages/ops_service_kit" },
     { name = "ops-store", editable = "packages/ops_store" },
     { name = "pyyaml", specifier = ">=6" },
@@ -2316,6 +2320,7 @@ dependencies = [
     { name = "mcp" },
     { name = "ops-agent-kernel" },
     { name = "ops-agents-service" },
+    { name = "ops-contracts" },
     { name = "ops-documents-client" },
     { name = "ops-email" },
     { name = "ops-files-client" },
@@ -2339,6 +2344,7 @@ requires-dist = [
     { name = "mcp", specifier = ">=2.2.0,<2.4" },
     { name = "ops-agent-kernel", editable = "packages/ops_agent_kernel" },
     { name = "ops-agents-service", editable = "services/agents-service" },
+    { name = "ops-contracts", editable = "packages/contracts" },
     { name = "ops-documents-client", editable = "packages/ops_documents_client" },
     { name = "ops-email", editable = "packages/ops_email" },
     { name = "ops-files-client", editable = "packages/ops_files_client" },

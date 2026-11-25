@@ -220,13 +220,10 @@ with ExitStack() as stack:
 
     # 8. S3 and S4: the team's sign-in address carries the plugin's parameters and not one of the platform's own is
     # replaced; the lookup after sign-in finds the site, and the call reaches it.
-    sites_on = turn_on(gw, priya, "test.fields-sites", signIn="person_or_team", credentialId=credential(gw, priya, "test.fields-sites", "multi-app", CLIENTS["multi-app"]))  # fmt: skip
+    sites_on = turn_on(gw, priya, "test.fields-sites", signIn="team", credentialId=credential(gw, priya, "test.fields-sites", "multi-app", CLIENTS["multi-app"]))  # fmt: skip
     sites_id = str((data(sites_on) or {}).get("connectionId") or "con_missing")
-    # The team's account signs the calls a run makes with nobody behind it (the team backup).
+    # Everyone uses the team's login here, so the call a run makes with nobody behind it is signed by it.
     sites = f"/v1/apps/plugin:test.fields-sites/accounts/{sites_id}"
-    held = data(gw.get(sites, headers=priya)) or {}
-    gw.patch(sites, json={"revision": held.get("revision", 1), "teamBackup": True},
-             headers=priya)  # fmt: skip
     started, done = sign_in(gw, m["sign_in"], priya, at("test.fields-sites", sites_id), "priya.team", account="team")
     authorize = (fake.state()["authorize_requests"] or [{}])[-1]
     reached = call(gw, "fields_sites_get_record", {"id": "rec-1042"})
@@ -242,8 +239,16 @@ with ExitStack() as stack:
 
     # 9. S4: James signs in with his own account, which reaches another site: refused, and no token kept for him.
     httpx.post(f"{m['control']}/site", json={"id": "site-other"}, verify=False, headers={"Host": "api.multi.test"})
+    # Who signs in has two answers, so the account is set to Each person signs in for James's own sign-in, then back to
+    # the team's login for the call with nobody behind it.
+    def who(answer: str) -> None:
+        held = data(gw.get(sites, headers=priya)) or {}
+        gw.patch(sites, json={"revision": held.get("revision", 1), "signIn": answer}, headers=priya)
+
+    who("person")
     _, refused = sign_in(gw, m["sign_in"], james, at("test.fields-sites", sites_id), "james.person")
     mine = data(kept(gw.get("/v1/me/accounts", headers=james))) or []
+    who("team")
     still = call(gw, "fields_sites_get_record", {"id": "rec-1042"})
     check(
         "9 James's own sign-in on another site is refused as signed in to another site, holds no token for him, and "

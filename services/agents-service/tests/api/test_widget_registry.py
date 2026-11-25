@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ..saves import save_agent
 from .test_agent_limits import _app, _data  # pyright: ignore[reportPrivateUsage]
 
 FRAUD = "ag_fraud"
@@ -41,7 +42,7 @@ async def test_a_builder_creates_saves_publishes_and_pins_a_widget(tmp_path: Pat
         made = _data(await c.post("/v1/widgets", json=LIMIT_CARD), 201)
         assert (made["widgetId"], made["version"], made["status"]) == ("wire-limit-card", 1, "draft")
         assert made["requiresTools"] == ["lookup_account"]
-        early = await c.patch(f"/v1/agents/{FRAUD}", json={"widgetPins": [{"widgetId": "wire-limit-card"}]})
+        early = await save_agent(c, FRAUD, {"widgetPins": [{"widgetId": "wire-limit-card"}]})
         assert early.status_code == 422, "a draft cannot be pinned"
 
         edited = _data(
@@ -53,9 +54,7 @@ async def test_a_builder_creates_saves_publishes_and_pins_a_widget(tmp_path: Pat
         again = _data(await c.patch("/v1/widgets/wire-limit-card", json={**LIMIT_CARD, "name": "Wire limits"}))
         assert (again["version"], again["status"]) == (2, "draft"), "a published version is never changed in place"
 
-        pinned = _data(
-            await c.patch(f"/v1/agents/{FRAUD}", json={"widgetPins": [{"widgetId": "wire-limit-card", "version": 1}]})
-        )
+        pinned = _data(await save_agent(c, FRAUD, {"widgetPins": [{"widgetId": "wire-limit-card", "version": 1}]}))
         assert pinned["widgetPins"][0]["name"] == "Wire limit card", "the pin keeps the version it named"
         listed_ = {w["widgetId"]: w for w in _data(await c.get("/v1/widgets"))["data"]}
         assert listed_["wire-limit-card"]["version"] == 2 and "hold-review" in listed_, "seeded and authored, together"
@@ -79,7 +78,7 @@ async def test_a_retired_widget_takes_no_new_pins(tmp_path: Path) -> None:
         _data(await c.post("/v1/widgets/wire-limit-card/publish-requests", json={}), 201)
         retired = _data(await c.post("/v1/widgets/wire-limit-card/retire", json={"reason": "Replaced"}))
         assert retired["status"] == "deprecated"
-        r = await c.patch(f"/v1/agents/{FRAUD}", json={"widgetPins": [{"widgetId": "wire-limit-card"}]})
+        r = await save_agent(c, FRAUD, {"widgetPins": [{"widgetId": "wire-limit-card"}]})
         assert r.status_code == 422 and "wire-limit-card" in r.text, r.text
 
 

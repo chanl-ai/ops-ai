@@ -23,6 +23,7 @@ from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unprocessable
 from ops_service_kit.http import Envelope, In, Json, ListResult, Out
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListParams
+from ops_service_kit.names import Name
 from ops_store import isolation
 
 from ...store.channel_list import (
@@ -38,7 +39,7 @@ from ...store.channel_list import (
 from ...store.mailboxes import MailboxStore
 from ...store.widget_deployments import WidgetDeployments
 from .. import deployment_reviews
-from ..auth import Principal, caller_in, caller_of, require_builder
+from ..auth import Principal, caller_in, caller_of, reader_of, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..team_names import PlatformTeamNames
@@ -385,7 +386,7 @@ class ChannelIn(In):
     # Chat is the one made here; a mailbox is connected at /v1/channels/mailboxes, an API key in Settings.
     type: Literal["chat"]
     agent_id: str
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     origins: list[str] = Field(min_length=1, max_length=20)
 
 
@@ -504,7 +505,9 @@ async def agent_live(rt: Rt, me: Me, agent_id: str) -> JSONResponse:
 
 
 @live_router.get("/v1/workflows/{workflow_id}/live", response_model=Envelope[Live])
-async def workflow_live(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
+async def workflow_live(
+    rt: Rt, me: Me, _: Annotated[Principal, Depends(reader_of("workflows"))], workflow_id: str
+) -> JSONResponse:
     """Where the workflow serves: the email channels whose trigger it is, and the live steps that start it."""
     asked = _teams(me, "all")
     teams = tuple(t for t in asked if _may(me, "view", t))
@@ -528,7 +531,7 @@ class ServesPatch(In):
 
 
 class ChannelPatch(In):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     paused: bool | None = None
     serves: ServesPatch | None = None
     # A chat channel's allowed websites; a change follows the team's publish-review setting, as a serves change does.

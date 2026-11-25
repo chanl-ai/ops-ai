@@ -121,26 +121,27 @@ try {
         for (const [who, email] of [['member', 'r.menon@harborpine.example'], ['admin', 'p.shah@harborpine.example']]) {
           const page = await signedIn(browser, consoleUrl, email, 1280);
           await step(`0 ${who}: a Mine card for an app the team has not set up opens a real state, never a 404`, async () => {
-            await page.goto(`${consoleUrl}/integrations/my-accounts`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+            await page.goto(`${consoleUrl}/work/apps`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
             const card = page.getByTestId(`connector-${sfId}`);
             await card.waitFor({ timeout: 90_000 });
             const cardText = (await card.innerText()).replace(/\s+/g, ' ');
+            // A card opens the app's own page; its text says what the app's state is and who sets it up.
             await page.getByTestId(`connector-open-${sfId}`).click();
-            const sheet = page.getByTestId('connector-sheet');
-            await sheet.waitFor({ timeout: 30_000 });
-            const sheetText = (await sheet.innerText()).replace(/\s+/g, ' ');
-            const adminLinks = await sheet.locator('a[href^="/integrations/apps/"]').count();
+            await page.waitForURL((u) => u.pathname.startsWith('/work/apps/'), { timeout: 30_000 });
+            await page.locator('main').waitFor({ timeout: 30_000 });
+            const sheetText = ((await page.locator('main').innerText()) ?? '').replace(/\s+/g, ' ');
+            const adminLinks = await page.locator('main a[href^="/data/connectors/"]').count();
             await page.screenshot({ path: join(SHOTS, `mine-not-set-up-${who}.png`), fullPage: true });
             if (who === 'member') {
-              check(`0 member: the card and its details say it is not set up and to ask an admin, with no way onto the admin page`, /Not set up for your team yet/.test(cardText) && /Ask an admin/.test(cardText) && /Not set up for your team yet/.test(sheetText) && /Ask an admin/.test(sheetText) && adminLinks === 0 && new URL(page.url()).pathname === '/integrations/my-accounts', { cardText, sheetText: sheetText.slice(0, 300), adminLinks, at: page.url() });
+              check(`0 member: the card and its details say it is not set up and to ask an admin, with no way onto the admin page`, /Not set up for your team yet/.test(cardText) && /Ask an admin/.test(cardText) && adminLinks === 0 && new URL(page.url()).pathname === `/work/apps/${encodeURIComponent(sfId)}`, { cardText, sheetText: sheetText.slice(0, 300), adminLinks, at: page.url() });
             } else {
-              await page.keyboard.press('Escape');
+              await page.goto(`${consoleUrl}/work/apps`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
               await page.getByTestId(`connector-turn-on-${sfId}`).click();
-              await page.waitForURL((u) => u.pathname.startsWith('/integrations/apps/'), { timeout: 60_000 });
+              await page.waitForURL((u) => u.pathname.startsWith('/data/connectors/'), { timeout: 60_000 });
               await page.getByTestId('app-connect').waitFor({ timeout: 60_000 });
               const body = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
               const action = (await page.getByTestId('app-connect').innerText()).trim();
-              check(`0 admin: Turn on on the card opens the app's page, which offers Turn on, never a 404`, adminLinks === 1 && new URL(page.url()).pathname === `/integrations/apps/${encodeURIComponent(sfId)}` && !notFound(body) && action === 'Turn on', { adminLinks, at: page.url(), action, body: body.slice(0, 200) });
+              check(`0 admin: Turn on on the card opens the app's page, which offers Turn on, never a 404`, new URL(page.url()).pathname === `/data/connectors/${encodeURIComponent(sfId)}` && !notFound(body) && action === 'Turn on', { adminLinks, at: page.url(), action, body: body.slice(0, 200) });
             }
           }, page);
           errors.push(...page.errors);
@@ -172,7 +173,7 @@ try {
           const member = await teamCard('r.menon@harborpine.example');
           const ok = (x) => x.state === 'needs_sign_in' && /Salesforce/.test(x.text) && !/this app/i.test(x.text);
           check('0c with the team account not signed in, chat offers an admin Connect the team account and a member Ask an admin',
-            on.status === 200 && ok(admin) && /Connect the team account/.test(admin.text) && admin.connect === 1 && ok(member) && member.ask === 1 && member.connect === 0,
+            on.status === 200 && ok(admin) && /Sign in the team login/.test(admin.text) && admin.connect === 1 && ok(member) && member.ask === 1 && member.connect === 0,
             { status: on.status, admin, member });
           // Back to off with no account, so the next steps meet Salesforce as a first turn-on.
           const card = ((await call(tools, 'GET', `/v1/apps?ids=${encodeURIComponent(sfId)}`, priya)).data?.data ?? []).find((c) => c.id === sfId);
@@ -183,7 +184,7 @@ try {
         // gets a Connect card naming Salesforce, never a bare error (the gateway's refusal names the account and app).
         const james0 = await signedIn(browser, consoleUrl, 'j.richardson@harborpine.example', 1280);
         await step('0b with nobody signed in yet, James’s chat shows a Connect card naming Salesforce', async () => {
-          const on = await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(sfId)}/team`, priya, { enabled: true, signIn: 'person_or_team', settings: { login_url: sf.info.login_url } });
+          const on = await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(sfId)}/team`, priya, { enabled: true, signIn: 'person', settings: { login_url: sf.info.login_url } });
           await call(agentsUrl, 'POST', '/v1/team-assistant/app-tools', priya, { moduleIds: on.data?.moduleIds ?? [] });
           const thread = (await call(agentsUrl, 'POST', '/v1/chat/threads', as(await tokenFor('j.richardson@harborpine.example'), 'team_ops'), { kbIds: [] })).data;
           await james0.goto(`${consoleUrl}/chat/${thread.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -196,7 +197,7 @@ try {
           await james0.getByTestId('connection-connect').waitFor({ timeout: 120_000 });
           const text = (await card.innerText()).replace(/\s+/g, ' ');
           await james0.screenshot({ path: join(SHOTS, 'no-instance-connect-card.png'), fullPage: true });
-          check('0b with nobody signed in yet, James’s chat shows a Connect card naming Salesforce', on.status === 200 && /Salesforce/.test(text) && /Connect Salesforce/.test(text) && !/this app/i.test(text), { status: on.status, text: text.slice(0, 300) });
+          check('0b with nobody signed in yet, James’s chat shows a Connect card naming Salesforce', on.status === 200 && /Salesforce/.test(text) && /Sign in to Salesforce/.test(text) && !/this app/i.test(text), { status: on.status, text: text.slice(0, 300) });
         }, james0);
         errors.push(...james0.errors);
         await james0.context().close();
@@ -211,7 +212,7 @@ try {
             }
             const page = await signedIn(browser, consoleUrl, 'p.shah@harborpine.example', width);
             await step(`1 ${tag}: the Turn on window asks where you sign in and whose account, with the assistant box ticked`, async () => {
-              await page.goto(`${consoleUrl}/integrations`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+              await page.goto(`${consoleUrl}/data/connectors`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
               await page.getByTestId(`connect-${app.id}`).click({ timeout: 90_000 });
               const win = page.getByTestId('connect-window');
               await win.waitFor({ timeout: 30_000 });
@@ -262,19 +263,29 @@ try {
           }
           const ravi = await signedIn(browser, consoleUrl, 'r.menon@harborpine.example', width);
           await step(`3 ${width}: a viewer cannot turn an app on: the app's page offers only signing in from Mine`, async () => {
-            await ravi.goto(`${consoleUrl}/integrations/apps/${encodeURIComponent(APPS[0].id)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-            const own = ravi.getByTestId('app-own-sign-in');
-            await own.waitFor({ timeout: 60_000 });
-            const href = await own.getAttribute('href');
+            // A viewer's My apps offers no Turn on: the team's setup is not theirs, so the card only says to ask an admin.
+            await ravi.goto(`${consoleUrl}/work/apps`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+            await ravi.getByTestId('connectors').waitFor({ timeout: 60_000 });
+            const turnOn = await ravi.locator('[data-testid^="connector-turn-on-"]').count();
             const connect = await ravi.getByTestId('app-connect').count();
             await ravi.screenshot({ path: join(SHOTS, `viewer-${width}.png`), fullPage: true });
-            check(`3 ${width}: a viewer cannot turn an app on: the app's page offers only signing in from Mine`, connect === 0 && href === '/integrations/my-accounts', { connect, href });
+            check(`3 ${width}: a viewer cannot turn an app on: My apps offers no Turn on`, turnOn === 0 && connect === 0, { turnOn, connect });
           }, ravi);
           errors.push(...ravi.errors);
           await ravi.context().close();
         }
         const james = await signedIn(browser, consoleUrl, 'j.richardson@harborpine.example', 1280);
         await step('4 James’s first chat with the team’s assistant asks for his own Salesforce account', async () => {
+          // The Turn on window's default sign-in is the team account, so a first chat after a default turn-on runs as the
+          // team and shows no card. Salesforce is turned on again per person, as step 0b does, so a person who has not
+          // connected is the one the Connect card is for. The app goes off and its account is removed first, as step 0c
+          // does, so this is a first turn-on.
+          const was = ((await call(tools, 'GET', `/v1/apps?ids=${encodeURIComponent(sfId)}`, priya)).data?.data ?? []).find((c) => c.id === sfId);
+          await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(sfId)}/team`, priya, { enabled: false });
+          if (was?.connectionId) await call(tools, 'DELETE', `/v1/apps/${encodeURIComponent(sfId)}/accounts/${was.connectionId}`, priya);
+          const on = await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(sfId)}/team`, priya, { enabled: true, signIn: 'person', settings: { login_url: sf.info.login_url } });
+          await call(agentsUrl, 'POST', '/v1/team-assistant/app-tools', priya, { moduleIds: on.data?.moduleIds ?? [] });
+          check('4 setup: Salesforce is turned on again per person', on.status === 200, { status: on.status });
           const thread = (await call(agentsUrl, 'POST', '/v1/chat/threads', as(await tokenFor('j.richardson@harborpine.example'), 'team_ops'), { kbIds: [] })).data;
           await james.goto(`${consoleUrl}/chat/${thread.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           const box = james.getByRole('textbox', { name: 'Message' });
@@ -287,7 +298,7 @@ try {
           await james.getByTestId('connection-connect').waitFor({ timeout: 120_000 });
           const text = (await card.innerText()).replace(/\s+/g, ' ');
           await james.screenshot({ path: join(SHOTS, 'first-chat-connect-card.png'), fullPage: true });
-          check('4 James’s first chat with the team’s assistant asks for his own Salesforce account', /Salesforce/.test(text) && /Connect Salesforce/.test(text), text.slice(0, 300));
+          check('4 James’s first chat with the team’s assistant asks for his own Salesforce account', /Salesforce/.test(text) && /Sign in to Salesforce/.test(text), text.slice(0, 300));
         }, james);
         errors.push(...james.errors);
         check('5 no page errors', errors.length === 0, errors.slice(0, 3));

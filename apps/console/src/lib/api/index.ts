@@ -1,9 +1,9 @@
 import type { OpsApi } from './contract';
+import type { SignInPolicy } from '@/lib/types/sign-in';
 import { DEFAULT_USER_ID, DEMO_PASSWORD, DEMO_TOTP, USERS } from './mock/auth/seed';
 import { createCasesOnlyHttp, createChatOnlyHttp, createHttpApi, createKnowledgeOnlyHttp, createRegistryOnlyHttp,
   createRegistryPromptVariables, createRegistryToolsDirectory, createRegistryToolsList, createToolsOnlyHttp } from './http';
 import { createMockApi } from './mock';
-import { withServedAgents } from './mock/evals';
 import { createMockAuthProvider } from './mock/auth';
 import { createNoNotifications } from './notifications-none';
 import { recordMockReads } from './sample-reads';
@@ -34,6 +34,8 @@ const documentsUrl = process.env.NEXT_PUBLIC_OPS_DOCUMENTS_API_URL;
 const modelsUrl = process.env.NEXT_PUBLIC_OPS_MODELS_API_URL;
 const embedUrl = process.env.NEXT_PUBLIC_OPS_EMBED_URL;
 const authProviderName = process.env.NEXT_PUBLIC_AUTH_PROVIDER ?? 'mock';
+/** The agents service's public address (it ends in /v1), as the Channels tab's API snippets name it. */
+export const agentsApiUrl = (registryUrl ?? chatUrl ?? baseUrl ?? 'https://ops.example.com/v1').replace(/\/$/, '');
 const onPlatform = authProviderName === 'platform' && Boolean(platformUrl);
 const onRealService = Boolean(chatUrl || casesUrl || registryUrl || toolsUrl || knowledgeUrl || (authProviderName === 'platform' && platformUrl));
 
@@ -61,11 +63,6 @@ function createApi(): OpsApi {
   if (registryUrl) api = { ...api, ...createRegistryOnlyHttp(registryUrl), tools: { ...api.tools, list: createRegistryToolsList(registryUrl), ...createRegistryToolsDirectory(registryUrl) } };
   // The instruction placeholders a run can fill come from agents-service; generation and lint stay on the mock.
   if (registryUrl) api = { ...api, prompts: { ...api.prompts, variables: createRegistryPromptVariables(registryUrl) } };
-  // Evals stay sample data; their stand-ins for the registry's agents take each agent's name and versions from it.
-  if (registryUrl && !baseUrl) {
-    const agents = api.agents;
-    api = { ...api, evals: withServedAgents(api.evals, (aid) => agents.get(aid)) };
-  }
   // The chat loader and the iframe it opens are served by the embed app.
   if (embedUrl) api = { ...api, widgetDeployments: { ...api.widgetDeployments, scriptUrl: () => `${embedUrl.replace(/\/$/, '')}/embed/v1.js` } };
   if (toolsUrl) {
@@ -100,6 +97,14 @@ function createApi(): OpsApi {
   return api;
 }
 export const api: OpsApi = createApi();
+
+/**
+ * The workspace sign-in policy the app shell reads (sign-in, sign-up, the MFA guard, re-authentication). No route on
+ * platform-service serves one: it answers each email's methods itself (`authProvider.signInOptions`), offers no
+ * self sign-up, and its adapter enrols no MFA, so on that stack the shell reads none and every reader falls back to
+ * those answers. Settings > Sign-in still reads `api.signInPolicy` for the sections that are sample data.
+ */
+export const readShellSignInPolicy = (): Promise<SignInPolicy | null> => (onPlatform ? Promise.resolve(null) : api.signInPolicy.get());
 
 /**
  * Each area's pages and the service URL that serves them, so the console can mark the pages still on sample data as
@@ -155,7 +160,7 @@ const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/settings/account/connections', served: false },
   { prefix: '/settings/account/memory', served: Boolean(chatUrl) },
   // A person's own sign-ins, a connection's sign-in setting and the sign-in pages are tools-service's.
-  { prefix: '/settings/account/connectors', served: Boolean(toolsUrl) },
+  { prefix: '/work/apps', served: Boolean(toolsUrl) },
   { prefix: '/connections', served: Boolean(toolsUrl) },
   { prefix: '/settings/members', served: onPlatform },
   { prefix: '/settings/policies', served: onPlatform },
@@ -165,7 +170,7 @@ const AREAS: { prefix: string; served: boolean }[] = [
   { prefix: '/', served: Boolean(registryUrl) },
   // No service owns these yet.
   { prefix: '/deployments', served: false },
-  // Evals are agents-service's /v1/assurance; the agent page's own Evals tab is still sample data.
+  // The govern evals page reads agents-service's /v1/assurance.
   { prefix: '/govern/evals', served: Boolean(registryUrl) },
   { prefix: '/govern/models', served: false },
   { prefix: '/data/connectors', served: false },
@@ -180,8 +185,6 @@ const AREAS: { prefix: string; served: boolean }[] = [
 export const apiKeysOnService = onPlatform || Boolean(baseUrl);
 /** Workspace policies are platform-service's; without it the page draws sample ones and says so. */
 export const policiesOnService = onPlatform || Boolean(baseUrl);
-/** Agent evals have no service yet: beside real services the Evals tab draws sample cases and runs and says so. */
-export const evalsArePreview = !baseUrl && onRealService;
 /** Sources and their settings are kb-service's once its URL (or the all-HTTP URL) is set; otherwise the mock's. */
 export const knowledgeOnService = Boolean(knowledgeUrl || baseUrl);
 /** Files on files-service, which does not set retention or export evidence yet; the Files page hides those actions. */

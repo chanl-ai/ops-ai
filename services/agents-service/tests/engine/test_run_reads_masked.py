@@ -22,6 +22,7 @@ from ops_engine.store import DefinitionStore, RunStore
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from tests.engine.test_worker import CountingTools, M, drain, worker
+from tests.run_rows import write_run
 
 FLOW = parse(
     {
@@ -60,7 +61,7 @@ async def _ran(engine: AsyncEngine, flow: Any = FLOW, by: str = "a@x") -> tuple[
         )
         run_id = new_id("wfrun")
         run = {"id": run_id, "team_id": "team_a", "workflow_id": flow.id, "version": version, "digest": flow.digest()}
-        await RunStore(tx).create(run | {"run_key": run_id, "mode": "live", "input": GIVEN, "created_by": by})
+        await write_run(tx, run | {"run_key": run_id, "mode": "live", "input": GIVEN, "created_by": by})
     await drain(worker(engine, CountingTools(), InMemorySaver()))
     return tenant, run_id
 

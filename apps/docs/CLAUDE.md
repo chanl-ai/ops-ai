@@ -11,11 +11,12 @@ in @AGENTS.md before writing Next.js code. How to run it: [README.md](README.md)
 
 | Path | Holds |
 |---|---|
-| `src/lib/nav.mjs` | `SITE`: the four tabs (Docs, API reference, Architecture, Contributing), their groups and entries. A page under `docs/` that `SITE` does not place fails the build |
+| `src/lib/nav.mjs` | `SITE`: the five tabs (Docs, Deploy and operate, Security, Reference, Contributing), their groups and entries. A page under `docs/` that `SITE` does not place fails the build. Internals go only in Contributing |
 | `src/lib/remark-ops-ai.mjs`, `src/components/` | The markdown conventions mapped onto components: status badges, summary cards, steps, callouts, mermaid, box diagrams, figures, file links |
 | `src/lib/repo.mjs` | Reading the repository: the repo root, the docs index, file links to GitHub |
 | `src/app/` | The catch-all page route, search, and `files/[...path]` for linked repository files |
 | `scripts/check-links.mjs` | Every link resolves and every page sits in a tab |
+| `scripts/check-public-pages.mjs`, `scripts/public-pages-allowlist.json` | Pages in the Docs, Security and Reference tabs name no repository path, `file:line`, local port or make target in code; the allowlist of older pages may only shrink |
 | `scripts/export-diagrams.mjs` | `docs/diagrams/<name>.yaml` exported to its SVG; `--check` fails on a stale SVG |
 | `vercel.json` | Static hosting under `/docs` ([docs/deploy/docs-site.md](../../docs/deploy/docs-site.md)) |
 
@@ -23,7 +24,7 @@ in @AGENTS.md before writing Next.js code. How to run it: [README.md](README.md)
 
 | Task | Command (in `apps/docs/`) |
 |---|---|
-| Link and tab check (seconds) | `pnpm check:links` |
+| Link and tab check (seconds) | `pnpm check:links` (also runs the user-page check) |
 | Diagram SVGs current | `node scripts/export-diagrams.mjs --check`; `pnpm diagrams` rewrites them after a `.yaml` edit |
 | Local site | `pnpm dev` → http://localhost:3040/docs |
 | Static export to `out/` | `pnpm build` (runs the link and diagram checks first) |

@@ -37,13 +37,21 @@ export const useToolUses = (tools: string[]) =>
     enabled: tools.length > 0,
   });
 
-export type TemplateCopy = Awaited<ReturnType<Agents['templates_list_templates']>>[number];
+export type TemplateCopy = Awaited<ReturnType<Agents['templates_list_templates']>>['data'][number];
 
 /** The plugin's templates with the version of the team's copy of each (copy provenance), for the review. */
 export const usePluginTemplates = (source: string) =>
   useTeamQuery({
     queryKey: ['templates', source],
-    queryFn: () => sdk((ops) => ops.raw.agents.templates_list_templates({ query: { source } })),
+    queryFn: async () => {
+      // One app's templates, every page: the review lists each copy the team holds.
+      const rows: TemplateCopy[] = [];
+      for (let page = 1; ; page += 1) {
+        const got = await sdk((ops) => ops.raw.agents.templates_list_templates({ query: { source, page, pageSize: 50 } }));
+        rows.push(...got.data);
+        if (!got.pagination.hasNext) return rows;
+      }
+    },
     enabled: !!source,
   });
 

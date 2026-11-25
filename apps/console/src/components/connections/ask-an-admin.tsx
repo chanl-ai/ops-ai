@@ -1,6 +1,6 @@
 'use client';
 
-import { useHolders, useMe } from '@/hooks/me-queries';
+import { useHolders } from '@/hooks/me-queries';
 import { askWhom } from '@/lib/ask-an-admin';
 
 /**
@@ -11,8 +11,7 @@ import { askWhom } from '@/lib/ask-an-admin';
  */
 export function AskAnAdmin({ testId, area = 'connections', action = 'manage', lead }: { testId: string; area?: string; action?: string; lead?: string }) {
   const holders = useHolders(area, action, true);
-  const me = useMe().data?.user.email;
-  const { first, more, all } = askWhom(holders.data?.holders ?? [], me);
+  const { first, more, all } = askWhom(holders.data?.holders ?? []);
   return (
     <span className="text-xs text-muted-foreground" data-testid={testId}>
       {lead && `${lead} `}

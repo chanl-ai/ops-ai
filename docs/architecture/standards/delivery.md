@@ -34,7 +34,11 @@ standards). The pull-request `checks` job, `make verify` (through `python-verify
 pre-commit (`make checks STAGED=1`, which runs a check when a staged path can change it) all run `make checks`. The
 leak scan and CodeQL run and are not required on the development trunk.
 
-Pattern (`.github/workflows/ci.yml`): `ci-ok` is the one required job; `scripts/ci-plan.sh` picks what runs.
+Pattern (`.github/workflows/ci.yml`): `ci-ok` is the one required job; `scripts/ci-plan.sh` picks what runs from the changed
+paths: a documents-only change (markdown or `docs/`) runs the docs job and the leak scan; a service's jobs run when
+it, its packages or a shared package changes; the console job on `apps/` or `sdk/`; `store-mssql` on any change
+under `services/`, `packages/` or `deploy/database/`. A skipped job counts as passed in
+`ci-ok`. `[ci full]` in the pull request title, or the `ci:full` label, runs every job.
 
 Check: `.github/workflows/ci.yml` job `ci-ok`; `make checks`; `scripts/tests/test_checks_list.py` (every check named
 in it runs from `make checks`, and every place that checks calls it). Needed: make `scan` and CodeQL required.
@@ -73,7 +77,7 @@ Rule: production deploys only a tag `vX.Y.Z` on a commit staging ran; migrations
 start; rollback redeploys the previous image; migrations only add (`DA10`).
 Why: promotion is repeatable and reversible.
 
-Today: `.github/workflows/release-tag.yml` tags the merge of a release or hotfix branch into `main` (`docs/deploy/release.md`); no workflow deploys the tag. A workflow returns once
+Today: `.github/workflows/release-tag.yml` tags the develop merge of a release or hotfix pull request and fast-forwards `main` to it (`docs/deploy/release.md`); no workflow deploys the tag. A workflow returns once
 the owner has made the `production` environment (`docs/deploy/fly-staging.md`, "Production on GitHub"). `release-images.yml`
 has never built from a merged commit.
 

@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- platform-service, stamped at 0045_api_key_revision
+-- platform-service, stamped at 20261124_0100_close_invites
 CREATE TABLE tenants (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -107,6 +107,21 @@ CREATE TABLE roles (
 GO
 CREATE INDEX ix_roles_builtin ON roles (tenant_id, builtin);
 GO
+CREATE INDEX ix_roles_name ON roles (tenant_id, name);
+GO
+CREATE TABLE groups (
+	tenant_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(64) NOT NULL, 
+	name VARCHAR(200) NOT NULL, 
+	provider_id VARCHAR(64) NULL, 
+	external_value VARCHAR(255) NULL, 
+	created_by VARCHAR(320) NOT NULL, 
+	created_at VARCHAR(40) NOT NULL, 
+	CONSTRAINT groups_pkey PRIMARY KEY (tenant_id, id), 
+	CONSTRAINT uq_groups_name UNIQUE (tenant_id, name), 
+	CONSTRAINT groups_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
+);
+GO
 CREATE TABLE signin_secrets (
 	tenant_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(100) NOT NULL, 
@@ -183,7 +198,15 @@ CREATE TABLE api_keys (
 	CONSTRAINT api_keys_prefix_key UNIQUE (prefix)
 );
 GO
+CREATE INDEX ix_api_keys_team_created_at ON api_keys (team_id, created_at);
+GO
+CREATE INDEX ix_api_keys_team_expires_at ON api_keys (team_id, expires_at);
+GO
 CREATE INDEX ix_api_keys_team_id ON api_keys (team_id);
+GO
+CREATE INDEX ix_api_keys_team_last_used_at ON api_keys (team_id, last_used_at);
+GO
+CREATE INDEX ix_api_keys_team_name ON api_keys (team_id, name);
 GO
 CREATE INDEX ix_api_keys_team_target_id ON api_keys (team_id, target_id);
 GO
@@ -237,6 +260,8 @@ CREATE TABLE audit_entries (
 	CONSTRAINT audit_entries_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
 );
 GO
+CREATE INDEX ix_audit_entries_at ON audit_entries (tenant_id, at);
+GO
 CREATE INDEX ix_audit_entries_team_id ON audit_entries (team_id);
 GO
 CREATE INDEX ix_audit_entries_tenant_id ON audit_entries (tenant_id);
@@ -274,6 +299,20 @@ GO
 CREATE INDEX ix_role_assignments_subject ON role_assignments (tenant_id, subject_id);
 GO
 CREATE UNIQUE INDEX ux_role_assignments_owner ON role_assignments (tenant_id) WHERE role_id = 'owner';
+GO
+CREATE TABLE group_members (
+	tenant_id VARCHAR(64) NOT NULL, 
+	group_id VARCHAR(64) NOT NULL, 
+	user_id VARCHAR(64) NOT NULL, 
+	source VARCHAR(16) NOT NULL, 
+	added_by VARCHAR(320) NOT NULL, 
+	added_at VARCHAR(40) NOT NULL, 
+	CONSTRAINT group_members_pkey PRIMARY KEY (tenant_id, group_id, user_id), 
+	CONSTRAINT fk_group_members_group FOREIGN KEY(tenant_id, group_id) REFERENCES groups (tenant_id, id) ON DELETE CASCADE, 
+	CONSTRAINT fk_group_members_user FOREIGN KEY(tenant_id, user_id) REFERENCES users (tenant_id, id) ON DELETE CASCADE
+);
+GO
+CREATE INDEX ix_group_members_user ON group_members (tenant_id, user_id);
 GO
 CREATE TABLE signin_providers (
 	id VARCHAR(64) NOT NULL, 
@@ -404,6 +443,7 @@ CREATE TABLE signin_identities (
 	last_used_at VARCHAR(40) NOT NULL, 
 	CONSTRAINT signin_identities_pkey PRIMARY KEY (id), 
 	CONSTRAINT uq_signin_identities_subject UNIQUE (tenant_id, provider_id, subject), 
+	CONSTRAINT uq_signin_identities_person UNIQUE (tenant_id, provider_id, user_id), 
 	CONSTRAINT fk_signin_identities_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
 	CONSTRAINT fk_signin_identities_user FOREIGN KEY(tenant_id, user_id) REFERENCES users (tenant_id, id), 
 	CONSTRAINT signin_identities_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
@@ -430,6 +470,8 @@ CREATE TABLE signin_flows (
 	answered_at VARCHAR(40) NULL, 
 	used_at VARCHAR(40) NULL, 
 	test_result NVARCHAR(max) NULL, 
+	subject VARCHAR(255) NULL, 
+	invite_hash VARCHAR(64) NULL, 
 	CONSTRAINT signin_flows_pkey PRIMARY KEY (id), 
 	CONSTRAINT fk_signin_flows_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
 	CONSTRAINT signin_flows_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id), 
@@ -494,6 +536,12 @@ CREATE SECURITY POLICY ops_security.roles_tenant
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.roles AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.groups_tenant
+    ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.groups,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.groups AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.groups AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.signin_secrets_tenant
     ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.signin_secrets,
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.signin_secrets AFTER INSERT,
@@ -540,6 +588,12 @@ CREATE SECURITY POLICY ops_security.role_assignments_tenant
     ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.role_assignments,
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.role_assignments AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.role_assignments AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.group_members_tenant
+    ADD FILTER PREDICATE ops_security.platform_tenant_read(tenant_id) ON dbo.group_members,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.group_members AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.platform_tenant_write(tenant_id) ON dbo.group_members AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.signin_providers_tenant
@@ -709,5 +763,5 @@ CREATE TABLE alembic_version_platform (
     CONSTRAINT alembic_version_platform_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_platform (version_num) VALUES ('0045_api_key_revision');
+INSERT INTO alembic_version_platform (version_num) VALUES ('20261124_0100_close_invites');
 GO

@@ -1,6 +1,6 @@
 ---
 name: ops-database
-description: Point Ops AI at another database: our container, an existing PostgreSQL 15 to 17 (Azure Database for PostgreSQL among them), and later Azure SQL. Use when someone asks which database Ops AI needs or how to use their own.
+description: Point Ops AI at another database: our container, an existing PostgreSQL 15 to 17 (Azure Database for PostgreSQL among them), and later Azure SQL. Use to choose or bring a database.
 allowed-tools: Bash(make *) Bash(uv run *) Bash(python3 *) Read Grep Glob
 ---
 

@@ -45,8 +45,9 @@ engine_definitions = sa.Table(
     # The mailbox its Email received trigger names (`definitions.watched_mailbox`), so the Channels list joins a
     # mailbox to the live workflows that read it in SQL (agents 0118).
     sa.Column("mailbox", sa.String(320)),
-    # One version per definition: publishing the same definition again returns its version.
-    sa.UniqueConstraint("tenant_id", "workflow_id", "digest", name="uq_engine_definitions_digest"),
+    # Publishing a definition stored before finds its version here. Not unique: a restored version published again is
+    # a new version with an older one's definition (agents 0122).
+    sa.Index("ix_engine_definitions_digest", "tenant_id", "workflow_id", "digest"),
     # The v2 workflows list, one team's page by name or update time (agents 0112).
     sa.Index("ix_engine_definitions_team_name", "tenant_id", "team_id", "name"),
     sa.Index("ix_engine_definitions_team_created", "tenant_id", "team_id", "created_at"),
@@ -63,6 +64,28 @@ sa.Index(
     engine_definitions.c.workflow_id,
     postgresql_where=LIVE,
     mssql_where=LIVE,
+)
+
+# The one working copy of a workflow: what its editor saves after each change, in whatever state it is, checks and all.
+# It is never run and never a version; publishing makes the next version from it and removes it (agents 0121).
+engine_working_copies = sa.Table(
+    "engine_working_copies",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("workflow_id", sa.String(64), primary_key=True),
+    # The workflow's owning team, as on engine_definitions; null for a workflow no team owns.
+    sa.Column("team_id", sa.String(64)),
+    sa.Column("definition", sa.JSON, nullable=False),
+    # The hash of `definition` as stored. With `base_version` it names this copy: a save names the copy it was made
+    # on, and one made on any other is refused, so two people's saves never overwrite each other.
+    sa.Column("digest", sa.String(64), nullable=False),
+    # The newest version when the copy was first saved.
+    sa.Column("base_version", sa.Integer, nullable=False),
+    # The checks of the last save: a working copy may fail them, and publishing refuses while one is an error.
+    sa.Column("checks", sa.JSON, nullable=False),
+    sa.Column("updated_at", sa.String(32), nullable=False),
+    sa.Column("updated_by", sa.String(200), nullable=False),
+    info=TENANT_SCOPED,
 )
 
 # One row per run. The id is also the run's thread id (lease, checkpoints, events) and carries RUN_PREFIX, so the v1
@@ -88,6 +111,9 @@ engine_runs = sa.Table(
     sa.Column("outcome", sa.String(64)),
     sa.Column("output", sa.JSON),
     sa.Column("error", sa.Text),
+    # The error as ops_contracts.errors.RunError records it ({kind, code, message, userMessage, retryable, ...}), set
+    # with `error`; None on a run that has not failed and on runs that failed before agents migration 0124.
+    sa.Column("failure", sa.JSON),
     # While waiting: {node, iteration, interruptId, payload}; the Reviews facade reads it.
     sa.Column("waiting", sa.JSON),
     sa.Column("created_by", sa.String(200), nullable=False),
@@ -98,7 +124,7 @@ engine_runs = sa.Table(
     # the requesterMayDecide policy, read from their roles at the start (agents migration 0095). A run's step
     # approving a write is then decided as theirs; false for a run no person started.
     sa.Column("started_by_approver", sa.Boolean, nullable=False, server_default=sa.false()),
-    sa.Column("created_at", sa.String(32), nullable=False),
+    sa.Column("created_at", sa.String(32), nullable=False, info=LISTED),
     sa.Column("updated_at", sa.String(32), nullable=False),
     sa.Column("finished_at", sa.String(32)),
     sa.UniqueConstraint("tenant_id", "workflow_id", "run_key", name="uq_engine_runs_key"),
@@ -161,11 +187,24 @@ engine_work = sa.Table(
     sa.Column("lapses", sa.Integer, nullable=False, server_default="0"),
     sa.Column("error", sa.Text),
     sa.Column("created_at", sa.String(32), nullable=False),
+    # The fair claim (work.py, agents migration 0125). Nullable, so adding them rewrote no row: the migration filled
+    # in the team and priority 0 on every open row, and every row queued since carries both. Higher priority first.
+    sa.Column("team_id", sa.String(64)),
+    sa.Column("priority", sa.Integer),
+    # What the team's cap counts; the team when null. A workflow may name its own (one customer, one mailbox).
+    sa.Column("concurrency_key", sa.String(240)),
+    # A connector account or model key with a rate limit of its own; nothing reads it until those limits are added.
+    sa.Column("rate_key", sa.String(240)),
     sa.UniqueConstraint("tenant_id", "dedupe_key", name="uq_engine_work_dedupe"),
     sa.Index("ix_engine_work_due", "status", "build", "available_at"),
     # The claim's other branch: claimed work whose lease lapsed.
     sa.Index("ix_engine_work_lease", "status", "build", "lease_expires_at"),
     info=TENANT_SCOPED,
+)
+# The claim's order (work.py): highest priority, then oldest, read in index order so a claim stops at the first row
+# it may take instead of sorting every due row.
+sa.Index(
+    "ix_engine_work_claim", engine_work.c.status, engine_work.c.build, engine_work.c.priority.desc(), engine_work.c.id
 )
 
 # One row per step parked on work another service finishes: what a service event or a signed callback looks a

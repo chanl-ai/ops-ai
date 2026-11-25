@@ -1,4 +1,4 @@
-import { AuthError, type AuthProvider, type MfaSetup, type Session, type SignInResult, type StepUp } from '@/lib/auth/provider';
+import { AuthError, type AuthProvider, type MfaSetup, type Session, type SsoLink, type SignInResult, type StepUp } from '@/lib/auth/provider';
 
 import { auditSink } from '../governance';
 import { currentSignInPolicy } from '../sign-in-policy';
@@ -32,6 +32,8 @@ interface Stored {
   resets: Record<string, string>;
   enrolled: Record<string, boolean>;
   ssoUsers: Record<string, MockUser>;
+  /** People who linked their account at the company provider from My security, by user id, with when. */
+  ssoLinked?: Record<string, string>;
   /** Step-up tokens reauthenticate issued, reusable until they expire so one step-up covers a batch. */
   stepUps?: Record<string, { email: string; expiresAt: string }>;
   /** The token an IdP step-up round trip left for takeStepUp. */
@@ -236,12 +238,17 @@ export function createMockAuthProvider(opts: { stepUpUrl?: string } = {}): AuthP
       if (p.methods.sso && p.sso.domains.some((d) => d.verified && d.domain === host)) return { password: false, sso: { kind: ssoKind, label } };
       return { password: p.methods.password, sso: p.methods.sso ? { kind: ssoKind, label } : null };
     },
-    startSso: async ({ email, domain, next }) => {
+    startSso: async ({ email, domain, next, invite }) => {
       const who = (email ?? `sso.user@${domain}`).trim().toLowerCase();
       const host = (domain ?? who.split('@')[1] ?? '').trim().toLowerCase();
       const p = currentSignInPolicy();
       if (!p.methods.sso) refuse({ email: who }, 'Sign-in refused: SSO is off in the sign-in policy', new AuthError('Single sign-on is turned off in this workspace’s sign-in policy.', 'policy'));
       if (!p.sso.domains.some((d) => d.verified && d.domain === host)) refuse({ email: who }, `Sign-in refused: ${host || 'no domain'} is not a verified SSO domain`, new AuthError(`${host || 'That domain'} is not a verified SSO domain in this workspace’s sign-in policy. Use your work email, or sign in with your password.`, 'policy'));
+      // As on the server, the provider's email never opens an existing person's account: they link from their own
+      // session or sign in from their invite.
+      const existing = userByEmail(who);
+      if (existing && existing.method === 'password' && !invite && !read().ssoLinked?.[existing.id]) return { redirectUrl: `/sso/callback?error=link_required${next ? `&next=${encodeURIComponent(next)}` : ''}` };
+      if (existing && invite) write({ ...read(), ssoLinked: { ...read().ssoLinked, [existing.id]: new Date().toISOString() } });
       // The mock IdP approves at once and sends the browser straight back with a code.
       return { redirectUrl: `/sso/callback?code=${encodeURIComponent(btoa(who))}${next ? `&next=${encodeURIComponent(next)}` : ''}` };
     },
@@ -322,6 +329,41 @@ export function createMockAuthProvider(opts: { stepUpUrl?: string } = {}): AuthP
       }
       auditSession('approved', s.user, s.mfaEnrolled ? 'Step-up verified with password and authenticator code' : 'Step-up verified with password');
       return issueStepUp(s.user.email, await mintRemote('/v1/auth/step-up', input.code?.trim() ? { password: input.password, code: input.code.replace(/\s/g, '') } : { password: input.password }));
+    },
+    ssoLinks: async (): Promise<SsoLink[]> => {
+      const s = current();
+      if (!s) throw new AuthError('Sign in again to continue.', 'no_session');
+      if (!currentSignInPolicy().methods.sso) return [];
+      const at = read().ssoLinked?.[s.user.id] ?? null;
+      const linked = s.authMethod === 'sso' || !!at;
+      return [{ providerId: 'sso_mock', kind: currentSignInPolicy().sso.provider === 'saml' ? 'saml' : 'oidc', label: idpName(), linked, linkedAt: linked ? (at ?? s.issuedAt ?? null) : null }];
+    },
+    startSsoLink: async ({ returnTo }) => {
+      const s = current();
+      if (!s) throw new AuthError('Sign in again to continue.', 'no_session');
+      if (!currentSignInPolicy().methods.sso) throw new AuthError('This workspace does not sign in through a company provider.', 'policy', 422);
+      return { redirectUrl: `/sso/callback?link=1&code=${encodeURIComponent(btoa(s.user.email))}&next=${encodeURIComponent(returnTo)}` };
+    },
+    unlinkSso: async () => {
+      const s = current();
+      if (!s) throw new AuthError('Sign in again to continue.', 'no_session');
+      const { [s.user.id]: _gone, ...rest } = read().ssoLinked ?? {};
+      write({ ...read(), ssoLinked: rest });
+      auditSession('edited', s.user, `Removed ${idpName()} as a way to sign in`);
+    },
+    completeSsoLink: async (code) => {
+      const s = current();
+      if (!s) throw new AuthError('Sign in again to continue.', 'no_session');
+      let email = '';
+      try {
+        email = atob(decodeURIComponent(code)).trim().toLowerCase();
+      } catch {
+        // Falls through to the refusal below.
+      }
+      if (email !== s.user.email) throw new AuthError('The sign-in link from your identity provider is not for this session. Start again.', 'invalid_token', 401);
+      if (s.authMethod === 'sso' || read().ssoLinked?.[s.user.id]) throw new AuthError('This account at your company’s provider is linked already, or you have one linked there.', 'policy', 409);
+      write({ ...read(), ssoLinked: { ...read().ssoLinked, [s.user.id]: new Date().toISOString() } });
+      auditSession('edited', s.user, `Linked ${idpName()} as a way to sign in`);
     },
     startSsoStepUp: async ({ returnTo }) => {
       const s = current();

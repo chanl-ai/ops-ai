@@ -32,7 +32,7 @@ from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.narrow import json_object
 
 from .node_types import TypeRegistry
-from .starts import file_shape
+from .starts import TRIGGER_GROUP_PREFIX, file_shape
 
 MAPPING_PREFIX = "$."
 # Between whole-value paths: `$.a ?? $.b` reads the first that is not empty.
@@ -251,8 +251,57 @@ def _unmarked_file_inputs(d: WorkflowDefinition, registry: TypeRegistry) -> list
     return out
 
 
+def _invalid_input_schemas(d: WorkflowDefinition) -> list[Json]:
+    """`input_schema_invalid`: a trigger's `inputSchema` that is not JSON Schema (a `type` JSON Schema does not have,
+    `required` that is not a list). A run's input is held to this schema when it starts, so one that cannot be read
+    would refuse every start."""
+    out: list[Json] = []
+    for n in d.nodes:
+        schema = n.parameters.get("inputSchema")
+        if not n.type.startswith(TRIGGER_GROUP_PREFIX) or not isinstance(schema, dict) or not schema:
+            continue
+        try:
+            cast(Any, jsonschema.Draft202012Validator).check_schema(schema)
+        except jsonschema.SchemaError as e:
+            where = ".".join(str(p) for p in e.absolute_path) or "the schema"
+            msg = f"The input schema is not valid JSON Schema at {where}: {e.message}."
+            out.append(_check(n.id, "input_schema_invalid", msg, "inputSchema"))
+    return out
+
+
 def _check(node: str | None, code: str, message: str, field: str | None = None) -> Json:
     return {"node": node, "level": "error", "code": code, "message": message, "field": field}
+
+
+# What a JSON type is called in a parameter check, for people who never read the schema.
+_TYPE_WORDS = {
+    "object": "a group of named values",
+    "array": "a list",
+    "string": "text",
+    "integer": "a whole number",
+    "number": "a number",
+    "boolean": "on or off",
+    "null": "empty",
+}
+
+
+def _plain(err: Any, field: str | None, ui: Mapping[str, JsonValue]) -> str:
+    """A schema error as the step's form names it: the field's label, then what it must be, in words. A nested value
+    keeps its path after the label; a rule with no plain wording keeps the validator's message."""
+    fields = ui.get("fields")
+    spec = fields.get(field) if field and isinstance(fields, dict) else None
+    label = str(spec["label"]) if isinstance(spec, dict) and spec.get("label") else field or "A setting"
+    inner = ".".join(str(p) for p in list(cast(list[object], err.path))[1:])
+    where = f"{label} ({inner})" if inner else label
+    rule, value = str(err.validator), cast(object, err.validator_value)
+    if rule == "required" and not err.path:
+        return f"{where} is required."
+    if rule == "type":
+        wanted = cast(list[object], value) if isinstance(value, list) else [value]
+        return f"{where} must be {' or '.join(_TYPE_WORDS.get(str(w), str(w)) for w in wanted)}."
+    if rule == "enum" and isinstance(value, list):
+        return f"{where} must be one of {', '.join(map(str, cast(list[object], value)))}."
+    return f"{where}: {err.message}"
 
 
 def _parameter(err: Any) -> str | None:
@@ -345,8 +394,8 @@ def validate(d: WorkflowDefinition, registry: TypeRegistry) -> list[Json]:
             key=lambda e: str(e.path),
         )
         for err in errors:
-            where = ".".join(str(p) for p in err.path) or "parameters"
-            checks.append(_check(n.id, "invalid_parameter", f"{where}: {err.message}", _parameter(err)))
+            field = _parameter(err)
+            checks.append(_check(n.id, "invalid_parameter", _plain(err, field, t.ui), field))
         for ref in named_nodes(n.parameters):
             if ref not in known:
                 checks.append(
@@ -381,6 +430,7 @@ def validate(d: WorkflowDefinition, registry: TypeRegistry) -> list[Json]:
                 checks.append(_check(node_id, "unconnected_port", f"Out port {port} of {node_id} leads nowhere."))
     checks.extend(_approval_order(d, known))
     checks.extend(_unmarked_file_inputs(d, registry))
+    checks.extend(_invalid_input_schemas(d))
     for n in d.nodes:
         t = registry.find(n.type, n.type_version)
         sources = {c.source.node for c in d.connections if c.target.node == n.id}

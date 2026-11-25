@@ -19,6 +19,24 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["kind", "status", "source", "team", "since", "until", "case", "page", "pageSize"],
         "stream": False,
     },
+    "agents_add_reference": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/agents/{agent_id}/references",
+        "pathParams": ["agent_id"],
+        "query": [],
+        "stream": False,
+    },
+    "agents_agent_prompt": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agents/{agent_id}/prompt",
+        "pathParams": ["agent_id"],
+        "query": ["version"],
+        "stream": False,
+    },
     "agents_agent_skill_options": {
         "body": None,
         "headers": [],
@@ -39,7 +57,7 @@ OPERATIONS: dict[str, Operation] = {
     },
     "agents_create_agent": {
         "body": "json",
-        "headers": [],
+        "headers": ["x-acting-for"],
         "method": "POST",
         "path": "/v1/agents",
         "pathParams": [],
@@ -142,6 +160,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "DELETE",
         "path": "/v1/agents/{agent_id}/skills/{skill_id}",
         "pathParams": ["agent_id", "skill_id"],
+        "query": [],
+        "stream": False,
+    },
+    "agents_draft_agent_brief": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/agents/{agent_id}/brief-draft",
+        "pathParams": ["agent_id"],
         "query": [],
         "stream": False,
     },
@@ -322,6 +349,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
+    "agents_publish_check": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agents/{agent_id}/publish-check",
+        "pathParams": ["agent_id"],
+        "query": ["version"],
+        "stream": False,
+    },
     "agents_publish_preview": {
         "body": None,
         "headers": [],
@@ -331,6 +367,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["version"],
         "stream": False,
     },
+    "agents_read_skill_text": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/skills/{skill_id}/text",
+        "pathParams": ["skill_id"],
+        "query": [],
+        "stream": False,
+    },
     "agents_recent_runs": {
         "body": None,
         "headers": [],
@@ -338,6 +383,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/agents/{agent_id}/runs",
         "pathParams": ["agent_id"],
         "query": ["limit"],
+        "stream": False,
+    },
+    "agents_references_search": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/references",
+        "pathParams": [],
+        "query": ["forAgent", "forSkill", "search", "kind", "cursor", "limit", "ids"],
         "stream": False,
     },
     "agents_render_skill": {
@@ -466,6 +520,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["search", "cursor", "limit", "ids", "agents"],
         "stream": False,
     },
+    "agents_try_targets": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/try-targets",
+        "pathParams": [],
+        "query": ["skill", "workflow", "step"],
+        "stream": False,
+    },
     "agents_update_agent": {
         "body": "json",
         "headers": [],
@@ -493,12 +556,48 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["search", "cursor", "limit", "ids", "granted"],
         "stream": False,
     },
+    "assurance_add_agent_cases": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/agents/{agent_id}/eval-cases",
+        "pathParams": ["agent_id"],
+        "query": [],
+        "stream": False,
+    },
     "assurance_agent_cases": {
         "body": None,
         "headers": [],
         "method": "GET",
         "path": "/v1/agents/{agent_id}/eval-cases",
         "pathParams": ["agent_id"],
+        "query": [],
+        "stream": False,
+    },
+    "assurance_agent_eval_runs": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agents/{agent_id}/eval-runs",
+        "pathParams": ["agent_id"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
+        "stream": False,
+    },
+    "assurance_delete_eval_case": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/eval-cases/{case_id}",
+        "pathParams": ["case_id"],
+        "query": [],
+        "stream": False,
+    },
+    "assurance_eval_run": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/eval-runs/{run_id}",
+        "pathParams": ["run_id"],
         "query": [],
         "stream": False,
     },
@@ -1069,7 +1168,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/me/memories",
         "pathParams": [],
-        "query": ["agentId"],
+        "query": ["agentId", "kind", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "memory_undo_memory": {
@@ -1297,13 +1396,22 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "reviews_withdraw_publish_request": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/publish-requests/{request_id}/withdraw",
+        "pathParams": ["request_id"],
+        "query": [],
+        "stream": False,
+    },
     "templates_list_templates": {
         "body": None,
         "headers": [],
         "method": "GET",
         "path": "/v1/templates",
         "pathParams": [],
-        "query": ["kind", "source"],
+        "query": ["kind", "source", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "threads_approve": {
@@ -1450,6 +1558,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "workflows_bulk_engine_runs": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/runs/bulk",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "workflows_cancel_engine_run": {
         "body": None,
         "headers": [],
@@ -1502,6 +1619,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/workflows/{workflow_id}",
         "pathParams": ["workflow_id"],
         "query": [],
+        "stream": False,
+    },
+    "workflows_diff_definitions": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/workflows/definitions/{workflow_id}/diff",
+        "pathParams": ["workflow_id"],
+        "query": ["from", "to"],
         "stream": False,
     },
     "workflows_discard_draft": {
@@ -1618,7 +1744,18 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/workflows",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "status", "startable", "takesFiles", "engine"],
+        "query": [
+            "page",
+            "pageSize",
+            "search",
+            "sortBy",
+            "sortOrder",
+            "status",
+            "startable",
+            "takesFiles",
+            "engine",
+            "ids",
+        ],
         "stream": False,
     },
     "workflows_move_pointer": {
@@ -1654,6 +1791,24 @@ OPERATIONS: dict[str, Operation] = {
         "method": "POST",
         "path": "/v1/workflows/definitions/{workflow_id}/pause",
         "pathParams": ["workflow_id"],
+        "query": [],
+        "stream": False,
+    },
+    "workflows_publish_preview": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/workflows/definitions/{workflow_id}/publish-preview",
+        "pathParams": ["workflow_id"],
+        "query": [],
+        "stream": False,
+    },
+    "workflows_redrive_engine_run": {
+        "body": None,
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/runs/{run_id}/redrive",
+        "pathParams": ["run_id"],
         "query": [],
         "stream": False,
     },
@@ -1752,6 +1907,15 @@ OPERATIONS: dict[str, Operation] = {
         "headers": [],
         "method": "PUT",
         "path": "/v1/workflows/{workflow_id}/draft",
+        "pathParams": ["workflow_id"],
+        "query": [],
+        "stream": False,
+    },
+    "workflows_save_working_copy": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/workflows/definitions/{workflow_id}/working-copy",
         "pathParams": ["workflow_id"],
         "query": [],
         "stream": False,
@@ -2031,9 +2195,9 @@ class Operations:
             None,
         )  # type: ignore[no-any-return]
 
-    def agents_create_agent(self, body: AgentInput) -> Agent:
+    def agents_create_agent(self, body: AgentInput, *, x_acting_for: str | None = None) -> Agent:
         "Create Agent"
-        return self._t.call(SERVICE, OPERATIONS["agents_create_agent"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["agents_create_agent"], {}, {}, {"x-acting-for": x_acting_for}, body)  # type: ignore[no-any-return]
 
     def agents_get_agent(self, agent_id: str) -> Agent:
         "Get Agent"
@@ -2047,15 +2211,51 @@ class Operations:
         "Delete Agent"
         return self._t.call(SERVICE, OPERATIONS["agents_delete_agent"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def agents_draft_agent_brief(self, agent_id: str, body: BriefDraftInput) -> BriefDraft:
+        "Draft Agent Brief"
+        return self._t.call(SERVICE, OPERATIONS["agents_draft_agent_brief"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     def assurance_agent_cases(self, agent_id: str) -> SavedCases:
         "Agent Cases"
         return self._t.call(SERVICE, OPERATIONS["assurance_agent_cases"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def assurance_add_agent_cases(self, agent_id: str, body: EvalCasesInput) -> SavedCases:
+        "Add Agent Cases"
+        return self._t.call(SERVICE, OPERATIONS["assurance_add_agent_cases"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def assurance_save_agent_cases(self, agent_id: str, body: EvalCasesInput) -> SavedCases:
         "Save Agent Cases"
         return self._t.call(SERVICE, OPERATIONS["assurance_save_agent_cases"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def agents_create_eval_run(self, agent_id: str, body: EvalRunInput) -> AgentEvalRun:
+    def assurance_agent_eval_runs(
+        self,
+        agent_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultEvalRunRow:
+        "Agent Eval Runs"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["assurance_agent_eval_runs"],
+            {"agent_id": agent_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    def agents_create_eval_run(self, agent_id: str, body: EvalRunInput) -> Any:
         "Create Eval Run"
         return self._t.call(SERVICE, OPERATIONS["agents_create_eval_run"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
@@ -2071,6 +2271,18 @@ class Operations:
         "Set Paused"
         return self._t.call(SERVICE, OPERATIONS["agents_set_paused"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def agents_agent_prompt(self, agent_id: str, *, version: int | None = None) -> AgentPrompt:
+        "Agent Prompt"
+        return self._t.call(
+            SERVICE, OPERATIONS["agents_agent_prompt"], {"agent_id": agent_id}, {"version": version}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def agents_publish_check(self, agent_id: str, *, version: int | None = None) -> AgentPublishCheck:
+        "Publish Check"
+        return self._t.call(
+            SERVICE, OPERATIONS["agents_publish_check"], {"agent_id": agent_id}, {"version": version}, {}, None
+        )  # type: ignore[no-any-return]
+
     def agents_publish_preview(self, agent_id: str, *, version: int | None = None) -> PublishDecisionFields:
         "Publish Preview"
         return self._t.call(
@@ -2080,6 +2292,10 @@ class Operations:
     def agents_request_publish(self, agent_id: str, body: PublishRequestInput) -> PublishReview:
         "Request Publish"
         return self._t.call(SERVICE, OPERATIONS["agents_request_publish"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def agents_add_reference(self, agent_id: str, body: AddReference) -> ReferenceAdded:
+        "Add Reference"
+        return self._t.call(SERVICE, OPERATIONS["agents_add_reference"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def agents_recent_runs(self, agent_id: str, *, limit: int | None = None) -> list[AgentRun]:
         "Recent Runs"
@@ -2406,6 +2622,14 @@ class Operations:
         "List Document Type Uses"
         return self._t.call(SERVICE, OPERATIONS["workflows_list_document_type_uses"], {}, {"types": types}, {}, None)  # type: ignore[no-any-return]
 
+    def assurance_delete_eval_case(self, case_id: str) -> Any:
+        "Delete Eval Case"
+        return self._t.call(SERVICE, OPERATIONS["assurance_delete_eval_case"], {"case_id": case_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def assurance_eval_run(self, run_id: str) -> EvalRunRecord:
+        "Eval Run"
+        return self._t.call(SERVICE, OPERATIONS["assurance_eval_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     def threads_team_stream(self, *, after: int | None = None, follow: bool | None = None) -> Any:
         "Team Stream"
         return self._t.call(
@@ -2548,9 +2772,36 @@ class Operations:
         "Knowledge Usage"
         return self._t.call(SERVICE, OPERATIONS["agents_knowledge_usage"], {}, {"ids": ids}, {}, None)  # type: ignore[no-any-return]
 
-    def memory_list_memories(self, *, agent_id: str | None = None) -> list[MemoryView]:
+    def memory_list_memories(
+        self,
+        *,
+        agent_id: str | None = None,
+        kind: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultMemoryView:
         "List Memories"
-        return self._t.call(SERVICE, OPERATIONS["memory_list_memories"], {}, {"agentId": agent_id}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["memory_list_memories"],
+            {},
+            {
+                "agentId": agent_id,
+                "kind": kind,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def memory_forget_agent_memories(self, *, agent_id: str | None = None) -> Forgotten:
         "Forget Agent Memories"
@@ -2630,6 +2881,41 @@ class Operations:
             SERVICE, OPERATIONS["reviews_decide_publish_request"], {"request_id": request_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
+    def reviews_withdraw_publish_request(self, request_id: str) -> PublishReview:
+        "Withdraw Publish Request"
+        return self._t.call(
+            SERVICE, OPERATIONS["reviews_withdraw_publish_request"], {"request_id": request_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def agents_references_search(
+        self,
+        *,
+        for_agent: str | None = None,
+        for_skill: str | None = None,
+        search: str | None = None,
+        kind: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        ids: list[str] | None = None,
+    ) -> ReferenceSearch:
+        "References Search"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["agents_references_search"],
+            {},
+            {
+                "forAgent": for_agent,
+                "forSkill": for_skill,
+                "search": search,
+                "kind": kind,
+                "cursor": cursor,
+                "limit": limit,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def resources_plan_resources(self, body: PlanInput) -> Plan:
         "Plan Resources"
         return self._t.call(SERVICE, OPERATIONS["resources_plan_resources"], {}, {}, {}, body)  # type: ignore[no-any-return]
@@ -2702,6 +2988,10 @@ class Operations:
             SERVICE, OPERATIONS["workflows_start_engine_run"], {}, {}, {"x-acting-for": x_acting_for}, body
         )  # type: ignore[no-any-return]
 
+    def workflows_bulk_engine_runs(self, body: BulkRunsRequest) -> BulkRunsResult:
+        "Bulk Engine Runs"
+        return self._t.call(SERVICE, OPERATIONS["workflows_bulk_engine_runs"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     def workflows_run_set_aside_email(self, event_id: str) -> RunStarted:
         "Run Set Aside Email"
         return self._t.call(SERVICE, OPERATIONS["workflows_run_set_aside_email"], {"event_id": event_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -2728,6 +3018,10 @@ class Operations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    def workflows_redrive_engine_run(self, run_id: str) -> RunRow:
+        "Redrive Engine Run"
+        return self._t.call(SERVICE, OPERATIONS["workflows_redrive_engine_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def workflows_retry_engine_run(self, run_id: str) -> RunRow:
         "Retry Engine Run"
@@ -2822,6 +3116,10 @@ class Operations:
         "Render Skill"
         return self._t.call(SERVICE, OPERATIONS["agents_render_skill"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def agents_read_skill_text(self, skill_id: str, body: SkillTextInput) -> SkillTextReading:
+        "Read Skill Text"
+        return self._t.call(SERVICE, OPERATIONS["agents_read_skill_text"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     def reviews_list_task_types(
         self,
         *,
@@ -2883,10 +3181,35 @@ class Operations:
         "Team Usage"
         return self._t.call(SERVICE, OPERATIONS["workflows_team_usage"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def templates_list_templates(self, *, kind: str | None = None, source: str | None = None) -> list[TemplateView]:
+    def templates_list_templates(
+        self,
+        *,
+        kind: str | None = None,
+        source: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultTemplateView:
         "List Templates"
         return self._t.call(
-            SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind, "source": source}, {}, None
+            SERVICE,
+            OPERATIONS["templates_list_templates"],
+            {},
+            {
+                "kind": kind,
+                "source": source,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     def threads_list_threads(
@@ -3015,6 +3338,19 @@ class Operations:
         "Get Tool"
         return self._t.call(SERVICE, OPERATIONS["agents_get_tool"], {"tool_id": tool_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def agents_try_targets(
+        self, *, skill: str | None = None, workflow: str | None = None, step: str | None = None
+    ) -> TryTargets:
+        "Try Targets"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["agents_try_targets"],
+            {},
+            {"skill": skill, "workflow": workflow, "step": step},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def agents_list_widgets(
         self,
         *,
@@ -3099,6 +3435,7 @@ class Operations:
         startable: bool | None = None,
         takes_files: bool | None = None,
         engine: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultWorkflow:
         "List Workflows"
         return self._t.call(
@@ -3115,6 +3452,7 @@ class Operations:
                 "startable": startable,
                 "takesFiles": takes_files,
                 "engine": engine,
+                "ids": ids,
             },
             {},
             None,
@@ -3188,10 +3526,29 @@ class Operations:
             SERVICE, OPERATIONS["workflows_archive_definition"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    def workflows_diff_definitions(
+        self, workflow_id: str, *, from_: str | None = None, to: str | None = None
+    ) -> DefinitionDiffView:
+        "Diff Definitions"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["workflows_diff_definitions"],
+            {"workflow_id": workflow_id},
+            {"from": from_, "to": to},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def workflows_pause_definition(self, workflow_id: str) -> DefinitionView:
         "Pause Definition"
         return self._t.call(
             SERVICE, OPERATIONS["workflows_pause_definition"], {"workflow_id": workflow_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def workflows_publish_preview(self, workflow_id: str) -> PublishPreview:
+        "Publish Preview"
+        return self._t.call(
+            SERVICE, OPERATIONS["workflows_publish_preview"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     def workflows_request_definition_publish(self, workflow_id: str, body: DefinitionPublishInput) -> PublishReview:
@@ -3221,6 +3578,12 @@ class Operations:
             {},
             {},
             None,
+        )  # type: ignore[no-any-return]
+
+    def workflows_save_working_copy(self, workflow_id: str, body: WorkingCopyInput) -> WorkingCopySaved:
+        "Save Working Copy"
+        return self._t.call(
+            SERVICE, OPERATIONS["workflows_save_working_copy"], {"workflow_id": workflow_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
     def workflows_node_types(self) -> list[NodeTypeView]:
@@ -3558,9 +3921,11 @@ class AsyncOperations:
             None,
         )  # type: ignore[no-any-return]
 
-    async def agents_create_agent(self, body: AgentInput) -> Agent:
+    async def agents_create_agent(self, body: AgentInput, *, x_acting_for: str | None = None) -> Agent:
         "Create Agent"
-        return await self._t.call(SERVICE, OPERATIONS["agents_create_agent"], {}, {}, {}, body)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE, OPERATIONS["agents_create_agent"], {}, {}, {"x-acting-for": x_acting_for}, body
+        )  # type: ignore[no-any-return]
 
     async def agents_get_agent(self, agent_id: str) -> Agent:
         "Get Agent"
@@ -3574,9 +3939,19 @@ class AsyncOperations:
         "Delete Agent"
         return await self._t.call(SERVICE, OPERATIONS["agents_delete_agent"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def agents_draft_agent_brief(self, agent_id: str, body: BriefDraftInput) -> BriefDraft:
+        "Draft Agent Brief"
+        return await self._t.call(SERVICE, OPERATIONS["agents_draft_agent_brief"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def assurance_agent_cases(self, agent_id: str) -> SavedCases:
         "Agent Cases"
         return await self._t.call(SERVICE, OPERATIONS["assurance_agent_cases"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def assurance_add_agent_cases(self, agent_id: str, body: EvalCasesInput) -> SavedCases:
+        "Add Agent Cases"
+        return await self._t.call(
+            SERVICE, OPERATIONS["assurance_add_agent_cases"], {"agent_id": agent_id}, {}, {}, body
+        )  # type: ignore[no-any-return]
 
     async def assurance_save_agent_cases(self, agent_id: str, body: EvalCasesInput) -> SavedCases:
         "Save Agent Cases"
@@ -3584,7 +3959,35 @@ class AsyncOperations:
             SERVICE, OPERATIONS["assurance_save_agent_cases"], {"agent_id": agent_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def agents_create_eval_run(self, agent_id: str, body: EvalRunInput) -> AgentEvalRun:
+    async def assurance_agent_eval_runs(
+        self,
+        agent_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultEvalRunRow:
+        "Agent Eval Runs"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["assurance_agent_eval_runs"],
+            {"agent_id": agent_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    async def agents_create_eval_run(self, agent_id: str, body: EvalRunInput) -> Any:
         "Create Eval Run"
         return await self._t.call(SERVICE, OPERATIONS["agents_create_eval_run"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
@@ -3600,6 +4003,18 @@ class AsyncOperations:
         "Set Paused"
         return await self._t.call(SERVICE, OPERATIONS["agents_set_paused"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def agents_agent_prompt(self, agent_id: str, *, version: int | None = None) -> AgentPrompt:
+        "Agent Prompt"
+        return await self._t.call(
+            SERVICE, OPERATIONS["agents_agent_prompt"], {"agent_id": agent_id}, {"version": version}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def agents_publish_check(self, agent_id: str, *, version: int | None = None) -> AgentPublishCheck:
+        "Publish Check"
+        return await self._t.call(
+            SERVICE, OPERATIONS["agents_publish_check"], {"agent_id": agent_id}, {"version": version}, {}, None
+        )  # type: ignore[no-any-return]
+
     async def agents_publish_preview(self, agent_id: str, *, version: int | None = None) -> PublishDecisionFields:
         "Publish Preview"
         return await self._t.call(
@@ -3609,6 +4024,10 @@ class AsyncOperations:
     async def agents_request_publish(self, agent_id: str, body: PublishRequestInput) -> PublishReview:
         "Request Publish"
         return await self._t.call(SERVICE, OPERATIONS["agents_request_publish"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def agents_add_reference(self, agent_id: str, body: AddReference) -> ReferenceAdded:
+        "Add Reference"
+        return await self._t.call(SERVICE, OPERATIONS["agents_add_reference"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def agents_recent_runs(self, agent_id: str, *, limit: int | None = None) -> list[AgentRun]:
         "Recent Runs"
@@ -3947,6 +4366,14 @@ class AsyncOperations:
             SERVICE, OPERATIONS["workflows_list_document_type_uses"], {}, {"types": types}, {}, None
         )  # type: ignore[no-any-return]
 
+    async def assurance_delete_eval_case(self, case_id: str) -> Any:
+        "Delete Eval Case"
+        return await self._t.call(SERVICE, OPERATIONS["assurance_delete_eval_case"], {"case_id": case_id}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def assurance_eval_run(self, run_id: str) -> EvalRunRecord:
+        "Eval Run"
+        return await self._t.call(SERVICE, OPERATIONS["assurance_eval_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
+
     async def threads_team_stream(self, *, after: int | None = None, follow: bool | None = None) -> Any:
         "Team Stream"
         return await self._t.call(
@@ -4091,9 +4518,36 @@ class AsyncOperations:
         "Knowledge Usage"
         return await self._t.call(SERVICE, OPERATIONS["agents_knowledge_usage"], {}, {"ids": ids}, {}, None)  # type: ignore[no-any-return]
 
-    async def memory_list_memories(self, *, agent_id: str | None = None) -> list[MemoryView]:
+    async def memory_list_memories(
+        self,
+        *,
+        agent_id: str | None = None,
+        kind: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultMemoryView:
         "List Memories"
-        return await self._t.call(SERVICE, OPERATIONS["memory_list_memories"], {}, {"agentId": agent_id}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["memory_list_memories"],
+            {},
+            {
+                "agentId": agent_id,
+                "kind": kind,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def memory_forget_agent_memories(self, *, agent_id: str | None = None) -> Forgotten:
         "Forget Agent Memories"
@@ -4175,6 +4629,41 @@ class AsyncOperations:
             SERVICE, OPERATIONS["reviews_decide_publish_request"], {"request_id": request_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
+    async def reviews_withdraw_publish_request(self, request_id: str) -> PublishReview:
+        "Withdraw Publish Request"
+        return await self._t.call(
+            SERVICE, OPERATIONS["reviews_withdraw_publish_request"], {"request_id": request_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def agents_references_search(
+        self,
+        *,
+        for_agent: str | None = None,
+        for_skill: str | None = None,
+        search: str | None = None,
+        kind: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        ids: list[str] | None = None,
+    ) -> ReferenceSearch:
+        "References Search"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["agents_references_search"],
+            {},
+            {
+                "forAgent": for_agent,
+                "forSkill": for_skill,
+                "search": search,
+                "kind": kind,
+                "cursor": cursor,
+                "limit": limit,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     async def resources_plan_resources(self, body: PlanInput) -> Plan:
         "Plan Resources"
         return await self._t.call(SERVICE, OPERATIONS["resources_plan_resources"], {}, {}, {}, body)  # type: ignore[no-any-return]
@@ -4247,6 +4736,10 @@ class AsyncOperations:
             SERVICE, OPERATIONS["workflows_start_engine_run"], {}, {}, {"x-acting-for": x_acting_for}, body
         )  # type: ignore[no-any-return]
 
+    async def workflows_bulk_engine_runs(self, body: BulkRunsRequest) -> BulkRunsResult:
+        "Bulk Engine Runs"
+        return await self._t.call(SERVICE, OPERATIONS["workflows_bulk_engine_runs"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def workflows_run_set_aside_email(self, event_id: str) -> RunStarted:
         "Run Set Aside Email"
         return await self._t.call(
@@ -4277,6 +4770,10 @@ class AsyncOperations:
             {},
             None,
         )  # type: ignore[no-any-return]
+
+    async def workflows_redrive_engine_run(self, run_id: str) -> RunRow:
+        "Redrive Engine Run"
+        return await self._t.call(SERVICE, OPERATIONS["workflows_redrive_engine_run"], {"run_id": run_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def workflows_retry_engine_run(self, run_id: str) -> RunRow:
         "Retry Engine Run"
@@ -4375,6 +4872,10 @@ class AsyncOperations:
         "Render Skill"
         return await self._t.call(SERVICE, OPERATIONS["agents_render_skill"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    async def agents_read_skill_text(self, skill_id: str, body: SkillTextInput) -> SkillTextReading:
+        "Read Skill Text"
+        return await self._t.call(SERVICE, OPERATIONS["agents_read_skill_text"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def reviews_list_task_types(
         self,
         *,
@@ -4439,11 +4940,34 @@ class AsyncOperations:
         return await self._t.call(SERVICE, OPERATIONS["workflows_team_usage"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def templates_list_templates(
-        self, *, kind: str | None = None, source: str | None = None
-    ) -> list[TemplateView]:
+        self,
+        *,
+        kind: str | None = None,
+        source: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultTemplateView:
         "List Templates"
         return await self._t.call(
-            SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind, "source": source}, {}, None
+            SERVICE,
+            OPERATIONS["templates_list_templates"],
+            {},
+            {
+                "kind": kind,
+                "source": source,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     async def threads_list_threads(
@@ -4572,6 +5096,19 @@ class AsyncOperations:
         "Get Tool"
         return await self._t.call(SERVICE, OPERATIONS["agents_get_tool"], {"tool_id": tool_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def agents_try_targets(
+        self, *, skill: str | None = None, workflow: str | None = None, step: str | None = None
+    ) -> TryTargets:
+        "Try Targets"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["agents_try_targets"],
+            {},
+            {"skill": skill, "workflow": workflow, "step": step},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     async def agents_list_widgets(
         self,
         *,
@@ -4656,6 +5193,7 @@ class AsyncOperations:
         startable: bool | None = None,
         takes_files: bool | None = None,
         engine: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultWorkflow:
         "List Workflows"
         return await self._t.call(
@@ -4672,6 +5210,7 @@ class AsyncOperations:
                 "startable": startable,
                 "takesFiles": takes_files,
                 "engine": engine,
+                "ids": ids,
             },
             {},
             None,
@@ -4747,10 +5286,29 @@ class AsyncOperations:
             SERVICE, OPERATIONS["workflows_archive_definition"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    async def workflows_diff_definitions(
+        self, workflow_id: str, *, from_: str | None = None, to: str | None = None
+    ) -> DefinitionDiffView:
+        "Diff Definitions"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["workflows_diff_definitions"],
+            {"workflow_id": workflow_id},
+            {"from": from_, "to": to},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     async def workflows_pause_definition(self, workflow_id: str) -> DefinitionView:
         "Pause Definition"
         return await self._t.call(
             SERVICE, OPERATIONS["workflows_pause_definition"], {"workflow_id": workflow_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def workflows_publish_preview(self, workflow_id: str) -> PublishPreview:
+        "Publish Preview"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_publish_preview"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def workflows_request_definition_publish(
@@ -4782,6 +5340,12 @@ class AsyncOperations:
             {},
             {},
             None,
+        )  # type: ignore[no-any-return]
+
+    async def workflows_save_working_copy(self, workflow_id: str, body: WorkingCopyInput) -> WorkingCopySaved:
+        "Save Working Copy"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_save_working_copy"], {"workflow_id": workflow_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
     async def workflows_node_types(self) -> list[NodeTypeView]:

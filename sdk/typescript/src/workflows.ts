@@ -3,6 +3,7 @@
  * YAML files are a Python/CLI concern; this surface accepts a parsed object or JSON text.
  */
 import { NotFound } from './errors.js';
+import { based } from './agents.js';
 import { eachPage } from './transport.js';
 
 export const PLANNED = 'This command is planned; the public API for it is not shipped.';
@@ -90,10 +91,35 @@ export class Workflows {
     return JSON.stringify(view.definition, null, 2);
   }
 
-  publish(id: string, note = '') {
+  /**
+   * Saves `definition` as the workflow's working copy, failing checks and all; it makes no version. `base` is the
+   * `saveBase` of the workflow as last read; left out, the workflow is read first. A save made on an older copy is
+   * refused with `stale_base`.
+   */
+  async saveWorkingCopy(id: string, definition: DefinitionSource, base?: { version: number; digest: string }) {
+    const read = base ?? ((await this.getDefinition(id)) as { saveBase: { version: number; digest: string } }).saveBase;
+    return this.raw.agents.workflows_save_working_copy({ path: { workflow_id: id }, body: based(body(definition), read) as never });
+  }
+
+  /** The steps added, removed, changed and moved between two versions, `live` or `working-copy`. */
+  diff(id: string, from: string | number = 'live', to: string | number = 'working-copy') {
+    return this.raw.agents.workflows_diff_definitions({ path: { workflow_id: id }, query: { from: String(from), to: String(to) } });
+  }
+
+  /** What publishing the working copy would change, what stops it, and whether it waits for a review. */
+  publishPreview(id: string) {
+    return this.raw.agents.workflows_publish_preview({ path: { workflow_id: id } });
+  }
+
+  /**
+   * Requests the publish of the newest draft or, with `workingCopy`, makes the next version from the working copy and
+   * requests its publish in one call, refused before any version is made while the publish preview lists a blocker.
+   */
+  async publish(id: string, note = '', workingCopy = false) {
+    const read = workingCopy ? ((await this.getDefinition(id)) as { saveBase: { version: number; digest: string } }).saveBase : null;
     return this.raw.agents.workflows_request_definition_publish({
       path: { workflow_id: id },
-      body: { note } as never,
+      body: (read ? based({ note }, read) : { note }) as never,
     });
   }
 

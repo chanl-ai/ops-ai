@@ -73,7 +73,7 @@ def _content(result: Any) -> dict[str, Any]:
 class AskerMayDecide:
     """The tenant's requesterMayDecide, on: a person holding reviews.decide approves their own write."""
 
-    async def allowed(self, _tenant: str) -> bool:
+    async def allowed(self, _tenant: str, _team: str | None = None) -> bool:
         return True
 
 
@@ -114,7 +114,8 @@ class Agents:
 
         @self.app.get("/v1/templates")
         async def templates(request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
-            return {"data": [{"id": "doc-coauthoring", "kind": "skill"}]}
+            page = {"page": 1, "pageSize": 20, "total": 1, "totalPages": 1, "hasNext": False, "hasPrev": False}
+            return {"data": {"data": [{"id": "doc-coauthoring", "kind": "skill"}], "pagination": page, "facets": {}}}
 
         @self.app.post("/v1/resources/{resource}/copies")
         async def install(resource: str, request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
@@ -263,7 +264,7 @@ async def test_template_calls_are_gateway_calls_and_an_install_is_not_held(stack
     async with stack.app.router.lifespan_context(stack.app), stack.session("maker") as c:
         listed = await c.call_tool("list_templates", {"kind": "skill"})
         made = await c.call_tool("install_template", {"resource": "plugin:opsai.starters:doc-coauthoring"})
-    assert not listed.is_error and _content(listed).get("templates"), listed
+    assert not listed.is_error and _content(listed).get("data"), listed
     [row] = await stack.rows("list_templates")
     assert (row["channel"], row["outcome"], row["sub"]) == ("mcp", "ok", "maker@bank.test")
     assert not made.is_error, made

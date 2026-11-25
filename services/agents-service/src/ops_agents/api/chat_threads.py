@@ -44,6 +44,7 @@ from ops_contracts.chat import (
     RememberedItem,
     ReplaceEvent,
     ReplyUsage,
+    SignedIn,
     StatusEvent,
     TextEvent,
     ToolCall,
@@ -53,6 +54,7 @@ from ops_contracts.chat import (
     WidgetEvent,
     WidgetPart,
 )
+from ops_contracts.skill_run import SkillRunState
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import now_iso
@@ -61,7 +63,7 @@ from ops_service_kit.narrow import json_object
 from ..store.chat_list import ChatListQuery, unsummarised_rows
 from ..store.chat_search import index_thread, indexed_ids, matching_threads
 from ..store.events import EventLog, EventOut
-from ..store.graphs import RunRow
+from ..store.graphs import RunRow, StoredThread
 from ..store.reviews import DecisionOut, ReviewStore
 from ..store.tenancy import current_team
 from ..store.thread_list import ThreadReader
@@ -143,6 +145,7 @@ class AssistantBuilder:
             status="running" if status == "running" else "failed" if status == "error" else "success",
             duration_ms=int(cast(float | str, c.get("durationMs") or 0)),
             gated=gated,
+            signed_in=SignedIn.model_validate(c["signedIn"]) if isinstance(c.get("signedIn"), dict) else None,
         )
 
     def _worded(self, text: str, tool: str) -> str:
@@ -281,6 +284,10 @@ class AssistantBuilder:
                 return []
             case "skill_loaded":
                 m.skills = [*(m.skills or []), LoadedSkill.model_validate(json_object(data))]
+                return []
+            case "skill_run":
+                # The last one of the reply is the record the next reply goes on from.
+                m.skill_run = SkillRunState.model_validate(json_object(data))
                 return []
             case "guardrail_withheld" | "guardrail_retracted":
                 if not self.audit:
@@ -500,11 +507,11 @@ async def _with_usage(rt: Runtime, thread_id: str, runs: list[RunRow], messages:
         )
 
 
-def thread_base(rt: Runtime, row: Json, messages: list[ChatMessage]) -> Json:
-    meta = json_object(row["meta"])
+def thread_base(rt: Runtime, row: StoredThread, messages: list[ChatMessage]) -> Json:
+    meta = json_object(row.meta)
     kb_ids = [str(k) for k in cast(list[Any], meta.get("kbIds") or [])]
     return {
-        "id": row["id"],
+        "id": row.id,
         "title": meta.get("title") or NEW_TITLE,
         "agent_id": meta.get("agentId"),
         "agent_name": meta.get("agentName"),
@@ -515,8 +522,8 @@ def thread_base(rt: Runtime, row: Json, messages: list[ChatMessage]) -> Json:
         "pinned": bool(meta.get("pinned")),
         "archived": bool(meta.get("archived")),
         "owner": meta.get("owner") or "",
-        "created_at": row["created_at"],
-        "last_message_at": meta.get("lastMessageAt") or row["created_at"],
+        "created_at": row.created_at,
+        "last_message_at": meta.get("lastMessageAt") or row.created_at,
         "message_count": len(messages),
         "start_agent_id": meta.get("startAgentId"),
         "start_agent_name": meta.get("startAgentName"),
@@ -524,11 +531,11 @@ def thread_base(rt: Runtime, row: Json, messages: list[ChatMessage]) -> Json:
     }
 
 
-def thread_view(rt: Runtime, row: Json, messages: list[ChatMessage]) -> ChatThread:
+def thread_view(rt: Runtime, row: StoredThread, messages: list[ChatMessage]) -> ChatThread:
     return ChatThread.model_validate({**thread_base(rt, row, messages), "messages": messages})
 
 
-def thread_row_view(rt: Runtime, row: Json, messages: list[ChatMessage]) -> ChatThreadRow:
+def thread_row_view(rt: Runtime, row: StoredThread, messages: list[ChatMessage]) -> ChatThreadRow:
     last = next((m for m in reversed(messages) if m.content), None)
     return ChatThreadRow.model_validate(
         {
@@ -590,33 +597,33 @@ def thread_reader(me: Principal) -> ThreadReader:
     return ThreadReader(graphs=graphs, chat=chat, email=me.email.strip().lower(), name=me.name)
 
 
-async def chat_rows(rt: Runtime, me: Principal) -> list[dict[str, Any]]:
+async def chat_rows(rt: Runtime, me: Principal) -> list[StoredThread]:
     """The caller's own visible chat threads (`may_read`)."""
-    rows = await graph_store(rt).threads(CHAT_GRAPH)
+    rows = await graph_store(rt).thread_rows(CHAT_GRAPH)
     return [
         r
         for r in rows
-        if json_object(r["meta"]).get("chat")
-        and not json_object(r["meta"]).get("hidden")
-        and may_read(json_object(r["meta"]), me)
+        if json_object(r.meta).get("chat")
+        and not json_object(r.meta).get("hidden")
+        and may_read(json_object(r.meta), me)
     ]
 
 
-async def chat_row(rt: Runtime, thread_id: str, me: Principal | None) -> dict[str, Any] | None:
+async def chat_row(rt: Runtime, thread_id: str, me: Principal | None) -> StoredThread | None:
     """One visible chat thread by id: the caller's own, so anyone else, a teammate included, reads it as not found.
     `me=None` skips the owner rule for a review decision made from the thread, which the review policy authorises; the
     team rule still applies."""
-    row = await graph_store(rt).thread(thread_id)
+    row = await graph_store(rt).thread_row(thread_id)
     if (
         row is None
-        or row["graph"] != CHAT_GRAPH
-        or not json_object(row["meta"]).get("chat")
-        or json_object(row["meta"]).get("hidden")
+        or row.graph != CHAT_GRAPH
+        or not json_object(row.meta).get("chat")
+        or json_object(row.meta).get("hidden")
     ):
         return None
-    if (team := current_team()) is not None and row["team_id"] != team:
+    if (team := current_team()) is not None and row.team_id != team:
         return None
-    if me is not None and not may_read(json_object(row["meta"]), me):
+    if me is not None and not may_read(json_object(row.meta), me):
         return None
     return row
 
@@ -634,14 +641,14 @@ def summary(messages: list[ChatMessage]) -> Json:
     }
 
 
-async def index_chat(rt: Runtime, row: Json, messages: list[ChatMessage]) -> None:
+async def index_chat(rt: Runtime, row: StoredThread, messages: list[ChatMessage]) -> None:
     """The thread's search row: title, agent, last reply and every question, as plain columns (store/chat_search)."""
-    meta = json_object(row["meta"])
+    meta = json_object(row.meta)
     await index_thread(
         graph_store(rt).engine,
         {
-            "thread_id": row["id"],
-            "team_id": row["team_id"],
+            "thread_id": row.id,
+            "team_id": row.team_id,
             "title": str(meta.get("title") or NEW_TITLE),
             "agent_name": str(meta.get("agentName") or ""),
             "preview": summary(messages)["preview"],
@@ -655,7 +662,7 @@ async def store_summary(rt: Runtime, thread_id: str) -> None:
     """After a turn or a rename: the list's summary in meta and the thread's search row."""
     messages = (await messages_of(rt, [thread_id]))[thread_id]
     await update_meta(rt, thread_id, **summary(messages))
-    if (row := await graph_store(rt).thread(thread_id)) is not None:
+    if (row := await graph_store(rt).thread_row(thread_id)) is not None:
         await index_chat(rt, row, messages)
 
 
@@ -670,19 +677,18 @@ async def with_stored_summaries(rt: Runtime, owner_email: str, owner_name: str) 
     await with_summaries(rt, rows)
 
 
-async def with_summaries(rt: Runtime, rows: list[Json]) -> None:
+async def with_summaries(rt: Runtime, rows: list[StoredThread]) -> None:
     """Threads written before summaries or search rows were kept get them once, here, so later lists read meta only
     and search reads its own columns."""
-    # A thread row's id is its string column.
-    indexed = await indexed_ids(graph_store(rt).engine, [cast(str, r["id"]) for r in rows])
-    missing = [r for r in rows if "messageCount" not in json_object(r["meta"]) or r["id"] not in indexed]
+    indexed = await indexed_ids(graph_store(rt).engine, [r.id for r in rows])
+    missing = [r for r in rows if "messageCount" not in json_object(r.meta) or r.id not in indexed]
     if not missing:
         return
-    msgs = await messages_of(rt, [cast(str, r["id"]) for r in missing])
+    msgs = await messages_of(rt, [r.id for r in missing])
     for r in missing:
-        rid = cast(str, r["id"])
+        rid = r.id
         s = summary(msgs[rid])
-        r["meta"] = {**json_object(r["meta"]), **s}
+        r.meta = {**json_object(r.meta), **s}
         await update_meta(rt, rid, **s)
         await index_chat(rt, r, msgs[rid])
 

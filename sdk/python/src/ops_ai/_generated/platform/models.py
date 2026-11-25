@@ -161,8 +161,10 @@ class EnvelopeListStr(TypedDict, closed=True):
 class ErrorBody(TypedDict, closed=True):
     code: str
     details: NotRequired[Any]
+    kind: Literal["input", "refused", "upstream", "timeout", "internal"]
     message: str
     requestId: str
+    retryable: bool
     status: int
 
 
@@ -196,7 +198,7 @@ class GrantOut(TypedDict, closed=True):
 class GrantingRole(TypedDict, closed=True):
     id: str
     name: str
-    via: Literal["person", "team"]
+    via: Literal["person", "team", "group"]
 
 
 class GridRow(TypedDict, closed=True):
@@ -306,6 +308,11 @@ class KeyTargetIn(TypedDict, closed=True):
     version: NotRequired[int | None]
 
 
+class Mailed(TypedDict, closed=True):
+    email: str
+    memberId: str
+
+
 class MeTeam(TypedDict, closed=True):
     id: str
     name: str
@@ -322,7 +329,9 @@ class MemberOut(TypedDict, closed=True):
     email: str
     id: str
     invitedAt: NotRequired[str | None]
+    linksOwnSession: NotRequired[bool]
     name: str
+    needsInvite: NotRequired[bool]
     role: str
     status: Literal["active", "invited"]
     team: str
@@ -436,6 +445,8 @@ class PolicyOut(TypedDict, closed=True):
         "choice",
         "app_changes",
         "app_changes_by_app",
+        "by_area",
+        "floor_rules",
     ]
     note: NotRequired[str | None]
     title: str
@@ -447,6 +458,10 @@ Domain: TypeAlias = str
 
 class Refresh(TypedDict, closed=True):
     refreshToken: str
+
+
+class ReinviteIn(TypedDict, closed=True):
+    ids: NotRequired[list[Id] | None]
 
 
 class ResetIn(TypedDict, closed=True):
@@ -508,10 +523,15 @@ class RoleGrantOut(TypedDict, closed=True):
     teamId: str
 
 
+class RoleHolderIn(TypedDict, closed=True):
+    id: str
+    kind: Literal["person", "group"]
+
+
 class RoleHolderOut(TypedDict, closed=True):
     email: NotRequired[str | None]
     id: str
-    kind: Literal["person", "team"]
+    kind: Literal["person", "team", "group"]
     name: str
     teamId: str
 
@@ -616,6 +636,24 @@ class SsoCompleteIn(TypedDict, closed=True):
     flowKey: str
 
 
+class SsoLink(TypedDict, closed=True):
+    kind: str
+    label: str
+    linked: bool
+    linkedAt: str | None
+    providerId: str
+
+
+class SsoLinkStartIn(TypedDict, closed=True):
+    next: NotRequired[str | None]
+    stepUp: str
+
+
+class SsoLinked(TypedDict, closed=True):
+    kind: str
+    providerId: str
+
+
 class SsoOption(TypedDict, closed=True):
     kind: Literal["oidc", "saml"]
     label: str
@@ -623,6 +661,7 @@ class SsoOption(TypedDict, closed=True):
 
 class SsoStartIn(TypedDict, closed=True):
     email: NotRequired[str | None]
+    invite: NotRequired[str | None]
     next: NotRequired[str | None]
     provider: NotRequired[str | None]
 
@@ -897,6 +936,11 @@ class EnvelopeRoleGrantOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeRoleHolderOut(TypedDict, closed=True):
+    data: RoleHolderOut
+    success: Literal[True]
+
+
 class EnvelopeSignInSecretOut(TypedDict, closed=True):
     data: SignInSecretOut
     success: Literal[True]
@@ -909,6 +953,11 @@ class EnvelopeSignInTestOut(TypedDict, closed=True):
 
 class EnvelopeSignInTestStartOut(TypedDict, closed=True):
     data: SignInTestStartOut
+    success: Literal[True]
+
+
+class EnvelopeSsoLinked(TypedDict, closed=True):
+    data: SsoLinked
     success: Literal[True]
 
 
@@ -977,13 +1026,13 @@ class EnvelopeListSignInSecretOut(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListTeamName(TypedDict, closed=True):
-    data: list[TeamName]
+class EnvelopeListSsoLink(TypedDict, closed=True):
+    data: list[SsoLink]
     success: Literal[True]
 
 
-class EnvelopeListTeamOut(TypedDict, closed=True):
-    data: list[TeamOut]
+class EnvelopeListTeamName(TypedDict, closed=True):
+    data: list[TeamName]
     success: Literal[True]
 
 
@@ -1030,6 +1079,12 @@ class ListResultRoleHolderOut(TypedDict, closed=True):
 
 class ListResultRoleOut(TypedDict, closed=True):
     data: list[RoleOut]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultTeamOut(TypedDict, closed=True):
+    data: list[TeamOut]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -1082,6 +1137,12 @@ class ProviderOut(TypedDict, closed=True):
     oidc: OidcSettingsOut | None
     saml: SamlSettingsOut | None
     verification: list[DomainCheckOut]
+
+
+class ReinviteBulkOut(TypedDict, closed=True):
+    mailed: list[Mailed]
+    skipped: list[Skip]
+    updated: list[str]
 
 
 class SessionOut(TypedDict, closed=True):
@@ -1142,6 +1203,11 @@ class EnvelopeListResultRoleOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListResultTeamOut(TypedDict, closed=True):
+    data: ListResultTeamOut
+    success: Literal[True]
+
+
 class EnvelopeListResultWorkspaceTeamOut(TypedDict, closed=True):
     data: ListResultWorkspaceTeamOut
     success: Literal[True]
@@ -1159,6 +1225,11 @@ class EnvelopePrincipal(TypedDict, closed=True):
 
 class EnvelopeProviderOut(TypedDict, closed=True):
     data: ProviderOut
+    success: Literal[True]
+
+
+class EnvelopeReinviteBulkOut(TypedDict, closed=True):
+    data: ReinviteBulkOut
     success: Literal[True]
 
 

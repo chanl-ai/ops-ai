@@ -17,6 +17,7 @@ from ops_service_kit.errors import NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, In, Json, JsonValue, ListResult, Out, ok
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListQuery
+from ops_service_kit.names import Name
 
 from .callers import caller_in
 from .mocks import MAX_WAIT_MS
@@ -31,7 +32,7 @@ MAX_BODY_CHARS = 64_000
 
 
 class MockIn(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     # test: answers test-environment calls; example: the operation's example answer, one per operation.
     environment: Literal["test", "example"] = "test"
     # Input field to the value it must equal; empty matches every call (use it as the default).
@@ -45,7 +46,7 @@ class MockIn(In):
 
 
 class MockPatchIn(In):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     match: dict[str, JsonValue] | None = None
     status: int | None = Field(default=None, ge=100, le=599)
     body: JsonValue = None

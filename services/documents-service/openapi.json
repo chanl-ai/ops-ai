@@ -243,6 +243,7 @@
       },
       "CopyRef": {
         "additionalProperties": false,
+        "description": "A team's copy of a template: where it came from and the record it made.",
         "properties": {
           "detachedAt": {
             "anyOf": [
@@ -260,7 +261,16 @@
             "type": "string"
           },
           "kind": {
-            "const": "document_type",
+            "enum": [
+              "agent",
+              "skill",
+              "workflow",
+              "document_type",
+              "case_type",
+              "task_type",
+              "guardrail",
+              "knowledge_source"
+            ],
             "title": "Kind",
             "type": "string"
           },
@@ -1118,6 +1128,25 @@
         "title": "Envelope[ListResult[Extraction]]",
         "type": "object"
       },
+      "Envelope_ListResult_TemplateView__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_TemplateView_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[TemplateView]]",
+        "type": "object"
+      },
       "Envelope_Purged_": {
         "additionalProperties": false,
         "properties": {
@@ -1304,29 +1333,6 @@
         "title": "Envelope[list[TemplateOffer]]",
         "type": "object"
       },
-      "Envelope_list_TemplateView__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/TemplateView"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[TemplateView]]",
-        "type": "object"
-      },
       "ErrorBody": {
         "additionalProperties": false,
         "properties": {
@@ -1337,6 +1343,17 @@
           "details": {
             "title": "Details"
           },
+          "kind": {
+            "enum": [
+              "input",
+              "refused",
+              "upstream",
+              "timeout",
+              "internal"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
           "message": {
             "title": "Message",
             "type": "string"
@@ -1344,6 +1361,10 @@
           "requestId": {
             "title": "Requestid",
             "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
           },
           "status": {
             "title": "Status",
@@ -1354,7 +1375,9 @@
           "code",
           "message",
           "status",
-          "requestId"
+          "requestId",
+          "kind",
+          "retryable"
         ],
         "title": "ErrorBody",
         "type": "object"
@@ -2335,6 +2358,7 @@
       },
       "Installed": {
         "additionalProperties": false,
+        "description": "The live copies a team holds of one template. A copy never changes by itself.",
         "properties": {
           "changed": {
             "default": false,
@@ -2666,6 +2690,38 @@
           "facets"
         ],
         "title": "ListResult[Extraction]",
+        "type": "object"
+      },
+      "ListResult_TemplateView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateView"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[TemplateView]",
         "type": "object"
       },
       "Pagination": {
@@ -3511,6 +3567,7 @@
       },
       "TemplateRequires": {
         "additionalProperties": false,
+        "description": "What a copy of a template needs before it can run.",
         "properties": {
           "bind": {
             "items": {
@@ -10170,7 +10227,7 @@
     },
     "/v1/templates": {
       "get": {
-        "description": "The document types the team's plugins bring, each with its state for the team, the copies the team holds of\nit and whether the caller may add it. A copy whose template the app no longer ships, while the app is still on,\nis listed too, as `removed_upstream`; a copy of an app turned off for the team reads `added`.",
+        "description": "The document types the team's plugins bring, each with its state for the team, the copies the team holds of\nit and whether the caller may add it. A copy whose template the app no longer ships, while the app is still on,\nis listed too, as `removed_upstream`; a copy of an app turned off for the team reads `added`. A page of the\nshared list query; `search` matches the title and the plugin's title.",
         "operationId": "templates_list_templates",
         "parameters": [
           {
@@ -10188,6 +10245,100 @@
                 }
               ],
               "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -10260,7 +10411,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_TemplateView__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_TemplateView__"
                 }
               }
             },

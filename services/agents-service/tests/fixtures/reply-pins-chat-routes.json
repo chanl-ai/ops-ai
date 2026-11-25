@@ -116,8 +116,10 @@
     "body": {
       "error": {
         "code": "validation_failed",
+        "kind": "input",
         "message": "That cursor is not one this list returned.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -128,8 +130,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Agent ag_missing was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -174,8 +178,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Conversation was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -186,8 +192,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Message was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -225,8 +233,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Conversation was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false
@@ -313,8 +323,10 @@
     "body": {
       "error": {
         "code": "validation_failed",
+        "kind": "input",
         "message": "The sidebar slice has its own order; leave out sortBy and cursor.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 400
       },
       "success": false
@@ -325,8 +337,10 @@
     "body": {
       "error": {
         "code": "not_found",
+        "kind": "input",
         "message": "Widget was not found.",
         "requestId": "<req>",
+        "retryable": false,
         "status": 404
       },
       "success": false

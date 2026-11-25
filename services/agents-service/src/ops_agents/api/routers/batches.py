@@ -27,14 +27,17 @@ from ops_service_kit.http import Envelope, In, Json, JsonValue, Out
 
 from ...store.batches import MAX_ROWS, Batches, BatchOut, BatchRowOut
 from ...store.tenancy import current_tenant
-from ..auth import Principal, principal, require_builder, started_by
+from ..auth import Principal, principal, reader_of, require_builder, started_by
 from ..deps import Runtime, runtime
+from ..engine_runs import checked_input
 from ..envelope import ok
 from .engine import startable
 
 router = APIRouter(tags=["batches"])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
+# A batch's page and results show every row's input and output, so they are read with workflows.view.
+Reader: TypeAlias = Annotated[Principal, Depends(reader_of("workflows"))]  # noqa: UP040
 SAMPLE = 5
 
 
@@ -145,7 +148,16 @@ async def start_batch(rt: Rt, me: Me, workflow_id: str, body: BatchIn) -> JSONRe
             f"No column in {info.name} names an input. Name the first row's columns {titles}.",
             code="batch_no_matching_columns",
         )
-    mapped: list[Json] = [{mapping[c]: v for c, v in r.items() if c in mapping and v != ""} for r in rows]
+    mapped: list[Json] = []
+    for n, r in enumerate(rows, start=1):
+        try:
+            mapped.append(checked_input(stored, {mapping[c]: v for c, v in r.items() if c in mapping and v != ""}))
+        except Unprocessable as e:
+            raise Unprocessable(
+                f"Row {n} of {info.name}: {e.message} No run was started.",
+                code=e.code,
+                details={**(e.details or {}), "row": n},
+            ) from e
     if body.dry_run:
         dry = {"rows": len(mapped), "mapping": mapping, "ignored": ignored, "sample": mapped[:SAMPLE]}
         return ok(dry)
@@ -174,7 +186,7 @@ def _status(r: BatchRowOut) -> str:
 
 
 @router.get("/v1/batches/{batch_id}", response_model=Envelope[BatchView])
-async def batch_page(rt: Rt, me: Me, _: Tx, batch_id: str) -> JSONResponse:
+async def batch_page(rt: Rt, me: Reader, _: Tx, batch_id: str) -> JSONResponse:
     """The batch's counts and every row, failed first: what its page shows."""
     batch = await _batch(rt, me, batch_id)
     rows = await Batches(rt.db).rows(batch_id)
@@ -216,7 +228,7 @@ async def retry_batch(rt: Rt, me: Me, batch_id: str) -> JSONResponse:
     response_class=Response,
     responses={200: {"content": {"text/csv": {"schema": {"type": "string"}}}, "description": "One line per row"}},
 )
-async def batch_results(rt: Rt, me: Me, _: Tx, batch_id: str) -> Response:
+async def batch_results(rt: Rt, me: Reader, _: Tx, batch_id: str) -> Response:
     """Every row as the page shows it, one line each: row, input, status, outcome, run, error and output. Input and
     output are JSON, so a value holding a comma or a quote reads back as it was."""
     await _batch(rt, me, batch_id)

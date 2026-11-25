@@ -29,6 +29,8 @@ from typing import Any
 
 import httpx
 from usecase_harness import (
+    discovered,
+    picks,
     AGENTS_DIR,
     AGENTS_PORT,
     DB,
@@ -125,10 +127,8 @@ def worker(files_url: str, models_url: str, documents_url: str) -> Generator[Non
 def bank_module(gw: httpx.Client) -> None:
     """The bank imported as a published module: reads from GET, place_hold approved by one person of team_ops."""
     source = {"kind": "openapi", "specUrl": "https://api.bank.test/openapi.json"}
-    found = data(gw.post("/v1/tool-modules/discover", json=source))
-    ops = [
-        {**o, "access": "read" if (o.get("method") or "GET").upper() == "GET" else "write"} for o in found["operations"]
-    ]
+    found = discovered(gw, source)
+    ops = picks(found)
     body = {
         "name": "northfield-core-banking",
         "displayName": "Harbor & Pine Core Banking",

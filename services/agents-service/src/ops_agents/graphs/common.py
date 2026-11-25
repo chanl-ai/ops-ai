@@ -5,13 +5,14 @@ from __future__ import annotations
 import base64
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import Any, Protocol, TypedDict, cast
+from typing import Any, NotRequired, Protocol, TypedDict, cast
 
 from langgraph.config import get_config, get_stream_writer
 
 from ops_agent_kernel.events import (
     CitationsReady,
     SkillLoaded,
+    SkillRunChanged,
     StatusChanged,
     TextDelta,
     TextReplaced,
@@ -38,6 +39,7 @@ from ops_agents.activities.attachments import ATTACHMENT_KB
 from ops_agents.activities.catalog import AgentDefinition, Catalog
 from ops_agents.activities.tool_directory import CatalogTools, ToolDirectory, grants_for
 from ops_agents.activities.tools import ReplySender
+from ops_contracts.skill_run import AGENT_TOOL_PREFIX, WORKFLOW_TOOL_PREFIX, SkillRunState
 from ops_metering import Usage
 from ops_service_kit.http import Json, JsonValue
 
@@ -91,9 +93,6 @@ async def agent_grants(deps: GraphDeps, agent: AgentDefinition) -> list[ToolGran
     return await grants_for(deps.tools or CatalogTools(deps.catalog), list(agent.tools))
 
 
-WORKFLOW_TOOL_PREFIX = "workflow__"
-
-
 class WorkflowRunner(Protocol):
     """The API side of workflows as agent tools (docs/architecture/workflows-as-tools.md), so this layer does not
     import the API."""
@@ -138,7 +137,6 @@ class WorkflowTools:
         )
 
 
-AGENT_TOOL_PREFIX = "agent__"
 MEMORY_TOOL = "search_memory"
 # The Ops tools: the team default agent's reads of the person's cases, Human Tasks, runs and workflows.
 OPS_SERVER = "ops"
@@ -195,16 +193,32 @@ class MemoryTools:
         return await self.runner.run(arguments)
 
 
+@dataclass(frozen=True)
+class Asker:
+    """The agent a turn runs as, read from the definition the turn runs: a draft under test, the version a widget
+    pins, or the live one. Who it may ask is decided from this and never from the live catalogue, which holds only
+    the published version and none for an agent never published."""
+
+    agent_id: str
+    version: int
+    # The ids of the agents its `agent:<id>` grants name.
+    grants: tuple[str, ...]
+
+    @classmethod
+    def of(cls, agent_id: str, version: int, tools: list[str]) -> Asker:
+        return cls(agent_id, version, tuple(t.removeprefix("agent:") for t in tools if t.startswith("agent:")))
+
+
 class AgentRunner(Protocol):
     """The API side of specialist agents as tools, so this layer does not import the API."""
 
-    async def offers(self, agent_id: str) -> list[ToolGrant]:
-        """`agent__<id>` grants for the specialists `agent_id` may ask on this turn: none unless it is its team's
-        default agent, the turn has a person, and the turn is not itself a specialist's."""
+    async def offers(self, asker: Asker) -> list[ToolGrant]:
+        """`agent__<id>` grants for the agents `asker` may ask on this turn: its own `agent:<id>` grants, every
+        specialist for its team's default agent on a turn with a person, and none its chain refuses."""
         ...
 
     async def run(
-        self, *, agent: str, arguments: Json, key: str, parent_thread_id: str, parent_run_id: str | None
+        self, *, asker: Asker, agent: str, arguments: Json, key: str, parent_thread_id: str, parent_run_id: str | None
     ) -> ToolOutcome:
         """Runs `agent`'s own turn on the question for the turn's person and returns its reply."""
         ...
@@ -216,12 +230,14 @@ class AgentTools:
 
     inner: ToolExecutor
     runner: AgentRunner
+    asker: Asker
 
     async def execute(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> ToolOutcome:
         if not tool.startswith(AGENT_TOOL_PREFIX):
             return await self.inner.execute(tool, arguments, key=key, approval_token=approval_token)
         configurable = get_config().get("configurable") or {}
         return await self.runner.run(
+            asker=self.asker,
             agent=tool.removeprefix(AGENT_TOOL_PREFIX),
             arguments=arguments,
             key=key,
@@ -231,17 +247,19 @@ class AgentTools:
 
 
 async def ports_with_workflows(
-    deps: GraphDeps, granted: list[str], *, agent_id: str | None = None
+    deps: GraphDeps, granted: list[str], *, agent_id: str | None = None, version: int = 0
 ) -> tuple[KernelPorts, list[ToolGrant]]:
-    """The ports and extra grants for an agent turn: workflow tools for its granted, published workflows, and for the
-    team's default agent the specialists the person may ask."""
+    """The ports and extra grants for an agent turn: workflow tools for its granted, published workflows, and the
+    specialists the person may ask. `granted` and `version` are those of the definition the turn runs, so a draft
+    under test is offered what the draft grants."""
     ports, offers = deps.ports, list[ToolGrant]()
     if deps.workflows is not None and (
         found := await deps.workflows.offers([g for g in granted if g.startswith("workflow:")])
     ):
         ports, offers = replace(ports, tools=WorkflowTools(ports.tools, deps.workflows)), found
-    if deps.agents is not None and agent_id and (specialists := await deps.agents.offers(agent_id)):
-        ports, offers = replace(ports, tools=AgentTools(ports.tools, deps.agents)), [*offers, *specialists]
+    asker = Asker.of(agent_id, version, granted) if agent_id else None
+    if deps.agents is not None and asker is not None and (specialists := await deps.agents.offers(asker)):
+        ports, offers = replace(ports, tools=AgentTools(ports.tools, deps.agents, asker)), [*offers, *specialists]
     if deps.memory is not None and agent_id and (search := await deps.memory.offers(agent_id)):
         ports, offers = replace(ports, tools=MemoryTools(ports.tools, deps.memory)), [*offers, *search]
     if deps.ops is not None and agent_id and (reads := await deps.ops.offers(agent_id)):
@@ -333,6 +351,7 @@ def _call_data(c: ToolCallRecord) -> Json:
         "durationMs": c.duration_ms,
         "view": c.view,
         **({"cached": True} if c.cached else {}),
+        **({"signedIn": c.signed_in} if c.signed_in else {}),
     }
 
 
@@ -373,8 +392,14 @@ async def _kernel_turn(node: str, req: TurnRequest, ports: KernelPorts) -> TurnR
                 # The run journal's record of each load (spec 11 5.3.7), with the part and how it entered the reply.
                 extra = {k: x for k, x in (("part", part), ("how", how), ("inputs", inputs)) if x}
                 emit("skill_loaded", node, {"skillId": sid, "version": v, "name": name, "matched": matched, **extra})
+            case SkillRunChanged(run=run):
+                emit("skill_run", node, run.model_dump(mode="json", by_alias=True))
             case TurnFinished(result=r):
                 result = r
+                # The record the next reply goes on from, whichever way the turn ended; an ended skill is kept too.
+                carried = req.carried_run is not None or req.resume is not None
+                if r.run is not None and (carried or r.run != SkillRunState()):
+                    emit("skill_run", node, r.run.model_dump(mode="json", by_alias=True))
                 # The audit record of what a guardrail kept from the person (withheld, never shown) or took back
                 # after it streamed (retracted, what they saw before the replacement); the conversation shows neither.
                 for kind, text in (("withheld", r.withheld), ("retracted", r.retracted)):
@@ -424,6 +449,10 @@ class PendingApproval(TypedDict):
     history: str
     loaded_skills: list[LoadedSkill]
     plan: Plan | None
+    # The running-skill record at the pause and the tools held for the rest of that reply; absent on a pause stored
+    # before skills had steps.
+    run: NotRequired[Json | None]
+    held: NotRequired[dict[str, list[str]]]
 
 
 def pending_approval(i: Interrupt) -> PendingApproval:
@@ -443,6 +472,8 @@ def pending_approval(i: Interrupt) -> PendingApproval:
         "history": base64.b64encode(i.history).decode(),
         "loaded_skills": i.loaded_skills,
         "plan": i.plan,
+        "run": i.run.model_dump(mode="json", by_alias=True) if i.run is not None else None,
+        "held": {k: [*v] for k, v in i.held.items()},
     }
 
 
@@ -474,4 +505,6 @@ def interrupt_from_state(d: Json) -> Interrupt:
         base64.b64decode(v["history"]),
         list(v.get("loaded_skills") or []),
         v.get("plan"),
+        SkillRunState.model_validate(run) if (run := v.get("run")) else None,
+        {k: [*held] for k, held in (v.get("held") or {}).items()},
     )

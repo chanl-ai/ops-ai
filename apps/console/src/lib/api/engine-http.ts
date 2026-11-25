@@ -14,6 +14,9 @@ export function createEngineHttp(get: Get, send: Send): EngineApi {
     validate: (definition) => send('POST', '/workflows/definitions/validate', { definition }),
     publish: (definition) => send('POST', '/workflows/definitions', { definition }),
     deleteDefinition: (id) => send('DELETE', `/workflows/definitions/${encodeURIComponent(id)}`),
+    saveWorkingCopy: (id, definition, base) => send('PUT', `/workflows/definitions/${encodeURIComponent(id)}/working-copy`, { definition, ...base }),
+    diff: (id, from, to) => get(`/workflows/definitions/${encodeURIComponent(id)}/diff?from=${from}&to=${to}`),
+    publishPreview: (id) => get(`/workflows/definitions/${encodeURIComponent(id)}/publish-preview`),
     requestPublish: (id, input) => send('POST', `/workflows/definitions/${encodeURIComponent(id)}/publish-requests`, input),
     setPaused: (id, paused) => send('POST', `/workflows/definitions/${encodeURIComponent(id)}/${paused ? 'pause' : 'resume'}`),
     options: (source) => get(`/workflows/option-sources?source=${source}`),
@@ -22,6 +25,7 @@ export function createEngineHttp(get: Get, send: Send): EngineApi {
     run: (runId) => get(`/runs/${encodeURIComponent(runId)}`),
     cancelRun: (runId) => send('POST', `/runs/${encodeURIComponent(runId)}/cancel`),
     retryRun: (runId) => send('POST', `/runs/${encodeURIComponent(runId)}/retry`),
+    redriveRun: (runId) => send('POST', `/runs/${encodeURIComponent(runId)}/redrive`),
     runSetAsideEmail: (eventId) => send('POST', `/runs/set-aside-emails/${encodeURIComponent(eventId)}/run`),
   };
 }

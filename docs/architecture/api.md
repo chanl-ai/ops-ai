@@ -1,12 +1,12 @@
 # The API
 
-Status: current, updated 2026-10-16. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md); decision records it does not settle remain options.
+Status: current, checked against the code on 2026-11-18. Designed and not built: the deployment pointer and environment, webhooks, review policies, editing a thread's state, cancelling a thread and a general `Idempotency-Key` header. The decided design is [workflows and agents](../design/workflows/workflows-and-agents.md).
 
 ## Decisions
 
 | Decision | Detail |
 |---|---|
-| One API for chat and workflows | Six families, 54 calls. Four do the work: create a thread, run it, read its state, decide a review |
+| One API for chat and workflows | The families in the table below. Four calls do the work: create a thread, run it, read its state, decide a review. Workflow runs on the engine have their own `/v1/runs` calls (start, cancel, retry, events, resume a step) |
 | Versions move only through the pointer | Deployments name `wf_d@production`; `POST …/pointer` moves it; rollback is the same call; running threads keep their version |
 | Decide is the only door for a policy-owned pause | `POST /v1/reviews/{id}/decide` resumes it; a resume sent to `runs` answers 409. A plain question to a chat user, owned by no policy, may resume through `runs` | Chat approvals use the same door: the chat widget action calls decide.
 | Knowledge, tools, connections, files, sign-in and settings | Their own families; not in this page |
@@ -14,7 +14,7 @@ Status: current, updated 2026-10-16. The decided design is [workflows and agents
 ## Calls
 
 "In code" counts a call that exists with the designed shape; "partial" exists under another route or with a
-narrower shape; "proposed" has no code. Count: 5 in code, 17 partial, 32 proposed, of 54.
+narrower shape; "proposed" has no code.
 
 | Family | Call | What it does | State |
 |---|---|---|---|
@@ -28,7 +28,7 @@ narrower shape; "proposed" has no code. Count: 5 in code, 17 partial, 32 propose
 | Agents | `GET /v1/agents/{id}`, `PATCH /v1/agents/{id}` | `staleToolIds`: granted ids the tool directory no longer offers (unpublished, hidden, drifted, deleted); a save drops them, while a newly added id it does not offer is refused (400 `unknown_tool`). With tools-service unreachable, a read reports none stale | In code on agents-service |
 | Agents | `GET /v1/model-aliases` | The chat aliases an agent may name: name, kind, clearance and prices; exactly the set a publish request accepts | In code on agents-service: models-service's chat aliases when it is configured, else the runtime's own alias by name |
 | Agents | `GET /v1/prompts/variables` | The `{key}` placeholders a run fills in an agent's instructions, for the instructions editor; empty while no run passes any, since a placeholder with no value fails the turn | In code on agents-service (`routers/prompt_variables.py`) |
-| Agents, Workflows | `GET /v1/publish-requests/{id}`, `POST /v1/publish-requests/{id}/decision` | Read or decide an agent or workflow publish request: approved, rejected or returned, with a reason for the last two | In code. While `requesterMayDecide` is off, the requester cannot decide, nor can the person who saved an agent version; approving publishes what the request recorded |
+| Agents, Workflows | `GET /v1/publish-requests/{id}`, `POST /v1/publish-requests/{id}/decision` | Read or decide an agent or workflow publish request: approved, rejected or returned, with a reason for the last two | In code. While the team's two-person rule is on (`requesterMayDecide` off), the requester cannot decide, nor can the person who saved an agent version, unless they are an Admin of the team; approving publishes what the request recorded |
 | Workflows | `GET /v1/workflows`, `POST /v1/workflows`, `GET`/`PATCH`/`DELETE /v1/workflows/{id}` | List; create from a template; read with live graph and draft; settings; delete | In code (`api/workflow_registry.py`). The id is the graph name for `POST /v1/threads`. dispute_email and wire_hold_review are seeded live |
 | Workflows | `PUT …/draft`, `DELETE …/draft` | Save or discard the canvas graph | In code; the draft is read on `GET /v1/workflows/{id}` |
 | Workflows | `POST …/validate`, `GET …/validations/latest`, `POST …/test` | Compile checks: node types, agent pins, one trigger, reachability; run once in memory with pauses approved | In code. Branch and router nodes with more than one route fail checks: no rule chooses between them yet |
@@ -47,7 +47,7 @@ narrower shape; "proposed" has no code. Count: 5 in code, 17 partial, 32 propose
 | Threads | `PATCH /v1/threads/{id}/state` | Edit state while waiting, journaled | Proposed |
 | Threads | `GET /v1/threads/{id}/history` | Every step with inputs and outputs by reference | Partial: `GET /v1/threads/{id}/runs` lists runs and node sequences |
 | Threads | `GET …/runs/{runId}/events?after=seq` | Re-attach from the stored event log | In code: SSE of the stored events in the designed shape, `seq` above `after`; `follow=false` returns what is stored and closes |
-| Threads | `POST …/cancel` | Cooperative stop | Proposed |
+| Threads | `POST …/cancel` | Cooperative stop | Proposed for threads; an engine run cancels at `POST /v1/runs/{run_id}/cancel` |
 | Threads | `POST /v1/threads/{id}/route-to-people` | Hand remaining steps to people | In code for definition workflows; a code graph answers 409 `not_routable` ([durability-failure-and-audit.md](durability-failure-and-audit.md#side-effect-classes)) |
 | Threads | `POST /v1/threads/{id}/migrate` | Move a waiting thread to a newer version | In code |
 | Threads | `PATCH /v1/threads/{id}`, `DELETE /v1/threads/{id}` | Title, pin, archive; hide | Partial: on `/chat/threads`, which stores title, pin, archive and hide in the agent_wrapper thread's metadata |
@@ -63,29 +63,29 @@ narrower shape; "proposed" has no code. Count: 5 in code, 17 partial, 32 propose
 
 | Route | Service | Why it exists |
 |---|---|---|
-| `/chat/*` and `/v1/chat/*` (11 routes) | The console chat, as a facade over the thread calls: a conversation is an `agent_wrapper` thread, a message is a leased run streamed as `ChatStreamEvent`, an approval is decided through `POST /reviews/{id}/decision`, and messages are rebuilt from run inputs and `thread_events`. Its own tables are dropped by migration 0017. Marked for removal under console strategy rule 6: it exists only until the chat page speaks the thread calls through the SDK | The console chat, on its own tables, calling the kernel directly. Moves onto the thread calls when chat runs as the `agent_wrapper` graph |
-| `POST /v1/threads/{id}/approvals` | agents-service | Records an approver for the exact call the thread waits on and mints the token once enough approvers exist; the decide path calls it. It runs the same decider check as decide: a reviewer of the thread's team who did not ask for it, unless `requesterMayDecide` is on (register row E51), and only the asker for a question put to the person (row E50) |
+| `/chat/*` and `/v1/chat/*` (13 routes) | The console chat, as a facade over the thread calls: a conversation is an `agent_wrapper` thread, a message is a leased run streamed as `ChatStreamEvent`, an approval is decided through `POST /reviews/{id}/decision`, and messages are rebuilt from run inputs and `thread_events`. Its own tables are dropped by migration 0017. Marked for removal under console strategy rule 6: it exists only until the chat page speaks the thread calls through the SDK | The console chat, on its own tables, calling the kernel directly. Moves onto the thread calls when chat runs as the `agent_wrapper` graph |
+| `POST /v1/threads/{id}/approvals` | agents-service | Records an approver for the exact call the thread waits on and mints the token once enough approvers exist; the decide path calls it. It runs the same decider check as decide: a reviewer of the thread's team, the asker too unless the team's two-person rule is on (`requesterMayDecide` off) and they are not an Admin of the team, and only the asker for a question put to the person (row E50) |
 | `POST /v1/threads:route-to-people` | agents-service | Routes every open thread of one workflow version to people |
-| `POST /v1/auth/step-up` | agents-service | Dev sign-in's step-up: re-checks the password (and code) and returns a signed step-up token for the caller, valid five minutes ([identity-and-tenancy.md](identity-and-tenancy.md#approval-and-step-up-token-facts)) |
-| `/runs/*`, `/reviews/*` (7 routes) | agents-service | The console's Cases and Reviews contract served from runtime threads (`api/hitl_facade.py`) until the `ops_hitl` package takes them; rows arrive pre-joined with state, journal, SLA and decisions |
+| `POST /v1/auth/step-up`, `POST /v1/auth/step-up/sso` | agents-service | Dev sign-in's step-up: re-checks the password (and code) and returns a signed step-up token for the caller, valid five minutes ([identity-and-tenancy.md](identity-and-tenancy.md#approval-and-step-up-token-facts)) |
+| `/runs/*`, `/reviews/*` (10 routes) | agents-service | The console's Cases and Reviews contract served from runtime threads (`api/hitl_facade.py`) until the `ops_hitl` package takes them; rows arrive pre-joined with state, journal, SLA and decisions |
 | `POST /v1/threads/{id}/events` | agents-service | `customer_reply`: restarts the SLA clock |
 | `POST`, `GET /v1/threads/{id}/inbox` | agents-service | Queued channel input for a busy thread ([channels-and-deployments.md](channels-and-deployments.md)) |
 | `POST /v1/calls`, `POST /v1/fences` | tools-service | A tool call through policy; raising the fence at takeover |
-| `GET /health` | both | Liveness |
+| `GET /health`, `GET /health/background` | every service | Liveness, and the state of its background processes |
 
 ## Request conventions
 
 | Convention | Rule | In code |
 |---|---|---|
 | Envelope | `{success: true, data}` or `{success: false, error: {code, message, status, requestId, details?}}` | Yes, `ops_agents/api/envelope.py` |
-| OpenAPI | Every operation of every service has an operationId `<tag>_<handler>` from one function (`ops_service_kit.http.operation_id`), a resource tag, the error envelope on every status, and a typed success response. Each service commits its document as `services/<service>/openapi.json`, and the SDKs are generated from them | In code for all seven services. Each service's `make openapi-check` (the shared gate, `ops_service_kit.openapi`) fails on drift, a repeated or missing id, a name that is not `<tag>_<handler>` (FastAPI's default, such as `delete_file_v1_files_file_id_delete`), a bare request body, or an untyped route off `openapi-untyped.txt`. The API tests validate every response against the document (`tests/contract.py`). The chat facade is left out |
+| OpenAPI | Every operation of every service has an operationId `<tag>_<handler>` from one function (`ops_service_kit.http.operation_id`), a resource tag, the error envelope on every status, and a typed success response. Each service commits its document as `services/<service>/openapi.json`, and the SDKs are generated from them | In code for all eight services. Each service's `make openapi-check` (the shared gate, `ops_service_kit.openapi`) fails on drift, a repeated or missing id, a name that is not `<tag>_<handler>` (FastAPI's default, such as `delete_file_v1_files_file_id_delete`), a bare request body, or an untyped route off `openapi-untyped.txt`. The API tests validate every response against the document (`tests/contract.py`). The chat facade is left out |
 | Who may call it | Every operation carries `x-ops-public`: `sdk` (generated into the SDKs and CLI), `tool` (offered to agents as a platform tool), `both`, or `internal` (takes a service token; in neither) | In code: `ops_service_kit.http.mark_public` sets it when the document is built, `internal` for a route that depends on the service-token dependency and `sdk` otherwise; a route may set its own value through `openapi_extra`. The gate fails a missing or unknown value |
 | Errors | 400 `validation_failed`, 401 `unauthorized`, 403 `forbidden`, 404 `not_found`, 409 conflicts by code, 422 `step_up_required` or `approval_token_required`, 429 `key_budget_exhausted`, 500 `internal` | Yes |
 | Conflict codes | `run_active` (with owner, runId, ageSeconds), `run_waiting`, `run_not_waiting`, `not_waiting`, `node_missing`, `deployment_paused`, `nothing_to_approve`, `already_decided` (a different decision on a decided review), `digest_mismatch` (the pinned version's stored digest no longer matches), `no_sla_waiting` (a customer reply to a thread with no SLA step waiting), `not_routable`; tools-service `lease_superseded`, `write_in_progress` | Yes |
 | Idempotency | Every write takes a key kept in our own dedupe table. A repeated `runId` replays the stored events instead of running again; a repeated `externalKey` returns the existing thread; a repeated tool write returns the first result | Run id and external key: yes. A general `Idempotency-Key` header: proposed |
-| Paging | The shared list contract: every list route takes `page`, `pageSize`, `search`, `sortBy`, `sortOrder`, `ids` and repeatable filters, and answers `{data, pagination, facets}`; see [Lists and errors](#lists-and-errors) | Yes on the services whose migration is finished (`ops_service_kit.listing`, `ops_service_kit.http.ListResult`); the others still return every row. Cursor paging is Planned |
-| Team | From identity, never from a parameter | Not yet: the dev principal reads `X-Team-Id` ([identity-and-tenancy.md](identity-and-tenancy.md)) |
-| Auth on service calls | Bearer service token with `area:action` scopes on the public routes; workload identity in a deployment | Shared token in code |
+| Paging | The shared list contract: every list route takes `page`, `pageSize`, `search`, `sortBy`, `sortOrder`, `ids` and repeatable filters, and answers `{data, pagination, facets}`; see [Lists and errors](#lists-and-errors) | In code: `ops_service_kit.listing.ListQuery` with `ops_store.listing.list_page` (rows in a table) or `ops_service_kit.http.page_rows` (rows a service holds in memory, such as plugin templates). `scripts/check_list_routes.py` fails a list route that answers every row unless `list-routes-allowlist.txt` names it with a reason (29 bounded, 20 owed). Pickers use `/options` pages with a cursor |
+| Team | From identity, never from a parameter | In code: `X-Team-Id` only picks among the verified identity's teams (`packages/ops_identity/src/ops_identity/resolve.py`); dev mode alone trusts the header ([identity-and-tenancy.md](identity-and-tenancy.md)) |
+| Auth on service calls | Bearer service token with `area:action` scopes on the public routes; workload identity in a deployment | In code: each service signs Ed25519 service tokens with its own key and scopes (`packages/ops_identity/src/ops_identity/service_keys.py`); dev uses one shared dev key. Workload identity is designed |
 
 ## Lists and errors
 
@@ -98,7 +98,7 @@ This section is the reference the SDK guides link to.
 | `page` | 1-based page number, default 1 |
 | `pageSize` | Rows per page: the install default is 20 (`OPS_PAGE_SIZE_DEFAULT`) and the largest is 50 (`OPS_PAGE_SIZE_MAX`); a larger value is answered at 50 |
 | `search` | Text matched by the list's own search columns |
-| `sortBy`, `sortOrder` | A column the list declares sortable, and `asc` or `desc` (default `desc`); rows with equal values keep a fixed order by id, so a page never repeats or skips a row |
+| `sortBy`, `sortOrder` | A column the list declares sortable, and `asc` or `desc` (default `desc`); rows with equal values keep a fixed order by id, so a page never repeats or skips a row. A list declares only the columns its console table sorts by, each with an index (`deploy/database/tests/test_indexes.py`); any other `sortBy` is ignored and the list keeps its default order |
 | `ids` | Repeated; at most 1000. Answers exactly those rows, whatever `search` says; used by pickers and labels |
 | any other key | A filter of that list, repeated once per value: `?status=open&status=held` keeps either |
 
@@ -113,7 +113,7 @@ A list answers the envelope with a page in `data`:
 
 `facets` counts the rows per value of each filter, with the search and the other filters applied. Some lists add a
 field beside the three (`canCreate`, `labels`, `byKey`); each service's OpenAPI document names it. A caller that needs
-every row follows `pagination.hasNext` and asks for 50 a page. Old parameter and reply names are gone, with no aliases:
+every row follows `pagination.hasNext` and asks for 50 a page. In the console, a table reads a list through the data table's server mode, a picker through `EntityPicker` or `SearchSelect` over an `/options` source, and any other list (a gallery, a document's pieces) through `useServerList` (`apps/console/src/hooks/server-list.ts`); `check-standards` fails a list searched in the browser. Old parameter and reply names are gone, with no aliases:
 [api-changes.md](migration/api-changes.md) lists each route's change.
 
 ### Error replies
@@ -139,7 +139,7 @@ Every stream, webhook and adapter uses one thread event. Receivers dedupe on `id
 
 | Field | Designed | In code |
 |---|---|---|
-| Shape | `{id, seq, type, threadId, runId, node, at, data}` | Designed shape in `thread_events` and the read routes; `runs/stream` still sends `{event, runId, seq, node?, data?}` for one release (deprecated) |
+| Shape | `{id, seq, type, threadId, runId, node, at, data}` | Designed shape in `thread_events` and the read routes; `runs/stream` still sends `{event, runId, seq, node?, data?}`; its removal is not scheduled |
 | `seq` | Rises by one per thread | Per thread in the log; per run in the old stream |
 | Types | `started`, `node`, `text`, `tool_call`, `citation`, `widget`, `waiting`, `waiting_review`, `decided`, `finished`, `failed`, `cancelled` | `started`, `node`, `tool_call`, `text`, `waiting`, `waiting_review`, `decided`, `finished`, `failed`, plus custom node events |
 | Storage | An event log written as events happen, read by re-attach and webhooks | `thread_events` (migration 0015), written as events happen on PostgreSQL (one INSERT…SELECT each) and at run end on SQLite; `graph_runs.events` is still written at run end |

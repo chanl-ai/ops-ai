@@ -20,14 +20,16 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { QueryError } from '@/components/shared/query-states';
+import { packFor } from '@/lib/template-packs';
 import { Row, Rows } from '@/components/shared/surface';
-import { useTeamQuery } from '@/hooks/team-query';
+import { type ServerListAsk, useServerList } from '@/hooks/server-list';
 import { ApiError } from '@/lib/api/contract';
 import { sdk } from '@/lib/api/ops-sdk';
 import type { OpsAI } from '@chanl-ai/ops-ai';
 
 type Raw = OpsAI['raw'];
-export type Template = Awaited<ReturnType<Raw['agents']['templates_list_templates']>>[number];
+type TemplatePage = Awaited<ReturnType<Raw['agents']['templates_list_templates']>>;
+export type Template = TemplatePage['data'][number];
 export type TemplateKind = 'agent' | 'skill' | 'workflow' | 'guardrail' | 'document_type';
 
 const NOUN: Record<TemplateKind, string> = {
@@ -40,14 +42,15 @@ const NOUN: Record<TemplateKind, string> = {
 
 const refOf = (t: { source: string; id: string }) => `${t.source}:${t.id}`;
 
-// Document types are kept by documents-service; every other kind by agents-service.
-const listOf = (kind: TemplateKind) =>
+// Document types are kept by documents-service; every other kind by agents-service. Both answer a page of the shared list.
+const pageOf = (kind: TemplateKind, ask: ServerListAsk) =>
   kind === 'document_type'
-    ? (sdk((ops) => ops.raw.documents.templates_list_templates({ query: { kind } })) as unknown as Promise<Template[]>)
-    : sdk((ops) => ops.raw.agents.templates_list_templates({ query: { kind } }));
+    ? (sdk((ops) => ops.raw.documents.templates_list_templates({ query: { kind, ...ask } })) as unknown as Promise<TemplatePage>)
+    : sdk((ops) => ops.raw.agents.templates_list_templates({ query: { kind, ...ask } }));
 
-export const useTemplates = (kind: TemplateKind, enabled = true) =>
-  useTeamQuery({ queryKey: ['templates', 'kind', kind], queryFn: () => listOf(kind), enabled });
+/** The templates of one kind matching `search`, searched and paged by the service. */
+export const useTemplates = (kind: TemplateKind, search: string, enabled = true) =>
+  useServerList(['templates', 'kind', kind], (ask) => pageOf(kind, ask), { search, enabled });
 
 export function useInstallTemplate(kind: TemplateKind) {
   const qc = useQueryClient();
@@ -87,16 +90,13 @@ function TemplatesDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const query = useTemplates(kind, open);
-  const install = useInstallTemplate(kind);
   const [search, setSearch] = React.useState('');
+  const query = useTemplates(kind, search, open);
+  const install = useInstallTemplate(kind);
+  const pack = packFor(kind);
   const [adding, setAdding] = React.useState<string | null>(null);
   const noun = NOUN[kind];
-  const rows = React.useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const all = query.data ?? [];
-    return q ? all.filter((t) => `${t.title} ${t.plugin.title}`.toLowerCase().includes(q)) : all;
-  }, [query.data, search]);
+  const rows = query.rows;
 
   const add = async (t: Template) => {
     setAdding(refOf(t));
@@ -143,13 +143,23 @@ function TemplatesDialog({
           {search ? (
             'No template matches this search.'
           ) : (
-            <>
-              {`No ${noun} templates yet. A team admin turns on an app or pack on `}
-              <Link href="/data/connectors" className="text-primary underline-offset-4 hover:underline" data-testid="templates-gallery-connectors">
-                Connectors
-              </Link>
-              {' to offer some.'}
-            </>
+            pack ? (
+              <>
+                {`No ${noun} templates yet. A team admin turns on the `}
+                <Link href={pack.href} className="text-primary underline-offset-4 hover:underline" data-testid="templates-gallery-pack">
+                  {pack.name}
+                </Link>
+                {' pack to offer some.'}
+              </>
+            ) : (
+              <>
+                {`No ${noun} templates yet. A team admin turns on an app on `}
+                <Link href="/data/connectors" className="text-primary underline-offset-4 hover:underline" data-testid="templates-gallery-connectors">
+                  Connectors
+                </Link>
+                {' to offer some.'}
+              </>
+            )
           )}
         </p>
       ) : (
@@ -180,6 +190,13 @@ function TemplatesDialog({
               }
             />
           ))}
+          {query.hasNextPage && (
+            <div className="flex justify-center pt-2">
+              <LoadingButton variant="ghost" size="sm" isLoading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()} data-testid="templates-gallery-more">
+                Show more
+              </LoadingButton>
+            </div>
+          )}
         </Rows>
       )}
     </DialogShell>

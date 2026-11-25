@@ -22,11 +22,11 @@ import { useKeyboardScrollRegions } from '@/components/shared/edge-fade';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { useSession, useSignInPolicy, useSignOut } from '@/hooks/auth-queries';
 import { useTeam, useTeamReady } from '@/hooks/use-team';
-import { currentTeamId, ownTeamId, setCurrentTeamId } from '@/lib/api';
-import { isUnreachable, servicesDown } from '@/lib/api/unreachable';
+import { setCurrentTeamId } from '@/lib/api';
+import { isUnreachable } from '@/lib/api/unreachable';
+import { useServicesDown } from '@/hooks/services-down';
 import { authProvider } from '@/lib/auth';
 import { isAuthPath } from '@/lib/auth/next-path';
-import { teamToUse } from '@/lib/session-gate';
 import { inSettings, LIVE_TREE } from '@/lib/settings-tree';
 
 import { HeaderNotifications } from './header-notifications';
@@ -81,7 +81,7 @@ function Guarded({ children }: { children: React.ReactNode }) {
   const needsMfa = authProvider.enrolsMfa && status === 'signed_in' && session?.authMethod === 'password' && !!policy.data?.mfaRequired && !session.mfaEnrolled;
   // The person's teams are the first thing every page needs. A 401 there, after the token was renewed once, means the
   // session is over; a 5xx or no answer at all means the services are down, which one shell state says for every page.
-  const { error: teamsError, teams, isPending: teamsPending } = useTeam();
+  const { error: teamsError, pick, noTeams, isPending: teamsPending } = useTeam();
   const teamsStatus = (teamsError as { status?: number } | null)?.status;
   const unreachable = isUnreachable(teamsError);
   // Pages render, and team queries run (hooks/team-query.ts), only once the current team is one the person holds. A team
@@ -101,12 +101,10 @@ function Guarded({ children }: { children: React.ReactNode }) {
   }, [status]);
   const ended = status === 'expired' || (status === 'signed_out' && !!wasIn.current && !signOutWasChosen());
   const expired = ended;
-  const teamIds = teams.map((t) => t.id).join(',');
   React.useEffect(() => {
-    if (status !== 'signed_in' || teamReady || !teamIds) return;
-    const pick = teamToUse(currentTeamId(), ownTeamId(), teamIds.split(','));
-    if (pick) setCurrentTeamId(pick);
-  }, [status, teamReady, teamIds]);
+    if (status !== 'signed_in' || teamReady || !pick) return;
+    setCurrentTeamId(pick);
+  }, [status, teamReady, pick]);
   React.useEffect(() => {
     // An ended session keeps the page under its sign-in dialog, so its sign-out and 401s do not send the person away.
     if (!ended && (status === 'signed_out' || teamsStatus === 401)) router.replace(`/login?next=${encodeURIComponent(here)}`);
@@ -118,7 +116,7 @@ function Guarded({ children }: { children: React.ReactNode }) {
   if (status === 'signed_in' && unreachable) return <ServicesUnavailable />;
   if ((status !== 'signed_in' && !expired) || needsMfa) return <Loading />;
   // An ended session reads no teams; the page it had stays mounted under the dialog.
-  if (!expired && !teamsPending && !teamsError && teams.length === 0) return <NoTeam />;
+  if (!expired && !teamsPending && !teamsError && noTeams) return <NoTeam />;
   if (!expired && !teamReady) return <Loading />;
   // The sign-in window's pages draw only their card: they open in a small window of their own, or a phone's tab.
   if (inSignInWindow(pathname))
@@ -153,26 +151,6 @@ function Guarded({ children }: { children: React.ReactNode }) {
 }
 
 /** Shown in place of the console when the session lifetime has passed; nothing behind it renders. */
-/** True while a page read on screen failed because the services did not answer (lib/api/unreachable.ts `servicesDown`). */
-function useServicesDown(): boolean {
-  const cache = useQueryClient().getQueryCache();
-  return React.useSyncExternalStore(
-    (changed) => cache.subscribe(changed),
-    () =>
-      servicesDown(
-        cache.getAll().map((q) => ({
-          observers: q.getObserversCount(),
-          status: q.state.status,
-          error: q.state.error,
-          failures: q.state.fetchFailureCount,
-          failureReason: q.state.fetchFailureReason,
-          side: q.meta?.side === true,
-        })),
-      ),
-    () => false,
-  );
-}
-
 /** Above any page whose reads the services are not answering: the page keeps what it has and asks again by itself. */
 function ServicesDownBanner() {
   if (!useServicesDown()) return null;

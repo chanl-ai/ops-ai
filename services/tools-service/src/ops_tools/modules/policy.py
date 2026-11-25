@@ -9,12 +9,17 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from ops_access import BY_KEY, Access, effective_answer, publish_mode, team_on
-from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_access import BY_KEY, Access, EffectiveAnswer, effective_answer, publish_mode, requester_may_decide, team_on
+from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable, principal_of
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import Json
+from ops_service_kit.narrow import json_object
 
 from ..store.modules import Module, ModuleColumns, Operation
+
+# The area a per-team requesterMayDecide names for a tool access request or write approval: every decision here is a
+# review, as `can()` asks it (`BY_AREA_TAKES`).
+REVIEWS = "reviews"
 
 Mode = Literal["always", "major", "never"]
 MODES: tuple[Mode, ...] = ("always", "major", "never")
@@ -46,6 +51,8 @@ class PublishPolicy:
             return ToolsMode("always", unreadable=True)
 
 
+# Where `levels` keeps the Security team's floor (approvalsFloor) in the team level; no appChanges field has this name.
+FLOOR = "_approvalsFloor"
 # appChanges switches whose off value lets a write run that would otherwise wait.
 LOOSENING = frozenset({"makersAsk", "testRunsAsk"})
 
@@ -75,9 +82,16 @@ class WriteApprovals:
                 # that only let writes through (makers' asks off, test runs not asking) are not taken from `*`.
                 of_team = {k: v for k, v in workspace.items() if not (k in LOOSENING and v is False)}
             apps = dict(by_app.get("value") or {}).get(team_id) if team_id else None
-            return (of_team or {}), dict(apps or {})
         except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
             return None, {}
+        # The Security team's floor rides in the team level under FLOOR, only when it locks something, so `answer`
+        # hands it to `effective_answer`. A floor that cannot be read counts as the strictest one: every write waits
+        # for a reviewer rather than running past a lock it could not see.
+        try:
+            floor = json_object((await self.platform.get("/v1/policies/approvalsFloor", tenant=tenant_id)).get("value"))
+        except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
+            floor = {"appChanges": "reviewer"}
+        return ({**(of_team or {}), FLOOR: floor} if floor else (of_team or {})), dict(apps or {})
 
     async def answer(
         self,
@@ -94,7 +108,7 @@ class WriteApprovals:
         levels: tuple[Any, Json] | None = None,
         tool: str | None = None,
         draft: bool = False,
-    ) -> dict[str, Any]:
+    ) -> EffectiveAnswer:
         """The one answer to "does this call wait, and who answers": the tool's own setting, its app's entry and the
         team's, through `effective_answer`. Everything that shows or enforces a wait calls here.
 
@@ -102,6 +116,10 @@ class WriteApprovals:
         `tool:<name>`, replaces the tool's own setting, so a plugin tool whose manifest asks first (its module row
         cannot be edited) is still changed by a team admin."""
         team, by_app = levels or await self.levels(tenant_id, team_id)
+        floor: Any = None
+        if isinstance(team, dict) and FLOOR in team:
+            team = dict(cast(Json, team))
+            floor = team.pop(FLOOR)
         app = next((by_app[i] for i in sorted(app_ids(module) if module else ()) if i in by_app), None)
         # `setting` is the tool's own mode (see `tool_mode`). A bare True or False is a stored requires_approval, which
         # cannot be told from the old default, so it is no override: the app and the team decide.
@@ -122,7 +140,7 @@ class WriteApprovals:
             "approvers": approvers,
             "draft": draft,
         }
-        return effective_answer(tool=own, app=app, team=team, channel=channel, test_account=test_account)
+        return effective_answer(tool=own, app=app, team=team, channel=channel, test_account=test_account, floor=floor)
 
 
 def maker_asks(module: Module | None, tool: str | None) -> bool:
@@ -164,17 +182,17 @@ def asker_refusal(
 ) -> Forbidden | None:
     """The refusal `can` gives when an approval names the person the call acts for and requesterMayDecide, read at the
     call (`may_decide`), does not let an asker decide; None when someone else approved or the policy allows it. Only
-    the separation-of-duties part counts here: the approver's role was checked when the approval was given."""
+    the separation-of-duties part counts here: the approver's role was checked when the approval was given. The asker
+    holds the roles their acting-for token carries, so an Admin of the team passes as `can` lets them."""
     return own_request_refusal(
         access,
         tenant_id,
         asker.email,
         approvers,
         may_decide=may_decide,
-        sub=asker.sub,
-        name=asker.name,
         team_id=asker.team_id,
         what="this write",
+        person=principal_of(asker, tenant_id),
     )
 
 
@@ -189,13 +207,15 @@ def own_request_refusal(
     name: str = "",
     team_id: str | None = None,
     what: str = "this",
+    person: Principal | None = None,
 ) -> Forbidden | None:
     """`can(requested_by=)`'s own_request refusal when one of `deciders` is `asker` (an email) and requesterMayDecide,
     read live by the caller (`may_decide`), does not let an asker decide; None otherwise. The decider's role is checked
-    where the decision is made, so any other refusal `can` gives here does not count."""
+    where the decision is made, so any other refusal `can` gives here does not count. `person` is the asker with the
+    roles a token says they hold (an Admin of the team decides their own request); without it they hold none."""
     if not asker or asker.casefold() not in {str(d).casefold() for d in deciders if d}:
         return None
-    person = Principal(
+    held = person or Principal(
         kind="person",
         sub=sub or asker,
         email=asker,
@@ -206,8 +226,8 @@ def own_request_refusal(
         roles={},
         scopes=[],
         auth_method="session",
-        policies={"requesterMayDecide": may_decide},
     )
+    person = held.model_copy(update={"policies": {**held.policies, "requesterMayDecide": may_decide}})
     try:
         access.can(person, "reviews", "decide", team=team_id, requested_by=[asker], what=what)
     except Forbidden as refused:
@@ -252,13 +272,17 @@ class RequesterMayDecide:
         self.platform = platform
         self.dev = dev or {}
 
-    async def allowed(self, tenant_id: str) -> bool:
-        """Whether whoever asked may also decide. A policy that cannot be read counts as off: a person never decides
-        their own request because a read failed."""
+    async def allowed(self, tenant_id: str, team_id: str | None = None) -> bool:
+        """Whether whoever asked in `team_id` may also decide, read by `requester_may_decide`, the one reader of the
+        value's shape: the team's own part over the workspace's `*`, off while the Security team's floor
+        (`approvalsFloor`) locks it. A policy or floor that cannot be read counts as off: a person never decides their
+        own request because a read failed."""
         if self.platform is None:
-            return self.dev.get("requesterMayDecide", BY_KEY["requesterMayDecide"].default) is True
+            value = self.dev.get("requesterMayDecide", BY_KEY["requesterMayDecide"].default)
+            return requester_may_decide(value, team_id, REVIEWS, self.dev.get("approvalsFloor"))
         try:
             data = await self.platform.get("/v1/policies/requesterMayDecide", tenant=tenant_id)
-            return data.get("value") is True
+            floor = await self.platform.get("/v1/policies/approvalsFloor", tenant=tenant_id)
+            return requester_may_decide(data.get("value"), team_id, REVIEWS, floor.get("value"))
         except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
             return False

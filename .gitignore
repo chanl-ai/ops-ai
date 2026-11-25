@@ -52,3 +52,9 @@ examples/**/.ops-profile.json
 
 # Agent settings for one machine (see .claude/workspace.example.md)
 .claude/workspace.local.md
+
+# Private agent setup linked in by a maintainer's install script; never committed
+.cursor/rules/private/
+.cursor/commands/
+.cursor/hooks.json
+.cursor/mcp.json

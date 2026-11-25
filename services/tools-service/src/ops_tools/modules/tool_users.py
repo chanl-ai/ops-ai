@@ -7,10 +7,11 @@ nobody was warned about."""
 
 from __future__ import annotations
 
-from typing import Any, Protocol, cast
+from typing import Protocol, cast
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import ServiceUnavailable
+from ops_service_kit.http import Json
 
 Uses = dict[str, list[dict[str, str]]]
 
@@ -20,7 +21,7 @@ class ToolUsers(Protocol):
         """For each tool name, its users in the team, each `{kind: agent|workflow, id, name}`."""
         ...
 
-    async def accounts(self, tenant_id: str, team_id: str, app: str, name: str) -> dict[str, Any]:
+    async def accounts(self, tenant_id: str, team_id: str, app: str, name: str) -> Json:
         """The team's definitions naming the account `name` of `app`: `{drafts, published, workflows, agents}`."""
         ...
 
@@ -41,9 +42,9 @@ class AgentsToolUsers:
                 "agents-service did not say which agents use these tools; try again shortly.",
                 code="tool_users_unavailable",
             ) from e
-        return {str(k): list(v) for k, v in cast(dict[str, Any], found).items()}
+        return {str(k): list(cast(list[dict[str, str]], v)) for k, v in cast(Json, found).items()}
 
-    async def accounts(self, tenant_id: str, team_id: str, app: str, name: str) -> dict[str, Any]:
+    async def accounts(self, tenant_id: str, team_id: str, app: str, name: str) -> Json:
         try:
             found = await self.agents.get(
                 "/v1/account-uses", tenant=tenant_id, team=team_id, params={"app": app, "name": name}
@@ -53,7 +54,7 @@ class AgentsToolUsers:
                 "agents-service did not say which workflows and agents name this account; try again shortly.",
                 code="account_users_unavailable",
             ) from e
-        return dict(cast(dict[str, Any], found))
+        return dict(cast(Json, found))
 
 
 class StaticToolUsers:
@@ -62,11 +63,11 @@ class StaticToolUsers:
     def __init__(self, uses: Uses | None = None) -> None:
         self.uses: Uses = uses or {}
         # By (app id, case-folded account name).
-        self.account_uses: dict[tuple[str, str], dict[str, Any]] = {}
+        self.account_uses: dict[tuple[str, str], Json] = {}
 
     async def of(self, tenant_id: str, team_id: str, tools: list[str]) -> Uses:
         return {t: self.uses.get(t, []) for t in tools}
 
-    async def accounts(self, tenant_id: str, team_id: str, app: str, name: str) -> dict[str, Any]:
-        none: dict[str, Any] = {"drafts": 0, "published": 0, "workflows": [], "agents": []}
+    async def accounts(self, tenant_id: str, team_id: str, app: str, name: str) -> Json:
+        none: Json = {"drafts": 0, "published": 0, "workflows": [], "agents": []}
         return self.account_uses.get((app, name.strip().casefold()), none)

@@ -36,11 +36,11 @@ export function StageBadge({ stage, testId }: { stage: DefinitionStage; testId?:
  * page never need in its text.
  */
 function VersionDetails({ version, digest }: { version: number; digest?: string }) {
-  if (!digest) return <span className="text-muted-foreground">Version {version}</span>;
+  if (!digest) return <span className="pl-3 text-muted-foreground">Version {version}</span>;
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button type="button" variant="link" size="sm" className="h-auto p-0 text-muted-foreground" data-testid="definition-version-details">
+        <Button type="button" variant="link" size="sm" className="font-normal text-muted-foreground" data-testid="definition-version-details">
           Version {version}
         </Button>
       </PopoverTrigger>
@@ -56,12 +56,24 @@ function VersionDetails({ version, digest }: { version: number; digest?: string 
   );
 }
 
+/** The live version when it is not the one shown; the canvas header leaves its live chip out for this line. */
+function LiveElsewhere({ lifecycle }: { lifecycle: Pick<Lifecycle, 'version' | 'liveVersion' | 'paused'> }) {
+  const { version, liveVersion, paused } = lifecycle;
+  if (liveVersion === null || liveVersion === version) return null;
+  return (
+    <span className="text-muted-foreground" data-testid="definition-live-version">
+      Version {liveVersion} {paused ? 'is paused' : 'is live'}
+    </span>
+  );
+}
+
 /** You can view the workflow; the stage shows, and who changes it. */
-export function ViewOnlyLine({ stage }: { stage: DefinitionStage }) {
+export function ViewOnlyLine({ lifecycle, note = 'You can view this workflow; builders change it.' }: { lifecycle: Lifecycle; note?: string }) {
   return (
     <div className="mr-auto flex flex-wrap items-center gap-2 text-sm" data-testid="definition-view-only">
-      <StageBadge stage={stage} testId="definition-stage" />
-      <span className="text-muted-foreground">You can view this workflow; builders change it.</span>
+      <StageBadge stage={lifecycle.stage} testId="definition-stage" />
+      <LiveElsewhere lifecycle={lifecycle} />
+      <span className="text-muted-foreground">{note}</span>
     </div>
   );
 }
@@ -69,19 +81,24 @@ export function ViewOnlyLine({ stage }: { stage: DefinitionStage }) {
 export type Lifecycle = Pick<DefinitionView, 'version' | 'stage' | 'liveVersion' | 'paused' | 'review' | 'startForm'> & { digest?: string };
 
 /**
- * Where the saved versions stand and what can move them: send the latest draft to Reviews, follow an open request,
- * pause or resume live runs. A workflow with unsaved changes is saved first, so what is reviewed is what is stored.
+ * Where the versions stand and what can move them: publish the working copy (or the newest draft), follow an open
+ * request, pause or resume live runs. Publish is greyed out only while a change is being saved, so the version and the
+ * preview are made from what is on screen; otherwise its dialog lists what stops it.
  */
 export function LifecycleActions({
   lifecycle,
-  dirty,
+  changed,
+  saving = false,
   onPublish,
   onSetPaused,
   pausing,
   canPublish = true,
 }: {
   lifecycle: Lifecycle;
-  dirty: boolean;
+  /** The working copy differs from the newest version. */
+  changed: boolean;
+  /** A change on screen is not saved yet. */
+  saving?: boolean;
   /** False when the person may not publish workflows: Publish shows locked with the reason, as on an agent. */
   canPublish?: boolean;
   onPublish: () => void;
@@ -93,16 +110,6 @@ export function LifecycleActions({
   const { version, stage, liveVersion, paused, review } = lifecycle;
   return (
     <>
-      <div className="mr-auto flex flex-wrap items-center gap-2 text-sm" data-testid="definition-lifecycle">
-        <VersionDetails version={version} digest={lifecycle.digest} />
-        <StageBadge stage={stage} testId="definition-stage" />
-        {liveVersion !== null && liveVersion !== version && (
-          <span className="text-muted-foreground" data-testid="definition-live-version">
-            Version {liveVersion} {paused ? 'is paused' : 'is live'}
-          </span>
-        )}
-        {dirty && <span className="text-muted-foreground">· Unsaved changes</span>}
-      </div>
       {liveVersion !== null && (
         <Button type="button" variant="outline" onClick={() => setConfirm(paused ? 'resume' : 'pause')} data-testid={paused ? 'definition-resume' : 'definition-pause'}>
           {paused ? <Play /> : <Pause />} {paused ? 'Resume' : 'Pause'}
@@ -110,18 +117,24 @@ export function LifecycleActions({
       )}
       {review ? (
         <Button type="button" variant="outline" asChild data-testid="definition-review-link">
-          <Link href={`/work/tasks?review=${encodeURIComponent(review.id)}`}>Version {review.version} in review</Link>
+          <Link href={`/work/tasks?review=${encodeURIComponent(review.id)}`} title={`Version ${review.version} is waiting in Reviews`}>In review</Link>
         </Button>
       ) : (
-        stage === 'draft' &&
+        (changed || stage === 'draft') &&
         (!canPublish ? (
-          <LockedReason area="workflows" action="publish" label="Publish…" />
+          <LockedReason area="workflows" action="publish" label="Publish" />
         ) : (
-          <Button type="button" variant="outline" onClick={onPublish} disabled={dirty} title={dirty ? 'Save the version first' : undefined} data-testid="definition-publish">
-            <Rocket /> Publish…
+          <Button type="button" onClick={onPublish} disabled={saving} title={saving ? 'Saving your change first' : undefined} data-testid="definition-publish">
+            <Rocket /> Publish
           </Button>
         ))
       )}
+      {/* The status comes after the buttons: a wrapped row never leaves a button alone, and a status may. */}
+      <div className="flex h-9 items-center gap-1 rounded-md bg-muted/50 pr-3 text-sm whitespace-nowrap" role="status" data-testid="definition-lifecycle">
+        <VersionDetails version={version} digest={lifecycle.digest} />
+        <StageBadge stage={stage} testId="definition-stage" />
+        <LiveElsewhere lifecycle={lifecycle} />
+      </div>
       <DialogShell
         open={confirm !== null}
         onOpenChange={(o) => {
