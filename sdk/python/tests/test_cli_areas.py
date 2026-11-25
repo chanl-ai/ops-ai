@@ -542,7 +542,7 @@ def test_apps_on_turns_the_app_on_as_the_window_does_and_prints_the_sign_in_link
     assert main(["apps", "on", "plugin:opsai.salesforce", "--place", place]) == 0
     out = capsys.readouterr().out
     turned = next(r for r in seen if r.url.path.endswith("/team"))
-    assert json.loads(turned.content) == {"enabled": True, "signIn": "person_or_team", "settings": {"login_url": place}}
+    assert json.loads(turned.content) == {"enabled": True, "signIn": "person", "settings": {"login_url": place}}
     gave = next(r for r in seen if r.url.path.endswith("/team-assistant/app-tools"))
     assert json.loads(gave.content) == {"moduleIds": ["mod_plugin_salesforce"]}
     signed = next(r for r in seen if r.url.path.endswith("/sign-in"))

@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from typing import Any, ClassVar, NotRequired, TypedDict, cast
 
 import sqlalchemy as sa
-from pydantic import JsonValue
+from pydantic import JsonValue, model_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
@@ -562,6 +562,10 @@ class TokenWrite(TypedDict, total=False):
     test: Json | None
 
 
+# The third answer to who signs in, retired: stored rows with it read as each person (_AccountFields).
+RETIRED_SIGN_IN = "person_or_team"
+
+
 class _AccountFields(Out):
     """The `connections` columns every account read carries but its settings and secret names."""
 
@@ -595,6 +599,16 @@ class _AccountFields(Out):
     created_at: datetime
     updated_by: str
     updated_at: datetime
+
+    @model_validator(mode="before")
+    @classmethod
+    def _two_answers(cls, data: Any) -> Any:
+        # Who signs in has two answers. A row written with the retired third one (each person, the team's login as
+        # backup) reads as each person, so no call with nobody behind it is signed with the team's login.
+        if not isinstance(data, Mapping):
+            return data
+        row = cast(Mapping[str, Any], data)
+        return {**row, "sign_in": "person", "team_backup": False} if row.get("sign_in") == RETIRED_SIGN_IN else row
 
 
 class _AccountRow(_AccountFields):

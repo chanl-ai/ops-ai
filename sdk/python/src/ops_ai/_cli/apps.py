@@ -129,7 +129,7 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
 
 # The window's "Whose account do tools use?": each person's own with the team account for runs nobody started, the
 # team account only, or each person only.
-WHOSE = {"each": "person_or_team", "team": "team", "person": "person"}
+WHOSE = {"each": "person", "team": "team", "person": "person"}
 
 
 def _turn_on(ns: argparse.Namespace, ops: OpsAI) -> int:

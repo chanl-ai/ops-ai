@@ -1730,7 +1730,7 @@ export interface components {
              * @default team
              * @enum {string}
              */
-            signIn: "team" | "person" | "person_or_team";
+            signIn: "team" | "person";
             signedIn?: components["schemas"]["ops_tools__connections__schemas__SignedIn"] | null;
             /**
              * Status
@@ -1834,9 +1834,9 @@ export interface components {
                 [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Signin */
-            signIn?: ("team" | "person" | "person_or_team") | null;
+            signIn?: ("person" | "team") | null;
             /** Teambackup */
-            teamBackup?: boolean | null;
+            teamBackup?: false | null;
         };
         /**
          * AccountTest
@@ -1940,7 +1940,7 @@ export interface components {
             /** Sandbox */
             sandbox: boolean;
             /** Signin */
-            signIn?: ("team" | "person" | "person_or_team") | null;
+            signIn?: ("person" | "team") | null;
             /** Signinvalues */
             signInValues?: components["schemas"]["SignInValue"][];
             /**
@@ -2978,7 +2978,7 @@ export interface components {
              * Signin
              * @enum {string}
              */
-            signIn: "team" | "person" | "person_or_team";
+            signIn: "team" | "person";
             /**
              * State
              * @enum {string}
@@ -4936,7 +4936,7 @@ export interface components {
              * @default team
              * @enum {string}
              */
-            signIn: "team" | "person" | "person_or_team";
+            signIn: "team" | "person";
         };
         /** NoteIn */
         NoteIn: {
@@ -5854,7 +5854,7 @@ export interface components {
             /** Sandboxid */
             sandboxId?: string | null;
             /** Signin */
-            signIn?: ("team" | "person" | "person_or_team") | null;
+            signIn?: ("person" | "team") | null;
             signIns?: components["schemas"]["SignInCounts"] | null;
             /** State */
             state?: ("connected" | "not_signed_in" | "expired" | "refused" | "revoked") | null;

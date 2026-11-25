@@ -369,8 +369,7 @@
             "default": "team",
             "enum": [
               "team",
-              "person",
-              "person_or_team"
+              "person"
             ],
             "title": "Signin",
             "type": "string"
@@ -710,9 +709,8 @@
             "anyOf": [
               {
                 "enum": [
-                  "team",
                   "person",
-                  "person_or_team"
+                  "team"
                 ],
                 "type": "string"
               },
@@ -725,6 +723,7 @@
           "teamBackup": {
             "anyOf": [
               {
+                "const": false,
                 "type": "boolean"
               },
               {
@@ -1036,9 +1035,8 @@
             "anyOf": [
               {
                 "enum": [
-                  "team",
                   "person",
-                  "person_or_team"
+                  "team"
                 ],
                 "type": "string"
               },
@@ -4103,8 +4101,7 @@
           "signIn": {
             "enum": [
               "team",
-              "person",
-              "person_or_team"
+              "person"
             ],
             "title": "Signin",
             "type": "string"
@@ -9527,8 +9524,7 @@
             "default": "team",
             "enum": [
               "team",
-              "person",
-              "person_or_team"
+              "person"
             ],
             "title": "Signin",
             "type": "string"
@@ -12395,9 +12391,8 @@
             "anyOf": [
               {
                 "enum": [
-                  "team",
                   "person",
-                  "person_or_team"
+                  "team"
                 ],
                 "type": "string"
               },

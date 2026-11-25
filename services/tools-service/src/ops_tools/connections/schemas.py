@@ -10,9 +10,8 @@ from pydantic import Field, model_validator
 from ops_service_kit.http import In, JsonValue, Out
 from ops_service_kit.names import Name
 
-# Whose account a call signs in with: the team's one sign-in, the person the call acts for, or the person's
-# with the team's as the backup for calls with nobody behind them.
-SignIn = Literal["team", "person", "person_or_team"]
+# Whose login a call signs in with: the team's one login, or the person the call acts for.
+SignIn = Literal["team", "person"]
 
 
 # A credential value: a key, a password or token, or a PEM certificate or private key, the longest of them.
@@ -80,7 +79,8 @@ class AccountPatchIn(In):
     revision: int = Field(ge=1)
     name: Name | None = None
     sign_in: SignIn | None = None
-    team_backup: bool | None = None
+    # Always off: the team login is never a backup for each person (retired with the third answer).
+    team_backup: Literal[False] | None = None
     # The account a test run of the app uses; a live run never signs in with it.
     sandbox: bool | None = None
     # What the console's card shows for a system connected by name; the docs link must be https.

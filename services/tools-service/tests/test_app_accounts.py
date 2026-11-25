@@ -133,8 +133,11 @@ async def test_a_sign_in_on_the_second_account_settles_its_own_instance_and_a_ca
     default = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, run="live")
     named = await world.registry.resolve(TOOL, tenant_id=tenant, team_id=TEAM, run="live", account="EU org")
     assert default is not None and default.module is not None and named is not None and named.module is not None
-    assert (default.module["connection_id"], default.module["endpoint"]) == (first, "https://us.my.desk.test/api/v1")
-    assert (named.module["connection_id"], named.module["endpoint"]) == (second, "https://eu.my.desk.test/api/v1")
+    assert (default.module["connection_id"], default.module.get("endpoint")) == (
+        first,
+        "https://us.my.desk.test/api/v1",
+    )
+    assert (named.module["connection_id"], named.module.get("endpoint")) == (second, "https://eu.my.desk.test/api/v1")
 
 
 async def test_a_call_naming_an_account_the_team_does_not_hold_is_refused_not_defaulted(
@@ -249,7 +252,7 @@ async def test_each_account_counts_the_people_signed_in_to_it_and_says_who_signs
     second = (await another(world, tenant, "EU org")).json()["data"]
     each = await world.client.patch(
         f"/v1/apps/{APP}/accounts/{second['id']}",
-        json={"revision": second["revision"], "signIn": "person_or_team"},
+        json={"revision": second["revision"], "signIn": "person"},
         headers=admin(tenant),
     )
     assert each.status_code == 200, each.text
@@ -258,4 +261,4 @@ async def test_each_account_counts_the_people_signed_in_to_it_and_says_who_signs
     await signed(world, tenant, second["id"], "https://eu.my.desk.test", "usr_maya")
     page = (await world.client.get(f"/v1/apps/{APP}", headers=admin(tenant))).json()["data"]
     rows = {a["name"]: (a["signIn"], a["peopleSignedIn"]) for a in page["accounts"] if a["kind"] == "team"}
-    assert rows == {"Desk": ("team", 1), "EU org": ("person_or_team", 2)}, rows
+    assert rows == {"Desk": ("team", 1), "EU org": ("person", 2)}, rows

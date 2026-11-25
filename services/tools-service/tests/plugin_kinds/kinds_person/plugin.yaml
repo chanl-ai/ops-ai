@@ -11,7 +11,7 @@ connection:
   scopes:
     - { id: openid, label: Know which account signed in, required: true }
     - { id: api, label: Read records, required: true }
-  sign_in: [team, person, person_or_team]
+  sign_in: [team, person]
   health_check: { path: "/person/me" }
 settings:
   base_url: { type: string, title: System address, default: "https://api.multi.test" }

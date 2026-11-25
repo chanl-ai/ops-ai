@@ -142,18 +142,18 @@ async def test_a_team_login_call_for_a_person_names_the_login_it_ran_as(engine: 
     assert prepared.signed_as == {"whose": "team", "login": "ops@bank.example", "app": "CRM"}, prepared.signed_as
 
 
-async def test_a_call_with_nobody_behind_it_uses_the_team_account_only_where_the_backup_is_on(
-    engine: AsyncEngine, tenant: str
-) -> None:
+async def test_an_app_stored_as_both_answers_reads_and_signs_as_each_person(engine: AsyncEngine, tenant: str) -> None:
+    """An app has two answers, the team's login or each person's. A row stored with the old third answer (each person,
+    the team's login as backup) reads as each person, and a call with nobody behind it is not signed with the team's
+    login, which would act with more access than anyone asked for."""
     store, tokens, auth = rig(engine)
-    personal = await connection(store, tenant, "person")
     backed = await connection(store, tenant, "person_or_team", backup=True)
-    for conn in (personal, backed):
-        await tokens.store_answer(tenant, conn, {"access_token": "at-team", "expires_in": 3600})
+    await tokens.store_answer(tenant, backed, {"access_token": "at-team", "expires_in": 3600})
+    found = await store.get(tenant, backed)
+    assert found is not None and (found.sign_in, found.team_backup) == ("person", False), found
     with pytest.raises(AuthFailed) as e:
-        await bearer(auth, tenant, personal, None)
-    assert e.value.code == "CONNECTION_NOT_LINKED" and e.value.details["reason"] == "no_person"
-    assert await bearer(auth, tenant, backed, None) == "Bearer at-team"
+        await bearer(auth, tenant, backed, None)
+    assert e.value.code == "CONNECTION_NOT_LINKED" and e.value.details["reason"] == "no_person", e.value.details
 
 
 async def test_one_persons_refused_refresh_leaves_the_connection_and_everyone_else_working(
