@@ -5,11 +5,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
+from ops_service_kit.http import Json
 from ops_store import Guarantee
 from ops_store.dialect import db_now
 from ops_store.schema import TENANT_SCOPED
@@ -30,7 +31,7 @@ agent_instruction_sections = sa.Table(
 
 @dataclass(frozen=True)
 class SavedSections:
-    document: dict[str, Any]
+    document: Json
     updated_by: str
     updated_at: datetime
 
@@ -55,7 +56,7 @@ class InstructionSections(RuntimeStore):
             return None
         return SavedSections(document=dict(row.document), updated_by=str(row.updated_by), updated_at=row.updated_at)
 
-    async def put(self, document: dict[str, Any], *, by: str) -> None:
+    async def put(self, document: Json, *, by: str) -> None:
         """Replaces the workspace's list with `document`."""
         # Update first, then insert under a savepoint: the dialect's upsert binds every value as a parameter on SQL
         # Server, so it cannot carry db_now(). A first save racing another first save loses the insert and updates.
