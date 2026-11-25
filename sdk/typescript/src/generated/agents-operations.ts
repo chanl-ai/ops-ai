@@ -60,6 +60,23 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_app_tools": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/{agent_id}/tool-apps/{app_id}/tools",
+    "pathParams": [
+      "agent_id",
+      "app_id"
+    ],
+    "query": [
+      "search",
+      "cursor",
+      "limit",
+      "granted"
+    ],
+    "stream": false
+  },
   "agents_attach_skill": {
     "body": "json",
     "headers": [],
@@ -694,6 +711,22 @@ export const agentsOperations = {
       "agent_id"
     ],
     "query": [],
+    "stream": false
+  },
+  "agents_tool_apps": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/{agent_id}/tool-apps",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [
+      "search",
+      "cursor",
+      "limit",
+      "granted"
+    ],
     "stream": false
   },
   "agents_tool_options": {

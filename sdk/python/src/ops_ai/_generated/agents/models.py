@@ -99,6 +99,13 @@ class AgentSkillPin(TypedDict, closed=True):
     useWhen: str
 
 
+class AgentToolAppMatch(TypedDict, closed=True):
+    access: str
+    granted: bool
+    id: str
+    label: str
+
+
 class AgentUses(TypedDict, closed=True):
     agents: NotRequired[int]
     knowledgeBases: NotRequired[int]
@@ -136,6 +143,16 @@ class AllHrefs(TypedDict, closed=True):
     runs: str
 
 
+class AppTool(TypedDict, closed=True):
+    access: str
+    approval: NotRequired[str | None]
+    description: str
+    granted: bool
+    id: str
+    label: str
+    requiresApproval: bool
+
+
 class AppToolsGiven(TypedDict, closed=True):
     agentId: str
     agentName: str
@@ -149,6 +166,11 @@ ModuleId: TypeAlias = str
 
 class AppToolsIn(TypedDict, closed=True):
     moduleIds: list[ModuleId]
+
+
+class AppToolsPage(TypedDict, closed=True):
+    data: list[AppTool]
+    nextCursor: NotRequired[str | None]
 
 
 class Approval(TypedDict, closed=True):
@@ -688,6 +710,11 @@ class EnvelopeAgentPrompt(TypedDict, closed=True):
 
 class EnvelopeAppToolsGiven(TypedDict, closed=True):
     data: AppToolsGiven
+    success: Literal[True]
+
+
+class EnvelopeAppToolsPage(TypedDict, closed=True):
+    data: AppToolsPage
     success: Literal[True]
 
 
@@ -2877,6 +2904,24 @@ class AgentTestTurn(TypedDict, closed=True):
     wouldPause: NotRequired[WouldPause | None]
 
 
+class AgentToolApp(TypedDict, closed=True):
+    appGroup: NotRequired[str | None]
+    connected: bool
+    id: str
+    kind: Literal["plugin", "builtin", "custom", "workflows", "agents"]
+    matches: list[AgentToolAppMatch]
+    name: str
+    signIn: NotRequired[str | None]
+    toolsGranted: int
+    toolsOffered: int
+    toolsTotal: int
+
+
+class AgentToolAppsPage(TypedDict, closed=True):
+    data: list[AgentToolApp]
+    nextCursor: NotRequired[str | None]
+
+
 class AiStepOut(TypedDict, closed=True):
     output: dict[str, JsonValue]
     port: str
@@ -3180,6 +3225,11 @@ class EnvelopeAgentSkills(TypedDict, closed=True):
 
 class EnvelopeAgentTestTurn(TypedDict, closed=True):
     data: AgentTestTurn
+    success: Literal[True]
+
+
+class EnvelopeAgentToolAppsPage(TypedDict, closed=True):
+    data: AgentToolAppsPage
     success: Literal[True]
 
 

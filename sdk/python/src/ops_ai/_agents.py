@@ -143,6 +143,17 @@ class Agents:
         """The operations an agent may be granted: published ones, as the agent page's picker lists them."""
         return list(iter_rows(self._raw.agents.agents_tool_options, search=search, limit=50))
 
+    def tool_apps(self, agent_id: str, **query: Any) -> Any:
+        """One page of the apps whose tools the agent may be granted (`search`, `granted`, `cursor`, `limit`).
+
+        `search` also matches tool text and names the matching tools in `matches`.
+        """
+        return self._raw.agents.agents_tool_apps(agent_id, **query)
+
+    def tool_app_tools(self, agent_id: str, app_id: str, **query: Any) -> Any:
+        """One page of one app's tools for the agent (`search`, `granted`, `cursor`, `limit`)."""
+        return self._raw.agents.agents_app_tools(agent_id, app_id, **query)
+
     def grant_tools(self, id: str, tools: list[str]) -> Any:
         """Adds tools (their ids from `tool_options`) to the agent's draft, keeping the ones it holds. Publish it
         for the grant to take effect."""
@@ -333,6 +344,17 @@ class AsyncAgents:
     async def tool_options(self, search: str | None = None) -> list[dict[str, Any]]:
         """The operations an agent may be granted: published ones, as the agent page's picker lists them."""
         return [row async for row in iter_rows_async(self._raw.agents.agents_tool_options, search=search, limit=50)]
+
+    async def tool_apps(self, agent_id: str, **query: Any) -> Any:
+        """One page of the apps whose tools the agent may be granted (`search`, `granted`, `cursor`, `limit`).
+
+        `search` also matches tool text and names the matching tools in `matches`.
+        """
+        return await self._raw.agents.agents_tool_apps(agent_id, **query)
+
+    async def tool_app_tools(self, agent_id: str, app_id: str, **query: Any) -> Any:
+        """One page of one app's tools for the agent (`search`, `granted`, `cursor`, `limit`)."""
+        return await self._raw.agents.agents_app_tools(agent_id, app_id, **query)
 
     async def grant_tools(self, id: str, tools: list[str]) -> Any:
         """Adds tools (their ids from `tool_options`) to the agent's draft, keeping the ones it holds. Publish it

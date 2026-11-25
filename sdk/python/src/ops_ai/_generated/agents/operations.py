@@ -46,6 +46,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["search", "cursor", "limit", "ids", "loading"],
         "stream": False,
     },
+    "agents_app_tools": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agents/{agent_id}/tool-apps/{app_id}/tools",
+        "pathParams": ["agent_id", "app_id"],
+        "query": ["search", "cursor", "limit", "granted"],
+        "stream": False,
+    },
     "agents_attach_skill": {
         "body": "json",
         "headers": [],
@@ -554,6 +563,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/agents/{agent_id}/test",
         "pathParams": ["agent_id"],
         "query": [],
+        "stream": False,
+    },
+    "agents_tool_apps": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agents/{agent_id}/tool-apps",
+        "pathParams": ["agent_id"],
+        "query": ["search", "cursor", "limit", "granted"],
         "stream": False,
     },
     "agents_tool_options": {
@@ -2400,6 +2418,45 @@ class Operations:
         "Test Agent"
         return self._t.call(SERVICE, OPERATIONS["agents_test_agent"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def agents_tool_apps(
+        self,
+        agent_id: str,
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        granted: bool | None = None,
+    ) -> AgentToolAppsPage:
+        "Tool Apps"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["agents_tool_apps"],
+            {"agent_id": agent_id},
+            {"search": search, "cursor": cursor, "limit": limit, "granted": granted},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    def agents_app_tools(
+        self,
+        agent_id: str,
+        app_id: str,
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        granted: bool | None = None,
+    ) -> AppToolsPage:
+        "App Tools"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["agents_app_tools"],
+            {"agent_id": agent_id, "app_id": app_id},
+            {"search": search, "cursor": cursor, "limit": limit, "granted": granted},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
     def agents_list_versions(self, agent_id: str) -> list[AgentVersion]:
         "List Versions"
         return self._t.call(SERVICE, OPERATIONS["agents_list_versions"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -4151,6 +4208,45 @@ class AsyncOperations:
     async def agents_test_agent(self, agent_id: str, body: OpsAgentsApiRoutersAgentsTestInput) -> AgentTestTurn:
         "Test Agent"
         return await self._t.call(SERVICE, OPERATIONS["agents_test_agent"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def agents_tool_apps(
+        self,
+        agent_id: str,
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        granted: bool | None = None,
+    ) -> AgentToolAppsPage:
+        "Tool Apps"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["agents_tool_apps"],
+            {"agent_id": agent_id},
+            {"search": search, "cursor": cursor, "limit": limit, "granted": granted},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    async def agents_app_tools(
+        self,
+        agent_id: str,
+        app_id: str,
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        granted: bool | None = None,
+    ) -> AppToolsPage:
+        "App Tools"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["agents_app_tools"],
+            {"agent_id": agent_id, "app_id": app_id},
+            {"search": search, "cursor": cursor, "limit": limit, "granted": granted},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def agents_list_versions(self, agent_id: str) -> list[AgentVersion]:
         "List Versions"
