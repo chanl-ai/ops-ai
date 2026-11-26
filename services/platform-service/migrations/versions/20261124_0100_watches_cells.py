@@ -28,11 +28,15 @@ CHAIN = "platform"
 RAISE = "UPDATE tenants SET permission_version = permission_version + 1"
 
 
+def _key(name: str) -> sa.Column[str]:
+    # `tenants` is isolated by its own key (ops_store.schema.tenant_column), every other table by tenant_id.
+    return (
+        sa.Column("id", sa.String(64), primary_key=True) if name == "tenants" else sa.Column("tenant_id", sa.String(64))
+    )
+
+
 def _set_aside() -> tuple[list[str], list[str]]:
-    tables = [
-        sa.Table(n, sa.MetaData(), sa.Column("tenant_id", sa.String(64)), info=TENANT_SCOPED)
-        for n in ("roles", "role_permissions", "tenants")
-    ]
+    tables = [sa.Table(n, sa.MetaData(), _key(n), info=TENANT_SCOPED) for n in ("roles", "role_permissions", "tenants")]
     return backfill_ddl(tables, op.get_bind().dialect.name, chain=CHAIN, kind="tenant")
 
 
