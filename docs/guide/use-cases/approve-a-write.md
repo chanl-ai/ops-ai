@@ -1,60 +1,66 @@
-# Hold a write for a person's approval
+# Have a person approve an agent's changes before they happen
 
-Status: current. Run end to end through the API, the SDK and the chat.
+Status: current.
 
-**Make an agent's writes wait for a person who can see exactly what will change, and run once only after a yes.**
+You can let an agent change data in your apps and still have a person approve each change first. The approver sees
+exactly what will change, and the change runs once, only after they approve it.
 
-## An agent that can write can write the wrong thing
+## Some actions need a person's approval
 
-An agent may read an account's balance at once, but freezing the account or escalating a case should wait for a person
-who can see exactly what will change. If the write simply runs, the first wrong one reaches a customer. If a person is
-asked by email, nobody can later show which input they approved.
+An agent can look up an account's balance straight away, because reading data changes nothing. Freezing the account
+or escalating a case is different: someone should see exactly what will change before it happens. If the agent makes
+the change on its own, a mistake goes straight to the customer. If you ask for approval by email instead, nobody can
+later show which input the approver actually saw.
 
-An approval setting makes a write wait. The person in the chat, or a reviewer, sees the tool and each field it changes,
-and the write runs once, only after a yes.
+When you turn on approvals, any action that changes data waits. The person in the chat, or a reviewer you choose,
+sees the tool and every field it will change. The action runs once, and only after they approve it.
 
 ## The plan
 
 <!-- site: steps -->
-1. **Turn asking on** for the team, an App or one Tool.
-2. **Choose who answers**: the person in the chat, or a reviewer with a role you pick.
-3. **Ask the agent to change something.** Reads still run at once; the write waits as a card.
-4. **Decide.** A yes runs the write once. A no runs nothing.
+1. **Turn on approvals** for your whole team, for one app, or for a single tool.
+2. **Choose who approves**: the person in the chat, or a reviewer with a role you pick.
+3. **Ask the agent to change something.** Reading data still happens straight away, but the change waits on a card.
+4. **Decide.** If you approve, the change runs once. If you deny it, nothing runs.
 
 ## Try it
 
-Make every write in your team wait, then watch one wait. You need an agent that holds a write tool; [Connect an app
-to an agent](connect-an-app.md) builds one.
+In this walk-through you make every change in your team wait for approval, and then watch one wait. You need an
+agent that has a tool able to change data. If you don't have one yet, [Connect an app to an agent](connect-an-app.md)
+builds one.
 
 <!-- site: steps -->
-1. **Turn asking on.** A team admin opens **Settings › Approvals** and turns on **Ask before an agent changes anything in
-   an app**.
-2. **Pick who answers.** **Ask the person**: the person in the chat confirms, and only they can. **Ask a reviewer**:
-   someone else with the role you choose approves.
-3. **Narrow it if you need to.** Below the team switch, add an App and give it its own answer, such as Salesforce:
-   ask a reviewer. On a single Tool's page, **Access and approval** sets that Tool's answer. The most specific one wins.
-4. **Ask the agent to change something.** In chat, ask for a write, for example "Escalate case 00044818." if you followed the connect guide. Reads still run
-   at once.
-5. **See the card.** With Ask the person, the chat shows **Allow** and **Deny**, naming the tool and each field it
-   changes. With Ask a reviewer, the write becomes a Human Task in the reviewer's queue.
-6. **Decide.** Allow, or a reviewer's Approve, runs the write exactly once. Deny runs nothing. **Allow for this chat**
-   stops the asking for that App in this chat.
+1. **Turn on approvals.** Your team admin opens **Settings › Approvals** and turns on **Ask before an agent changes
+   anything in an app**.
+2. **Choose who approves.** With **Ask the person**, the person in the chat confirms, and nobody else can. With **Ask a
+   reviewer**, someone else who holds the role you choose approves it.
+3. **Narrow it down if you need to.** Below the team switch, you can add an app and give it its own setting, for
+   example Salesforce with Ask a reviewer. On a single tool's page, **Access and approval** sets the choice for that
+   tool alone. When settings overlap, the most specific one wins.
+4. **Ask the agent to change something.** In the chat, ask for a change. If you followed the connect guide, try
+   "Escalate case 00044818." Reading data still happens straight away.
+5. **See the card.** With Ask the person, the chat shows **Allow** and **Deny**, along with the tool's name and each
+   field it will change. With Ask a reviewer, the change becomes a task in the reviewer's **Human Tasks** queue.
+6. **Decide.** Choosing Allow, or a reviewer's Approve, runs the change exactly once. Deny runs nothing. If you choose
+   **Allow for this chat**, the agent stops asking about that app for the rest of the chat.
 
 ## What success looks like
 
-Nothing reaches the app while the card waits. After the yes, the app holds exactly one change, and the call log shows
-the write with who approved it. After a no, the app is unchanged and the record shows who refused.
+While the card waits, nothing reaches the app. Once someone approves, the app holds exactly one change, and the call
+log shows it along with who approved it. If someone denies it, the app is unchanged and the record shows who
+refused.
 
-## What skipping it costs
+## What happens without approvals
 
-With asking off, the first wrong write from an agent reaches the app. An approval kept in an email thread does not say
-which input was approved, and the audit answer is rebuilt by hand each time someone asks.
+With approvals turned off, an agent's changes go straight to the app, so the first mistaken one lands
+before anyone sees it. An approval kept in an email thread doesn't record which input was approved, so each time
+someone asks for the audit trail, it has to be pieced together by hand.
 
 ![The Human Tasks queue: open, overdue and decided counts, then each request with its time left, status and risk](../../media/human-tasks-light.png)
 
 ## Decide from code
 
-A reviewer can decide from a script, signed in as themselves. An API key never decides a task.
+A reviewer can also decide from a script, signed in as themselves. An API key can never decide a task.
 
 ```python tab="Python"
 from ops_ai import OpsAI
@@ -74,36 +80,38 @@ opsai tasks approve wfrun_... --reason "Freeze confirmed with the branch."
 
 | Setting | What it does | Default |
 |---|---|---|
-| Ask before an agent changes anything in an app | Team-wide: writes wait for the answer below | Off: writes run at once |
-| Who answers | Ask the person, or ask a reviewer of a chosen role | Ask the person |
-| Per App | Use the team setting, don't ask, ask the person, or ask a reviewer | Use the team setting |
-| Per Tool (**Access and approval**) | The same choices for one Tool | Follows the App, then the team |
-| Two-person rule | On: whoever asked cannot decide, so someone else approves; Admins of the team still decide their own requests. Off: people approve their own requests where their role lets them | Off |
-| Test accounts never ask | A write on an App's sandbox account runs without asking | On |
-| Test runs on live accounts ask first | A test run from a Tool's page asks before writing to a live account | On |
+| Ask before an agent changes anything in an app | For the whole team, changes wait for the approver chosen below | Off, so changes run straight away |
+| Who answers | Ask the person in the chat, or ask a reviewer with a role you choose | Ask the person |
+| Per app | Use the team setting, don't ask, ask the person, or ask a reviewer | Use the team setting |
+| Per tool (**Access and approval**) | The same choices, for one tool | Follows the app's setting, then the team's |
+| Two-person rule | When on, the person who asked can't decide, so someone else approves. Team admins can still decide their own requests. When off, people can approve their own requests if their role allows it | Off |
+| Test accounts never ask | Changes to an app's sandbox account run without asking | On |
+| Test runs on live accounts ask first | A test run from a tool's page asks before it changes a live account | On |
 
-Who may approve at all is the approve permission on a role, held by the built-in Admin, Reviewer and Builder roles.
+Whether someone can approve at all depends on the approve permission in their role. The built-in Admin, Reviewer and
+Builder roles all have it.
 
-## Rules that always hold
+## How Ops AI decides whether a change waits
 
-Three checks decide whether a write waits.
+Three questions decide whether an action waits, and who is asked.
 
 <!-- site: decision source caption="Whether a write waits, and who answers" -->
-- **Does the call only read?**
-  - **Yes**: It runs at once and is logged. A read never waits.
-  - **No, it writes**: The route it came by matters next.
-    - **Did it arrive over MCP, an outside AI client calling the tool?**
-      - **Yes**: It waits for a person whatever the settings say, since nobody is in the chat to confirm. The one exception is a write that only makes a draft.
-      - **No, from a chat or a workflow**: The settings decide.
-        - **Is asking on for this Tool, App or team? The most specific wins.**
-          - **Yes**: It waits. In a workflow there is no person in a chat, so Ask the person becomes Ask a reviewer.
-          - **No**: It runs at once and is logged with who asked.
+- **Does the call only read data?**
+  - **Yes**: It runs straight away and is logged. Reading data never waits.
+  - **No, it changes data**: What matters next is where the call came from.
+    - **Did it come over MCP, from an outside AI client calling the tool?**
+      - **Yes**: It waits for a person whatever the settings say, because nobody is in a chat to confirm it. The one exception is a change that only creates a draft.
+      - **No, it came from a chat or a workflow**: Your settings decide.
+        - **Are approvals on for this tool, this app or the team? The most specific setting wins.**
+          - **Yes**: It waits. A workflow has no person in a chat, so Ask the person becomes Ask a reviewer.
+          - **No**: It runs straight away and is logged with who asked.
 
-If the team's approval settings cannot be read, every write is refused and none runs; reads still run.
+If Ops AI can't read your team's approval settings, it refuses every change and runs none of them. Reading data still
+works.
 
 ## Next
 
 <!-- site: cards -->
-- [Card disputes](card-disputes.md): a workflow whose credit waits for an approver.
-- [Start the day from chat](chat-and-human-tasks.md): deciding Human Tasks from chat.
-- [Security and governance](../security-and-governance.md): approvals as a control.
+- [Card disputes](card-disputes.md): a workflow where a credit waits for an approver.
+- [Start the day from chat](chat-and-human-tasks.md): deciding Human Tasks from the chat.
+- [Security and governance](../security-and-governance.md): how approvals work as a control.

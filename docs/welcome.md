@@ -2,70 +2,71 @@
 
 Status: current.
 
-**Put agents and workflows to work on your team's operations, with a person approving every change that matters.**
-You build the agent once, and every run keeps the record a risk review asks for: who approved it, which version ran
-and what it could reach.
+Ops AI lets you put agents and workflows to work on your team's operations, with a person approving every change that
+matters. You build an agent once, and every run keeps the record a risk review will ask for: who approved it, which
+version ran and what it could reach.
 
 ## You have a queue AI could clear
 
-You run or build for an operations team. A card team works through hundreds of disputes a week. A claims team reads
-the same policy wording fifty times a day. A lending servicing team answers payoff and hardship requests that follow
-the same few paths. A model can already draft most of this work.
+You run an operations team, or build tools for one. A card team works through hundreds of disputes a week. A claims
+team reads the same policy wording fifty times a day. A lending servicing team answers payoff and hardship requests
+that follow the same few paths. A model can already draft most of this work.
 
-The pilot goes well. Then the risk review asks who approved the change to the customer's account, which version of the
-agent ran, and what data it could reach. Most agent tools have no answer, so the team either stops at the pilot or
-builds approvals, versions and audit by hand for each new use case.
+Then the pilot goes well, and the risk review asks three questions: who approved the change to the customer's
+account, which version of the agent ran, and what data it could reach. Most agent tools can't answer them, so the
+team either stops at the pilot or builds approvals, versions and an audit trail by hand for every new use case.
 
 ## What waiting costs
 
-Every week the pilot stays a pilot, the queue is still worked by hand. Each use case that gets its own hand-built
-approvals and audit makes the next one slower, and a single unreviewed write to a customer's account can end the
-programme.
+For every week the pilot stays a pilot, your team still works the queue by hand. Each use case that needs its own
+hand-built approvals and audit trail slows down the next one. And a single unreviewed change to a customer's account
+can be enough to end the programme.
 
-## Ops AI is built for that review
+## How Ops AI answers the risk review
 
-We built Ops AI for teams that answer to a risk function, and the controls a reviewer asks about ship with it:
+We built Ops AI for teams that answer to a risk function, so the controls a reviewer asks about come with it:
 
 | A reviewer asks | Ops AI records |
 |---|---|
-| Who approved this change? | The workflow waits on a Human Task; the person decides with the facts in front of them, and the approved call is bound to exactly what they saw |
-| Which version ran? | Agents and workflows are published as versions that do not change; each run keeps the version it started on |
-| What could it reach? | Every tool and data call goes through one gateway and every model call through another, with per-team access and a call log |
-| Where does it run? | On your own machines: Docker Compose on one server or Kubernetes, on PostgreSQL, with a built-in test model that needs no key or network |
+| Who approved this change? | The workflow waits on a human task. The person decides with the facts in front of them, and the call that runs is bound to exactly what they approved |
+| Which version ran? | Agents and workflows are published as fixed versions that never change, and each run keeps the version it started on |
+| What could it reach? | Every tool and data call goes through one gateway, and every model call through another, with access set per team and a log of every call |
+| Where does it run? | On your own machines, either Docker Compose on one server or Kubernetes, with PostgreSQL. A built-in test model means you need no model key or network to start |
 
-The full answers, with their limits, are on the [Security](security/README.md) pages.
+The [Security](security/README.md) pages give the full answers, including their limits.
 
 ## How you get there
 
 <!-- site: steps -->
-1. **Install it on one machine.** One command, about ten minutes, no model key needed.
-2. **Build an agent.** Write its instructions, try the draft, and publish it once a second person has reviewed it.
+1. **Install it on one machine.** It takes one command and about ten minutes, and you don't need a model key.
+2. **Build an agent.** Write its instructions, try out the draft, and publish it once a second person has reviewed it.
 3. **Connect your apps and documents.** Give the agent tools for your systems and a knowledge base to answer from.
-4. **Put a person on the steps that matter.** Writes wait for a yes, and the workflow keeps the record.
+4. **Put a person on the steps that matter.** Any change to data waits for someone to approve it, and the workflow
+   keeps the record.
 
 ## Start now
 
 <!-- site: cards -->
-- **[Install Ops AI](guide/quickstart.md)**: One machine, about ten minutes, and a first workflow run at the end.
+- **[Install Ops AI](guide/quickstart.md)**: Set it up on one machine in about ten minutes, and finish with your first workflow run.
 
 ## What changes when it works
 
-A dispute reaches a person already checked against the handbook, and the approval is on the case when the risk team
-asks.
+By the time a dispute reaches a person, it has already been checked against your handbook. When the risk team asks,
+the approval is already on the case.
 
 <!-- site: journey caption="A card dispute from arrival to a recorded approval, as the team sees it: each step is done before a person opens the case" -->
-1. **Team mailbox · A dispute arrives**: The cardholder's email lands in the team mailbox. Nobody retypes it.
+1. **Team mailbox · A dispute arrives**: The cardholder's email lands in the team mailbox, so nobody has to retype it.
    - **From**: Cardholder, card ending 4417
    - **Subject**: Charged twice for one purchase
    - **Amount**: $84.20
-2. **Workflow · The workflow finds the cardholder**: It reads the account through the data gateway. Reads never wait for a person.
+2. **Workflow · The workflow finds the cardholder**: It reads the account through the data gateway. Reading data never waits for a person.
    - **Account**: Found, open since 2019
    - **Same charge**: Twice, two minutes apart
    - **Earlier disputes**: None in 12 months
 3. **Agent · The agent checks the handbook**: It answers from your dispute handbook and says which section it used.
    - **Handbook**: Duplicate charges, section 4.2
    - **Suggests**: Credit $84.20 to the card
-4. **Human task · A person approves the credit**: The credit is a write, so it waits for a named reviewer, who sees the exact input.
+4. **Human task · A person approves the credit**: The credit changes the account, so it waits for a named reviewer, who sees the exact input.
    - **Input**: Credit $84.20 to card ending 4417
    - **Reviewer**: Disputes lead
    - **Actions**: Approve, Reject
@@ -75,10 +76,10 @@ asks.
    - **Reached**: Card ledger, one write
 
 <!-- site: cards -->
-- **Without Ops AI**: The same request is retyped across three systems, the approval lives in an email thread, and the audit answer is rebuilt by hand each time someone asks.
-- **With Ops AI**: The case already holds who approved the credit, on which version, with what data ([Card disputes](guide/use-cases/card-disputes.md) walks through it).
+- **Without Ops AI**: Someone retypes the same request into three systems, the approval sits in an email thread, and each time someone asks for the audit trail, it has to be pieced together by hand.
+- **With Ops AI**: The case already shows who approved the credit, on which version, and with what data. [Card disputes](guide/use-cases/card-disputes.md) walks through it.
 
 ## Read next
 
-- [Build an agent](guide/use-cases/build-an-agent.md): from a first draft to a published agent your team chats with.
-- [How work flows](guide/how-work-flows.md): how a request becomes a run, a task for a person and a record.
+- [Build an agent](guide/use-cases/build-an-agent.md): go from a first draft to a published agent your team can chat with.
+- [How work flows](guide/how-work-flows.md): how a request becomes a run, a task for a person, and a record.
