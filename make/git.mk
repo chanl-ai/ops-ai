@@ -54,8 +54,13 @@ git-rules: ## Print the git rules for the shared tree and check them
 # the stack back. The review worktree is detached at origin/BRANCH, so any branch can be reviewed, including one that is
 # checked out somewhere else.
 #   make review BRANCH=feat/apps-salesforce
-.PHONY: review builder-watch
+.PHONY: review builder-watch review-dry-run
 REVIEW_DIR ?= $(STACK_HOME)-review
+
+review-dry-run: ## A read-only dry run in a `git archive` export: make review-dry-run EXPORT=<dir> ARGS='up OPS_PORT_OFFSET=400'; refuses a checkout
+	@[ -n "$(EXPORT)" ] || { echo "review-dry-run: give EXPORT=<dir>, a git archive export (git archive HEAD | tar -x -C <dir>)"; exit 2; }
+	@python3 $(ROOT)/scripts/in_export_only.py "$(EXPORT)"
+	@$(MAKE) -n -C "$(EXPORT)" $(ARGS)
 
 review: ## Check BRANCH out from origin into the review worktree and run the stack from it, restarting only what changed
 	@[ -n "$(BRANCH)" ] || { echo "make review: name the branch, e.g. BRANCH=feat/apps-salesforce"; exit 2; }
