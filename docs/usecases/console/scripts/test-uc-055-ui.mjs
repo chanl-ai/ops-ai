@@ -54,6 +54,11 @@ async function chat(page, consoleUrl, text) {
 }
 
 
+/** The team's two-person rule (requesterMayDecide off), as an admin sets it on the approvals page. */
+async function twoPersonRule(admin, on) {
+  await admin.raw.platform.policies_set_policy({ path: { key: 'requesterMayDecide' }, body: { value: !on } });
+}
+
 await withUiStack(
   async (consoleUrl, stack) => {
     const browser = await chromium.launch();
@@ -148,6 +153,9 @@ await withUiStack(
         // Approvals are off by default (2026-11-01): steps 8 and 9 prove a held chat write, so the team turns tool
         // write approvals on here, after step 5's owner run of the write.
         await setWriteApprovals(samInOps, true);
+        // The two-person rule on: James, a Builder, may decide reviews but not his own write, so Maya decides it in
+        // step 9. Step 9b turns it off again.
+        await twoPersonRule(samInOps, true);
         await james.goto(`${consoleUrl}/agents/${AGENT}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         // The agent page saves each edit into its draft by itself; the save after the last grant holds every tool.
         const patched = armed(james.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${AGENT}` && ['get_account', 'place_hold'].every((op) => (r.request().postData() ?? '').includes(`"${op}"`)), { timeout: 60_000 }));
@@ -201,6 +209,28 @@ await withUiStack(
           if (sent === before) await new Promise((r) => setTimeout(r, 2_000));
         }
         check('9 Maya approves the held write in Reviews and it runs once', res?.status() === 200 && sent === before + 1, { decision: res?.status(), before, sent });
+      });
+
+      // 9b. With the two-person rule off James may decide his own write: his card offers Approve, and the write waits
+      // for that click. An approval is always a decision someone made.
+      await step("9b James's own chat write waits for his Approve click", async () => {
+        await twoPersonRule(samInOps, false);
+        const first = await sentWrites();
+        await chat(james, consoleUrl, 'call place_hold {"accountId": "CHQ-2219"}');
+        const approve = james.getByRole('button', { name: 'Approve', exact: true }).last();
+        const offered = await approve.waitFor({ timeout: 60_000 }).then(() => true, () => false);
+        const waiting = await sentWrites();
+        if (offered) {
+          await approve.click();
+          const confirm = james.getByRole('button', { name: 'Approve and run' });
+          if (await confirm.waitFor({ timeout: 5_000 }).then(() => true, () => false)) await confirm.click();
+        }
+        let sent = waiting;
+        for (let i = 0; i < 10 && sent === first; i++) {
+          await new Promise((r) => setTimeout(r, 2_000));
+          sent = await sentWrites();
+        }
+        check("9b James's own chat write waits for his Approve click", offered && waiting === first && sent === first + 1, { offered, first, waiting, sent });
       });
 
       // 10. The module's Activity tab shows the calls.
