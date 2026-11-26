@@ -74,7 +74,7 @@ async def test_another_team_of_the_tenant_cannot_read_or_change_a_teams_schedule
     with isolation.scope(tenant, "team_b"):
         assert await store.get(wf, "start") is None
         assert await store.for_workflow(wf) == []
-        assert await store.for_workflows([wf]) == []
+        assert await store.for_workflows([wf], teams=["team_b"]) == []
         assert not await store.clear(wf, "start")
         await store.delete_workflow(wf)
         # The database holds the team too: a query with no team filter still sees no row of team A.

@@ -10,12 +10,13 @@ machines on one slot exactly one records its outcome; the run key (`schedule:{wo
 as well.
 
 A schedule is its workflow's team's: every read and write names the acting team (`team_visible`), and the team policy
-holds the database to the same. Only the schedule clock reads every team's rows, inside `tenant_wide(SCHEDULE_CLOCK)`
-(`everything`) and past the tenant inside `system_tx(SCHEDULE_TENANTS)` (`tenants`)."""
+holds the database to the same. Two reads widen, each by name: the schedule clock reads every team's rows inside
+`tenant_wide(SCHEDULE_CLOCK)` (`everything`) and past the tenant inside `system_tx(SCHEDULE_TENANTS)` (`tenants`); a
+live-places list reads the teams its caller may view inside `tenant_wide(SCHEDULE_VIEWS)` (`for_workflows`)."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields
 from typing import Any, ClassVar
 
@@ -32,7 +33,7 @@ from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
 from .outbox import agents_outbox
-from .tenancy import SCHEDULE_TENANTS, current_tenant, system_tx, tenant_tx
+from .tenancy import SCHEDULE_TENANTS, SCHEDULE_VIEWS, current_tenant, system_tx, tenant_tx
 
 Rule = dict[str, JsonValue]
 # What the clock records for a slot.
@@ -114,17 +115,20 @@ class WorkflowSchedules:
         async with tenant_tx(self.engine) as c:
             return [_row(r) for r in await c.execute(q.order_by(t.c.trigger_step))]
 
-    async def for_workflows(self, workflow_ids: list[str]) -> list[ScheduleRow]:
-        """The saved schedules of these workflows only, for a page that shows the ones it lists."""
-        if not workflow_ids:
+    async def for_workflows(self, workflow_ids: list[str], *, teams: Sequence[str]) -> list[ScheduleRow]:
+        """The saved schedules of these workflows only, for a page that lists the live steps of every team the caller
+        may view (`teams`, checked by the caller): read inside `tenant_wide(SCHEDULE_VIEWS)` and held to `teams`, so a
+        person of two teams sees both teams' schedules in one statement and no other team's."""
+        if not workflow_ids or not teams:
             return []
         t = workflow_schedules
         cols = [c for c in t.c if c.name != "tenant_id"]
         q = sa.select(*cols).where(
-            t.c.tenant_id == current_tenant(), t.c.workflow_id.in_(workflow_ids), team_visible(t)
+            t.c.tenant_id == current_tenant(), t.c.workflow_id.in_(workflow_ids), t.c.team_id.in_(list(teams))
         )
-        async with tenant_tx(self.engine) as c:
-            return [_row(r) for r in await c.execute(q.order_by(t.c.workflow_id, t.c.trigger_step))]
+        with isolation.tenant_wide(SCHEDULE_VIEWS):
+            async with tenant_tx(self.engine) as c:
+                return [_row(r) for r in await c.execute(q.order_by(t.c.workflow_id, t.c.trigger_step))]
 
     async def everything(self) -> list[ScheduleRow]:
         """Every team's saved schedules of the acting tenant, for the clock alone, which reads them beside the live

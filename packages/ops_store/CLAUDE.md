@@ -94,6 +94,7 @@ images crash under Docker Desktop's emulation; the pinned 2025 image runs on the
 |---|---|
 | `backends()` names only PostgreSQL, so the conformance suites never run on SQL Server here | SQL Server DDL and model parity are checked in `deploy/database/tests` (`make test PKG=deploy/database`, the `pool-deploy` job of `make verify`) |
 | The conformance database is `<test database>_conformance`, created on first use | Two sessions with different test databases never migrate each other's |
+| A migration's `drop_table` on SQL Server fails with error 3729 while a schema-bound security policy names the table | Run `isolation_drop_ddl(table, "mssql")` before `drop_table`; the chain test from the SQL Server baseline catches the miss |
 | Importing `ops_store` installs the connect retry on every SQLAlchemy engine in the process (`src/ops_store/__init__.py:11`) | Engines made in scripts and tests get it without passing anything |
 
 ## Reference docs
