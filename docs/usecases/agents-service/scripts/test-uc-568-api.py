@@ -192,8 +192,6 @@ def story(name: str, steps: Callable[[], None]) -> None:
 def worker(files_url: str, models_url: str, documents_url: str) -> Generator[None]:
     env = _env() | {
         "OPS_DATABASE_URL": pg_url(),
-        # Its workflows run no tool step, so it runs with no tool gateway.
-        "OPS_ALLOW_NO_GATEWAY": "true",
         "OPS_MODELS_URL": models_url,
         "OPS_MODELS_KEY": "mk_dev_agents",
         "OPS_FILES_URL": files_url,

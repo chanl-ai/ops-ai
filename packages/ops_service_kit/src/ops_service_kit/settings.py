@@ -281,10 +281,6 @@ class Settings(BaseSettings):
     # The tool gateway (E3). Unset keeps write tools in this process; set, every write tool and send_reply go to the
     # gateway, which runs them only when OPA accepts the call's approval token.
     gateway_url: str | None = None
-    # Test only: lets agents-service and its worker start with no gateway_url (require_gateway). Set by unit-test
-    # fixtures that build the app themselves and by use cases whose workflows run no tool step; never on a deployment,
-    # where a tool step with no gateway passes nothing and fails at run time.
-    allow_no_gateway: bool = False
     # tools-service, for agents-service to apply a tool module review decided in Reviews. Unset, the gateway's
     # address is used; with neither, a decision waits to be applied.
     tools_url: str | None = None
@@ -668,16 +664,6 @@ class Settings(BaseSettings):
         missing = [endpoint_env(n) for n in names if getattr(self, n) is None]
         if missing:
             raise SystemExit(f"{', '.join(missing)} must be set: this process cannot run without the service it names")
-
-    def require_gateway(self) -> None:
-        """Called at boot by agents-service and its worker, the processes that publish and run workflow steps: exits
-        naming OPS_GATEWAY_URL when it is unset, so a running deployment always has the tool gateway its tool steps
-        and its publish check read. OPS_ALLOW_NO_GATEWAY opts a test out."""
-        if self.gateway_url is None and not self.allow_no_gateway:
-            raise SystemExit(
-                "OPS_GATEWAY_URL must be set: agents-service and its worker run every tool step through the tool "
-                "gateway (tools-service). OPS_ALLOW_NO_GATEWAY=1 is for tests that run no tool step."
-            )
 
     @field_validator("embedding_width")
     @classmethod
