@@ -62,6 +62,7 @@ shared list: the shareable guide built from `guide/*.md` is meant to present the
 | `> [!NOTE]` whose first words are `**Upcoming.**` | The callout that marks a section about a feature that is not in the current release |
 | `<!-- site: cards -->` directly above a table or a list | Summary cards: a table row or list item each; the first cell, or the item's opening **bold** or link, is the title |
 | `<!-- site: steps -->` directly above a numbered list | Numbered steps |
+| `<!-- site: journey -->`, `annotated` or `layers` with `caption="..."`, directly above a list | A flow drawn as its screens, one screen with numbered notes, or a system's layers ([figure guide](contributing/figure-guide.md#writing-a-journey-an-annotated-screen-or-layers)) |
 | `> [!NOTE]`, `> [!WARNING]` (GitHub alerts) | A callout |
 | A ```` ```mermaid ```` block (flowchart, sequence, state, ER); `caption="..."` after the fence adds a caption | The diagram in the site's theme |
 | `![caption](../diagrams/<name>.svg)` where `diagrams/<name>.yaml` exists | The live architecture diagram drawn from that data file; GitHub shows the exported SVG |

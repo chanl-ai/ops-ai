@@ -50,20 +50,24 @@ Make every write in your team wait for a person, then approve one.
 
 A decision is tied to what the reviewer saw, and it counts once.
 
-```mermaid caption="What happens to a write that waits for a person: it runs once if approved in time, and never runs on a timeout"
-flowchart TD
-  A[Agent reaches a write] --> B[Run pauses, using no worker]
-  B --> C[Task shows the exact input]
-  C --> D{Person decides}
-  D -->|Approve| E[Write runs once]
-  D -->|Reject| F[No change made]
-```
+<!-- site: annotated caption="A claims settlement waiting for a person, with each protection numbered where it applies on the task" -->
+- **Human task · Approve a write: pay a claim settlement**: The claims agent wants to pay a repair shop. Nothing is paid until a reviewer decides.
+- **Requested by**: Claims agent, in a chat with a claims handler
+  - Nobody approves their own request, unless the team allows it.
+- **Tool**: Pay settlement, in the claims system (a write)
+- **Input**:
+  ```json
+  { "claim": "CLM-20931", "payee": "Harbor Auto Body", "amount": 2140.00 }
+  ```
+  - The approval is bound to this exact input. Changing one character after approving voids it, and an approval is good for 15 minutes.
+- **Waiting**: 2 days, using no worker
+  - A run can wait a minute or a week. A deadline that passes marks the task overdue and never approves it.
+- **Actions**: Approve, Reject
+  - Approve runs the write once, even if it is decided twice. Reject makes no change. Both keep who decided, when and why.
 
-A run can wait a minute or a week. An approval is good for 15 minutes, and changing one character of the input after it
-voids it. A deadline that passes marks the task overdue and never approves it. Deciding twice resumes the run once.
+When a task is opened, and who can open one:
 
 - **Reads never wait.** Writes run at once until a team turns approvals on.
-- **Nobody approves their own request**, unless the team allows it.
 - **Workflows and other systems can ask too.** A workflow asks a person with a **Human review** step, or an **Ask** step
   for a free-text answer. Another system can open a task through the API and read the decision back.
 

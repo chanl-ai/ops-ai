@@ -7,6 +7,7 @@
  * - a table cell that starts with built, partial, planned, upcoming or not built shows that word as a badge
  * - `<!-- site: cards -->` above a table or a list renders it as summary cards
  * - `<!-- site: steps -->` above a numbered list renders it as steps
+ * - `<!-- site: journey | annotated | layers caption="..." -->` above a list renders that figure (figure guide)
  * - `<!-- site: whats-new -->` becomes the What's new entries in changelog/, newest first, so release notes never go stale
  * - a GitHub alert (`> [!NOTE]`, `> [!WARNING]` ...) becomes a callout
  * - ```mermaid blocks render as diagrams that follow the light and dark theme; ```mermaid caption="..." adds the caption
@@ -169,6 +170,75 @@ function whatsNew() {
   return remark().use(remarkGfm).parse(lines.join('\n')).children;
 }
 
+/** `**Lead**: rest` as { lead, rest }, both plain text; a paragraph with no bold opening has no lead. */
+function leadAndRest(para) {
+  const kids = para?.type === 'paragraph' ? para.children : [];
+  const first = kids[0];
+  if (!first || first.type !== 'strong') return { lead: '', rest: mdToString(para ?? { type: 'text', value: '' }).trim() };
+  const rest = mdToString({ type: 'paragraph', children: kids.slice(1) }).replace(/^\s*[:—–-]\s*/, '').trim();
+  return { lead: mdToString(first).trim(), rest };
+}
+
+/** "Inbox · A dispute arrives" as the screen's surface and its title. */
+function surfaceAndTitle(lead) {
+  const [surface, ...title] = lead.split(/\s+·\s+/);
+  return title.length ? { surface, title: title.join(' · ') } : { surface: '', title: lead };
+}
+
+const nestedList = (item) => item.children.find((c) => c.type === 'list');
+const firstNote = (item) => {
+  const list = nestedList(item);
+  return list ? mdToString(list.children[0]).trim() : undefined;
+};
+
+/** A screen's fields from list items: `**Label**: value`, a code block as the value, a nested bullet as the note. */
+function fragmentFields(items) {
+  const fragment = { fields: [], actions: [] };
+  for (const item of items) {
+    const { lead, rest } = leadAndRest(item.children[0]);
+    if (/^actions?$/i.test(lead)) {
+      fragment.actions = rest.split(/\s*,\s*/).filter(Boolean);
+      fragment.actionsNote = firstNote(item);
+      continue;
+    }
+    const code = item.children.find((c) => c.type === 'code')?.value;
+    fragment.fields.push({ label: lead, value: rest, code, note: firstNote(item) });
+  }
+  return fragment;
+}
+
+/** The data of a figure marker (`journey`, `annotated`, `layers`), or an error message. */
+function figureData(kind, list) {
+  if (kind === 'journey') {
+    if (!list.ordered) return { error: 'must sit directly above a numbered list' };
+    return {
+      data: list.children.map((item) => {
+        const { lead, rest } = leadAndRest(item.children[0]);
+        const nested = nestedList(item);
+        return { ...surfaceAndTitle(lead), callout: rest, ...fragmentFields(nested ? nested.children : []) };
+      }),
+    };
+  }
+  if (kind === 'annotated') {
+    const [head, ...items] = list.children;
+    const { lead, rest } = leadAndRest(head.children[0]);
+    return { data: { ...surfaceAndTitle(lead), text: rest || undefined, ...fragmentFields(items) } };
+  }
+  return {
+    data: list.children.map((item) => {
+      const { lead, rest } = leadAndRest(item.children[0]);
+      const nested = nestedList(item);
+      const parts = (nested ? nested.children : []).map((p) => {
+        const part = leadAndRest(p.children[0]);
+        return part.lead ? { title: part.lead, text: part.rest || undefined } : { title: part.rest };
+      });
+      return { title: lead || rest, text: lead ? rest || undefined : undefined, parts };
+    }),
+  };
+}
+
+const FIGURES = { journey: 'JourneyFigure', annotated: 'AnnotatedFigure', layers: 'LayerMap' };
+
 export function remarkOpsAi(options = {}) {
   const throwOnError = options.throwOnError ?? true;
 
@@ -275,6 +345,22 @@ export function remarkOpsAi(options = {}) {
     visit(tree, 'html', (n, i, parent) => {
       if (!parent || i === undefined || !/^<!--\s*site:\s*whats-new\s*-->$/.test(n.value.trim())) return;
       parent.children.splice(i, 1, ...whatsNew());
+      return [SKIP, i];
+    });
+
+    // Figure markers: `<!-- site: journey caption="..." -->` above a list becomes that figure.
+    visit(tree, 'html', (n, i, parent) => {
+      const m = n.value.trim().match(/^<!--\s*site:\s*(journey|annotated|layers)\b([^>]*?)-->$/);
+      if (!m || !parent || i === undefined) return;
+      const [, kind, attrs] = m;
+      const next = parent.children[i + 1];
+      const fail = (why) => errors.push(`${source}: <!-- site: ${kind} --> ${why}`);
+      if (next?.type !== 'list') return fail('must sit directly above a list');
+      const { data, error } = figureData(kind, next);
+      if (error) return fail(error);
+      const attr = (name) => attrs.match(new RegExp(`${name}="([^"]*)"`))?.[1];
+      if (!attr('caption')) return fail('needs caption="...", which is also its accessible name');
+      parent.children.splice(i, 2, jsx(FIGURES[kind], { data: JSON.stringify(data), caption: attr('caption'), frame: attr('frame') }));
       return [SKIP, i];
     });
 

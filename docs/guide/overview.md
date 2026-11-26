@@ -43,40 +43,28 @@ on your own infrastructure, against a database your DBA controls and a model end
 
 ## The platform in one picture
 
-```mermaid
-flowchart TB
-  IN["Where work comes from: people in the console,<br/>team mailboxes, other systems over the API,<br/>AI assistants over MCP"]:::outside
-  subgraph RUN["Two ways to run work"]
-    direction LR
-    AG["Agents<br/>a model with instructions, tools,<br/>knowledge, skills and guardrails"]
-    WF["Workflows<br/>typed steps that run the same<br/>way every time, each journaled"]
-    AG <-->|"agent as a step,<br/>workflow as a tool"| WF
-  end
-  subgraph SH["Shared services"]
-    direction TB
-    HT["Reviews, human tasks, cases"]
-    KF["Knowledge, files, documents"]
-    ID["Identity, teams, roles, audit"]
-    HT ~~~ KF ~~~ ID
-  end
-  subgraph GW["Gateways: the only way out"]
-    direction TB
-    DG["Data gateway: tools, approvals,<br/>policy, allow-list, credentials"]
-    AIG["AI gateway: aliases,<br/>keys, budgets"]
-    DG ~~~ AIG
-  end
-  DB[("PostgreSQL")]:::store
-  OUT["Your systems (REST, MCP, mail)<br/>and your model endpoint"]:::outside
-  IN --> RUN
-  RUN --> SH
-  RUN --> GW
-  SH --> DB
-  GW --> OUT
-```
+Read it from the top: where work comes in, what runs it, and the one way out to your systems.
 
-*What runs today. Work arrives from people, mailboxes, other systems and AI assistants; agents and workflows run it on
-the shared services. Every call to one of your systems leaves through the data gateway, and every model call through the
-AI gateway.*
+<!-- site: layers frame="Ops AI, on your infrastructure" caption="What runs today: work arrives from people, mailboxes, other systems and AI assistants; agents and workflows run it on the shared services; every call to your systems and every model call leaves through a gateway" -->
+- **Where work comes from**: People, mailboxes, other systems and AI assistants
+  - **A person in the console**: A lending team member asks for a payoff quote
+  - **A team mailbox**: An outage report reaches a utility's service desk
+  - **Another system, over the API**: A claims system opens a case
+  - **An AI assistant, over MCP**: Every write it asks for waits for a person
+- **Two ways to run work**: An agent can be a workflow step, and a workflow can be an agent's tool
+  - **Agents**: A model with instructions, tools, knowledge, skills and guardrails
+  - **Workflows**: Typed steps that run the same way every time, each one journaled
+- **Shared services**: Used by both, stored in your own database
+  - **Reviews, human tasks, cases**
+  - **Knowledge, files, documents**
+  - **Identity, teams, roles, audit**
+  - **PostgreSQL**: The database your DBA controls
+- **Gateways, the only way out**: Nothing reaches your systems or a model any other way
+  - **Data gateway**: Tools, approvals, policy, allowed hosts, credentials
+  - **AI gateway**: Model aliases, keys, budgets
+- **Your systems and your model**
+  - **Your systems**: Over REST, MCP and mail
+  - **Your model endpoint**: The provider you choose
 
 ## Ideas the design rests on
 

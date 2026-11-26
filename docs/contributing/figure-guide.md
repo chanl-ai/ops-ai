@@ -10,6 +10,9 @@ or that repeats a paragraph left beside it, is cut.
 
 | The text explains | Use | How to write it |
 |---|---|---|
+| A flow a person sees, step by step (a request becoming a record) | Journey: each step drawn as the screen it happens on, joined by a numbered path, with what it means beside it | `<!-- site: journey caption="..." -->` above a numbered list (below) |
+| One screen whose parts protect the reader (an approval, a policy) | Annotated screen: the screen drawn large, a numbered pin on each part, the notes beside it | `<!-- site: annotated caption="..." -->` above a list (below) |
+| A system at a glance: where work comes in, its layers, where calls leave | Layers: stacked bands, the platform's own inside one frame | `<!-- site: layers frame="..." caption="..." -->` above a list (below) |
 | A flow or sequence of steps, or who talks to whom | Mermaid flowchart or sequence diagram | A ```` ```mermaid caption="..." ```` block |
 | A lifecycle with states (draft, review, published) | Mermaid flowchart with the states as boxes and the triggers on the arrows | Same block |
 | Steps a reader performs | Steps | `<!-- site: steps -->` above a numbered list |
@@ -32,10 +35,31 @@ are read at 390 wide, so options go in cards that stack.
 | Architecture boxes | `BoxDiagram` | `apps/docs/src/components/box-diagram.tsx`, drawn from `docs/diagrams/*.yaml` |
 | Cards, pairs, option sets | `SummaryCards`, `SummaryCard` | `apps/docs/src/components/summary-cards.tsx` |
 | Status | `StatusBadge` | `apps/docs/src/components/status-badge.tsx` |
+| A step's screen | `UiFragment` | `apps/docs/src/components/ui-fragment.tsx` |
+| Journey, annotated screen, layers | `JourneyFigure`, `AnnotatedFigure`, `LayerMap` | `apps/docs/src/components/journey-figure.tsx`, `annotated-figure.tsx`, `layer-map.tsx` |
 
 A new component goes in `apps/docs/src/components`, is composed from these and the Fumadocs primitives, takes its
 colours and spacing from the tokens below, and is mapped in `mdx.tsx` and `src/lib/remark-ops-ai.mjs` so authors write
 plain markdown. A component that needs its own colours or spacing values is rejected in review.
+
+## Writing a journey, an annotated screen or layers
+
+All three are plain lists, so the page still reads on GitHub. Pages using them: [Welcome](../welcome.md) (journey),
+[Human tasks](../guide/human-tasks.md) (annotated), [Overview](../guide/overview.md) (layers).
+
+| Figure | Each list item | Nested bullets |
+|---|---|---|
+| Journey | `**Surface · What happens**: what it means`. The surface (Team mailbox, Workflow, Agent, Human task, Case) names the screen and picks its icon | `**Label**: value` rows on that screen; `**Actions**: Approve, Reject` draws buttons |
+| Annotated | First item: `**Surface · Title**: one line`. Then one `**Label**: value` per row; a code block under an item is shown as code; `**Actions**: ...` draws buttons | A bullet under a row is its numbered note |
+| Layers | `**Band**: one line`. The first and last bands are outside the frame; the band just above the last is the boundary every call leaves through and carries the accent | `**Part**: one line` per box in the band |
+
+Each needs `caption`, which is also its accessible name. A journey has three to six steps, each screen two to four rows;
+an annotated screen has at most five notes. Sample data comes from several industries across a page set, and no step
+shows a customer's real name.
+
+The journey reveals its steps once when it scrolls into view (opacity and an 8px rise, 70ms apart, ease-out). Without
+JavaScript, in print or with reduced motion the steps are simply there. Nothing in a figure takes focus: the buttons are
+drawn, not working.
 
 ## How the website's patterns carry over
 
@@ -46,6 +70,8 @@ plain markdown. A component that needs its own colours or spacing values is reje
 | Persona and voice-agent carousels | Cards that stack; never a carousel |
 | Problem section: the workaround, then the product's answer | A with and without pair |
 | Section with a lead line, a visual, then proof | A one or two sentence lead, the figure, then the next heading |
+| Feature cards that hold a live product widget | Journey and annotated screens: the step shown as the screen it happens on |
+| Numbered callouts beside a product shot | Annotated screen pins and the journey's numbered path |
 
 The wording follows the landing-copy rules: concrete nouns, a title that carries its meaning alone, no filler words,
 and every claim a shipped feature. A card title that needs its body to decode is rewritten.

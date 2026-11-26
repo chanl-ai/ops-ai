@@ -53,13 +53,26 @@ The full answers, with their limits, are on the [Security](security/README.md) p
 A dispute reaches a person already checked against the handbook, and the approval is on the case when the risk team
 asks.
 
-```mermaid caption="A card dispute from arrival to a recorded approval: each step is done before a person opens the case"
-flowchart TD
-  A[Dispute arrives] --> B[Workflow finds the cardholder]
-  B --> C[Agent checks the handbook]
-  C --> D[Person approves the credit]
-  D --> E[Case records who, version, data]
-```
+<!-- site: journey caption="A card dispute from arrival to a recorded approval, as the team sees it: each step is done before a person opens the case" -->
+1. **Team mailbox · A dispute arrives**: The cardholder's email lands in the team mailbox. Nobody retypes it.
+   - **From**: Cardholder, card ending 4417
+   - **Subject**: Charged twice for one purchase
+   - **Amount**: $84.20
+2. **Workflow · The workflow finds the cardholder**: It reads the account through the data gateway. Reads never wait for a person.
+   - **Account**: Found, open since 2019
+   - **Same charge**: Twice, two minutes apart
+   - **Earlier disputes**: None in 12 months
+3. **Agent · The agent checks the handbook**: It answers from your dispute handbook and says which section it used.
+   - **Handbook**: Duplicate charges, section 4.2
+   - **Suggests**: Credit $84.20 to the card
+4. **Human task · A person approves the credit**: The credit is a write, so it waits for a named reviewer, who sees the exact input.
+   - **Input**: Credit $84.20 to card ending 4417
+   - **Reviewer**: Disputes lead
+   - **Actions**: Approve, Reject
+5. **Case · The case keeps the record**: When the risk team asks, the answer is already on the case.
+   - **Approved by**: Disputes lead, 10:42
+   - **Version**: Disputes agent, version 7
+   - **Reached**: Card ledger, one write
 
 <!-- site: cards -->
 - **Without Ops AI**: The same request is retyped across three systems, the approval lives in an email thread, and the audit answer is rebuilt by hand each time someone asks.
