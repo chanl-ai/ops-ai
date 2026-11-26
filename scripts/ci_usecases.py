@@ -151,7 +151,8 @@ def self_test() -> int:
         ok.append(False)
     except SystemExit:
         ok.append(True)
-    print("ci_usecases self-test: " + ("ok" if all(ok) else f"FAILED {ok}"))
+    bad = [i for i, good in enumerate(ok) if not good]
+    print("ci_usecases self-test: " + ("ok" if not bad else f"FAILED assertions {bad}"))
     return 0 if all(ok) else 1
 
 
