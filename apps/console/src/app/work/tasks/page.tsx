@@ -23,6 +23,7 @@ import { useCurrentPerson } from '@/hooks/auth-queries';
 import { useTeam } from '@/hooks/use-team';
 import { useDebounced } from '@/hooks/use-debounced';
 import { useFocusTrap } from '@/hooks/use-focus-trap';
+import { useWide } from '@/hooks/use-wide';
 import { cn } from '@/lib/utils';
 import type { Review } from '@/lib/types/domain';
 import type { ReviewView } from '@/lib/types/query';
@@ -38,19 +39,6 @@ const PAGE = 50;
  * ?review= (and ?runKey= resolves to one), as every link into a task already reads it. Every
  * view as a table, with bulk decisions and export, is All tasks.
  */
-/** Whether the window is at least `px` wide; false until it has been measured, as on the server. */
-function useMinWidth(px: number) {
-  const [wide, setWide] = React.useState(false);
-  React.useEffect(() => {
-    const mql = window.matchMedia(`(min-width: ${px}px)`);
-    const on = () => setWide(mql.matches);
-    on();
-    mql.addEventListener('change', on);
-    return () => mql.removeEventListener('change', on);
-  }, [px]);
-  return wide;
-}
-
 export default function HumanTasksPage() {
   const params = useSearchParams();
   const router = useRouter();
@@ -146,7 +134,7 @@ export default function HumanTasksPage() {
   };
 
   const twoPanes = !!task?.evidence.some((n) => n.type === 'viewer');
-  const wide = useMinWidth(1024);
+  const wide = useWide();
   // Over the list on a phone the task holds the focus, and closing it gives the focus back to the row that opened it.
   const panelRef = React.useRef<HTMLElement>(null);
   const overList = !wide && showTask && !!active;
@@ -294,7 +282,8 @@ export default function HumanTasksPage() {
             aria-modal={wide ? undefined : true}
             aria-label={active?.title ?? 'Task'}
             onKeyDown={(e) => {
-              if (!wide && e.key === 'Escape') setShowTask(false);
+              // A menu or dialog inside the task takes its own Escape (it marks the key handled) before the sheet closes.
+              if (!wide && e.key === 'Escape' && !e.defaultPrevented) setShowTask(false);
             }}
             data-testid={wide ? 'task-pane' : 'task-sheet'}
           >

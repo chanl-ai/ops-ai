@@ -521,13 +521,13 @@ export function ReviewDecisionForm({
           </div>
         )}
         {/* A workflow's own step has no agent or requester to return it to: it is approved or rejected. */}
-        {!inBar && (review.canReturn ?? ((isPublish || !review.runId) && !isHost)) && (
+        {!inBar && review.canReturn === true && (
           <Button variant="ghost" size="sm" disabled={!!pending} onClick={() => submit('returned')}>
             {isTemplate ? 'Return to submitter' : isPublish ? 'Return to requester' : 'Return to agent'}
           </Button>
         )}
         {inBar
-          ? createPortal(<div className="flex gap-2" data-testid="task-bar-decide">{decideButtons}</div>, bar!.slot!)
+          ? createPortal(<div className="flex flex-wrap justify-end gap-2" data-testid="task-bar-decide">{decideButtons}</div>, bar!.slot!)
           : (
             <div className={cn('ml-auto flex gap-2', layout === 'footer' && 'max-sm:w-full max-sm:*:flex-1')}>
               {decideButtons}

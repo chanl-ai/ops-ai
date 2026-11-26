@@ -61,10 +61,10 @@ export function DecisionPanel({
 }) {
   const open = isOpen(review);
   const canDecide = open && review.canDecide !== false;
-  // Each is offered only when its route will accept it; the server says so per person (hitl_facade.with_rights). The
-  // mock sends no rights, so it falls back to whether the person may decide.
-  const canAssign = review.canAssign ?? (canDecide && !me.includes(review.assignee ?? ''));
-  const canReassign = review.canReassign ?? (canDecide && !!review.assignee);
+  // Each is offered only when its route will accept it; the server says so per person (hitl_facade.with_rights), and
+  // the mock sends the same flags.
+  const canAssign = review.canAssign === true;
+  const canReassign = review.canReassign === true;
   // A person who may not act on the task sees no menu at all, as the mock's member view draws it.
   // Where the decision form draws Reject and Approve, and the Return it hands the More menu (publish requests only).
   const [slot, setSlot] = React.useState<HTMLDivElement | null>(null);
@@ -77,7 +77,7 @@ export function DecisionPanel({
   return (
     <aside className={cn('flex min-h-0 min-w-0 flex-col rounded-lg border bg-card', className)} aria-label="Decision" data-testid="decision-panel">
       {/* The pinned bar: up and down through the queue, then the task's own actions under More. */}
-      <div className="flex items-center gap-1 border-b px-2 py-1.5" data-testid="task-bar">
+      <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5 border-b px-2 py-1.5" data-testid="task-bar">
         {place && (
           <>
             <Button type="button" variant="ghost" size="icon" aria-label="Previous task" disabled={!place.previous} onClick={() => place.previous && place.onGo(place.previous)} data-testid="task-previous">
@@ -93,7 +93,7 @@ export function DecisionPanel({
             )}
           </>
         )}
-        <div ref={setSlot} className="ml-auto flex items-center gap-2" data-testid="task-bar-slot" />
+        <div ref={setSlot} className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2" data-testid="task-bar-slot" />
         {more && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

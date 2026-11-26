@@ -275,14 +275,38 @@ await withUiStack(
         const row = page.getByTestId(`queue-item-${ids.tom}`);
         await row.focus();
         await page.keyboard.press('Enter');
-        await page.getByTestId('task-sheet').waitFor();
+        // The sheet is a visible modal dialog before any key is pressed, so the Tabs below run with the overlay open.
+        await page.getByTestId('task-sheet').waitFor({ state: 'visible' });
+        const modal = await page.getByTestId('task-sheet').getAttribute('aria-modal');
         for (let i = 0; i < 25; i += 1) await page.keyboard.press('Tab');
         const inside = await page.evaluate(() => !!document.activeElement?.closest('[data-testid=task-sheet]'));
         await page.keyboard.press('Escape');
-        await page.getByTestId('task-sheet').waitFor({ state: 'detached' }).catch(() => undefined);
+        // The sheet stays mounted when closed (a half-made decision survives a resize), so closed is hidden; a timeout fails the step.
+        await page.getByTestId('task-sheet').waitFor({ state: 'hidden', timeout: 10_000 });
         const back = await page.evaluate(() => document.activeElement?.getAttribute('data-testid'));
         await page.setViewportSize({ width: 1280, height: 800 });
-        check('13 on a phone the task holds the focus and closing it gives it back to its row', inside && back === `queue-item-${ids.tom}`, { inside, back });
+        check('13 on a phone the task holds the focus and closing it gives it back to its row', modal === 'true' && inside && back === `queue-item-${ids.tom}`, { modal, inside, back });
+      });
+      // WCAG 1.4.10: at 390 and 375 px every control of the pinned bar is inside the window, and More opens its menu there.
+      await step('14 the pinned bar and its More menu are reachable at 390 and 375 px', async () => {
+        const seen = [];
+        for (const width of [390, 375]) {
+          await page.setViewportSize({ width, height: 844 });
+          await page.goto(`${consoleUrl}/work/tasks?review=${encodeURIComponent(ids.tom)}`, { waitUntil: 'domcontentloaded' });
+          await page.getByTestId('task-bar').waitFor({ state: 'visible', timeout: 60_000 });
+          await page.getByTestId('task-more').waitFor({ state: 'visible' });
+          const out = await page.evaluate(() => [...document.querySelectorAll('[data-testid=task-bar] button')].map((b) => { const r = b.getBoundingClientRect(); return { id: b.dataset.testid ?? b.getAttribute('aria-label'), left: Math.round(r.left), right: Math.round(r.right) }; }).filter((b) => b.left < 0 || b.right > window.innerWidth));
+          await page.getByTestId('task-more').click();
+          const first = page.getByRole('menuitem').first();
+          await first.waitFor({ state: 'visible' });
+          const box = await first.boundingBox();
+          await page.keyboard.press('Escape');
+          await page.getByRole('menu').waitFor({ state: 'hidden' });
+          const sheetOpen = await page.getByTestId('task-sheet').isVisible();
+          seen.push({ width, out, menuInside: !!box && box.x >= 0 && box.x + box.width <= width, sheetOpen });
+        }
+        check('14 the pinned bar and its More menu are reachable at 390 and 375 px', seen.every((w) => w.out.length === 0 && w.menuInside && w.sheetOpen), seen);
+        await page.setViewportSize({ width: 1280, height: 800 });
       });
       check('9 no page errors and no sideways scroll at 375 px', errors.length === 0, errors.slice(0, 3));
     } finally {

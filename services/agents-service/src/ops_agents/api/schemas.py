@@ -827,7 +827,7 @@ class PublishReview(Out):
     id: str
     # Whether the caller may decide it now, by the same checks the decision route runs; absent outside Reviews.
     can_decide: bool | None = None
-    # What the caller may do with it now, each by the check its own route runs (hitl_facade.for_viewer): assign an
+    # What the caller may do with it now, each by the check its own route runs (hitl_facade.with_rights): assign an
     # unassigned task, reassign an assigned one, return it to who asked; absent outside Reviews.
     can_assign: bool | None = None
     can_reassign: bool | None = None
@@ -1372,7 +1372,7 @@ class ThreadReview(Out):
     id: str
     # Whether the caller may decide it now, by the same checks the decision route runs; absent outside Reviews.
     can_decide: bool | None = None
-    # What the caller may do with it now, each by the check its own route runs (hitl_facade.for_viewer): assign an
+    # What the caller may do with it now, each by the check its own route runs (hitl_facade.with_rights): assign an
     # unassigned task, reassign an assigned one, return it to who asked; absent outside Reviews.
     can_assign: bool | None = None
     can_reassign: bool | None = None

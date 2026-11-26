@@ -23,6 +23,9 @@ export function useFocusTrap(ref: React.RefObject<HTMLElement | null>, active: b
       const first = list[0];
       const last = list[list.length - 1];
       const at = document.activeElement;
+      // A dialog or menu opened from the panel (the step-up dialog, the More menu) is portalled outside it and traps
+      // its own focus; the panel's trap steps aside while focus is in one.
+      if (at && !el.contains(at) && at.closest('[role="dialog"],[role="alertdialog"],[role="menu"]')) return;
       if (e.shiftKey && (at === first || !el.contains(at))) {
         e.preventDefault();
         last.focus();
