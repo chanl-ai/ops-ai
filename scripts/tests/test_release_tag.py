@@ -19,9 +19,14 @@ def git(repo: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True).stdout.strip()
 
 
+# The script reads GITHUB_ACTIONS and WALK_PASSED; CI sets the first, so a test builds its own environment.
+CI_ONLY = ("GITHUB_ACTIONS", "WALK_PASSED")
+
+
 def tag(repo: Path, **env: str) -> subprocess.CompletedProcess[str]:
+    base = {k: v for k, v in os.environ.items() if k not in CI_ONLY}
     return subprocess.run(
-        ["sh", str(SCRIPT)], cwd=repo, capture_output=True, text=True, env={**os.environ, **env}, check=False
+        ["sh", str(SCRIPT)], cwd=repo, capture_output=True, text=True, env={**base, **env}, check=False
     )
 
 

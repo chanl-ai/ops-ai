@@ -54,6 +54,7 @@ scripts are reached through a make target; run them that way so ports and env ma
 
 | Trap | Detail |
 |---|---|
+| Tests passed on a laptop and failed in CI | CI runs the tests with `GITHUB_ACTIONS` set, so a script that reads it (`release-tag.sh`: `GITHUB_ACTIONS`, `WALK_PASSED`; `ci-plan.sh`: `GITHUB_REF`, `GITHUB_EVENT_NAME`, `CI_FULL`) is tested with an explicit env that drops or sets them (`tag()` in `test_release_tag.py`, `plan()` in `test_ci_plan.py`); run a suite with `GITHUB_ACTIONS=true` exported to see what CI sees |
 | A queue merge commit has no type in its subject | `release-tag.sh` reads `feat`/`fix` from the pull request title, which is the first body line of a `Merge pull request #N` commit; a squash commit has it as the subject (`test_release_tag.py`) |
 | A pick wider than one run fits is cancelled and records nothing | `ci_usecases.py pick` returns nothing above `MAX_PICK` and prints why (the nightly covers it); `run` rewrites its `--out` file after each use case, so a cut-off run still leaves results |
 | A registry row marked `failing` gates against an empty quarantine | A status cell has no owner or expiry, so `ci_usecases.py` ignores it: a known-failing use case is an entry in `config/quarantine.json` (owner, 30-day expiry). An id is `uc-<digits>` or a name such as `uc-workflows-1`, and `uc-012` equals `uc-12`. CI passes bare ids, so a `:ui` entry quarantines every layer of that use case |
