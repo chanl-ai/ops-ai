@@ -455,7 +455,7 @@ jobs:
         id: pick
         run: |
           base=$(git merge-base "$BASE_SHA" HEAD)
-          ids=$(python3 scripts/ci_usecases.py pick --base "$base" | tr '\n' ' ')
+          ids=$(python3 scripts/ci_usecases.py pick --base "$base" | tr '\n' ' ' | xargs)
           echo "ids=$ids" >> "$GITHUB_OUTPUT"
           echo "use cases: ${ids:-none}"
       - if: steps.pick.outputs.ids != ''

@@ -220,6 +220,23 @@ def self_test() -> int:
         finally:
             usecase_batch.run, usecase_batch.LOGS = real_run, real_logs
         ok.append(code == 0 and seen == [1] and len(json.loads(out.read_text())["results"]) == 2)
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "none.json"
+        real_changed = globals()["git_changed"]
+        globals()["git_changed"] = lambda base, head: ["docs/x.md"]  # a diff that affects no use case
+        buf, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
+                pick_code = main(["pick"])
+                picked = buf.getvalue()
+                run_code = main(["run", "--out", str(out)])  # no ids: what CI passes when the pick is empty
+        except SystemExit as e:  # argparse refusing the empty list
+            pick_code = run_code = int(e.code or 0)
+        finally:
+            globals()["git_changed"] = real_changed
+        # An empty pick prints nothing: a blank line becomes the output " ", which is not empty to the workflow's `if`.
+        ok.append(picked == "" and pick_code == 0 and run_code == 0)
+        ok.append(out.exists() and json.loads(out.read_text())["results"] == [])
     bad = [i for i, good in enumerate(ok) if not good]
     print("ci_usecases self-test: " + ("ok" if not bad else f"FAILED assertions {bad}"))
     return 0 if all(ok) else 1
@@ -243,7 +260,7 @@ def main(argv: list[str]) -> int:
     r.add_argument(
         "--no-gate", action="store_true", help="exit 0 whatever failed (the nightly records, it does not gate)"
     )
-    r.add_argument("ids", nargs="+")
+    r.add_argument("ids", nargs="*")
     n = sub.add_parser("report")
     n.add_argument("dir")
     n.add_argument("--expected", type=int, default=8)
@@ -257,7 +274,8 @@ def main(argv: list[str]) -> int:
         chosen, why = cap(chosen)
         if why:
             print(f"ci_usecases: {why}", file=sys.stderr)
-        print("\n".join(chosen))
+        if chosen:
+            print("\n".join(chosen))
         return 0
     if args.cmd == "all":
         print("\n".join(shard(known, args.shard)))
@@ -268,6 +286,10 @@ def main(argv: list[str]) -> int:
         print(report_md(rows, len(files), args.expected, args.run_url))
         return 0
     ids = shard(args.ids, args.shard)
+    if not ids:
+        print("ci_usecases: no use cases to run")
+        write_results(args.out, [])
+        return 0
     held = quarantine.active(quarantine.load(), dt.date.today())
     results = run_ids(ids, args.slots, args.timeout, held=held, out=args.out)
     failed = [x for x in results if x["status"] == "failed"]
