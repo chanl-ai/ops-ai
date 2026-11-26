@@ -95,6 +95,11 @@ images crash under Docker Desktop's emulation; the pinned 2025 image runs on the
 | `backends()` names only PostgreSQL, so the conformance suites never run on SQL Server here | SQL Server DDL and model parity are checked in `deploy/database/tests` (`make test PKG=deploy/database`, the `pool-deploy` job of `make verify`) |
 | The conformance database is `<test database>_conformance`, created on first use | Two sessions with different test databases never migrate each other's |
 | Importing `ops_store` installs the connect retry on every SQLAlchemy engine in the process (`src/ops_store/__init__.py:11`) | Engines made in scripts and tests get it without passing anything |
+| A migration's stand-in `sa.Table` for `tenants` given a `tenant_id` column makes SQL Server's policy name a column dbo.tenants lacks (207) | Give the stand-in `id` as its primary key; `backfill_ddl` refuses it otherwise, on both databases |
+
+## Known traps
+
+- A lease test that waits on real time against a short ttl => build the lease on the suite's `LeaseClock` (`make(clock)`) and lapse it with `clock.advance`; a loaded CI runner can take longer than the ttl between two acquires, so a live lease reads as lapsed
 
 ## Known traps
 

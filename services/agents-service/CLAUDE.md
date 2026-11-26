@@ -84,7 +84,7 @@ stack's chat alias points at one. Reference: [make/CLAUDE.md](../../make/CLAUDE.
 
 ## Known traps
 
-- A migration that adds a tenant-scoped table => create its row policy after the table and drop it before the table on downgrade; the policy names the table, so neither order works the other way round, and `make db-ddl-golden` (reviewed) records it
+- A migration that creates a tenant or team table => create its SQL Server security policy after the table (`mssql_predicates_ddl`, then `isolation_ddl`) and drop it before the table (`isolation_drop_ddl`); SQL Server refuses to drop a table a policy is bound to (error 3729), and only the store-mssql CI job runs that path
 - A store helper that takes a team list => an empty list reads every team; pass the caller's teams and test the empty case
 - A new team-owned table such as an outbox or schedule table => add it to the team-boundary list and regenerate the store inventory
 - A list route that accepts `search` => pass the search columns to `list_page`; five lists took the parameter and ignored it
