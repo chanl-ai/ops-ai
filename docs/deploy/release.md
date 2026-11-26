@@ -123,6 +123,20 @@ anything that is not a fast-forward, and the script never forces.
 
 A move of `main` does not touch staging.
 
+## First run of the tag and nightly workflows
+
+GitHub starts a `workflow_run` or `schedule` workflow only from the copy on the default branch. While `main` holds the
+old push-triggered tag file and no `nightly-usecases.yml`, neither new workflow starts by itself, and the tag step does
+not run after a develop merge. Until the next move of `main` carries them:
+
+| Step | How |
+|---|---|
+| Get the files onto `main` | The next release pull request into `main` carries them; to start sooner, a pull request that changes only these workflow files into `main` |
+| Tag a develop commit meanwhile | After its staging walk passed, an admin runs `gh workflow run release-tag.yml --ref main -f ref=<sha> -f walk_passed=true`; the workflow runs from `main`'s copy, so this works only once the file is there. Before that, run `DRY=1 make release-tag REF=<sha>` and then `make release-tag REF=<sha>` by hand, with `BUMP=auto` for a queue merge |
+| Run the nightly once | `gh workflow run nightly-usecases.yml --ref develop` after the file is on `main` |
+
+A `walk_passed=true` dispatch counts only from a repository admin; a writer's dispatch is ignored with a warning.
+
 ## Version tags
 
 Every release and hotfix is tagged `vX.Y.Z`; there is no second tag scheme. Installs from before this flow hold date

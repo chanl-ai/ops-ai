@@ -102,6 +102,21 @@ def test_auto_bump_tags_a_feature_as_the_next_minor_a_fix_as_the_next_patch_and_
     assert git(remote, "rev-list", "-n", "1", "v1.3.1") == fix
 
 
+def test_auto_bump_reads_the_pull_request_title_from_a_merge_commit_body(tmp_path: Path) -> None:
+    remote, work = clone_pair(tmp_path)
+    commit(work, "b", RELEASE)
+    tag(work)
+    queue = "Merge pull request #50 from chanl-ai/gh-readonly-queue/develop/pr-50-abc"
+    feat = commit(work, "c", queue, body="feat(console): saved views")
+    assert tag(work, BUMP="auto").returncode == 0
+    fix = commit(work, "d", queue, body="fix(api): paging (#51)")
+    assert tag(work, BUMP="auto").returncode == 0
+    commit(work, "e", queue, body="chore(ci): tidy")
+    assert "gets no tag" in tag(work, BUMP="auto").stdout
+    assert git(remote, "rev-list", "-n", "1", "v1.3.0") == feat
+    assert git(remote, "rev-list", "-n", "1", "v1.3.1") == fix
+
+
 def test_a_tag_made_on_github_needs_a_recorded_walk_and_a_local_run_does_not(tmp_path: Path) -> None:
     remote, work = clone_pair(tmp_path)
     commit(work, "b", RELEASE)

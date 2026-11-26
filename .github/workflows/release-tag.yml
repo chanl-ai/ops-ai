@@ -3,7 +3,10 @@
 #   - workflow_run: ci.yml finished on develop. The job reads that run's jobs and goes on only when the `staging` deploy
 #     (the deploy, then the click walk and smoke check, which a failed step rolls back) concluded success for the commit.
 #     A skipped staging deploy (staging frozen, STAGING_HOLD) or a red walk leaves the commit untagged.
-#   - workflow_dispatch: a person names a commit and sets walk_passed to true, for a walk they ran or watched.
+#   - workflow_dispatch: a person names a commit and sets walk_passed to true, for a walk they ran or watched. The claim
+#     counts only from a repository admin; a writer's dispatch ends at the walk job with a warning.
+# Both starts run only from this file on the default branch (main): GitHub starts workflow_run and schedule workflows
+# from the default branch's copy. Until this file is on main, start it by hand: docs/deploy/release.md, "First run".
 # The version is `release: X.Y.Z into develop` in the commit's title when there is one (docs/deploy/release.md), else
 # the merge-queue rule (BUMP=auto, scripts/release-tag.sh): a `feat` commit is the next minor version, `fix` or `perf`
 # the next patch, any other type gets no tag. scripts/release-tag.sh itself refuses to push on GitHub without
@@ -54,16 +57,23 @@ jobs:
           RUN_ID: ${{ github.event.workflow_run.id }}
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
           RUN_EVENT: ${{ github.event.workflow_run.event }}
+          ACTOR: ${{ github.actor }}
         run: |
           passed=false
           if [ "$EVENT" = workflow_dispatch ]; then
-            ref=$INPUT_REF; passed=$INPUT_PASSED
+            ref=$INPUT_REF
+            # Anyone with write access can start this workflow, so the walk claim counts only from an admin.
+            role=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$ACTOR/permission" --jq .permission)
+            if [ "$INPUT_PASSED" = true ] && [ "$role" = admin ]; then passed=true
+            elif [ "$INPUT_PASSED" = true ]; then echo "::warning::$ACTOR is $role, not admin: the walk claim is ignored"; fi
           elif [ "$RUN_EVENT" = push ]; then
             ref=$RUN_SHA
             # `staging / deploy` is the called deploy-staging.yml job. Its `Deploy` step runs the deploy, the click walk and
             # the smoke check, and is skipped while staging is held, so only a `Deploy` step that succeeded counts.
-            result=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" \
-              --jq '[.jobs[] | select(.name | startswith("staging")) | select(.conclusion == "success") | .steps[] | select(.name == "Deploy" and .conclusion == "success")] | length')
+            # A page of 100 jobs is not the whole run (shards, matrices): every page is read and the counts added.
+            result=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" \
+              --jq '[.jobs[] | select(.name | startswith("staging")) | select(.conclusion == "success") | .steps[] | select(.name == "Deploy" and .conclusion == "success")] | length' \
+              | awk '{ n += $1 } END { print n + 0 }')
             [ "${result:-0}" -gt 0 ] && passed=true
           else
             ref=$RUN_SHA
@@ -81,7 +91,8 @@ jobs:
       contents: write # pushes the version tag and fast-forwards main
       actions: write # starts sdk-publish.yml and release-images.yml on it
     concurrency:
-      group: release-tag
+      # One group per commit: a group shared by all drops the older of two queued runs, and its commit is never tagged.
+      group: release-tag-${{ needs.walk.outputs.ref }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -124,6 +135,11 @@ jobs:
             curl -fsS https://api.github.com/meta | jq -r '.ssh_keys[] | "github.com " + .' > "$ssh_dir/known_hosts"
             export GIT_SSH_COMMAND="ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o StrictHostKeyChecking=yes"
             export PUSH_URL="git@github.com:$REPO.git"
+          fi
+          git fetch --quiet origin main
+          if git merge-base --is-ancestor "$REF" origin/main; then
+            echo "main already holds $REF (a newer commit was released first); nothing to move"
+            exit 0
           fi
           rc=0
           # The script, not make: make turns the script's exit 3 (push refused) into its own exit 2.

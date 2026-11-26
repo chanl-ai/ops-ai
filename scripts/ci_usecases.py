@@ -21,7 +21,7 @@ import json
 import re
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +35,7 @@ import quarantine  # noqa: E402
 import usecase_batch  # noqa: E402
 
 REGISTRY = ROOT / "docs/usecases/README.md"
-ROW = re.compile(r"^\|\s*(uc-\d+)\s*\|[^|]*\|[^|]*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|")
+ROW = re.compile(r"^\|\s*(uc-[a-z0-9]+(?:-[a-z0-9]+)*)\s*\|[^|]*\|[^|]*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|")
 # Rows the runner has nothing to run for: a page is documentation, draft has no script yet.
 NOT_RUN = ("retired", "superseded", "draft", "page")
 
@@ -47,7 +47,33 @@ def runnable(registry: str) -> list[str]:
         m = ROW.match(line)
         if m and m.group(2) and not any(w in m.group(3).lower().split() for w in NOT_RUN):
             ids.append(m.group(1))
-    return sorted(ids, key=lambda s: int(s.split("-")[1]))
+    # Numbered ids first in number order, then the named ones (uc-workflows-1) in name order.
+    return sorted(ids, key=lambda s: (0, int(s.split("-")[1]), "") if s.split("-")[1].isdigit() else (1, 0, s))
+
+
+def known_failing(registry: str) -> set[str]:
+    """Ids of the rows the registry marks `failing`: they run and record, and their failure does not gate."""
+    return {
+        m.group(1)
+        for line in registry.splitlines()
+        if (m := ROW.match(line)) and "failing" in m.group(3).lower().split()
+    }
+
+
+# Use cases one pull request run may pick: 45 minutes on three slots fits about this many; a wider pick (a diff that
+# touches shared code) is left to the nightly, which runs every one.
+MAX_PICK = 40
+
+
+def cap(chosen: list[str], limit: int = MAX_PICK) -> tuple[list[str], str]:
+    """The pick, or nothing with the reason when it is larger than one run can finish."""
+    if len(chosen) <= limit:
+        return chosen, ""
+    return (
+        [],
+        f"{len(chosen)} use cases affected, more than the {limit} one run fits: "
+        "left to the nightly (nightly-usecases.yml)",
+    )
 
 
 def pick(paths: list[str], mapping: dict[str, Any], known: list[str]) -> list[str]:
@@ -63,9 +89,17 @@ def shard(items: list[str], spec: str) -> list[str]:
     return items[int(i) - 1 :: int(n)]
 
 
-def classify(results: list[dict[str, Any]], held: set[str]) -> list[dict[str, Any]]:
+def classify(results: list[dict[str, Any]], held: set[str], failing: set[str] | None = None) -> list[dict[str, Any]]:
+    marked = {quarantine.norm(f) for f in failing or set()}
     for r in results:
-        r["status"] = "passed" if r["code"] == 0 else ("quarantined" if quarantine.covers(held, r["id"]) else "failed")
+        if r["code"] == 0:
+            r["status"] = "passed"
+        elif quarantine.covers(held, r["id"]):
+            r["status"] = "quarantined"
+        elif quarantine.norm(r["id"]).partition(":")[0] in marked:
+            r["status"] = "known-failing"
+        else:
+            r["status"] = "failed"
     return results
 
 
@@ -73,13 +107,18 @@ def report_md(results: list[dict[str, Any]], shards_seen: int, shards_expected: 
     """The night's record: failures first, one `FAILED` line each, then the quarantined ones and the counts."""
     failed = [r for r in results if r["status"] == "failed"]
     held = [r for r in results if r["status"] == "quarantined"]
-    lines = [f"Nightly use cases on develop: {len(results)} ran, {len(failed)} failed, {len(held)} quarantined."]
+    known = [r for r in results if r["status"] == "known-failing"]
+    lines = [
+        f"Nightly use cases on develop: {len(results)} ran, {len(failed)} failed, {len(held)} quarantined, "
+        f"{len(known)} known failing."
+    ]
     if run_url:
         lines.append(f"Run: {run_url}")
     if shards_seen < shards_expected:
         lines.append(f"FAILED shards: only {shards_seen} of {shards_expected} wrote a result file.")
     lines += [f"FAILED {r['id']}  log {r.get('log', '')}" for r in failed]
     lines += [f"quarantined {r['id']}" for r in held]
+    lines += [f"known failing {r['id']} (the registry marks it failing)" for r in known]
     return "\n".join(lines)
 
 
@@ -90,15 +129,33 @@ def git_changed(base: str, head: str) -> list[str]:
     return [p for p in out.stdout.splitlines() if p]
 
 
-def run_ids(ids: list[str], slots: int, timeout: int) -> list[dict[str, Any]]:
+def write_results(path: str | None, results: list[dict[str, Any]]) -> None:
+    if path:
+        Path(path).write_text(json.dumps({"results": results}, indent=2) + "\n", encoding="utf-8")
+
+
+def run_ids(
+    ids: list[str], slots: int, timeout: int, *, held: set[str], failing: set[str], out: str | None = None
+) -> list[dict[str, Any]]:
+    """Runs the ids and rewrites the result file after each one finishes, so a run cut off by the job's time limit
+    still leaves every result so far."""
     usecase_batch.LOGS.mkdir(parents=True, exist_ok=True)
 
     def one(item: str) -> dict[str, Any]:
         _, code, waited, ran, log = usecase_batch.run(item, timeout)
         return {"id": item, "code": code, "seconds": round(waited + ran), "log": usecase_batch.shown(log)}
 
+    done: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=slots) as pool:
-        return list(pool.map(one, ids))
+        for fut in as_completed([pool.submit(one, i) for i in ids]):
+            done.append(fut.result())
+            classify([done[-1]], held, failing)
+            print(
+                f"{done[-1]['status'].upper():13} {done[-1]['id']:12} {done[-1]['seconds']:5}s  {done[-1]['log']}",
+                flush=True,
+            )
+            write_results(out, done)
+    return done
 
 
 def self_test() -> int:
@@ -114,6 +171,7 @@ def self_test() -> int:
         ],
     }
     known = runnable(registry)
+    named = runnable("| uc-workflows-2 | s | A | api | passing |\n| uc-007 | s | B | ui | failing |\n")
     today = dt.date(2026, 11, 26)
     held = quarantine.active(
         {
@@ -140,6 +198,15 @@ def self_test() -> int:
         pick(["docs/x.md", "README.md"], mapping, known) == [],  # a docs-only diff runs no use case
         [r["status"] for r in results]
         == ["quarantined", "failed", "passed", "failed"],  # layer-exact; expired gates again
+        named == ["uc-007", "uc-workflows-2"],  # a named id runs too, after the numbered ones
+        known_failing("| uc-007 | s | B | ui | failing |\n| uc-001 | s | A | api | passing |\n") == {"uc-007"},
+        [
+            r["status"]
+            for r in classify([{"id": "uc-007:ui", "code": 1}, {"id": "uc-007", "code": 0}], set(), {"uc-007"})
+        ]
+        == ["known-failing", "passed"],  # a row the registry marks failing records its failure and does not gate
+        cap(["uc-1", "uc-2", "uc-3"], 5) == (["uc-1", "uc-2", "uc-3"], ""),
+        cap(["uc-1", "uc-2", "uc-3"], 2)[0] == [] and "nightly" in cap(["uc-1", "uc-2", "uc-3"], 2)[1],
         shard(["a", "b", "c", "d", "e"], "2/3") == ["b", "e"],
         sorted(x for i in (1, 2, 3) for x in shard(list("abcdefg"), f"{i}/3")) == list("abcdefg"),
     ]
@@ -185,6 +252,9 @@ def main(argv: list[str]) -> int:
         paths = git_changed(args.base, args.head)
         chosen = pick(paths, affected_usecases.load_map(), known)
         print(f"ci_usecases: {len(paths)} files changed, {len(chosen)} use cases", file=sys.stderr)
+        chosen, why = cap(chosen)
+        if why:
+            print(f"ci_usecases: {why}", file=sys.stderr)
         print("\n".join(chosen))
         return 0
     if args.cmd == "all":
@@ -197,16 +267,15 @@ def main(argv: list[str]) -> int:
         return 0
     ids = shard(args.ids, args.shard)
     held = quarantine.active(quarantine.load(), dt.date.today())
-    results = classify(run_ids(ids, args.slots, args.timeout), held)
-    for x in results:
-        print(f"{x['status'].upper():11} {x['id']:12} {x['seconds']:5}s  {x['log']}")
+    results = run_ids(
+        ids, args.slots, args.timeout, held, known_failing(REGISTRY.read_text(encoding="utf-8")), args.out
+    )
     failed = [x for x in results if x["status"] == "failed"]
     print(
         f"{sum(x['status'] == 'passed' for x in results)} passed, {len(failed)} failed, "
-        f"{sum(x['status'] == 'quarantined' for x in results)} quarantined"
+        f"{sum(x['status'] == 'quarantined' for x in results)} quarantined, "
+        f"{sum(x['status'] == 'known-failing' for x in results)} known failing"
     )
-    if args.out:
-        Path(args.out).write_text(json.dumps({"results": results}, indent=2) + "\n", encoding="utf-8")
     return 1 if failed and not args.no_gate else 0
 
 

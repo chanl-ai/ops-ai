@@ -26,7 +26,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 FILE = ROOT / "config/quarantine.json"
-ID = re.compile(r"^uc-\d+(:[a-z]+)?$")
+ID = re.compile(r"^uc-[a-z0-9]+(-[a-z0-9]+)*(:[a-z]+)?$")
 MAX_DAYS = 30
 
 
@@ -55,6 +55,10 @@ def problems(data: dict[str, Any], today: dt.date) -> list[str]:
         except ValueError:
             out.append(f"{uid}: expires is not a YYYY-MM-DD date")
             continue
+        added = str(e.get("added", ""))
+        since = dt.date.fromisoformat(added) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", added) else today
+        if (until - since).days > MAX_DAYS:
+            out.append(f"{uid}: expires {until} is more than {MAX_DAYS} days after {since}")
         if until < today:
             out.append(f"{uid}: expired {until} (owner {e.get('owner')}); fix the test and remove the entry")
     return out
@@ -65,9 +69,18 @@ def active(data: dict[str, Any], today: dt.date) -> set[str]:
     return {e["id"] for e in data.get("entries", []) if dt.date.fromisoformat(e["expires"]) >= today}
 
 
+def norm(item: str) -> str:
+    """The registry pads numbers (`uc-012`), a quarantine entry may not (`uc-12`): both name the same use case."""
+    return re.sub(r"^uc-0+(\d)", r"uc-\1", item)
+
+
 def covers(ids: set[str], item: str) -> bool:
-    """`uc-1` quarantines every layer of uc-1; `uc-1:ui` only that layer."""
-    return item in ids or item.partition(":")[0] in ids
+    """`uc-1` quarantines every layer of uc-1; `uc-1:ui` only that layer. A run of `uc-1` as a whole carries no layer,
+    so a layer entry covers it: a run names a layer only when it was started for one."""
+    held = {norm(i) for i in ids}
+    item = norm(item)
+    base = item.partition(":")[0]
+    return item in held or base in held or (":" not in item and any(h.partition(":")[0] == base for h in held))
 
 
 def add(data: dict[str, Any], uid: str, who: tuple[str, str, str], today: dt.date) -> None:
@@ -100,6 +113,10 @@ def self_test() -> int:
     ok = [
         problems(data, today) == [],
         active(data, today) == {"uc-12", "uc-30:ui"},
+        covers({"uc-30:ui"}, "uc-30") and covers({"uc-12"}, "uc-012"),  # a padded registry id is the same use case
+        problems({"entries": [{"id": "uc-1", "owner": "a", "expires": "2027-06-01", "added": "2026-11-26"}]}, today)
+        == ["uc-1: expires 2027-06-01 is more than 30 days after 2026-11-26"],
+        ID.match("uc-workflows-1:api") is not None,
         covers({"uc-12"}, "uc-12:api") and covers({"uc-30:ui"}, "uc-30:ui") and not covers({"uc-30:ui"}, "uc-30:api"),
         # An entry past its date stops protecting its test and is reported.
         active(data, dt.date(2026, 12, 2)) == {"uc-12"},

@@ -31,7 +31,11 @@ if [ -z "$version" ]; then
     last=$(git tag --list 'v[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
     last=${last:-0.0.0}
     major=${last%%.*}; rest=${last#*.}; minor=${rest%%.*}; patch=${rest#*.}
-    case "$title" in
+    # A queue merge commit's subject is "Merge pull request #N from ...": its type is the pull request title, which is the
+    # first body line; a squash commit carries the title as its subject.
+    typed=$title
+    case "$title" in "Merge pull request"*) typed=$body_title ;; esac
+    case "$typed" in
       feat\(*\)!:* | feat!:* | feat:* | feat\(*\):*) version="$major.$((minor + 1)).0" ;;
       fix:* | fix\(*\):* | perf:* | perf\(*\):*) version="$major.$minor.$((patch + 1))" ;;
     esac
