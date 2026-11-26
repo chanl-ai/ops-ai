@@ -235,7 +235,7 @@ export function ReviewDetailBody({
         <div className="rounded-lg border border-primary/25 bg-primary/5 p-4">
           <p className="text-sm font-medium leading-relaxed">{review.proposal}</p>
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
-            {review.amount != null && <span className="font-semibold text-foreground tabular-nums">{money(review.amount, review.currency)}</span>}
+            {review.amount != null && <span className="font-semibold text-foreground tabular-nums">{money(review.amount, review.currency ?? null)}</span>}
             <span className="flex items-center gap-1.5">
               <Wrench className="size-3.5" /> Runs <code className="font-mono text-foreground">{review.actionTool}</code> on approval
             </span>
@@ -257,7 +257,7 @@ export function ReviewDetailBody({
             </dd>
             {policy.fourEyes && (
               <dd className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <ShieldCheck className="size-3.5" /> Two approvers · {review.approvals.length} of 2 so far
+                <ShieldCheck className="size-3.5" /> {review.approvalsNeeded ?? 2} approvers · {review.approvals.length} of {review.approvalsNeeded ?? 2} so far
               </dd>
             )}
           </div>
@@ -405,9 +405,10 @@ export function ReviewDecisionForm({
     setMissing(false);
     onDecide(decision, reason.trim(), decision !== 'approved' && !!review.testTarget && addTestCase);
   };
-  const needsSecond = review.policy.fourEyes && review.approvals.length === 0;
+  const needed = review.approvalsNeeded ?? (review.policy.fourEyes ? 2 : 1);
+  const needsSecond = needed > 1;
   const mine = (who?: string) => !!who && !!currentUser?.includes(who);
-  const alreadyApproved = review.approvals.some(mine);
+  const alreadyApproved = review.viewerApproved ?? review.approvals.some(mine);
   const ownPublish =
     (review.kind === 'publish_request' && mine(review.publish?.requestedBy)) || (review.kind === 'skill_publish' && mine(review.skillPublish?.requestedBy)) || (review.kind === 'template_submission' && mine(review.templateSubmission?.submittedBy)) ||
     // Maker-checker on agents covers whoever saved the version as well as whoever requested it.
@@ -477,7 +478,7 @@ export function ReviewDecisionForm({
           </p>
         )}
         {/* A workflow's own step has no agent or requester to return it to: it is approved or rejected. */}
-        {(isPublish || !review.runId) && !isHost && (
+        {(review.canReturn ?? ((isPublish || !review.runId) && !isHost)) && (
           <Button variant="ghost" size="sm" disabled={!!pending} onClick={() => submit('returned')}>
             {isTemplate ? 'Return to submitter' : isPublish ? 'Return to requester' : 'Return to agent'}
           </Button>
@@ -487,7 +488,7 @@ export function ReviewDecisionForm({
             {isHost ? 'Refuse' : 'Reject'}
           </LoadingButton>
           <LoadingButton size="sm" isLoading={pending === 'approved'} disabled={!!pending || alreadyApproved || ownPublish || blocked || !!approveBlocked} onClick={() => submit('approved')} data-testid="review-approve">
-            {approveBlocked ? `Approve · ${approveBlocked}` : blocked ? 'Blocked by evals' : ownPublish ? (isTemplate ? 'Another platform member approves' : 'Another publisher approves') : alreadyApproved ? 'Waiting on second approver' : needsSecond ? 'Approve · 1 of 2' : isTemplate ? 'Approve and publish template' : isPublish ? 'Approve and publish' : 'Approve'}
+            {approveBlocked ? `Approve · ${approveBlocked}` : blocked ? 'Blocked by evals' : ownPublish ? (isTemplate ? 'Another platform member approves' : 'Another publisher approves') : alreadyApproved ? 'Waiting on second approver' : needsSecond ? `Approve · ${review.approvals.length + 1} of ${needed}` : isTemplate ? 'Approve and publish template' : isPublish ? 'Approve and publish' : 'Approve'}
           </LoadingButton>
         </div>
       </div>

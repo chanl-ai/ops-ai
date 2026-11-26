@@ -169,6 +169,8 @@ await withUiStack(
 
       await step('5 reassigning Tom gives the task to someone else', async () => {
         await page.goto(`${consoleUrl}/reviews?review=${encodeURIComponent(ids.tom)}`, { waitUntil: 'domcontentloaded' });
+        // Reassign sits under More, offered because the server says Maya may reassign it.
+        await page.getByTestId('task-more').click();
         await page.getByTestId('reassign').click();
         const to = page.locator('[data-testid^=reassign-to-]').first();
         const who = (await to.innerText()).trim();
@@ -204,6 +206,33 @@ await withUiStack(
         await page.waitForTimeout(1500);
         const state = await sidebar();
         check('8 a sidebar opened on Human Tasks stays open on the next page', opened === 'expanded' && state === 'expanded', { opened, state, url: page.url() });
+      });
+      await step('10 the search runs on the server: a customer’s name lists only that task', async () => {
+        await page.goto(`${consoleUrl}/work/tasks?view=open`, { waitUntil: 'domcontentloaded' });
+        await page.getByTestId('queue-list').waitFor({ timeout: 60_000 });
+        const asked = page.waitForRequest((r) => r.url().includes('/reviews?') && r.url().includes('search=Jordan'), { timeout: 30_000 });
+        await page.getByTestId('tasks-search').fill('Jordan');
+        await asked;
+        await page.waitForFunction((id) => { const items = [...document.querySelectorAll('[data-testid^=queue-item-]')]; return items.length > 0 && items.every((e) => e.dataset.testid === `queue-item-${id}`); }, ids.tom, { timeout: 30_000 });
+        await page.getByTestId('tasks-search').fill('nobody by this name');
+        await page.getByTestId('queue-no-match').waitFor({ timeout: 30_000 });
+        await shot('search-none');
+        check('10 the search runs on the server: a customer’s name lists only that task', true);
+      });
+
+      await step('11 a viewer sees the task with no actions', async () => {
+        const viewerErrors = [];
+        const viewer = await consoleSignIn(browser, consoleUrl, 'r.menon@harborpine.example', PASSWORD, viewerErrors);
+        viewer.setDefaultTimeout(60_000);
+        await viewer.setViewportSize({ width: 1440, height: 900 });
+        await viewer.goto(`${consoleUrl}/work/tasks?review=${encodeURIComponent(ids.tom)}`, { waitUntil: 'domcontentloaded' });
+        await viewer.getByTestId('decision-panel').waitFor({ timeout: 120_000 });
+        await viewer.screenshot({ path: join(SHOTS, 'member-1440-light.png') });
+        await viewer.setViewportSize({ width: 390, height: 844 });
+        await viewer.waitForTimeout(700);
+        await viewer.screenshot({ path: join(SHOTS, 'member-390-light.png') });
+        const offered = await viewer.getByTestId('task-more').count();
+        check('11 a viewer sees the task with no actions', offered === 0 && viewerErrors.length === 0, { offered, viewerErrors: viewerErrors.slice(0, 3) });
       });
       check('9 no page errors and no sideways scroll at 375 px', errors.length === 0, errors.slice(0, 3));
     } finally {
