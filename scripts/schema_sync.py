@@ -99,7 +99,9 @@ async def reset(url: str, confirmed: bool = False) -> None:
     dsn, name = _dsn(url)
     if not name:
         raise SystemExit("schema_sync: refusing to reset a database with no name")
-    if not confirmed and not name.startswith(REFUSED):
+    if name.startswith(REFUSED):
+        raise SystemExit(f"schema_sync: refusing to reset {name!r}; its runner owns it")
+    if not confirmed:
         raise SystemExit(
             f"schema_sync: refusing to reset {name!r}: only make reset-db, after its yes prompt, resets it"
         )

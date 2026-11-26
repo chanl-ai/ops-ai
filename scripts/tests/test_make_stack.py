@@ -241,17 +241,20 @@ def test_a_shared_stack_keeps_the_infra_ports_and_moves_the_rest() -> None:
 
 def test_a_shared_stack_starts_and_stops_no_container() -> None:
     for goal in ("up", "down"):
-        out = dry(goal, "OPS_INFRA=shared", "OPS_PORT_OFFSET=400")
+        # SAMPLE=0: make -n still runs a line that holds $(MAKE), and the sample-install line ends in a touch.
+        out = dry(goal, "SAMPLE=0", "OPS_INFRA=shared", "OPS_PORT_OFFSET=400")
         assert out.returncode == 0, out.stderr
         assert "docker compose" not in out.stdout, (goal, out.stdout)
 
 
 def test_shared_needs_a_plain_numeric_offset_except_for_the_preview_targets() -> None:
-    for offset in ("0", "00", "04", "4/5", "4?x"):
+    for offset in ("0", "00", "04", "4/5", "4?x", "4 5"):
         out = dry("up", "OPS_INFRA=shared", f"OPS_PORT_OFFSET={offset}")
         assert out.returncode != 0 and "OPS_INFRA=shared" in out.stderr, (offset, out.stderr)
     assert dry("wt", "BRANCH=x", "OPS_INFRA=shared").returncode == 0
     assert dry("wt-stop", "BRANCH=x", "OPS_INFRA=shared").returncode == 0
+    mixed = dry("wt-list", "reset-db", "CONFIRM=yes", "OPS_INFRA=shared")
+    assert mixed.returncode != 0 and "OPS_INFRA=shared" in mixed.stderr, mixed.stdout
 
 
 def test_a_shared_stacks_shell_and_use_case_reset_reach_the_default_containers() -> None:
@@ -259,3 +262,9 @@ def test_a_shared_stacks_shell_and_use_case_reset_reach_the_default_containers()
         out = dry(goal, "OPS_INFRA=shared", "OPS_PORT_OFFSET=400")
         assert "-p ops-runtime " in out.stdout and "ops-runtime-400" not in out.stdout, (goal, out.stdout)
     assert "-d ops_runtime_400" in dry("db-shell", "OPS_INFRA=shared", "OPS_PORT_OFFSET=400").stdout
+
+
+def test_db_move_image_is_refused_on_a_shared_stack() -> None:
+    # Run for real: the guard is the recipe's first command, so nothing after it executes.
+    out = make(ROOT, "db-move-image", "OPS_INFRA=shared", "OPS_PORT_OFFSET=400")
+    assert out.returncode != 0 and "default stack owns the postgres container" in out.stdout, out.stdout + out.stderr

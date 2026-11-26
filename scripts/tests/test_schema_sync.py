@@ -118,6 +118,13 @@ def test_a_reset_of_a_stack_database_needs_the_flag_only_make_reset_db_passes() 
     assert "only make reset-db" in refused(url, "--reset")
 
 
+def test_a_runner_database_is_never_reset_flag_or_not() -> None:
+    for name in ("ops_test_r1_abc", "ops_usecase", "ops_testing"):
+        url = f"postgresql+asyncpg://ops:ops@localhost:1/{name}"
+        assert "its runner owns it" in refused(url, "--reset"), name
+        assert "its runner owns it" in refused(url, "--reset", "--confirmed-by-reset-db"), name
+
+
 def test_a_shared_stack_never_resets_or_creates_a_database_but_its_own() -> None:
     env = {"OPS_INFRA": "shared", "OPS_PORT_OFFSET": "400"}
     for name in ("ops_runtime", "ops_runtime_300"):

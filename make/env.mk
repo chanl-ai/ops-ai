@@ -98,9 +98,9 @@ OPS_PLATFORM_INTERNAL_PORT ?= $(call port,8711)
 # at the base values and the database is its own, ops_runtime_<offset>. The default stack (offset 0) owns the containers.
 # The preview targets (make wt) run at offset 0 and start each stack at its own offset with OPS_INFRA passed on.
 ifeq ($(OPS_INFRA),shared)
-  ifeq ($(filter wt wt-list wt-stop,$(MAKECMDGOALS)),)
-    # Only digits, no leading zero, not 0: the offset names a database and lands in URLs.
-    ifneq ($(strip $(subst 9,,$(subst 8,,$(subst 7,,$(subst 6,,$(subst 5,,$(subst 4,,$(subst 3,,$(subst 2,,$(subst 1,,$(subst 0,,$(OPS_PORT_OFFSET)))))))))))$(filter 0%,$(OPS_PORT_OFFSET))$(if $(OPS_PORT_OFFSET),,x)),)
+  ifneq ($(if $(MAKECMDGOALS),$(filter-out wt wt-list wt-stop,$(MAKECMDGOALS)),x),)
+    # Only digits, no leading zero, not 0, one word: the offset names a database and lands in URLs.
+    ifneq ($(strip $(subst 9,,$(subst 8,,$(subst 7,,$(subst 6,,$(subst 5,,$(subst 4,,$(subst 3,,$(subst 2,,$(subst 1,,$(subst 0,,$(OPS_PORT_OFFSET)))))))))))$(filter 0%,$(OPS_PORT_OFFSET))$(filter-out 1,$(words $(OPS_PORT_OFFSET)))),)
       $(error OPS_INFRA=shared needs OPS_PORT_OFFSET=N, digits only with no leading zero, got '$(OPS_PORT_OFFSET)')
     endif
     ifeq ($(OPS_PORT_OFFSET),0)

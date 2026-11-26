@@ -58,6 +58,7 @@ db-move-image: ## Move the stack's database onto the compose file's PostgreSQL i
 	@# old data folder is never reused (its text indexes would be wrong). The old volume (ops-runtime-pg) is left as it
 	@# was: rolling back is pointing the compose file's volume and image at it again. scripts/db-move-image.sh counts
 	@# every table's rows before and after, refuses a dump short of them, and stops the restore at its first error.
+	@[ "$(OPS_INFRA)" != shared ] || { echo "db-move-image: the default stack owns the postgres container; run it there"; exit 1; }
 	@if [ "$(CONFIRM)" != yes ]; then \
 		printf 'Dump every database on the stack PostgreSQL, recreate it on the compose image and restore? Type yes: '; read answer; \
 		[ "$$answer" = yes ] || { echo "db-move-image: nothing changed"; exit 1; }; \
