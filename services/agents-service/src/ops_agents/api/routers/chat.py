@@ -930,23 +930,24 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         yield _frame(StartEvent(user_message=user_message, message_id=assistant.id))
         # The turn runs for this person: a workflow tool is offered and started only if they may start it.
         # The turn's id keys its model calls and writes, so a worker that continues it pays and sends nothing twice.
+        cards: list[tuple[ChatStreamEvent, ApprovalWidget]] = []
         with acting_for(me), step_calls(run_id):
             async with aclosing(
                 execute(rt, thread_row, graph, graph_input=graph_input, run_id=run_id, kind="input")
             ) as run:
                 async for e in run:
                     for out in builder.apply_run_event(e):
-                        # The live card says whether this reader may decide it, as the thread read does: the
-                        # person who asked for a write never sees Approve on it.
                         w = getattr(out, "widget", None)
                         if isinstance(w, ApprovalWidget) and w.state in ("pending", "awaiting_second"):
-                            w.can_decide = await hitl_facade.can_decide(rt, me, thread_id)
+                            cards.append((out, w))
+                            continue
                         yield _frame(out)
-            # Roles decide approvals: a person who may decide this write themselves is not
-            # asked. It is decided as theirs through the path the Approve button takes, so the token, the record and
-            # the four-eyes rule are the same; a write that needs a step-up still asks them. The thread read after
-            # the reply shows the decided card and the resumed answer.
-            await _decide_own_write(rt, me, thread_id, assistant)
+        # A waiting card is sent once the run has ended and its interrupt is checkpointed, so whether this reader may
+        # decide it reads the wait itself, as the thread read does. A person who may decide their own write gets
+        # Approve on it and the write waits for that click: an approval is always a decision someone made.
+        for out, card in cards:
+            card.can_decide = await hitl_facade.can_decide(rt, me, thread_id)
+            yield _frame(out)
         if notes:
             # What could not be read, told in the reply, and kept in the log so a reload says the same.
             note = "".join(f"\n\n_{n}_" for n in notes)
@@ -991,21 +992,6 @@ async def _renew(queue: WorkQueue, turn: Work) -> None:
                 return
         except Exception as e:  # A blip is tried again at the next beat.
             log.warning("chat_turn_renew_failed", turn=turn.id, error=type(e).__name__)
-
-
-async def _decide_own_write(rt: Runtime, me: Principal, thread_id: str, reply: ChatMessage) -> None:
-    """Approves the turn's waiting write as `me` when they may decide it and it asks for no step-up."""
-    # A write whose app asks before changes is the person's to answer on its card, whatever their role.
-    waiting = [
-        w for w in reply.widgets or [] if isinstance(w, ApprovalWidget) and w.state == "pending" and not w.ask_first
-    ]
-    if not waiting or any(w.step_up for w in waiting) or not await hitl_facade.can_decide(rt, me, thread_id):
-        return
-    try:
-        await hitl_facade.decide(rt, me, thread_id, decision="approved", reason=None, step_up_token=None)
-    except ApiError:
-        # A step-up the workspace asks for, or a run still holding the thread: the card stays for them to decide.
-        return
 
 
 @router.put("/threads/{thread_id}/messages/{message_id}/feedback")
