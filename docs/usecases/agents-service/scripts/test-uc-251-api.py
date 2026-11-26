@@ -16,7 +16,19 @@ from typing import Any
 os.environ["OPS_DEV_POLICIES"] = '{"requesterMayDecide": false}'
 
 import httpx
-from usecase_harness import AGENTS_PORT, TEAM, TOOLS_PORT, agents, check, data, engine_worker, finish, tools, until
+from usecase_harness import (
+    AGENTS_PORT,
+    TEAM,
+    TOOLS_PORT,
+    agents,
+    check,
+    data,
+    engine_worker,
+    finish,
+    platform,
+    tools,
+    until,
+)
 
 DEFINITION = """
 schemaVersion: 2
@@ -85,9 +97,11 @@ def case_of(api: httpx.Client, run_id: str) -> dict[str, Any]:
     return data(api.get(f"/v1/cases/{case_id}", headers=TEAM)) if case_id else {}
 
 
+# The gateway decides each write by the team's approval rules, which platform-service holds; without it a write is
+# refused (503 approval_rules_unavailable). One platform-service serves both stacks below: tools() points at it.
+rules = ExitStack()
+rules.enter_context(platform())
 with ExitStack() as stack:
-    # The gateway decides each write by the team's approval rules, which platform-service holds; without it a write is
-    # refused (503 approval_rules_unavailable).
     stack.enter_context(tools({"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}, approval_rules=True))
     api = stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}"))
     created = api.post("/v1/workflows/definitions", json={"yaml": DEFINITION}, headers=TEAM)
@@ -209,4 +223,5 @@ with ExitStack() as stack:
         {"decision": mine.status_code, "outcome": ended.get("outcome"), "waive": [x.get("output") for x in sent]},
     )
 
+rules.close()
 finish()
