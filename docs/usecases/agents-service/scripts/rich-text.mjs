@@ -1,8 +1,8 @@
 // Helpers for the shared rich text editor on the skill page: its text box, one line of the stored text, and the
 // Markdown view, which sets a whole text in one step.
 
-/** The editor's text box (the contenteditable element). */
-export const textBox = (page) => page.getByTestId('rich-text');
+/** The editor's text box (the contenteditable element); a read-only copy of the text beside it is not it. */
+export const textBox = (page) => page.locator('[data-testid="rich-text"][contenteditable="true"]');
 
 /** The block that holds a line of the text. A paragraph keeps its lines, so a block may hold several. */
 export const lineOf = (page, text) => textBox(page).locator('p, li, h1, h2, h3', { hasText: text }).first();
@@ -12,7 +12,7 @@ export async function caretAtLineEnd(page, text) {
   await lineOf(page, text).waitFor();
   await textBox(page).focus();
   await page.evaluate((needle) => {
-    const box = document.querySelector('[data-testid="rich-text"]');
+    const box = document.querySelector('[data-testid="rich-text"][contenteditable="true"]');
     const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
       const at = n.textContent.indexOf(needle);
