@@ -315,6 +315,17 @@ def require_runs_start(me: Principal, *, team_id: str | None, what: str) -> None
     can(caller_of(me), "workflows", "run", team=team_id or None, what=what)
 
 
+def require_agent_turn(me: Principal, *, team_id: str | None, agent_team_id: str | None, owner: str, what: str) -> None:
+    """A turn in a thread with an agent: workflows.run in the thread's team, as any run. A person without it (a viewer,
+    a chat user) takes turns in their own thread only: chat.run in the agent's team and chat.view of the thread's
+    owner, as chat checks a message."""
+    if me.is_key or ACCESS.may(caller_of(me), "workflows", "run", team=team_id or None, what=what):
+        require_runs_start(me, team_id=team_id, what=what)
+        return
+    require_chat_use(me, team_id=agent_team_id)
+    can(caller_of(me), "chat", "view", team=team_id or None, owner=owner, what=what)
+
+
 def require_team_account_use(me: Principal, *, team_id: str, what: str) -> None:
     """connections.run: a person who may use the team's own account of an app, as Run as the team account does in place
     of their own; admins hold it by default."""

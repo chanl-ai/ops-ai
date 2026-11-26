@@ -2,6 +2,7 @@ import type { OptionsPage, OptionsParams } from '@/lib/types/query';
 import type { BulkResult } from '@/lib/types/domain';
 import type { ListParams, ListResult } from '@/lib/types/query';
 import type {
+  ApiScope,
   ApiKey,
   ApiKeyInput,
   DeliveryFilters,
@@ -54,6 +55,8 @@ export interface SettingsApi {
     /** The full key is returned once and never again. */
     create(input: ApiKeyInput): Promise<{ key: string; apiKey: ApiKey }>;
     revoke(id: string): Promise<void>;
+    /** The scopes a key is created with, from the list the service's key check enforces. */
+    scopes(): Promise<ApiScope[]>;
   };
   usage: {
     get(days: UsageDays): Promise<UsageReport>;

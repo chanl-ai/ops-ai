@@ -24594,6 +24594,12 @@
                 "type": "object"
               },
               {
+                "items": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "array"
+              },
+              {
                 "type": "null"
               }
             ],
@@ -40321,7 +40327,7 @@
     },
     "/v1/batches/{batch_id}": {
       "get": {
-        "description": "The batch's counts and every row, failed first: what its page shows.",
+        "description": "The batch's counts and every row, failed first: what its page shows. No request transaction (`_shown_rows`).",
         "operationId": "batches_batch_page",
         "parameters": [
           {
@@ -40510,7 +40516,7 @@
     },
     "/v1/batches/{batch_id}/results.csv": {
       "get": {
-        "description": "Every row as the page shows it, one line each: row, input, status, outcome, run, error and output. Input and\noutput are JSON, so a value holding a comma or a quote reads back as it was.",
+        "description": "Every row as the page shows it, masked as the page masks it, one line each: row, input, status, outcome, run,\nerror and output. Input and output are JSON, so a value holding a comma or a quote reads back as it was.",
         "operationId": "batches_batch_results",
         "parameters": [
           {
@@ -61940,7 +61946,7 @@
     },
     "/v1/tasks/{task_id}": {
       "get": {
-        "description": "The task's status and, once decided, the action, reason, values and decider.",
+        "description": "The task's status and, once decided, the action, reason, values and decider; the reason and values masked for a\nperson who may not decide it (`hitl_facade.sees_real_values`), as the task's own page shows them.",
         "operationId": "reviews_get_task",
         "parameters": [
           {

@@ -14,6 +14,9 @@
     {"when": "UC263-ODD", "tool": "final_result", "arguments": {"question": "Open it?", "summary": "A short note.", "doubtful": [], "suggestion": {"action": "escalate", "reason": "Not sure."}}},
     {"when": "UC265-PII", "text": "Ann Lee, SSN ending 6789, email ann.lee@example.com, phone (902) 555-0147, account 4401235567."},
     {"when": "UC265-STEP", "tool": "final_result", "arguments": {"summary": "Priya Natarajan, SSN ending 6789, phone 902-555-0147."}},
+    {"when": "UC265-RECORD", "tool": "present", "arguments": {"shape": "record", "data": {"name": "Ann Lee", "ssnLast4": "4471", "accountId": "BUS-7781", "accountNumber": 4401235567}}},
+    {"after": "present", "when": "UC265-RECORD", "text": "That is Ann Lee's record."},
+    {"when": "UC265-IDS", "tool": "final_result", "arguments": {"name": "Ann Lee", "ssnLast4": "4471", "accountIds": ["CHQ-1003", "BUS-7781"], "accountNumber": 4401235567}},
     {"when": "Outgoing open_case[\\s\\S]*Refund promised", "tool": "final_result", "arguments": {"ok": false, "reason": "It promises a refund, which the policy forbids."}},
     {"when": "Outgoing open_case[\\s\\S]*Card stopped", "tool": "final_result", "arguments": {"ok": true, "reason": ""}}
   ]

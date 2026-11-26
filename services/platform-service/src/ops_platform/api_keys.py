@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TypedDict
 
+from ops_identity import KEY_SCOPES
 from ops_service_kit.errors import NotFound, ValidationFailed
 from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
@@ -147,7 +148,7 @@ class ApiKeys:
             key_id=key_id,
             name=name,
             secret_hash=hashlib.sha256(secret.encode()).hexdigest(),
-            scopes=sorted(set(scopes), key=["read", "write"].index),
+            scopes=sorted(set(scopes), key=list[str](KEY_SCOPES).index),
             expires_at=_iso(now + timedelta(days=expires_in_days)) if expires_in_days else None,
             at=_iso(now),
             target=target,

@@ -69,6 +69,15 @@ export const platformOperations = {
     "query": [],
     "stream": false
   },
+  "api_keys_settings_lookups": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/settings/lookups",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "audit_read_audit": {
     "body": null,
     "headers": [],

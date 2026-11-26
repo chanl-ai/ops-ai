@@ -23,6 +23,7 @@ READS = (
     "/v1/people-names?emails=a@example.com",
     "/v1/api-keys",
     "/v1/api-key-summaries",
+    "/v1/settings/lookups",
     "/v1/audit",
     "/v1/oauth/grants",
     "/v1/settings/teams",

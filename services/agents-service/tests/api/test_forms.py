@@ -29,6 +29,8 @@ INPUTS = {
     },
 }
 VALUES = {"account": "40 1188 2271", "reason": "Reduced hours since September"}
+# A run's read masks a field named as personal data for every reader while aiStepsMaskPersonalData is on (E34).
+SEEN = {**VALUES, "account": "[account]"}
 
 
 def flow(wid: str, inputs: dict[str, Any] | None) -> dict[str, Any]:
@@ -88,7 +90,7 @@ async def test_the_public_page_shows_only_the_form_and_a_submission_runs_in_the_
     assert sent.status_code == 202, sent.text
     [run] = await runs_of(c)
     got = (await c.get(f"/v1/runs/{run['runId'] if 'runId' in run else run['id']}", headers=BUILDER)).json()["data"]
-    assert got["input"] == VALUES and got["mode"] == "live", got
+    assert got["input"] == SEEN and got["mode"] == "live", got
     assert (got["startedBy"]["kind"], got["startedBy"]["name"]) == ("trigger", "Ask for a payment plan"), got
 
 
@@ -185,4 +187,4 @@ async def test_the_api_refuses_a_form_with_a_required_field_empty_and_fills_its_
     sent = await send(c, form)
     [run] = await runs_of(c)
     got = (await c.get(f"/v1/runs/{run['id']}", headers=BUILDER)).json()["data"]
-    assert sent.status_code == 202 and got["input"] == VALUES | {"channel": "web"}, got
+    assert sent.status_code == 202 and got["input"] == SEEN | {"channel": "web"}, got

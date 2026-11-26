@@ -8,6 +8,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints, model_validator
 
 from ops_access.catalogue import INVITE_ROLES
+from ops_identity import KeyScope
 from ops_service_kit.flags import FlagName
 from ops_service_kit.http import In, ListResult, Out
 from ops_service_kit.names import Name, Name80
@@ -449,10 +450,21 @@ class KeyTargetIn(In):
 
 class ApiKeyIn(In):
     name: Name
-    scopes: list[Literal["read", "write"]] = Field(min_length=1, max_length=2)
+    scopes: list[KeyScope] = Field(min_length=1, max_length=2)
     expires_in_days: int | None = Field(default=None, ge=1, le=730)
     # The one agent or workflow the key may start; left out, any live workflow of the team.
     target: KeyTargetIn | None = None
+
+
+class ScopeOption(Out):
+    value: KeyScope
+    label: str
+
+
+class SettingsLookups(Out):
+    """The fixed lists a settings screen offers: an API key's scopes, from the list the key check enforces."""
+
+    api_scopes: list[ScopeOption]
 
 
 class ApiKeyCreated(Out):

@@ -46,7 +46,9 @@ from ..auth import (
     Principal,
     graph_target,
     principal,
+    require_agent_turn,
     require_builder,
+    require_chat_use,
     require_key_reaches,
     require_runs_start,
     require_step_up,
@@ -166,8 +168,17 @@ def _thread_view(row: Json) -> Json:
 async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONResponse:
     """A thread and its budget, written in the request transaction, so a failure between the two leaves no thread
     without its budget. Nothing here calls another service: the key admission port answers in this process."""
-    # A thread is made to run: the run-start rule, in the team it is made in.
-    require_runs_start(me, team_id=None, what=f"graph {body.graph}")
+    agent_id = body.graph.removeprefix("agent:") if body.graph.startswith("agent:") else None
+    owners = await registry(rt).tenant_owners({agent_id}) if agent_id is not None else {}
+    if agent_id is not None and agent_id not in owners:
+        # A deleted agent and another tenant's read the same: the catalogue holds every tenant's.
+        raise ValidationFailed(f"Unknown graph {body.graph}: no such agent.")
+    if agent_id is not None and not me.is_key:
+        # A person's thread with an agent is a chat, open to every role of the agent's team (chat.run).
+        require_chat_use(me, team_id=owners[agent_id] or None)
+    else:
+        # A workflow thread, or a key's, is made to run: the run-start rule, in the team it is made in.
+        require_runs_start(me, team_id=None, what=f"graph {body.graph}")
     key_pin = require_key_reaches(me, *graph_target(body.graph))
     if key_pin is not None and body.version not in (None, key_pin):
         raise Forbidden(f"This API key starts version {key_pin} of {body.graph} only.", code="key_target")
@@ -179,15 +190,10 @@ async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONRespons
     thread_id = new_id("gth")
     version: int | None = None
     digest: str | None = None
-    if body.graph.startswith("agent:") and body.graph.removeprefix("agent:") not in await registry(rt).tenant_owners(
-        {body.graph.removeprefix("agent:")}
-    ):
-        # A deleted agent and another tenant's read the same: the catalogue holds every tenant's.
-        raise ValidationFailed(f"Unknown graph {body.graph}: no such agent.")
     if body.graph.startswith("agent:") and rt.catalog.agent(body.graph.removeprefix("agent:")) is None:
         # Its graph stays compiled while turns under way drain; no new thread starts on it.
         await refuse_new_turns(rt, body.graph.removeprefix("agent:"))
-        raise ValidationFailed(f"Unknown graph {body.graph}: that agent is not live.")
+        raise ValidationFailed(f"Unknown graph {body.graph}: that agent is not live.", code="agent_not_published")
     if key_pin is not None and body.graph in rt.graphs:
         raise Forbidden(f"{body.graph} has no versions, so a key pinned to one cannot start it.", code="key_target")
     if body.graph not in rt.graphs:
@@ -301,6 +307,11 @@ async def thread_state(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     if pending:
         async with isolation.request_transaction():
             interrupt = await hitl_facade.interrupt_view(rt, row, pending[0])
+    # What the paused step holds is a task's data: real only to who may decide it, as its task page shows it.
+    team, asker = row.get("team_id"), hitl_facade.asker_of(pending[0].get("payload")) if pending else None
+    # Masked once encoded: a checkpoint can hold values that are not JSON, which the walk passes through as they are.
+    shown_values = hitl_facade.as_seen_in(me, team, jsonable_encoder(await _worded_failure(rt, values)), asker=asker)
+    interrupt = hitl_facade.as_seen_in(me, team, jsonable_encoder(interrupt), asker=asker)
     return ok(
         {
             "threadId": thread_id,
@@ -308,7 +319,7 @@ async def thread_state(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
             "version": row["version"],
             "digest": row["digest"],
             "status": row["status"],
-            "values": jsonable_encoder(await _worded_failure(rt, values)),
+            "values": shown_values,
             "next": list(snap.next),
             "interrupt": interrupt,
             "sla": sla,
@@ -338,10 +349,12 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
         if existing.thread_id != thread_id or existing.status == "running":
             raise Conflict("That run id is already in use.", code="run_active")
         replay = existing.events
+        team = str(row["team_id"] or "") or None
 
         async def replayed() -> AsyncIterator[dict[str, str]]:
+            # A waiting step's payload in a replayed frame is a task's data, as the run's events show it.
             for e in replay:
-                yield _frame(e)
+                yield _frame(hitl_facade.event_as_seen_in(me, team, e))
 
         return EventSourceResponse(replayed(), sep="\n", ping=15)
 
@@ -402,7 +415,17 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
     else:
         if waiting:
             raise Conflict("This thread is waiting for a decision; resume it instead.", code="run_waiting")
-        require_runs_start(me, team_id=str(row["team_id"] or "") or None, what=f"thread {thread_id}")
+        team = str(row["team_id"] or "") or None
+        if row["graph"].startswith("agent:"):
+            require_agent_turn(
+                me,
+                team_id=team,
+                agent_team_id=await agent_team(rt, row["graph"].removeprefix("agent:")),
+                owner=str(an_object(row["meta"] or {}, "thread meta").get("ownerEmail") or ""),
+                what=f"thread {thread_id}",
+            )
+        else:
+            require_runs_start(me, team_id=team, what=f"thread {thread_id}")
         # A paused agent takes no new turn on its own graph or the shared wrapper; a turn already under way finishes.
         agent_id = None
         if row["graph"].startswith("agent:"):

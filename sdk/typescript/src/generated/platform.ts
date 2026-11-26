@@ -1053,6 +1053,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/settings/lookups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Settings Lookups
+         * @description The scopes an API key is created with, each with what it lets the key call: the list the key check
+         *     enforces (`ops_identity.KEY_SCOPES`), so the keys screen never offers one the service refuses.
+         */
+        get: operations["api_keys_settings_lookups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/settings/members": {
         parameters: {
             query?: never;
@@ -2449,6 +2470,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[SettingsLookups] */
+        Envelope_SettingsLookups_: {
+            data: components["schemas"]["SettingsLookups"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[SignInSecretOut] */
         Envelope_SignInSecretOut_: {
             data: components["schemas"]["SignInSecretOut"];
@@ -3654,6 +3684,16 @@ export interface components {
             /** Tiles */
             tiles: boolean;
         };
+        /** ScopeOption */
+        ScopeOption: {
+            /** Label */
+            label: string;
+            /**
+             * Value
+             * @enum {string}
+             */
+            value: "read" | "write";
+        };
         /** SessionOut */
         SessionOut: {
             /** Expiresat */
@@ -3663,6 +3703,14 @@ export interface components {
             refreshToken: string;
             /** Token */
             token: string;
+        };
+        /**
+         * SettingsLookups
+         * @description The fixed lists a settings screen offers: an API key's scopes, from the list the key check enforces.
+         */
+        SettingsLookups: {
+            /** Apiscopes */
+            apiScopes: components["schemas"]["ScopeOption"][];
         };
         /** SignIn */
         SignIn: {
@@ -9719,6 +9767,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_RoleDetail_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    api_keys_settings_lookups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SettingsLookups_"];
                 };
             };
             /** @description Invalid request */

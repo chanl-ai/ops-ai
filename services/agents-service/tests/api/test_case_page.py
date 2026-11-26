@@ -4,6 +4,7 @@ another team's case or run shows on the page; the page reads one query per run."
 
 from __future__ import annotations
 
+import json
 from typing import Any
 from urllib.parse import quote
 
@@ -494,3 +495,30 @@ async def test_an_empty_or_unreadable_deadline_falls_back_to_the_resolution_cloc
         assert (
             page["timer"]["label"] == "Resolution" and page["timer"]["dueAt"] == page["sla"]["resolution"]["dueAt"]
         ), page["timer"]
+
+
+async def _waiting_with(s: Stack, case_id: str, workflow: str, payload: Json) -> str:
+    """A run of the case waiting on a review step whose pause holds `payload`."""
+    _, rt = s
+    run = await _linked_run(s, case_id, workflow)
+    waiting = {
+        "node": "review",
+        "iteration": 1,
+        "interruptId": "i1",
+        "payload": {"node": "review", "iteration": 1, **payload},
+    }
+    with tenant_scope(TENANT):
+        await RunStore(EngineTransactions(rt.db)).update(run, status="waiting", waiting=waiting)
+    return run
+
+
+async def test_a_viewer_reads_the_case_pages_tasks_masked(stack: Stack) -> None:  # noqa: F811
+    # The case page named a waiting task by its title, the customer's SSN in it, as its next action to a Viewer, who
+    # may not decide it. A decider's view of it follows the team's masking setting, as the rest of the page does.
+    c, _ = stack
+    case_id = await typed_case(stack)
+    await _waiting_with(stack, case_id, "pii_case", {"title": "Check SSN 123-45-6789 on file"})
+    viewer = data(await c.get(f"/v1/cases/{case_id}", headers=VIEWER))
+    [task] = viewer["waiting"]
+    assert "123-45-6789" not in json.dumps(viewer) and "[SSN]" in viewer["nextAction"]["label"], viewer["nextAction"]
+    assert viewer["nextAction"]["href"] == task["href"] == f"/reviews/{quote(task['taskId'], safe='')}", task

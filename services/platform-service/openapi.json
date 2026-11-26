@@ -1858,6 +1858,25 @@
         "title": "Envelope[SessionOut]",
         "type": "object"
       },
+      "Envelope_SettingsLookups_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SettingsLookups"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[SettingsLookups]",
+        "type": "object"
+      },
       "Envelope_SignInSecretOut_": {
         "additionalProperties": false,
         "properties": {
@@ -5391,6 +5410,29 @@
         "title": "SamlSettingsOut",
         "type": "object"
       },
+      "ScopeOption": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "enum": [
+              "read",
+              "write"
+            ],
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "ScopeOption",
+        "type": "object"
+      },
       "SessionOut": {
         "additionalProperties": false,
         "properties": {
@@ -5417,6 +5459,24 @@
           "principal"
         ],
         "title": "SessionOut",
+        "type": "object"
+      },
+      "SettingsLookups": {
+        "additionalProperties": false,
+        "description": "The fixed lists a settings screen offers: an API key's scopes, from the list the key check enforces.",
+        "properties": {
+          "apiScopes": {
+            "items": {
+              "$ref": "#/components/schemas/ScopeOption"
+            },
+            "title": "Apiscopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "apiScopes"
+        ],
+        "title": "SettingsLookups",
         "type": "object"
       },
       "SignIn": {
@@ -15392,6 +15452,153 @@
         "summary": "Reset Role",
         "tags": [
           "roles"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/settings/lookups": {
+      "get": {
+        "description": "The scopes an API key is created with, each with what it lets the key call: the list the key check\nenforces (`ops_identity.KEY_SCOPES`), so the keys screen never offers one the service refuses.",
+        "operationId": "api_keys_settings_lookups",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SettingsLookups_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Settings Lookups",
+        "tags": [
+          "api-keys"
         ],
         "x-ops-public": "sdk"
       }

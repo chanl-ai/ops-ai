@@ -23,9 +23,13 @@ from ops_agents.api.ops_tools import (
     ops_assistant_id,
 )
 from ops_agents.store.cases import CaseStore
+from ops_agents.store.engine import EngineTransactions
+from ops_agents.store.tenancy import tenant_scope
 from ops_contracts.chat import ChatMessage, ToolCall
+from ops_engine.store import RunStore
 from ops_store.isolation import scope
 from tests.api.test_action_roles import ADMIN, VIEWER
+from tests.api.test_case_routes import started_run
 from tests.api.test_team_default_agent import (  # noqa: F401
     URL,  # pyright: ignore[reportUnusedImport]
     Stack,  # pyright: ignore[reportUnusedImport]
@@ -34,7 +38,7 @@ from tests.api.test_team_default_agent import (  # noqa: F401
     start,  # pyright: ignore[reportUnusedImport]
     viewer,  # pyright: ignore[reportUnusedImport]
 )
-from tests.engine.test_lifecycle_rights import TENANT
+from tests.engine.test_lifecycle_rights import BUILDER, TENANT
 
 AID = ops_assistant_id(TENANT, "team_ops")
 
@@ -295,3 +299,24 @@ async def test_a_start_card_is_drawn_only_where_the_person_may_run_the_workflows
     assert "view" in await drawn("team_ops", "wf_ops_start"), "a builder of the owning team gets the form"
     assert (await drawn("team_ops", "wf_fraud_start")).get("missing"), "another team's workflow is never drawn"
     assert (await drawn("team_fraud", "wf_fraud_start")).get("missing"), "a viewer of the owning team may not run it"
+
+
+async def test_a_viewer_asking_the_agent_about_a_task_reads_its_personal_data_masked(stack: Stack) -> None:  # noqa: F811 - the shared fixture
+    # The chat tools named a waiting task by its title, the customer's SSN in it, to a Viewer who may not decide it,
+    # while the task's own page masked it.
+    c, rt = stack
+    run = await started_run(c, BUILDER, "pii_task")
+    waiting = {"node": "review", "iteration": 1, "interruptId": "i1",
+               "payload": {"node": "review", "iteration": 1, "title": "Check SSN 123-45-6789 on file"}}  # fmt: skip
+    with tenant_scope(TENANT):
+        await RunStore(EngineTransactions(rt.db)).update(run, status="waiting", waiting=waiting)
+    ops = OpsReads(rt)
+    with scope(TENANT, "team_ops"), acting_for(viewer()):
+        listed = await ops.run("my_human_tasks", {"which": "team"})
+        one = await ops.run("get_human_task", {"taskId": run})
+    assert listed.ok and one.ok, (listed.output, one.output)
+    for shown in (listed.output["summary"], one.output["summary"]):
+        assert "123-45-6789" not in shown and "[SSN]" in shown, shown
+    with scope(TENANT, "team_ops"), acting_for(builder()):
+        real = await ops.run("get_human_task", {"taskId": run})
+    assert "123-45-6789" in real.output["summary"], "whoever may decide it reads what they approve"
