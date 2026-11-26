@@ -1,0 +1,32 @@
+{
+  "id": "openai-compatible",
+  "label": "OpenAI-compatible URL",
+  "icon": "link",
+  "adapter": "openai-compatible",
+  "connection": {
+    "type": "object",
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "title": "Base URL",
+        "description": "Any endpoint that speaks OpenAI's chat completions API (vLLM, Ollama, LiteLLM, a gateway), ending in /v1.",
+        "format": "uri",
+        "x-column": "base_url"
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API key",
+        "description": "Optional for an endpoint that takes no key.",
+        "x-secret": true
+      }
+    },
+    "required": [
+      "baseUrl"
+    ]
+  },
+  "modelList": {
+    "path": "/models",
+    "auth": "bearer"
+  },
+  "test": "modelList"
+}

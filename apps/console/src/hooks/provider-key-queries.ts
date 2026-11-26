@@ -6,7 +6,7 @@ import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
 import type { OptionSource } from '@/hooks/options-queries';
 import type { ListParams } from '@/lib/types/query';
-import type { ChatModelChoice, KeyWhere } from '@/lib/types/provider-keys';
+import type { KeyWhere } from '@/lib/types/provider-keys';
 import { useTeamQuery } from './team-query';
 
 const KEY = ['provider-keys'] as const;
@@ -38,9 +38,3 @@ export const useCheckProviderKey = () => useMutation({ mutationFn: ({ name, wher
 /** The models a saved key reaches, once it has passed its check (`where` null until then). */
 export const useProviderKeyModels = (name: string, where: KeyWhere | null) =>
   useTeamQuery({ queryKey: [...KEY, name, 'models', where], queryFn: () => api.providerKeys.models(name, where!), enabled: !!where, retry: false });
-
-/** Points chat at a model the saved key lists; aliases and keys are read again after it. */
-export function useSetChatModel() {
-  const qc = useQueryClient();
-  return useMutation({ mutationFn: (choice: ChatModelChoice) => api.providerKeys.setChatModel(choice), onSuccess: () => qc.invalidateQueries({ queryKey: KEY }) });
-}

@@ -39,9 +39,10 @@ receive images and files. Moving an alias to another model is a new version; no 
 | Embeddings through the same keys, budgets and clearance as chat (`POST /v1/models/embeddings`) | Built |
 | One embedding model per environment (`OPS_EMBEDDING_ALIAS`, `OPS_EMBEDDING_WIDTH`, at most 1,998 wide) | Built |
 | Binding an alias at install with the connect-model command | Built |
-| Anthropic's own API as a provider | Planned: a connection can be registered, but the gateway does not serve it yet |
+| OpenAI, Anthropic, Google Gemini, Azure OpenAI and Amazon Bedrock as provider types, each with its own fields | Built: the console's Connect a provider lists them from the registry |
 | Failover between providers | Planned |
-| A console page for aliases and keys | Planned: today the operator manages them with the connect-model command |
+| Live calls to Amazon Bedrock, Google Gemini and Anthropic | **Unverified**: these adapters were tested against fakes only and never called with a real key; try one with a real key before relying on it |
+| A console page for connections, aliases and keys | Built: Settings › Workspace › Models (Connections, Aliases; only the workspace owner changes aliases, since they apply to every team); an agent's Model dialog offers only the settings its alias's model takes, with defaults and Reset |
 
 ## Keys, budgets and spend caps
 

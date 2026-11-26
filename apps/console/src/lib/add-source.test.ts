@@ -14,8 +14,8 @@ const defaults = (strategies: string[]) =>
     schedule: { kind: 'daily', time: '02:00', tz: 'UTC' },
   }) as unknown as SourceKindOption['defaults'];
 
-const website: SourceKindOption = { type: 'tool', kind: 'web', group: 'apps', title: 'Website', plugin: 'web', source: 'site', site: true, previews: true, canCreate: true, connected: true, needsConnection: false, pickers: false, inputs: { start: { type: 'string' } }, defaults: defaults(['structure', 'context_headers', 'faq']) };
-const files: SourceKindOption = { type: 'file', kind: 'file', group: 'built_in', title: 'Files', canCreate: true, connected: true, needsConnection: false, pickers: false, previews: false, site: false, defaults: defaults(['structure', 'context_headers']) };
+const website: SourceKindOption = { type: 'tool', kind: 'web', group: 'apps', title: 'Website', plugin: 'web', source: 'site', site: true, files: false, previews: true, canCreate: true, connected: true, needsConnection: false, pickers: false, inputs: { start: { type: 'string' } }, defaults: defaults(['structure', 'context_headers', 'faq']) };
+const files: SourceKindOption = { type: 'file', kind: 'file', group: 'built_in', title: 'Files', canCreate: true, connected: true, needsConnection: false, pickers: false, previews: false, site: false, files: false, defaults: defaults(['structure', 'context_headers']) };
 
 test('switching the AI steps keeps the kind’s other steps and never repeats one', () => {
   assert.deepEqual(strategiesWith(['structure', 'faq', 'context_headers'], { questions: false, drafts: true }), ['structure', 'context_headers', 'faq_pairs']);

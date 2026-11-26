@@ -141,6 +141,10 @@ class AgentSpec(TypedDict, total=False):
     brief: Json
     promptMode: Literal["brief", "full"]
     patterns: Json
+    # The never rules' heading when the workspace's list renamed it at the save; absent means the default.
+    neverHeading: str
+    # The model settings by knob name, checked against the alias's knobs when saved; absent is none.
+    modelSettings: dict[str, JsonValue]
 
 
 # A new agent's caps are empty (no cap): a real agent can need many calls. Seeds set low ones.
@@ -266,9 +270,17 @@ def definition_of(agent_id: str, version: int, spec: Json) -> AgentDefinition:
         memory_kinds=tuple(memory_of(spec)["kinds"]),
         skill_menu=s.get("skillMenu") or "team",
         never=never,
+        never_heading=agent_brief.never_heading_of(spec),
         thinking=None if patterns.thinking == "default" else patterns.thinking,
         parallel_reads=patterns.parallel_reads,
+        model_settings=model_settings_of(spec),
     )
+
+
+def model_settings_of(spec: Json) -> dict[str, float | int | str]:
+    """The version's saved model settings; a value that is not a number or a name is not sent."""
+    held = cast(AgentSpec, spec).get("modelSettings") or {}
+    return {str(k): v for k, v in held.items() if isinstance(v, int | float | str) and not isinstance(v, bool)}
 
 
 def agent_review_body(agent_id: str, spec: Json, row: AgentRow, v: AgentVersionRow, *, note: str, by: str) -> Json:
@@ -598,6 +610,7 @@ class AgentView(TypedDict):
     brief: Json | None
     promptMode: str | None
     patterns: Json
+    modelSettings: dict[str, float | int | str]
     uses: agent_brief.Uses
     controls: Json
     usedIn: list[WorkflowUse]
@@ -668,6 +681,7 @@ def agent_view(row: Mapping[str, JsonValue], spec: Json, tasks: int) -> AgentVie
             "brief": s.get("brief"),
             "promptMode": agent_brief.mode_of(spec),
             "patterns": agent_brief.patterns_of(spec).model_dump(by_alias=True),
+            "modelSettings": model_settings_of(spec),
             "uses": agent_brief.uses_of(spec),
             "controls": CONTROLS,
             "usedIn": [],

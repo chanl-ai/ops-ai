@@ -408,6 +408,8 @@ erDiagram
 | `trigger_bindings` | What starts which agent job or workflow, with a daily cap | planned |
 | `trigger_events` | Each arrival, with a dedupe key so a repeat starts nothing new | planned |
 | `poll_cursors` | Where a polling trigger last read up to | planned |
+| `agents_outbox` | The audit entry of each schedule save and clear, written with the change and relayed to platform-service's audit log | built |
+| `workflow_schedules` | One saved schedule per workflow and trigger step, outside the workflow's versions: the rule, who changed it (id and name as saved), and the schedule clock's slot state (`rule_digest`, `last_slot_at`, `last_outcome`, `last_run_id`, `seen_at`). Row security by tenant; the team is a plain column | built |
 
 ## Tools and the data gateway
 
@@ -675,6 +677,7 @@ erDiagram
 | `file_blobs` | One row per digest in a team, so two uploads of the same bytes share one stored file, even when they finish together | built |
 | `file_versions, file_references, file_legal_holds` | Each version is its own stored object; a reference blocks deletion; a legal hold keeps its history after release | built |
 | `file_idempotency` | The key of an upload request, so a retried upload returns the first file | built |
+| `file_watches, file_watch_events` | A team's watched folders (the picked places, the place the last check stopped, a check lease) and what each check found, numbered by the lease holder. A failed event's `code` is `too_large` or `fetch_failed`, so a reader tells a file no retry brings in from one the next check may fetch; a watch's `refused_sizes` holds the size and version tag each file was refused at, so a file too large is one failed event per version, not one per full listing (files 20261125_0900) | built |
 | `storage_settings` | One versioned document per organisation: where each kind of file is stored, its limits and retention class, and how long a download link lasts. A save names the version it was made from, so two admins cannot overwrite each other | built |
 | `storage_credentials` | A storage credential by name, sealed with AES-256-GCM and never shown again; the settings document refers to it by name | built |
 | `storage_settings_audit` | One row for every settings save and every credential set or deletion, written with the change; a credential is named and never valued | built |

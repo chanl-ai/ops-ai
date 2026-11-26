@@ -55,7 +55,18 @@ export function createChannelsMock(): ChannelsApi {
       if ('paused' in patch) m.paused = patch.paused;
       return asChannel(m);
     },
-    live: async () => ({ latestVersion: 1, versions: [], rows: [] }),
+    // Two scheduled workflows, one with a long name, so the live list draws a schedule line under a name.
+    live: async (kind) => ({
+      latestVersion: 2,
+      versions: kind === 'agent' ? [{ version: 2, places: 2 }] : [],
+      rows:
+        kind === 'agent'
+          ? [
+              { where: { kind: 'workflow_step', id: 'ask', name: 'Morning report: Ask the agent', workflowId: 'morning_report' }, version: 2, pinned: false, behind: 0, health: 'ok', traffic24h: null, errors24h: null, lastActivityAt: null, schedule: { words: 'Every day at 07:30, Europe/London', nextRun: new Date(Date.now() + 3_600_000).toISOString(), triggerStep: 'start' } },
+              { where: { kind: 'workflow_step', id: 'ask', name: 'Quarterly regulatory filing reconciliation for the claims operations team: Ask the agent', workflowId: 'quarterly' }, version: 2, pinned: false, behind: 0, health: 'ok', traffic24h: null, errors24h: null, lastActivityAt: null, schedule: { words: 'Every 1 days from 06:00, America/Toronto', nextRun: null, triggerStep: 'start' } },
+            ]
+          : [],
+    }),
     mailboxes: async (search) => rows.filter((r) => !search || `${r.name} ${r.address}`.toLowerCase().includes(search.toLowerCase())),
     mailbox: async (id) => find(id),
     connectMailbox: async (input) => {

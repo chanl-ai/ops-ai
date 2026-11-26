@@ -1,5 +1,6 @@
 {
   "tenant": { "id": "local", "name": "Harbor & Pine Bank", "allowedDomains": [] },
+  "owner": "usr_workspace_admin",
   "teams": [
     { "id": "team_ops", "name": "Operations", "ownerGroups": ["operations"], "scope": "all" },
     { "id": "team_security", "name": "Security", "ownerGroups": ["security"], "scope": "all" },

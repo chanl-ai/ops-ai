@@ -71,6 +71,9 @@ query = { app = "salesforce", name = "Main" }
 ["GET /v1/activity"]
 queries = 6
 
+["GET /v1/agent-instruction-sections"]
+queries = 1
+
 ["GET /v1/agents"]
 queries = 15
 
@@ -93,6 +96,13 @@ query = { version = "1" }
 
 ["GET /v1/agents/{agent_id}/runs"]
 queries = 3
+
+["GET /v1/agents/{agent_id}/tool-apps"]
+# Measured the same at 5 and 50 rows.
+queries = 6
+
+["GET /v1/agents/{agent_id}/tool-apps/{app_id}/tools"]
+queries = 6
 
 ["GET /v1/agents/{agent_id}/prompt"]
 queries = 2
@@ -227,8 +237,19 @@ queries = 2
 ["GET /v1/me/memories/export"]
 queries = 3
 
+# One read of the agents' newest and published versions, inside the request transaction.
+["GET /v1/model-alias-uses"]
+queries = 1
+query = { aliases = "default" }
+
 ["GET /v1/model-aliases"]
 queries = 0
+
+# models-service answers the alias's knobs; no row is read here. The budget stack has no models-service, so the
+# seeded name is no alias and the route answers its refusal.
+["GET /v1/model-aliases/{name}/knobs"]
+queries = 0
+status = 422
 
 # Two transactions by design: the reads that name the held writes, then (tools-service asked with none open) the build.
 ["GET /v1/overview"]
@@ -271,6 +292,12 @@ queries = 2
 transactions = 2
 connections = 2
 query = { follow = "false" }
+
+["GET /v1/schedules/kinds"]
+queries = 0
+
+["GET /v1/schedules/zones"]
+queries = 0
 
 ["GET /v1/skills"]
 queries = 7
@@ -374,7 +401,8 @@ queries = 4
 query = { app = "salesforce", name = "Main" }
 
 ["GET /v1/workflows/definitions/{workflow_id}"]
-queries = 4
+# The workflow's saved schedules and the serving version they are read against are two reads beyond the definition's.
+queries = 6
 
 ["GET /v1/workflows/definitions/{workflow_id}/diff"]
 # Each side is its own store read in its own transaction (the definition row, then the two sides); a fixed count.
@@ -385,10 +413,20 @@ query = { from = "live", to = "working-copy" }
 
 ["GET /v1/workflows/definitions/{workflow_id}/publish-preview"]
 # No request transaction by design: the publish policy is read from platform-service between the store reads. The
-# blocker list adds two reads, the open publish request and the stored versions (a copy equal to the live one).
-queries = 5
-transactions = 5
-connections = 5
+# blocker list adds two reads, the open publish request and the stored versions (a copy equal to the live one), and
+# the saved schedules a version must still be able to fill.
+queries = 6
+transactions = 6
+connections = 6
+
+["GET /v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule"]
+not_budgeted = "needs a saved schedule on a trigger step; the budget seed saves none yet"
+
+["GET /v1/workflows/definitions/{workflow_id}/sample"]
+# A fixed number of store reads, each in its own transaction: none of them repeats per step.
+queries = 3
+transactions = 3
+connections = 3
 
 ["GET /v1/workflows/definitions/{workflow_id}/versions/{version}/shapes"]
 queries = 1

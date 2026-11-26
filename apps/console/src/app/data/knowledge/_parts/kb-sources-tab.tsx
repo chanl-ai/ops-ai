@@ -13,6 +13,7 @@ import { DataTableWithViews } from '@/components/data-table-with-views';
 import { scheduleLabel, SourceHealthText, SourceKindIcon } from '@/components/knowledge/knowledge-meta';
 import { useAddDataSource } from '@/components/knowledge/add-data-source';
 import { DialogShell } from '@/components/shared/dialog-shell';
+import { ListCell } from '@/components/shared/table-cells';
 import { EmptyState } from '@/components/shared/empty-state';
 import { StopRowClick } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -106,8 +107,9 @@ export function KbSourcesTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canBui
             <div className="truncate font-medium">{row.original.source.name}</div>
             <div className="truncate text-xs text-muted-foreground">{row.original.source.scopeSummary}</div>
             {row.original.source.waitingHosts.length > 0 && (
-              <div className="truncate text-xs text-warning-text" data-testid="kb-source-host-waiting">
-                Waiting for an admin to approve {row.original.source.waitingHosts.map((w) => w.host).join(', ')}
+              <div className="flex items-center gap-1 text-xs text-warning-text" data-testid="kb-source-host-waiting">
+                <span className="shrink-0">Waiting for an admin to approve</span>
+                <ListCell values={row.original.source.waitingHosts.map((w) => w.host)} shown={1} label="Hosts waiting for approval" />
               </div>
             )}
           </div>

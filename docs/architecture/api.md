@@ -35,6 +35,8 @@ narrower shape; "proposed" has no code.
 | Workflows | `POST /v1/workflows/{id}/publish-requests` | Compile to a definition with digest, pin agents, open a review | In code. Agent steps copy the published agent definition into the node, so the digest pins it. Dev `registry_auto_approve` publishes at once |
 | Workflows | `GET …/versions` | Version history | In code |
 | Workflows | `POST …/versions/{n}/restore`, `POST …/pointer`, `POST …/status` | Restore into the draft; move the pointer; live or paused | In code. New threads start on the pointer; paused answers 409 `workflow_paused` |
+| Workflows | `GET`/`PUT`/`DELETE /v1/workflows/definitions/{id}/triggers/{step}/schedule` | Read, save or clear the schedule on a trigger step; the view carries words, next runs, last outcome and reason, last run, the saver's name and an idle code | In code (`api/routers/schedules.py`). A save applies to the live version at once |
+| Schedules | `GET /v1/schedules/kinds`, `GET /v1/schedules/zones`, `POST /v1/schedules/preview` | The rule kinds with their schemas; the searched, paged time zones; a rule in words with its next runs (optionally `after` an instant) | In code. An unknown rule field is refused naming it |
 | Workflows | `GET /v1/workflows/{id}/runs` | Threads this workflow ran | In code, steps from each thread's run journal |
 | Deployments | `POST /v1/deployments` | One row: pointer, channel, environment, settings | Partial: graph name, channel, multitask, paused, default `budget`; no pointer or environment |
 | Deployments | `PATCH /v1/deployments/{id}`, `…/pause`, `…/resume` | Change settings; stop or restart new threads | Partial: `PATCH` sets `paused` only |

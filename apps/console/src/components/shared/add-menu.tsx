@@ -29,7 +29,7 @@ export function AddMenu({
    * Each choice; `description` adds a second line, `icon` a leading icon, and `group` a heading over the run of items
    * that share it (a separator between groups).
    */
-  items: { value: string; label: ReactNode; description?: ReactNode; icon?: ReactNode; group?: string; testId?: string }[];
+  items: { value: string; label: ReactNode; description?: ReactNode; icon?: ReactNode; group?: string; testId?: string; disabled?: boolean }[];
   onSelect: (value: string) => void;
   disabled?: boolean;
   className?: string;
@@ -55,7 +55,7 @@ export function AddMenu({
             <Fragment key={i.value}>
               {starts && n > 0 && <DropdownMenuSeparator />}
               {starts && i.group && <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{i.group}</DropdownMenuLabel>}
-              <DropdownMenuItem onSelect={() => onSelect(i.value)} className={cn(i.description && 'items-start')} data-testid={i.testId}>
+              <DropdownMenuItem disabled={i.disabled} onSelect={() => onSelect(i.value)} className={cn(i.description && 'items-start')} data-testid={i.testId}>
                 {i.icon && <span className={cn('shrink-0 text-muted-foreground [&_svg]:size-4', i.description && 'mt-0.5')}>{i.icon}</span>}
                 {i.description ? (
                   <span className="flex min-w-0 flex-col">

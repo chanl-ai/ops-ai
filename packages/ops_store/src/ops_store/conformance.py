@@ -7,7 +7,7 @@ the guarantee prevents: two owners writing, a timer firing twice, a change witho
 
   @pytest.mark.parametrize("backend", backends(settings.database_url), ids=lambda b: b.name)
   async def test_leases_conform(backend: Backend) -> None:
-      await lease_suite(backend, lambda: MyLeases(...))
+      await lease_suite(backend, lambda clock: MyLeases(..., now=clock.sql))
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Generator, Mapping, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, datetime
-from itertools import pairwise
 from secrets import token_hex
 from typing import Any
 
@@ -108,17 +107,24 @@ def _guarantees(repo: object, backend: Backend) -> None:
     assert not missing, f"{type(repo).__name__} needs {names}, which {backend.name} does not provide"
 
 
-async def _until[T](attempt: Callable[[], Awaitable[T | None]], timeout: float = 10.0) -> T:  # noqa: ASYNC109
-    deadline = time.monotonic() + timeout
-    while (result := await attempt()) is None:
-        assert time.monotonic() < deadline, "the condition did not hold in time"
-        await asyncio.sleep(0.05)
-    return result
+class LeaseClock:
+    """The lease suite's clock: frozen, and moved on only by the suite. A lease under test reads `sql()` wherever it
+    would read the database's clock, so whether a lease is live never depends on how fast the host runs the suite."""
+
+    def __init__(self) -> None:
+        self.now = time.time()
+
+    def sql(self) -> Any:
+        return sa.literal(self.now, sa.Float(asdecimal=False))
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
 
 
-async def lease_suite(backend: Backend, make: Callable[[], Awaitable[LeasePort]]) -> None:
-    """Build the leases with a short `ttl` (well under a second): the suite waits it out twice."""
-    a, b = await make(), await make()
+async def lease_suite(backend: Backend, make: Callable[[LeaseClock], Awaitable[LeasePort]]) -> None:
+    """Build each lease on the clock passed to `make`; the suite lapses a lease by advancing that clock."""
+    clock = LeaseClock()
+    a, b = await make(clock), await make(clock)
     _guarantees(a, backend)
     key = f"lease-{token_hex(4)}"
     first = await a.try_acquire(key, "a")
@@ -126,44 +132,27 @@ async def lease_suite(backend: Backend, make: Callable[[], Awaitable[LeasePort]]
     assert await b.try_acquire(key, "b") is None, "a live lease refuses a second holder"
     assert await a.write_fenced(key, first), "the owner's fenced write lands"
 
-    second = await _until(lambda: b.try_acquire(key, "b"))
+    clock.advance(a.ttl * 1.5)
+    second = await b.try_acquire(key, "b")
+    assert second is not None, "a lapsed lease goes to the next holder"
     assert second > first, "a new owner gets a newer generation"
     assert not await a.write_fenced(key, first), "the old owner's write is refused once a newer generation owns the key"
     assert await b.write_fenced(key, second)
 
-    racers = [await make() for _ in range(CONTENDERS)]
+    racers = [await make(clock) for _ in range(CONTENDERS)]
     fresh = f"lease-{token_hex(4)}"
     won = await _race(racers, fresh, "r")
-    assert _one_at_a_time(won, a.ttl), f"{len(won)} contenders took one free key: {won}"
-    await asyncio.sleep(a.ttl * 1.5)
-    won = await _race(racers, fresh, "s")
-    assert _one_at_a_time(won, a.ttl), f"{len(won)} contenders took one lapsed lease: {won}"
+    assert len(won) == 1, f"{len(won)} contenders took one free key: {won}"
+    clock.advance(a.ttl * 1.5)
+    again = await _race(racers, fresh, "s")
+    assert len(again) == 1, f"{len(again)} contenders took one lapsed lease: {again}"
+    assert again[0] > won[0], "a new owner gets a newer generation"
 
 
-# A winner of a race: its generation and when its try_acquire started and returned, in seconds on one clock.
-_Win = tuple[int, float, float]
-
-
-async def _race(racers: Sequence[LeasePort], key: str, prefix: str) -> list[_Win]:
-    async def one(i: int, r: LeasePort) -> _Win | None:
-        start = time.monotonic()
-        g = await r.try_acquire(key, f"{prefix}{i}")
-        return (g, start, time.monotonic()) if g else None
-
+async def _race(racers: Sequence[LeasePort], key: str, prefix: str) -> list[int]:
     async with asyncio.TaskGroup() as tg:
-        tries = [tg.create_task(one(i, r)) for i, r in enumerate(racers)]
-    # In the order the winners got the key, so the generations are checked in that order, not sorted into it.
-    return sorted((w for t in tries if (w := t.result())), key=lambda w: w[2])
-
-
-def _one_at_a_time(won: list[_Win], ttl: float) -> bool:
-    """One winner, or each later one only after the lease before it lapsed: a contender held up past the ttl (a slow
-    connection on a loaded host) takes the key once the first holder's lease ran out, which a correct lease allows. A
-    later winner that returned less than a ttl after the earlier one started took a lease that was still live, and one
-    without a newer generation than the winner before it would let that holder's fenced writes still land."""
-    return len(won) >= 1 and all(
-        later[0] > earlier[0] and later[2] - earlier[1] >= ttl for earlier, later in pairwise(won)
-    )
+        tries = [tg.create_task(r.try_acquire(key, f"{prefix}{i}")) for i, r in enumerate(racers)]
+    return [g for t in tries if (g := t.result()) is not None]
 
 
 async def timer_claim_suite(backend: Backend, make: Callable[[], Awaitable[TimerClaimPort]]) -> None:

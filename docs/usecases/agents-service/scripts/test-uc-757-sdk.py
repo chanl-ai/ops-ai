@@ -5,9 +5,24 @@ check, the insert and the publish. Platform sign-in (lib/main_chains.py bank_sta
 from __future__ import annotations
 
 import time
+from typing import Any
 
 from apps_walk import signed_sdk
-from brief_steps import brief, confirm_skill, freeze_skill
+from brief_steps import (
+    COMPLIANCE_HEADINGS,
+    COMPLIANCE_TEXT,
+    SECTION_HEADINGS,
+    SECTIONS,
+    brief,
+    compliance_id,
+    compliance_sections,
+    confirm_skill,
+    freeze_skill,
+    headings,
+    sections_brief,
+    warm_preset,
+    with_compliance,
+)
 from main_chains import bank_stack, publish_bank_module
 from ops_ai.errors import OpsError
 from usecase_harness import check, finish
@@ -69,9 +84,67 @@ with bank_stack() as s:
         agent["promptMode"] == "brief"
         and agent["instructions"].startswith(f"# Who you are\nYou are {name}.")
         and [p["id"] for p in before["problems"]] == [f"tool:{read}"]
+        and [(b["code"], b["field"]) for b in before.get("blockers") or []] == [("missing_reference", "brief.howToAnswer")]
         and len(added["added"]) == 3
-        and after == {"canRequest": True, "problems": []}
+        and (after["canRequest"], after["problems"], after.get("blockers")) == (True, [], [])
         and live["publishedVersion"] == live["version"],
         (agent.get("promptMode"), before, added, after, live.get("publishedVersion"), live.get("version")),
+    )
+
+    # 26. The same sections through the SDK: the definition's `brief.sections` field, read back, and the prompt.
+    replied, shown = None, ""
+    try:
+        desk = ops.agents.apply(
+            {"name": f"Sections desk sdk {RUN}", "role": "Freezes accounts", "brief": sections_brief(SECTIONS)}
+        )
+        replied = (ops.agents.get(str(desk["id"])).get("brief") or {}).get("sections")
+        shown = ops.raw.agents.agents_agent_prompt(str(desk["id"]))["text"]
+    except OpsError as error:
+        replied = (error.status, error.code)
+    check(
+        "26 the SDK applies a brief with Tone and a custom section, reads both back and the prompt has them in order",
+        replied == [{**SECTIONS[0]}, {"kind": "tone", "name": "Tone", "text": "Calm and plain."}]
+        and headings(shown) == SECTION_HEADINGS
+        and shown.rstrip().endswith("- Never promise when a freeze will be lifted."),
+        (replied, headings(shown)),
+    )
+
+    # 30. The workspace's list through the SDK: an admin reads and saves it, a viewer's save is refused, a builder
+    # applies an agent with the added section, and the admin resets the list.
+    listing: dict[str, Any] = {}
+    refused, names, noted_prompt, restored = None, None, "", None
+    try:
+        by_admin = signed_sdk("admin")
+        listing = by_admin.agents.instruction_sections()
+        by_admin.agents.set_instruction_sections(with_compliance(listing))
+        try:
+            signed_sdk("viewer").agents.set_instruction_sections(listing)
+        except OpsError as error:
+            refused = error.status
+        noted = ops.agents.apply(
+            {
+                "name": f"Compliance desk sdk {RUN}",
+                "role": "Freezes accounts",
+                "brief": sections_brief(compliance_sections(compliance_id(ops.agents.instruction_sections()))),
+            }
+        )
+        names = [(x.get("name"), x.get("text")) for x in (noted.get("brief") or {}).get("sections") or []]
+        noted_prompt = ops.raw.agents.agents_agent_prompt(str(noted["id"]))["text"]
+        by_admin.agents.reset_instruction_sections()
+        restored = by_admin.agents.instruction_sections()
+    except (OpsError, AttributeError) as error:
+        names = repr(error)[:300]
+    check(
+        "30 the SDK saves the workspace's sections as an admin and is refused as a viewer, and a brief has the added section in its place",
+        refused == 403
+        and names == [("Compliance notes", COMPLIANCE_TEXT), ("Voice", "Calm and plain.")]
+        and headings(noted_prompt) == COMPLIANCE_HEADINGS
+        and bool(listing)
+        and restored == listing,
+        (refused, names, headings(noted_prompt), compliance_id(restored)),
+    )
+    check(
+        "30 the list the SDK reads offers a Warm preset on Tone, with an id, an icon and a sentence",
+        warm_preset(listing),
     )
 finish()

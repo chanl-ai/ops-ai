@@ -110,6 +110,14 @@ person rather than an area.
 
 Old flat routes answer one 307 to their tree page before any page renders: `proxy.ts` looks each path up in `MOVED` (`apps/console/src/lib/routes/moved.ts`, longest prefix first) and keeps the rest of the path and the query. Four more (`/logs/tool-calls`, `/settings/policies`, `/account`, `/account/security`) are in `redirects()` in `apps/console/next.config.ts`. Every route in the tables on this page is checked against the console's pages by `scripts/check-doc-routes.mjs`.
 
+## The schedule on a workflow and an agent
+
+| Place | What it shows | Rights |
+|---|---|---|
+| The Schedule trigger's sheet, under How it starts | The schedule form, next runs in the chosen zone, last scheduled run, pause and idle notices; saves on its own, outside the workflow's versions | Save and Clear: `workflows.edit` and `deployments.create`; Resume: `workflows.edit` |
+| Above the workflow canvas | A notice for a saved schedule whose trigger a newer version dropped, with Clear schedule | `workflows.edit` and `deployments.create` for the button |
+| The agent's Channels tab, Where it's live | Each scheduled workflow with its schedule in words and next run; Schedule (Run on a schedule) makes the workflow | `workflows.create`, `workflows.edit`, `deployments.create` |
+
 ## Components
 
 | Region | Component |

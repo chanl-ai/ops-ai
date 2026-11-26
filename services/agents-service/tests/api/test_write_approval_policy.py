@@ -142,28 +142,40 @@ async def drafted(client: AsyncClient, asker: dict[str, str]) -> str:
     return f"/chat/threads/{thread}/messages/{events[0]['messageId']}/widgets/{widget['id']}/actions"
 
 
-async def test_an_asker_who_decides_reviews_is_not_asked_until_the_tenant_switches_it_off(
+async def test_an_askers_own_chat_write_waits_for_their_click_and_their_card_offers_approve(
     production: AsyncClient,
 ) -> None:
-    """Roles decide: James decides Operations' reviews, so in a workspace that turned requesterMayDecide on his own
-    write is decided as his at once and the card is no longer waiting; with it off, the default, Maya decides it."""
+    """Every approval is a decision someone clicked: James decides Operations' reviews and the workspace lets an asker
+    decide, so the live card offers him Approve, and the write does not run until he clicks it. With the two-person
+    rule on, Maya decides it."""
     james = person("usr_james", ["team_ops"], policies={"requesterMayDecide": True})
-    url = await drafted(production, james)
-    again = await production.post(url, json={"type": "approve"}, headers=james)
-    assert (again.status_code, again.json()["error"]["message"]) == (409, "This approval was already decided."), (
-        again.text
+    res = await production.post("/chat/threads", json={"agentId": "ag_dispute", "kbIds": []}, headers=james)
+    thread = res.json()["data"]["id"]
+    sent = await production.post(
+        f"/chat/threads/{thread}/messages", json={"content": WRITE}, headers={**james, "Accept": "text/event-stream"}
     )
-    thread = url.split("/")[3]
-    messages: list[dict[str, Any]] = (await production.get(f"/chat/threads/{thread}", headers=james)).json()["data"][
-        "messages"
-    ]
-    calls: list[dict[str, Any]] = [
-        c
-        for m in messages
-        for c in cast(list[dict[str, Any]], m.get("toolCalls") or [])
-        if c["name"] == "request_document"
-    ]
-    assert calls and calls[-1]["status"] == "success", calls
+    events = sse_events(sent.text)
+    card = next(e["widget"] for e in events if e["type"] == "widget" and e["widget"]["kind"] == "approval")
+    assert (card["state"], card.get("canDecide")) == ("pending", True), card
+
+    def ran(messages: list[dict[str, Any]]) -> int:
+        """The request_document calls that went out; a held one reads awaiting_approval."""
+        return sum(
+            1
+            for m in messages
+            for c in cast(list[dict[str, Any]], m.get("toolCalls") or [])
+            if c["name"] == "request_document"
+            and c["status"] == "success"
+            and cast(dict[str, Any], c.get("output") or {}).get("status") != "awaiting_approval"
+        )
+
+    read = (await production.get(f"/chat/threads/{thread}", headers=james)).json()["data"]["messages"]
+    assert ran(read) == 0, "the write ran before anyone clicked Approve"
+    url = f"/chat/threads/{thread}/messages/{events[0]['messageId']}/widgets/{card['id']}/actions"
+    clicked = await production.post(url, json={"type": "approve"}, headers=james)
+    assert clicked.status_code == 200, clicked.text
+    read = (await production.get(f"/chat/threads/{thread}", headers=james)).json()["data"]["messages"]
+    assert ran(read) == 1, read
 
     strict = {"requesterMayDecide": False}
     james, maya = person("usr_james", ["team_ops"], policies=strict), person("usr_maya", ["team_ops"], policies=strict)
@@ -210,10 +222,10 @@ async def test_the_workspace_step_up_policy_asks_every_approver_to_step_up() -> 
     async for c in _client(
         Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies=loose), platform=False
     ):
-        # The operation asks for no step-up and step-up is off: the dev asker, who passes every role rule, is not
-        # asked, so the card is decided as theirs.
+        # The operation asks for no step-up and step-up is off: the dev asker, who passes every role rule, approves
+        # their own write with one click.
         own = await c.post(await drafted(c, dana), json={"type": "approve"}, headers=dana)
-        assert own.status_code == 409, own.text
+        assert own.status_code == 200, own.text
     strict = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED, dev_policies={"stepUp": True, **loose})
     async for c in _client(strict, platform=False):
         url = await drafted(c, dana)

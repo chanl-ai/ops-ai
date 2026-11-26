@@ -1,7 +1,9 @@
+import type { AgentToolAppsPage, AppToolsPage, ToolAppsParams } from '@/lib/types/agent-tool-apps';
 import type { PublishPreview } from '@/lib/types/publish-preview';
 import type { SaveBase } from '@/lib/save-base';
 import type { CasesApi } from './cases-contract';
 import type { ChannelsApi } from './channels-contract';
+import type { SchedulesApi } from './schedules-contract';
 import type { EngineApi } from './engine-contract';
 import type { ChatApi } from './chat-contract';
 import type { KnowledgeApi } from './knowledge-contract';
@@ -15,6 +17,8 @@ import type { InvitesApi } from './invites-contract';
 import type { OAuthApi } from './oauth-contract';
 import type { AccountApi } from './account-contract';
 import type { WorkspacePoliciesApi } from './workspace-policies-contract';
+import type { AliasKnobs } from '@/lib/types/models';
+import type { ModelAliasesApi } from './model-aliases-contract';
 import type { ProviderConnectionsApi } from './provider-connections-contract';
 import type { ProviderKeysApi } from './provider-keys-contract';
 import type { SignInProvidersApi } from './sign-in-providers-contract';
@@ -76,6 +80,7 @@ import type {
   RouteFields,
   WorkflowInput,
   ReviewPlace,
+  InstructionSectionList,
 } from '@/lib/types/domain';
 import type {
   AgentFilters,
@@ -127,6 +132,12 @@ export interface OpsApi {
     promptView(id: string, version?: number): Promise<AgentPrompt>;
     /** A proposed text per brief heading from a description of the job; saves nothing. */
     draftBrief(id: string, description: string): Promise<BriefDraft>;
+    /** The workspace's list of sections an agent's brief may add (the stored list, or the default). */
+    instructionSections(): Promise<InstructionSectionList>;
+    /** Replaces the list; 403 without settings: manage, 422 `validation_failed` naming `sections` for a list that breaks a rule. */
+    saveInstructionSections(list: InstructionSectionList): Promise<InstructionSectionList>;
+    /** Deletes the saved list and returns the default. */
+    resetInstructionSections(): Promise<InstructionSectionList>;
     /** What stops the newest draft from publishing, each with the field it is in; opens and changes nothing. */
     publishCheck(id: string, version: number): Promise<AgentPublishCheck>;
     /** Whether publishing the newest draft would wait for review, and why; opens and changes nothing. */
@@ -138,8 +149,14 @@ export interface OpsApi {
     /** The tools picker: grantable tools searched and paged on the server; `ids` labels stored grants. */
     /** `agents: false` leaves agents out (an MCP link's picker: its door runs tools and workflows only). */
     toolOptions(p: OptionsParams & { agents?: boolean }): Promise<ToolOptionsPage>;
+    /** The apps whose tools this agent may be granted, connected first; a search also names the matching tools (`matches`). */
+    toolApps(agentId: string, p: ToolAppsParams): Promise<AgentToolAppsPage>;
+    /** One app's tools the team added, each saying whether the agent holds it; 404 for an app the agent has none of. */
+    toolAppTools(agentId: string, appId: string, p: ToolAppsParams): Promise<AppToolsPage>;
     /** The model aliases an agent may name; a publish naming any other is refused (422 unknown_model_alias). */
     modelAliases(): Promise<ModelAlias[]>;
+    /** Only the settings the alias's model takes, each with its range and catalog default; 422 `unknown_model_alias` for another name. */
+    modelAliasKnobs(name: string): Promise<AliasKnobs>;
     /** One kernel turn on the agent's newest version, nothing kept; a write tool stops at its gate. */
     test(id: string, message: string): Promise<AgentTestTurn>;
     /** Absent when the backend has no bulk route (the agents-service registry); the list then offers no bulk actions. */
@@ -150,6 +167,7 @@ export interface OpsApi {
   engine: EngineApi;
   /** Channels > Email: the team's mailboxes. */
   channels: ChannelsApi;
+  schedules: SchedulesApi;
   workflows: {
     get(id: string): Promise<WorkflowDetail>;
     create(input: WorkflowInput): Promise<Workflow>;
@@ -215,6 +233,7 @@ export interface OpsApi {
   providerKeys: ProviderKeysApi;
   /** The account's model provider connections (models-service): type, endpoint, region and key name. */
   providerConnections: ProviderConnectionsApi;
+  modelAliases: ModelAliasesApi;
   evals: EvalsApi;
   modelRisk: ModelRiskApi;
   toolModules: ToolModulesApi;

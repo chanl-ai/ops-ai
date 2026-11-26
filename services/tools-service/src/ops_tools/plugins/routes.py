@@ -189,6 +189,8 @@ class KnowledgeSourceView(Out):
     fetch_at_once: int = 4
     # Its items are pages of one website.
     site: bool = False
+    # Its items are files a watched folder can copy into Files.
+    files: bool = False
     # What a source of this kind is set up with, checked by kb-service and sent to each tool as `source`; and the
     # input whose addresses the source's sync may reach.
     inputs: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
@@ -884,6 +886,7 @@ def plugins_router(
                         lists_whole=s.lists_whole,
                         fetch_at_once=s.fetch_at_once,
                         site=s.site,
+                        files=s.files,
                         inputs={k: f.model_dump(exclude_none=True) for k, f in s.inputs.items()},
                         egress_from=s.egress_from,
                         get_takes_tag=(getter := m.tool(s.get)) is not None and "tag" in getter.input,

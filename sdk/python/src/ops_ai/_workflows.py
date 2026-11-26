@@ -84,10 +84,61 @@ def _batch_body(file_id: str, mode: str | None, dry_run: bool | None) -> dict[st
     return body
 
 
+def _rule(kind: str, fields: dict[str, Any]) -> dict[str, Any]:
+    """The body of a save or preview: the kind's own fields inside `rule`, which the API reads by `kind`."""
+    return {"rule": {"kind": kind, **fields}}
+
+
+class Schedules:
+    """A workflow trigger's saved schedule. It applies at once to the live version, with no publish. Rule kinds and
+    their fields come from `kinds()`; pass a kind's own fields as keywords: `save(id, step, kind="every", every=15,
+    unit="minutes", tz="Europe/London")`."""
+
+    def __init__(self, raw: Any) -> None:
+        self._raw = raw
+
+    def kinds(self) -> list[dict[str, Any]]:
+        return list(self._raw.agents.schedules_schedule_kinds())
+
+    def show(self, id: str, step: str) -> Any:
+        return self._raw.agents.workflows_get_schedule(id, step)
+
+    def save(self, id: str, step: str, *, kind: str, **fields: Any) -> Any:
+        return self._raw.agents.workflows_save_schedule(id, step, _rule(kind, fields))
+
+    def clear(self, id: str, step: str) -> Any:
+        return self._raw.agents.workflows_clear_schedule(id, step)
+
+    def preview(self, *, kind: str, **fields: Any) -> Any:
+        """The rule as it would be saved, in words, with its next runs. Writes nothing."""
+        return self._raw.agents.schedules_preview_schedule(_rule(kind, fields))
+
+
+class AsyncSchedules:
+    def __init__(self, raw: Any) -> None:
+        self._raw = raw
+
+    async def kinds(self) -> list[dict[str, Any]]:
+        return list(await self._raw.agents.schedules_schedule_kinds())
+
+    async def show(self, id: str, step: str) -> Any:
+        return await self._raw.agents.workflows_get_schedule(id, step)
+
+    async def save(self, id: str, step: str, *, kind: str, **fields: Any) -> Any:
+        return await self._raw.agents.workflows_save_schedule(id, step, _rule(kind, fields))
+
+    async def clear(self, id: str, step: str) -> Any:
+        return await self._raw.agents.workflows_clear_schedule(id, step)
+
+    async def preview(self, *, kind: str, **fields: Any) -> Any:
+        return await self._raw.agents.schedules_preview_schedule(_rule(kind, fields))
+
+
 class Workflows:
     def __init__(self, raw: Any, runs: Any) -> None:
         self._raw = raw
         self._runs = runs
+        self.schedules = Schedules(raw)
 
     def list(self, **query: Any) -> Iterator[Any]:
         return iter_pages(self._raw.agents.workflows_list_definitions, **query)
@@ -251,6 +302,7 @@ class AsyncWorkflows:
     def __init__(self, raw: Any, runs: Any) -> None:
         self._raw = raw
         self._runs = runs
+        self.schedules = AsyncSchedules(raw)
 
     def list(self, **query: Any) -> AsyncIterator[Any]:
         return iter_pages_async(self._raw.agents.workflows_list_definitions, **query)

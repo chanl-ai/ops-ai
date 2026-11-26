@@ -133,6 +133,9 @@ def bank_stack(*, worker: str | None = None) -> Generator[SimpleNamespace]:
         admin = bearer(signed_in(accounts, "w.kamau@harborpine.example"), "team_ops")
         on = accounts.put("/v1/policies/toolWritesNeedApproval", json={"value": True}, headers=admin)
         check("setup: the admin turns write approvals on for the team", on.status_code == 200, on.text[:200])
+        # The two-person rule is opt-in: the use cases on this stack prove a writer cannot decide their own request.
+        rule = accounts.put("/v1/policies/requesterMayDecide", json={"value": False}, headers=admin)
+        check("setup: the admin turns the two-person rule on", rule.status_code == 200, rule.text[:200])
         who = {role: as_role(accounts, role) for role in ("builder", "approver", "security")}
         team_settings = {**bank.settings, **AUTH, "OPS_AGENTS_URL": f"http://127.0.0.1:{agents_port}"}
         with ExitStack() as extra:

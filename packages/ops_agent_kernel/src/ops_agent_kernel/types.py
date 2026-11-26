@@ -138,6 +138,8 @@ class WidgetTemplate:
 # Above this many granted tools an agent finds its tools by searching: no schema is sent until a search
 # reveals it. OPS_TOOL_SEARCH_ABOVE changes it per deployment, with the install flag tool_search on.
 TOOL_SEARCH_ABOVE = 20
+# The heading the never rules are written under unless the workspace's list renames it.
+NEVER_HEADING = "Never"
 
 
 @dataclass(frozen=True)
@@ -179,10 +181,16 @@ class AgentSettings:
     redact_pii: bool = False
     # The brief's never rules: written last in the prompt, after everything else, whoever wrote the rest of it.
     never: list[str] = field(default_factory=list[str])
+    # The heading they are written under: the never section's label in the workspace's list when the version was saved.
+    never_heading: str = NEVER_HEADING
     # How hard the model thinks ("low", "medium", "high"); None leaves the model's default and sends no setting.
     thinking: str | None = None
     # Off: the model is asked to make one tool call at a time. Writes run one at a time whatever this says.
     parallel_reads: bool = True
+    # The model settings the agent version saved, by knob name (temperature, top_p, top_k, max_tokens,
+    # thinking_budget, reasoning_effort), checked against its alias's knobs when saved. models-service fits each call
+    # to the alias's model again (catalog.fit), since an alias can move to a model with other limits.
+    model_settings: dict[str, float | int | str] = field(default_factory=dict[str, float | int | str])
 
 
 @dataclass(frozen=True)

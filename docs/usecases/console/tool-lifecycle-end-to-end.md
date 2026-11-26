@@ -27,10 +27,11 @@ calls a real model provider.
 | 3 | James requests a security review from the module page | the module is in review |
 | 4 | Nadia opens Reviews > Tool modules and approves | the module is published |
 | 5 | James runs `get_account` and `place_hold` from the module's test panel, as its owner with no workflow approval | the read and the write both reach the bank; the write is logged under James |
-| 6 | James grants both operations to Branch Concierge, saves and publishes the agent | the agent holds `get_account` and `place_hold` |
+| 6 | The team turns write approvals and the two-person rule on; James grants both operations to Branch Concierge, saves and publishes the agent | the agent holds `get_account` and `place_hold`; James, a Builder, may not decide his own write |
 | 7 | James asks Branch Concierge `call get_account {"accountId": "CHQ-2219"}` | the read runs; the reply is "Here is what I found." |
 | 8 | James asks it `call place_hold {"accountId": "CHQ-2219"}` | an approval card shows; nothing reaches the bank |
 | 9 | Maya opens Reviews and approves the held write | the write runs once (pending: chat writes are listed in Reviews) |
+| 9b | The team turns the two-person rule off; James asks for `place_hold` again | the card offers James Approve and nothing reaches the bank; once he clicks Approve the write runs once |
 | 10 | James opens the module's Activity tab | it lists the `get_account` call |
 | 11 | James hides `get_account` and publishes; the agent's grant dialog lists it as no longer offered, with Remove | (pending) |
 

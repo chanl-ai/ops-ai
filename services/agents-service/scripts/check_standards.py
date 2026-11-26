@@ -40,6 +40,8 @@ ORDER = [
     "ops_storage",
     "ops_ingest",
     "ops_extract",
+    # Reading a source through its tools, shared by kb-service and files-service: below both.
+    "ops_sources",
     "ops_files",
     "ops_files_client",
     "ops_documents_client",

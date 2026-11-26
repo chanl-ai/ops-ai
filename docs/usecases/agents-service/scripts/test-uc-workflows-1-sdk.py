@@ -1,7 +1,9 @@
 """uc-workflows-1, sdk layer: docs/usecases/agents-service/a-schedule-starts-a-run-once.md, steps 1 to 4. James, a
 builder, schedules a workflow through `OpsAI.workflows.schedule` in sdk/python: a due tick starts one run, the same
-key returns it, another key starts another, and a tick due in an hour stays queued. Platform sign-in, agents-service
-with publish reviews kept pending, and a workflow worker. No model is called."""
+key returns it, another key starts another, and a tick due in an hour stays queued. Step 11: the schedule noun
+(`OpsAI.workflows.schedules`) previews, saves and shows a rule with the same words and runs as the API, and a rule
+under the floor is refused naming its field. Platform sign-in, agents-service with publish reviews kept pending, and a
+workflow worker. No model is called."""
 
 from __future__ import annotations
 
@@ -24,6 +26,7 @@ from usecase_harness import (
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "sdk" / "python" / "src"))
 from ops_ai import OpsAI
+from ops_ai.errors import OpsError
 
 JAMES, MAYA, PASSWORD = "j.richardson@harborpine.example", "m.okafor@harborpine.example", "northfield-demo"
 PRIYA = "p.shah@harborpine.example"
@@ -109,5 +112,24 @@ with platform(), agents(env=AUTH):
             held.get("status") == "queued",
             {"status": held.get("status")},
         )
+
+    rule = {"every": 15, "unit": "minutes", "start": "07:00", "tz": "Europe/London"}
+    previewed = james.workflows.schedules.preview(kind="every", **rule)
+    saved = james.workflows.schedules.save(WID, "start", kind="every", **rule)
+    shown = james.workflows.schedules.show(WID, "start")
+    try:
+        james.workflows.schedules.save(WID, "start", kind="every", every=2, unit="minutes")
+        refused: Any = None
+    except OpsError as e:
+        refused = e
+    check(
+        "11 the schedule noun previews, saves and shows one rule in the API's words, and refuses one under the floor",
+        previewed["words"] == saved["words"] == shown["words"] == "Every 15 minutes from 07:00, Europe/London"
+        and previewed["nextRuns"] == saved["nextRuns"]
+        and shown["rule"] == saved["rule"]
+        and refused is not None
+        and (refused.details or {}).get("field") == "every",
+        {"preview": previewed.get("words"), "saved": saved.get("words"), "refused": str(refused)[:200]},
+    )
 
 finish()

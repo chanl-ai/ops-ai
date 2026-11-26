@@ -10,5 +10,7 @@ export function createProviderConnectionsHttp(get: Get, send: Send, qs: (p: List
   return {
     list: (p) => get(`/models/providers?${qs(p)}`),
     create: (input) => send('POST', '/models/providers', input),
+    types: () => get('/models/provider-types'),
+    catalog: (providerId) => get(`/models/providers/${encodeURIComponent(providerId)}/catalog`),
   };
 }

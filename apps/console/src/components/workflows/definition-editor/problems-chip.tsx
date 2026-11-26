@@ -12,7 +12,8 @@ import { ChecksPanel } from './checks-panel';
 
 /**
  * The working copy's problems in the page header, beside its save state: a count that opens the list, each line
- * naming its step and opening that step's settings. An error stops a publish; a warning never does.
+ * naming its step and opening that step's settings. An error stops a publish; a warning never does. On a phone it shows
+ * only when there is something to read; "No problems" moves into the header's menu (LifecycleActions).
  */
 export function ProblemsChip({
   validation,
@@ -35,7 +36,7 @@ export function ProblemsChip({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className={cn(errors > 0 && 'border-destructive text-destructive-text')} data-testid="definition-problems" data-errors={errors}>
+        <Button type="button" variant="outline" size="sm" className={cn(errors > 0 && 'border-destructive text-destructive-text', !errors && !warnings && !checking && 'max-sm:hidden')} data-testid="definition-problems" data-errors={errors}>
           {errors > 0 ? <AlertTriangle /> : warnings > 0 ? <AlertTriangle className="text-warning-text" /> : <CheckCircle2 className="text-success-text" />}
           <span className="tabular-nums">{label}</span>
         </Button>

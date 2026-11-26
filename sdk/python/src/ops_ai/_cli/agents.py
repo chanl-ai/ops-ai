@@ -61,6 +61,12 @@ def main(argv: list[str]) -> int:
     add.add_argument("id")
     add.add_argument("kind", choices=KINDS)
     add.add_argument("ref", help="the id of the tool, knowledge base, skill, agent or workflow")
+    sub.add_parser("sections", parents=common, help="the workspace's instruction section list")
+    apply_sections = sub.add_parser(
+        "sections-apply", parents=common, help="replace the workspace's instruction section list from a file"
+    )
+    apply_sections.add_argument("file")
+    sub.add_parser("sections-reset", parents=common, help="bring the default instruction section list back")
     check = sub.add_parser("publish-check", parents=common, help="what stops the newest draft from being published")
     check.add_argument("id")
     evals = sub.add_parser(
@@ -115,6 +121,12 @@ def _dispatch(ns: argparse.Namespace) -> int:
         return emit(ns, [{"kind": g["kind"], **item} for g in found["groups"] for item in g["items"]])
     if ns.verb == "add-reference":
         return emit(ns, agents.add_reference(ns.id, ns.kind, ns.ref))
+    if ns.verb == "sections":
+        return emit(ns, agents.instruction_sections())
+    if ns.verb == "sections-apply":
+        return emit(ns, agents.set_instruction_sections(load_data(ns.file)))
+    if ns.verb == "sections-reset":
+        return emit(ns, agents.reset_instruction_sections())
     if ns.verb == "publish-check":
         return emit(ns, agents.publish_check(ns.id))
     if ns.verb == "eval":

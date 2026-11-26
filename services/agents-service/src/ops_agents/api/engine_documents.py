@@ -1,5 +1,5 @@
 """The workflow runner's DocumentsPort, DocumentTypesPort and FileDataPort in agents-service: an Extract from file step
-asks documents-service's extraction API, Extract from text a document type's
+asks documents-service's extraction API (its Full text the file's shared reading), Extract from text a document type's
 fields, a Purge step its purge, and a Save data on file step files-service, each as the run's own team, through the
 services' clients (never their code). Another team's or tenant's file is not found, as the service answers it."""
 
@@ -29,6 +29,15 @@ class DocumentsExtractions:
             raise LookupError(f"run {run_id} is gone")
         with outside_call():
             return await self.client.extract(current_tenant(), run.team_id, file_id, request, idempotency_key=key)
+
+    async def reading(self, run_id: str, file_id: str, *, ocr: str, ask: bool) -> Json:
+        """The file's shared reading as it is now, asked for when `ask`; one still under way is never waited for here:
+        the step parks on reading.finished instead."""
+        team = await _team(self.tx, run_id)
+        with outside_call():
+            if ask:
+                return await self.client.reading(current_tenant(), team, file_id, ocr=ocr)
+            return await self.client.reading_now(current_tenant(), team, file_id, ocr=ocr)
 
     async def purge(self, run_id: str, file_id: str) -> Json:
         team = await _team(self.tx, run_id)
