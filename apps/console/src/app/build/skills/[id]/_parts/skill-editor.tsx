@@ -375,6 +375,7 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
                 onChange={(text) => (setRefused(null), setForm((f) => (stepped ? { ...f, text } : { ...f, instructions: text })))}
                 readOnly={readOnly}
                 labels={labels.data}
+                labelsError={labels.isError ? { retry: () => void labels.refetch() } : undefined}
                 onMissingChange={(refs) => setBrokenMentions(refs.length)}
                 context={context}
                 controls={textDoc}

@@ -33,3 +33,13 @@ export function mentionsIn(text: string): Ref[] {
   for (const m of text.matchAll(ANYWHERE)) found.set(m[0], { kind: m[1] as RefKind, id: m[2] });
   return [...found.values()];
 }
+
+/**
+ * The mentions in `text` that a save must wait on. While the names are loading every mention counts, so a save never
+ * goes out on a guess; when they could not be loaded none does, and the raw text saves; once loaded, only a mention the
+ * team does not hold counts.
+ */
+export function unheldMentions(text: string, labels: readonly Ref[] | undefined, failed: boolean): Ref[] {
+  if (!labels && failed) return [];
+  return mentionsIn(text).filter((r) => !labels?.some((l) => l.kind === r.kind && l.id === r.id));
+}

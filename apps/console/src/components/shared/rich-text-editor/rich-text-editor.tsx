@@ -5,6 +5,7 @@ import type { Editor, Range } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { GitBranch, Heading2, List, ListOrdered, Minus, Quote } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
 import { CaretMenu, type MenuRow, type MenuSection } from '@/components/shared/caret-menu';
@@ -14,7 +15,7 @@ import type { Ref, ReferenceContext, ReferenceGroup, ReferenceItem } from '@/lib
 import { cn } from '@/lib/utils';
 
 import { type MenuBridge, type Trigger, richTextExtensions } from './extensions';
-import { mentionToken, mentionsIn } from '@/lib/mentions';
+import { mentionToken, unheldMentions } from '@/lib/mentions';
 import { keepPlainText } from './markdown';
 import { ReferencePickerDialog, type InsertableKind } from './reference-picker-dialog';
 import { type MarkdownIO, blockAtLine, spliceEdit } from './splice';
@@ -45,6 +46,8 @@ export interface RichTextEditorProps {
   context: ReferenceContext;
   /** The current names of what the text mentions; undefined while loading. A mention it leaves out is drawn as Missing. */
   labels?: readonly ReferenceItem[];
+  /** Set when the names could not be loaded: an inline error with Retry shows, and the text saves as written. */
+  labelsError?: { retry: () => void };
   /** The mentions `labels` does not hold, whenever that set changes; a save waits until it is empty. */
   onMissingChange?: (refs: Ref[]) => void;
   placeholder?: string;
@@ -77,7 +80,7 @@ const EDITOR_CLASS = cn(
  * value the person has not edited is handed back as it came. Free text is always valid; only a mention the team no
  * longer holds is reported, through `onMissingChange`.
  */
-export function RichTextEditor({ value, onChange, readOnly = false, context, labels, onMissingChange, placeholder = 'Write the steps. Type @ for a tool, knowledge or skill, / for more.', ariaLabel, controls }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, readOnly = false, context, labels, labelsError, onMissingChange, placeholder = 'Write the steps. Type @ for a tool, knowledge or skill, / for more.', ariaLabel, controls }: RichTextEditorProps) {
   const bridge = React.useRef<MenuBridge | null>(null);
   const [extensions] = React.useState(() => richTextExtensions(() => bridge.current, placeholder));
   const search = useReferenceSearch(context);
@@ -118,12 +121,12 @@ export function RichTextEditor({ value, onChange, readOnly = false, context, lab
   // is always made, and an empty one when the editor goes away, so a page holding the last answer never keeps a stale one.
   const gone = React.useRef<string | null>(null);
   React.useEffect(() => {
-    const refs = mentionsIn(value).filter((r) => !labels?.some((l) => l.kind === r.kind && l.id === r.id));
+    const refs = unheldMentions(value, labels, !!labelsError);
     const text = JSON.stringify(refs);
     if (text === gone.current) return;
     gone.current = text;
     latest.current.onMissingChange?.(refs);
-  }, [labels, value]);
+  }, [labels, value, labelsError]);
   React.useEffect(
     () => () => {
       gone.current = null;
@@ -263,6 +266,14 @@ export function RichTextEditor({ value, onChange, readOnly = false, context, lab
 
   return (
     <MentionLabels.Provider value={labels}>
+      {labelsError && (
+        <p className="flex flex-wrap items-center gap-2 border-b px-4 py-1.5 text-xs text-destructive-text" role="alert" data-testid="rte-labels-error">
+          Couldn’t check the mentions just now. The text still saves as written.
+          <Button type="button" variant="link" size="sm" onClick={labelsError.retry} data-testid="rte-labels-retry">
+            Retry
+          </Button>
+        </p>
+      )}
       <RichTextToolbar editor={editor} disabled={readOnly} view={view} onView={setView} onInsert={insert} />
       {view === 'formatted' ? (
         <EditorContent editor={editor} />

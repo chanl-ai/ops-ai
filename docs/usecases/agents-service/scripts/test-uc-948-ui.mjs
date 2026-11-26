@@ -209,6 +209,22 @@ await withUiStack(
         const stored = (await call(J, `/v1/agents/${plain.id}`, undefined, 'GET')).data?.instructions ?? '';
         note('23 a broken mention in a plain prompt turns Save off, and removing it turns Save on', blocked && /Unsaved \/ .*fix the highlighted fields/i.test(said) && missing > 0 && open_ && stored.includes('the lookup tool') && !stored.includes(GONE), { blocked, said, missing, open_, stored });
       }
+      // When the names of the mentions cannot be loaded, the page says so with Retry and the text still saves as written.
+      if (width === 1440) {
+        await call(J, `/v1/agents/${plain.id}`, { instructions: `Look it up with ${GONE}.`, ...(await agentBase(agents, J, plain.id)) }, 'PATCH');
+        await james.route(/\/references\?.*ids=/, (route) => route.abort());
+        await go(james, `/build/agents/${plain.id}`, 'agent-plain-text');
+        await james.getByTestId('rte-labels-error').waitFor({ timeout: 15_000 }).catch(() => undefined);
+        const shown = (await james.getByTestId('rte-labels-error').count()) === 1 && (await james.getByTestId('rte-labels-retry').count()) === 1;
+        await james.getByTestId('agent-plain-text').getByTestId('rich-text').click();
+        await james.keyboard.press('ControlOrMeta+End');
+        await james.keyboard.type(' Thanks.');
+        await james.waitForFunction(() => !document.querySelector('[data-testid="agent-save"]')?.hasAttribute('disabled'), null, { timeout: 10_000 }).catch(() => undefined);
+        const saves = !(await james.getByTestId('agent-save').isDisabled());
+        await james.unroute(/\/references\?.*ids=/);
+        note('26 when the mention names cannot be loaded the page shows an error with Retry and Save still works', shown && saves, { shown, saves });
+      }
+
       // A viewer reads a skill: no formatting bar, no empty Not when field, and Used by 0 agents is text, not a link.
       await go(ravi, `/build/skills/${skill.id}`, 'rich-text');
       const bars = (await ravi.getByTestId('rte-toolbar').count()) + (await ravi.getByTestId('rte-menu').count());
@@ -237,6 +253,7 @@ await withUiStack(
       15: 'the save state reads Unsaved then Saved after Cmd+S', 16: 'the header keeps one order and no label over two words', 17: 'tools, knowledge and skills are sections',
       18: 'a skill opens on its instructions with the button bar and a Used by list', 19: 'no page scrolls sideways and none logs an error', 20: 'Withdraw takes a waiting version out of review and offers Send again',
       21: 'a viewer sees a waiting version and no Withdraw', 22: 'a viewer reads the page and a member is refused it',
+      26: 'when the mention names cannot be loaded, an error with Retry shows and Save still works',
       25: 'a viewer reads a skill with no formatting bar, no empty Not when and Used by 0 agents as text',
       24: 'Tab on the @ menu writes the tool and grants it to the agent',
       23: 'a broken mention in a plain prompt turns Save off and refuses a publish until it is removed',

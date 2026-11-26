@@ -178,7 +178,7 @@ export function AgentBriefEditor({
         <div className="flex flex-col gap-2">
           {toolbar && <div className="flex flex-wrap justify-end gap-2">{toolbar}</div>}
           <div className="rounded-lg border bg-card" data-testid="agent-plain-text">
-            <RichTextEditor value={instructions} onChange={onInstructions} readOnly={readOnly} context={context} labels={textLabels.data} onMissingChange={onMissingChange} ariaLabel="Instructions" />
+            <RichTextEditor value={instructions} onChange={onInstructions} readOnly={readOnly} context={context} labels={textLabels.data} labelsError={textLabels.isError ? { retry: () => void textLabels.refetch() } : undefined} onMissingChange={onMissingChange} ariaLabel="Instructions" />
           </div>
           <p className="text-xs text-muted-foreground">Brief fields other than Never are not used while this is on. Never is written after your text.</p>
           {footer}
