@@ -99,129 +99,127 @@ def case_of(api: httpx.Client, run_id: str) -> dict[str, Any]:
 
 # The gateway decides each write by the team's approval rules, which platform-service holds; without it a write is
 # refused (503 approval_rules_unavailable). One platform-service serves both stacks below: tools() points at it.
-rules = ExitStack()
-rules.enter_context(platform())
-with ExitStack() as stack:
-    stack.enter_context(tools({"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}, approval_rules=True))
-    api = stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}"))
-    created = api.post("/v1/workflows/definitions", json={"yaml": DEFINITION}, headers=TEAM)
-    live = api.post("/v1/workflows/definitions/uc251_fee_dispute/publish-requests", json={}, headers=TEAM)
-    check(
-        "0 the fee dispute workflow saves and goes live",
-        created.status_code == 201 and data(live)["status"] == "approved",
-        created.text[:300],
-    )
-    stack.enter_context(engine_worker("uc251", {"OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}"}))
+with platform():
+    with ExitStack() as stack:
+        stack.enter_context(tools({"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}, approval_rules=True))
+        api = stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}"))
+        created = api.post("/v1/workflows/definitions", json={"yaml": DEFINITION}, headers=TEAM)
+        live = api.post("/v1/workflows/definitions/uc251_fee_dispute/publish-requests", json={}, headers=TEAM)
+        check(
+            "0 the fee dispute workflow saves and goes live",
+            created.status_code == 201 and data(live)["status"] == "approved",
+            created.text[:300],
+        )
+        stack.enter_context(engine_worker("uc251", {"OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}"}))
 
-    started = api.post(
-        "/v1/runs", json={"workflowId": "uc251_fee_dispute", "input": DISPUTE, "runKey": "uc251-a"}, headers=TEAM
-    )
-    run_id = str(data(started)["runId"])
-    waiting = until(
-        lambda: (r := data(api.get(f"/v1/runs/{run_id}", headers=TEAM)) or {}).get("status") == "waiting" and r
-    )
-    case = case_of(api, run_id)
-    fields = [(f["key"], f["display"]) for f in case.get("typedFields") or []]
-    check(
-        "1 the case shows its fields in the complaint type's order, the amount as money",
-        fields == [("complaint", DISPUTE["complaint"]), ("category", "fees"), ("urgency", ""), ("amount", "35.00")]
-        and (case.get("caseType") or {}).get("id") == "complaint",
-        {"fields": fields, "type": case.get("caseType"), "waiting": bool(waiting)},
-    )
-    tasks, actions = case.get("waiting") or [], case.get("actions") or []
-    check(
-        "2 it says what it waits on, the drafted action and where to decide it",
-        len(tasks) == 1
-        and (case.get("nextAction") or {}).get("href") == tasks[0]["href"]
-        and len(actions) == 1
-        and actions[0]["status"] == "pending"
-        and actions[0]["href"] == tasks[0]["href"],
-        {"waiting": tasks, "actions": actions, "next": case.get("nextAction")},
-    )
-    links = case.get("links") or {}
-    check(
-        "3 it links the run that opened it, its workflow and the dispute letter",
-        [r["id"] for r in links.get("runs") or []] == [run_id]
-        and (case.get("workflow") or {}).get("name") == "Fee dispute (uc-251)"
-        and any(f["fileId"] == LETTER and f["name"] == "dispute-letter.pdf" for f in links.get("files") or []),
-        {"links": links, "workflow": case.get("workflow")},
-    )
+        started = api.post(
+            "/v1/runs", json={"workflowId": "uc251_fee_dispute", "input": DISPUTE, "runKey": "uc251-a"}, headers=TEAM
+        )
+        run_id = str(data(started)["runId"])
+        waiting = until(
+            lambda: (r := data(api.get(f"/v1/runs/{run_id}", headers=TEAM)) or {}).get("status") == "waiting" and r
+        )
+        case = case_of(api, run_id)
+        fields = [(f["key"], f["display"]) for f in case.get("typedFields") or []]
+        check(
+            "1 the case shows its fields in the complaint type's order, the amount as money",
+            fields == [("complaint", DISPUTE["complaint"]), ("category", "fees"), ("urgency", ""), ("amount", "35.00")]
+            and (case.get("caseType") or {}).get("id") == "complaint",
+            {"fields": fields, "type": case.get("caseType"), "waiting": bool(waiting)},
+        )
+        tasks, actions = case.get("waiting") or [], case.get("actions") or []
+        check(
+            "2 it says what it waits on, the drafted action and where to decide it",
+            len(tasks) == 1
+            and (case.get("nextAction") or {}).get("href") == tasks[0]["href"]
+            and len(actions) == 1
+            and actions[0]["status"] == "pending"
+            and actions[0]["href"] == tasks[0]["href"],
+            {"waiting": tasks, "actions": actions, "next": case.get("nextAction")},
+        )
+        links = case.get("links") or {}
+        check(
+            "3 it links the run that opened it, its workflow and the dispute letter",
+            [r["id"] for r in links.get("runs") or []] == [run_id]
+            and (case.get("workflow") or {}).get("name") == "Fee dispute (uc-251)"
+            and any(f["fileId"] == LETTER and f["name"] == "dispute-letter.pdf" for f in links.get("files") or []),
+            {"links": links, "workflow": case.get("workflow")},
+        )
 
-    review_id = tasks[0]["taskId"] if tasks else run_id
-    # The run's starter does not decide its own run's write (the two-person rule, pinned on above); Lee does.
-    own = api.post(f"/reviews/{review_id}/decision", json={"decision": "approved", "reason": "uc-251"}, headers=TEAM)
-    check("3a the person who started the run cannot approve its write (403)", own.status_code == 403, own.text[:200])
-    lee = {**TEAM, "X-Dev-User": "lee@harborpine.example"}
-    decided = api.post(f"/reviews/{review_id}/decision", json={"decision": "approved", "reason": "uc-251"}, headers=lee)
-    after = until(lambda: (c := case_of(api, run_id)) and not c.get("waiting") and c) or {}
-    done = [a for a in after.get("actions") or [] if a["taskId"] == review_id]
-    # The case tells its story as a feed of lines; the full list of one kind is the activity route below.
-    lines = [line["text"] for line in (after.get("feed") or {}).get("lines") or []]
-    waived = until(
-        lambda: (r := data(api.get(f"/v1/runs/{run_id}", headers=TEAM)) or {}).get("status") in ("succeeded", "failed")
-        and r
-    ) or {}
-    check(
-        "4a Lee's approval waives the fee: the run ends waived",
-        waived.get("status") == "succeeded" and waived.get("outcome") == "waived",
-        {
-            "status": waived.get("status"),
-            "outcome": waived.get("outcome"),
-            "waive": [x.get("output") for x in waived.get("steps") or [] if x.get("nodeId") == "waive"],
-        },
-    )
-    check(
-        "4 approved on its task page, the case reads the action decided and nothing waiting",
-        decided.status_code == 200
-        and after.get("waiting") == []
-        and after.get("nextAction") is None
-        and [a["status"] for a in done] == ["approved"],
-        {"decision": decided.status_code, "actions": after.get("actions"), "waiting": after.get("waiting")},
-    )
-    listed = data(api.get(f"/v1/activity?case={after.get('id')}&kind=decision", headers=TEAM)) or {}
-    check(
-        "5 the decision is a line of the case's activity",
-        (listed.get("pagination") or {}).get("total") == 1 and bool(lines),
-        {"feed": lines[:5], "decisions": listed.get("pagination")},
-    )
+        review_id = tasks[0]["taskId"] if tasks else run_id
+        # The run's starter does not decide its own run's write (the two-person rule, pinned on above); Lee does.
+        own = api.post(f"/reviews/{review_id}/decision", json={"decision": "approved", "reason": "uc-251"}, headers=TEAM)
+        check("3a the person who started the run cannot approve its write (403)", own.status_code == 403, own.text[:200])
+        lee = {**TEAM, "X-Dev-User": "lee@harborpine.example"}
+        decided = api.post(f"/reviews/{review_id}/decision", json={"decision": "approved", "reason": "uc-251"}, headers=lee)
+        after = until(lambda: (c := case_of(api, run_id)) and not c.get("waiting") and c) or {}
+        done = [a for a in after.get("actions") or [] if a["taskId"] == review_id]
+        # The case tells its story as a feed of lines; the full list of one kind is the activity route below.
+        lines = [line["text"] for line in (after.get("feed") or {}).get("lines") or []]
+        waived = until(
+            lambda: (r := data(api.get(f"/v1/runs/{run_id}", headers=TEAM)) or {}).get("status") in ("succeeded", "failed")
+            and r
+        ) or {}
+        check(
+            "4a Lee's approval waives the fee: the run ends waived",
+            waived.get("status") == "succeeded" and waived.get("outcome") == "waived",
+            {
+                "status": waived.get("status"),
+                "outcome": waived.get("outcome"),
+                "waive": [x.get("output") for x in waived.get("steps") or [] if x.get("nodeId") == "waive"],
+            },
+        )
+        check(
+            "4 approved on its task page, the case reads the action decided and nothing waiting",
+            decided.status_code == 200
+            and after.get("waiting") == []
+            and after.get("nextAction") is None
+            and [a["status"] for a in done] == ["approved"],
+            {"decision": decided.status_code, "actions": after.get("actions"), "waiting": after.get("waiting")},
+        )
+        listed = data(api.get(f"/v1/activity?case={after.get('id')}&kind=decision", headers=TEAM)) or {}
+        check(
+            "5 the decision is a line of the case's activity",
+            (listed.get("pagination") or {}).get("total") == 1 and bool(lines),
+            {"feed": lines[:5], "decisions": listed.get("pagination")},
+        )
 
-# 6-7. The default rule (an asker who may decide does): James, a Builder holding reviews.decide, may approve his own
-# run's write, and it still waits for his click. Nothing is approved for him while nobody looks.
-OWN = DEFINITION.replace("uc251_fee_dispute", "uc251_own_fee")
-LOOSE = {"OPS_DEV_POLICIES": "{}"}
-with ExitStack() as stack:
-    stack.enter_context(tools({"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}", **LOOSE}, approval_rules=True))
-    api = stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}", env=LOOSE))
-    api.post("/v1/workflows/definitions", json={"yaml": OWN}, headers=TEAM)
-    api.post("/v1/workflows/definitions/uc251_own_fee/publish-requests", json={}, headers=TEAM)
-    stack.enter_context(engine_worker("uc251-own", {"OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}", **LOOSE}))
-    started = api.post(
-        "/v1/runs", json={"workflowId": "uc251_own_fee", "input": DISPUTE, "runKey": "uc251-b"}, headers=TEAM
-    )
-    own_run = str((data(started) or {}).get("runId"))
+    # 6-7. The default rule (an asker who may decide does): James, a Builder holding reviews.decide, may approve his own
+    # run's write, and it still waits for his click. Nothing is approved for him while nobody looks.
+    OWN = DEFINITION.replace("uc251_fee_dispute", "uc251_own_fee")
+    LOOSE = {"OPS_DEV_POLICIES": "{}"}
+    with ExitStack() as stack:
+        stack.enter_context(tools({"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}", **LOOSE}, approval_rules=True))
+        api = stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}", env=LOOSE))
+        api.post("/v1/workflows/definitions", json={"yaml": OWN}, headers=TEAM)
+        api.post("/v1/workflows/definitions/uc251_own_fee/publish-requests", json={}, headers=TEAM)
+        stack.enter_context(engine_worker("uc251-own", {"OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}", **LOOSE}))
+        started = api.post(
+            "/v1/runs", json={"workflowId": "uc251_own_fee", "input": DISPUTE, "runKey": "uc251-b"}, headers=TEAM
+        )
+        own_run = str((data(started) or {}).get("runId"))
 
-    def settled() -> dict[str, Any]:
-        r = data(api.get(f"/v1/runs/{own_run}", headers=TEAM)) or {}
-        return r if r.get("status") in ("waiting", "succeeded", "failed") else {}
+        def settled() -> dict[str, Any]:
+            r = data(api.get(f"/v1/runs/{own_run}", headers=TEAM)) or {}
+            return r if r.get("status") in ("waiting", "succeeded", "failed") else {}
 
-    held = until(settled) or {}
-    ran = [s["nodeId"] for s in held.get("steps") or [] if s.get("nodeId") == "waive"]
-    check(
-        "6 James's own run holds at its review and waives nothing before a click",
-        held.get("status") == "waiting" and (held.get("waiting") or {}).get("node") == "review" and ran == [],
-        {"status": held.get("status"), "waiting": held.get("waiting"), "waive": ran},
-    )
-    mine = api.post(f"/reviews/{own_run}/decision", json={"decision": "approved", "reason": "uc-251"}, headers=TEAM)
-    ended = until(
-        lambda: (r := data(api.get(f"/v1/runs/{own_run}", headers=TEAM)) or {}).get("status") in ("succeeded", "failed")
-        and r
-    ) or {}
-    sent = [s for s in ended.get("steps") or [] if s.get("nodeId") == "waive"]
-    check(
-        "7 James approves it himself (200), and only then the fee is waived",
-        mine.status_code == 200 and len(sent) == 1 and ended.get("outcome") == "waived",
-        {"decision": mine.status_code, "outcome": ended.get("outcome"), "waive": [x.get("output") for x in sent]},
-    )
+        held = until(settled) or {}
+        ran = [s["nodeId"] for s in held.get("steps") or [] if s.get("nodeId") == "waive"]
+        check(
+            "6 James's own run holds at its review and waives nothing before a click",
+            held.get("status") == "waiting" and (held.get("waiting") or {}).get("node") == "review" and ran == [],
+            {"status": held.get("status"), "waiting": held.get("waiting"), "waive": ran},
+        )
+        mine = api.post(f"/reviews/{own_run}/decision", json={"decision": "approved", "reason": "uc-251"}, headers=TEAM)
+        ended = until(
+            lambda: (r := data(api.get(f"/v1/runs/{own_run}", headers=TEAM)) or {}).get("status") in ("succeeded", "failed")
+            and r
+        ) or {}
+        sent = [s for s in ended.get("steps") or [] if s.get("nodeId") == "waive"]
+        check(
+            "7 James approves it himself (200), and only then the fee is waived",
+            mine.status_code == 200 and len(sent) == 1 and ended.get("outcome") == "waived",
+            {"decision": mine.status_code, "outcome": ended.get("outcome"), "waive": [x.get("output") for x in sent]},
+        )
 
-rules.close()
 finish()
