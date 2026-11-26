@@ -393,10 +393,13 @@ export function ReviewDecisionForm({
   const [missing, setMissing] = React.useState(false);
   // On by default: a rejected action is the cheapest test case the suite will ever get.
   const [addTestCase, setAddTestCase] = React.useState(true);
+  // Return chosen from the task bar's More menu: the reason box opens with its own Return and Cancel, one step.
+  const [returning, setReturning] = React.useState(false);
   React.useEffect(() => {
     setReason('');
     setMissing(false);
     setAddTestCase(true);
+    setReturning(false);
   }, [review.id]);
 
   const gate = review.kind === 'publish_request' ? review.publish?.evalGate : undefined;
@@ -420,18 +423,16 @@ export function ReviewDecisionForm({
   // A host request is allowed or refused; a refusal's reason is what the person who set the address reads.
   const isHost = review.kind === 'egress_host';
   // The page footer is one row until an action needs a reason (or one is being typed); the sheet always shows the box.
-  const showReason = layout === 'sheet' || missing || !!reason || reasonToApprove;
+  const showReason = layout === 'sheet' || missing || !!reason || reasonToApprove || returning;
   const platformOnly = isTemplate && !platformTeam;
   // In Human Tasks the buttons sit in the task's pinned bar and Return in its More menu; the reason they check stays
   // here, so the form is still the one source of what each button does.
   const bar = React.useContext(DecisionBarContext);
   const inBar = layout === 'footer' && !!bar?.slot && !platformOnly;
-  const submitRef = React.useRef(submit);
-  submitRef.current = submit;
   const barReturn = inBar && review.canReturn === true;
   React.useEffect(() => {
     if (!bar) return;
-    bar.setReturn(barReturn ? () => submitRef.current('returned') : null);
+    bar.setReturn(barReturn ? () => setReturning(true) : null);
     return () => bar.setReturn(null);
   }, [bar, barReturn]);
   if (platformOnly)
@@ -500,6 +501,24 @@ export function ReviewDecisionForm({
           <p className="min-w-0 basis-full text-sm sm:flex-1 sm:basis-auto" data-testid="review-consequence">
             {consequence}
           </p>
+        )}
+        {returning && (
+          <div className="flex gap-2" data-testid="return-confirm">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setReturning(false);
+                setMissing(false);
+              }}
+              data-testid="return-cancel"
+            >
+              Cancel
+            </Button>
+            <LoadingButton variant="outline" size="sm" isLoading={pending === 'returned'} disabled={!!pending} onClick={() => submit('returned')} data-testid="return-submit">
+              Return
+            </LoadingButton>
+          </div>
         )}
         {/* A workflow's own step has no agent or requester to return it to: it is approved or rejected. */}
         {!inBar && (review.canReturn ?? ((isPublish || !review.runId) && !isHost)) && (

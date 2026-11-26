@@ -69,6 +69,9 @@ export function DecisionPanel({
   // Where the decision form draws Reject and Approve, and the Return it hands the More menu (publish requests only).
   const [slot, setSlot] = React.useState<HTMLDivElement | null>(null);
   const [returnTask, setReturnTask] = React.useState<(() => void) | null>(null);
+  // Return opens the reason box only once the menu has finished closing: opened from the item itself, the box took
+  // the focus mid-close, the menu stayed mounted closed, and the next click on More did not open it.
+  const returnAfterClose = React.useRef(false);
   const bar = React.useMemo<DecisionBar>(() => ({ slot, setReturn: (submit) => setReturnTask(() => submit) }), [slot]);
   const more = canAssign || canReassign || (canDecide && !!review.caseId) || !!returnTask;
   return (
@@ -98,7 +101,16 @@ export function DecisionPanel({
                 <Ellipsis />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent
+              align="end"
+              className="w-56"
+              onCloseAutoFocus={(e) => {
+                if (!returnAfterClose.current) return;
+                returnAfterClose.current = false;
+                e.preventDefault();
+                returnTask?.();
+              }}
+            >
               {canAssign && !me.includes(review.assignee ?? '') && (
                 <DropdownMenuItem onSelect={onAssignToMe} data-testid="assign-to-me">
                   Assign to me
@@ -123,7 +135,7 @@ export function DecisionPanel({
                 </DropdownMenuSub>
               )}
               {returnTask && (
-                <DropdownMenuItem onSelect={() => returnTask()} data-testid="task-return">
+                <DropdownMenuItem onSelect={() => (returnAfterClose.current = true)} data-testid="task-return">
                   {review.kind === 'template_submission' ? 'Return to submitter' : 'Return to requester'}
                 </DropdownMenuItem>
               )}

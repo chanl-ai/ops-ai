@@ -234,24 +234,38 @@ await withUiStack(
         const offered = await viewer.getByTestId('task-more').count();
         check('11 a viewer sees the task with no actions', offered === 0 && viewerErrors.length === 0, { offered, viewerErrors: viewerErrors.slice(0, 3) });
       });
-      await step('12 a publish request has Approve and Reject in the pinned bar and Return in More; a workflow task has no Return', async () => {
+      await step('12 a publish request has Approve and Reject in the pinned bar and Return in More, in one step with a reason; a workflow task has no Return', async () => {
         await page.setViewportSize({ width: 1440, height: 900 });
-        await page.goto(`${consoleUrl}/work/tasks?view=open`, { waitUntil: 'domcontentloaded' });
-        await page.getByTestId('queue-list').waitFor({ timeout: 60_000 });
-        await page.locator('[data-testid^=queue-item-]', { hasText: /^Publish / }).first().click();
-        const bar = page.getByTestId('task-bar');
-        await bar.getByTestId('review-approve').waitFor({ timeout: 60_000 });
-        const reject = await bar.getByTestId('review-reject').count();
-        await page.getByTestId('task-more').click();
-        const offered = await page.getByTestId('task-return').count();
-        await shot('publish-more');
-        await page.keyboard.press('Escape');
         await page.goto(`${consoleUrl}/work/tasks?review=${encodeURIComponent(ids.tom)}`, { waitUntil: 'domcontentloaded' });
-        await page.getByTestId('decision-panel').waitFor();
+        await page.getByTestId('decision-panel').waitFor({ timeout: 60_000 });
         await page.getByTestId('task-more').click();
         const onWorkflow = await page.getByTestId('task-return').count();
         await page.keyboard.press('Escape');
-        check('12 a publish request has Approve and Reject in the pinned bar and Return in More; a workflow task has no Return', reject === 1 && offered === 1 && onWorkflow === 0, { reject, offered, onWorkflow });
+        await page.goto(`${consoleUrl}/work/tasks?view=open`, { waitUntil: 'domcontentloaded' });
+        await page.getByTestId('queue-list').waitFor({ timeout: 60_000 });
+        const publishRow = page.locator('[data-testid^=queue-item-]', { hasText: /^Publish / }).first();
+        const publishId = (await publishRow.getAttribute('data-testid')).replace('queue-item-', '');
+        await publishRow.click();
+        const bar = page.getByTestId('task-bar');
+        await bar.getByTestId('review-approve').waitFor({ timeout: 60_000 });
+        const reject = await bar.getByTestId('review-reject').count();
+        // Return opens the reason box with its own Return and Cancel; Cancel closes it without returning.
+        await page.getByTestId('task-more').click();
+        await page.getByTestId('task-return').click();
+        await page.getByTestId('return-confirm').waitFor();
+        await page.getByTestId('return-cancel').click();
+        await page.getByTestId('return-confirm').waitFor({ state: 'detached' });
+        const stillOpen = (await json(await fetch(`${agents}/reviews/${encodeURIComponent(publishId)}`, { headers: maya })))?.status;
+        await page.getByTestId('task-more').click();
+        await page.getByTestId('task-return').click();
+        await page.locator('#decision-reason').fill('Add the missing eval first');
+        await shot('publish-return');
+        await page.getByTestId('return-submit').click();
+        const returned = await until(async () => {
+          const got = await json(await fetch(`${agents}/reviews/${encodeURIComponent(publishId)}`, { headers: maya }));
+          return got?.status === 'returned' ? got : null;
+        }, 60_000);
+        check('12 a publish request has Approve and Reject in the pinned bar and Return in More, in one step with a reason; a workflow task has no Return', reject === 1 && onWorkflow === 0 && stillOpen === 'pending' && !!returned, { reject, onWorkflow, stillOpen, returned: returned?.status });
       });
 
       await step('13 on a phone the task holds the focus and closing it gives it back to its row', async () => {
