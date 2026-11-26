@@ -56,7 +56,9 @@ scripts are reached through a make target; run them that way so ports and env ma
 |---|---|
 | A queue merge commit has no type in its subject | `release-tag.sh` reads `feat`/`fix` from the pull request title, which is the first body line of a `Merge pull request #N` commit; a squash commit has it as the subject (`test_release_tag.py`) |
 | A pick wider than one run fits is cancelled and records nothing | `ci_usecases.py pick` returns nothing above `MAX_PICK` and prints why (the nightly covers it); `run` rewrites its `--out` file after each use case, so a cut-off run still leaves results |
-| A registry row marked `failing` gates against an empty quarantine | `ci_usecases.py` records it as `known-failing`, which does not gate; an id is `uc-<digits>` or a name such as `uc-workflows-1`, and `uc-012` equals `uc-12` |
+| A registry row marked `failing` gates against an empty quarantine | A status cell has no owner or expiry, so `ci_usecases.py` ignores it: a known-failing use case is an entry in `config/quarantine.json` (owner, 30-day expiry). An id is `uc-<digits>` or a name such as `uc-workflows-1`, and `uc-012` equals `uc-12`. CI passes bare ids, so a `:ui` entry quarantines every layer of that use case |
+| `run` crashed on its own arguments while `--self-test` stayed green | A self-test that never calls `main` cannot catch a wrong call; `ci_usecases.py --self-test` drives `run --out` through `main` with a stubbed runner and reads the file after the first result |
+| One commit got two tags (`v1.3.0`, then `v1.4.0`) | `release-tag.sh` skips a commit that already holds a `vX.Y.Z` tag before it computes a version, so a rerun or a run by branch name adds none |
 | A quarantine entry is capped at 30 days | `quarantine.py check` rejects a later expiry than 30 days after `added`; `make checks` runs it on every pull request |
 | A workflow_run or schedule workflow starts only from the default branch | `release-tag.yml` and `nightly-usecases.yml` do nothing until they are on `main`; start them once by hand (`docs/deploy/release.md`, First run) |
 

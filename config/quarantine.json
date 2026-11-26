@@ -1,4 +1,54 @@
 {
   "about": "Use cases a run may fail without failing the merge queue. A quarantined use case still runs and its failure is printed; it just does not gate. Each entry needs an owner and an expiry date, and an expired entry fails `make quarantine-check`, so nothing stays here without someone fixing or deleting it. Edit with `make quarantine ADD=<id> OWNER=<name> UNTIL=<date> WHY=<reason>` or `make quarantine REMOVE=<id>`.",
-  "entries": []
+  "entries": [
+    {
+      "id": "uc-100",
+      "owner": "ops-release",
+      "expires": "2026-12-26",
+      "reason": "registry row marked failing before the nightly existed; owner to fix or remove",
+      "added": "2026-11-26"
+    },
+    {
+      "id": "uc-140",
+      "owner": "ops-release",
+      "expires": "2026-12-26",
+      "reason": "registry row marked failing before the nightly existed; owner to fix or remove",
+      "added": "2026-11-26"
+    },
+    {
+      "id": "uc-469",
+      "owner": "ops-release",
+      "expires": "2026-12-26",
+      "reason": "registry row marked failing before the nightly existed; owner to fix or remove",
+      "added": "2026-11-26"
+    },
+    {
+      "id": "uc-525",
+      "owner": "ops-release",
+      "expires": "2026-12-26",
+      "reason": "registry row marked failing before the nightly existed; owner to fix or remove",
+      "added": "2026-11-26"
+    },
+    {
+      "id": "uc-552",
+      "owner": "ops-release",
+      "expires": "2026-12-26",
+      "reason": "registry row marked failing before the nightly existed; owner to fix or remove",
+      "added": "2026-11-26"
+    },
+    {
+      "id": "uc-733",
+      "owner": "ops-release",
+      "expires": "2026-12-26",
+      "reason": "registry row marked failing before the nightly existed; owner to fix or remove",
+      "added": "2026-11-26"
+    },
+    {
+      "id": "uc-722",
+      "owner": "ops-release",
+      "expires": "2026-12-26",
+      "reason": "registry row marked failing before the nightly existed; owner to fix or remove",
+      "added": "2026-11-26"
+    }
+  ]
 }

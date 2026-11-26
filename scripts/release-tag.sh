@@ -21,6 +21,10 @@ remote=${REMOTE:-origin}
 sha=$(git rev-parse --verify "$ref^{commit}")
 version=${VERSION:-}
 if [ -z "$version" ]; then
+  # A rerun, or a run by branch name after one by sha, must not raise a second version on the same commit.
+  git fetch --quiet --tags "$remote" 2>/dev/null || true
+  held=$(git tag --points-at "$sha" --list 'v[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+  if [ -n "$held" ]; then echo "release-tag: $sha is already $held"; exit 0; fi
   title=$(git log -1 --format=%s "$sha")
   body_title=$(git log -1 --format=%b "$sha" | sed -n '1p')
   for line in "$title" "$body_title"; do

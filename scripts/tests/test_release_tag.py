@@ -117,6 +117,17 @@ def test_auto_bump_reads_the_pull_request_title_from_a_merge_commit_body(tmp_pat
     assert git(remote, "rev-list", "-n", "1", "v1.3.1") == fix
 
 
+def test_a_commit_that_already_has_a_version_tag_gets_no_second_one(tmp_path: Path) -> None:
+    remote, work = clone_pair(tmp_path)
+    commit(work, "b", RELEASE)
+    tag(work)
+    feat = commit(work, "c", "feat(console): saved views (#40)")
+    assert tag(work, BUMP="auto").returncode == 0
+    again = tag(work, BUMP="auto")
+    assert again.returncode == 0 and "already v1.3.0" in again.stdout
+    assert git(remote, "tag", "--points-at", feat) == "v1.3.0"
+
+
 def test_a_tag_made_on_github_needs_a_recorded_walk_and_a_local_run_does_not(tmp_path: Path) -> None:
     remote, work = clone_pair(tmp_path)
     commit(work, "b", RELEASE)

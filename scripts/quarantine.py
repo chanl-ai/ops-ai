@@ -75,8 +75,9 @@ def norm(item: str) -> str:
 
 
 def covers(ids: set[str], item: str) -> bool:
-    """`uc-1` quarantines every layer of uc-1; `uc-1:ui` only that layer. A run of `uc-1` as a whole carries no layer,
-    so a layer entry covers it: a run names a layer only when it was started for one."""
+    """`uc-1` quarantines every layer of uc-1; `uc-1:ui` only that layer. CI runs bare ids (the pick emits `uc-1`),
+    and a bare run carries no layer, so a `uc-1:ui` entry quarantines every layer of uc-1 there: a failing api layer is
+    covered too. Run an id with its layer (`uc-1:api`) to have the entry cover only that layer."""
     held = {norm(i) for i in ids}
     item = norm(item)
     base = item.partition(":")[0]
