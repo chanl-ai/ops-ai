@@ -186,7 +186,7 @@ publishing** (the `skillPublishStrict` setting on Governance › Policies) refus
 (`position.field` `source`, `position.index` the line), and so does a text that makes more than 30 steps: none of its
 tools or paths could be enforced, so it is a `bad_step` problem on the 31st step's line. Each step's prompt carries
 only that step's lines, not the whole text. `POST /v1/skills/{id}/text` reads a text without saving it,
-by the same reader a save runs (`services/agents-service/src/ops_agents/app/skill_text.py`). A skill saved as a list
+by the same reader a save runs. A skill saved as a list
 of steps is shown as text by that reader and keeps its stored steps until its text is saved.
 
 ## Give the skill to an agent and follow the steps

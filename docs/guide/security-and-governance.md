@@ -2,9 +2,41 @@
 
 Status: current. Checked against the release's sign-in, gateway, policy and storage code.
 
+**Answer the risk review's questions from one place: who signed in, what they may do, what a write needs, where a call
+may go and what is kept as evidence.**
+
+## The pilot works, then the risk review asks
+
+A card team's agent drafts dispute credits well. Then the reviewer asks who approved the credit, what the agent could
+reach, which hosts it called and where the record is. A claims team and a lender get the same questions. If the answers
+live in each agent's code, each new use case waits on a new review, and one unreviewed write to a customer's account can
+end the programme.
+
 Ops AI is built so that software can draft any change and only a person can let one through. The controls below are
 layered: who you are (sign-in), what you may do in a team (roles), what a single write needs (approvals), where a call
 may go (the gateways and the allow-list), and what is kept as evidence (audit).
+
+## The plan
+
+<!-- site: steps -->
+1. **Sign people in** with your identity provider, or a password where there is none.
+2. **Give each person a role per team.** The grid says what each role may do.
+3. **Choose which writes wait** for a person, and how many approvers they need.
+4. **Allow only the hosts your agents need.** The outbound list starts empty.
+5. **Hand the reviewer the evidence.** The audit log, the tool call log and the run journal answer who, what and when.
+
+## Try it
+
+See who you are and what your role may do, then find what a write needs.
+
+```bash
+opsai people me
+opsai people roles
+opsai tasks list --view open
+```
+
+In the console the same views are under **Govern › Access** (roles and tool access), **Govern › Policies** (approvals
+and the allow-list) and **Settings › Approvals**.
 
 ## Sign-in and SSO
 
@@ -88,7 +120,7 @@ flowchart TB
 |---|---|---|
 | Registry | Operations come from tool modules: imported from OpenAPI 3.0 or 3.1, discovered from an MCP server, or written by a builder. A module's major change opens a Security review; calls keep the published shape until the new version is published | Built |
 | Connections | How the platform signs in to a system, one account at a time: API key, basic or bearer, OAuth client credentials, OAuth authorization code with PKCE, either OAuth kind proving the app with a signed client assertion instead of a secret, a signed service-account JWT grant (DocuSign, Google), client certificate (mutual TLS). The signing key is sealed like a client secret and never read back; reads show the certificate's thumbprint and expiry. Tokens are stored encrypted and refreshed one at a time | Built |
-| Each person signing in to a system with their own account | Tools a person runs, and agents acting for them, use that person's own account of the App; a run waiting for an account it does not have becomes a Human Task ([Apps](apps.md#accounts-the-teams-and-your-own)) | Built |
+| Each person signing in to a system with their own account | Tools a person runs, and agents acting for them, use that person's own account of the App; a run waiting for an account it does not have becomes a Human Task ([Apps](apps.md#who-signs-in-the-teams-login-or-each-persons)) | Built |
 | Test and live runs | Live runs and chats use an app's default account; test runs use its test account when it has one. A write on a test account never waits, whatever the team holds; a test run's write on a live account meets the rules a live write meets. A test run with a saved mock answer for its input gets that answer instead | Built |
 | Ask before changes | A newly added app has every tool on. When a team asks the person in the chat, each write of an app asks that person first with Allow, Deny and Allow for this chat; only the person who asked answers it. A write on a test account never asks. Writes any approval holds go to a reviewer as before; workflows and agent runs with nobody in them are not asked; a tool the team turned off is refused with Turn on <tool> for an admin and Ask an admin for anyone else | Built |
 | Outbound allow-list | HTTPS only, to hosts on your tenant's list. Every address a host resolves to is checked inside the connection, so DNS cannot be used to redirect a call. Private ranges are allowed only when listed; loopback, link-local and cloud metadata addresses never. No redirects are followed and no cookies kept. The list starts empty: nothing is reachable until a Security admin adds a host | Built |
@@ -125,6 +157,16 @@ Saving or clearing a workflow's schedule is in the audit log with the old and ne
 Every security-relevant change and every call to the outside is recorded: the audit log, the tool call log, the
 credential, allow-list, connection and storage audits, the run journal, each review decision and the model call log.
 Details and status are in [Data and database](data-and-database.md#the-audit-trail).
+
+## What success looks like
+
+A reviewer asks who approved a change and which hosts the agent reached, and the answer is a log row, not a search. A
+write waits for a named person on the exact input they saw. Nothing is reachable until a Security admin adds the host.
+
+## What skipping it costs
+
+Without these controls, each agent is reviewed on its own, the first unreviewed write to a customer's account ends the
+pilot, and an auditor's question takes days of reading code.
 
 ## Platform hardening
 

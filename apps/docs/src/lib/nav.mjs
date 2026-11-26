@@ -62,6 +62,7 @@ export const SITE = [
         icon: 'briefcase',
         open: true,
         entries: [
+          { page: 'guide/use-cases/build-an-agent.md', title: 'Build an agent', icon: 'bot' },
           { page: 'guide/use-cases/card-disputes.md', title: 'Card disputes', icon: 'credit-card' },
           { page: 'guide/use-cases/chat-and-human-tasks.md', title: 'Start the day from chat', icon: 'message-square' },
           { page: 'guide/use-cases/answer-from-documents.md', title: 'Answer from your documents', icon: 'library' },
@@ -233,7 +234,9 @@ export const SITE = [
         icon: 'flag',
         open: true,
         entries: [
-          { page: 'contributing.md', title: 'Contributing', icon: 'hammer' },
+          { page: 'contributing/README.md', title: 'Contributing', icon: 'hammer' },
+          { page: 'contributing/figure-guide.md', title: 'Figure guide', icon: 'shapes' },
+          { page: 'contributing/figures.md', title: 'Figures', icon: 'gallery-horizontal' },
           { page: 'README.md', title: 'All documents', icon: 'list' },
         ],
       },

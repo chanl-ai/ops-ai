@@ -8,8 +8,7 @@ Status: current, checked against the code on 2026-11-18. Designed and not built:
 |---|---|
 | One API for chat and workflows | The families in the table below. Four calls do the work: create a thread, run it, read its state, decide a review. Workflow runs on the engine have their own `/v1/runs` calls (start, cancel, retry, events, resume a step) |
 | Versions move only through the pointer | Deployments name `wf_d@production`; `POST …/pointer` moves it; rollback is the same call; running threads keep their version |
-| Decide is the only door for a policy-owned pause | `POST /v1/reviews/{id}/decide` resumes it; a resume sent to `runs` answers 409. A plain question to a chat user, owned by no policy, may resume through `runs` | Chat approvals use the same door: the chat widget action calls decide.
-| Knowledge, tools, connections, files, sign-in and settings | Their own families; not in this page |
+| Decide is the only door for a policy-owned pause | `POST /v1/reviews/{id}/decide` resumes it; a resume sent to `runs` answers 409. A plain question to a chat user, owned by no policy, may resume through `runs` | Chat approvals use the same door: the chat widget action calls decide. | Knowledge, tools, connections, files, sign-in and settings | Their own families; not in this page |
 
 ## Calls
 
