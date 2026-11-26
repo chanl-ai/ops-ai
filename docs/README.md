@@ -51,6 +51,11 @@ Each page opens with the problem it solves and says what is built. Images sit be
 | `design/agents-v2/agent-spec-file.md` | Agents version 2: the one versioned document that describes an agent, its fields, rules, schema and two worked examples |
 | `design/agents-v2/automatic-mode-and-loop-kinds.md` | Agents version 2: how an agent picks direct, plan, helpers or sandbox per request, the seven fixed loop kinds, and hand-overs |
 | `design/agents-v2/chat-builder.md` | Agents version 2: drafting a whole agent spec from a description, approved section by section |
+| `design/agents-v2/tool-gateway.md` | Agents version 2: the tool gateway's tool-server client additions, web search and page fetch |
+| `design/agents-v2/sandbox-service.md` | Agents version 2: one sandbox per conversation, files kept and restored, the exit gate, limits, approvals and the backend port |
+| `design/agents-v2/sandbox-backend-sprites.md` | Agents version 2: running sandboxes on Fly Sprites for hosted tenants |
+| `design/agents-v2/sandbox-backend-docker.md` | Agents version 2: running sandboxes as sealed Docker containers for a small install |
+| `design/agents-v2/sandbox-backend-kubernetes.md` | Agents version 2: running sandboxes as pods with gVisor or small virtual machines in an enterprise's cluster |
 
 ## How the docs site shows a page
 
