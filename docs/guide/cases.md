@@ -6,12 +6,20 @@ Status: current. Rows marked planned are designed and not built.
 
 ## Work that lasts days gets lost between people
 
-A court order on an account, a complaint or a claim passes through several people and several runs. Without one record,
-each person reads the email chain to learn what happened, and nobody can say what the work is waiting on or who owns it.
-A deadline slips because no one could see the clock.
+A court order on an account, a complaint, an insurance claim or a loan hardship request passes through several people and
+several runs. Without one record, each person reads the email chain to learn what happened. Nobody can say what the work
+is waiting on or who owns it, and a deadline slips because no one could see the clock.
 
 A case is the one record of that work: what it is about, what it is waiting on, who owns it, and everything that
 happened to it. Use cases when a person needs to pick up a piece of work where someone else left it.
+
+## The plan
+
+<!-- site: steps -->
+1. **Name the kind of work.** A builder edits a case type: the fields it carries and their order.
+2. **Let a workflow open it.** An **Open case** step creates the case with the fields the workflow read.
+3. **Work it.** People assign it, add notes and change its status. Drafted actions and Human Tasks show on the case.
+4. **Close it.** A person closes the case. A run never does.
 
 ## Try it
 
@@ -41,7 +49,7 @@ opsai cases note <case-id> "Called the claimant; documents on the way."
 
 In the console the case is under **Work › Cases**.
 
-## How it works
+## What a case holds
 
 - A case belongs to a team, and only that team's members with the Cases permission can open it.
 - Its page shows the subject, status, priority, owner, customer and two clocks (first response and resolution), the
@@ -72,7 +80,13 @@ In the console the case is under **Work › Cases**.
 ## What success looks like
 
 A workflow opens the case with its fields filled in. Anyone on the team with the Cases permission finds it, reads the
-history in plain words, sees the Human Tasks it waits on and adds a note. The owner and the two clocks are on its page.
+history in plain words, sees the Human Tasks it waits on and adds a note. The owner and the two clocks are on its page,
+so a colleague who picks it up on Monday knows what happened on Friday.
+
+## What skipping it costs
+
+Without a case, the state of the work is spread across email threads and run logs. The next person rebuilds it by
+reading all of them, and the owner of a deadline is whoever remembers it.
 
 ## Next
 

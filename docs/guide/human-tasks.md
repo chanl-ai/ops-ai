@@ -7,12 +7,23 @@ their decision.**
 
 ## Some steps need a named person on the record
 
-A payment, a hold on an account, a reply to a customer, a field read from a blurry scan: these should not happen until a
-person has looked. If the agent simply runs, the first wrong write reaches a customer's account. If a person is asked by
-email, nobody can later show what they were looking at when they said yes.
+A payment, a hold on an account, a reply to a customer, a field read from a blurry scan: none of these should happen
+until a person has looked. If the agent simply runs, the first wrong write reaches a customer's account. If a person is
+asked by email, nobody can later show what they were looking at when they said yes. A reviewer who signs off on a
+summary cannot say what the agent was about to send.
 
 A human task pauses the agent or workflow at that step, shows a person exactly what will happen, and carries on only
-with their decision. Use it wherever your process needs a named person on the record.
+with their decision. Use it wherever your process needs a named person on the record: a claims team approving a
+settlement, a lender confirming a payoff quote, a support team checking a refund.
+
+## The plan
+
+<!-- site: steps -->
+1. **Choose which writes wait.** A team admin picks the whole team, some apps or one tool, and who answers.
+2. **The agent asks.** When it reaches a write, the run pauses and a task shows the exact input.
+3. **A person decides.** They approve or reject with a reason, in the console, in the chat or with the command line.
+4. **The run carries on.** An approved write runs once. A rejected one makes no change. Either way the record keeps who
+   decided, when and why.
 
 ## Try it
 
@@ -35,18 +46,18 @@ Make every write in your team wait for a person, then approve one.
    The write runs once, and the chat carries on with its result. `opsai tasks decide <task-id> reject --reason "..."`
    rejects it, and no write is made.
 
-## How it works
+## What the person is protected by
 
-- Writes run at once until a team turns approvals on. Reads never wait.
-- The approval is bound to the exact input the reviewer saw. If one character changes after approval, the approval no
-  longer counts and the write is refused. An approval is good for 15 minutes.
-- By default the person who asked does not decide their own request.
-- A decision is recorded with who made it, when and why, then the paused run resumes from where it stopped. Deciding the
-  same task twice resumes it once.
-- A waiting run uses no worker. It can wait a minute or a week.
-- A deadline that passes marks the task overdue or sends the run down its timeout path. A timeout never approves.
-- A workflow asks a person with a **Human review** step, or an **Ask** step for a free-text answer. Another system can open
-  a task through the API and read the decision back.
+- **Reads never wait.** Writes run at once until a team turns approvals on.
+- **The approval is bound to what the reviewer saw.** If one character of the input changes after approval, the approval
+  no longer counts and the write is refused. An approval is good for 15 minutes.
+- **Nobody approves their own request**, unless the team allows it.
+- **Deciding twice resumes once.** A decision is recorded with who made it, when and why, then the paused run resumes
+  from where it stopped.
+- **Waiting is free.** A waiting run uses no worker, so it can wait a minute or a week.
+- **A timeout never approves.** A deadline that passes marks the task overdue or sends the run down its timeout path.
+- **Workflows and other systems can ask too.** A workflow asks a person with a **Human review** step, or an **Ask** step
+  for a free-text answer. Another system can open a task through the API and read the decision back.
 
 ## What a task looks like
 
@@ -75,7 +86,7 @@ Five types come with Ops AI; a builder copies one to make a specialised type, an
 | Two approvers | A tool's approval policy | Two different people must approve; the same person twice is refused. Use it for anything that moves money | Off |
 | Task assist | Govern › Policies | A model summarises the task and suggests an action, marked as AI | Off |
 
-Every write made over MCP waits for a person, whatever these settings say. Who may decide at all is the role's decide
+Every write an AI assistant makes over MCP waits for a person, whatever these settings say. Who may decide at all is the role's decide
 permission ([Teams and access](teams-and-access.md)).
 
 ## Limits
@@ -90,7 +101,12 @@ permission ([Teams and access](teams-and-access.md)).
 
 A write waits as a task showing the exact input. A reviewer approves or rejects it, with a reason, and the record keeps
 who decided and when. On approval the write runs once and the chat or workflow carries on. On rejection no write is
-made.
+made. When the risk team asks who approved a change, the answer is on the task.
+
+## What skipping it costs
+
+Without a task, the approval lives in an email thread or a chat message. It does not say which input was approved, and
+the write can run again with a different one. The audit answer is rebuilt by hand each time someone asks.
 
 ## Next
 
