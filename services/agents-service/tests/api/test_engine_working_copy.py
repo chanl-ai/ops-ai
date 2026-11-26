@@ -167,16 +167,39 @@ async def test_a_tool_step_the_team_lacks_is_listed_with_its_step_and_refused(cl
     assert refused.status_code == 422 and refused.json()["error"]["code"] == "tool_not_available", refused.text
 
 
-async def test_a_step_sending_the_platforms_reply_publishes_without_a_tools_gateway(client: AsyncClient) -> None:
-    # send_reply is not in the in-process catalogue; this process sends it itself, as the shipped mail workflows do.
-    view = await _published(client)
+async def _publish_send_reply(client: AsyncClient, view: dict[str, Any]) -> Any:
+    """Publishes the live workflow again with its lookup step sending send_reply, the shipped mail workflows' reply."""
     named = basic()
     next(n for n in named["nodes"] if n["id"] == "lookup")["parameters"]["operation"] = "send_reply"
     base = (await _save(client, named, view["saveBase"])).json()["data"]["saveBase"]
-    preview = (await client.get(f"{WF}/publish-preview")).json()["data"]
-    assert not [b for b in preview["blockers"] if b["code"] == "tool_not_available"], preview
-    published = await _publish(client, base)
-    assert published.status_code == 201, published.text
+    return await _publish(client, base)
+
+
+async def test_a_reply_step_with_no_tool_gateway_is_refused_naming_the_gateway(client: AsyncClient) -> None:
+    refused = await _publish_send_reply(client, await _published(client))
+    error = refused.json()["error"]
+    assert refused.status_code == 422 and error["code"] == "tool_not_available", refused.text
+    assert "no tool gateway (OPS_GATEWAY_URL is not set)" in error["message"], error["message"]
+
+
+class _TurnedOff:
+    """A gateway's directory for a team that turned every operation off, send_reply among them."""
+
+    async def operations(self) -> list[Any]:
+        return []
+
+
+async def test_with_a_gateway_a_team_that_turned_send_reply_off_is_refused(
+    graph_models: FakeGraphModels, database_url: str
+) -> None:
+    settings = Settings(database_url=database_url, seed_dir=SEED)
+    async with empty_engine(database_url) as engine, started(engine, settings, graph_models) as (app, client):
+        view = await _published(client)
+        app.state.runtime.gateway, app.state.runtime.tool_directory = True, _TurnedOff()
+        refused = await _publish_send_reply(client, view)
+        error = refused.json()["error"]
+        assert refused.status_code == 422 and error["code"] == "tool_not_available", refused.text
+        assert "which this team does not have" in error["message"], error["message"]
 
 
 @pytest.fixture

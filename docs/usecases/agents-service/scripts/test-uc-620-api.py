@@ -5,7 +5,7 @@ docs/usecases/agents-service/any-file-a-workflow-or-chat.md.
 
 Own services, no real model: models-service on the fake OpenAI with the levy notice's extraction rule, kb-service's
 files-service (scanning off) and documents-service with the demo's document types, both delivering their service
-events to this run's agents-service, agents-service and a workflow worker. The event workflows are the ones
+events to this run's agents-service, agents-service and a workflow worker, with tools-service as the tool gateway. The event workflows are the ones
 agents-service ships; the notice workflow is a team copy of the seeded mail_document whose cases step starts a
 workflow of this script's, so no bank is needed."""
 
@@ -31,6 +31,7 @@ from usecase_harness import (
     AGENTS_DIR,
     AGENTS_PORT,
     LOG_DIR,
+    TOOLS_PORT,
     _env,  # pyright: ignore[reportPrivateUsage]
     agents,
     check,
@@ -42,6 +43,7 @@ from usecase_harness import (
     pg_url,
     put_in_files,
     sse,
+    tools,
 )
 
 RULES = AGENTS_DIR.parent / "models-service" / "seed" / "demo-fake-openai"
@@ -120,6 +122,7 @@ def worker(files_url: str, models_url: str, documents_url: str) -> Generator[Non
         "OPS_FILES_URL": files_url,
         "OPS_DOCUMENTS_URL": documents_url,
         "OPS_ENGINE_POLL_SECONDS": "0.2",
+        "OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}",
     }
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     with (LOG_DIR / "worker-uc620.log").open("ab") as fh:
@@ -403,12 +406,15 @@ def main() -> None:
         fake_openai(RULES) as fake,
         models({"OPS_MODELS_FAKE_OPENAI_URL": fake}) as models_url,
         kb(Path(tmp) / "files", models_url=models_url, document_types=True, agents_url=agents_url) as knowledge,
+        # Every deployment runs a tool gateway, so the workflows publish and run against tools-service's tool list.
         agents(
             kb_url=str(knowledge.base_url).rstrip("/"),
+            gateway_url=f"http://127.0.0.1:{TOOLS_PORT}",
             models_url=models_url,
             models_key="mk_dev_agents",
             env={"OPS_FILES_URL": knowledge.files_url, "OPS_DOCUMENTS_URL": knowledge.documents_url},
         ) as api,
+        tools(),
         worker(knowledge.files_url, models_url, knowledge.documents_url),
         httpx.Client(base_url=knowledge.files_url, headers=OPS, timeout=60) as files,
     ):

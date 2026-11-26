@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-26",
-  "title": "Workflows with a reply step publish again",
-  "description": "A workflow whose step emails a reply or an acknowledgement, such as a copy of the shipped mail workflow, publishes and can be shared as a form again instead of being refused for a missing tool.",
-  "tag": "fix"
-}
