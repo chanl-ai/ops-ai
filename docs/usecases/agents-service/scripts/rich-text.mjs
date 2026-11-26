@@ -36,6 +36,8 @@ export async function showView(page, view) {
   if (await bar.isVisible()) return bar.click();
   await page.getByTestId('rte-menu').click();
   await page.getByTestId(`rte-menu-view-${view}`).click();
+  // The menu closes with an animation; opening it again before it is gone would press its button as a close.
+  await page.locator('[role="menu"]').waitFor({ state: 'detached', timeout: 10_000 });
 }
 
 /** Replaces the whole text through the Markdown view and returns to the formatted one. */

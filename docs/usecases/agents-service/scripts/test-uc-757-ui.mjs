@@ -860,7 +860,7 @@ await withUiStack(
       const dialogBox = await page.getByTestId('reference-picker').boundingBox();
       await page.keyboard.press('Escape');
       await page.getByTestId('reference-picker').waitFor({ state: 'hidden', timeout: 10_000 });
-      // The text saves itself a moment after a change; a menu opened while that lands is closed by the page's update.
+      // Let the text's own save land first, so the view switch below is the only change in flight.
       await saveSkill(page);
       await page.locator('[data-testid="save-state"][data-state="saved"]').waitFor({ timeout: 60_000 });
       await showView(page, 'markdown');
