@@ -2,11 +2,20 @@
 
 Status: current. Rows marked planned are designed and not built.
 
-Some work should run the same way every time and leave a record: open a case for each court order, place a hold only
-after a person approves, reply on the channel the request came in on. A workflow is a versioned graph of typed steps
-that does that. Each step's input and output is saved as it runs, so a crash or a restart loses nothing and a write is
-never made twice. Some steps are AI (an agent, a classification, an extraction); the rest are rules, tool calls and
-people deciding.
+**Run a process the same way every time, with a person approving the steps that matter and a record of every run.**
+
+## A process that depends on who is at the desk
+
+Open a case for each court order, place a hold only after a person approves, reply on the channel the request came in
+on. Done by hand, each of these changes with the person doing it, and the record of what happened lives in an email
+thread. Done by a script, a crash halfway can repeat a write to a customer's account.
+
+## What it costs to leave it manual
+
+Every request is retyped across systems, approvals are lost between inboxes, and the audit answer is rebuilt by hand.
+A workflow is a versioned graph of typed steps that removes that. Each step's input and output is saved as it runs, so
+a crash or a restart loses nothing and a write is never made twice. Some steps are AI (an agent, a classification, an
+extraction); the rest are rules, tool calls and people deciding.
 
 ## Try it
 
@@ -89,7 +98,7 @@ run = ops.workflows.run(draft["workflowId"], input={"customerEmail": "ada@exampl
 > [!NOTE]
 > A new run is a test run unless you ask for a live one (`mode="live"`, or `--live`). A test run signs in with the
 > app's sandbox account when it has one, and with its live account otherwise
-> ([Tools and apps](apps.md#accounts-the-teams-and-your-own)).
+> ([Tools and apps](apps.md#who-signs-in-the-teams-login-or-each-persons)).
 
 A run keeps the version it started on. Publishing a new version changes only the runs that start after it.
 
@@ -122,6 +131,11 @@ A definition has an `id`, a `name`, a list of `nodes` and a list of `connections
 | A chat, from the assistant's start card or an agent that has the workflow as a tool | Built |
 | A due time on the platform clock; the same key runs once | Built |
 | A recurring schedule, a signed incoming webhook, polling another system | Planned |
+
+## What success looks like
+
+A run ends with an outcome you named, and its timeline shows every step with its input and output. A step that needs a
+person pauses the run at no cost until they decide. A new version changes only the runs that start after it.
 
 ## Next
 

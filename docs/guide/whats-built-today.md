@@ -3,6 +3,12 @@
 Status: current. Each row is read from the code of this release. Built means it runs and is covered by an automated
 use case or test; Partial names what runs and what does not; Planned means designed and not in the code.
 
+**Check what runs today before you plan around it, so a pilot never stalls on a feature that does not exist yet.**
+
+You are choosing whether Ops AI covers your use case, and a feature list that mixes working and hoped-for items is no
+help. Planning around a capability that is only designed costs a quarter. Every row below says which one it is, so read
+the area your use case touches, then start with the [Quickstart](quickstart.md) for what is Built.
+
 ## Agents and chat
 
 | Capability | Status |

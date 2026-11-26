@@ -2,11 +2,22 @@
 
 Status: current. The command line is not on a public package index yet, so this page installs it from the clone.
 
-Get Ops AI running on one machine, then build and run a workflow from the command line, in about ten minutes. The
-install uses a built-in test model, so you need no model key. To install for a team on a server, read
-[Install](install.md) instead; the steps are the same with more questions answered.
+**Run Ops AI on one machine and watch a workflow run in about ten minutes, with no model key and nothing to sign up for.**
 
-## What you need
+## Seeing it run beats reading about it
+
+You are deciding whether Ops AI can carry your team's work, and a slide deck cannot answer that. Many tools ask for
+setup, a cloud account and a model key before anything runs, so the decision waits on a project nobody has approved yet. This page installs the real platform on one machine with a built-in test model, then runs a workflow
+you can read in full and open step by step in the console.
+
+## What waiting costs
+
+Until someone runs it, the decision rests on someone else's demo. A pilot that starts without a first run on your own
+machine tends to stall on the first unanswered question: what does a run look like, and what does it keep? Ten minutes
+here answers both. To install for a team on a server, read [Install](install.md) instead; the steps are the same with
+more questions answered.
+
+## Before you start
 
 | Tool | Used for |
 |---|---|
@@ -43,7 +54,7 @@ install uses a built-in test model, so you need no model key. To install for a t
 
 ## Run your first workflow
 
-This workflow takes a support request, maps its fields onto one shape and ends. It has no model, tool or person in it.
+The workflow below takes a support request, maps its fields onto one shape and ends. It has no model, tool or person in it.
 
 <!-- site: steps -->
 1. **Write the workflow.** Save this as `workflow.yaml`:
@@ -111,6 +122,13 @@ This workflow takes a support request, maps its fields onto one shape and ends. 
 
 A new run is a test run unless you ask for a live one with `--live`. Publishing a version, for live runs, is on
 [Workflows](workflows.md).
+
+## What success looks like
+
+- `./install.sh status` prints an address, and you are signed in to the console at it as the first admin.
+- `opsai workflows run` ends `succeeded` with the outcome `accepted`, and the same run is under **Build › Workflows ›
+  Runs** with each step's input and output saved.
+- The Python call prints the same status, so the command line and the code read one run.
 
 ## Use a real model or stop
 

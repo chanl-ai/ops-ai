@@ -2,15 +2,26 @@
 
 Status: current. Checked against the code of this release.
 
+**See the whole platform on one page: what it does for your team, who touches it, and where each piece sits.**
+
+## Routine work eats the team
+
+An operations team spends its day on work that follows a pattern: a court notice arrives and someone opens a case, a
+complaint email needs triage, an account needs a hold, a colleague asks what the procedure says. Software could do the
+reading and drafting. In a regulated business it cannot be allowed to change a customer's account without a person
+deciding, and every step has to leave a record an auditor can read.
+
+## What skipping it costs
+
+Without a platform that carries those controls, each automation is a one-off script or a pilot that the risk function
+has to review from scratch. The team keeps retyping the same request across systems, and the audit answer is rebuilt by
+hand each time someone asks.
+
 ## What Ops AI does
 
-Ops AI is an operational AI platform. A bank's or other regulated business's operations teams use it to hand routine
-back-office work to software: reading a court notice and opening a case, triaging a complaint email, placing a hold on
-an account, answering a staff question from the team's own procedures. The team decides which writes to its
-other systems wait for a person, such as anything that moves money, and every step leaves a record an auditor can read.
-
-It runs on your own infrastructure, against a database your DBA controls and a model endpoint you choose. Nothing
-calls home.
+Ops AI is an operational AI platform that hands routine back-office work to software while the team decides which
+writes to its other systems wait for a person, such as anything that moves money. Every step leaves a record. It runs
+on your own infrastructure, against a database your DBA controls and a model endpoint you choose. Nothing calls home.
 
 ## In three parts
 
@@ -92,6 +103,12 @@ AI gateway.*
 | Case | The record of one piece of work for people: what it is about, what it waits on, what happened |
 | Tool | One operation on one of your systems, such as "get account" or "place hold", with its access class (read or write) and approval policy |
 | Alias | A name such as `default` that points at a provider's model; changing the alias changes the model without changing an agent |
+
+## What success looks like
+
+A new process is configured, not coded: a builder writes the agents and workflows, publishes them through a second
+person's review, and the team starts using them the same day. When the risk team asks about a change, the answer is on
+the record: who approved it, which version ran, and what it could reach.
 
 ## Next
 

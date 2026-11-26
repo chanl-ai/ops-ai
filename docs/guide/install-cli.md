@@ -3,9 +3,17 @@
 Status: current. The package is not on the public Python index yet: install it from a clone, or from the wheel your
 operator gives you. Publishing it is planned.
 
-The opsai command line scripts a team's agents, workflows, knowledge, apps and tasks against an Ops AI install that
-someone else runs. It installs on its own, without the platform, and needs only Python 3.11 or newer and two small
-packages, so it also installs through a company package mirror or with no network at all.
+**Script your team's agents, workflows, knowledge, apps and tasks from a terminal, and keep them in version control.**
+
+## Clicking does not scale to a team
+
+A console is the right place to look at a run. It is the wrong place to keep forty agent definitions, apply the same
+change to staging and production, or let a pipeline publish after a review. Without a command line, every change is a
+sequence of clicks that nobody can diff, repeat or hand to a colleague, and the definitions live only in the database.
+
+The opsai command line works against an Ops AI install that someone else runs. It installs on its own, without the
+platform, and needs only Python 3.11 or newer and two small packages, so it also installs through a company package
+mirror or with no network at all. The steps below install it, sign in and check it.
 
 ## Install
 
@@ -102,9 +110,15 @@ opsai --help
 To build the folder for other operating systems or Python versions than the one you are on, or to upload it to a Nexus
 hosted repository, see [Install from a company registry](../deploy/install.md#install-from-a-company-registry).
 
+## What success looks like
+
+`opsai --help` prints the areas, and `opsai people me` prints you and your team. From then on a definition is a file:
+validate it, apply it, and review the change in your repository like any other.
+
 ## Next
 
 <!-- site: cards -->
 - **[Quickstart](quickstart.md)**: build and run a first workflow with the command line.
+- **[Build an agent](use-cases/build-an-agent.md)**: write, test and publish an agent from a file.
 - **[Agents](agents.md)**: the agent commands.
 - **[Workflows](workflows.md)**: the workflow commands.

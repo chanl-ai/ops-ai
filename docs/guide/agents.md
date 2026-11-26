@@ -2,10 +2,18 @@
 
 Status: current. Rows marked planned are designed and not built.
 
-Some work does not follow the same steps twice: a staff member asks a question, a request needs a few lookups before
-anyone knows what to do. An agent is a model with instructions, tools, knowledge, skills, guardrails and a budget. Inside
-those limits it chooses its own next step. People reach it through chat, other systems through the API, and a workflow
-through an Agent step.
+**Give your team an assistant that answers from your own procedures and calls your systems, inside limits you set.**
+
+## Some work never follows the same steps twice
+
+A staff member asks a question, or a request needs a few lookups before anyone knows what to do. A fixed script cannot
+cover that, and a loose chatbot with no limits cannot be trusted near a customer's account. Without something in
+between, the team keeps answering the same questions by hand.
+
+An agent is a model with instructions, tools, knowledge, skills, guardrails and a budget. Inside those limits it
+chooses its own next step. People reach it through chat, other systems through the API, and a workflow through an Agent
+step. Skipping the limits is the costly part: an agent with no budget, no approval on its writes and no knowledge of
+your documents guesses, and a guess that writes to an account is the one a risk review stops.
 
 ## Try it
 
@@ -89,6 +97,11 @@ are planned.
 
 When an agent drafts a write that needs approval, the chat shows Approve and Reject, and approving may ask for your
 password again ([Human tasks and approvals](human-tasks.md)).
+
+## What success looks like
+
+The agent answers from your instructions and cites the page and section of your documents. A write waits for a person
+before it reaches your system. A published version stays as it was while you edit the next one.
 
 ## Next
 

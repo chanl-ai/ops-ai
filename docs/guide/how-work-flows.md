@@ -2,11 +2,25 @@
 
 Status: current. Each flow below is exercised end to end by the release's automated use cases.
 
-Three flows cover most of what Ops AI does: a person chats with an agent that wants to change something, a workflow
-pauses for a person and resumes days later, and an email becomes cases that people decide. In each one the same three
-rules hold: a write that needs approval waits for a token bound to its exact input, every outside call leaves through a
-gateway, and a run's state is saved after every step so a crash or a restart loses nothing. To run the flows yourself,
-start at [Build with Ops AI](build-with-ops-ai.md).
+**Know what happens between a request and a record, so you can trust a run and answer a reviewer who asks.**
+
+## A reviewer will ask what the AI did
+
+An agent that can change a customer's account is only useful if you can say exactly what it did, who approved it and
+what happens when something fails halfway. Most agent tools cannot say, so teams either keep a person in every step or
+hold the pilot back. This page follows three real flows end to end: a person chats with an agent that wants to change
+something, a workflow pauses for a person and resumes days later, and an email becomes cases that people decide.
+
+## What not knowing costs
+
+Without this picture you cannot tell a reviewer where an approval is enforced, or what a crash does to a half-finished
+write. The answers below are the same in all three flows: a write that needs approval waits for a token bound to its
+exact input, every outside call leaves through a gateway, and a run's state is saved after every step so a crash or a
+restart loses nothing.
+
+## The three flows
+
+To run the flows yourself, start at [Build with Ops AI](build-with-ops-ai.md).
 
 ## A chat turn with a tool approval
 
@@ -141,6 +155,11 @@ Each debtor gets a case whatever happens to the others, and an unmatched debtor 
 
 Other worked examples in the release use the same parts: complaint email triage, a hold requested through the API,
 and a customer summary built from the core system and an agent.
+
+## What success looks like
+
+You can point at any run and say which version ran, what each step received and returned, who approved the write and
+what they saw when they did. A crash, a retry or a week-long wait changes none of that.
 
 ## Next
 
