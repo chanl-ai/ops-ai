@@ -28,37 +28,20 @@ A member of the operations team asks the team's agent to place a hold on an acco
 write, and this team has set holds to wait for a reviewer, so the agent drafts it and a person approves it before
 anything reaches the core system.
 
-```mermaid
-sequenceDiagram
-  autonumber
-  actor P as Person
-  participant AG as agents
-  participant MO as AI gateway
-  participant TO as Data gateway
-  participant SYS as Your core system
-  P->>AG: Message, signed in
-  AG->>MO: Model call on the agent's alias and key
-  MO-->>AG: Call get_account, then place_hold
-  AG->>TO: get_account (a read)
-  TO->>SYS: HTTPS, allow-listed host
-  SYS-->>TO: Balance and holds
-  TO-->>AG: Result, logged
-  Note over AG: place_hold is a write: the run<br/>pauses with its state saved
-  AG-->>P: Approval card with the exact input
-  P->>AG: Approve, with a fresh sign-in if asked
-  Note over AG: Token bound to the input's hash,<br/>the tool and the step
-  AG->>TO: place_hold with the token
-  Note over TO: Policy engine: signed, same input,<br/>not expired, enough approvers
-  TO->>SYS: HTTPS with the stored credential
-  SYS-->>TO: Hold placed
-  TO-->>AG: Result, recorded once by its key
-  AG->>MO: Model call with the result
-  AG-->>P: The answer, streamed
-```
-
-*The person sees the input that will be sent before approving it. Who may approve is the operation's policy: the
-number of approvers, the team they belong to, whether a fresh sign-in is needed, and whether the person who asked may
-decide.*
+<!-- site: sequence caption="A hold that waits for a person: the write is sent only with an approval bound to its exact input" -->
+1. **Person → Agent**: Sends a message, signed in
+2. **Agent → AI gateway**: Model call on the agent's alias and key
+3. **AI gateway → Agent**: Asks for get_account, then place_hold
+4. **Agent → Data gateway**: get_account, a read
+5. **Data gateway → Your core system**: Calls an allow-listed host over HTTPS; the balance and holds come back and are logged
+6. **Agent → Person**: place_hold is a write, so the run pauses with its state saved and an approval card shows the exact input
+   - The person sees the input that will be sent before approving it. Who may approve is the operation's policy: the number of approvers, the team they belong to, whether a fresh sign-in is needed, and whether the person who asked may decide.
+7. **Person → Agent**: Approves, with a fresh sign-in if asked; the token is bound to the input's hash, the tool and the step
+8. **Agent → Data gateway**: place_hold with the token; the policy engine checks it is signed, for the same input, not expired and has enough approvers
+9. **Data gateway → Your core system**: Sends the call with the stored credential; the hold is placed
+10. **Data gateway → Agent**: The result, recorded once by its key
+11. **Agent → AI gateway**: Model call with the result
+12. **Agent → Person**: The answer, streamed
 
 | Step | What protects it |
 |---|---|

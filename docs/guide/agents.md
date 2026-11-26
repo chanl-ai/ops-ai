@@ -88,12 +88,14 @@ are planned.
 
 ## Agent or workflow
 
-| Situation | Use |
-|---|---|
-| A person asks questions and the steps vary | An agent in chat |
-| The same steps every time, with a record and a person deciding | A [workflow](workflows.md) |
-| A process with one judgement step in the middle | A workflow with an Agent step; the step returns what the agent's output schema says |
-| An agent that should be able to start a governed process | Publish the workflow and give it to the agent as a tool |
+<!-- site: decision caption="Whether a piece of work is an agent in chat or a workflow" -->
+- **Are the steps the same every time?**
+  - **No, a person asks and the steps vary**: An agent in chat.
+    - **Should it be able to start a governed process?**
+      - **Yes**: Publish the workflow and give it to the agent as a tool.
+      - **No**: The agent in chat is enough.
+  - **Yes, with a record and a person deciding**: A workflow.
+  - **Mostly, with one judgement in the middle**: A workflow with an Agent step; the step returns what the agent's output schema says.
 
 When an agent drafts a write that needs approval, the chat shows Approve and Reject, and approving may ask for your
 password again ([Human tasks and approvals](human-tasks.md)).

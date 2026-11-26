@@ -43,13 +43,24 @@ who it ran as, and a write can wait for a person. This guide uses Salesforce; th
    open your own agent and add Run a SOQL query and Update a record under **Tools**. Publish.
 5. **Ask in chat.** "What is the status of case 00044818?" The agent runs the query and shows the case.
 6. **Ask it to change something.** Writes run at once unless asking is on, so first turn it on under
-   **Settings › Approvals** ([Hold a write for approval](approve-a-write.md)). Then "Escalate case 00044818." A card names the tool,
-   Update a record, and the change, Status: Escalated, and waits for a yes. Salesforce is unchanged until then.
+   **Settings › Approvals** ([Hold a write for approval](approve-a-write.md)). Then "Escalate case 00044818." A card waits for a yes.
 
 ## What success looks like
 
-After the approval, the case reads Escalated in Salesforce, changed by the account the App signed in with, and the
-App's **Logs** tab lists both calls with who each ran as. Before the approval Salesforce is unchanged.
+Before the approval Salesforce is unchanged; after it, the case is escalated and the App's log shows both calls.
+
+<!-- site: journey caption="Escalating a case from chat: nothing changes in Salesforce until a person says yes" -->
+1. **Chat · Ask about the case**: The agent runs the query and shows the case.
+   - **Question**: What is the status of case 00044818?
+2. **Chat · Ask for a change**: A card names the tool and the change, and waits for a yes. Salesforce is unchanged until then.
+   - **Tool**: Update a record
+   - **Change**: Status: Escalated
+   - **Actions**: Approve, Reject
+3. **Salesforce · The case after the approval**: Changed by the account the App signed in with.
+   - **Status**: Escalated
+4. **Salesforce · Logs tab**: Both calls are listed, each with who it ran as.
+   - **Calls**: Run a SOQL query, Update a record
+   - **Ran as**: The account the App signed in with
 
 ## What skipping it costs
 

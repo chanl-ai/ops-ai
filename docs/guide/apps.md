@@ -58,13 +58,15 @@ The full steps, an app's states, bringing your own OAuth app and turning an app 
 ## Who signs in: the team's login or each person's
 
 A team admin answers one question per app, on the app's **Settings** tab under **Who signs in**. The agent's **Tools**
-list shows the same answer beside each tool's app. A shared mailbox suits the team's login. A system that records who
-did what, such as a core banking API, suits each person's own.
+list shows the same answer beside each tool's app.
 
-| Answer | What a chat user sees | What the audit keeps |
-|---|---|---|
-| **Everyone uses the team's login** | No sign-in and no question. Under the reply: "Runs in <app> as <login> (team login). You are recorded as the person who asked." | The team login and the person who asked |
-| **Each person signs in** | The first time, one card: **Sign in to <app> to continue**. After signing in the chat carries on, and later actions in that app ask nothing | The person's own login |
+<!-- site: compare caption="The two answers to who signs in to an app, and what the chat user and the audit see" -->
+- **Everyone uses the team's login**: Suits a shared mailbox.
+  - **Chat user sees**: No sign-in and no question. Under the reply: "Runs in `<app>` as `<login>` (team login). You are recorded as the person who asked."
+  - **Audit keeps**: The team login and the person who asked
+- **Each person signs in**: Suits a system that records who did what, such as a core banking API.
+  - **Chat user sees**: The first time, one card: **Sign in to `<app>` to continue**. After signing in the chat carries on, and later actions in that app ask nothing
+  - **Audit keeps**: The person's own login
 
 Nobody is asked in a chat or a Human Task to choose between their own login and the team's. Each person manages their
 own sign-ins in **My apps**. On an app each person signs in to, a run nobody started, such as a schedule, cannot call it:
