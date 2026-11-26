@@ -5,6 +5,7 @@ a search by the customer or the case's name finds nothing, or finds a task by a 
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -16,6 +17,7 @@ from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.store import RunStore
 from tests.api.test_action_roles import REVIEWER
+from tests.api.test_agent_registry import _app  # pyright: ignore[reportPrivateUsage]
 from tests.api.test_case_page import _linked_run, data, typed_case  # pyright: ignore[reportPrivateUsage]
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from tests.api.test_write_approval_policy import (
@@ -121,3 +123,21 @@ async def test_a_search_finds_a_task_by_its_customer_and_its_case_for_whoever_re
     # A viewer reads the task masked, so its customer's name is no key for finding it.
     rows = data(await c.get("/reviews", params={"search": "marcus bell"}, headers=VIEWER))["data"]
     assert not found(rows), [r["id"] for r in rows]
+
+
+async def test_a_publish_request_is_the_task_a_decider_may_return_and_returning_it_is_accepted(tmp_path: Path) -> None:
+    """Return is offered on a publish request alone: the one kind whose decision route takes `returned`."""
+    async with _app(
+        str(tmp_path / "db.sqlite"), registry_auto_approve=False, dev_policies={"requesterMayDecide": False}
+    ) as c:
+        lee, kim = {"X-Dev-User": "lee@harborpine.example"}, {"X-Dev-User": "kim@harborpine.example"}
+        agent = data(await c.post("/v1/agents", json={"name": "Checker", "role": "Checks"}, headers=lee), 201)
+        asked = await c.post(f"/v1/agents/{agent['id']}/publish-requests", json={"version": 1, "note": "go"})
+        rid = data(asked, 201)["id"]
+        review = data(await c.get(f"/reviews/{rid}", headers=kim))
+        assert review["canReturn"] is True, review
+        # The requester may not decide their own request, so Return is not theirs to give either.
+        assert data(await c.get(f"/reviews/{rid}"))["canReturn"] is False
+        body = {"decision": "returned", "reason": "Add the missing eval first"}
+        returned = data(await c.post(f"/reviews/{rid}/decision", json=body, headers=kim))
+        assert returned["status"] == "returned", returned

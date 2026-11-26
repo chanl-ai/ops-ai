@@ -22,6 +22,7 @@ import { useAssignReviews, useLookups, useReview, useReviewByRunKey, useReviewPl
 import { useCurrentPerson } from '@/hooks/auth-queries';
 import { useTeam } from '@/hooks/use-team';
 import { useDebounced } from '@/hooks/use-debounced';
+import { useFocusTrap } from '@/hooks/use-focus-trap';
 import { cn } from '@/lib/utils';
 import type { Review } from '@/lib/types/domain';
 import type { ReviewView } from '@/lib/types/query';
@@ -146,6 +147,10 @@ export default function HumanTasksPage() {
 
   const twoPanes = !!task?.evidence.some((n) => n.type === 'viewer');
   const wide = useMinWidth(1024);
+  // Over the list on a phone the task holds the focus, and closing it gives the focus back to the row that opened it.
+  const panelRef = React.useRef<HTMLElement>(null);
+  const overList = !wide && showTask && !!active;
+  useFocusTrap(panelRef, overList);
 
   // The open task as the reading pane: beside the list from 1024 px, over it as a sheet below that.
   const taskPane = !active ? (
@@ -279,6 +284,8 @@ export default function HumanTasksPage() {
               1024, and below it over the list as a sheet from the bottom, closed back to the same place in the list. */}
           {!wide && showTask && !!active && <div className="fixed inset-0 z-40 bg-black/50" aria-hidden onClick={() => setShowTask(false)} />}
           <section
+            ref={panelRef}
+            tabIndex={-1}
             className={cn(
               'min-h-0 min-w-0 flex-col bg-background',
               wide ? 'flex flex-1 overflow-y-auto p-4' : showTask && active ? 'fixed inset-x-0 bottom-0 z-50 flex h-[90dvh] overflow-y-auto rounded-t-xl border-t p-3 pt-12 shadow-lg' : 'hidden',

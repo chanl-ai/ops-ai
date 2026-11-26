@@ -7,6 +7,7 @@ import { ChevronDown, ChevronUp, Ellipsis } from 'lucide-react';
 import { EvidenceExportButton } from '@/components/files/file-actions';
 import type { ReadChecks, ReadEdits } from '@/components/reviews/document-read';
 import { isOpen } from '@/components/reviews/review-columns';
+import { type DecisionBar, DecisionBarContext } from '@/components/reviews/decision-bar';
 import { TaskDecision } from '@/components/reviews/task-decision';
 import type { useReviewDecider } from '@/components/reviews/use-review-decider';
 import { KIND_LABEL, ReviewStatusBadge, RiskBadge, SlaText } from '@/components/status-badges';
@@ -65,7 +66,11 @@ export function DecisionPanel({
   const canAssign = review.canAssign ?? (canDecide && !me.includes(review.assignee ?? ''));
   const canReassign = review.canReassign ?? (canDecide && !!review.assignee);
   // A person who may not act on the task sees no menu at all, as the mock's member view draws it.
-  const more = canAssign || canReassign || (canDecide && !!review.caseId);
+  // Where the decision form draws Reject and Approve, and the Return it hands the More menu (publish requests only).
+  const [slot, setSlot] = React.useState<HTMLDivElement | null>(null);
+  const [returnTask, setReturnTask] = React.useState<(() => void) | null>(null);
+  const bar = React.useMemo<DecisionBar>(() => ({ slot, setReturn: (submit) => setReturnTask(() => submit) }), [slot]);
+  const more = canAssign || canReassign || (canDecide && !!review.caseId) || !!returnTask;
   return (
     <aside className={cn('flex min-h-0 min-w-0 flex-col rounded-lg border bg-card', className)} aria-label="Decision" data-testid="decision-panel">
       {/* The pinned bar: up and down through the queue, then the task's own actions under More. */}
@@ -85,10 +90,11 @@ export function DecisionPanel({
             )}
           </>
         )}
+        <div ref={setSlot} className="ml-auto flex items-center gap-2" data-testid="task-bar-slot" />
         {more && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button type="button" variant="outline" size="icon" className="ml-auto" aria-label="More actions" data-testid="task-more">
+              <Button type="button" variant="outline" size="icon" aria-label="More actions" data-testid="task-more">
                 <Ellipsis />
               </Button>
             </DropdownMenuTrigger>
@@ -115,6 +121,11 @@ export function DecisionPanel({
                     )}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
+              )}
+              {returnTask && (
+                <DropdownMenuItem onSelect={() => returnTask()} data-testid="task-return">
+                  {review.kind === 'template_submission' ? 'Return to submitter' : 'Return to requester'}
+                </DropdownMenuItem>
               )}
               {canDecide && review.caseId && (
                 <DropdownMenuItem asChild>
@@ -179,6 +190,7 @@ export function DecisionPanel({
       {review.kind === 'connect_account' ? (
         <ConnectWait review={review} />
       ) : (
+      <DecisionBarContext.Provider value={bar}>
       <TaskDecision review={review} view={view} checks={checks} decider={decider} me={me} owners={owners} platformTeam={platformTeam} layout="panel">
         {({ choice, decide }) => (
           <>
@@ -195,6 +207,7 @@ export function DecisionPanel({
           </>
         )}
       </TaskDecision>
+      </DecisionBarContext.Provider>
       )}
     </aside>
   );

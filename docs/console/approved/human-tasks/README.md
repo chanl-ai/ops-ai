@@ -14,9 +14,11 @@ the question, the amount in the step's own currency, one pill style for status, 
 task opens over the list from the bottom and closes back to the same place. A person who may not decide sees the task
 with no menu. The page's big title block is dropped; the top bar names the page.
 
-Not built yet, against the mock: Approve and Reject in the pinned bar (they stay in the decision form at the foot of
-the task), Return to agent in More (it stays in the form, and the server offers it only where the decision route takes
-it), and sample-data cases and step values in the console's mock fixtures.
+Reject and Approve sit in the pinned bar: the decision form draws them there (`components/reviews/decision-bar.tsx`),
+so the reason they check stays the form's. Return to the requester is in More, only on a publish request, from the
+server's `canReturn`; a chat or workflow task has no Return. A step with options or a typed task keeps its choice and
+Decide in the form at the foot of the task. Over the list on a phone the task holds the focus (`hooks/use-focus-trap.ts`)
+and gives it back to its row on close. Sample data carries cases, step values and a two-approval wire hold.
 
 Screenshots are written by uc-460's ui layer (`queue-*`, `option-step-*`, `search-none-*`, `member-*`).
 

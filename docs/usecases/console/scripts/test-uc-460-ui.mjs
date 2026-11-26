@@ -234,6 +234,42 @@ await withUiStack(
         const offered = await viewer.getByTestId('task-more').count();
         check('11 a viewer sees the task with no actions', offered === 0 && viewerErrors.length === 0, { offered, viewerErrors: viewerErrors.slice(0, 3) });
       });
+      await step('12 a publish request has Approve and Reject in the pinned bar and Return in More; a workflow task has no Return', async () => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.goto(`${consoleUrl}/work/tasks?view=open`, { waitUntil: 'domcontentloaded' });
+        await page.getByTestId('queue-list').waitFor({ timeout: 60_000 });
+        await page.locator('[data-testid^=queue-item-]', { hasText: /^Publish / }).first().click();
+        const bar = page.getByTestId('task-bar');
+        await bar.getByTestId('review-approve').waitFor({ timeout: 60_000 });
+        const reject = await bar.getByTestId('review-reject').count();
+        await page.getByTestId('task-more').click();
+        const offered = await page.getByTestId('task-return').count();
+        await shot('publish-more');
+        await page.keyboard.press('Escape');
+        await page.goto(`${consoleUrl}/work/tasks?review=${encodeURIComponent(ids.tom)}`, { waitUntil: 'domcontentloaded' });
+        await page.getByTestId('decision-panel').waitFor();
+        await page.getByTestId('task-more').click();
+        const onWorkflow = await page.getByTestId('task-return').count();
+        await page.keyboard.press('Escape');
+        check('12 a publish request has Approve and Reject in the pinned bar and Return in More; a workflow task has no Return', reject === 1 && offered === 1 && onWorkflow === 0, { reject, offered, onWorkflow });
+      });
+
+      await step('13 on a phone the task holds the focus and closing it gives it back to its row', async () => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto(`${consoleUrl}/work/tasks?view=open`, { waitUntil: 'domcontentloaded' });
+        await page.getByTestId('queue-list').waitFor({ timeout: 60_000 });
+        const row = page.getByTestId(`queue-item-${ids.tom}`);
+        await row.focus();
+        await page.keyboard.press('Enter');
+        await page.getByTestId('task-sheet').waitFor();
+        for (let i = 0; i < 25; i += 1) await page.keyboard.press('Tab');
+        const inside = await page.evaluate(() => !!document.activeElement?.closest('[data-testid=task-sheet]'));
+        await page.keyboard.press('Escape');
+        await page.getByTestId('task-sheet').waitFor({ state: 'detached' }).catch(() => undefined);
+        const back = await page.evaluate(() => document.activeElement?.getAttribute('data-testid'));
+        await page.setViewportSize({ width: 1280, height: 800 });
+        check('13 on a phone the task holds the focus and closing it gives it back to its row', inside && back === `queue-item-${ids.tom}`, { inside, back });
+      });
       check('9 no page errors and no sideways scroll at 375 px', errors.length === 0, errors.slice(0, 3));
     } finally {
       await browser.close();
