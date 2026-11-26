@@ -82,6 +82,12 @@ stack's chat alias points at one. Reference: [make/CLAUDE.md](../../make/CLAUDE.
 | Definitions are data | Agents, workflows, guardrails, skills, task and case types are records seeded from `seed/`, never code |
 | Experiments | Each `experiments/e<n>_*.py` has a write-up under 60 lines in `docs/services/agents-service/experiments/`; its code stays only while `make verify` is green |
 
+## Known traps
+
+| Trap | Detail |
+|---|---|
+| The tool list is not every tool a step can call | Without a gateway the directory is the in-process catalogue (`CatalogTools`), which lists no platform sends; a check of a step's tool against it must also accept `tool_access.WORKFLOW_TOOLS`, or every copy of a shipped mail workflow is refused |
+
 ## Reference docs
 
 | Doc | Covers |

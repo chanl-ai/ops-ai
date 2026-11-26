@@ -38,6 +38,7 @@ from .email_trigger import EMAIL_TRIGGER, require_binding
 from .publish_policy import decide, team_document
 from .review_sla import sla_hours
 from .routers.tool_catalog import directory_tools, known_tools
+from .tool_access import WORKFLOW_TOOLS
 
 KIND = "engine"
 REGISTRY = default_registry()
@@ -137,10 +138,13 @@ def _on_trigger(definition: Json) -> str | None:
 async def _missing_tools(rt: Runtime, definition: Json) -> list[Blocker]:
     """A tool step whose operation the team's tool list does not offer, read as a skill save reads it
     (`known_tools`, asked again fresh before refusing), so a workflow never publishes a step that cannot run."""
+    # The platform's own sends (send_reply, send_acknowledgement) run in every team: in this process without a gateway,
+    # where CatalogTools does not list them, and in tools-service's Runtime module with one.
     steps = [
-        (nid, str(cast(Json, n.get("parameters") or {}).get("operation") or ""))
+        (nid, op)
         for nid, n in nodes_of(definition).items()
         if n.get("type") == "ops.action.tool"
+        and (op := str(cast(Json, n.get("parameters") or {}).get("operation") or "")) not in WORKFLOW_TOOLS
     ]
     if not steps:
         return []
