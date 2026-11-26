@@ -158,6 +158,9 @@ class HeldSource(NamedTuple):
 # What runs in a source version's own transaction once it is written: (connection, file id, the version's number, or
 # None when the bytes matched the newest version).
 Written = Callable[[AsyncConnection, str, "int | None"], Awaitable[None]]
+# The connection a store write hands its callback, named here so code outside the store types it without importing
+# the database driver.
+InTx = AsyncConnection
 
 
 class SourceVersion(TypedDict):

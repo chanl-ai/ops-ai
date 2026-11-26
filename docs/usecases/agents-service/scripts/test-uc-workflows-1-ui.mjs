@@ -5,12 +5,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { JAMES, PASSWORD, PRIYA, agents, as, saveAndPublish, until } from '../../lib/workflow_ui.mjs';
 
 const RAVI = 'r.menon@harborpine.example';
 const TAG = Math.random().toString(36).slice(2, 6);
-const SHOTS = process.env.OPS_UC_SHOTS ?? path.resolve('.logs/usecases/workflows-1/shots');
+const SHOTS = evidenceDir('uc-workflows-1');
 fs.mkdirSync(SHOTS, { recursive: true });
 
 const node = (id, type, name, parameters = {}) => ({ id, type, typeVersion: 1, name, parameters });

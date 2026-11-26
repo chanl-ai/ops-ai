@@ -24,9 +24,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import cast
 
-from sqlalchemy.ext.asyncio import AsyncConnection
-
 from ops_files.store import FilesStore, HeldSource, WatchesStore, WatchEvent, WatchRow
+from ops_files.store.files import InTx
 from ops_files.store.watches import LeaseLost, write_events
 from ops_files.tenant_files import TenantFiles
 from ops_identity import ServiceCallError, ServiceUnreachable
@@ -255,7 +254,7 @@ class WatchChecks:
             name = str(item.get("title") or r.get("title") or source_id)
             full_path = f"{path}/{name}" if path else name
 
-            async def then(c: AsyncConnection, file_id: str, version: int | None) -> None:
+            async def then(c: InTx, file_id: str, version: int | None) -> None:
                 # The version and its event commit together, and only while this check holds the lease.
                 if version is not None:
                     kind = "new" if version == 1 else "changed"
@@ -380,7 +379,7 @@ class WatchChecks:
             removed |= {i for i in state.by_id if i not in listing.seen and i not in skipped_ids}
         gone = [state.by_id[i] for i in removed if i in state.by_id and not state.by_id[i].removed]
 
-        async def removals(c: AsyncConnection) -> None:
+        async def removals(c: InTx) -> None:
             events = [_event(h.file_id, None, "removed", None, None, h.name, now) for h in gone]
             await write_events(c, watch.id, owner=owner, events=events)
 
