@@ -95,7 +95,7 @@ await withUiStack(
         await type(SOP_LINES.last);
         await lineOf(james, 'Never refund over 500').waitFor({ timeout: 30_000 });
         // The guard is an if line with its two steps under it, not three flat lines.
-        const nested = await textBox(james).locator('li', { hasText: SOP_LINES.guard }).locator('li li').count();
+        const nested = await textBox(james).locator('li', { hasText: SOP_LINES.guard }).locator('ul > li').count();
         if (nested !== 2) throw new Error(`the guard holds ${nested} indented lines, not two`);
       });
       await step('4 save the draft', async () => {
