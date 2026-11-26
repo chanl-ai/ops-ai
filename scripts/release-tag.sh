@@ -2,7 +2,7 @@
 # make release-tag: tags the develop commit of a merged release or hotfix pull request `vX.Y.Z` and pushes the tag, so
 # every build can say which release it is (What's new). The version comes from the pull request's title,
 # `release: X.Y.Z into develop` (`hotfix: X.Y.Z into develop`), which is the commit's subject after a squash and the
-# first body line of a merge commit. Run on every push to develop of the public repo (.github/workflows/release-tag.yml)
+# first body line of a merge commit. Run by .github/workflows/release-tag.yml after a develop commit's staging deploy and walk passed
 # and by hand the same way (docs/deploy/release.md).
 #   REF=<commit>   the develop commit to tag (default HEAD)
 #   REMOTE=<name>  where tags are read from and pushed to (default origin; with no such remote, the tag stays local)

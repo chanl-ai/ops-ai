@@ -151,8 +151,8 @@ is replaced by a newer one, a running one finishes). It starts two ways:
 
 | Trigger | When | Pin |
 |---|---|---|
-| A merge to `develop` | `ci.yml` job `staging` calls it once `ci-ok` passed for that commit | Skipped with a notice while a `release/*` or `hotfix/*` branch exists on origin; a live `STAGING_HOLD` skips it and fails the job (docs/deploy/release.md, The staging hold) |
-| A push to `release/*` or `hotfix/*` | The same job | Not frozen: it is the release being tested |
+| A merge to `develop` | `ci.yml` job `staging` calls it once `ci-ok` passed for that commit | Not deployed, and the `staging` job fails red, while a `release/*` or `hotfix/*` branch exists on origin or a live `STAGING_HOLD` is set (docs/deploy/release.md, The staging hold) |
+| A push to `release/*` or `hotfix/*` | The same job | Not frozen by a branch: it is the release being tested. A live `STAGING_HOLD` still stops it and fails the job, whatever the ref |
 | By hand | `make stg-deploy-ci REF=<branch, tag or commit>` (`SKIP_WALK=1`, `REASON=`), or Actions, deploy-staging, Run workflow | Deploys anyway; the summary says which pin it overrode |
 
 | To | Do |

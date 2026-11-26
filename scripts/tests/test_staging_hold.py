@@ -43,17 +43,19 @@ def check(cwd: Path, hold: str) -> subprocess.CompletedProcess[str]:
 
 def test_no_hold_is_none(tmp_path: Path) -> None:
     r = check(repo(tmp_path), "")
-    assert r.returncode == 0 and "state=none" in r.stdout
+    assert r.returncode == 0 and "state=none" in r.stdout and "\npin=\n" in r.stdout
 
 
 def test_a_hold_for_an_untagged_release_is_active_and_keeps_its_text(tmp_path: Path) -> None:
     r = check(repo(tmp_path, "v1.0.0"), "1.1.0: under test on staging")
     assert r.returncode == 0 and "state=active" in r.stdout and "text=1.1.0: under test on staging" in r.stdout
+    assert "\npin=STAGING_HOLD is set: 1.1.0: under test on staging\n" in r.stdout
 
 
 def test_a_hold_for_a_release_that_is_tagged_is_stale_and_ignored(tmp_path: Path) -> None:
     r = check(repo(tmp_path, "v1.1.0"), "1.1.0: under test on staging")
     assert r.returncode == 0 and "state=ignored" in r.stdout and "v1.1.0" in r.stdout
+    assert "\npin=\n" in r.stdout
 
 
 def test_a_hold_without_a_release_prefix_is_refused(tmp_path: Path) -> None:

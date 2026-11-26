@@ -81,7 +81,9 @@ jobs:
         env:
           ASKED: ${{ inputs.ref }}
           HOLD: ${{ vars.STAGING_HOLD }}
+        shell: bash
         run: |
+          set -o pipefail
           started=$(date +%s); echo "STG_STARTED=$started" >> "$GITHUB_ENV"
           sha=$(git rev-parse --verify -q "$ASKED^{commit}" || git rev-parse --verify -q "origin/$ASKED^{commit}") \
             || { echo "::error title=Staging not deployed::No commit named $ASKED"; exit 1; }
@@ -93,7 +95,10 @@ jobs:
           branches=""
           case "$GITHUB_REF" in
             refs/heads/release/* | refs/heads/hotfix/*) ;;
-            *) branches=$(git ls-remote --heads origin 'refs/heads/release/[0-9]*' 'refs/heads/hotfix/*' | sed 's|.*refs/heads/||' | tr '\n' ' ') ;;
+            *)
+              listing=$(git ls-remote --heads origin 'refs/heads/release/[0-9]*' 'refs/heads/hotfix/*') \
+                || { echo "::error title=Staging freeze unreadable::git ls-remote failed, so a branch freeze cannot be ruled out"; exit 1; }
+              branches=$(printf '%s\n' "$listing" | sed 's|.*refs/heads/||' | tr '\n' ' ') ;;
           esac
           verdict=$(HOLD="$HOLD" BRANCHES="${branches% }" python3 scripts/staging_hold.py) || true
           state=$(printf '%s\n' "$verdict" | sed -n 's/^state=//p'); text=$(printf '%s\n' "$verdict" | sed -n 's/^text=//p')

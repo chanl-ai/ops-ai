@@ -453,7 +453,9 @@ jobs:
           fetch-depth: 0
       - name: Pick the use cases
         id: pick
+        shell: bash
         run: |
+          set -o pipefail
           base=$(git merge-base "$BASE_SHA" HEAD)
           ids=$(python3 scripts/ci_usecases.py pick --base "$base" | tr '\n' ' ' | xargs)
           echo "ids=$ids" >> "$GITHUB_OUTPUT"
@@ -506,7 +508,7 @@ jobs:
     # Every merge to develop, and every push to a release or hotfix branch, goes to staging once ci-ok passed for that
     # commit, so the owner tests the real combination. Pull requests and pushes to main never reach this job.
     # deploy-staging.yml holds the deploy, the freeze rules (a release or hotfix branch on origin, or STAGING_HOLD, skips
-    # a develop deploy with a notice), the checks, the rollback and the summary.
+    # a develop deploy and fails the job red), the checks, the rollback and the summary.
     needs: ci-ok
     if: ${{ !cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/heads/hotfix/')) && needs.ci-ok.result == 'success' }}
     permissions:
