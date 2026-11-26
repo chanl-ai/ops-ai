@@ -7,7 +7,11 @@ from any one machine's memory. Deleting the workflow deletes its rows.
 
 The slot write names the last slot it read and changes the row only while that is still the stored one, so of two
 machines on one slot exactly one records its outcome; the run key (`schedule:{workflow}:{slot}`) keeps the runs to one
-as well."""
+as well.
+
+A schedule is its workflow's team's: every read and write names the acting team (`team_visible`), and the team policy
+holds the database to the same. Only the schedule clock reads every team's rows, inside `tenant_wide(SCHEDULE_CLOCK)`
+(`everything`) and past the tenant inside `system_tx(SCHEDULE_TENANTS)` (`tenants`)."""
 
 from __future__ import annotations
 
@@ -23,7 +27,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee, isolation
 from ops_store.audit import record as record_audit
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
 from .outbox import agents_outbox
@@ -40,7 +45,8 @@ workflow_schedules = sa.Table(
     sa.Column("workflow_id", sa.String(64), primary_key=True),
     # The trigger step's id in the definition; the row never names a node type.
     sa.Column("trigger_step", sa.String(100), primary_key=True),
-    # The workflow's team when saved: a workflow no team owns cannot carry a schedule.
+    # The workflow's team when saved: a workflow no team owns cannot carry a schedule, so the column is never null and
+    # the team policy needs no branch for a shared workflow.
     sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("rule", sa.JSON, nullable=False),
     sa.Column("changed_by", sa.String(200), nullable=False),
@@ -52,8 +58,10 @@ workflow_schedules = sa.Table(
     sa.Column("last_outcome", sa.String(16), nullable=True),
     sa.Column("last_run_id", sa.String(64), nullable=True),
     sa.Column("seen_at", sa.String(32), nullable=True),
-    info=TENANT_SCOPED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
+# The clock alone reads every team's schedules: it ticks each one under its tenant, between requests.
+CLOCK_READS = "the schedule clock ticks every team's saved schedules"
 
 
 @dataclass(frozen=True)
@@ -86,7 +94,10 @@ class WorkflowSchedules:
     def _key(self, workflow_id: str, trigger_step: str) -> sa.ColumnElement[bool]:
         t = workflow_schedules
         return sa.and_(
-            t.c.tenant_id == current_tenant(), t.c.workflow_id == workflow_id, t.c.trigger_step == trigger_step
+            t.c.tenant_id == current_tenant(),
+            t.c.workflow_id == workflow_id,
+            t.c.trigger_step == trigger_step,
+            team_visible(t),
         )
 
     async def get(self, workflow_id: str, trigger_step: str) -> ScheduleRow | None:
@@ -99,7 +110,7 @@ class WorkflowSchedules:
     async def for_workflow(self, workflow_id: str) -> list[ScheduleRow]:
         t = workflow_schedules
         cols = [c for c in t.c if c.name != "tenant_id"]
-        q = sa.select(*cols).where(t.c.tenant_id == current_tenant(), t.c.workflow_id == workflow_id)
+        q = sa.select(*cols).where(t.c.tenant_id == current_tenant(), t.c.workflow_id == workflow_id, team_visible(t))
         async with tenant_tx(self.engine) as c:
             return [_row(r) for r in await c.execute(q.order_by(t.c.trigger_step))]
 
@@ -109,15 +120,22 @@ class WorkflowSchedules:
             return []
         t = workflow_schedules
         cols = [c for c in t.c if c.name != "tenant_id"]
-        q = sa.select(*cols).where(t.c.tenant_id == current_tenant(), t.c.workflow_id.in_(workflow_ids))
+        q = sa.select(*cols).where(
+            t.c.tenant_id == current_tenant(), t.c.workflow_id.in_(workflow_ids), team_visible(t)
+        )
         async with tenant_tx(self.engine) as c:
             return [_row(r) for r in await c.execute(q.order_by(t.c.workflow_id, t.c.trigger_step))]
 
     async def everything(self) -> list[ScheduleRow]:
-        """Every saved schedule of the acting tenant, for the clock, which reads them beside the live versions."""
+        """Every team's saved schedules of the acting tenant, for the clock alone, which reads them beside the live
+        versions inside `tenant_wide(SCHEDULE_CLOCK)`; a request reads through `get` and `for_workflow(s)`."""
         t = workflow_schedules
         cols = [c for c in t.c if c.name != "tenant_id"]
-        q = sa.select(*cols).where(t.c.tenant_id == current_tenant()).order_by(t.c.workflow_id, t.c.trigger_step)
+        q = (
+            sa.select(*cols)
+            .where(t.c.tenant_id == current_tenant(), any_team(t, CLOCK_READS))
+            .order_by(t.c.workflow_id, t.c.trigger_step)
+        )
         async with tenant_tx(self.engine) as c:
             return [_row(r) for r in await c.execute(q)]
 
@@ -126,7 +144,8 @@ class WorkflowSchedules:
         scheduled workflow is paused, to mark its schedule idle, and then works each tenant under its own."""
         t = workflow_schedules
         async with system_tx(self.engine, SCHEDULE_TENANTS) as c:
-            return list((await c.execute(sa.select(t.c.tenant_id).distinct())).scalars())
+            q = sa.select(t.c.tenant_id).where(any_team(t, CLOCK_READS)).distinct()
+            return list((await c.execute(q)).scalars())
 
     async def idle(self, workflow_id: str, trigger_step: str) -> None:
         """The clock found the workflow not live, or its live version without the step: the next time it is seen live
@@ -198,7 +217,9 @@ class WorkflowSchedules:
     async def delete_workflow(self, workflow_id: str) -> None:
         t = workflow_schedules
         async with tenant_tx(self.engine) as c:
-            await c.execute(t.delete().where(t.c.tenant_id == current_tenant(), t.c.workflow_id == workflow_id))
+            await c.execute(
+                t.delete().where(t.c.tenant_id == current_tenant(), t.c.workflow_id == workflow_id, team_visible(t))
+            )
 
     async def record_slot(
         self,

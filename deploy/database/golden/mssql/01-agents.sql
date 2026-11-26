@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 20261124_2313_agent_instruction
+-- agents-service, stamped at 20261126_1200_schedule_teams
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -1598,10 +1598,10 @@ CREATE SECURITY POLICY ops_security.review_assignments_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.review_assignments AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.workflow_schedules_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.workflow_schedules,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.workflow_schedules AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.workflow_schedules AFTER UPDATE
+CREATE SECURITY POLICY ops_security.workflow_schedules_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.workflow_schedules,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.workflow_schedules AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.workflow_schedules AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.task_assists_tenant
@@ -1731,5 +1731,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('20261124_2313_agent_instruction');
+INSERT INTO alembic_version (version_num) VALUES ('20261126_1200_schedule_teams');
 GO

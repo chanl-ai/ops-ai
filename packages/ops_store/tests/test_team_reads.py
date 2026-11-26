@@ -23,9 +23,6 @@ TEAM_COLUMNS = {"team_id", "team"}
 # Tables with a team column whose reads take the team as an argument instead of the helper. Remove a name when its
 # table is marked; the test fails on a name that is marked or gone, so the list only shrinks.
 NOT_YET_MARKED = {
-    # agents-service: a workflow's saved schedules hold its team as a plain column; they are read and written through
-    # the workflow's own rights, which cover shared workflows the team policy has no branch for (store/schedules.py)
-    "workflow_schedules",
     # agents-service: work records, scoped by the acting team passed in, or by thread
     # publish requests gained their subject's team in agents 0106; the registry stores read it by team with the
     # registry tables' marking (docs/architecture/migration/agents-registry-tenancy.md)
