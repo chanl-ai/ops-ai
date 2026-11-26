@@ -30,6 +30,7 @@ from ops_service_kit.errors import Conflict, Forbidden, NotFound, ValidationFail
 from ops_service_kit.http import Envelope, In, ListResult, Option, OptionsPage, Out, ok, options_window
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListQuery
+from ops_service_kit.names import Name
 from ops_sources import Declared, Reader, refusal_of, source_values
 
 # A watch's settings as the source's picker saved them (site, libraries, folders); kept small, as a knowledge
@@ -56,7 +57,7 @@ Manager = Annotated[Who, Depends(watch_manager)]
 
 
 class WatchIn(In):
-    name: str = Field(min_length=1, max_length=200)
+    name: Name
     plugin: str = Field(min_length=1, max_length=120)
     source: str = Field(min_length=1, max_length=120)
     # The app connection the source reads through, as Add source's kinds name it; part of each file's identity. The
@@ -67,7 +68,7 @@ class WatchIn(In):
 
 
 class WatchChange(In):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: Name | None = None
     values: dict[str, JsonValue] | None = Field(default=None, max_length=VALUES_MAX)
     # Replaces the kept names when given; left out, the kept names still label the ids that remain.
     names: PickedNames | None = Field(default=None, max_length=VALUES_MAX)

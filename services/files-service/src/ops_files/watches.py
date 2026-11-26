@@ -19,7 +19,6 @@ import asyncio
 import base64
 import dataclasses
 import hashlib
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -34,11 +33,12 @@ from ops_identity import ServiceCallError, ServiceUnreachable
 from ops_service_kit.errors import Conflict
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import new_id
+from ops_service_kit.logging import get_logger
 from ops_sources import Answer, Declared, Fetcher, Held, Listing, Place, Reader, SourceError, read_changes
 from ops_sources.contract import RECONNECT, access_list
 from ops_store import background, isolation
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 KEY = "files_watch_checks"
 # Changed files fetched and held in memory at once; each is written before the next few are fetched.
@@ -407,7 +407,7 @@ class WatchChecks:
                 try:
                     outcome = await self.check(watch_id)
                 except Exception:
-                    log.exception("watch check failed", extra={"watch_id": watch_id, "tenant_id": tenant})
+                    log.exception("files.watch_check_failed", watch_id=watch_id, tenant_id=tenant)
                     done += 1
                     continue
             done += outcome.status != "already_checking"

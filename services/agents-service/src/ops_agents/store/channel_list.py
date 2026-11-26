@@ -265,15 +265,16 @@ def channels(teams: Sequence[str], *, now: datetime, retired: bool = False, agen
 class ChannelList(RuntimeStore):
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
 
-    async def live_definitions(self, teams: Sequence[str] | None = None) -> list[LiveDefinition]:
-        """The tenant's live workflow versions, with their definitions; with `teams`, only those of the teams (a
-        workflow no team owns is left out, as its name belongs to no team the caller was checked against)."""
+    async def live_definitions(self, teams: Sequence[str]) -> list[LiveDefinition]:
+        """The live workflow versions of `teams`, with their definitions. A workflow no team owns is left out, as its
+        name belongs to no team the caller was checked against; no teams reads none."""
         d = engine_definitions
         q = sa.select(d.c.workflow_id, d.c.name, d.c.version, d.c.definition, d.c.team_id).where(
-            d.c.tenant_id == current_tenant(), d.c.stage == "live", d.c.archived_at.is_(None)
+            d.c.tenant_id == current_tenant(),
+            d.c.stage == "live",
+            d.c.archived_at.is_(None),
+            d.c.team_id.in_(list(teams)),
         )
-        if teams is not None:
-            q = q.where(d.c.team_id.in_(list(teams)))
         async with self.tx() as c:
             return await rows(c, q, LiveDefinition)
 

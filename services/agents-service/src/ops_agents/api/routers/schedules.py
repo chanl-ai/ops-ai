@@ -166,7 +166,7 @@ async def get_schedule(rt: Rt, me: Reader, workflow_id: str, step: str) -> JSONR
         raise NotFound(f"Workflow definition {workflow_id}")
     row = await WorkflowSchedules(rt.db).get(workflow_id, step)
     if row is None:
-        raise NotFound(f"No schedule on {step} of {workflow_id}")
+        raise NotFound(f"The schedule on {step} of {workflow_id}")
     now = datetime.now(UTC)
     return ok((await schedule_views(rt.db, [row], now, await serving_definition(rt, workflow_id), REGISTRY))[0])
 
@@ -208,7 +208,7 @@ async def clear_schedule(rt: Rt, me: Me, _: Tx, workflow_id: str, step: str) -> 
     store = WorkflowSchedules(rt.db)
     before = await store.get(workflow_id, step)
     if before is None or not await store.clear(workflow_id, step):
-        raise NotFound(f"No schedule on {step} of {workflow_id}")
+        raise NotFound(f"The schedule on {step} of {workflow_id}")
     await store.audit(
         team_id=before.team_id,
         actor=me.sub,
