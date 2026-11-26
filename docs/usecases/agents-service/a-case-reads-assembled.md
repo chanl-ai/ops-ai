@@ -10,6 +10,7 @@ Status: passing (2026-10-19). Id: `uc-251`. Service: `agents-service`. Layers: a
 | S2 | The case says what it waits on, links the task, and lists the drafted action as pending | ui | 2 | 2 |
 | S3 | Maya follows that link and approves on the task page; the case then reads nothing left and the action decided | ui | 4 | 4 |
 | S4 | The same through the API, with the case's run, workflow and file, and its decision in Activity | api | 0-5 | 5 |
+| S5 | A Builder who may decide his own run's write still waits for his own click (with the two-person rule on, step 3a refuses him and Lee decides) | api | 6-7 | 6 |
 
 A fee dispute workflow, configuration in the script and nothing in code, opens a case of the seeded `complaint` case
 type and waits on a person to approve waiving the fee. One call, `GET /v1/cases/{id}`, returns the case assembled for
@@ -36,6 +37,8 @@ The stack is agents-service and tools-service (the tool gateway) with a workflow
 | 3 | The same read | `links.runs` holds the run, `workflow` names Fee dispute (uc-251), `links.files` holds dispute-letter.pdf |
 | 4 | Approve the task on its page (`POST /reviews/{id}/decision`), read the case again | Nothing waiting, no next action, the action `approved` |
 | 5 | `GET /v1/activity?case={id}&kind=decision` | One decision; the case's feed tells its story |
+| 6 | With the default rule (an asker who may decide does), James, a Builder, starts a second run | It holds at its review; the fee is not waived |
+| 7 | James approves that review himself | 200; only then the waive step sends its call to the gateway, once |
 
 ## Acceptance layers
 
@@ -45,6 +48,8 @@ The stack is agents-service and tools-service (the tool gateway) with a workflow
 | ui | `agents-service/scripts/test-uc-251-ui.mjs` | passing: the case page as James reads it, the task as Maya decides it |
 
 ## Non-vacuous check
+
+With the starter's own decision restored in the review step (a run whose starter may decide is approved for them), step 6 fails: the waive step runs with no click.
 
 With `waiting_of` in `api/case_page.py` returning nothing, step 2 fails (no waiting task, no next action) and the
 unit test `tests/api/test_case_page.py::test_the_case_says_what_it_waits_on_until_the_task_is_decided` fails with it.

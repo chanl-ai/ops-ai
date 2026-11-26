@@ -155,4 +155,44 @@ with ExitStack() as stack:
         {"feed": lines[:5], "decisions": listed.get("pagination")},
     )
 
+# 6-7. The default rule (an asker who may decide does): James, a Builder holding reviews.decide, may approve his own
+# run's write, and it still waits for his click. Nothing is approved for him while nobody looks.
+OWN = DEFINITION.replace("uc251_fee_dispute", "uc251_own_fee")
+LOOSE = {"OPS_DEV_POLICIES": "{}"}
+with ExitStack() as stack:
+    stack.enter_context(tools({"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}", **LOOSE}))
+    api = stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}", env=LOOSE))
+    api.post("/v1/workflows/definitions", json={"yaml": OWN}, headers=TEAM)
+    api.post("/v1/workflows/definitions/uc251_own_fee/publish-requests", json={}, headers=TEAM)
+    stack.enter_context(engine_worker("uc251-own", {"OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}", **LOOSE}))
+    # waive_fee's schema takes the amount as a number.
+    own_input = {**DISPUTE, "amount": 35}
+    started = api.post("/v1/runs", json={"workflowId": "uc251_own_fee", "input": own_input, "runKey": "uc251-b"}, headers=TEAM)
+    own_run = str((data(started) or {}).get("runId"))
+
+    def settled() -> dict[str, Any]:
+        r = data(api.get(f"/v1/runs/{own_run}", headers=TEAM)) or {}
+        return r if r.get("status") in ("waiting", "succeeded", "failed") else {}
+
+    held = until(settled) or {}
+    ran = [s["nodeId"] for s in held.get("steps") or [] if s.get("nodeId") == "waive"]
+    check(
+        "6 James's own run holds at its review and waives nothing before a click",
+        held.get("status") == "waiting" and (held.get("waiting") or {}).get("node") == "review" and ran == [],
+        {"status": held.get("status"), "waiting": held.get("waiting"), "waive": ran},
+    )
+    mine = api.post(f"/reviews/{own_run}/decision", json={"decision": "approved", "reason": "uc-251"}, headers=TEAM)
+    ended = until(
+        lambda: (r := data(api.get(f"/v1/runs/{own_run}", headers=TEAM)) or {}).get("status") in ("succeeded", "failed")
+        and r
+    ) or {}
+    # The write goes to the gateway once his click is recorded. This stack has no platform-service to read the team's
+    # approval rules from, so the gateway answers that it cannot judge the write; the call reaching it is the point.
+    sent = [s for s in ended.get("steps") or [] if s.get("nodeId") == "waive"]
+    check(
+        "7 James approves it himself (200), and only then the waive goes to the gateway, once",
+        mine.status_code == 200 and len(sent) == 1,
+        {"decision": mine.status_code, "status": ended.get("status"), "waive": [x.get("output") for x in sent]},
+    )
+
 finish()
