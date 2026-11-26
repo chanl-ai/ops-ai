@@ -99,9 +99,6 @@ export function createMockApi(): OpsApi {
   // One agent is written as a brief; the others are legacy text, as agents saved before briefs are.
   const briefAgent = agents.find((a) => a.id === 'ag_dispute');
   if (briefAgent) Object.assign(briefAgent, { brief: SEED_BRIEF, promptMode: 'brief' as const, role: SEED_BRIEF.purpose, instructions: composeBrief(briefAgent.name, SEED_BRIEF, defaultSectionList().sections) });
-  // One agent still keeps its prompt as plain text, with Markdown in it, as agents saved before briefs do.
-  const plainAgent = agents.find((a) => a.id === 'ag_kyb');
-  if (plainAgent) Object.assign(plainAgent, { promptMode: 'full' as const, instructions: `${plainAgent.instructions}\n\n## Hand off\n\n- if the business is on a watch list:\n  - stop and ask a person\n- otherwise:\n  - continue the check` });
   // Which agent version is published; graph pins and agent rows read it, the agent publish flow writes it.
   const agentStore = createAgentVersionStore(agents);
   // Agent wrapper workflows and console chat deployments; assigned once the stores they read exist, read at request time.

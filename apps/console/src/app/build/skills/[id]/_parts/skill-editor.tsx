@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { BookOpen, CircleAlert, Lock, RefreshCw, TriangleAlert, Users, Wrench } from 'lucide-react';
+import { BookOpen, ChevronDown, CircleAlert, GitBranch, Lock, Plus, RefreshCw, Sparkles, TriangleAlert, Users, Wrench } from 'lucide-react';
 
 import { EntityPicker } from '@/components/shared/entity-picker';
 import { FormField } from '@/components/shared/form-field';
@@ -12,7 +12,7 @@ import { RecordLayout } from '@/components/shared/record-layout';
 import { SettingsSection } from '@/components/shared/settings-section';
 import { TagInput } from '@/components/shared/tag-input';
 import { parseText, refToken } from '@/components/shared/instruction-document/document-model';
-import { RichTextEditor, type RichTextEditorHandle } from '@/components/shared/rich-text-editor';
+import { SopEditor, type SopEditorHandle } from '@/components/shared/sop-editor';
 import { SkillInputsSection } from '@/components/skills/skill-inputs-section';
 import { UNWRITTEN_SECTIONS } from '@/components/skills/skill-meta';
 import { inText, refusedSave } from '@/components/skills/skill-problems';
@@ -21,6 +21,7 @@ import { SkillWhenSection, type SkillWhen, type SkillWhenHandle } from '@/compon
 import { AccessBadge } from '@/components/status-badges';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -73,6 +74,14 @@ const squash = (t: string) => t.replace(/\s+/g, '');
 const textOf = (text: string) => (squash(text) === squash(UNWRITTEN_SECTIONS) ? '' : text);
 const formOf = (sk: SkillDetail): Form => ({ name: sk.content.name, when: { useWhen: sk.content.useWhen, notWhen: sk.content.notWhen ?? '' }, loading: sk.content.loading, instructions: sk.content.instructions, toolIds: sk.content.tools.map((t) => t.toolId), knowledgeBases: sk.content.knowledgeBases, guardrails: sk.content.guardrails, refusal: sk.content.refusal ?? '', parts: sk.content.parts ?? [], text: textOf(sk.text), ending: { exit: sk.content.exit ?? {}, returns: sk.content.returns ?? [], success: sk.content.success ?? [] }, inputs: sk.content.inputs ?? [] });
 const NONE: PublishBlocker[] = [];
+const EXAMPLE = [
+  'Write the steps the way you would explain them to a new colleague, one per line. e.g.',
+  'Ask for the postcode. Look up the outage with @Outage map.',
+  'if power is already reported:',
+  '    Give the restore time.',
+  'else:',
+  '    Log a new outage.',
+].join('\n');
 const KINDS = [['tools', 'tool', 'tools'], ['knowledge', 'knowledge source', 'knowledge sources'], ['skills', 'skill', 'skills'], ['agents', 'agent', 'agents'], ['workflows', 'workflow', 'workflows']] as const;
 /** “3 tools · 2 knowledge sources”, from the counts the service read from the text. */
 const usesLine = (uses: Record<(typeof KINDS)[number][0], number> | undefined) => {
@@ -107,13 +116,11 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
   const [endingValid, setEndingValid] = React.useState(true);
   const [whenValid, setWhenValid] = React.useState(true);
   const [inputsValid, setInputsValid] = React.useState(true);
-  // A mention the team no longer holds is the one thing in the text that blocks a save; free text never does.
-  const [brokenMentions, setBrokenMentions] = React.useState(0);
   const setEnding = React.useCallback((ending: SkillEndingValue) => setForm((f) => ({ ...f, ending })), []);
   const setWhen = React.useCallback((when: SkillWhen) => setForm((f) => ({ ...f, when })), []);
   const setInputs = React.useCallback((inputs: SkillInputField[]) => setForm((f) => ({ ...f, inputs })), []);
   const whenForm = React.useRef<SkillWhenHandle>(null);
-  const textDoc = React.useRef<RichTextEditorHandle>(null);
+  const textDoc = React.useRef<SopEditorHandle>(null);
   const context = React.useMemo(() => ({ forSkill: sk.id }), [sk.id]);
   const reading = useSkillTextReading(sk.id, form.text, { loading: form.loading, hasParts: form.parts.length > 0, exit: form.ending.exit });
   const mentioned = React.useMemo(() => [...new Set(parseText(form.text).flatMap((x) => (x.t === 'ref' ? [refToken(x).slice(1)] : [])))], [form.text]);
@@ -168,7 +175,7 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
   const toolOf = (id: string) => tools.find((t) => t.toolId === id) ?? sk.content.tools.find((t) => t.toolId === id);
 
   // Everything the form needs to be saved: a valid name, parts, when, endings and inputs.
-  const valid = !errors.name && endingValid && whenValid && inputsValid && !brokenMentions;
+  const valid = !errors.name && endingValid && whenValid && inputsValid;
   const sentForm = React.useRef<Form>(form);
   const send = () => {
     sentForm.current = form;
@@ -253,6 +260,7 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
     const name = kbLabels.get(id)?.label ?? id;
     return { id, title: name, description: kbLabels.get(id)?.hint ?? undefined, remove: readOnly ? undefined : { label: `Remove ${name}`, onClick: () => setForm((f) => ({ ...f, knowledgeBases: f.knowledgeBases.filter((x) => x !== id) })) } };
   });
+  const insert = (text: string) => textDoc.current?.insert(text);
 
   return (
     <div className={hidden ? 'hidden' : 'flex flex-col gap-4'} data-testid="skill-editor">
@@ -367,17 +375,43 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="sop-read-only">
                     <Lock className="size-3.5" /> {locked ?? 'Read only. A builder in its team can change it.'}
                   </span>
-                ) : null}
+                ) : (
+                  // One menu in place of a toolbar: the editor has no formatting, and @ and if work from the keyboard too.
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" data-testid="sop-insert-menu">
+                        <Plus className="size-4" /> Insert <ChevronDown className="size-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => insert('@')} data-testid="sop-insert-tool">
+                        <Wrench className="size-4" /> Tool
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => insert('@')} data-testid="sop-insert-knowledge">
+                        <BookOpen className="size-4" /> Knowledge
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => insert('@')} data-testid="sop-insert-skill">
+                        <Sparkles className="size-4" /> Skill
+                      </DropdownMenuItem>
+                      {stepped && (
+                        <DropdownMenuItem onClick={() => insert('\nif ')} title="An if / otherwise path" data-testid="sop-add-path">
+                          <GitBranch className="size-4" /> Path
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </header>
-              <RichTextEditor
+              <SopEditor
                 value={stepped ? form.text : form.instructions}
                 onChange={(text) => (setRefused(null), setForm((f) => (stepped ? { ...f, text } : { ...f, instructions: text })))}
                 readOnly={readOnly}
+                reading={stepped ? reading.reading : undefined}
+                readingFor={stepped ? reading.forText : undefined}
                 labels={labels.data}
-                onMissingChange={(refs) => setBrokenMentions(refs.length)}
                 context={context}
                 controls={textDoc}
-                placeholder={stepped ? 'e.g. Ask for the postcode, then look up the outage with @Outage map. Type / for an if or otherwise path.' : 'e.g. Ask which order it is about, then pick the part that fits.'}
+                placeholder={stepped ? EXAMPLE : 'e.g. Ask which order it is about, then pick the part that fits.'}
                 ariaLabel={stepped ? 'Steps' : 'Introduction'}
               />
               {/* One row on a wide screen: what the text uses on the left, the keys on the right. */}
@@ -397,7 +431,7 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
                 <p className="flex items-center gap-2 border-b px-3 py-2 text-xs text-muted-foreground">
                   <Lock className="size-3.5" /> Your copy, read only. It is not saved.
                 </p>
-                <RichTextEditor value={mine.text} onChange={() => undefined} readOnly labels={labels.data} context={context} ariaLabel="Your copy of the skill text" />
+                <SopEditor value={mine.text} onChange={() => undefined} readOnly labels={labels.data} context={context} ariaLabel="Your copy of the skill text" />
               </div>
             )}
             {!!reading.reading?.hints.length && reading.forText === form.text && (

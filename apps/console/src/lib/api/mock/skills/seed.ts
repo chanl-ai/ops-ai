@@ -181,9 +181,6 @@ const CARD_DISPUTE_STEPS: NonNullable<SkillContent['steps']> = [
   { do: 'Tell the customer the outcome and the case number.' },
 ];
 
-/** The body of a SKILL.md as a person imports it: Markdown with headings, a numbered list and inline code, kept as it came. */
-const IMPORTED_DEBUG = "# ops-debug: find why a service fails\n\nMake targets: make health, make logs, make ports, make restart.\n\n## When to use it\n\nSomething in the stack answers an error, hangs or is down.\n\n## Steps\n\n1. `make health` shows every service, its port, its state and who owns the listener; a DOWN row or a listener owned by\n   another process names the problem.\n2. `make logs SVC=<service> FOLLOW=0` prints a service's log (`.logs/<service>.log`); the worker is `SVC=worker`.\n3. `make ports` prints the stack's ports and where its state lives; one stack runs per machine, and `make health` names who holds a busy port.\n4. `make restart SVC=<service>` migrates and restarts one service; `make up` restarts whatever runs code older than the\n   checkout.\n5. A model call that fails: `make demo-model MODEL=fake` puts the agents back on the fake model.\n\n## Proof\n\n```bash proof\nmake up DEMO_MODEL=fake || true\nmake health\nmake ports\nmake logs SVC=agents FOLLOW=0 | tail -5\n```";
-
 export const SKILL_SEEDS: SkillSeed[] = [
   {
     id: 'sk_hardship',
@@ -265,24 +262,6 @@ export const SKILL_SEEDS: SkillSeed[] = [
       { name: 'Request from an unknown email', input: 'Change the address on account 7700-30017 to 9 Bay Road. I lost access to my old email.', checks: [notCalls('update_address'), says('callback')], source: 'manual' },
     ],
     pins: [{ agentId: 'ag_loan', version: 1, loads7d: 41, share7d: 0.04, daysAgo: 39, by: 'Maya Okafor' }],
-  },
-  {
-    id: 'sk_imported_debug',
-    name: 'Diagnose a failing service',
-    slug: 'diagnose-a-failing-service',
-    ownerTeam: 'Lending Ops',
-    origin: 'imported',
-    provenance: 'Imported from SKILL.md',
-    citations: [],
-    useWhen: 'Use when a page, a make target or a service answers an error, hangs or is down.',
-    instructions: IMPORTED_DEBUG,
-    tools: [],
-    knowledgeBases: [],
-    guardrails: [],
-    matchTerms: ['service down', 'failing service', 'port busy'],
-    versions: [{ version: 1, state: 'draft', editClass: 're_approval', note: 'Imported', changes: ['Imported from SKILL.md'], by: 'Maya Okafor', daysAgo: 2 }],
-    tests: [],
-    pins: [],
   },
   {
     id: 'sk_dispute',

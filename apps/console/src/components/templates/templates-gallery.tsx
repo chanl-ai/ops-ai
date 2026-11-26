@@ -9,14 +9,19 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { LayoutTemplate } from 'lucide-react';
+import { LayoutTemplate, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { SearchAddDialog } from '@/components/shared/search-add-dialog';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import { DialogShell } from '@/components/shared/dialog-shell';
+import { LoadingButton } from '@/components/shared/loading-button';
+import { QueryError } from '@/components/shared/query-states';
 import { packFor } from '@/lib/template-packs';
+import { Row, Rows } from '@/components/shared/surface';
 import { type ServerListAsk, useServerList } from '@/hooks/server-list';
 import { ApiError } from '@/lib/api/contract';
 import { sdk } from '@/lib/api/ops-sdk';
@@ -89,9 +94,12 @@ function TemplatesDialog({
   const query = useTemplates(kind, search, open);
   const install = useInstallTemplate(kind);
   const pack = packFor(kind);
+  const [adding, setAdding] = React.useState<string | null>(null);
   const noun = NOUN[kind];
+  const rows = query.rows;
 
   const add = async (t: Template) => {
+    setAdding(refOf(t));
     try {
       const made = await install.mutateAsync(t);
       toast.success(`${t.title} added to your team as a draft ${noun}.`);
@@ -99,86 +107,98 @@ function TemplatesDialog({
       if (made.copy?.recordId) router.push(`${href}/${made.copy.recordId}`);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : `Could not add ${t.title}.`);
+    } finally {
+      setAdding(null);
     }
   };
 
   return (
-    <SearchAddDialog
+    <DialogShell
       open={open}
       onOpenChange={onOpenChange}
+      size="lg"
       title={`Start a ${noun} from a template`}
-      description="Templates from the packs and apps your team has on. Adding one makes your team's own copy, which you can edit."
-      searchLabel="Search templates"
-      what="templates"
-      search={search}
-      onSearchChange={setSearch}
-      query={query}
-      empty={
-        pack ? (
-          <>
-            {`No ${noun} templates yet. A team admin turns on the `}
-            <Link href={pack.href} className="text-primary underline-offset-4 hover:underline" data-testid="templates-gallery-pack">
-              {pack.name}
-            </Link>
-            {' pack to offer some.'}
-          </>
-        ) : (
-          <>
-            {`No ${noun} templates yet. A team admin turns on an app on `}
-            <Link href="/data/connectors" className="text-primary underline-offset-4 hover:underline" data-testid="templates-gallery-connectors">
-              Connectors
-            </Link>
-            {' to offer some.'}
-          </>
-        )
-      }
-      rowKey={refOf}
-      rowTitle={(t) => t.title}
-      rowDescription={(t) => t.plugin.title}
-      preview={(t) => <TemplatePreview template={t} href={href} />}
-      addLabel={`Add to team`}
-      canAdd={(t) => t.canAdd && !t.copy?.recordId}
-      onAdd={add}
-      testId="templates-gallery"
-    />
-  );
-}
-
-/** What the chosen template brings and needs, as the service reports it; an existing copy opens instead of adding. */
-function TemplatePreview({ template: t, href }: { template: Template; href: string }) {
-  const router = useRouter();
-  const needs = [...t.requires.tools.map((x) => `Tool: ${x}`), ...t.requires.resources.map((x) => `Resource: ${x}`)];
-  return (
-    <div className="flex flex-col gap-3" data-testid="templates-gallery-preview-body">
-      <div>
-        <h3 className="text-sm font-semibold">{t.title}</h3>
-        <p className="text-xs text-muted-foreground">
-          {t.plugin.title} · version {t.version}
+      description={`Templates from the packs and apps your team has on. Adding one makes your team's own copy, which you can edit.`}
+    >
+      <div className="relative mb-3">
+        <Search className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search templates"
+          aria-label="Search templates"
+          className="pl-8"
+        />
+      </div>
+      {query.isPending ? (
+        <div className="space-y-2">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-12 w-full" />
+          ))}
+        </div>
+      ) : query.isError ? (
+        <QueryError what="templates" error={query.error} onRetry={() => query.refetch()} retrying={query.isFetching} />
+      ) : rows.length === 0 ? (
+        <p className="text-muted-foreground py-6 text-center text-sm" data-testid="templates-gallery-empty">
+          {search ? (
+            'No template matches this search.'
+          ) : (
+            pack ? (
+              <>
+                {`No ${noun} templates yet. A team admin turns on the `}
+                <Link href={pack.href} className="text-primary underline-offset-4 hover:underline" data-testid="templates-gallery-pack">
+                  {pack.name}
+                </Link>
+                {' pack to offer some.'}
+              </>
+            ) : (
+              <>
+                {`No ${noun} templates yet. A team admin turns on an app on `}
+                <Link href="/data/connectors" className="text-primary underline-offset-4 hover:underline" data-testid="templates-gallery-connectors">
+                  Connectors
+                </Link>
+                {' to offer some.'}
+              </>
+            )
+          )}
         </p>
-      </div>
-      <div>
-        <h4 className="mb-1 text-xs font-medium text-muted-foreground">Needs</h4>
-        {needs.length ? (
-          <div className="flex flex-wrap gap-1">
-            {needs.map((n) => (
-              <Badge key={n} variant="outline">
-                {n}
-              </Badge>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm">Nothing else. It works as soon as it is added.</p>
-        )}
-      </div>
-      {t.copy?.recordId ? (
-        <Button variant="outline" size="sm" className="self-start" onClick={() => router.push(`${href}/${t.copy!.recordId}`)}>
-          Open your copy
-        </Button>
-      ) : !t.canAdd ? (
-        <Badge variant="outline" className="self-start">
-          Ask an admin to add it
-        </Badge>
-      ) : null}
-    </div>
+      ) : (
+        <Rows testId="templates-gallery">
+          {rows.map((t) => (
+            <Row
+              key={refOf(t)}
+              title={t.title}
+              description={t.plugin.title}
+              trailing={
+                t.copy?.recordId ? (
+                  <Button variant="outline" size="sm" onClick={() => router.push(`${href}/${t.copy!.recordId}`)}>
+                    Open your copy
+                  </Button>
+                ) : t.canAdd ? (
+                  <LoadingButton
+                    size="sm"
+                    isLoading={adding === refOf(t)}
+                    disabled={adding !== null}
+                    onClick={() => add(t)}
+                    data-testid={`templates-gallery-add-${t.id}`}
+                  >
+                    Add to team
+                  </LoadingButton>
+                ) : (
+                  <Badge variant="outline">Ask an admin to add it</Badge>
+                )
+              }
+            />
+          ))}
+          {query.hasNextPage && (
+            <div className="flex justify-center pt-2">
+              <LoadingButton variant="ghost" size="sm" isLoading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()} data-testid="templates-gallery-more">
+                Show more
+              </LoadingButton>
+            </div>
+          )}
+        </Rows>
+      )}
+    </DialogShell>
   );
 }

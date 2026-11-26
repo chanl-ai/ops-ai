@@ -541,6 +541,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 controls={docControls}
                 toolbar={assist.toolbar}
                 footer={assist.footer}
+                textareaRef={assist.textareaRef}
               />
               <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
               {mode === 'full' && <AgentJobField draft={draft} set={set} error={errors.role} />}

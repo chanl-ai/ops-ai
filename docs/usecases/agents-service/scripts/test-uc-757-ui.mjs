@@ -7,7 +7,6 @@
 // server side of it is proved by the api script.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, evidenceDir, finish, shootBothWidths, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { agentBase, saveAgent } from '../../lib/agent_save.mjs';
-import { caretAtLineEnd } from './rich-text.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
@@ -83,8 +82,8 @@ await withUiStack(
       const page = await signIn(JAMES);
 
       // 10. The skill page: the notes and steps are one text, and the endings hint reads.
-      const doc = page.getByTestId('rich-text');
-      const lineOf = (text) => page.getByTestId('rich-text').locator('p, li, h1, h2, h3', { hasText: text }).first();
+      const doc = page.getByTestId('sop-editor-content');
+      const lineOf = (text) => page.getByTestId('sop-editor').locator('.cm-line', { hasText: text });
       await page.goto(`${consoleUrl}/build/skills/${skill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await doc.waitFor({ timeout: 120_000 });
       await lineOf('Tell the cardholder what happens next').waitFor({ timeout: 60_000 });
@@ -106,15 +105,16 @@ await withUiStack(
       await page.getByRole('tab', { name: /^Instructions/ }).click();
       await lineOf('Look the charge up').waitFor({ timeout: 30_000 });
       // A tool picked in the middle of a step's sentence becomes the tool the step runs, drawn once as a mention.
-      await caretAtLineEnd(page, 'Look the charge up');
+      await lineOf('Look the charge up').click();
+      await page.keyboard.press('End');
       await page.keyboard.type(' with @');
       const picker = page.getByTestId('caret-menu');
       await picker.getByRole('option').first().waitFor({ timeout: 60_000 });
       await page.keyboard.press('Enter');
-      await lineOf('Look the charge up').getByTestId('reference-chip').waitFor({ timeout: 30_000 }).catch(() => undefined);
-      const drawn = await page.getByTestId('skill-text-editor').getByTestId('reference-chip').count();
+      await lineOf('Look the charge up').getByTestId('sop-mention').waitFor({ timeout: 30_000 }).catch(() => undefined);
+      const drawn = await page.getByTestId('sop-editor').getByTestId('sop-mention').count();
       // The Tools field lists what the text mentions, read-only, once the text holds the mention.
-      const picked = (await lineOf('Look the charge up').getByTestId('reference-chip').innerText()).trim();
+      const picked = (await lineOf('Look the charge up').getByTestId('sop-mention').innerText()).trim();
       const rows = page.getByTestId('skill-tools-rows').locator(':scope > *');
       const toolRow = rows.filter({ hasText: 'In the steps' });
       await toolRow.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
@@ -137,7 +137,8 @@ await withUiStack(
       const open = (await (await fetch(`${agents}/v1/skills/${skill.id}`, { headers: J })).json()).data;
       const THEIRS = 'Ask whether there is anything else.';
       await made(`/v1/skills/${skill.id}/draft`, { name: `Card dispute renamed ${RUN}`, source: `${open.text}\n${THEIRS}`, baseVersion: open.version, baseDigest: open.digest }, 'PUT');
-      await caretAtLineEnd(page, 'Tell the cardholder what happens next');
+      await lineOf('Tell the cardholder what happens next').click();
+      await page.keyboard.press('End');
       // One insert, as a paste is: the check is about what Reload keeps, not about key-by-key typing.
       await page.keyboard.insertText(' Then thank them.');
       // A resize to phone width and back draws the page's columns again; the unsaved text and its save stay.
@@ -171,7 +172,8 @@ await withUiStack(
         await notice.scrollIntoViewIfNeeded().catch(() => undefined);
       });
       // He copies his sentence across by hand; the save keeps their text with it, and their name.
-      await caretAtLineEnd(page, THEIRS);
+      await lineOf(THEIRS).click();
+      await page.keyboard.press('End');
       await page.keyboard.insertText(' Then thank them.');
       const onTop = armed(page.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === `${agents}/v1/skills/${skill.id}/draft`, { timeout: 60_000 }));
       await saveSkill(page);
@@ -190,12 +192,13 @@ await withUiStack(
         const real = window.setTimeout.bind(window);
         window.setTimeout = (fn, ms, ...rest) => real(fn, ms === undefined || ms === 0 ? 60 : ms, ...rest);
       });
-      const slowLine = (text) => slow.getByTestId('rich-text').locator('p, li, h1, h2, h3', { hasText: text }).first();
+      const slowLine = (text) => slow.getByTestId('sop-editor').locator('.cm-line', { hasText: text });
       const rounds = [];
       for (let n = 1; n <= 5; n += 1) {
         await slow.goto(`${consoleUrl}/build/skills/${raced.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await slowLine('Tell them what happens next').waitFor({ timeout: 120_000 });
-        await caretAtLineEnd(slow, 'Tell them what happens next');
+        await slowLine('Tell them what happens next').click();
+        await slow.keyboard.press('End');
         await slow.keyboard.insertText(` mine${n}.`);
         const read = (await (await fetch(`${agents}/v1/skills/${raced.id}`, { headers: J })).json()).data;
         const put = await fetch(`${agents}/v1/skills/${raced.id}/draft`, { method: 'PUT', headers: J, body: JSON.stringify({ source: `${read.text}\nSay theirs${n}.`, baseVersion: read.version, baseDigest: read.digest }) });
@@ -204,7 +207,7 @@ await withUiStack(
         await slow.getByTestId('skill-stale-reload').click();
         await slow.getByTestId('skill-stale-base').waitFor({ state: 'detached', timeout: 30_000 }).catch(() => undefined);
         await slowLine(`theirs${n}`).waitFor({ timeout: 30_000 }).catch(() => undefined);
-        const shown = await slow.getByTestId('rich-text').innerText();
+        const shown = await slow.getByTestId('sop-editor-content').innerText();
         await slow.getByTestId('skill-kept-copy-open').click().catch(() => undefined);
         const copied = await slow.getByTestId('skill-kept-copy-text').innerText().catch(() => '');
         // Long enough for a save to land, were one going to.
@@ -232,7 +235,10 @@ await withUiStack(
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.goto(`${consoleUrl}/build/skills/${guarded.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await lineOf('Offer to explain the review').waitFor({ timeout: 60_000 });
-      // The editor draws no per-line condition label; whether a condition is checked or judged shows in the hints list.
+      const legend = page.getByTestId('sop-condition-how');
+      await legend.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+      // A condition in words is judged by a model; only a condition on a value reads as checked.
+      check('10 an if line shows that the agent decides', (await legend.count()) >= 1 && /^judged$/.test(await legend.first().innerText()), await legend.allInnerTexts());
       await shootBothWidths(page, AREA, 'uc-757-skill-text-admin', async () => {});
 
       await page.setViewportSize({ width: 1440, height: 1000 });
@@ -399,7 +405,7 @@ await withUiStack(
       check('18 a reviewer can open what the agent uses and its model and limits, with the fields off', sheet && limits && (await maya.locator('#ag-thinking').isDisabled()), { sheet, limits });
       await shootBothWidths(maya, AREA, 'uc-757-agent-member', async () => {});
       await maya.goto(`${consoleUrl}/build/skills/${skill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await maya.getByTestId('rich-text').waitFor({ timeout: 120_000 });
+      await maya.getByTestId('sop-editor-content').waitFor({ timeout: 120_000 });
       await shootBothWidths(maya, AREA, 'uc-757-skill-member', async () => {});
 
       // 28. An agent whose brief was saved before sections opens as it was: no added section, and View prompt reads
@@ -768,9 +774,9 @@ await withUiStack(
           await viaSidebar(p, '/build/skills');
           // The row's link lies under its label; a click event on the link is the row click a person makes.
           await p.locator(`main a[href="/build/skills/${skill.id}"]`).first().dispatchEvent('click');
-          await p.getByTestId('rich-text').waitFor({ timeout: 60_000 });
+          await p.getByTestId('sop-editor-content').waitFor({ timeout: 60_000 });
           if (who === 'james') {
-            await p.getByTestId('rich-text').click();
+            await p.getByTestId('sop-editor-content').click();
             await p.keyboard.press('ControlOrMeta+End');
             await p.keyboard.type(' Then say goodbye with @', { delay: 20 });
             await p.getByTestId('caret-menu').getByRole('option').first().waitFor({ timeout: 60_000 });
