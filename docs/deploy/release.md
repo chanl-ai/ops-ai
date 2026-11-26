@@ -137,6 +137,20 @@ not run after a develop merge. Until the next move of `main` carries them:
 
 A `walk_passed=true` dispatch counts only from a repository admin; a writer's dispatch is ignored with a warning.
 
+## The staging hold
+
+`STAGING_HOLD` (repository variable) keeps develop merges off staging while a release is under test. Its value is
+`X.Y.Z: reason`, for example `1.1.0: under test on staging`.
+
+| Case | Result |
+|---|---|
+| The hold is set and tag `vX.Y.Z` does not exist | The deploy is skipped and the `staging` job fails red, with the hold text in the error, so a green run always means deployed |
+| Tag `vX.Y.Z` exists | The hold is stale: it is ignored, the deploy goes on and a notice says to clear the variable |
+| The value has no `X.Y.Z:` prefix | Refused as invalid, the job fails red |
+| A hand-started run | Overrides the hold, as before; the summary says so |
+
+The rule is `scripts/staging_hold.py`, which `deploy-staging.yml` calls; `scripts/tests/test_staging_hold.py` proves it.
+
 ## Version tags
 
 Every release and hotfix is tagged `vX.Y.Z`; there is no second tag scheme. Installs from before this flow hold date
