@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { BookOpen, ChevronDown, CircleAlert, GitBranch, Lock, Plus, RefreshCw, Sparkles, TriangleAlert, Users, Wrench } from 'lucide-react';
+import { BookOpen, CircleAlert, Lock, RefreshCw, TriangleAlert, Users, Wrench } from 'lucide-react';
 
 import { EntityPicker } from '@/components/shared/entity-picker';
 import { FormField } from '@/components/shared/form-field';
@@ -13,7 +13,6 @@ import { SettingsSection } from '@/components/shared/settings-section';
 import { TagInput } from '@/components/shared/tag-input';
 import { parseText, refToken } from '@/components/shared/instruction-document/document-model';
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/shared/rich-text-editor';
-import { SopEditor } from '@/components/shared/sop-editor';
 import { SkillInputsSection } from '@/components/skills/skill-inputs-section';
 import { UNWRITTEN_SECTIONS } from '@/components/skills/skill-meta';
 import { inText, refusedSave } from '@/components/skills/skill-problems';
@@ -22,7 +21,6 @@ import { SkillWhenSection, type SkillWhen, type SkillWhenHandle } from '@/compon
 import { AccessBadge } from '@/components/status-badges';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -255,7 +253,6 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
     const name = kbLabels.get(id)?.label ?? id;
     return { id, title: name, description: kbLabels.get(id)?.hint ?? undefined, remove: readOnly ? undefined : { label: `Remove ${name}`, onClick: () => setForm((f) => ({ ...f, knowledgeBases: f.knowledgeBases.filter((x) => x !== id) })) } };
   });
-  const insert = (text: string) => textDoc.current?.insert(text);
 
   return (
     <div className={hidden ? 'hidden' : 'flex flex-col gap-4'} data-testid="skill-editor">
@@ -370,32 +367,7 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="sop-read-only">
                     <Lock className="size-3.5" /> {locked ?? 'Read only. A builder in its team can change it.'}
                   </span>
-                ) : (
-                  // One menu in place of a toolbar: the editor has no formatting, and @ and if work from the keyboard too.
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" data-testid="sop-insert-menu">
-                        <Plus className="size-4" /> Insert <ChevronDown className="size-3.5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => insert('@')} data-testid="sop-insert-tool">
-                        <Wrench className="size-4" /> Tool
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => insert('@')} data-testid="sop-insert-knowledge">
-                        <BookOpen className="size-4" /> Knowledge
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => insert('@')} data-testid="sop-insert-skill">
-                        <Sparkles className="size-4" /> Skill
-                      </DropdownMenuItem>
-                      {stepped && (
-                        <DropdownMenuItem onClick={() => insert('\nif ')} title="An if / otherwise path" data-testid="sop-add-path">
-                          <GitBranch className="size-4" /> Path
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                ) : null}
               </header>
               <RichTextEditor
                 value={stepped ? form.text : form.instructions}
@@ -425,7 +397,7 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
                 <p className="flex items-center gap-2 border-b px-3 py-2 text-xs text-muted-foreground">
                   <Lock className="size-3.5" /> Your copy, read only. It is not saved.
                 </p>
-                <SopEditor value={mine.text} onChange={() => undefined} readOnly labels={labels.data} context={context} ariaLabel="Your copy of the skill text" />
+                <RichTextEditor value={mine.text} onChange={() => undefined} readOnly labels={labels.data} context={context} ariaLabel="Your copy of the skill text" />
               </div>
             )}
             {!!reading.reading?.hints.length && reading.forText === form.text && (

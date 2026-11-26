@@ -58,3 +58,16 @@ export function spliceEdit(io: MarkdownIO, schema: Schema, src: string, doc: JSO
   const sep = !replaced.length && before && !before.endsWith('\n\n') ? (before.endsWith('\n') ? '\n' : '\n\n') : '';
   return before + sep + written + (written ? gap : '') + after;
 }
+
+/** The index of the editor block that holds a line (from 1) of the stored text; the last block for a line past the end. */
+export function blockAtLine(io: MarkdownIO, schema: Schema, src: string, line: number): number {
+  let seen = 1;
+  let blocks = 0;
+  for (const s of segmentsOf(io, schema, src)) {
+    const lines = s.raw.split('\n').length - (s.raw.endsWith('\n') ? 1 : 0);
+    if (s.nodes.length && line < seen + lines) return blocks;
+    seen += lines;
+    blocks += s.nodes.length;
+  }
+  return Math.max(0, blocks - 1);
+}

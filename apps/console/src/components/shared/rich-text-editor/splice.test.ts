@@ -52,3 +52,8 @@ test('an edit inside a nested bullet rewrites only that list', () => {
   assert.ok(out.endsWith(SRC.slice(SRC.indexOf('Last line'))), 'blocks after the list are untouched');
   assert.ok(out.includes('refund in full today'));
 });
+
+test('text edited in the Markdown view is unchanged by a visit to the formatted view', () => {
+  const typed = SRC.replace('Last line @tool:order_lookup.', 'Last line @tool:order_lookup and @knowledge:refund-policy, 2 * 3 = 6.');
+  assert.equal(spliceEdit(manager as never, schema, typed, manager.parse(typed)), typed);
+});

@@ -1,6 +1,6 @@
 {
   "date": "2026-11-25",
-  "title": "Skill steps show as formatted text",
-  "description": "The skill steps editor shows headings, lists and bold as formatting instead of raw markers, with @ for tools, knowledge and skills and / for an if or otherwise path. Starting a skill from a template now has a search with a preview.",
+  "title": "Skill and agent text with a button bar",
+  "description": "Skill steps and an agent's plain instructions show headings, lists and bold as formatting, with a button bar for formatting, indent and inserting a tool, knowledge or skill after a search with a preview. A Markdown view shows the saved text as it is stored, and an edit changes only the lines you touched.",
   "tag": "improved"
 }

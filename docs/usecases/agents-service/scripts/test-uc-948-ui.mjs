@@ -133,10 +133,10 @@ await withUiStack(
         note('15 the save state says Unsaved, then Saved after Cmd+S, in the four words', STATES.includes(unsaved) && /Unsaved|Saving/.test(unsaved) && saved === 'Saved', { unsaved, saved });
       }
 
-      // A skill opens on its instructions, with an Insert menu and one Uses list.
-      await go(james, `/build/skills/${skill.id}`, 'sop-editor-content');
+      // A skill opens on its instructions, with the button bar and one Uses list.
+      await go(james, `/build/skills/${skill.id}`, 'rich-text');
       const instructionsTab = james.getByRole('tab', { name: /^Instructions/ });
-      note('18 a skill opens on its instructions with an Insert menu and a Uses list', (await instructionsTab.getAttribute('aria-selected').catch(() => null)) === 'true' && (await james.getByRole('button', { name: /^Insert/ }).count()) > 0 && (await james.getByRole('button', { name: /^Used by/ }).count()) > 0, '');
+      note('18 a skill opens on its instructions with the button bar and a Uses list', (await instructionsTab.getAttribute('aria-selected').catch(() => null)) === 'true' && (await james.getByTestId('rte-menu').count()) > 0 && (await james.getByRole('button', { name: /^Used by/ }).count()) > 0, '');
 
       // A version waiting for review: its requester can take it back, which leaves review, then send it again; a viewer only sees it.
       const waiting = waits[width];
@@ -174,7 +174,7 @@ await withUiStack(
       9: 'the brief reads as five bands', 10: 'there is no identity box', 11: 'each tab has its own address and Compare is its own page',
       12: 'the channels are one list of seven places', 13: 'View prompt is read only with Never last', 14: 'the footer holds the uses link and View prompt',
       15: 'the save state reads Unsaved then Saved after Cmd+S', 16: 'the header keeps one order and no label over two words', 17: 'tools, knowledge and skills are sections',
-      18: 'a skill opens on its instructions with an Insert menu and a Used by list', 19: 'no page scrolls sideways and none logs an error', 20: 'Withdraw takes a waiting version out of review and offers Send again',
+      18: 'a skill opens on its instructions with the button bar and a Used by list', 19: 'no page scrolls sideways and none logs an error', 20: 'Withdraw takes a waiting version out of review and offers Send again',
       21: 'a viewer sees a waiting version and no Withdraw', 22: 'a viewer reads the page and a member is refused it',
     };
     for (const [id, title] of Object.entries(TITLES)) {

@@ -31,7 +31,6 @@ export function useInstructionsAssist({
 }) {
   const submit = useSubmitTemplate();
   const [templateOpen, setTemplateOpen] = React.useState(false);
-  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
   const toolbar = (
       <Button variant="outline" size="sm" className="bg-card" onClick={onAttachAlways} data-testid="attach-always-skill">
@@ -68,5 +67,5 @@ export function useInstructionsAssist({
     </>
   );
 
-  return { toolbar, footer, menuItem, dialogs, textareaRef };
+  return { toolbar, footer, menuItem, dialogs };
 }

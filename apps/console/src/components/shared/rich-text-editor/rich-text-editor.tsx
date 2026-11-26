@@ -5,6 +5,8 @@ import type { Editor, Range } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { GitBranch, Heading2, List, ListOrdered, Minus, Quote } from 'lucide-react';
 
+import { Textarea } from '@/components/ui/textarea';
+
 import { CaretMenu, type MenuRow, type MenuSection } from '@/components/shared/caret-menu';
 import { KIND_ICON } from '@/components/shared/reference-kinds';
 import { useReferenceSearch } from '@/hooks/references-queries';
@@ -13,7 +15,9 @@ import { cn } from '@/lib/utils';
 
 import { type MenuBridge, type Trigger, richTextExtensions } from './extensions';
 import { keepPlainText, mentionToken } from './markdown';
-import { type MarkdownIO, spliceEdit } from './splice';
+import { ReferencePickerDialog, type InsertableKind } from './reference-picker-dialog';
+import { type MarkdownIO, blockAtLine, spliceEdit } from './splice';
+import { IF_PATH, RichTextToolbar, type View, insertPath } from './toolbar';
 import { MentionLabels } from './mention-view';
 
 type Pick = (editor: Editor, range: Range) => void;
@@ -46,14 +50,6 @@ export interface RichTextEditorProps {
   ariaLabel: string;
   controls?: React.Ref<RichTextEditorHandle>;
 }
-
-const IF_PATH = {
-  type: 'bulletList',
-  content: [
-    { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'if …:' }] }, { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }] }] },
-    { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'otherwise:' }] }, { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }] }] },
-  ],
-};
 
 const SLASH_ROWS: { key: string; label: string; icon: typeof List; trailing: string; run: Pick }[] = [
   { key: 'path', label: 'If / otherwise', icon: GitBranch, trailing: 'Two paths, indented under their condition', run: (e, r) => e.chain().focus().deleteRange(r).insertContent(IF_PATH).run() },
@@ -133,6 +129,16 @@ export function RichTextEditor({ value, onChange, readOnly = false, context, lab
     gone.current = text;
     latest.current.onMissingChange?.(refs);
   }, [editor, labels, value]);
+
+  // ---------- the button bar: view and insert dialogs ----------
+  const [view, setView] = React.useState<View>('formatted');
+  const [picking, setPicking] = React.useState<InsertableKind | null>(null);
+  const insert = (what: InsertableKind | 'path') => {
+    if (!editor) return;
+    if (what === 'path') insertPath(editor);
+    else setPicking(what);
+  };
+  const place = (item: { kind: Ref['kind']; id: string }) => editor?.chain().focus().insertContent([{ type: 'mention', attrs: { kind: item.kind, id: item.id } }, { type: 'text', text: ' ' }]).run();
 
   // ---------- the @ and / menus ----------
   const [open, setOpen] = React.useState<OpenMenu | null>(null);
@@ -236,16 +242,18 @@ export function RichTextEditor({ value, onChange, readOnly = false, context, lab
     () => ({
       insert: (text) => {
         if (!editor) return;
-        editor.chain().focus('end').insertContent(text).run();
+        editor.chain().focus('end').insertContent(text, { contentType: 'markdown' }).run();
       },
+      // The block that holds that line of the saved text; the text is Markdown, so a line is not a position in the editor.
       focusLine: (line) => {
         if (!editor) return;
-        let at = 0;
-        let n = 0;
-        editor.state.doc.forEach((node, offset) => {
-          if (++n === line) at = offset + 1;
+        const index = blockAtLine(editor.markdown as unknown as MarkdownIO, editor.schema, emitted.current, line);
+        let at = 1;
+        editor.state.doc.forEach((_, offset, i) => {
+          if (i === index) at = offset + 1;
         });
-        editor.chain().focus().setTextSelection(at || 1).scrollIntoView().run();
+        setView('formatted');
+        editor.chain().focus().setTextSelection(at).scrollIntoView().run();
       },
     }),
     [editor],
@@ -253,8 +261,15 @@ export function RichTextEditor({ value, onChange, readOnly = false, context, lab
 
   return (
     <MentionLabels.Provider value={labels}>
-      <EditorContent editor={editor} />
-      {open && editor && (
+      <RichTextToolbar editor={editor} disabled={readOnly} view={view} onView={setView} onInsert={insert} />
+      {view === 'formatted' ? (
+        <EditorContent editor={editor} />
+      ) : (
+        // The saved text as it is stored, mentions as @kind:id; what is typed here is the text, read again on the way back.
+        <Textarea value={value} onChange={(e) => onChange(e.target.value)} readOnly={readOnly} aria-label={`${ariaLabel}, Markdown`} className="min-h-48 rounded-none border-0 font-mono text-xs leading-relaxed shadow-none focus-visible:ring-0" data-testid="rte-markdown" />
+      )}
+      {picking && <ReferencePickerDialog kind={picking} context={context} open onOpenChange={(o) => !o && setPicking(null)} onPick={place} />}
+      {open && editor && view === 'formatted' && (
         <CaretMenu
           rect={() => open.rect?.() ?? null}
           label={open.trigger === '@' ? 'Insert a mention' : 'Add to the text'}
