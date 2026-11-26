@@ -51,6 +51,7 @@ from usecase_harness import (
     pg_url,
     put_in_files,
     service_headers,
+    sse,
 )
 
 OPS = {"X-Team-Id": "team_ops"}
@@ -101,7 +102,7 @@ RULES = {
 # ---- the 12-page scan ----
 
 
-def _page_image(number: int) -> Image.Image:
+def _page_image(number: int, copy: str = "") -> Image.Image:
     """One scanned page at 150 dpi: text drawn into pixels, so the PDF has no text layer and is read by OCR."""
     img = Image.new("L", (1275, 1650), 255)
     draw = ImageDraw.Draw(img)
@@ -126,14 +127,17 @@ def _page_image(number: int) -> Image.Image:
         ImageDraw.Draw(faded).text((10, 10), "Reference", fill=185, font=ImageFont.load_default(size=30))
         img.paste(faded.filter(ImageFilter.GaussianBlur(1.6)), (110, 400))
     draw.text((110, 1520), f"Page {number} of 12", fill=0, font=font)
+    if copy:
+        draw.text((110, 1580), copy, fill=0, font=font)
     return img
 
 
-def scan_pdf() -> bytes:
+def scan_pdf(copy: str = "") -> bytes:
+    """The scan; `copy` marks every page, so its bytes are a file nobody has read yet."""
     buf = io.BytesIO()
     c = Canvas(buf, pagesize=LETTER)
     for n in range(1, 13):
-        c.drawImage(ImageReader(_page_image(n)), 0, 0, width=LETTER[0], height=LETTER[1])
+        c.drawImage(ImageReader(_page_image(n, copy)), 0, 0, width=LETTER[0], height=LETTER[1])
         c.showPage()
     c.save()
     return buf.getvalue()
@@ -450,6 +454,22 @@ def reads(
         and "Page 2 of 12" in blob and "Page 3 of 12" not in blob,
         {"checks": [f"{c.get('level')}: {c.get('message')}" for c in valid.get("checks") or []], "publish": live,
          "run": run.get("status"), "outcome": run.get("outcome"), "error": run.get("error")},
+    )  # fmt: skip
+
+    # A scan nobody has read yet is read in the background: the step parks on reading.finished, and the reading's end
+    # wakes it, well inside its 20-minute limit.
+    fresh = put_in_files(str(files.base_url).rstrip("/"), "levy-copy.pdf", scan_pdf(f"Copy {RUN}"), headers=OPS)
+    body_ = {"workflowId": text_wid, "mode": "live", "input": {"fileId": fresh}}
+    run_id = str((required(api.post("/v1/runs", json=body_, headers=OPS), "/v1/runs")).get("runId"))
+    run = (until(ended, 240) if live == "approved" else None) or {}
+    events = sse(api.get(f"/v1/runs/{run_id}/events", params={"follow": "false"}, headers=OPS).text)
+    types = [e.get("type") for e in events]
+    blob = json.dumps(run)
+    check(
+        "4 the same step on a scan nobody has read parks until its reading ends, then returns pages 1 and 2",
+        run.get("status") == "succeeded" and run.get("outcome") == "ok" and "waiting_external" in types
+        and "Page 2 of 12" in blob and "Page 3 of 12" not in blob,
+        {"run": run.get("status"), "outcome": run.get("outcome"), "error": run.get("error"), "events": types},
     )  # fmt: skip
 
 

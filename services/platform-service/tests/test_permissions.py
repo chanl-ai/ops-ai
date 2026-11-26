@@ -194,6 +194,23 @@ async def test_a_security_team_action_is_listed_only_in_the_security_team(platfo
     assert not any(SECURITY_CELLS & set(held(view, t["teamId"])) for t in view["teams"])
 
 
+async def test_a_security_cell_a_route_holds_in_the_acting_team_is_listed_apart_for_that_team(
+    platform: Platform,
+) -> None:
+    """agents-service holds settings.manage in the acting team for the agent instruction sections
+    (`can(in_team=True)`), so a team's Admin changes them; listed nowhere, the console showed that Admin no edit
+    controls, and listed among the team's cells, every Security-only screen would have offered them too."""
+    admin = await platform.person(roles=("admin",))
+    team = next(iter(admin.teams))
+    view = await permissions(platform, await bearer(platform, admin))
+    assert not SECURITY_CELLS & set(held(view, team)), "the Security-only answer is unchanged"
+    in_team = {f"{c['area']}.{c['action']}" for t in view["teams"] if t["teamId"] == team for c in t["heldInTeam"]}
+    assert "settings.manage" in in_team, in_team
+    builder = await platform.person(roles=("builder",), tenant_id=admin.tenant_id)
+    view = await permissions(platform, await bearer(platform, builder))
+    assert not any(c["area"] == "settings" for t in view["teams"] for c in t["heldInTeam"]), view["teams"]
+
+
 async def test_another_persons_permissions_show_only_shared_teams(platform: Platform) -> None:
     me = await platform.person(roles=("viewer", "builder"))
     shared, mine_only = list(me.teams)

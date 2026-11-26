@@ -72,6 +72,8 @@ owns the record.
 | Security admin | Egress, any team's secrets, storage settings and security reviews of tool modules. Held by admins of the Security team |
 | Owner | Transfers, closes and restores the workspace. One person holds it, and only a transfer moves it |
 
+A workflow's schedule follows the same cells: anyone who may view the workflow reads it; saving or clearing it needs the right to edit the workflow and to add deployments in its team, and resuming a paused workflow needs the right to edit it. A Viewer or Chat user sees the schedule and no button ([Schedule a workflow or an agent](schedule-a-workflow.md)).
+
 ## Options
 
 | Setting | Where | What it does | Default |

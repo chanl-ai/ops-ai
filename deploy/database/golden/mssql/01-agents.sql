@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 20261124_0257_skill_owner_ids
+-- agents-service, stamped at 20261124_2313_agent_instruction
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -817,6 +817,14 @@ CREATE TABLE registry_guardrails (
 GO
 CREATE INDEX ix_registry_guardrails_tenant_team ON registry_guardrails (tenant_id, team_id);
 GO
+CREATE TABLE agent_instruction_sections (
+	tenant_id VARCHAR(64) NOT NULL, 
+	document NVARCHAR(max) NOT NULL, 
+	updated_by VARCHAR(320) NOT NULL, 
+	updated_at DATETIMEOFFSET NOT NULL, 
+	CONSTRAINT agent_instruction_sections_pkey PRIMARY KEY (tenant_id)
+);
+GO
 CREATE TABLE agent_memories (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -920,6 +928,24 @@ CREATE TABLE model_call_records_unattributed (
 	CONSTRAINT model_call_records_unattributed_pkey PRIMARY KEY (id)
 );
 GO
+CREATE TABLE agents_outbox (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	name VARCHAR(120) NOT NULL, 
+	event_key VARCHAR(200) NOT NULL, 
+	actor VARCHAR(320) NULL, 
+	payload NVARCHAR(max) NOT NULL, 
+	created_at FLOAT NOT NULL, 
+	next_at FLOAT NULL, 
+	sent_at FLOAT NULL, 
+	attempts INTEGER NOT NULL, 
+	last_error VARCHAR(max) NULL, 
+	CONSTRAINT agents_outbox_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_agents_outbox_due ON agents_outbox (sent_at, next_at);
+GO
 CREATE TABLE review_assignments (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -931,6 +957,23 @@ CREATE TABLE review_assignments (
 );
 GO
 CREATE INDEX ix_review_assignments_review ON review_assignments (tenant_id, review_id, assigned_at);
+GO
+CREATE TABLE workflow_schedules (
+	tenant_id VARCHAR(64) NOT NULL, 
+	workflow_id VARCHAR(64) NOT NULL, 
+	trigger_step VARCHAR(100) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	[rule] NVARCHAR(max) NOT NULL, 
+	changed_by VARCHAR(200) NOT NULL, 
+	changed_by_name VARCHAR(200) NULL, 
+	changed_at VARCHAR(32) NOT NULL, 
+	rule_digest VARCHAR(64) NULL, 
+	last_slot_at VARCHAR(32) NULL, 
+	last_outcome VARCHAR(16) NULL, 
+	last_run_id VARCHAR(64) NULL, 
+	seen_at VARCHAR(32) NULL, 
+	CONSTRAINT workflow_schedules_pkey PRIMARY KEY (tenant_id, workflow_id, trigger_step)
+);
 GO
 CREATE TABLE task_assists (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -1513,6 +1556,12 @@ CREATE SECURITY POLICY ops_security.registry_guardrails_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_guardrails AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.agent_instruction_sections_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.agent_instruction_sections,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.agent_instruction_sections AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.agent_instruction_sections AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.agent_memories_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.agent_memories,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.agent_memories AFTER INSERT,
@@ -1537,10 +1586,22 @@ CREATE SECURITY POLICY ops_security.model_call_records_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.model_call_records AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.agents_outbox_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.agents_outbox,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.agents_outbox AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.agents_outbox AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.review_assignments_tenant
     ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.review_assignments,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.review_assignments AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.review_assignments AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.workflow_schedules_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.workflow_schedules,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.workflow_schedules AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.workflow_schedules AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.task_assists_tenant
@@ -1670,5 +1731,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('20261124_0257_skill_owner_ids');
+INSERT INTO alembic_version (version_num) VALUES ('20261124_2313_agent_instruction');
 GO

@@ -52,9 +52,17 @@ export interface InstructionDocumentProps {
   footer?: 'add-step';
   /** The card's own footer row (counts, actions); shown read-only too, and in place of the hint. */
   footerSlot?: React.ReactNode;
-  /** Actions in the card's own header row, right-aligned above the first heading (the brief's Draft). */
+  /** Shows the hint line in the footer row of an editable document with no footer of its own; off, there is no footer row. */
+  showHint?: boolean;
+  /** The card's one header row, above the first heading (the brief's model, uses and actions); the page lays it out. */
   headerSlot?: React.ReactNode;
   hint?: string;
+  /** Removes the block whose Remove control was used, by its key; only blocks marked `removable` draw one. */
+  onRemoveBlock?: (key: string) => void;
+  /** Called with a block's key and the text of the chip picked above it. */
+  onChip?: (key: string, text: string) => void;
+  /** A row between the text and the footer, shown to a person who can edit (the brief's Add section). */
+  belowSlot?: React.ReactNode;
   /** What the document is, for a screen reader: "Dispute desk instructions". */
   label: string;
   controls?: React.Ref<InstructionDocumentHandle>;
@@ -63,7 +71,7 @@ export interface InstructionDocumentProps {
 const normal = (value: DocumentValue) => JSON.stringify(fromEditorDoc(toEditorDoc(value)));
 
 const EDITOR_CLASS =
-  'flex flex-col gap-4 p-4 text-sm leading-7 outline-hidden [&_.is-empty]:before:pointer-events-none [&_.is-empty]:before:float-left [&_.is-empty]:before:-mr-[100%] [&_.is-empty]:before:w-full [&_.is-empty]:after:block [&_.is-empty]:after:clear-both [&_.is-empty]:after:content-[""] [&_.is-empty]:before:text-muted-foreground [&_.is-empty]:before:content-[attr(data-placeholder)]';
+  'flex flex-col gap-4 p-4 text-sm leading-6 outline-hidden [&_.is-empty]:before:pointer-events-none [&_.is-empty]:before:float-left [&_.is-empty]:before:-mr-[100%] [&_.is-empty]:before:w-full [&_.is-empty]:after:block [&_.is-empty]:after:clear-both [&_.is-empty]:after:content-[""] [&_.is-empty]:before:text-muted-foreground [&_.is-empty]:before:content-[attr(data-placeholder)]';
 
 interface OpenMenu {
   trigger: Trigger;
@@ -89,13 +97,13 @@ const MENU_COPY: Record<Trigger, { label: string; empty: (q: string) => string }
  * skills, agents and workflows as chips. `@` opens the grouped picker under the caret, `{{` the variables, `/` adds a
  * step, a check or an if-not line. The agent page and the skill page draw the same component with different blocks.
  */
-export function InstructionDocument({ value, onChange, searchReferences, onInsertReference, resolved, missing = [], onMissingChange, invalid = [], warnings = [], variables, readOnly = false, footer, footerSlot, headerSlot, hint = 'Type @ to add a tool, knowledge or skill', label, controls }: InstructionDocumentProps) {
+export function InstructionDocument({ value, onChange, searchReferences, onInsertReference, resolved, missing = [], onMissingChange, invalid = [], warnings = [], variables, readOnly = false, footer, footerSlot, headerSlot, onRemoveBlock, onChip, belowSlot, showHint = true, hint = 'Type @ to add a tool, knowledge or skill', label, controls }: InstructionDocumentProps) {
   const bridge = React.useRef<MenuBridge | null>(null);
   const [extensions] = React.useState(() => instructionExtensions(() => bridge.current));
   // What the page last saw, so a value it hands back unchanged does not reload the document and move the caret.
   const seen = React.useRef(normal(value));
-  const latest = React.useRef({ onChange, onInsertReference, searchReferences });
-  latest.current = { onChange, onInsertReference, searchReferences };
+  const latest = React.useRef({ onChange, onInsertReference, searchReferences, onRemoveBlock, onChip });
+  latest.current = { onChange, onInsertReference, searchReferences, onRemoveBlock, onChip };
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -303,6 +311,8 @@ export function InstructionDocument({ value, onChange, searchReferences, onInser
       invalid,
       warnings,
       readOnly,
+      pickChip: onChip ? (key, text) => latest.current.onChip?.(key, text) : undefined,
+      removeBlock: onRemoveBlock ? (key) => latest.current.onRemoveBlock?.(key) : undefined,
       chooseAnother,
       canMarkRuns: (pos) => !!editor && canMarkRuns(editor, pos),
       markRuns: (pos, ref) => editor && setStepRuns(editor, pos, ref),
@@ -311,7 +321,7 @@ export function InstructionDocument({ value, onChange, searchReferences, onInser
     }),
     // `onInsertReference` only decides whether Add it back is offered.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [known, missing, invalid, warnings, readOnly, chooseAnother, editor, !onInsertReference],
+    [known, missing, invalid, warnings, readOnly, !onRemoveBlock, !onChip, chooseAnother, editor, !onInsertReference],
   );
 
   React.useImperativeHandle(
@@ -342,14 +352,15 @@ export function InstructionDocument({ value, onChange, searchReferences, onInser
   return (
     <DocumentContext.Provider value={context}>
       <div className="rounded-lg border bg-card" data-testid="instruction-document">
-        {headerSlot && <div className="flex flex-wrap items-center justify-end gap-2 border-b px-4 py-2">{headerSlot}</div>}
+        {headerSlot && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2">{headerSlot}</div>}
         <EditorContent editor={editor} />
+        {!readOnly && belowSlot && <div className="flex flex-col gap-2 px-4 pb-3">{belowSlot}</div>}
         {unplaced.length > 0 && (
           <div className="flex flex-col gap-2 px-4 pb-4">
             <FixRows blockers={unplaced} />
           </div>
         )}
-        {(!readOnly || footerSlot) && (
+        {(footerSlot || (!readOnly && (footer === 'add-step' || showHint))) && (
           <div className="flex flex-wrap items-center gap-2 border-t px-4 py-2">
             {footerSlot ?? <p className="text-xs text-muted-foreground">{hint}</p>}
             {!footerSlot && <span className="flex-1" />}

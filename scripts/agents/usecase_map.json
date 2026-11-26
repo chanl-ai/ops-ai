@@ -1664,6 +1664,7 @@
    "row": "service: Knowledge (kb-service)",
    "globs": [
     "services/kb-service/**",
+    "packages/ops_sources/**",
     "packages/ops_ingest/**"
    ],
    "usecases": [

@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from ops_access import tool_waits
 from ops_agent_kernel.types import (
+    NEVER_HEADING,
     TOOL_SEARCH_ABOVE,
     Access,
     AgentSettings,
@@ -230,9 +231,12 @@ class AgentDefinition(_Model):
     skill_menu: Literal["team", "attached", "off"] = "team"
     # The brief's never rules, written last in the prompt in both prompt modes; none on a version without a brief.
     never: list[str] = []
+    never_heading: str = NEVER_HEADING
     # How hard the model thinks (low, medium, high); None sends no setting. Off: one tool call at a time.
     thinking: str | None = None
     parallel_reads: bool = True
+    # The version's model settings by knob name (agent_registry.model_settings_of).
+    model_settings: dict[str, float | int | str] = {}
 
 
 class ApprovalTemplate(_Model):
@@ -390,8 +394,10 @@ class Catalog(_Model):
                 s for k in agent.skills for s in kernel_skills(k.skill_id, k.version, k.slug, k.content(), k.tokens)
             ],
             never=list(agent.never),
+            never_heading=agent.never_heading,
             thinking=agent.thinking,
             parallel_reads=agent.parallel_reads,
+            model_settings=dict(agent.model_settings),
             # Callers narrow widgets only: pinned ones switched off, composing off, a lower cap (resolver-checked).
             widgets=[w.template() for w in agent.widgets if not effective or w.widget_id not in effective.widgets_off],
             compose=agent.compose and not (effective and effective.compose_off),

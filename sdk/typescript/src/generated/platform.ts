@@ -3916,6 +3916,8 @@ export interface components {
         };
         /** TeamPermissions */
         TeamPermissions: {
+            /** Heldinteam */
+            heldInTeam: components["schemas"]["EffectivePermission"][];
             /** Permissions */
             permissions: components["schemas"]["EffectivePermission"][];
             /** Teamid */

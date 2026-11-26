@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "The agent brief and editor headers take fewer rows",
+  "description": "The model, what the agent uses, Draft and View prompt share one row on the brief card, empty optional sections are one line with an Add link, and on a phone the editors keep Save and the main action and move the rest into the menu.",
+  "tag": "improved"
+}

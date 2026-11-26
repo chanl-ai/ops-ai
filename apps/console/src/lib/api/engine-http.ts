@@ -19,6 +19,7 @@ export function createEngineHttp(get: Get, send: Send): EngineApi {
     publishPreview: (id) => get(`/workflows/definitions/${encodeURIComponent(id)}/publish-preview`),
     requestPublish: (id, input) => send('POST', `/workflows/definitions/${encodeURIComponent(id)}/publish-requests`, input),
     setPaused: (id, paused) => send('POST', `/workflows/definitions/${encodeURIComponent(id)}/${paused ? 'pause' : 'resume'}`),
+    sample: (id, step) => get(`/workflows/definitions/${encodeURIComponent(id)}/sample?step=${encodeURIComponent(step)}`),
     options: (source) => get(`/workflows/option-sources?source=${source}`),
     startRun: (input) => send('POST', '/runs', input),
     startWorkflow: (input) => send('POST', '/runs/start', input),

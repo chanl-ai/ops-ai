@@ -206,7 +206,7 @@ async def set_guardrail_status(rt: Rt, me: Me, _: Tx, guardrail_id: str, body: G
 @router.delete("/{guardrail_id}", status_code=204, response_class=Response)
 async def delete_guardrail(rt: Rt, me: Me, _: Tx, guardrail_id: str) -> Response:
     """Refused (403) unless the caller created the guardrail or is an admin of its team, and (409) while it is
-    pinned. Who deleted it is logged; agents-service has no audit table yet."""
+    pinned. Who deleted it is logged; this write records no audit entry yet."""
     row = await guardrails(rt).row(guardrail_id)
     first = await guardrails(rt).version(guardrail_id, 1)
     require_owner_or_admin(

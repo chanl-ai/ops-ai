@@ -4,6 +4,7 @@ loses the types not built yet, or a page for one of them fails to load."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -16,12 +17,15 @@ from ops_agents.store.api_key_copies import ApiKeyCopies, KeySummary, api_key_co
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.mailboxes import MailboxRow, MailboxStore
 from ops_agents.store.poll_cursors import poll_cursors
+from ops_agents.store.schedules import WorkflowSchedules
 from ops_agents.store.tenancy import tenant_scope
 from ops_agents.store.widget_deployments import WidgetDeployments
-from ops_engine.store import RunStore
+from ops_engine.store import DefinitionStore, RunStore
 from ops_identity import dev_service_signer, mint_service_token
 from ops_store import copies
 from ops_store.outbox import ApiKeyChanged
+from ops_store.schedule import Rule
+from ops_store.schedule.wall_time import DAYS
 from tests.api.test_action_roles import REVIEWER
 from tests.api.test_activity import email
 from tests.api.test_case_routes import started_run
@@ -209,6 +213,8 @@ async def test_an_agents_live_places_are_its_channels_and_the_steps_that_run_it(
     for n in d["nodes"]:
         if n["type"] == "ops.ai.agent":
             n["parameters"]["agent"] = "ag_branch"
+        if str(n["type"]).startswith("ops.trigger."):
+            n["type"], n["parameters"] = "ops.trigger.schedule", {}
     assert (await c.post("/v1/workflows/definitions", json={"definition": d}, headers=BUILDER)).status_code == 201
     live = await c.post("/v1/workflows/definitions/customer_summary/publish-requests", json={}, headers=BUILDER)
     assert live.status_code == 201, live.text
@@ -218,6 +224,31 @@ async def test_an_agents_live_places_are_its_channels_and_the_steps_that_run_it(
     assert set(places) == {("channel", "wd_branch"), ("workflow_step", "summarise")}, places
     assert places[("channel", "wd_branch")]["pinned"] is True
     assert places[("workflow_step", "summarise")]["where"]["workflowId"] == "customer_summary"
+    assert places[("workflow_step", "summarise")]["schedule"] is None
+    trigger = next(n["id"] for n in d["nodes"] if str(n["type"]).startswith("ops.trigger."))
+    rule: Rule = {"kind": "every", "every": 15, "unit": "minutes", "start": "00:00", "tz": "UTC", "days": list(DAYS)}
+    with tenant_scope(TENANT):
+        await WorkflowSchedules(rt.db).save("customer_summary", trigger, "team_ops", rule, "user_ana")
+    again = (await c.get("/v1/agents/ag_branch/live", headers=BUILDER)).json()["data"]["rows"]
+    step = next(p for p in again if p["where"]["kind"] == "workflow_step")
+    assert step["schedule"]["words"] == "Every 15 minutes from 00:00, UTC", step
+    assert step["schedule"]["triggerStep"] == trigger
+    assert datetime.fromisoformat(step["schedule"]["nextRun"]) > datetime.now(UTC)
+    assert next(p for p in again if p["where"]["kind"] == "channel")["schedule"] is None
+    # Another team's workflow runs the same agent on a schedule: neither its step nor its schedule is listed.
+    theirs = {**d, "id": "fraud_summary", "name": "Fraud summary"}
+    digest = hashlib.sha256(json.dumps(theirs, sort_keys=True).encode()).hexdigest()
+    with tenant_scope(TENANT):
+        store = DefinitionStore(EngineTransactions(rt.db))
+        version, _ = await store.publish(
+            "fraud_summary", name="Fraud summary", definition=theirs, digest=digest, now="n", by="b", team="team_fraud"
+        )
+        await store.go_live("fraud_summary", version)
+        await WorkflowSchedules(rt.db).save("fraud_summary", trigger, "team_fraud", rule, "user_omar")
+    both = (await c.get("/v1/agents/ag_branch/live", headers=BUILDER)).json()["data"]["rows"]
+    steps = {p["where"]["workflowId"]: p["schedule"] for p in both if p["where"]["kind"] == "workflow_step"}
+    assert steps["customer_summary"] is not None and "fraud_summary" not in steps, steps
+    assert (await c.get("/v1/workflows/fraud_summary/live", headers=BUILDER)).status_code == 404
     assert (await c.get("/v1/agents/ag_nobody/live", headers=BUILDER)).status_code == 404
 
 

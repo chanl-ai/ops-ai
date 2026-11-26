@@ -23,7 +23,7 @@ routes.
 | 5. Agents, workflows, SDK, CLI | Built: grantable operations, tool search above 20 tools | `app.py:364`; `packages/ops_agent_kernel/src/ops_agent_kernel/types.py:74` | Unchanged |
 | 5b. MCP in (Ops AI as a server) | Slice 1: `/mcp` behind the `mcp_gateway` flag, read tools only, every call a test run | `services/tools-service/src/ops_tools/mcp_server.py:6-9`, `:101-116`; `app.py:338-340` | Curated endpoints, per-person tokens and keys, meta tools above 20, masking, held writes |
 | 5c. MCP out (outside MCP servers) | Built: an outside server is a module of type `mcp`, imported by address or discovery | `services/tools-service/src/ops_tools/modules/schemas.py:18`; `services/tools-service/src/ops_tools/modules/routes.py:131` | Its sign-in may be a provider account |
-| 6. Triggers | Partly: trigger nodes on the canvas; the email trigger; system event workflows | `packages/ops_engine/src/ops_engine/node_types.py:399`, `:427`, `:478`, `:522`; `services/agents-service/src/ops_agents/api/email_trigger.py:80` | A `triggers` record per team: webhook, poll, email, record change, cron schedule |
+| 6. Triggers | Partly: trigger nodes on the canvas; the email trigger; system event workflows | `packages/ops_engine/src/ops_engine/node_types.py:399`, `:427`, `:478`, `:522`; `services/agents-service/src/ops_agents/api/email_trigger.py:80` | A `triggers` record per team: webhook, poll, email, record change. A schedule is not one: it is a saved row on a workflow's trigger step, ticked by the schedule clock (below) |
 | 7. Knowledge sources | Built: a plugin's sources become knowledge sources with their own schedule | `services/kb-service/src/ops_kb/schedule.py:100`; `services/kb-service/src/ops_kb/app.py:453` | Console's Add source lists plugin sources |
 | 8. Templates and document types | Built: templates of kind agent, skill, workflow, document type, copied per team | `manifest.py:377-378`; `services/agents-service/src/ops_agents/api/routers/templates.py:61`; `services/tools-service/src/ops_tools/plugins/templates.py:337` | `document_types` as its own manifest list |
 
@@ -41,7 +41,7 @@ scheduler or audit table is added.
 | Who may do what | `ops_access.can()`; the existing `webhooks` area, `packages/ops_access/src/ops_access/catalogue.py:48-50` | Triggers and hooks use the `webhooks` area, shown on screen as Triggers |
 | Events from a service to agents-service | `POST /v1/events`, `services/agents-service/src/ops_agents/api/routers/service_events.py:26`, `:56`; team from the token, `:73-74`; `EVENT_OWNERS`, `services/agents-service/src/ops_agents/api/service_events.py:125` | New owner prefix `app_event.` for tools-service |
 | Delivery history and dedupe | `trigger_events` with outcomes, `services/agents-service/src/ops_agents/store/trigger_events.py:30-44`; `poll_cursors`, `services/agents-service/src/ops_agents/store/poll_cursors.py:23` | Add `trigger_id`; generic `source`; agent target |
-| Timed starts | `arm_job` and the timer poller, `services/agents-service/src/ops_agents/api/timers.py:205`, `:427` | A schedule arms its next tick |
+| Timed starts | `arm_job` and the timer poller, `services/agents-service/src/ops_agents/api/timers.py:205`, `:427`, start one agent turn once | Unchanged. Recurring schedules do not use it: the schedule clock reads `workflow_schedules` (`services/agents-service/src/ops_agents/api/schedule_clock.py`) |
 | One-shot delayed start | `after_seconds` on run start, `services/agents-service/src/ops_agents/api/routers/engine.py:778` | Unchanged |
 | Ops AI's own OAuth clients | `OPS_PLUGIN_CLIENTS`, `packages/ops_service_kit/src/ops_service_kit/settings.py:167`; install locks `plugin_locked`, `:170` | Stay environment-only; shown read-only by `GET /v1/plugins` |
 | Mailboxes | `/v1/channels/mailboxes`, `services/agents-service/src/ops_agents/api/routers/mailboxes.py:41` | An email trigger points at a mailbox |
@@ -146,7 +146,7 @@ outbox relay.
 | Poll | The listener calls the plugin's changes or list tool through the gateway every N minutes with a team account, keeps a cursor, and emits one event per new item | agents-service, in the mail listener's loop | The item id | A failed poll keeps the cursor; after 3 failures the trigger shows "failing" | No |
 | Email | A mailbox folder | agents-service | Message id | Set aside after 3 tries; run again by hand | Yes (`email_trigger.py:80`, `trigger_events.py:30-44`) |
 | Record change | A platform service reports `file.`, `extraction.`, `task.`, `app_account.` events; team workflows may now listen | The reporting service | `(tenant, name, key)` | As today | System workflows only (`api/service_events.py:125`) |
-| Schedule | A cron expression in a named time zone, with pause, resume and next tick shown, armed as a timer | agents-service timers | Trigger id plus tick time | A missed tick starts once at catch-up, marked late; a DST gap runs at the next valid minute; a repeated hour runs once | One due time only (`node_types.py:522`, `engine.py:778`) |
+| Schedule | A rule saved on a workflow's schedule trigger step (every N minutes, hours or days, on chosen weekdays, between two times, in a time zone), read by the schedule clock each minute. Pause is the workflow's Pause | agents-service, the schedule clock | `schedule:{workflow}:{slot to the minute}`, so a slot is one run | A tick whose last run is still going is skipped and logged; after an outage one catch-up run starts, marked late, when the latest slot is within half the smaller gap to its neighbouring slots and at least 90 seconds (a pass trails its slot by up to a minute, so a one-minute rule is never judged missed by a normal pass); a gap runs at the first valid minute; a repeated hour runs once | Yes (`schedule_clock.py`, `routers/schedules.py`). Each save and clear writes an audit entry (`workflow.schedule.save`, `workflow.schedule.clear`) with the old and new schedule in words, in the same transaction, through the agents outbox. The schedule view also carries the saver's name (stored at save), the clock's reason for the last slot, the last run id and an idle code; `GET /v1/schedules/zones` lists the time zones a rule may name. Cron and business calendars are later rule kinds |
 
 | Rule | Detail |
 |---|---|
@@ -163,7 +163,7 @@ outbox relay.
 | A person leaves | Their sign-ins and endpoint keys are revoked; team triggers keep running on team accounts; deleting a hook is refused while a trigger names it |
 | Access | The `webhooks` area: view, create, edit, run (run again), delete, manage (secrets) |
 | Audit | Create, edit, pause, resume, delete, secret rotation, run again, endpoint and key changes, and every refused arrival go through the one audit log |
-| Background processes | No new loop: the receiver is a route, polling joins the mail listener, the schedule uses the timer poller |
+| Background processes | The receiver is a route and polling joins the mail listener. The schedule clock is one loop in the worker (`schedule_clock` on the Background page), with a lease per schedule so two machines give one outcome |
 | Where it appears | One list under Agents › Channels with views All, Webhooks, Schedules, Polls, Email. The canvas trigger node points at the record ("Starts from: webhook, GitHub issue opened"); an older `ops.trigger.*` node in a published version keeps working |
 
 ### The receiver route
@@ -200,16 +200,41 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-  participant Admin
+  participant Builder
   participant Agents as agents-service
-  participant Poller as timer poller
-  Admin->>Agents: POST /v1/triggers {kind: schedule, cron, timezone, target}
-  Agents->>Agents: triggers row, arm_job(key = trigger:id:tick)
-  Poller->>Agents: timer due
-  Agents->>Agents: paused? skip and arm next; else trigger_events row, start_run, arm next tick in the time zone
+  participant Clock as schedule clock
+  Builder->>Agents: PUT /v1/workflows/definitions/{id}/triggers/{step}/schedule {rule}
+  Agents->>Agents: check the rule and the floor, save the row (applies to the live version at once)
+  Clock->>Agents: each minute: read saved schedules beside live versions
+  Clock->>Clock: lease, latest slot from the rule kind, last scheduled run still going?
+  Clock->>Agents: skipped or refused: trigger log row; else start_run keyed by the slot
 ```
 
-A schedule trigger owns one system thread, because `arm_job` keys timers by thread (`timers.py:205`).
+A saved schedule is a row of `workflow_schedules` (`services/agents-service/src/ops_agents/store/schedules.py`): one
+per workflow and trigger step, outside the workflow's versions, with who changed it and when and the slot state. It
+owns no thread and arms no timer. Paused and archived workflows are not live, so the clock reads nothing for them.
+
+### Adding a rule kind
+
+A rule kind answers four things and nothing else reads a rule's fields: `check` (the rule as stored, or the field
+that is wrong), `last_slot`, `next_slots` and `words`. The clock, the routes, the preview, the floor and the live
+places ask the registry only these. A schedule's first sighting (new, changed, resumed or restored) is read from its
+row, not from one machine's memory: the rule differs from the one stored beside the slot, or `seen_at` is empty, which
+each pass makes it while the workflow is not live or lacks the step. A tick that fails or whose lease is held writes
+nothing, so its slot stays open for the next pass.
+
+1. Write a class with those members, a `schema` (JSON Schema of its fields, with `kind` as a `const` of its name) and
+   an `interval_field` (the field a refusal under the floor names, such as `every`), under
+   `packages/ops_store/src/ops_store/schedule/kinds/`; see `every.py`.
+2. Add it to `default_kinds()` in `packages/ops_store/src/ops_store/schedule/__init__.py`. Registering refuses a
+   duplicate name or a schema that does not name its kind. A plugin or a test registers into `KINDS`, the install's
+   one registry, which the clock, the routes and every view read, so the worker's clock knows the kind too.
+3. Nothing else changes: `GET /v1/schedules/kinds` lists it, the save and preview routes accept it, the floor applies
+   to it, and the SDKs pass its fields through. `services/agents-service/tests/engine/test_schedule_kind_plugin.py`
+   shows a kind registered from a test and run through the real clock.
+
+A new target (the folder work's files check) is registered the same way: a handler with `busy` and `tick`, keyed by
+its trigger node type, with `schedulable=True` on the node type.
 
 ## MCP, both ways
 

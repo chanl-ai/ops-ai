@@ -1,0 +1,27 @@
+{
+  "id": "openai",
+  "label": "OpenAI",
+  "icon": "openai",
+  "adapter": "openai-compatible",
+  "catalog": "openai",
+  "baseUrl": "https://api.openai.com/v1",
+  "connection": {
+    "type": "object",
+    "properties": {
+      "apiKey": {
+        "type": "string",
+        "title": "API key",
+        "description": "Saved sealed as the account's provider key; never shown again.",
+        "x-secret": true
+      }
+    },
+    "required": [
+      "apiKey"
+    ]
+  },
+  "modelList": {
+    "path": "/models",
+    "auth": "bearer"
+  },
+  "test": "modelList"
+}

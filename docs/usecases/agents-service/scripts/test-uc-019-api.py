@@ -9,6 +9,8 @@ import os
 
 # Publishing goes through a second person here, as outside dev: dev's auto-approve is off for this use case.
 os.environ["OPS_REGISTRY_AUTO_APPROVE"] = "false"
+# The two-person rule is opt-in (a team turns requesterMayDecide off); this use case proves it, so the dev caller carries it.
+os.environ["OPS_DEV_POLICIES"] = '{"requesterMayDecide": false}'
 
 from usecase_harness import TEAM, agents, check, data, finish, new_thread, nodes, run, state
 

@@ -112,11 +112,13 @@ knowledge_sources:
     get: get_file
     changes: list_file_changes
     scopes: list_scopes
+    # Its items are documents, so Files can watch its folders.
+    files: true
     # Each fetch is three Graph calls (metadata, content, permissions), so a few at once keeps well under Graph's throttle.
     fetch_at_once: 4
     inputs:
-      sites: { type: array, required: false, picker: site, description: "Site ids; all document libraries of each are taken in unless libraries is set" }
-      libraries: { type: array, required: false, picker: library, description: "Document library (drive) ids, from any site or a OneDrive" }
-      include: { type: array, required: false, description: "Path patterns to take in; ** crosses folders" }
-      exclude: { type: array, required: false, description: "Path patterns to leave out; exclude wins" }
+      sites: { type: array, required: false, picker: site, description: "Sites to take in. Every document library of a picked site is included unless you pick libraries" }
+      libraries: { type: array, required: false, picker: library, description: "Document libraries to take in, from any site or a OneDrive" }
+      include: { type: array, required: false, description: "Folders and files to take in, by where they are kept; ** crosses folders" }
+      exclude: { type: array, required: false, description: "Folders and files to leave out, by where they are kept; leaving out wins" }
     schedule: { kind: daily, time: "02:00" }

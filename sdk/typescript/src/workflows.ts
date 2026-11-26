@@ -37,11 +37,47 @@ export class WorkflowCheck {
   }
 }
 
+/** A rule: its `kind` and that kind's own fields, as `kinds()` lists them. */
+export type ScheduleRule = { kind: string; [field: string]: unknown };
+
+/**
+ * A workflow trigger's saved schedule. It applies at once to the live version, with no publish. Rule kinds and their
+ * fields come from `kinds()`.
+ */
+export class Schedules {
+  constructor(private readonly raw: { agents: any }) {}
+
+  kinds() {
+    return this.raw.agents.schedules_schedule_kinds();
+  }
+
+  show(workflowId: string, step: string) {
+    return this.raw.agents.workflows_get_schedule({ path: { workflow_id: workflowId, step } });
+  }
+
+  save(workflowId: string, step: string, rule: ScheduleRule) {
+    return this.raw.agents.workflows_save_schedule({ path: { workflow_id: workflowId, step }, body: { rule } as never });
+  }
+
+  clear(workflowId: string, step: string) {
+    return this.raw.agents.workflows_clear_schedule({ path: { workflow_id: workflowId, step } });
+  }
+
+  /** The rule as it would be saved, in words, with its next runs. Writes nothing. */
+  preview(rule: ScheduleRule) {
+    return this.raw.agents.schedules_preview_schedule({ body: { rule } as never });
+  }
+}
+
 export class Workflows {
+  readonly schedules: Schedules;
+
   constructor(
     private readonly raw: { agents: any },
     private readonly runs: { start: Function; wait: Function },
-  ) {}
+  ) {
+    this.schedules = new Schedules(raw);
+  }
 
   /** Every workflow definition, page after page (`search`, `ids`, `status`). */
   list(query: Record<string, unknown> = {}) {

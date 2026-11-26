@@ -33,13 +33,19 @@ OPERATIONS: dict[str, Operation] = {
     "save_key": _op("PUT", "/v1/provider-keys/{name}", "name"),
     "remove_key": _op("DELETE", "/v1/provider-keys/{name}", "name"),
     "check_key": _op("POST", "/v1/provider-keys/{name}/check", "name"),
-    "key_models": _op("GET", "/v1/provider-keys/{name}/models", "name", query=("provider", "endpoint", "apiVersion")),
+    "key_models": _op(
+        "GET", "/v1/provider-keys/{name}/models", "name", query=("provider", "endpoint", "apiVersion", "region")
+    ),
     "set_chat_model": _op("PUT", "/v1/models/chat-model"),
+    "provider_types": _op("GET", "/v1/models/provider-types"),
+    "catalog": _op("GET", "/v1/models/providers/{provider_id}/catalog", "provider_id"),
 }
 
 
-def _where(provider: str, endpoint: str | None, api_version: str | None) -> dict[str, Any]:
+def _where(provider: str, endpoint: str | None, api_version: str | None, region: str | None = None) -> dict[str, Any]:
     out: dict[str, Any] = {"provider": provider}
+    if region:
+        out["region"] = region
     if endpoint:
         out["endpoint"] = endpoint
     if api_version:
@@ -84,13 +90,40 @@ class Models:
     def remove_key(self, name: str) -> Any:
         return self._call("remove_key", {"name": name})
 
-    def check_key(self, name: str, provider: str, endpoint: str | None = None, api_version: str | None = None) -> Any:
-        """Whether the provider accepts the saved key: {ok, reason, models}."""
-        return self._call("check_key", {"name": name}, _where(provider, endpoint, api_version))
+    def check_key(
+        self,
+        name: str,
+        provider: str,
+        endpoint: str | None = None,
+        api_version: str | None = None,
+        region: str | None = None,
+    ) -> Any:
+        """Whether the provider accepts the saved key: {ok, reason, models}; `provider` is any registry type id."""
+        return self._call("check_key", {"name": name}, _where(provider, endpoint, api_version, region))
 
-    def key_models(self, name: str, provider: str, endpoint: str | None = None, api_version: str | None = None) -> Any:
+    def key_models(
+        self,
+        name: str,
+        provider: str,
+        endpoint: str | None = None,
+        api_version: str | None = None,
+        region: str | None = None,
+    ) -> Any:
         """The models (Azure OpenAI: deployments) the saved key reaches."""
-        return self._call("key_models", {"name": name}, query=_where(provider, endpoint, api_version))
+        return self._call("key_models", {"name": name}, query=_where(provider, endpoint, api_version, region))
+
+    def provider_types(self) -> Any:
+        """The provider types a connection can be made of: each one's fields as a JSON Schema, and whether its models
+        can be listed and are catalogued."""
+        return self._call("provider_types")
+
+    def catalog(self, provider_id: str) -> Any:
+        """The catalogued models of a connection's provider type, with limits, prices and the knobs each takes."""
+        return self._call("catalog", {"provider_id": provider_id})
+
+    def alias_knobs(self, name: str) -> Any:
+        """The settings an agent on this alias may set, as a JSON Schema of only the knobs its model takes."""
+        return self._raw.agents.agents_model_alias_knobs(name)
 
     def set_chat_model(self, body: dict[str, Any]) -> dict[str, Any]:
         """Points chat at {provider, keyName, model, endpoint?, apiVersion?}."""
@@ -132,14 +165,33 @@ class AsyncModels:
         return await self._call("remove_key", {"name": name})
 
     async def check_key(
-        self, name: str, provider: str, endpoint: str | None = None, api_version: str | None = None
+        self,
+        name: str,
+        provider: str,
+        endpoint: str | None = None,
+        api_version: str | None = None,
+        region: str | None = None,
     ) -> Any:
-        return await self._call("check_key", {"name": name}, _where(provider, endpoint, api_version))
+        return await self._call("check_key", {"name": name}, _where(provider, endpoint, api_version, region))
 
     async def key_models(
-        self, name: str, provider: str, endpoint: str | None = None, api_version: str | None = None
+        self,
+        name: str,
+        provider: str,
+        endpoint: str | None = None,
+        api_version: str | None = None,
+        region: str | None = None,
     ) -> Any:
-        return await self._call("key_models", {"name": name}, query=_where(provider, endpoint, api_version))
+        return await self._call("key_models", {"name": name}, query=_where(provider, endpoint, api_version, region))
+
+    async def provider_types(self) -> Any:
+        return await self._call("provider_types")
+
+    async def catalog(self, provider_id: str) -> Any:
+        return await self._call("catalog", {"provider_id": provider_id})
+
+    async def alias_knobs(self, name: str) -> Any:
+        return await self._raw.agents.agents_model_alias_knobs(name)
 
     async def set_chat_model(self, body: dict[str, Any]) -> dict[str, Any]:
         return cast(dict[str, Any], await self._call("set_chat_model", body=body))

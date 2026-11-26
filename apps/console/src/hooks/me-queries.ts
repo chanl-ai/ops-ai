@@ -146,6 +146,22 @@ export function useCan(area: string, action: string, everyTeam = false): boolean
 }
 
 /**
+ * Whether the person holds `area.action` in the team the console acts in (or workspace-wide), as the service checks a
+ * team's own settings: a cell held only in the Security team does not count, unlike `useCan`. Off platform sign-in a
+ * signed-in person may take every action, as in `useCan`.
+ */
+export function useCanInTeam(area: string, action: string): boolean | undefined {
+  const { teamId, team } = useTeam();
+  const current = team?.id ?? teamId;
+  const perms = useMyPermissions();
+  const { session } = useSession();
+  if (!api.teams.me) return session ? true : undefined;
+  if (!perms.data) return undefined;
+  const held = (list: { area: string; action: string }[] | undefined) => (list ?? []).some((p) => p.area === area && p.action === action);
+  return held(perms.data.workspace) || held(perms.data.teams.find((t) => t.teamId === current)?.heldInTeam);
+}
+
+/**
  * Whether the person may open a nav page with these needs (lib/nav.ts): true for a page that needs nothing, undefined
  * while permissions load. The sidebar, the title switcher and search all read it, so none offers a page that refuses.
  */

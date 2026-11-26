@@ -14,6 +14,7 @@ import { OverrideRateChart, PassRateChart } from '@/components/model-risk/monito
 import { PageLayout } from '@/components/page-layout';
 import { toastBulk } from '@/components/shared/bulk';
 import { FieldRow } from '@/components/shared/field-row';
+import { TextCell } from '@/components/shared/table-cells';
 import { DisabledReason } from '@/components/shared/disabled-reason';
 import { QueryError } from '@/components/shared/query-states';
 import { AttributeCard, RecordLayout } from '@/components/shared/record-layout';
@@ -250,7 +251,7 @@ function ModelEntryView({ entry: e }: { entry: ModelEntryDetail }) {
                     <TableBody>
                       {e.conditions.map((c) => (
                         <TableRow key={c.id}>
-                          <TableCell className="max-w-96 whitespace-normal">{c.text}</TableCell>
+                          <TableCell><TextCell>{c.text}</TextCell></TableCell>
                           <TableCell className="whitespace-nowrap text-xs">{c.owner}</TableCell>
                           <TableCell className="whitespace-nowrap text-xs tabular-nums">{dateOnly(c.dueDate)}</TableCell>
                           <TableCell>
@@ -318,7 +319,7 @@ function ModelEntryView({ entry: e }: { entry: ModelEntryDetail }) {
                     <TableBody>
                       {e.findings.map((f) => (
                         <TableRow key={f.id}>
-                          <TableCell className="max-w-96 whitespace-normal">{f.title}</TableCell>
+                          <TableCell><TextCell>{f.title}</TextCell></TableCell>
                           <TableCell>
                             <SeverityBadge severity={f.severity} />
                           </TableCell>

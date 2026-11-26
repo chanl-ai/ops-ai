@@ -1,0 +1,28 @@
+{
+  "id": "google",
+  "label": "Google Gemini",
+  "icon": "google",
+  "adapter": "openai-compatible",
+  "catalog": "google",
+  "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+  "connection": {
+    "type": "object",
+    "properties": {
+      "apiKey": {
+        "type": "string",
+        "title": "API key",
+        "description": "Saved sealed as the account's provider key; never shown again.",
+        "x-secret": true
+      }
+    },
+    "required": [
+      "apiKey"
+    ]
+  },
+  "modelList": {
+    "path": "/models",
+    "auth": "bearer",
+    "idPrefix": "models/"
+  },
+  "test": "modelList"
+}

@@ -48,7 +48,7 @@ The same attributes as the [Python SDK](python.md#what-the-client-offers), with 
 `raw.<service>.<operation>({ path, query, body })` for every other public operation. The Apps area's verbs are camel
 case and take their options as an object: `apps.turnOn(app, fields)`, `apps.addCustom(kind, name, { baseAddress })`,
 `credentials.set(app, { clientId, clientSecret })`, `accounts.makeDefault(account)`, `accounts.setKey(account, key)`,
-`tools.run(app, tool, input, { real })`. The setup words are camel case too: `tools.importOpenapi(module, specUrl, operations)`, `tools.createModule(name, displayName)`, `tools.decideReview(review, decision)`, `tools.runModule(module, tool, input)`, `secrets.create(name, value)`, `egress.allowHost(host)`, `policies.set(key, value)`, `agents.grantTools(id, toolIds)`, `agents.references(search, forAgent)`, `agents.addReference(id, kind, refId)`, `agents.publishCheck(id)`, `tasks.approve(task, { password })`.
+`tools.run(app, tool, input, { real })`. The setup words are camel case too: `tools.importOpenapi(module, specUrl, operations)`, `tools.createModule(name, displayName)`, `tools.decideReview(review, decision)`, `tools.runModule(module, tool, input)`, `secrets.create(name, value)`, `egress.allowHost(host)`, `policies.set(key, value)`, `files.watches.add(name, { plugin, source, values })`, `files.watches.check(id, { wait })`, `files.watches.events(id, { after })`, `agents.grantTools(id, toolIds)`, `agents.references(search, forAgent)`, `agents.addReference(id, kind, refId)`, `agents.publishCheck(id)`, `tasks.approve(task, { password })`.
 
 ## Paging and filters
 
@@ -80,6 +80,21 @@ const start = await ops.me.connectors.connect('Person desk'); // open start.auth
 await ops.me.connectors.finish(state, code);
 const accounts = await ops.me.connectors.accounts();
 ```
+
+## Schedule a workflow
+
+```ts
+const step = 'start'; // the Schedule trigger step's id
+await ops.workflows.schedules.kinds(); // each rule kind, its label and the JSON Schema of its fields
+await ops.workflows.schedules.preview({ kind: 'every', every: 15, unit: 'minutes', tz: 'Europe/London' });
+await ops.workflows.schedules.save('held_wires', step, { kind: 'every', every: 15, unit: 'minutes', start: '07:00', tz: 'Europe/London' });
+await ops.workflows.schedules.show('held_wires', step); // the rule, its words, next runs, last outcome and its reason, the saver's name, last run id and idle code
+await ops.workflows.schedules.clear('held_wires', step);
+```
+
+The rule is its `kind` and that kind's own fields. A save applies at once to the live version and is refused (422,
+naming the field) for a rule under the install's shortest interval or a trigger whose input schema needs more than
+`dueAt`.
 
 ## Saved profile
 

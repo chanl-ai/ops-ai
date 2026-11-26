@@ -1,6 +1,6 @@
 # A builder edits a workflow that saves itself, publishes it past its problems and compares its versions
 
-Status: current. Id: `uc-761`. Service: `console`. Layers: ui.
+Status: current. Id: `uc-761`. Service: `console`. Layers: sdk, cli, ui.
 
 The workflow editor saves a working copy a second after each change and makes no version until Publish. The header
 says where the save stands and how many problems remain; leaving with a change not yet saved asks first. A second
@@ -32,9 +32,17 @@ with no save state and no Publish.
 | 10 | James restores version 1 | The working copy holds version 1's steps; no version is added |
 | 11 | Ravi, a viewer, opens the workflow | The canvas shows; no save state, no Publish |
 | 12 | Screens at 1440 and 390 | Canvas with the save state, the publish dialog and the Versions tab |
+| 13 | A developer saves the working copy through the Python SDK | It returns the copy's checks and the workflow still has one version |
+| 14 | A second builder saves through the SDK on the copy read before | Refused with 409 `stale_base` |
+| 15 | The developer reads the diff and the publish preview | The diff names the changed step; the preview lists no blocker |
+| 16 | The developer publishes the working copy in one call | Version 2 exists |
+| 17 | `opsai workflows save-copy`, then `diff` | The copy is saved; the diff names the changed step |
+| 18 | `opsai workflows publish --working-copy` | The next version is live with the change |
 
 ## Scripts
 
 | Layer | Script |
 |---|---|
+| sdk | `scripts/test-uc-761-sdk.py` |
+| cli | `scripts/test-uc-761-cli.py` |
 | ui | `scripts/test-uc-761-ui.mjs` |

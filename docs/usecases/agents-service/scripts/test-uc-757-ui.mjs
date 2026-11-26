@@ -251,13 +251,25 @@ await withUiStack(
       // The document editor draws after the page's own fields, so its headings are waited for before they are counted.
       await brief.getByRole('group').nth(4).waitFor({ timeout: 60_000 }).catch(() => undefined);
       check('11 the brief has its headings and the uses line is a link', (await brief.getByRole('group').count()) >= 5 && /^Uses /.test(await page.getByTestId('agent-uses-link').innerText()), await page.getByTestId('agent-uses-link').innerText());
-      // An empty block's hint takes its own height at phone width, so a wrapped hint never runs under the next line.
+      // An optional block with nothing in it is one line at phone width: its text and hint are not drawn, and an Add
+      // link stands beside its heading. Add draws the block, and its hint then takes its own height, so a wrapped hint
+      // never runs under the next line. Non-vacuous: a block drawn open before Add fails the first check, and a hint
+      // that floats out of its block fails the second.
       const bare = await made('/v1/agents', { name: `Bare desk ${RUN}`, role: 'Has an empty brief' });
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(`${consoleUrl}/build/agents/${bare.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await brief.locator('.is-empty').first().waitFor({ timeout: 120_000 });
-      const hints = await brief.locator('.is-empty').evaluateAll((els) => els.map((el) => ({ hint: parseFloat(getComputedStyle(el, '::before').height), box: el.getBoundingClientRect().height })));
-      check('11 at 390 wide an empty block is as tall as its hint', hints.length > 0 && hints.every((h) => h.box >= h.hint - 1) && hints.some((h) => h.hint > 30), hints);
+      const examples = brief.locator('[data-field="brief.examples"]');
+      await brief.locator('[data-collapsed="yes"]').first().waitFor({ timeout: 120_000 }).catch(() => undefined);
+      const folded = await brief.locator('[data-collapsed="yes"]').evaluateAll((els) => els.map((el) => ({ field: el.getAttribute('data-field'), text: [...el.querySelectorAll('.is-empty')].reduce((sum, line) => sum + line.getBoundingClientRect().height, 0), add: (el.querySelector('[data-testid^="brief-add-"]')?.getBoundingClientRect().height ?? 0) > 0 })));
+      check(
+        '11 at 390 wide an empty optional block is one line: its text is not drawn and an Add link is',
+        folded.length > 0 && folded.every((f) => f.text === 0 && f.add) && folded.some((f) => f.field === 'brief.examples'),
+        folded,
+      );
+      await page.getByTestId('brief-add-brief.examples').click({ timeout: 10_000 }).catch(() => undefined);
+      await examples.locator('.is-empty').first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+      const hints = (await examples.locator('.is-empty').evaluateAll((els) => els.map((el) => ({ hint: parseFloat(getComputedStyle(el, '::before').height), box: el.getBoundingClientRect().height })))).filter((h) => h.box > 0);
+      check('11 at 390 wide the block Add draws is as tall as its hint', hints.length > 0 && hints.every((h) => h.box >= h.hint - 1) && hints.some((h) => h.hint > 30), hints);
       await page.screenshot({ path: evidenceDir('media', AREA, 'uc-757-empty-brief-admin-390.png'), fullPage: true });
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.goto(`${consoleUrl}/build/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -396,6 +408,346 @@ await withUiStack(
       await maya.getByTestId('sop-editor-content').waitFor({ timeout: 120_000 });
       await shootBothWidths(maya, AREA, 'uc-757-skill-member', async () => {});
 
+      // 28. An agent whose brief was saved before sections opens as it was: no added section, and View prompt reads
+      // what the service writes. James then adds Tone from the Add section menu and a section of his own,
+      // and View prompt shows both in their places with Never last. Maya, who cannot edit, reads the
+      // sections with no control to add or remove one. What the page is asked for beyond the design's words: each added
+      // section is a group named by its title, as the fixed fields are; Add custom section is a button in the brief or
+      // an item of the Add section menu; its name field is labelled Section name and Enter confirms it; each remove
+      // control's name starts with Remove.
+      const tried = (p) => p.then(() => true, () => false);
+      const MENU = ['Personality', 'Tone', 'Environment', 'Context', 'Tool use', 'Error handling', 'Escalation wording'];
+      const briefOf = (p) => p.getByTestId('agent-brief');
+      const sectionOf = (p, name) => briefOf(p).getByRole('group', { name, exact: true });
+      const addSection = (p) => briefOf(p).getByRole('button', { name: 'Add section' });
+      const removes = (p) => briefOf(p).getByRole('button', { name: /^Remove\b/ });
+      // An item of the Add section menu: an option whose name starts with the section's label, its example after it.
+      const menuItem = (p, label) => p.getByRole('option', { name: new RegExp(`^${label}\\b`) }).or(p.getByRole('menuitem', { name: label, exact: true })).first();
+      const promptShown = async (p) => {
+        await p.getByTestId('agent-view-prompt').click({ timeout: 10_000 }).catch(() => undefined);
+        // The dialog draws a skeleton until the prompt is read.
+        await p.getByTestId('agent-prompt-text').filter({ hasText: '# Who you are' }).waitFor({ timeout: 15_000 }).catch(() => undefined);
+        const text = await p.getByTestId('agent-prompt-text').innerText({ timeout: 5_000 }).catch(() => '');
+        await p.keyboard.press('Escape');
+        return text.trim();
+      };
+      const NEVER_RULE = 'Promise a refund before the review';
+      const sectioned = await made('/v1/agents', { name: `Sections desk ${RUN}`, role: 'Helps cardholders with disputes' });
+      await made(`/v1/agents/${sectioned.id}`, { brief: { purpose: 'Help cardholders dispute a charge.', howToAnswer: 'Keep answers short.', handOff: ['The cardholder asks for a person.'], never: [NEVER_RULE] }, ...(await agentBase(agents, J, sectioned.id)) }, 'PATCH');
+      const servedPrompt = async () => ((await (await fetch(`${agents}/v1/agents/${sectioned.id}/prompt`, { headers: J })).json()).data?.text ?? '').trim();
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(`${consoleUrl}/build/agents/${sectioned.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await brief.waitFor({ timeout: 120_000 });
+      await page.getByTestId('agent-uses-link').waitFor({ timeout: 60_000 });
+      await sectionOf(page, 'How to answer').waitFor({ timeout: 60_000 }).catch(() => undefined);
+      const before = { added: (await Promise.all(MENU.map((n) => sectionOf(page, n).count()))).reduce((a, b) => a + b, 0), prompt: await promptShown(page), served: await servedPrompt() };
+      check('28 a brief saved before sections opens with none added, and View prompt reads as the service writes it', before.added === 0 && before.prompt.length > 0 && before.prompt === before.served && !/^# Tone$/m.test(before.prompt), before);
+
+      const sectionsSaved = armed(page.waitForResponse(async (r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${sectioned.id}` && r.ok() && ((await r.json().catch(() => ({}))).data?.brief?.sections ?? []).filter((x) => x.text).length === 2, { timeout: 30_000 }));
+      const write = async (name, text) => {
+        const group = sectionOf(page, name);
+        if (!(await tried(group.waitFor({ timeout: 10_000 })))) return false;
+        // The section's text itself: the group's middle can fall on its locked heading, which takes no cursor.
+        await group.locator('[data-node-view-content]').first().click({ timeout: 5_000 }).catch(() => group.click({ timeout: 5_000 }).catch(() => undefined));
+        await page.keyboard.insertText(text);
+        return true;
+      };
+      await addSection(page).click({ timeout: 10_000 }).catch(() => undefined);
+      await menuItem(page, 'Tone').click({ timeout: 10_000 }).catch(() => undefined);
+      const toneDrawn = await write('Tone', 'Calm and plain.');
+      // The brief is read-only while a save is in flight.
+      if (toneDrawn) await page.locator('[data-testid="save-state"][data-state="saved"]').waitFor({ timeout: 30_000 }).catch(() => undefined);
+      const ownButton = briefOf(page).getByRole('button', { name: 'Add custom section' });
+      if (await ownButton.count()) await ownButton.click({ timeout: 10_000 }).catch(() => undefined);
+      else {
+        await addSection(page).click({ timeout: 10_000 }).catch(() => undefined);
+        await menuItem(page, 'Add custom section').click({ timeout: 10_000 }).catch(() => undefined);
+      }
+      const named = await tried(page.getByLabel('Section name').fill('Refund wording', { timeout: 10_000 }));
+      if (named) await page.keyboard.press('Enter');
+      const ownDrawn = named && (await write('Refund wording', 'Say refund, never reimbursement.'));
+      const storedSections = (await (await sectionsSaved.catch(() => null))?.json().catch(() => ({})))?.data?.brief?.sections ?? null;
+      const controls = { add: await addSection(page).count(), remove: await removes(page).count() };
+      check(
+        '28 a builder adds Tone and a section of his own, and both save with their kind and title',
+        toneDrawn && ownDrawn && (storedSections ?? []).map((x) => [x.kind, x.name, x.text].join('|')).join(';') === 'tone|Tone|Calm and plain.;custom|Refund wording|Say refund, never reimbursement.' && controls.add === 1 && controls.remove >= 2,
+        { toneDrawn, named, ownDrawn, storedSections, controls },
+      );
+      const withSections = await promptShown(page);
+      const places = ['# Tone', '# How to answer', '# Refund wording', '# Hand off when', '# Never'].map((h) => withSections.split('\n').indexOf(h));
+      check('28 View prompt shows Tone before How to answer, his section after it, and Never last', places.every((at, i) => at >= 0 && (i === 0 || at > places[i - 1])) && withSections.endsWith(NEVER_RULE), { places, tail: withSections.slice(-120) });
+      await page.setViewportSize({ width: 390, height: 844 });
+      const narrow = { tone: await tried(sectionOf(page, 'Tone').waitFor({ timeout: 10_000 })), add: await addSection(page).isVisible().catch(() => false), wide: await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth) };
+      check('28 at 390 wide the added sections and Add section are drawn and the page does not scroll sideways', narrow.tone && narrow.add && narrow.wide <= 1, narrow);
+      await shootBothWidths(page, AREA, 'uc-757-agent-sections-admin', async () => {
+        await sectionOf(page, 'Tone').scrollIntoViewIfNeeded({ timeout: 2_000 }).catch(() => undefined);
+      });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await maya.setViewportSize({ width: 1440, height: 1000 });
+      await maya.goto(`${consoleUrl}/build/agents/${sectioned.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await maya.getByTestId('agent-brief').waitFor({ timeout: 120_000 });
+      await maya.getByTestId('read-only-notice').waitFor({ timeout: 60_000 }).catch(() => undefined);
+      const read = { tone: await sectionOf(maya, 'Tone').innerText({ timeout: 10_000 }).catch(() => ''), own: await sectionOf(maya, 'Refund wording').innerText({ timeout: 10_000 }).catch(() => ''), add: await addSection(maya).count(), remove: await removes(maya).count() };
+      check('28 a person who cannot edit reads the sections with no control to add or remove one', /Calm and plain\./.test(read.tone) && /Say refund/.test(read.own) && read.add === 0 && read.remove === 0, read);
+      await shootBothWidths(maya, AREA, 'uc-757-agent-sections-member', async () => {
+        await sectionOf(maya, 'Tone').scrollIntoViewIfNeeded({ timeout: 2_000 }).catch(() => undefined);
+      });
+      await maya.setViewportSize({ width: 1440, height: 1000 });
+
+      // 32. The list of sections is the workspace's. Priya (admin) adds Compliance notes on Settings > Agent
+      // instructions; the list then places it before Tone and renames Tone to Voice; James adds it to an agent from
+      // Add section and View prompt shows it in that place with Never last; the agent of step 28, saved before the
+      // change, shows the prompt it had; a viewer reads the settings page with no control to change it; Reset to
+      // default brings the first list back. What the page is asked for beyond the design's words: it is served at
+      // /settings/agent-instructions under a heading named Agent instructions; its Add section button opens a field
+      // labelled Section name that Enter confirms (a Save button, if the page has one, sends it); Reset to default is
+      // a button, and a dialog that asks first has a button whose name starts with Reset.
+      // TODO manual: moving a section with the page's own control. The move is saved through the list's route here,
+      // which is the save that control sends.
+      const LIST = `${agents}/v1/agent-instruction-sections`;
+      const VIEWER = 'r.menon@harborpine.example';
+      const P = as(await tokenFor(PRIYA));
+      const listNow = async () => (await (await fetch(LIST, { headers: P })).json().catch(() => ({}))).data ?? {};
+      const inOrder = (list) => [...(list.sections ?? [])].sort((a, b) => a.order - b.order);
+      const complianceIn = (list) => (list.sections ?? []).find((x) => x.label === 'Compliance notes');
+      const firstList = await listNow();
+      const settingsLog = [];
+      // These pages keep their own log, so a fault on the settings page fails this step and not step 19.
+      const signInApart = async (email) => {
+        const p = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
+        p.on('pageerror', (e) => settingsLog.push(`${email.split('@')[0]}: ${e.message}`));
+        p.on('response', (r) => r.status() >= 400 && r.status() !== 401 && settingsLog.push(`${email.split('@')[0]}: ${r.status()} ${r.request().method()} ${r.url()}`));
+        await p.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await p.getByLabel('Email').fill(email);
+        await p.getByLabel('Password').fill(PASSWORD);
+        await p.getByRole('button', { name: /^Sign in/ }).first().click();
+        await p.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
+        return p;
+      };
+      const openSettings = async (p) => {
+        await p.goto(`${consoleUrl}/settings/agent-instructions`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        return tried(p.getByRole('heading', { name: 'Agent instructions' }).first().waitFor({ timeout: 60_000 }));
+      };
+      const listControls = async (p) => ({ add: await p.getByRole('button', { name: 'Add section' }).count(), reset: await p.getByRole('button', { name: 'Reset to default' }).count() });
+      const sideways = (p) => p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      const oldPrompt = await servedPrompt();
+      try {
+        const priya = await signInApart(PRIYA);
+        const opened = await openSettings(priya);
+        const listSaved = armed(priya.waitForResponse((r) => r.request().method() === 'PUT' && r.url() === LIST && r.ok(), { timeout: 30_000 }));
+        await priya.getByRole('button', { name: 'Add section' }).click({ timeout: 10_000 }).catch(() => undefined);
+        const typed = await tried(priya.getByLabel('Section name').fill('Compliance notes', { timeout: 10_000 }));
+        if (typed) await priya.keyboard.press('Enter');
+        await priya.getByRole('button', { name: 'Save', exact: true }).click({ timeout: 2_000 }).catch(() => undefined);
+        await listSaved.catch(() => undefined);
+        const added = complianceIn(await listNow()) ?? {};
+        check('32 an admin adds Compliance notes on Settings > Agent instructions, and the workspace list holds it as a menu section', opened && typed && Boolean(added.id) && added.kind === 'menu', { opened, typed, added });
+
+        // The list now puts Compliance notes before Tone and names Tone Voice; a list that only appends fails the order below.
+        const others = inOrder(await listNow()).filter((x) => x.label !== 'Compliance notes').map((x) => (x.id === 'tone' ? { ...x, label: 'Voice' } : x));
+        const at = Math.max(0, others.findIndex((x) => x.id === 'tone'));
+        const placed = [...others.slice(0, at), added, ...others.slice(at)].map((x, n) => ({ ...x, order: n }));
+        const moved = await fetch(LIST, { method: 'PUT', headers: P, body: JSON.stringify({ ...firstList, sections: placed }) });
+        const noted = await made('/v1/agents', { name: `Compliance desk ${RUN}`, role: 'Helps cardholders with disputes' });
+        const notedSave = await fetch(`${agents}/v1/agents/${noted.id}`, { method: 'PATCH', headers: J, body: JSON.stringify({ brief: { purpose: 'Help cardholders dispute a charge.', howToAnswer: 'Keep answers short.', handOff: ['The cardholder asks for a person.'], never: [NEVER_RULE], sections: [{ kind: 'tone', text: 'Calm and plain.' }] }, ...(await agentBase(agents, J, noted.id)) }) });
+        await page.goto(`${consoleUrl}/build/agents/${noted.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await brief.waitFor({ timeout: 120_000 });
+        await sectionOf(page, 'How to answer').waitFor({ timeout: 60_000 }).catch(() => undefined);
+        const notedSaved = armed(page.waitForResponse(async (r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${noted.id}` && r.ok() && ((await r.json().catch(() => ({}))).data?.brief?.sections ?? []).some((x) => x.name === 'Compliance notes' && x.text), { timeout: 30_000 }));
+        await addSection(page).click({ timeout: 10_000 }).catch(() => undefined);
+        await menuItem(page, 'Compliance notes').click({ timeout: 10_000 }).catch(() => undefined);
+        const drawn = await write('Compliance notes', 'Say the call is recorded.');
+        const stored = Boolean(await notedSaved.catch(() => null));
+        const notedPrompt = await promptShown(page);
+        const order = ['# Compliance notes', '# Voice', '# How to answer', '# Hand off when', '# Never'].map((h) => notedPrompt.split('\n').indexOf(h));
+        check(
+          '32 a builder adds Compliance notes from Add section, and View prompt shows it where the list puts it, before the renamed Tone, with Never last',
+          moved.status === 200 && notedSave.ok && drawn && stored && order.every((n, i) => n >= 0 && (i === 0 || n > order[i - 1])) && notedPrompt.endsWith(NEVER_RULE),
+          { moved: moved.status, notedSave: notedSave.status, drawn, stored, order, tail: notedPrompt.slice(-120) },
+        );
+        await page.goto(`${consoleUrl}/build/agents/${sectioned.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await brief.waitFor({ timeout: 120_000 });
+        await sectionOf(page, 'How to answer').waitFor({ timeout: 60_000 }).catch(() => undefined);
+        const oldShown = await promptShown(page);
+        check('32 the agent saved before the list changed shows the prompt it had, Tone under its first name', moved.status === 200 && oldShown.length > 0 && oldShown === oldPrompt && /^# Tone$/m.test(oldShown) && !/^# Voice$/m.test(oldShown), { same: oldShown === oldPrompt, head: oldShown.slice(0, 160) });
+
+        const viewer = await signInApart(VIEWER);
+        const viewerOpened = await openSettings(viewer);
+        const reads = { row: await tried(viewer.getByText('Compliance notes', { exact: true }).first().waitFor({ timeout: 30_000 })), ...(await listControls(viewer)) };
+        const admin = await listControls(priya);
+        check('32 a viewer reads the list on the settings page with no Add section and no Reset to default, which the admin has', viewerOpened && reads.row && reads.add === 0 && reads.reset === 0 && admin.add === 1 && admin.reset === 1, { viewerOpened, reads, admin });
+        const wide = {};
+        for (const [who, p] of [['admin', priya], ['member', viewer]]) {
+          await p.setViewportSize({ width: 390, height: 844 });
+          wide[who] = { row: await p.getByText('Compliance notes', { exact: true }).first().isVisible().catch(() => false), sideways: await sideways(p) };
+          await shootBothWidths(p, AREA, `uc-757-agent-instruction-sections-${who}`, async () => undefined);
+          await p.setViewportSize({ width: 1440, height: 1000 });
+        }
+        check('32 at 390 wide the settings page draws the list for both people and does not scroll sideways', Object.values(wide).every((w) => w.row && w.sideways <= 1), wide);
+
+        const listReset = armed(priya.waitForResponse((r) => r.request().method() === 'DELETE' && r.url() === LIST && r.ok(), { timeout: 30_000 }));
+        await priya.getByRole('button', { name: 'Reset to default' }).click({ timeout: 10_000 }).catch(() => undefined);
+        await priya.getByRole('alertdialog').getByRole('button', { name: /^Reset/ }).click({ timeout: 3_000 }).catch(() => undefined);
+        const resetSent = Boolean(await listReset.catch(() => null));
+        const lastList = await listNow();
+        check('32 Reset to default on the settings page brings the first list back', resetSent && (firstList.sections ?? []).length > 0 && JSON.stringify(inOrder(lastList)) === JSON.stringify(inOrder(firstList)), { resetSent, compliance: complianceIn(lastList) ?? null, sections: (lastList.sections ?? []).length });
+        check('32 the settings pages log no page errors and no refused requests', settingsLog.length === 0, settingsLog);
+      } finally {
+        // The later steps read the default list whatever this one did.
+        await fetch(LIST, { method: 'DELETE', headers: P }).catch(() => undefined);
+      }
+
+      // 33. Add section is a searchable menu in groups, and a preset is ordinary text. On an agent with no sections
+      // James opens Add section, reads the groups, searches, picks Tone and presses its Warm preset; he types into the
+      // sentence it wrote, and View prompt shows the result under Tone. What the page is asked for beyond the design's
+      // words: the menu's search field has a placeholder that starts with Search; each group is a group named by its
+      // heading holding options; an option's name starts with the section's label and its text holds the section's
+      // example line; a preset is a button or a radio named by its label inside the section's group.
+      const GROUPS = { 'Voice and style': ['Personality', 'Tone'], Context: ['Environment', 'Context'], Behaviour: ['Tool use', 'Error handling', 'Escalation wording'] };
+      const toneItem = ((await listNow()).sections ?? []).find((x) => x.id === 'tone') ?? {};
+      const warm = (toneItem.presets ?? []).find((x) => x.label === 'Warm') ?? {};
+      const preset = await made('/v1/agents', { name: `Preset desk ${RUN}`, role: 'Helps cardholders with disputes' });
+      await made(`/v1/agents/${preset.id}`, { brief: { purpose: 'Help cardholders dispute a charge.', howToAnswer: 'Keep answers short.', handOff: ['The cardholder asks for a person.'], never: [NEVER_RULE] }, ...(await agentBase(agents, J, preset.id)) }, 'PATCH');
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(`${consoleUrl}/build/agents/${preset.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await brief.waitFor({ timeout: 120_000 }).catch(() => undefined);
+      await sectionOf(page, 'How to answer').waitFor({ timeout: 60_000 }).catch(() => undefined);
+      await addSection(page).click({ timeout: 10_000 }).catch(() => undefined);
+      const search = page.getByPlaceholder(/^Search/);
+      const options = page.getByRole('listbox').getByRole('option');
+      const firstLines = async (loc) => (await loc.allInnerTexts().catch(() => [])).map((t) => t.trim().split('\n')[0].trim());
+      const menuDrawn = await tried(search.waitFor({ timeout: 10_000 }));
+      const grouped = {};
+      for (const name of Object.keys(GROUPS)) grouped[name] = await firstLines(page.getByRole('listbox').getByRole('group', { name, exact: true }).getByRole('option'));
+      const toneText = await menuItem(page, 'Tone').innerText({ timeout: 5_000 }).catch(() => '');
+      check(
+        '33 Add section opens a menu with a search field and the sections under Voice and style, Context and Behaviour, each with its example line',
+        menuDrawn && JSON.stringify(grouped) === JSON.stringify(GROUPS) && Boolean(toneItem.example) && toneText.includes(toneItem.example ?? '\u0000'),
+        { menuDrawn, grouped, example: toneItem.example ?? null, toneText },
+      );
+      await search.fill('tone', { timeout: 5_000 }).catch(() => undefined);
+      const found = await firstLines(options);
+      await search.fill('zzqxv', { timeout: 5_000 }).catch(() => undefined);
+      const none = menuDrawn ? await options.count() : -1;
+      await search.fill('', { timeout: 5_000 }).catch(() => undefined);
+      check('33 typing in the search field lists Tone first, and a word no section has lists none', found[0] === 'Tone' && found.length < 7 && none === 0, { found, none });
+
+      const MARK = '(first names)';
+      const toneOf = (body) => (body?.data?.brief?.sections ?? []).find((x) => x.kind === 'tone')?.text ?? '';
+      const presetSaved = armed(page.waitForResponse(async (r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${preset.id}` && r.ok() && toneOf(await r.json().catch(() => ({}))).includes(MARK), { timeout: 30_000 }));
+      await menuItem(page, 'Tone').click({ timeout: 10_000 }).catch(() => undefined);
+      const toneGroup = sectionOf(page, 'Tone');
+      const chip = toneGroup.getByRole('radio', { name: 'Warm', exact: true }).or(toneGroup.getByRole('button', { name: 'Warm', exact: true })).first();
+      const pressed = await tried(chip.click({ timeout: 10_000 }));
+      const filled = Boolean(warm.text) && (await tried(toneGroup.getByText(warm.text ?? '\u0000').first().waitFor({ timeout: 10_000 })));
+      // The brief is read-only while a save is in flight.
+      if (filled) await page.locator('[data-testid="save-state"][data-state="saved"]').waitFor({ timeout: 30_000 }).catch(() => undefined);
+      const typedInto = filled && (await write('Tone', MARK));
+      const storedTone = toneOf(await (await presetSaved.catch(() => null))?.json().catch(() => ({})));
+      await page.locator('[data-testid="save-state"][data-state="saved"]').waitFor({ timeout: 30_000 }).catch(() => undefined);
+      check(
+        '33 pressing Warm on Tone writes its sentence as text he types into, and the sentence with his words is what saves',
+        pressed && filled && typedInto && storedTone.includes(MARK) && storedTone.replace(MARK, '').trim() === (warm.text ?? '').trim(),
+        { pressed, filled, typedInto, warm: warm.text ?? null, storedTone },
+      );
+      const presetPrompt = storedTone ? await promptShown(page) : '';
+      check('33 View prompt shows the edited sentence under Tone', storedTone.length > 0 && presetPrompt.includes(`# Tone\n${storedTone}`), { tone: presetPrompt.split('# Tone')[1]?.slice(0, 200) ?? null });
+
+      // 34. Connectors is on the test panel from the start. James opens an agent he has never tested: the panel has no
+      // test yet and already shows Connectors; pressing it makes the test chat and opens the list. Non-vacuous: the
+      // button is looked for before any message is sent, and a panel that makes a chat as it opens fails the count.
+      const tall = Array.from({ length: 60 }, (_, n) => `Rule ${n + 1}: keep the answer short.`).join('\n');
+      const panelDesk = await made('/v1/agents', { name: `Panel desk ${RUN}`, role: 'Helps cardholders with disputes' });
+      await made(`/v1/agents/${panelDesk.id}`, { brief: { purpose: 'Help cardholders dispute a charge.', howToAnswer: tall, handOff: ['The cardholder asks for a person.'], never: [NEVER_RULE] }, ...(await agentBase(agents, J, panelDesk.id)) }, 'PATCH');
+      const testsMade = [];
+      const onRequest = (r) => {
+        if (r.method() === 'POST' && r.url() === `${agents}/chat/threads`) testsMade.push(r.postDataJSON() ?? {});
+      };
+      page.on('request', onRequest);
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(`${consoleUrl}/build/agents/${panelDesk.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      const panel = page.getByTestId('agent-test-panel');
+      await panel.waitFor({ timeout: 120_000 }).catch(() => undefined);
+      await brief.waitFor({ timeout: 120_000 }).catch(() => undefined);
+      const connectors = panel.getByTestId('connectors-picker');
+      const shownAtStart = await tried(connectors.waitFor({ timeout: 15_000 }));
+      check(
+        '34 a test panel with no test yet shows Connectors, and no test chat has been made',
+        shownAtStart && testsMade.length === 0 && (await panel.getByTestId('new-test').count()) === 0,
+        { shownAtStart, testsMade: testsMade.length, newTest: await panel.getByTestId('new-test').count() },
+      );
+      const threadMade = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${agents}/chat/threads`, { timeout: 30_000 }));
+      if (shownAtStart) await connectors.click({ timeout: 10_000 }).catch(() => undefined);
+      const madeThread = shownAtStart ? ((await (await threadMade.catch(() => null))?.json().catch(() => ({})))?.data ?? {}) : {};
+      const listOpen = await tried(page.getByTestId('connectors-picker-list').waitFor({ timeout: 15_000 }));
+      const threadRead = madeThread.id ? (await fetch(`${agents}/chat/threads/${madeThread.id}`, { headers: J })).status : 0;
+      check(
+        '34 pressing Connectors makes one test chat for this agent and opens the list',
+        listOpen && threadRead === 200 && testsMade.length === 1 && testsMade[0].agentId === panelDesk.id && testsMade[0].test === true,
+        { listOpen, threadRead, testsMade },
+      );
+      page.off('request', onRequest);
+      await page.keyboard.press('Escape').catch(() => undefined);
+
+      // 35. At 1440 the test panel is as tall as the room under the header and stays there while the settings beside it
+      // scroll; at 390 it is in the page's flow, as before. Room below the panel is the page's own padding, taken as at
+      // most 32px; the Connectors row is the composer's last, taken as within 48px of the panel's end. Non-vacuous: the
+      // settings must move more than 100px for the 1440 check to count, and at 390 the panel must move as far as they do.
+      const placed = () =>
+        page.evaluate(() => {
+          const el = document.querySelector('[data-testid="agent-test-panel"]');
+          const r = el.getBoundingClientRect();
+          const b = document.querySelector('[data-testid="agent-brief"]').getBoundingClientRect();
+          const foot = el.querySelector('[data-testid="connectors-picker"]')?.getBoundingClientRect();
+          const over = document.elementFromPoint(r.left + r.width / 2, r.top + 2);
+          return { top: Math.round(r.top), bottom: Math.round(r.bottom), below: Math.round(window.innerHeight - r.bottom), underComposer: foot ? Math.round(r.bottom - foot.bottom) : -1, brief: Math.round(b.top), uncovered: !!over && el.contains(over) };
+        });
+      const wheelOver = async (locator, dy) => {
+        const at = await locator.boundingBox();
+        if (at) await page.mouse.move(at.x + Math.min(at.width / 2, 200), Math.max(at.y, 0) + 40);
+        const was = await page.evaluate(() => document.querySelector('[data-testid="agent-brief"]').getBoundingClientRect().top).catch(() => 0);
+        await page.mouse.wheel(0, dy);
+        // The wheel is applied a frame later: wait for the settings to have moved, or for 5 seconds when they cannot.
+        await page.waitForFunction((y) => document.querySelector('[data-testid="agent-brief"]').getBoundingClientRect().top !== y, was, { timeout: 5_000 }).catch(() => undefined);
+      };
+      // A scroll settles over several frames, so the place is read frame by frame until it meets `met` on two frames
+      // running, for at most 10 seconds; the last reading is returned either way, so a panel that never gets there
+      // fails the check on what was last seen.
+      const settled = async (met) => {
+        const until = Date.now() + 10_000;
+        let last = await placed().catch(() => ({}));
+        let held = 0;
+        while (Date.now() < until) {
+          held = met(last) ? held + 1 : 0;
+          if (held >= 2) break;
+          await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => done(null)))).catch(() => undefined);
+          last = await placed().catch(() => ({}));
+        }
+        return last;
+      };
+      const atRest = await placed().catch(() => ({}));
+      check(
+        '35 at 1440 the test panel reaches the end of the page, with no room under the composer',
+        atRest.below >= 0 && atRest.below <= 32 && atRest.underComposer >= 0 && atRest.underComposer <= 48,
+        atRest,
+      );
+      await wheelOver(brief, 900);
+      // Fails when the settings cannot scroll 100px, or the panel leaves with them, is cut off or is covered.
+      const stuck = (at) => atRest.brief - at.brief > 100 && at.top >= 0 && at.top <= atRest.top && at.below >= 0 && at.below <= 32 && at.uncovered === true;
+      const scrolled = await settled(stuck);
+      check('35 at 1440 the test panel stays in view, whole and uncovered, while the settings scroll past it', stuck(scrolled), { atRest, scrolled });
+      await page.screenshot({ path: evidenceDir('media', AREA, 'uc-757-test-panel-scrolled-admin-1440.png') });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await panel.scrollIntoViewIfNeeded().catch(() => undefined);
+      const narrowBefore = await placed().catch(() => ({}));
+      await wheelOver(panel, -300);
+      // Fails when the page cannot scroll 50px, or the panel stays put (sticky) while the settings move.
+      const flowed = (at) => at.brief - narrowBefore.brief > 50 && Math.abs(at.top - narrowBefore.top - (at.brief - narrowBefore.brief)) <= 2 && narrowBefore.top > narrowBefore.brief;
+      const narrowAfter = await settled(flowed);
+      check('35 at 390 the test panel is in the flow under the settings and scrolls with them', flowed(narrowAfter), { narrowBefore, narrowAfter });
+      await page.screenshot({ path: evidenceDir('media', AREA, 'uc-757-test-panel-admin-390.png') });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+
       // 23. Pages reached by the sidebar's links, not by loading their URL: a client navigation keeps the shell mounted,
       // and the walks saw update loops only that way, at both widths.
       const viaSidebar = async (p, href) => {
@@ -439,6 +791,30 @@ await withUiStack(
         }
         await p.setViewportSize({ width: 1440, height: 1000 });
       }
+      // 36. A skill with parts is split into one skill per part on the page, for a builder at both widths; a reviewer, who
+      // may not create skills, sees the parts and no Split skills button.
+      const partOf = (tag, n, name) => ({ slug: `part-${tag}-${n}-${RUN}`, name: `${name} ${tag} ${RUN}`, useWhen: `Use it for ${name.toLowerCase()}.`, instructions: `Say what ${name.toLowerCase()} means here.`, inputs: [], toolIds: [] });
+      const splits = [];
+      for (const width of [1440, 390]) {
+        const parted = await made('/v1/skills', { name: `Disputes in parts ${width} ${RUN}`, ownerTeam: 'team_ops', useWhen: 'The cardholder asks about a dispute.', instructions: 'Pick the part that fits.', parts: [partOf(width, 1, 'Charge look-up'), partOf(width, 2, 'Dispute timing')] });
+        await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+        await page.goto(`${consoleUrl}/build/skills/${parted.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await page.getByTestId('skill-parts').waitFor({ timeout: 60_000 });
+        await page.getByTestId('skill-parts-split').click();
+        const text = await page.getByTestId('skill-parts-made').innerText({ timeout: 60_000 }).catch(() => '');
+        const sideways = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+        await maya.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+        await maya.goto(`${consoleUrl}/build/skills/${parted.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+        await maya.getByTestId('skill-parts').waitFor({ timeout: 60_000 });
+        splits.push({ width, text, sideways, reviewerSees: await maya.getByTestId('skill-parts-split').count() });
+      }
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await maya.setViewportSize({ width: 1440, height: 1000 });
+      check(
+        '36 Split skills makes one skill per part at 1440 and 390, naming them, with no sideways scroll; a reviewer sees no Split skills',
+        splits.every((x) => /Made 2 skills/.test(x.text) && x.text.includes(`Charge look-up ${x.width} ${RUN}`) && !x.sideways && x.reviewerSees === 0),
+        splits,
+      );
       // A skill publish waiting on Maya, the way the walk made one: the team's skill publishes always need a review.
       const policy = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/publishReview`, { method: 'PUT', headers: as(await tokenFor(PRIYA)), body: JSON.stringify({ value: { skills: 'always' } }) });
       // A policy change ends the tokens issued before it.
