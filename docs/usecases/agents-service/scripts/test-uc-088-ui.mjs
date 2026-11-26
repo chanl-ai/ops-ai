@@ -31,22 +31,26 @@ await withUiStack(async (consoleUrl) => {
     // Two chats with the agent, so Recent runs has rows to show from the API.
     const chats = [];
     for (let i = 0; i < 2; i++) chats.push((await api('/chat/threads', { method: 'POST', body: JSON.stringify({ agentId: created.id, kbIds: [] }) })).data?.id);
-    await page.goto(`${consoleUrl}/agents/${created.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-    await page.getByTestId('agent-limits').waitFor({ timeout: 120_000 });
-
-    // Only what works: chat is the one channel, the tool-call cap the one guardrail setting, and no evals.
-    const channels = await page.locator('#ag-channels [role="radio"], #ag-channels button').allInnerTexts();
-    check('Can talk on offers Chat alone', JSON.stringify(channels.map((c) => c.trim())) === '["Chat"]', channels);
+    // Each part of the agent is a tab of its own page: Channels, Usage, Limits and the settings beside the test panel.
+    const tab = async (name, testId) => {
+      await page.goto(`${consoleUrl}/build/agents/${created.id}${name ? `/${name}` : ''}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await page.getByTestId(testId).first().waitFor({ timeout: 120_000 });
+    };
+    await tab('channels', 'embed-agent');
+    const ways = await page.locator('main').innerText();
+    check('the Channels tab names Chat among the ways to reach the agent', /Ways to reach it/.test(ways) && /\bChat\b/.test(ways), ways.slice(0, 300));
+    await tab('limits', 'agent-limits');
     // Masking is enforced, so its switch shows; When unsure is not enforced, so it does not.
     check('only enforced guardrail settings are shown', (await page.locator('#g-pii').count()) === 1 && (await page.locator('#g-unsure').count()) === 0 && (await page.locator('#g-max').count()) === 1);
     // Eval runs score a dataset on the newest version (agent_registry.CONTROLS), so the Evals tab is offered.
     check('the Evals tab is offered', (await page.getByTestId('agent-evals-tab-trigger').count()) === 1);
     const runs = (await api(`/v1/agents/${created.id}/runs`)).data ?? [];
-    // Recent runs sits in the test panel's Used in tab.
-    await page.getByTestId('agent-test-panel').getByRole('tab', { name: 'Used in' }).click();
+    // Recent runs sits on the Usage tab.
+    await tab('usage', 'agent-usage');
     await page.getByTestId('recent-runs-card').locator('li').first().waitFor({ timeout: 30_000 }).catch(() => undefined);
     const rows = await page.getByTestId('recent-runs-card').locator('li').count();
-    check('the rail lists the agent\'s recent runs from the API', runs.length === 2 && rows === runs.length && chats.every((t) => runs.some((r) => r.threadId === t)), { rows, runs: runs.map((r) => r.threadId), chats });
+    check('the Usage tab lists the agent\'s recent runs from the API', runs.length === 2 && rows === runs.length && chats.every((t) => runs.some((r) => r.threadId === t)), { rows, runs: runs.map((r) => r.threadId), chats });
+    await tab('limits', 'agent-limits');
 
     // A temperature default above its highest is refused by the server, naming the limit, and nothing is saved.
     const limits = page.getByTestId('agent-limits');
@@ -100,9 +104,9 @@ await withUiStack(async (consoleUrl) => {
     const live = (await api(`/v1/agents/${created.id}`)).data;
     check('the draft that was saved is the published version', live.publishedVersion === saved?.version && JSON.stringify(live.limits) === JSON.stringify(saved?.limits), { publishedVersion: live.publishedVersion, saved: saved?.version });
 
-    // The test panel's Why shows the review the write paused on: a test is a real chat, so it opens the review a run
-    // would. The API's single-turn harness names the same approval, and whether deciding it needs a step-up.
-    await page.getByTestId('test-agent-button').click();
+    // Show steps under the test reply names the review the write paused on: a test is a real chat, so it opens the
+    // review a run would. The API's single-turn harness names the same approval, and whether deciding it needs a step-up.
+    await tab('', 'agent-test-panel');
     const panel = page.getByTestId('agent-test-panel');
     await panel.getByLabel('Message').fill('Place a 24-hour hold on wire W-88213');
     await panel.locator('button[aria-label="Send"]').click();
@@ -110,13 +114,14 @@ await withUiStack(async (consoleUrl) => {
     await panel.locator('button[aria-label="Stop"]').waitFor({ timeout: 10_000 }).catch(() => undefined);
     await panel.locator('button[aria-label="Stop"]').waitFor({ state: 'detached', timeout: 120_000 });
     await page.waitForTimeout(1500);
-    await panel.getByTestId('why-tab').click();
+    await panel.getByTestId('show-steps-toggle').last().click();
     const paused = await panel.getByTestId('test-would-pause').first().waitFor({ timeout: 60_000 }).then(() => true, () => false);
     const said = paused ? await panel.getByTestId('test-would-pause').first().innerText() : '';
     const turn = (await api(`/v1/agents/${created.id}/test`, { method: 'POST', body: JSON.stringify({ message: 'Place a 24-hour hold on wire W-88213' }) })).data;
     const would = turn?.wouldPause;
     check('the test panel names the review the write paused on, and its step-up', paused && !!would && said.includes('step-up') === !!would.stepUp, { said, would });
     // Caps are optional numbers: empty is no cap, and a real agent may set a large one.
+    await tab('limits', 'agent-limits');
     const capsSaved = nextPatch();
     await page.locator('#g-max').fill('');
     await page.locator('#g-model-calls').fill('40');
