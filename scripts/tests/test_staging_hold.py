@@ -60,3 +60,27 @@ def test_a_hold_without_a_release_prefix_is_refused(tmp_path: Path) -> None:
     for bad in ("under test", "1.1: under test", "1.1.0 under test", "v1.1.0: x"):
         r = check(repo(tmp_path / bad.replace(" ", "_").replace(":", "_"), "v1.1.0"), bad)
         assert r.returncode == 1 and "state=invalid" in r.stdout, bad
+
+
+def test_a_branch_freeze_without_a_hold_is_a_pin_too(tmp_path: Path) -> None:
+    r = subprocess.run(
+        ["python3", str(SCRIPT)],
+        cwd=repo(tmp_path),
+        env={**os.environ, "HOLD": "", "BRANCHES": "release/1.2.0 hotfix/x"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert r.returncode == 0 and "pin=staging is frozen for release/1.2.0 hotfix/x" in r.stdout
+
+
+def test_the_pin_joins_a_branch_freeze_and_a_live_hold(tmp_path: Path) -> None:
+    r = subprocess.run(
+        ["python3", str(SCRIPT)],
+        cwd=repo(tmp_path),
+        env={**os.environ, "HOLD": "1.1.0: under test", "BRANCHES": "release/1.1.0"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert "pin=staging is frozen for release/1.1.0; STAGING_HOLD is set: 1.1.0: under test" in r.stdout

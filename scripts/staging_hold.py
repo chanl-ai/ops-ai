@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Reads the STAGING_HOLD repository variable (env HOLD) for .github/workflows/deploy-staging.yml.
 
-A hold names the release under test: `X.Y.Z: reason`. Prints `state=` and `text=` lines and exits 1 only for an invalid
-hold. States: none (no hold), active (the release is not tagged yet, so staging stays frozen), ignored (tag vX.Y.Z
-exists: the hold is stale and the deploy goes on), invalid (no `X.Y.Z:` prefix). Run in a checkout that holds the tags.
-Stdlib only; tests: scripts/tests/test_staging_hold.py.
+A hold names the release under test: `X.Y.Z: reason`. BRANCHES is the release and hotfix branches on origin, space
+separated. Prints three lines: `state=`, `text=` and `pin=`, the one reason a develop merge is not deployed (a branch
+freeze, a live hold, or both; empty when it is deployed). Exits 1 only for an invalid hold. States: none (no hold),
+active (the release is not tagged yet, so staging stays frozen), ignored (tag vX.Y.Z exists: the hold is stale and the
+deploy goes on), invalid (no `X.Y.Z:` prefix). Run in a checkout that holds the tags. Stdlib only; tests:
+scripts/tests/test_staging_hold.py.
 """
 
 from __future__ import annotations
@@ -32,7 +34,12 @@ def judge(hold: str, tagged: set[str]) -> tuple[str, str]:
 def main() -> int:
     tags = subprocess.run(["git", "tag", "--list", "v[0-9]*"], capture_output=True, text=True, check=False).stdout
     state, text = judge(os.environ.get("HOLD", ""), set(tags.split()))
-    print(f"state={state}\ntext={text}")
+    branches = os.environ.get("BRANCHES", "").strip()
+    parts = ([f"staging is frozen for {branches}"] if branches else []) + (
+        [f"STAGING_HOLD is set: {text}"] if state == "active" else []
+    )
+    # The reason a develop merge is not deployed: a release or hotfix branch on origin, a live hold, or both.
+    print(f"state={state}\ntext={text}\npin={'; '.join(parts)}")
     return 1 if state == "invalid" else 0
 
 
