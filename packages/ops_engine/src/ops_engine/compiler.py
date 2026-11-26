@@ -1303,8 +1303,9 @@ async def action_send(call: NodeCall) -> Outcome:
     if not to:
         return Outcome("error", {"error": "Send read no recipient.", "code": "no_recipient"})
     arguments: Json = {"to": to, "subject": subject, "body": body}
-    # Sent without an approval: a reply the team's rules hold waits at the gateway for a reviewer, whoever started
-    # the run.
+    # Sent without an approval, whoever started the run: the gateway applies the team's approval rules and send check,
+    # and a reply they hold is refused, so the step leaves by its error way out. A reply that needs a person's yes goes
+    # behind a review step.
     result = await call.ports.tools.call("send_reply", arguments, call.key, call.generation, None)
     if result.ok:
         out: Json = {}

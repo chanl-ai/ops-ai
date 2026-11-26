@@ -186,8 +186,8 @@ with ExitStack() as stack:
         lambda: (r := data(api.get(f"/v1/runs/{own_run}", headers=TEAM)) or {}).get("status") in ("succeeded", "failed")
         and r
     ) or {}
-    # The write goes to the gateway once his click is recorded. This stack has no platform-service to read the team's
-    # approval rules from, so the gateway answers that it cannot judge the write; the call reaching it is the point.
+    # The write goes to the gateway once his click is recorded. In this stack the gateway cannot read the team's
+    # approval rules (503 RULES_UNAVAILABLE), so the write itself does not run; the call reaching it is the point.
     sent = [s for s in ended.get("steps") or [] if s.get("nodeId") == "waive"]
     check(
         "7 James approves it himself (200), and only then the waive goes to the gateway, once",
