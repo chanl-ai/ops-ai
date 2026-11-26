@@ -35,7 +35,10 @@ import type {
   SkillLoading,
   SkillCheckResult,
 } from '@/lib/types/skills';
+import { mentionsIn } from '@/lib/mentions';
 import type { PublishBlocker, PublishWarning } from '@/lib/types/references';
+
+const mentionKey = (r: { kind: string; id: string }) => `${r.kind}:${r.id}`;
 import type { SearchHit } from '@/lib/types/search';
 
 import { plural } from '@/lib/format';
@@ -345,7 +348,7 @@ export function createSkillsMock(deps: SkillsDeps) {
     return (c.steps ?? []).flatMap((step, i) => {
       if (!step.use) return [];
       const run = `${step.use.kind}:${step.use.id}`;
-      return [...new Set([...step.do.matchAll(/@(tool:[\w.-]+)/g)].map((m) => m[1]))]
+      return [...new Set(mentionsIn(step.do).filter((r) => r.kind === 'tool').map(mentionKey))]
         .filter((token) => token !== run)
         .map((token): PublishWarning => ({ kind: 'step_mentions_tool', id: token, position: { field: 'steps', step: i + 1, index: null }, message: `Step ${i + 1} mentions ${token.slice(token.indexOf(':') + 1)}, which this step does not run.` }));
     });
@@ -354,7 +357,7 @@ export function createSkillsMock(deps: SkillsDeps) {
   /** A step that names something the team no longer offers, as the service's publish check places it. */
   function stepProblems(c: StoredContent): PublishBlocker[] {
     return (c.steps ?? []).flatMap((step, i) => {
-      const named = [...(step.use ? [`${step.use.kind}:${step.use.id}`] : []), ...[...`${step.do} ${step.check?.text ?? ''}`.matchAll(/@((?:tool|knowledge|skill|agent|workflow):[\w.-]+)/g)].map((m) => m[1])];
+      const named = [...(step.use ? [`${step.use.kind}:${step.use.id}`] : []), ...mentionsIn(`${step.do} ${step.check?.text ?? ''}`).map(mentionKey)];
       return [...new Set(named)]
         .filter((token) => !isOffered(token))
         .map((token): PublishBlocker => ({ kind: 'missing_reference', id: token, position: { field: 'steps', step: i + 1, index: null }, message: `Step ${i + 1} names ${token.slice(token.indexOf(':') + 1)}, which this team no longer offers.` }));

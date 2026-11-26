@@ -178,20 +178,21 @@ await withUiStack(
       await go(lena, `/build/agents/${draft.id}`, 'page-header');
       note('22 a member who only chats is told they have no access', /don’t have access here/.test(await lena.locator('main').innerText()), (await lena.locator('main').innerText()).slice(0, 120));
 
-      // The same prompt, already saved, is refused a publish by the service, naming the prompt's field.
-      const version = (await call(J, `/v1/agents/${plain.id}`, undefined, 'GET')).data.version;
-      const refusal = await fetch(`${agents}/v1/agents/${plain.id}/publish-requests`, { method: 'POST', headers: J, body: JSON.stringify({ version, note: 'go' }) });
-      const refused = { status: refusal.status, body: await refusal.json().catch(() => ({})) };
-      const named = (refused.body.error?.details?.problems ?? []).some((p) => p.position?.field === 'instructions' && p.id === 'tool:no_such_tool_walk');
-      note('23 a saved plain prompt with a broken mention cannot be sent for publish', width !== 1440 || (refused.status === 422 && named), refused);
       // A plain-text prompt that mentions something the team no longer holds cannot be saved until the mention is gone.
       if (width === 1440) {
+        // The same prompt, already saved, is refused a publish by the service, naming the prompt's field.
+        const version = (await call(J, `/v1/agents/${plain.id}`, undefined, 'GET')).data.version;
+        const refusal = await fetch(`${agents}/v1/agents/${plain.id}/publish-requests`, { method: 'POST', headers: J, body: JSON.stringify({ version, note: 'go' }) });
+        const refused = { status: refusal.status, body: await refusal.json().catch(() => ({})) };
+        const named = (refused.body.error?.details?.problems ?? []).some((p) => p.position?.field === 'instructions' && p.id === 'tool:no_such_tool_walk');
+        note('23 a saved plain prompt with a broken mention cannot be sent for publish', refused.status === 422 && named, refused);
         await go(james, `/build/agents/${plain.id}`, 'agent-plain-text');
         const box = james.getByTestId('agent-plain-text').getByTestId('rich-text');
         await box.click();
         await james.keyboard.press('ControlOrMeta+End');
         await james.keyboard.type(' Thanks.');
         const state = james.getByTestId('save-state');
+        await james.waitForFunction(() => /Unsaved|Saving/.test(document.querySelector('[data-testid="save-state"]')?.textContent ?? ''), null, { timeout: 10_000 });
         // The header's word is Unsaved; what to do about it is its title.
         const said = `${(await state.innerText()).trim()} / ${(await state.getAttribute('title')) ?? ''}`;
         await james.getByTestId('agent-plain-text').getByText('Missing').first().waitFor({ timeout: 10_000 }).catch(() => undefined);

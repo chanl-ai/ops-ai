@@ -108,15 +108,21 @@ test('deleting the first or the last block leaves no stray blank lines at that e
   assert.equal(withDoc('A\n\nB', () => []).out, '');
 });
 
-test('a block added at the start or the end keeps the other blocks and the text ending with a line break', () => {
-  const start = withDoc('A\n\nB\n', (d) => [HEADING, ...d]);
-  assert.equal(start.out, '## Mid\n\nA\n\nB\n');
-  const end = withDoc('A\n\nB\n', (d) => [...d, HEADING]);
-  assert.ok(end.out.startsWith('A\n\nB\n') && readBack(end.out).length === 3, end.out);
+test('a block added at the start or the end keeps the other blocks exactly', () => {
+  assert.equal(withDoc('A\n\nB\n', (d) => [HEADING, ...d]).out, '## Mid\n\nA\n\nB\n');
+  assert.equal(withDoc('A\n\nB\n', (d) => [...d, HEADING]).out, 'A\n\nB\n\n## Mid');
 });
 
 test('a line of the text is found in the block that holds it, and one past the end in the last block', () => {
   const src = 'A\n\n\n\nB\n\n- x\n- y\n\nC';
   // Blocks: A, an empty paragraph, B, the list, C.
   assert.deepEqual([1, 5, 7, 8, 10, 40].map((line) => blockAtLine(manager as never, schema, src, line)), [0, 2, 3, 3, 4, 4]);
+});
+
+test('when the blocks do not line up with the text, the whole document is written again', () => {
+  // A lexer that finds no blocks in text that reads as two paragraphs is a text the splice cannot cut.
+  const unreadable = { instance: { lexer: () => [] }, parse: (t: string) => manager.parse(t), serialize: (d: never) => manager.serialize(d) };
+  const doc = manager.parse('A\n\nB');
+  assert.equal(spliceEdit(unreadable as never, schema, 'A\n\nB', doc), manager.serialize(doc));
+  assert.equal(spliceEdit(unreadable as never, schema, 'A\n\nB', { type: 'doc', content: [] }), '');
 });
