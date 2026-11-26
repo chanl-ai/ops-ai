@@ -2,11 +2,31 @@
 
 Status: current. Rows marked planned are designed and not built.
 
-An agent that can only talk is of little use to an operations team: it needs to look up the customer, read the account
-and, with a person's approval, change something. An app is a system outside Ops AI that agents and workflows work with,
-such as Salesforce, a core banking API or a mailbox. Each app brings tools: the single operations an agent or a workflow
-step can take with it, such as "get account" or "place hold". Every tool call leaves through one gateway that checks who
-is calling, the approval, and which hosts may be reached.
+**Let agents look up your customer and, with a person's approval, change a record in the systems you already use.**
+
+## An agent that only talks cannot clear the queue
+
+An operations team needs an agent to look up the customer, read the account and, once someone approves, place the hold.
+A claims team needs the policy and the open claim. A lending team needs the loan balance before it quotes a payoff. An
+agent that can only talk leaves all of that to the person, so the queue stays as long as it was.
+
+An agent wired to your systems with no checks is worse. Each agent carries its own keys and its own rules, nobody can
+say who it signed in as, and a risk review has no single place to read what it changed.
+
+An app is a system outside Ops AI that agents and workflows work with, such as Salesforce, a core banking API or a
+mailbox. Each app brings tools: the single operations an agent or a workflow step can take with it, such as "get
+account" or "place hold". Every tool call leaves through one gateway that checks who is calling, whether a person has
+approved it, and which hosts may be reached.
+
+## The plan
+
+<!-- site: steps -->
+1. **Turn an app on.** A team admin picks the app and chooses who signs in to it.
+2. **Check what its tools do.** Each tool is marked read or write. Run one against mock answers before it touches
+   anything real.
+3. **Decide which writes wait.** Reads run at once. A team admin makes writes wait for a person, for the whole team, for
+   chosen apps or for one tool.
+4. **Give the tools to an agent.** The agent calls them in a chat or a workflow, and every call lands in the log.
 
 ## Try it
 
@@ -20,20 +40,61 @@ opsai tools run <app-id> <tool> --input '{"accountId": "ACC-1001"}'
 opsai tools run <app-id> <tool> --input '{"accountId": "ACC-1001"}' --real
 ```
 
-`tools run` answers from the tool's mock answers and sends nothing; `--real` sends the call as a test run, through every
-check. In the console the same views are **Data › Apps** (the team's apps) and **Data ›
-Tools**. A tool's page has **Run** with **Mock**, which answers from saved mock answers and sends nothing, and
-**Real**, which sends the request and shows exactly what was sent, with every key hidden.
+`tools run` answers from the tool's mock answers and sends nothing. `--real` sends the call as a test run, through every
+check. In the console the same views are **Data › Apps** (the team's apps) and **Data › Tools**. A tool's page has
+**Run** with **Mock**, which answers from saved mock answers and sends nothing, and **Real**, which sends the request and
+shows exactly what was sent, with every key hidden.
 
-## How it works
+## Turn an app on
 
-- **Accounts.** An app signs in with an account: the team's, or each person's own. A person's own account is used for
-  the tools they run and for agents acting for them, so an agent reaches only what that person may reach.
+<!-- site: steps -->
+1. A team admin opens **Data › Apps**, view **Team setup**, and presses **Turn on** on the app's card.
+2. They pick who signs in: **Everyone uses the team's login** or **Each person signs in**. Saving signs nobody in.
+3. **Sign in with my login** or **Sign in the team login** opens the app's own sign-in page. The app reads
+   **Connected** once a login has signed in.
+
+The full steps, an app's states, bringing your own OAuth app and turning an app off are on [Set up an app](apps-setup.md).
+
+## Who signs in: the team's login or each person's
+
+A team admin answers one question per app, on the app's **Settings** tab under **Who signs in**. The agent's **Tools**
+list shows the same answer beside each tool's app.
+
+<!-- site: compare caption="The two answers to who signs in to an app, and what the chat user and the audit see" -->
+- **Everyone uses the team's login**: Suits a shared mailbox.
+  - **Chat user sees**: No sign-in and no question. Under the reply: "Runs in `<app>` as `<login>` (team login). You are recorded as the person who asked."
+  - **Audit keeps**: The team login and the person who asked
+- **Each person signs in**: Suits a system that records who did what, such as a core banking API.
+  - **Chat user sees**: The first time, one card: **Sign in to `<app>` to continue**. After signing in the chat carries on, and later actions in that app ask nothing
+  - **Audit keeps**: The person's own login
+
+Nobody is asked in a chat or a Human Task to choose between their own login and the team's. Each person manages their
+own sign-ins in **My apps**. On an app each person signs in to, a run nobody started, such as a schedule, cannot call it:
+there is no person to act as, and the team's login is not used as a backup. The run is refused with a message naming the
+app and the two ways on (set it to Everyone uses the team's login, or have a person start the run). Saving a workflow
+that a schedule or an event starts warns about each such step before its first run. Changing the answer takes the
+`connections.manage` permission (team admins by default).
+
+| Login | Used by | How to add it |
+|---|---|---|
+| Team login | Anyone in the team. The **Default** account answers every live call that names no other | **Sign in the team login**, by a team admin |
+| Your login | Tools you run, and agents acting for you | **Sign in to <app>** in a chat, or **My apps** |
+| Sandbox account | Test runs only | **Add a sandbox account** on the app's page |
+
+### Your own sign-ins
+
+Each person's sign-ins are on **Apps › Mine** (also **My apps** in the user menu): one card per app the team turned on,
+with Connect, Reconnect or Add another account. With two accounts of one app and no default, the assistant asks which to
+use.
+
+## What the gateway does on every call
+
+- **Accounts.** An agent acting for a person uses that person's own account, so it reaches only what that person may
+  reach.
 - **Sandbox and live.** An account marked Sandbox is used by test runs (an agent's Test panel, a draft, **Real** on a
   tool's page). Live runs never use it. Without a sandbox account, a test run that writes asks the person first.
 - **Reads and writes.** Every tool is marked read or write. Writes run at once until a team turns approvals on; then a
-  write waits as a Human Task ([Human tasks and approvals](human-tasks.md)). Every write made over MCP waits for a
-  person.
+  write waits as a Human Task ([Human tasks and approvals](human-tasks.md)).
 - **Secrets.** Keys and passwords a tool sends are stored encrypted, never shown again, and removed from whatever an app
   answers. A key typed into a tool's own header is refused when you save it: the app's account signs every call.
 - **Allowed hosts.** A tool may call only hosts a Security admin has allowed.
@@ -50,48 +111,25 @@ Tools**. A tool's page has **Run** with **Mock**, which answers from saved mock 
 | A tool written in the console | A request on an app's address, with mock answers for tests ([Build your first tool](build-your-first-tool.md)) | built |
 | A Python function in a sandbox with no network, files or secrets | A code tool | partial: runs, writing one in the console is planned |
 
-## Who signs in: the team's login or each person's
-
-A team admin answers one question per app, on the app's **Settings** tab under **Who signs in**. The agent's **Tools**
-list shows the same answer beside each tool's app.
-
-| Answer | What a chat user sees | What the audit keeps |
-|---|---|---|
-| **Everyone uses the team's login** | No sign-in and no question. Under the reply: "Runs in <app> as <login> (team login). You are recorded as the person who asked." | The team login and the person who asked |
-| **Each person signs in** | The first time, one card: **Sign in to <app> to continue**. After signing in the chat carries on, and later actions in that app ask nothing | The person's own login |
-
-Nobody is asked in a chat or a Human Task to choose between their own login and the team's. Each person manages their
-own sign-ins in **My apps**. On an app each person signs in to, a run nobody started, such as a schedule, cannot call
-it: there is no person to act as, and the team's login is not used as a backup. The run is refused with a message naming the app and the two ways on (set it to Everyone uses the team's login, or have a person start the run), and saving a workflow that a schedule or an event starts warns about each such step before its first run. Changing the answer takes the `connections.manage` permission (team admins by default).
-
-| Login | Used by | How to add it |
-|---|---|---|
-| Team login | Anyone in the team. The **Default** account answers every live call that names no other | **Sign in the team login**, by a team admin |
-| Your login | Tools you run, and agents acting for you | **Sign in to <app>** in a chat, or **My apps** |
-| Sandbox account | Test runs only | **Add a sandbox account** on the app's page |
-
-### Your own sign-ins
-
-Each person's sign-ins are on **Apps › Mine** (also **My apps** in the user menu): one card per app the team turned on,
-with Connect, Reconnect or Add another account. With two accounts of one app and no default, the assistant asks which to
-use.
-
-## Turn an app on
-
-<!-- site: steps -->
-1. A team admin opens **Data › Apps**, view **Team setup**, and presses **Turn on** on the app's card.
-2. They pick who signs in: **Everyone uses the team's login** or **Each person signs in**. Saving signs nobody in.
-3. **Sign in with my login** or **Sign in the team login** opens the app's own sign-in page. The app reads
-   **Connected** once a login has signed in.
-
-The full steps, an app's states, bringing your own OAuth app and turning an app off are on [Set up an app](apps-setup.md).
-
 ## Approvals
 
 A write runs at once by default. A team admin makes writes wait for a person at three levels, and the most specific
 level that is set wins: the whole team, the apps they pick, or one tool on its page under **Access and approval**. Each
 level answers don't ask, ask the person in the chat, or ask a reviewer. A waiting write becomes a Human Task
 ([Human tasks and approvals](human-tasks.md)).
+
+## Assistants over MCP
+
+An AI assistant such as Claude or Cursor can call your team's tools over MCP. The calls go through the same gateway as
+an agent's, as test runs, so they use an app's sandbox account when the team has one.
+
+| What the assistant reaches | Writes |
+|---|---|
+| The team's address lists the team's read tools only | None are listed |
+| A link a builder made on **Channels › MCP** lists the tools and workflows picked for it, writes included | A write always waits for a person, whatever the team's approval settings say |
+
+One kind of write does not wait: an operation that only makes a draft, such as installing a template or starting a
+workflow, because the draft still needs its own publish review. Setup is on [MCP](../reference/mcp.md).
 
 ## Who may do what
 
@@ -106,7 +144,18 @@ level answers don't ask, ask the person in the chat, or ask a reviewer. A waitin
 ## Limits
 
 - A scheduled or polled trigger from an app, and signed incoming webhooks, are planned.
-- AI assistants calling the team's tools over MCP get read tools only, as test runs.
+- The team's MCP address lists read tools only. Writes over MCP need a link and always wait for a person.
+
+## What success looks like
+
+A team admin has turned on the apps the team uses, and each tool is marked read or write. An agent reads the account
+without asking anyone, and a write waits for a person when the team has turned approvals on. The app's **Logs** tab
+shows every call and who it ran as, so the risk review reads one log.
+
+## What skipping it costs
+
+Without the gateway, each agent holds its own keys. A key leaks once and every agent is exposed, a write reaches a
+customer's account with nobody named, and the answer to "what did it change" is a search through each agent's logs.
 
 ## Next
 

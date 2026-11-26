@@ -2,9 +2,24 @@
 
 Status: current. Run end to end against a Salesforce stand-in, in the console, the API, the SDK and the CLI.
 
-A service desk wants an agent that can look up a case in Salesforce and escalate it when asked, without handing the
-agent a password and without an unseen change reaching the CRM. This guide turns the Salesforce app on, gives its tools
-to an agent, and works a case in chat. The same steps fit any App.
+**Turn an App on, give its tools to an agent, and work a real case in chat, without handing the agent a password.**
+
+## The agent needs your CRM, and no one should hand it a password
+
+A service desk wants an agent that can look up a case in Salesforce and escalate it when asked. Pasting a password into a
+prompt gives the agent more than it should have and leaves no record of what it did, and an unseen change reaching the
+CRM is how a case gets escalated by mistake.
+
+An App holds the sign-in, so the agent never sees it. The agent gets only the tools you add, each call is logged with
+who it ran as, and a write can wait for a person. This guide uses Salesforce; the same steps fit any App.
+
+## The plan
+
+<!-- site: steps -->
+1. **Turn the App on** and sign in the team login.
+2. **Try a tool** in Mock, then Real.
+3. **Give the tools to an agent** and publish it.
+4. **Work a case in chat**, then ask for a change and approve it.
 
 ## Before you start
 
@@ -12,26 +27,45 @@ to an agent, and works a case in chat. The same steps fit any App.
 |---|---|
 | A team admin | To turn the App on and sign in the team login |
 | A builder | To add tools to an agent and publish it |
+| A Salesforce org with a case in it | Without one, follow [Build your first tool](../build-your-first-tool.md) with an App you have |
 | A Salesforce user | Access to Ops AI's connected app in your org (see [Salesforce](../integrations/salesforce.md#if-sign-in-fails)) |
 
-## Steps
+## Try it
 
 <!-- site: steps -->
-1. **Turn Salesforce on.** A team admin opens **Data Gateway › Apps**, presses **Turn on** on Salesforce, picks where
-   the team signs in and whose account calls use, and keeps **Give the team's assistant this app's read tools** ticked.
+1. **Turn Salesforce on.** A team admin opens **Data Gateway › Apps**, presses **Turn on** on Salesforce, picks whether everyone uses the team's login or each person signs in, and keeps **Give the team's assistant this app's read tools** ticked.
    The window reads **Saved. Salesforce is on for** your team and how many read tools were added.
 2. **Connect.** Press **Sign in the team login** and allow access on Salesforce's page. The App reads **Connected**.
-3. **Try a tool.** On the App's **Tools** tab, open Run a query, enter `SELECT Id, CaseNumber, Status FROM Case LIMIT 1`
+3. **Try a tool.** On the App's **Tools** tab, open Run a SOQL query, enter `SELECT Id, CaseNumber, Status FROM Case LIMIT 1`
    and press **Run** in **Mock**: nothing leaves Ops AI. Then **Real**: you see your org's answer and the request sent,
    with the token hidden.
-4. **Give the tools to an agent.** On the App's **Resources** tab, press **Add to team** on the case helper agent. Or
-   open your own agent and add Run a query and Update a record under **Tools**. Publish.
+4. **Give the tools to an agent.** On the App's **Resources** tab, press **Add to team** on the Case helper agent, on the App's **Agents** tab. Or
+   open your own agent and add Run a SOQL query and Update a record under **Tools**. Publish.
 5. **Ask in chat.** "What is the status of case 00044818?" The agent runs the query and shows the case.
-6. **Ask it to change something.** "Escalate case 00044818." If your team asks before writes, a card names the tool,
-   Update a record, and the change, Status: Escalated, and waits for a yes. Salesforce is unchanged until then.
+6. **Ask it to change something.** Writes run at once unless asking is on, so first turn it on under
+   **Settings › Approvals** ([Hold a write for approval](approve-a-write.md)). Then "Escalate case 00044818." A card waits for a yes.
 
-Expected: after the approval, the case reads Escalated in Salesforce, changed by the account the App signed in with,
-and the App's **Logs** tab lists both calls with who each ran as.
+## What success looks like
+
+Before the approval Salesforce is unchanged; after it, the case is escalated and the App's log shows both calls.
+
+<!-- site: journey caption="Escalating a case from chat: nothing changes in Salesforce until a person says yes" -->
+1. **Chat · Ask about the case**: The agent runs the query and shows the case.
+   - **Question**: What is the status of case 00044818?
+2. **Chat · Ask for a change**: A card names the tool and the change, and waits for a yes. Salesforce is unchanged until then.
+   - **Tool**: Update a record
+   - **Change**: Status: Escalated
+   - **Actions**: Approve, Reject
+3. **Salesforce · The case after the approval**: Changed by the account the App signed in with.
+   - **Status**: Escalated
+4. **Salesforce · Logs tab**: Both calls are listed, each with who it ran as.
+   - **Calls**: Run a SOQL query, Update a record
+   - **Ran as**: The account the App signed in with
+
+## What skipping it costs
+
+An agent without an App cannot look at the case at all. An agent given a pasted password can do anything that
+password allows, and nothing in Ops AI records which person asked or what the agent did.
 
 ## From the CLI
 

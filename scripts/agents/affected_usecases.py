@@ -26,8 +26,8 @@ from review_context import matches
 
 MAP_FILE = Path(__file__).resolve().parent / "usecase_map.json"
 REGISTRY = "docs/usecases/README.md"
-OWN_SCRIPT = re.compile(r"^docs/usecases/.+/scripts/test-(uc-\d+)-[a-z]+\.[a-z]+$")
-REGISTRY_ROW = re.compile(r"^\|\s*(uc-\d+)\s*\|[^|]*\|[^|]*\|\s*([^|]+?)\s*\|")
+OWN_SCRIPT = re.compile(r"^docs/usecases/.+/scripts/test-(uc-[a-z0-9]+(?:-[a-z0-9]+)*?)-(?:api|sdk|cli|ui)\.[a-z]+$")
+REGISTRY_ROW = re.compile(r"^\|\s*(uc-[a-z0-9]+(?:-[a-z0-9]+)*)\s*\|[^|]*\|[^|]*\|\s*([^|]+?)\s*\|")
 
 
 def git(*args: str) -> str:
