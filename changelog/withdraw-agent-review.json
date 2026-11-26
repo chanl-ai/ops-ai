@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "Withdrawing a waiting agent version works",
+  "description": "Withdraw on an agent version that waits for review now reaches the server, so the version leaves review and can be edited and sent again."
+  ,"tag": "fix"
+}

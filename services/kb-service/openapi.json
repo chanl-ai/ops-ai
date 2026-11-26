@@ -6971,8 +6971,24 @@
             "title": "Connected",
             "type": "boolean"
           },
+          "connectionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connectionid"
+          },
           "defaults": {
             "$ref": "#/components/schemas/SourceKindDefaults"
+          },
+          "files": {
+            "default": false,
+            "title": "Files",
+            "type": "boolean"
           },
           "group": {
             "enum": [

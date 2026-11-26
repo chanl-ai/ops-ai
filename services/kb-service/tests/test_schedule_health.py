@@ -14,6 +14,7 @@ from typing import Any
 
 import httpx
 import pytest
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import Auth, ServiceClient, dev_service_signer
@@ -24,7 +25,7 @@ from ops_kb.schedule import run_due
 from ops_kb.search import HybridRetriever
 from ops_kb.service import KnowledgeService
 from ops_kb.store import KnowledgeStore
-from ops_kb.store.knowledge import outbox_relay
+from ops_kb.store.knowledge import kb_sources, outbox_relay
 from ops_kb.tool_sources import Answer
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -62,6 +63,33 @@ async def test_a_scheduled_file_source_syncs_on_its_own_and_a_manual_or_paused_o
         run = data(await client.get(f"/v1/sources/{hourly['id']}/runs"))["data"][0]
         assert (run["trigger"], run["counts"]["upserted"]) == ("schedule", 1), run
         assert data(await client.get(f"/v1/sources/{hourly['id']}"))["health"]["state"] == "healthy"
+
+
+async def test_a_stored_time_the_old_rule_read_and_one_nobody_reads_do_not_stop_the_other_sources(
+    engine: AsyncEngine, tenant: str
+) -> None:
+    intake = KnowledgeFiles(Path(mkdtemp(prefix="kb-files-")))
+    async with kb_client(engine, tenant, files=intake, readings=LocalReadings(intake)) as client:
+        odd = await file_source(client)
+        unreadable = await file_source(client)
+        fine = await file_source(client)
+        data(await client.patch(f"/v1/sources/{fine['id']}", json={"schedule": {"kind": "hourly", "every": 1}}))
+        await upload(client, fine["id"], "hardship.pdf", HARDSHIP)
+        # A time saved before the clock was strict ("2" is 02:00), and one no rule reads at all.
+        stored = ((odd, "2"), (unreadable, "25:00"))
+        with isolation.tenant_wide("test: store a schedule as an older release saved it", tenant_id=tenant):
+            async with engine.begin() as c:
+                for source, at in stored:
+                    await c.execute(
+                        sa.update(kb_sources)
+                        .where(kb_sources.c.tenant_id == tenant, kb_sources.c.id == source["id"])
+                        .values(settings={"schedule": {"kind": "daily", "time": at, "tz": "UTC"}})
+                    )
+        service = KnowledgeService(KnowledgeStore(engine), intake, HybridRetriever(engine), StaticAgents(),
+                                   readings=LocalReadings(intake))  # fmt: skip
+        with isolation.tenant_wide("test: the schedule as its background process", tenant_id=tenant):
+            ran = await run_due(service, datetime(2026, 11, 24, 12, 0, tzinfo=UTC))
+        assert fine["id"] in ran and odd["id"] in ran and unreadable["id"] not in ran, ran
 
 
 class Agents:

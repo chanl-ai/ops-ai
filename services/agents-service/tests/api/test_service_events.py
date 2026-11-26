@@ -3,7 +3,7 @@ that failed is never tried again, or is retried under a new key; an event nobody
 with the Service event trigger, or under the handler's id, reacts to events; the handler cannot be edited through
 review or run by hand like any workflow; a token without events:emit, a person's token or an oversized payload is
 accepted; a service reports another service's event, or for a team its token does not name; the asker of a request is
-lost, or the reporting service is."""
+lost, or the reporting service is; a reading that failed leaves the step parked on its end asleep."""
 
 from __future__ import annotations
 
@@ -24,10 +24,11 @@ from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
 from ops_agents.store.base import metadata
 from ops_agents.store.engine import EngineTransactions
+from ops_agents.store.service_events import service_events as service_events_table
 from ops_agents.store.tenancy import tenant_scope
 from ops_agents.store.tool_copies import ToolCopies
 from ops_engine.definition import parse
-from ops_engine.store import DefinitionStore
+from ops_engine.store import DefinitionStore, RunStore
 from ops_engine.store import metadata as engine_metadata
 from ops_engine.store.tables import engine_runs
 from ops_identity import Auth, Identity, ServiceAuth, dev_service_signer, mint_service_token, service_verifiers
@@ -36,10 +37,12 @@ from ops_policy import mint
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.outbox import Event, ToolChanged, ToolOperation, ToolPublished, add, outbox_table, wire
+from ops_store.team_scope import acting_as
 from tests.api.test_action_roles import introspect
 from tests.api.test_team_default_agent import Stack, jwks
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
 from tests.engine.test_lifecycle_rights import BUILDER, PLATFORM, TENANT, person
+from tests.run_rows import write_run
 
 EVENT = "file.deleted"
 
@@ -231,6 +234,45 @@ async def test_kb_service_reports_its_knowledge_events_and_no_other_service_can(
         files = await c.post("/v1/events", json={**body, "key": f"f-{name}"}, headers=service())
         got[name] = (kb.status_code, files.status_code)
     assert got == {"kb.changed": (202, 403), "knowledge.source.failing": (202, 403)}, got
+
+
+async def test_a_reading_that_failed_wakes_the_full_text_step_parked_on_its_end(stack: Stack) -> None:
+    """A Full text read parks on reading.finished; a reading that could not be read is reported as reading.failed
+    alone, so the step slept until its time limit. Either wakes the step, and neither is kept."""
+    c, rt = stack
+    tx, flow = EngineTransactions(rt.db), parse(event_workflow("full_text"))
+    end = "d1:r1:auto:eng:fil_9"
+    parked: list[str] = []
+    with tenant_scope(TENANT), acting_as("team_ops"):
+        version, _ = await DefinitionStore(tx).publish(
+            flow.id, name="Read", definition=flow.wire(), digest=flow.digest(), now="n", by="a@x", stage="live",
+            team="team_ops",
+        )  # fmt: skip
+        for n in (1, 2):
+            run_id = f"wfrun_read{n}"
+            await write_run(
+                tx,
+                {"id": run_id, "team_id": "team_ops", "workflow_id": flow.id, "version": version}
+                | {"digest": flow.digest(), "run_key": run_id, "mode": "live", "input": {}, "created_by": "a@x"},
+            )
+            waiting = {"node": "read", "iteration": 1, "interruptId": f"int_{n}", "payload": {"kind": "external"}}
+            wait = {"event": "reading.finished", "key": f"reading.finished:{end}{n}"}
+            await RunStore(tx).park(run_id, generation=None, waiting=waiting, wait=wait)
+            parked.append(run_id)
+    headers = service(name="documents")
+    got: list[list[str]] = []
+    for n, name in ((1, "reading.finished"), (2, "reading.failed")):
+        body = {"name": name, "key": f"{name}:{end}{n}", "teamId": "team_ops", "payload": {"fileId": "fil_9"}}
+        r = await c.post("/v1/events", json=body, headers=headers)
+        assert r.status_code == 202, r.text
+        got.append(r.json()["data"]["woke"])
+    unparked = {"name": "reading.finished", "key": "reading.finished:d2:r1:auto:eng:fil_2", "teamId": "team_ops"}
+    nobody = await c.post("/v1/events", json=unparked, headers=headers)
+    async with rt.db.connect() as conn:
+        kept = (await conn.execute(sa.select(sa.func.count()).select_from(service_events_table))).scalar_one()
+    # Every reading of the workspace ends with one of these: one no step waits on is not kept as unhandled.
+    assert (nobody.json()["data"]["status"], kept) == ("unhandled", 0), (nobody.text, kept)
+    assert got == [[parked[0]], [parked[1]]], got
 
 
 async def test_a_role_without_workflows_edit_cannot_change_the_handler(stack: Stack) -> None:

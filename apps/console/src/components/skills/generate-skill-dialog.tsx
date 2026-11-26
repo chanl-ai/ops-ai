@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 
 import { CheckChips } from '@/components/evals/eval-meta';
 import { DialogShell } from '@/components/shared/dialog-shell';
-import { FileUpload, type UploadItem, uploadsBlocker, uploadsReady } from '@/components/shared/file-upload';
+import { type UploadItem, uploadsBlocker, uploadsReady } from '@/components/shared/file-upload';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { QueryError } from '@/components/shared/query-states';
@@ -163,7 +163,7 @@ export function GenerateSkillDialog({
         ? uploads.length && uploadsBlocker(uploads)
           ? uploadsBlocker(uploads)
           : !docIds.length && !fileIds.length
-            ? 'Choose a document or upload one.'
+            ? 'Choose a document.'
             : undefined
         : kind === 'past_work'
           ? !pastIds.length
@@ -335,7 +335,7 @@ export function GenerateSkillDialog({
                   </Pick>
                 ))}
               </div>
-              <FileUpload id="gen-sop" purpose="skill_resource" multiple title="Or upload an SOP" hint="Stored through Files and scanned before the model reads it." onChange={setUploads} testId="gen-sop-upload" />
+              {/* An SOP upload stays out until files takes skill uploads; a document is chosen from a knowledge base. */}
               {err(startError)}
             </div>
           )}

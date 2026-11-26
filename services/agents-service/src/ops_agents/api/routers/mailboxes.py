@@ -199,8 +199,10 @@ async def _visible(rt: Runtime, me: Principal, mailbox_id: str) -> MailboxRow:
 
 async def _views(rt: Runtime, rows: list[MailboxRow]) -> list[Json]:
     """Each mailbox joined with the live workflows that watch it and when it was last read, in one pass."""
-    # The tenant's live versions, read in the request's transaction; by id, so a mailbox lists its workflows in order.
-    live = sorted(await ChannelList(rt.db).live_definitions(), key=lambda r: str(r.workflow_id))
+    # The live versions of the mailboxes' teams, read in the request's transaction; by id, so a mailbox lists its
+    # workflows in order.
+    teams = sorted({m.team_id for m in rows if m.team_id})
+    live = sorted(await ChannelList(rt.db).live_definitions(teams), key=lambda r: str(r.workflow_id))
     bound: dict[str, list[LiveDefinition]] = {}
     for r in live:
         b = binding_of(cast(Json | None, r.definition))

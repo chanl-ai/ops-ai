@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-24",
+  "title": "A schedule with a misspelled field is refused",
+  "description": "A schedule saved with a field its kind does not have, such as at instead of time, is refused with the field named and the ones allowed. Before, it saved with the default time."
+,
+  "tag": "fix"
+}

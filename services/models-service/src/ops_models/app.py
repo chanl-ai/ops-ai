@@ -26,7 +26,15 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ops_access import Access
-from ops_identity import Auth, CurrentPrincipal, CurrentTenantCaller, Principal, current_service, install_auth
+from ops_identity import (
+    Auth,
+    CurrentPrincipal,
+    CurrentTenantCaller,
+    Principal,
+    ServiceClient,
+    current_service,
+    install_auth,
+)
 from ops_identity.fastapi import Tx
 from ops_metering import Price, Usage, cost
 from ops_policy import CredentialStore
@@ -65,16 +73,20 @@ from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
 from ops_store.database import Database
 
+from .alias_users import AgentsAliasUsers, AliasUsers, NoAliasUsers
+from .catalog import Catalog, CatalogModel
 from .connection_settings import azure_openai_problem
 from .key_check import EndpointRefused, KeyRefused, azure_host, listed_models
 from .provider_keys import ProviderKeys
-from .providers import AzureOpenAIProvider, ProviderError, StreamUsage, provider_for, region_mismatch
+from .providers import ADAPTERS, AzureOpenAIProvider, ProviderError, StreamUsage, provider_for, region_mismatch
+from .registry import BUILTIN, ProviderEntry, load_registry
 from .schemas import (
     Admission,
     AliasOut,
     AliasRef,
     CallOut,
     CallPage,
+    CatalogModelOut,
     ChatChoice,
     ChatCompletion,
     ChatCompletionRequest,
@@ -89,9 +101,11 @@ from .schemas import (
     KeyRotated,
     KeySecret,
     KeySpend,
+    KnobsOut,
     ProviderCreated,
     ProviderKeyOut,
     ProviderOut,
+    ProviderTypeOut,
     ToolCall,
     ToolFunction,
 )
@@ -112,32 +126,37 @@ _FIELD = {"endpoint": "baseUrl", "api_version": "apiVersion"}
 log = get_logger("ops_models.app")
 
 
-def connection_problem(kind: str, base_url: str | None, api_version: str | None, region: str | None) -> str | None:
-    """Why a connection of `kind` with these values cannot be called, naming the field; None when it can. Azure's rule
-    is the install settings' own (`connection_settings.azure_openai_problem`); only Azure connections carry an
-    api-version or a region."""
-    if kind == "azure-openai":
+def connection_problem(
+    entry: ProviderEntry | None, base_url: str | None, api_version: str | None, region: str | None
+) -> str | None:
+    """Why a connection of the registry type `entry` with these values cannot be called, naming the field; None when
+    it can. The fields each type takes, and their form, are its registry entry's; Azure's endpoint and api-version
+    rule is the install settings' own (`connection_settings.azure_openai_problem`)."""
+    if entry is None:
+        return "type is not a provider type this install serves (GET /v1/models/provider-types lists them)"
+    if entry.adapter == "azure-openai":
         problem = azure_openai_problem(base_url, api_version)
-        return f"{_FIELD[problem[0]]} {problem[1]}" if problem else None
-    if api_version is not None or region is not None:
-        return "apiVersion and region apply to azure-openai connections only"
-    if kind == "openai-compatible" and not base_url:
-        return "baseUrl is missing: the endpoint's base URL, ending in /v1"
-    return None
+        if problem:
+            return f"{_FIELD[problem[0]]} {problem[1]}"
+    return entry.problem({"baseUrl": base_url, "apiVersion": api_version, "region": region})
 
 
 class ProviderIn(_Wire):
     name: str = Field(min_length=1, max_length=120)
-    type: str = Field(pattern="^(openai-compatible|azure-openai|anthropic|scripted)$")
+    # A provider type's id from the registry (GET /v1/models/provider-types).
+    type: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,31}$")
     base_url: str | None = Field(default=None, max_length=400)
-    key_ref: str | None = Field(default=None, max_length=120)
+    key_ref: str | None = Field(default=None, pattern="^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$")
     api_version: str | None = Field(default=None, max_length=32)
     region: str | None = Field(default=None, max_length=64)
+    # The type's secret fields (its x-secret ones), saved sealed as the account's provider key `keyRef` names and
+    # never returned. Left out, the connection signs in with a key saved under that name before or after.
+    secrets: dict[str, Annotated[str, Field(min_length=1, max_length=4000)]] | None = Field(default=None, max_length=8)
 
     @model_validator(mode="after")
-    def _callable(self) -> ProviderIn:
-        if (why := connection_problem(self.type, self.base_url, self.api_version, self.region)) is not None:
-            raise ValueError(why)
+    def _keyed(self) -> ProviderIn:
+        if self.secrets and not self.key_ref:
+            raise ValueError("keyRef is missing: the name the connection's secrets are saved under")
         return self
 
 
@@ -155,10 +174,14 @@ class ProviderKeyIn(_Wire):
 class KeyCheckIn(_Wire):
     """Which provider the key is for, and for Azure OpenAI the resource's endpoint and API version."""
 
-    provider: Literal["openai", "azure-openai", "anthropic"]
-    # Azure OpenAI only: the resource's address under openai.azure.com. OpenAI and Anthropic use their own.
+    # A provider type's id from the registry.
+    provider: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,31}$")
+    # The connection's base URL when it has its own (Azure OpenAI's resource, an OpenAI-compatible endpoint); a type
+    # with a fixed address (OpenAI, Anthropic, Gemini) uses its own when this is left out.
     endpoint: str | None = Field(default=None, max_length=500)
     api_version: str | None = Field(default=None, max_length=40, pattern=r"^[0-9a-z-]+$")
+    # Bedrock: the AWS region whose models are listed.
+    region: str | None = Field(default=None, max_length=64)
 
 
 class KeyCheckOut(Out):
@@ -348,6 +371,31 @@ def _provider_view(r: ProviderRow) -> ProviderOut:
     )
 
 
+def _type_view(e: ProviderEntry) -> ProviderTypeOut:
+    return ProviderTypeOut(
+        id=e.id,
+        label=e.label,
+        icon=e.icon,
+        connection=e.schema_view,
+        lists_models=e.test != "none" and e.model_list is not None,
+        catalogued=e.catalog is not None,
+    )
+
+
+def _catalog_view(model_id: str, m: CatalogModel, knobs: list[str]) -> CatalogModelOut:
+    return CatalogModelOut(
+        id=model_id,
+        name=m.name,
+        context=m.context,
+        output=m.output,
+        reasoning=m.reasoning,
+        images=m.images,
+        input_per_million=m.input_per_million,
+        output_per_million=m.output_per_million,
+        knobs=knobs,
+    )
+
+
 def _provider_key_view(r: ProviderKeyRow) -> ProviderKeyOut:
     return ProviderKeyOut(
         name=r.name,
@@ -453,12 +501,14 @@ def create_models_app(
     key_fetch: PublicFetch | None = None,
     chat_aliases: tuple[str, ...] = ("default", "assistant"),
     background: Sequence[Callable[[], Coroutine[Any, Any, None]]] | None = None,
+    alias_users: AliasUsers | None = None,
 ) -> FastAPI:
     """Tests inject `upstream`, the client provider calls go out on; otherwise one is opened and closed with the app.
     `auth` resolves callers (ops_identity's shared dependency); by default it is built from Settings for "models".
     Provider keys are the accounts' own (`provider_keys`), kept in `credentials` (the store the settings choose by
     default); `provider_secrets` are the dev stack's keys from settings, behind them. `background` are the processes
-    the lifespan runs beside the server, by default the sweep of idle key spend."""
+    the lifespan runs beside the server, by default the sweep of idle key spend. `alias_users` says how many agents
+    name each alias; by default agents-service on `OPS_AGENTS_URL`, and no counts when that is unset."""
     http = upstream or httpx.AsyncClient(timeout=60)
     # Testing a key sends it out: only to a public address, never following a redirect with it.
     key_fetch = key_fetch or PublicFetch(max_redirects=0, timeout_s=20)
@@ -500,6 +550,8 @@ def create_models_app(
                     task.cancel()
         if upstream is None:
             await http.aclose()
+        if agents_client is not None:
+            await agents_client.aclose()
 
     app = FastAPI(
         title="Ops AI models service",
@@ -509,6 +561,17 @@ def create_models_app(
     )
     install_error_handlers(app)
     settings = Settings()
+    # Read and checked here, at start-up: an entry naming an adapter no code registers stops the service.
+    registry = load_registry(ADAPTERS, BUILTIN, settings.models_provider_registry_extra)
+    catalog = Catalog.load()
+    agents_client: ServiceClient | None = None
+    if alias_users is None:
+        if settings.agents is not None:
+            agents_client = ServiceClient.for_settings(
+                settings, service="models", audience="agents", scopes=["agents:view"]
+            )
+        alias_users = AgentsAliasUsers(agents_client) if agents_client else NoAliasUsers()
+    users: AliasUsers = alias_users
     if settings.cors_origins:
         # The console calls the provider key and connection routes from the browser (Settings > Model providers).
         app.add_middleware(
@@ -536,6 +599,16 @@ def create_models_app(
         return p
 
     connections_guard = Depends(connections_caller)
+
+    async def alias_writer(p: CurrentTenantCaller) -> Principal:
+        """Aliases are install-wide (one install serves one account): every team's agents run on them, so a person
+        creates or re-points one only with `install.manage`, which Owner holds and a workspace Admin does not. An
+        install's own scripts (a service token) write them as before."""
+        if p.kind != "service":
+            access.can(p, "install", "manage", what="the install's model aliases", code="install_admin_only")
+        return p
+
+    alias_write_guard = Depends(alias_writer)
 
     @app.get("/health", tags=["health"], response_model=Health)
     async def health() -> Health:  # pyright: ignore[reportUnusedFunction]
@@ -571,9 +644,31 @@ def create_models_app(
         response_model=Envelope[ProviderCreated],
         responses=connection_errors,
     )
-    async def create_provider(body: ProviderIn, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """Adds a connection; 400 naming the field its type refuses (an Azure OpenAI connection needs its endpoint and
-        api-version; its region is optional)."""
+    async def create_provider(body: ProviderIn, p: CurrentTenantCaller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """Adds a connection of a registry type; 400 naming the field its type refuses (an Azure OpenAI connection
+        needs its endpoint and api-version; a Bedrock one its region). `secrets` are saved as the account's provider
+        key `keyRef` names, one value for a type with one secret field, else a JSON object of them."""
+        entry = registry.get(body.type)
+        if (why := connection_problem(entry, body.base_url, body.api_version, body.region)) is not None:
+            raise ValidationFailed(why)
+        assert entry is not None
+        if body.secrets is not None:
+            # Saving a key value is an account admin's, whoever calls: the rule PUT /v1/provider-keys/{name} holds to.
+            account_admin(p)
+            # New secrets under a name another connection signs in with would change that connection's key unseen.
+            using = [r.name for r in (await providers.page(ListParams(), key_ref=body.key_ref)).data]
+            if using:
+                raise Conflict(
+                    f"Provider connection {', '.join(using)} signs in with key {body.key_ref}; name another key, or "
+                    "leave secrets out to share it.",
+                    code="key_ref_in_use",
+                )
+            wanted = entry.secret_fields
+            if set(body.secrets) != set(wanted):
+                raise ValidationFailed(f"secrets are {', '.join(wanted) or 'none'} for {entry.label} connections")
+            value = body.secrets[wanted[0]] if len(wanted) == 1 else json.dumps(body.secrets, sort_keys=True)
+            await key_vault.save(p.tenant_id, str(body.key_ref), value, by=p.email or p.sub)
+            keys.forget(p.tenant_id, str(body.key_ref))
         pid = new_id("prov")
         row: NewProvider = {
             "id": pid,
@@ -588,6 +683,42 @@ def create_models_app(
         if not await providers.create(row):
             raise Conflict(f"A provider connection named {body.name} exists.", code="provider_exists")
         return typed(ProviderCreated(id=pid, name=body.name, type=body.type), status=201)
+
+    def provider_type(type_id: str) -> ProviderEntry:
+        entry = registry.get(type_id)
+        if entry is None:
+            raise ValidationFailed(f"provider {type_id} is not a provider type this install serves")
+        return entry
+
+    @app.get(
+        "/v1/models/provider-types",
+        dependencies=[connections_guard],
+        tags=["providers"],
+        response_model=Envelope[list[ProviderTypeOut]],
+        responses=connection_errors,
+    )
+    async def list_provider_types() -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The provider types a connection can be made of, by label: the fields each takes as a JSON Schema (an
+        `x-secret` field is saved as a provider key and never returned), and whether its models can be listed and are
+        in the model catalog."""
+        return typed([_type_view(e) for e in registry.listed()])
+
+    @app.get(
+        "/v1/models/providers/{provider_id}/catalog",
+        dependencies=[connections_guard],
+        tags=["providers"],
+        response_model=Envelope[list[CatalogModelOut]],
+        responses=error_responses({403: "Not an account admin", 404: "No such connection"}),
+    )
+    async def list_catalog_models(provider_id: str, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The catalogued models of the connection's provider type, by id, each with its context, output limit, prices
+        and the knobs it takes; empty for a type the catalog does not hold (an OpenAI-compatible URL)."""
+        row = await providers.get(provider_id)
+        if row is None:
+            raise refusal(404, "provider_not_found", f"No provider connection {provider_id}.")
+        entry = registry.get(row.type)
+        kind = entry.catalog if entry else None
+        return typed([_catalog_view(i, m, sorted(catalog.ranges_for(kind, m))) for i, m in catalog.listed(kind)])
 
     @app.put(
         "/v1/models/providers/{provider_id}",
@@ -610,7 +741,7 @@ def create_models_app(
         given = body.model_fields_set
         version = body.api_version if "api_version" in given else row.api_version
         region = body.region if "region" in given else row.region
-        if (why := connection_problem(row.type, body.base_url, version, region)) is not None:
+        if (why := connection_problem(registry.get(row.type), body.base_url, version, region)) is not None:
             raise ValidationFailed(why)
         fields: ProviderBinding = {
             "base_url": body.base_url,
@@ -678,10 +809,17 @@ def create_models_app(
     ) -> JSONResponse:
         """Asks the provider for what the saved key reaches: ok with how many models or deployments, or not ok with
         the provider's reason. Nothing is called with the key otherwise."""
+        entry = provider_type(body.provider)
         value = await saved_key(p, name)
         try:
             found = await listed_models(
-                http, key_fetch, body.provider, value, endpoint=body.endpoint, api_version=body.api_version
+                http,
+                key_fetch,
+                entry,
+                value,
+                endpoint=body.endpoint,
+                api_version=body.api_version,
+                region=body.region,
             )
         except KeyRefused as e:
             return typed(KeyCheckOut(ok=False, reason=str(e)))
@@ -696,17 +834,22 @@ def create_models_app(
         responses=error_responses({403: "Not an account admin", 422: "The provider refused the key"}),
     )
     async def list_provider_models(  # pyright: ignore[reportUnusedFunction]
+        *,
         name: Annotated[str, KEY_NAME],
         p: CurrentPrincipal,
-        provider: Annotated[Literal["openai", "azure-openai", "anthropic"], Query()],
+        provider: Annotated[str, Query(pattern=r"^[a-z0-9][a-z0-9-]{1,31}$")],
         endpoint: Annotated[str | None, Query(max_length=500)] = None,
         api_version: Annotated[str | None, Query(alias="apiVersion", max_length=40, pattern=r"^[0-9a-z-]+$")] = None,
+        region: Annotated[str | None, Query(max_length=64)] = None,
     ) -> JSONResponse:
-        """The models (OpenAI, Anthropic) or deployments (Azure OpenAI) the saved key reaches, for choosing which one
-        chat uses; 422 key_refused with the provider's reason."""
+        """The models (OpenAI, Anthropic, Gemini, Bedrock) or deployments (Azure OpenAI) the saved key reaches, for
+        choosing which one an alias uses; 422 key_refused with the provider's reason."""
+        entry = provider_type(provider)
         value = await saved_key(p, name)
         try:
-            found = await listed_models(http, key_fetch, provider, value, endpoint=endpoint, api_version=api_version)
+            found = await listed_models(
+                http, key_fetch, entry, value, endpoint=endpoint, api_version=api_version, region=region
+            )
         except KeyRefused as e:
             raise Unprocessable(str(e), code="key_refused") from e
         except EndpointRefused as e:
@@ -724,8 +867,10 @@ def create_models_app(
     async def set_chat_model(body: ChatModelIn, p: CurrentPrincipal, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Points chat (the runtime's `default` alias and the team assistant's) at `model` on the provider the saved key
         belongs to. One connection per provider is kept and moved on a later choice; each alias gets a new version, or
-        version 1 on a fresh install, where no chat alias exists yet."""
+        version 1 on a fresh install, where no chat alias exists yet. The chat aliases are the install's, so this
+        also needs `install.manage` (403 `install_admin_only`)."""
         await saved_key(p, body.key_name)
+        await alias_writer(p)
         if body.provider == "azure-openai":
             try:
                 base = azure_host(body.endpoint)
@@ -799,23 +944,38 @@ def create_models_app(
         keys.forget(p.tenant_id, name)
         return Response(status_code=204)
 
+    async def named(rows: Sequence[AliasRow], caller: Principal) -> list[AliasOut]:
+        """Each alias version with its connection's name, read in one page of connections by id, and for a person how
+        many agents name the alias (agents-service, one call per page). A service reads the list to resolve aliases
+        and gets no count, so agents-service's own alias reads never call it back."""
+        ids = sorted({r.provider_id for r in rows})
+        held = (await providers.page(ListParams(ids=ids, page_size=len(ids)))).data if ids else []
+        names = {c.id: c.name for c in held}
+        wanted = sorted({r.name for r in rows}) if caller.kind == "person" else []
+        used = await users.counts(caller.tenant_id, wanted) if wanted else {}
+        return [
+            _alias_view(r).model_copy(update={"provider_name": names.get(r.provider_id), "used_by": used.get(r.name)})
+            for r in rows
+        ]
+
     @app.get(
         "/v1/models/aliases",
-        dependencies=[guard],
+        dependencies=[connections_guard],
         tags=["aliases"],
         response_model=Envelope[ListResult[AliasOut]],
         responses=ERRORS,
     )
-    async def list_aliases(_: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def list_aliases(caller: CurrentTenantCaller, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Each alias's serving version, by name. `search` matches the name, the kind or the model; `ids` names
-        aliases by name."""
+        aliases by name. `usedBy`: how many agents name the alias, for a person; null for a service or when
+        agents-service did not answer."""
         page = await aliases.page(q)
-        views = [_alias_view(r) for r in page.data]
+        views = await named(page.data, caller)
         return typed(ListResult[AliasOut](data=views, pagination=page.pagination, facets=page.facets))
 
     @app.post(
         "/v1/models/aliases",
-        dependencies=[guard],
+        dependencies=[alias_write_guard],
         tags=["aliases"],
         status_code=201,
         response_model=Envelope[AliasRef],
@@ -828,23 +988,50 @@ def create_models_app(
 
     @app.get(
         "/v1/models/aliases/{name}/versions",
-        dependencies=[guard],
+        dependencies=[connections_guard],
         tags=["aliases"],
         response_model=Envelope[ListResult[AliasOut]],
         responses=ERRORS,
     )
-    async def list_versions(name: str, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def list_versions(name: str, caller: CurrentTenantCaller, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The alias's versions, oldest first. `search` matches the model or the status; `ids` names versions by
         number. 404 when there is no such alias."""
         page = await aliases.version_page(name, q)
         if page is None:
             raise refusal(404, "alias_not_found", f"No alias {name}.")
-        views = [_alias_view(r) for r in page.data]
+        views = await named(page.data, caller)
         return typed(ListResult[AliasOut](data=views, pagination=page.pagination, facets=page.facets))
+
+    @app.get(
+        "/v1/models/aliases/{name}/knobs",
+        dependencies=[connections_guard],
+        tags=["aliases"],
+        response_model=Envelope[KnobsOut],
+        responses=ERRORS,
+    )
+    async def alias_knobs(name: str, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        """The settings an agent on this alias may set, as a JSON Schema object: only the knobs its model takes, each
+        with its range and catalog default. A model the catalog does not hold gets the common knobs with no range;
+        404 when there is no such alias."""
+        held = await aliases.current(name)
+        if held is None:
+            raise refusal(404, "alias_not_found", f"No alias {name}.")
+        connection = await providers.get(held.provider_id)
+        entry = registry.get(connection.type) if connection else None
+        schema = catalog.knob_schema(entry.catalog if entry else None, held.model_id)
+        return typed(
+            KnobsOut(
+                alias=name,
+                version=held.version,
+                model_id=held.model_id,
+                catalogued=bool(schema["x-catalogued"]),
+                knobs=schema,
+            )
+        )
 
     @app.post(
         "/v1/models/aliases/{name}/versions",
-        dependencies=[guard],
+        dependencies=[alias_write_guard],
         tags=["aliases"],
         status_code=201,
         response_model=Envelope[AliasRef],
@@ -1194,7 +1381,7 @@ def create_models_app(
             )
         try:
             secrets_by_ref = {str(ref): provider_key} if ref and provider_key else {}
-            gate.provider = provider_for(alias_row, secrets_by_ref, http)
+            gate.provider = provider_for(alias_row, secrets_by_ref, http, registry)
         except ProviderError as e:
             await gate.log("error", e.code)
             return provider_refused(e)
@@ -1235,6 +1422,8 @@ def create_models_app(
         settle, broke, failed = gate.settle, gate.broke, gate.failed
         if alias_row.reasoning_effort and "reasoning_effort" not in body:
             body["reasoning_effort"] = alias_row.reasoning_effort
+        served_type = registry.get(alias_row.type)
+        body = catalog.fit(body, served_type.catalog if served_type else None, alias_row.model_id)
         call_id = new_id("chatcmpl")
         created = int(time.time())
 

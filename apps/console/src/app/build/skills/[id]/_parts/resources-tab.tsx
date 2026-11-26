@@ -1,34 +1,24 @@
 'use client';
 
-import * as React from 'react';
-import { FileText, LayoutTemplate, Plus, ShieldX, Trash2 } from 'lucide-react';
+import { FileText, LayoutTemplate, ShieldX, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { FileDownloadButton } from '@/components/files/file-actions';
 import { fileIcon } from '@/components/files/file-meta';
 import { EmptyState } from '@/components/shared/empty-state';
-import { FileUpload, type UploadItem, uploadsBlocker, uploadsReady } from '@/components/shared/file-upload';
-import { LoadingButton } from '@/components/shared/loading-button';
 import { SettingsSection } from '@/components/shared/settings-section';
 import { Row, Rows } from '@/components/shared/surface';
-import { TemplateResourceDialog } from '@/components/skills/skill-dialogs';
 import { Button } from '@/components/ui/button';
-import { useAddSkillResource, useRemoveSkillResource } from '@/hooks/skill-queries';
-import { bytes, plural, relativeTime } from '@/lib/format';
+import { useRemoveSkillResource } from '@/hooks/skill-queries';
+import { bytes, relativeTime } from '@/lib/format';
 import type { SkillDetail } from '@/lib/types/skills';
 
 /** Reference files (through Files, scanned before the runtime reads them) and text templates on the newest version. */
 export function ResourcesTab({ skill: s }: { skill: SkillDetail }) {
-  const add = useAddSkillResource(s.id);
   const remove = useRemoveSkillResource(s.id);
-  const [uploads, setUploads] = React.useState<UploadItem[]>([]);
-  const [uploadKey, setUploadKey] = React.useState(0);
-  const [templateOpen, setTemplateOpen] = React.useState(false);
   const newest = s.versions[0];
   const resources = newest.content.resources;
   const locked = newest.state === 'in_review' ? `v${newest.version} is waiting in Reviews.` : s.status === 'deprecated' ? 'The skill is deprecated.' : undefined;
-  const ready = uploadsReady(uploads);
-  const waiting = uploads.length ? uploadsBlocker(uploads) : undefined;
   const target = newest.state === 'draft' ? `draft v${newest.version}` : `a new draft v${newest.version + 1}`;
 
   return (
@@ -89,47 +79,8 @@ export function ResourcesTab({ skill: s }: { skill: SkillDetail }) {
         )}
       </SettingsSection>
 
-      <SettingsSection title="Add" description="Files are stored through Files and scanned before the runtime reads them.">
-        <div className="flex flex-col gap-3">
-          <FileUpload key={uploadKey} id="skill-resource-upload" purpose="skill_resource" multiple disabled={!!locked} onChange={setUploads} testId="skill-resource-upload" />
-          <div className="flex flex-wrap items-center gap-2">
-            <LoadingButton
-              size="sm"
-              isLoading={add.isPending}
-              disabled={!!locked || !ready}
-              onClick={() =>
-                add.mutate(
-                  { fileIds: uploads.map((u) => u.fileId!) },
-                  {
-                    onSuccess: (d) => {
-                      toast.success(`Added ${plural(uploads.length, 'file')}`, { description: `Saved to draft v${d.versions[0].version}.` });
-                      setUploads([]);
-                      setUploadKey((k) => k + 1);
-                    },
-                    onError: (e) => toast.error('Couldn’t add the files', { description: e.message }),
-                  },
-                )
-              }
-              data-testid="skill-resource-add"
-            >
-              <Plus className="size-3.5" /> Add {uploads.length ? plural(uploads.length, 'file') : 'files'}
-            </LoadingButton>
-            <Button variant="outline" size="sm" disabled={!!locked} onClick={() => setTemplateOpen(true)}>
-              <LayoutTemplate className="size-3.5" /> Add template
-            </Button>
-            {(locked || waiting) && <span className="text-xs text-muted-foreground">{locked ?? waiting}</span>}
-          </div>
-        </div>
-      </SettingsSection>
-      <TemplateResourceDialog
-        open={templateOpen}
-        onOpenChange={setTemplateOpen}
-        isPending={add.isPending}
-        onSubmit={async (template) => {
-          const d = await add.mutateAsync({ template });
-          toast.success(`Added ${template.name}`, { description: `Saved to draft v${d.versions[0].version}.` });
-        }}
-      />
+      {/* Adding files and templates stays out until agents-service serves /v1/skills/{id}/resources and files takes
+          skill uploads. */}
     </div>
   );
 }

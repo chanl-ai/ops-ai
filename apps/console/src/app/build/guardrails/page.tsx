@@ -12,6 +12,7 @@ import { DataTableWithViews } from '@/components/data-table-with-views';
 import { GuardrailFields, guardrailErrors, keptScopes, type GuardrailDraft, type GuardrailErrors } from '@/components/guardrails/guardrail-fields';
 import { PageLayout } from '@/components/page-layout';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
+import { ListCell } from '@/components/shared/table-cells';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField, StopRowClick } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
@@ -89,7 +90,7 @@ function columns(on: Actions): ColumnDef<Guardrail>[] {
     {
       id: 'usedBy',
       header: 'Pinned by',
-      cell: ({ row }) => <span className="text-sm text-muted-foreground">{row.original.usedBy.length ? row.original.usedBy.join(', ') : 'No agent'}</span>,
+      cell: ({ row }) => <span className="text-sm text-muted-foreground"><ListCell values={row.original.usedBy} empty="No agent" label="Pinned by" /></span>,
     },
     { accessorKey: 'updatedAt', header: ({ column }) => <DataTableColumnHeader column={column} title="Updated" />, cell: ({ row }) => <span className="text-sm whitespace-nowrap text-muted-foreground">{relativeTime(row.original.updatedAt)}</span> },
     {

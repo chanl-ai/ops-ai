@@ -1,7 +1,7 @@
 import type { FilePurpose } from '@/lib/types/files';
 
 /** The purposes files-service stores (the files contract's purpose enum); the Storage page sets a target for each. */
-export const STORED_PURPOSES: FilePurpose[] = ['knowledge_source', 'chat_attachment', 'case_attachment', 'document_type_sample', 'email_body', 'knowledge_snapshot', 'test_import', 'evidence_bundle', 'export', 'tool_spec', 'avatar'];
+export const STORED_PURPOSES: FilePurpose[] = ['knowledge_source', 'chat_attachment', 'case_attachment', 'document_type_sample', 'email_body', 'knowledge_snapshot', 'source_file', 'test_import', 'evidence_bundle', 'export', 'tool_spec', 'avatar'];
 
 export const PURPOSE_LABEL: Record<FilePurpose, string> = {
   knowledge_source: 'Knowledge source',
@@ -10,6 +10,7 @@ export const PURPOSE_LABEL: Record<FilePurpose, string> = {
   document_type_sample: 'Document type sample',
   email_body: 'Email body',
   knowledge_snapshot: 'Knowledge snapshot',
+  source_file: 'Watched folder file',
   test_import: 'Test import',
   evidence_bundle: 'Evidence bundle',
   export: 'Export',

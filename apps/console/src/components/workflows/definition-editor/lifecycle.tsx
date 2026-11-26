@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Pause, Play, Rocket } from 'lucide-react';
+import { MoreHorizontal, Pause, Play, Rocket } from 'lucide-react';
 
 import { LockedReason } from '@/components/shared/locked-reason';
 import { DialogShell } from '@/components/shared/dialog-shell';
@@ -10,6 +10,7 @@ import { CopyId } from '@/components/shared/setting/copy-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { DefinitionStage, DefinitionView } from '@/lib/types/engine';
 import { cn } from '@/lib/utils';
@@ -93,6 +94,7 @@ export function LifecycleActions({
   onSetPaused,
   pausing,
   canPublish = true,
+  problemsNote,
 }: {
   lifecycle: Lifecycle;
   /** The working copy differs from the newest version. */
@@ -104,6 +106,8 @@ export function LifecycleActions({
   onPublish: () => void;
   onSetPaused: (paused: boolean) => Promise<unknown>;
   pausing: boolean;
+  /** "No problems" while the header's chip is hidden on a phone, so the menu says it instead. */
+  problemsNote?: string;
 }) {
   const [confirm, setConfirm] = React.useState<'pause' | 'resume' | null>(null);
   const [error, setError] = React.useState<string>();
@@ -111,7 +115,7 @@ export function LifecycleActions({
   return (
     <>
       {liveVersion !== null && (
-        <Button type="button" variant="outline" onClick={() => setConfirm(paused ? 'resume' : 'pause')} data-testid={paused ? 'definition-resume' : 'definition-pause'}>
+        <Button type="button" variant="outline" className="max-sm:hidden" onClick={() => setConfirm(paused ? 'resume' : 'pause')} data-testid={paused ? 'definition-resume' : 'definition-pause'}>
           {paused ? <Play /> : <Pause />} {paused ? 'Resume' : 'Pause'}
         </Button>
       )}
@@ -130,11 +134,30 @@ export function LifecycleActions({
         ))
       )}
       {/* The status comes after the buttons: a wrapped row never leaves a button alone, and a status may. */}
-      <div className="flex h-9 items-center gap-1 rounded-md bg-muted/50 pr-3 text-sm whitespace-nowrap" role="status" data-testid="definition-lifecycle">
+      <div className="flex h-9 items-center gap-1 rounded-md bg-muted/50 pr-3 text-sm whitespace-nowrap max-sm:hidden" role="status" data-testid="definition-lifecycle">
         <VersionDetails version={version} digest={lifecycle.digest} />
         <StageBadge stage={stage} testId="definition-stage" />
         <LiveElsewhere lifecycle={lifecycle} />
       </div>
+      {/* On a phone the header keeps Save and Start run (and Publish); the rest is here. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" size="icon" className="sm:hidden" aria-label="More actions" data-testid="definition-more">
+            <MoreHorizontal />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuLabel className="font-normal text-muted-foreground">
+            Version {version} · {STAGE_LABEL[stage]}
+            {problemsNote ? ` · ${problemsNote}` : ''}
+          </DropdownMenuLabel>
+          {liveVersion !== null && (
+            <DropdownMenuItem onSelect={() => setConfirm(paused ? 'resume' : 'pause')} data-testid={paused ? 'definition-resume-menu' : 'definition-pause-menu'}>
+              {paused ? <Play /> : <Pause />} {paused ? 'Resume' : 'Pause'}
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
       <DialogShell
         open={confirm !== null}
         onOpenChange={(o) => {

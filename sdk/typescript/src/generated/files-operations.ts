@@ -99,7 +99,9 @@ export const filesOperations = {
     "pathParams": [
       "file_id"
     ],
-    "query": [],
+    "query": [
+      "version"
+    ],
     "stream": false
   },
   "files_get_file": {
@@ -298,6 +300,103 @@ export const filesOperations = {
     "path": "/v1/settings/storage/test",
     "pathParams": [],
     "query": [],
+    "stream": false
+  },
+  "watches_change_watch": {
+    "body": "json",
+    "headers": [],
+    "method": "PATCH",
+    "path": "/v1/watches/{watch_id}",
+    "pathParams": [
+      "watch_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "watches_check_watch": {
+    "body": null,
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/watches/{watch_id}/check",
+    "pathParams": [
+      "watch_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "watches_create_watch": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/watches",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "watches_delete_watch": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/watches/{watch_id}",
+    "pathParams": [
+      "watch_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "watches_get_watch": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/watches/{watch_id}",
+    "pathParams": [
+      "watch_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "watches_list_watches": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/watches",
+    "pathParams": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
+    "stream": false
+  },
+  "watches_watch_events": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/watches/{watch_id}/events",
+    "pathParams": [
+      "watch_id"
+    ],
+    "query": [
+      "after",
+      "limit"
+    ],
+    "stream": false
+  },
+  "watches_watch_options": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/watches/options",
+    "pathParams": [],
+    "query": [
+      "search",
+      "cursor",
+      "limit",
+      "ids"
+    ],
     "stream": false
   }
 } as const;

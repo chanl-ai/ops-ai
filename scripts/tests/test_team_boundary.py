@@ -46,6 +46,7 @@ TENANT_HELD = {
     "documents_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "kb_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "platform_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
+    "agents_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
 }
 # Until each team has its own tool modules (keys per team, its own policies): then this list is empty.
 TOOLS_UNTIL_C509 = {
@@ -69,6 +70,8 @@ BACKGROUND = {
 REVIEWED_ACROSS_TEAMS = {
     "registry_publish_requests": "a publish request is read by reviewers outside its subject's team; can() checks the "
     "team, the tenant policy holds the tenant",
+    "workflow_schedules": "a schedule is read and written through its workflow's own rights, which cover shared "
+    "workflows the team policy has no branch for; the tenant policy holds the tenant (agents 20261123_1900)",
     "tool_modules": "a module with no team is read by every team and one granted to another team's workflow by that "
     "team; the store's team_modules and granted check the team, the tenant policy holds the tenant (tools_0086)",
 }

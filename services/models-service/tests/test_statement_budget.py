@@ -95,7 +95,7 @@ def seed_team(app: FastAPI, client: httpx.AsyncClient, models: Models) -> SeedTe
             await on_app.key()
             assert (await on_app.complete(secret)).status_code == 200
             assert (await http.put(f"/v1/provider-keys/{tag}", json={"value": KEY})).status_code == 200
-        return Seeded(headers={}, ids={"name": name}, service_headers=SERVICE)
+        return Seeded(headers={}, ids={"name": name, "provider_id": "prov_scripted"}, service_headers=SERVICE)
 
     return seed
 

@@ -15,3 +15,13 @@ test('the settings rail offers the policy pages to an admin and hides them from 
   const chatOnly = (needs?: NavNeed) => !needs || needs.area === 'chat' || needs.area === 'memory';
   assert.deepEqual(POLICY_PAGES.filter((id) => pages(chatOnly).includes(id)), []);
 });
+
+// models-service refuses connections and aliases to anyone without settings.manage, so the rail offers the Models pages
+// only to a person who holds that cell, and draws no Models heading above nothing.
+test('the settings rail offers Models to someone who may manage settings and hides it from everyone else', () => {
+  const MODELS = ['section-Models', 'model-connections', 'model-aliases'];
+  const manager = (needs?: NavNeed) => !needs || (needs.area === 'settings' && needs.action === 'manage');
+  const noSettings = (needs?: NavNeed) => !needs || needs.area === 'chat';
+  assert.deepEqual(MODELS.filter((id) => pages(manager).includes(id)), MODELS);
+  assert.deepEqual(MODELS.filter((id) => pages(noSettings).includes(id)), []);
+});

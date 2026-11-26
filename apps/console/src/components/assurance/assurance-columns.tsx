@@ -4,6 +4,7 @@ import { Download } from 'lucide-react';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { StopRowClick } from '@/components/shared/form-field';
+import { ListCell } from '@/components/shared/table-cells';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { RiskBadge } from '@/components/status-badges';
 import { Badge } from '@/components/ui/badge';
@@ -141,7 +142,7 @@ export const evidenceColumns = (onExport: (b: EvidenceBundleRow) => void, export
   { id: 'name', accessorFn: (r) => r.asset.name, header: ({ column }) => <DataTableColumnHeader column={column} title="Asset" />, cell: ({ row }) => <AssetCell asset={row.original.asset} sub={`v${row.original.version}${row.original.live ? ' · live' : ''}`} />, enableHiding: false },
   kindColumn(),
   { accessorKey: 'digest', header: 'Digest', cell: ({ row }) => <code className="font-mono text-xs" title={row.original.digest}>{row.original.digest.slice(0, 19)}…</code> },
-  { id: 'approvers', accessorFn: (r) => r.approvers.join(', '), header: 'Approvers', cell: ({ row }) => <span className="text-xs">{row.original.approvers.join(', ')}</span> },
+  { id: 'approvers', accessorFn: (r) => r.approvers.join(', '), header: 'Approvers', cell: ({ row }) => <span className="text-xs"><ListCell values={row.original.approvers} label="Approvers" /></span> },
   { accessorKey: 'sealedAt', header: ({ column }) => <DataTableColumnHeader column={column} title="Sealed" />, cell: ({ row }) => <span className="whitespace-nowrap text-xs">{dateTime(row.original.sealedAt)}</span> },
   {
     id: 'actions',

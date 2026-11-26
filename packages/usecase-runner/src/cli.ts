@@ -100,6 +100,8 @@ async function runAll(
   layerArg: string | undefined,
   databaseFor: (run: (env: NodeJS.ProcessEnv) => Promise<Outcome>) => Promise<Outcome>,
 ): Promise<number> {
+  // A malformed Stories table stops the run before any script, so no layer prints a pass that the exit then contradicts.
+  for (const uc of targets) storiesOf(root, uc);
   const outcomes: Outcome[] = [];
   for (const uc of targets) {
     const layers: Layer[] = layerArg ? [layerArg as Layer] : uc.layers;

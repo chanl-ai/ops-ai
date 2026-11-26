@@ -884,6 +884,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
           pickers: false,
           previews: false,
           site: false,
+          files: false,
           defaults: { parsing: { ocr: 'auto' as const, tables: true, vision: false }, cleaning: { furniture: false, mainContent: false, siteRepeats: false, duplicates: 'flag' as const }, ingest: structuredClone(MOCK_INGEST), rules: [], metadataMapping: [], schedule: { kind: 'manual' as const } },
         },
       ]),

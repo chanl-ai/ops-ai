@@ -46,6 +46,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["search", "cursor", "limit", "ids", "loading"],
         "stream": False,
     },
+    "agents_app_tools": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agents/{agent_id}/tool-apps/{app_id}/tools",
+        "pathParams": ["agent_id", "app_id"],
+        "query": ["search", "cursor", "limit", "granted"],
+        "stream": False,
+    },
     "agents_attach_skill": {
         "body": "json",
         "headers": [],
@@ -199,6 +208,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "agents_get_instruction_sections": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agent-instruction-sections",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "agents_get_skill": {
         "body": None,
         "headers": [],
@@ -269,6 +287,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/guardrails",
         "pathParams": [],
         "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
+        "stream": False,
+    },
+    "agents_list_model_alias_uses": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/model-alias-uses",
+        "pathParams": [],
+        "query": ["aliases"],
         "stream": False,
     },
     "agents_list_model_aliases": {
@@ -349,6 +376,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
+    "agents_model_alias_knobs": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/model-aliases/{name}/knobs",
+        "pathParams": ["name"],
+        "query": [],
+        "stream": False,
+    },
     "agents_publish_check": {
         "body": None,
         "headers": [],
@@ -365,6 +401,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/agents/{agent_id}/publish-preview",
         "pathParams": ["agent_id"],
         "query": ["version"],
+        "stream": False,
+    },
+    "agents_put_instruction_sections": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/agent-instruction-sections",
+        "pathParams": [],
+        "query": [],
         "stream": False,
     },
     "agents_read_skill_text": {
@@ -439,6 +484,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "agents_reset_instruction_sections": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/agent-instruction-sections",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "agents_restore_version": {
         "body": None,
         "headers": [],
@@ -509,6 +563,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/agents/{agent_id}/test",
         "pathParams": ["agent_id"],
         "query": [],
+        "stream": False,
+    },
+    "agents_tool_apps": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agents/{agent_id}/tool-apps",
+        "pathParams": ["agent_id"],
+        "query": ["search", "cursor", "limit", "granted"],
         "stream": False,
     },
     "agents_tool_options": {
@@ -1405,6 +1468,33 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "schedules_preview_schedule": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/schedules/preview",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "schedules_schedule_kinds": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/schedules/kinds",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
+    "schedules_schedule_zones": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/schedules/zones",
+        "pathParams": [],
+        "query": ["search", "cursor", "limit"],
+        "stream": False,
+    },
     "templates_list_templates": {
         "body": None,
         "headers": [],
@@ -1576,6 +1666,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "workflows_clear_schedule": {
+        "body": None,
+        "headers": [],
+        "method": "DELETE",
+        "path": "/v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule",
+        "pathParams": ["workflow_id", "step"],
+        "query": [],
+        "stream": False,
+    },
     "workflows_create_definition": {
         "body": "json",
         "headers": [],
@@ -1592,6 +1691,15 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/workflows",
         "pathParams": [],
         "query": [],
+        "stream": False,
+    },
+    "workflows_definition_sample": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/workflows/definitions/{workflow_id}/sample",
+        "pathParams": ["workflow_id"],
+        "query": ["step"],
         "stream": False,
     },
     "workflows_definition_shapes": {
@@ -1663,6 +1771,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/runs/{run_id}",
         "pathParams": ["run_id"],
+        "query": [],
+        "stream": False,
+    },
+    "workflows_get_schedule": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule",
+        "pathParams": ["workflow_id", "step"],
         "query": [],
         "stream": False,
     },
@@ -1908,6 +2025,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "PUT",
         "path": "/v1/workflows/{workflow_id}/draft",
         "pathParams": ["workflow_id"],
+        "query": [],
+        "stream": False,
+    },
+    "workflows_save_schedule": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule",
+        "pathParams": ["workflow_id", "step"],
         "query": [],
         "stream": False,
     },
@@ -2164,6 +2290,18 @@ class Operations:
             None,
         )  # type: ignore[no-any-return]
 
+    def agents_get_instruction_sections(self) -> SectionList:
+        "Get Instruction Sections"
+        return self._t.call(SERVICE, OPERATIONS["agents_get_instruction_sections"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def agents_put_instruction_sections(self, body: SectionListIn) -> SectionList:
+        "Put Instruction Sections"
+        return self._t.call(SERVICE, OPERATIONS["agents_put_instruction_sections"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def agents_reset_instruction_sections(self) -> SectionList:
+        "Reset Instruction Sections"
+        return self._t.call(SERVICE, OPERATIONS["agents_reset_instruction_sections"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
     def agents_list_agents(
         self,
         *,
@@ -2342,6 +2480,45 @@ class Operations:
     def agents_test_agent(self, agent_id: str, body: OpsAgentsApiRoutersAgentsTestInput) -> AgentTestTurn:
         "Test Agent"
         return self._t.call(SERVICE, OPERATIONS["agents_test_agent"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def agents_tool_apps(
+        self,
+        agent_id: str,
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        granted: bool | None = None,
+    ) -> AgentToolAppsPage:
+        "Tool Apps"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["agents_tool_apps"],
+            {"agent_id": agent_id},
+            {"search": search, "cursor": cursor, "limit": limit, "granted": granted},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    def agents_app_tools(
+        self,
+        agent_id: str,
+        app_id: str,
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        granted: bool | None = None,
+    ) -> AppToolsPage:
+        "App Tools"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["agents_app_tools"],
+            {"agent_id": agent_id, "app_id": app_id},
+            {"search": search, "cursor": cursor, "limit": limit, "granted": granted},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def agents_list_versions(self, agent_id: str) -> list[AgentVersion]:
         "List Versions"
@@ -2831,9 +3008,17 @@ class Operations:
         "Undo Memory"
         return self._t.call(SERVICE, OPERATIONS["memory_undo_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    def agents_list_model_alias_uses(self, *, aliases: str | None = None) -> Any:
+        "List Model Alias Uses"
+        return self._t.call(SERVICE, OPERATIONS["agents_list_model_alias_uses"], {}, {"aliases": aliases}, {}, None)  # type: ignore[no-any-return]
+
     def agents_list_model_aliases(self) -> list[ModelAlias]:
         "List Model Aliases"
         return self._t.call(SERVICE, OPERATIONS["agents_list_model_aliases"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def agents_model_alias_knobs(self, name: str) -> ModelAliasKnobs:
+        "Model Alias Knobs"
+        return self._t.call(SERVICE, OPERATIONS["agents_model_alias_knobs"], {"name": name}, {}, {}, None)  # type: ignore[no-any-return]
 
     def cases_overview(self) -> OverviewCounts:
         "Overview"
@@ -3031,6 +3216,27 @@ class Operations:
         "Resume Step"
         return self._t.call(
             SERVICE, OPERATIONS["workflows_resume_step"], {"run_id": run_id, "step": step}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    def schedules_schedule_kinds(self) -> list[KindView]:
+        "Schedule Kinds"
+        return self._t.call(SERVICE, OPERATIONS["schedules_schedule_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    def schedules_preview_schedule(self, body: PreviewIn) -> PreviewView:
+        "Preview Schedule"
+        return self._t.call(SERVICE, OPERATIONS["schedules_preview_schedule"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def schedules_schedule_zones(
+        self, *, search: str | None = None, cursor: str | None = None, limit: int | None = None
+    ) -> OptionsPage:
+        "Schedule Zones"
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["schedules_schedule_zones"],
+            {},
+            {"search": search, "cursor": cursor, "limit": limit},
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     def agents_list_skills(
@@ -3569,6 +3775,30 @@ class Operations:
             SERVICE, OPERATIONS["workflows_resume_definition"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
+    def workflows_definition_sample(self, workflow_id: str, *, step: str | None = None) -> DefinitionSample:
+        "Definition Sample"
+        return self._t.call(
+            SERVICE, OPERATIONS["workflows_definition_sample"], {"workflow_id": workflow_id}, {"step": step}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def workflows_get_schedule(self, workflow_id: str, step: str) -> ScheduleView:
+        "Get Schedule"
+        return self._t.call(
+            SERVICE, OPERATIONS["workflows_get_schedule"], {"workflow_id": workflow_id, "step": step}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def workflows_save_schedule(self, workflow_id: str, step: str, body: RuleIn) -> ScheduleView:
+        "Save Schedule"
+        return self._t.call(
+            SERVICE, OPERATIONS["workflows_save_schedule"], {"workflow_id": workflow_id, "step": step}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    def workflows_clear_schedule(self, workflow_id: str, step: str) -> Any:
+        "Clear Schedule"
+        return self._t.call(
+            SERVICE, OPERATIONS["workflows_clear_schedule"], {"workflow_id": workflow_id, "step": step}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     def workflows_definition_shapes(self, workflow_id: str, version: int) -> DefinitionShapes:
         "Definition Shapes"
         return self._t.call(
@@ -3890,6 +4120,18 @@ class AsyncOperations:
             None,
         )  # type: ignore[no-any-return]
 
+    async def agents_get_instruction_sections(self) -> SectionList:
+        "Get Instruction Sections"
+        return await self._t.call(SERVICE, OPERATIONS["agents_get_instruction_sections"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def agents_put_instruction_sections(self, body: SectionListIn) -> SectionList:
+        "Put Instruction Sections"
+        return await self._t.call(SERVICE, OPERATIONS["agents_put_instruction_sections"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def agents_reset_instruction_sections(self) -> SectionList:
+        "Reset Instruction Sections"
+        return await self._t.call(SERVICE, OPERATIONS["agents_reset_instruction_sections"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
     async def agents_list_agents(
         self,
         *,
@@ -4074,6 +4316,45 @@ class AsyncOperations:
     async def agents_test_agent(self, agent_id: str, body: OpsAgentsApiRoutersAgentsTestInput) -> AgentTestTurn:
         "Test Agent"
         return await self._t.call(SERVICE, OPERATIONS["agents_test_agent"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def agents_tool_apps(
+        self,
+        agent_id: str,
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        granted: bool | None = None,
+    ) -> AgentToolAppsPage:
+        "Tool Apps"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["agents_tool_apps"],
+            {"agent_id": agent_id},
+            {"search": search, "cursor": cursor, "limit": limit, "granted": granted},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
+
+    async def agents_app_tools(
+        self,
+        agent_id: str,
+        app_id: str,
+        *,
+        search: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+        granted: bool | None = None,
+    ) -> AppToolsPage:
+        "App Tools"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["agents_app_tools"],
+            {"agent_id": agent_id, "app_id": app_id},
+            {"search": search, "cursor": cursor, "limit": limit, "granted": granted},
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def agents_list_versions(self, agent_id: str) -> list[AgentVersion]:
         "List Versions"
@@ -4579,9 +4860,19 @@ class AsyncOperations:
         "Undo Memory"
         return await self._t.call(SERVICE, OPERATIONS["memory_undo_memory"], {"memory_id": memory_id}, {}, {}, None)  # type: ignore[no-any-return]
 
+    async def agents_list_model_alias_uses(self, *, aliases: str | None = None) -> Any:
+        "List Model Alias Uses"
+        return await self._t.call(
+            SERVICE, OPERATIONS["agents_list_model_alias_uses"], {}, {"aliases": aliases}, {}, None
+        )  # type: ignore[no-any-return]
+
     async def agents_list_model_aliases(self) -> list[ModelAlias]:
         "List Model Aliases"
         return await self._t.call(SERVICE, OPERATIONS["agents_list_model_aliases"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def agents_model_alias_knobs(self, name: str) -> ModelAliasKnobs:
+        "Model Alias Knobs"
+        return await self._t.call(SERVICE, OPERATIONS["agents_model_alias_knobs"], {"name": name}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def cases_overview(self) -> OverviewCounts:
         "Overview"
@@ -4783,6 +5074,27 @@ class AsyncOperations:
         "Resume Step"
         return await self._t.call(
             SERVICE, OPERATIONS["workflows_resume_step"], {"run_id": run_id, "step": step}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    async def schedules_schedule_kinds(self) -> list[KindView]:
+        "Schedule Kinds"
+        return await self._t.call(SERVICE, OPERATIONS["schedules_schedule_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
+
+    async def schedules_preview_schedule(self, body: PreviewIn) -> PreviewView:
+        "Preview Schedule"
+        return await self._t.call(SERVICE, OPERATIONS["schedules_preview_schedule"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def schedules_schedule_zones(
+        self, *, search: str | None = None, cursor: str | None = None, limit: int | None = None
+    ) -> OptionsPage:
+        "Schedule Zones"
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["schedules_schedule_zones"],
+            {},
+            {"search": search, "cursor": cursor, "limit": limit},
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     async def agents_list_skills(
@@ -5329,6 +5641,30 @@ class AsyncOperations:
         "Resume Definition"
         return await self._t.call(
             SERVICE, OPERATIONS["workflows_resume_definition"], {"workflow_id": workflow_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def workflows_definition_sample(self, workflow_id: str, *, step: str | None = None) -> DefinitionSample:
+        "Definition Sample"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_definition_sample"], {"workflow_id": workflow_id}, {"step": step}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def workflows_get_schedule(self, workflow_id: str, step: str) -> ScheduleView:
+        "Get Schedule"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_get_schedule"], {"workflow_id": workflow_id, "step": step}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def workflows_save_schedule(self, workflow_id: str, step: str, body: RuleIn) -> ScheduleView:
+        "Save Schedule"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_save_schedule"], {"workflow_id": workflow_id, "step": step}, {}, {}, body
+        )  # type: ignore[no-any-return]
+
+    async def workflows_clear_schedule(self, workflow_id: str, step: str) -> Any:
+        "Clear Schedule"
+        return await self._t.call(
+            SERVICE, OPERATIONS["workflows_clear_schedule"], {"workflow_id": workflow_id, "step": step}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def workflows_definition_shapes(self, workflow_id: str, version: int) -> DefinitionShapes:

@@ -1,7 +1,7 @@
 // uc-469 Staff start, follow and finish their work in chat, ui layer: docs/usecases/console/chat-home.md. The
 // demo stack (platform sign-in, the fake model's rules, the core fake bank, a worker). James starts a card dispute,
-// which waits for a provisional credit decision. Maya, an approver, signs in and lands on Chat's home beside the open
-// sidebar, asks "What needs me today?", approves the task from its card (signing in again when the task asks for it),
+// which waits for a provisional credit decision. Maya, an approver, signs in and lands on Chat's home with the sidebar
+// folded, asks "What needs me today?", approves the task from its card (signing in again when the task asks for it),
 // and sees the run move on in its run card; a reload shows the task decided, with no buttons. Screenshots go to
 // evidenceDir('469', 'uc').
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -72,13 +72,13 @@ await withUiStack(
         await page.setViewportSize({ width: 1280, height: 900 });
       };
 
-      await step('1 Maya lands on Chat’s home beside the open sidebar, with hints or starts', async () => {
+      await step('1 Maya lands on Chat’s home with the sidebar folded, as it opens until she opens it, with hints or starts', async () => {
         await page.getByTestId('home-start').waitFor({ timeout: 90_000 });
         await page.locator('[data-testid=home-hints], [data-testid=home-starts]').first().waitFor({ timeout: 60_000 });
         const sidebar = await page.locator('[data-slot=sidebar]').first().getAttribute('data-state');
         const offered = await page.locator('[data-testid^=home-hint-], [data-testid^=home-start-]').count();
         await shot('home');
-        check('1 Maya lands on Chat’s home beside the open sidebar, with hints or starts', new URL(page.url()).pathname === '/chat' && sidebar === 'expanded' && offered >= 1 && offered <= 4, { at: page.url(), sidebar, offered });
+        check('1 Maya lands on Chat’s home with the sidebar folded, as it opens until she opens it, with hints or starts', new URL(page.url()).pathname === '/chat' && sidebar === 'collapsed' && offered >= 1 && offered <= 4, { at: page.url(), sidebar, offered });
       });
 
       // Other tasks Maya may decide (a seeded agent publish) can come first; the dispute's card is the one checked.
@@ -135,7 +135,7 @@ await withUiStack(
         check('5 after a reload the task card reads who decided it and offers no buttons', /^Approved by /.test(status) && buttons === 0, { status, buttons });
       });
 
-      await step('5b on a 13-inch laptop the conversation keeps its room beside the open sidebar', async () => {
+      await step('5b on a 13-inch laptop the conversation keeps its room beside the folded sidebar', async () => {
         const middle = () => page.evaluate(() => Math.round(document.querySelector('[data-middle-column]')?.getBoundingClientRect().width ?? 0));
         const sidebar = () => page.locator('[data-slot=sidebar]').first().getAttribute('data-state');
         await page.setViewportSize({ width: 1024, height: 800 });
@@ -145,13 +145,13 @@ await withUiStack(
         await page.waitForTimeout(3000);
         const runFold = await sidebar();
         await page.setViewportSize({ width: 1280, height: 900 });
-        check('5b on a 13-inch laptop the conversation keeps its room beside the open sidebar', at1024.middle >= 640 && at1024.sidebar === 'expanded' && at1024.rail === 0 && runFold === 'collapsed', { at1024, runFold });
+        check('5b on a 13-inch laptop the conversation keeps its room beside the folded sidebar', at1024.middle >= 640 && at1024.sidebar === 'collapsed' && at1024.rail === 0 && runFold === 'collapsed', { at1024, runFold });
       });
 
       await step('6 other pages keep the sidebar as it was', async () => {
         await page.goto(`${consoleUrl}/cases`, { waitUntil: 'domcontentloaded' });
         await page.waitForTimeout(1500);
-        check('6 other pages keep the sidebar as it was', (await page.locator('[data-slot=sidebar]').first().getAttribute('data-state')) === 'expanded');
+        check('6 other pages keep the sidebar as it was, folded', (await page.locator('[data-slot=sidebar]').first().getAttribute('data-state')) === 'collapsed');
       });
       check('7 no page errors', errors.length === 0, errors.slice(0, 3));
     } finally {

@@ -1,6 +1,7 @@
 // uc-113 a builder picks a knowledge base past the first hundred and a tool, searched on the server, ui layer:
 // docs/usecases/console/pickers-search-the-server.md. Signed in through platform-service.
 import { AGENTS_PORT, KB_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { chooseMatchedTool, findMatchedTool, showHeldTools } from '../../lib/tools_picker.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const kb = `http://127.0.0.1:${KB_PORT}`;
@@ -28,7 +29,8 @@ await withUiStack(
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
       const asked = [];
-      page.on('request', (r) => /\/options\?/.test(r.url()) && asked.push(r.url()));
+      page.on('request', (r) => /\/(options|tool-apps(\/[^?]+\/tools)?)\?/.test(r.url()) && asked.push(r.url()));
+      const param = (u, key) => new URL(u).searchParams.get(key);
       await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await page.getByLabel('Email').fill('j.richardson@harborpine.example');
       await page.getByLabel('Password').fill('northfield-demo');
@@ -38,7 +40,7 @@ await withUiStack(
 
       // Steps 1-2: the 118th base, found by a server search and picked.
       const knowledge = page.getByTestId('agent-knowledge-picker');
-      await knowledge.getByRole('button', { name: 'Choose knowledge bases' }).click({ timeout: 120_000 });
+      await knowledge.getByRole('button', { name: 'Add', exact: true }).click({ timeout: 120_000 });
       await page.getByPlaceholder('Search knowledge bases…').fill(name(117));
       const offered = page.getByRole('option', { name: new RegExp(name(117)) });
       await offered.waitFor({ timeout: 30_000 }).catch(() => undefined);
@@ -46,31 +48,37 @@ await withUiStack(
       await offered.click();
       await page.keyboard.press('Escape');
       // The chip's name comes from the options route by id, so it lands a moment after the pick.
-      await knowledge.getByText(name(117)).waitFor({ timeout: 15_000 }).catch(() => undefined);
-      check('the picked base shows as a chip with its name', (await knowledge.getByText(name(117)).count()) === 1);
+      await page.getByTestId('agent-knowledge-rows').getByText(name(117)).waitFor({ timeout: 15_000 }).catch(() => undefined);
+      check('the picked base shows as a chip with its name', (await page.getByTestId('agent-knowledge-rows').getByText(name(117)).count()) === 1);
 
       // Step 3: a tool through agents-service's search.
-      const tools = page.getByTestId('agent-tools-picker');
-      await tools.getByRole('button', { name: 'Grant tools' }).click();
-      await page.getByPlaceholder('Search tools by name or system…').fill('lookup_acc');
-      const tool = page.getByRole('option', { name: /lookup_account/ });
+      const tool = await findMatchedTool(page, 'lookup_acc', 'lookup_account');
       await tool.waitFor({ timeout: 30_000 }).catch(() => undefined);
-      check('the tools picker searches agents-service', (await tool.count()) >= 1 && asked.some((u) => u.startsWith(agents) && u.includes('/tools/options')), { asked: asked.slice(-3) });
+      // The typed words themselves go to agents-service, which names the tool under its app.
+      const searches = asked.filter((u) => u.startsWith(agents) && /\/tool-apps\?/.test(u) && param(u, 'search') === 'lookup_acc');
+      const offeredTools = await page.locator('[data-testid^="tools-match-"]').count();
+      check('the tools picker searches agents-service', (await tool.count()) === 1 && offeredTools >= 1 && searches.length >= 1, { offeredTools, asked: asked.slice(-3) });
       // The draft saves itself a second after a change: there is no Save button, so the save is awaited.
       const saved = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes(`/v1/agents/${agent.id}`), { timeout: 60_000 }));
-      await tool.first().click();
-      await page.keyboard.press('Escape');
+      await chooseMatchedTool(page, tool);
 
       // Step 4: the draft autosaves, and the version holds ids.
       await saved;
-      await page.getByTestId('agent-save-status').filter({ hasText: /saved$/ }).first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+      await page.locator('[data-testid="save-state"][data-state="saved"]').first().waitFor({ timeout: 30_000 }).catch(() => undefined);
       const stored = await data(await fetch(`${agents}/v1/agents/${agent.id}`, { headers: J }));
       check('the version stores the base id and the tool id', stored.collections?.includes(target.id) && stored.toolIds?.includes('lookup_account'), { collections: stored.collections, toolIds: stored.toolIds });
 
       // Step 5: chips resolve by id after a reload.
+      const before = asked.length;
       await page.reload({ waitUntil: 'domcontentloaded' });
-      await knowledge.getByText(name(117)).waitFor({ timeout: 60_000 }).catch(() => undefined);
-      check('after a reload the chips show names resolved by id', (await knowledge.getByText(name(117)).count()) === 1 && (await tools.getByText('lookup_account').count()) === 1 && asked.some((u) => u.includes('ids=')));
+      await page.getByTestId('agent-knowledge-rows').getByText(name(117)).waitFor({ timeout: 60_000 }).catch(() => undefined);
+      await showHeldTools(page);
+      const held = page.getByTestId('agent-tools-rows').getByText(/^lookup[_ ]account$/i);
+      await held.first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+      // The base's name comes from the options route by id; the tool's from the agent's own grants, read per app.
+      const again = asked.slice(before);
+      const toolsRead = again.some((u) => /\/tool-apps\?/.test(u) && param(u, 'granted') === 'true') && again.some((u) => /\/tool-apps\/[^?]+\/tools\?/.test(u) && param(u, 'granted') === 'true');
+      check('after a reload the chips show names resolved by id', (await page.getByTestId('agent-knowledge-rows').getByText(name(117)).count()) === 1 && (await held.count()) === 1 && again.some((u) => u.includes('ids=')) && toolsRead, { again: again.slice(-6) });
 
       check('no page errors', errors.length === 0, errors);
     } finally {

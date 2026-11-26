@@ -28,7 +28,7 @@ from ..store.engine import AsyncEngine, EngineTransactions
 from ..store.service_events import ServiceEvents, attempts_of, listeners
 from ..store.tenancy import current_tenant
 from .deps import Runtime
-from .engine_lifecycle import definitions, open_publish
+from .engine_lifecycle import definitions, open_publish, policy_reads
 from .engine_resume import wake_parked
 from .engine_runs import start_run
 from .event_workflows import EVENT_WORKFLOWS, handlers
@@ -99,20 +99,26 @@ async def ensure_event_workflows(rt: Runtime) -> None:
                 log.warning("event_workflow_id_taken", workflow=d.id, error=str(e))
                 continue
             await store.go_live(d.id, version)
-        elif d.digest() not in {v.digest for v in versions}:
-            await _follow_seed(rt, store, d)
+        elif d.digest() not in {v.digest for v in versions} and not await _follow_seed(rt, store, d):
+            # Left unseen: the next pass tries again once the policy can be read.
+            continue
         rt.event_workflows_seen.add((tenant, d.id))
 
 
-async def _follow_seed(rt: Runtime, store: DefinitionStore, d: WorkflowDefinition) -> None:
+async def _follow_seed(rt: Runtime, store: DefinitionStore, d: WorkflowDefinition) -> bool:
     """A shipped event workflow changed in the seed file: a tenant still running the seed's own version gets
     the new one as a publish request its publishReview decides, live at once only where no review is needed; one whose
     live version a person published keeps it and is told an update exists. Either is recorded once per shipped digest
-    as a service event."""
+    as a service event. False, with no version made, while the publish policy cannot be read."""
     live = await store.serving(d.id)
     events = ServiceEvents(rt.db)
     key = f"{d.id}:{d.digest()[:16]}"
     if live is not None and live.created_by in SEED_AUTHORS:
+        # The policy is read before the version is made, so a failed read leaves the versions as they were.
+        reads = await policy_reads(rt)
+        if reads.document is None:
+            log.warning("event_workflow_update_waits", workflow=d.id, reason="publishReview unread")
+            return False
         # Saved as a draft and published through the same request a person's publish opens, so the workspace's
         # publishReview decides it now: live at once where no review is needed, otherwise waiting in Reviews.
         version, _ = await store.publish(
@@ -120,8 +126,10 @@ async def _follow_seed(rt: Runtime, store: DefinitionStore, d: WorkflowDefinitio
         )
         row = await store.row(d.id, version)
         if row is None:
-            return
-        req = await open_publish(rt, d.id, row, live, by=SEED, team="", note="An update to a shipped workflow")
+            return True
+        req = await open_publish(
+            rt, d.id, row, live, by=SEED, team="", note="An update to a shipped workflow", document=reads.document
+        )
         await events.record(
             name=UPDATED,
             key=key,
@@ -131,7 +139,7 @@ async def _follow_seed(rt: Runtime, store: DefinitionStore, d: WorkflowDefinitio
             payload={"workflowId": d.id, "version": version, "reviewId": req.id, "status": req.status},
         )
         log.info("event_workflow_updated", workflow=d.id, version=version, status=req.status)
-        return
+        return True
     await events.record(
         name=UPDATE_AVAILABLE,
         key=key,
@@ -140,6 +148,7 @@ async def _follow_seed(rt: Runtime, store: DefinitionStore, d: WorkflowDefinitio
         actor=None,
         payload={"workflowId": d.id, "liveVersion": live.version if live else None},
     )
+    return True
 
 
 # Which service reports which events (the catalogue in docs/architecture/service-map.md): a service reports only events
@@ -147,13 +156,19 @@ async def _follow_seed(rt: Runtime, store: DefinitionStore, d: WorkflowDefinitio
 EVENT_OWNERS: dict[str, tuple[str, ...]] = {
     # tool.module.* and tool.team_state.changed also keep this service's copy of the catalogue (store/tool_copies.py).
     "tools": ("tool_access.", "tool_module.", "module_review.", "app_account.", "tool.module.", "tool.team_state."),
-    "files": ("file.",),
-    "documents": ("extraction.",),
+    # watch.checked: a watched folder's check ended; the Files changed trigger reads its events after it.
+    "files": ("file.", "watch."),
+    "documents": ("extraction.", "reading."),
     "kb": ("kb.", "knowledge."),
     # The task API records a posted task as its own event, so the task runs as the api_task workflow.
     "agents": ("task.",),
 }
 
+
+# Events that only wake parked steps, never start a workflow and are not kept: a reading's end, which a Full text step
+# waits on as reading.finished. reading.failed also wakes a step parked on reading.finished, which then reads the
+# failed reading and takes its error port.
+WAKES_ONLY = {"reading.finished": "", "reading.failed": "reading.finished"}
 
 REMINDER = "task.reminder"
 
@@ -280,6 +295,19 @@ async def _deliver(
     actor: str | None,
     payload: Json,
 ) -> DeliveredEvent:
+    if name in WAKES_ONLY:
+        # Every reading of the workspace ends with one of these; only a step parked on it hears it, so it is not kept.
+        woke = await wake_parked(db, name=name, key=key, team_id=team_id, payload=payload)
+        if (ends := WAKES_ONLY[name]) and key.startswith(f"{name}:"):
+            # A failed end wakes the step parked on reading.finished: the key differs only by the event's name.
+            also = f"{ends}:{key.removeprefix(f'{name}:')}"
+            woke += await wake_parked(db, name=ends, key=also, team_id=team_id, payload=payload)
+        now = now_iso()
+        return DeliveredEvent(
+            id="", tenant_id=current_tenant(), team_id=team_id, name=name, event_key=key, source=source, actor=actor,
+            payload=payload, status="resumed" if woke else "unhandled", run_ids=[], attempts=0, recorded_at=now,
+            updated_at=now, woke=woke,
+        )  # fmt: skip
     events = ServiceEvents(db)
     jobs = BackgroundJobs(db)
     event = await events.record(name=name, key=key, team_id=team_id, source=source, actor=actor, payload=payload)
