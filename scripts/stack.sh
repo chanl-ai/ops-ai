@@ -212,12 +212,12 @@ cmd_of() {
     console)
       # OPS_CONSOLE_MODE=prod (cloud boxes) serves a production build; see scripts/console-prod.sh. Local dev keeps next dev.
       if [[ "${OPS_CONSOLE_MODE:-dev}" == prod ]]; then CONSOLE_RUN="env NEXT_PUBLIC_OPS_DEMO_SIGNIN=1 bash scripts/console-prod.sh $CONSOLE_PORT"
-      else CONSOLE_RUN="pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"; fi
+      else CONSOLE_RUN="env -u AI_AGENT -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"; fi
       echo "env $(console_auth)NEXT_PUBLIC_UI_FEEDBACK=$(ui_feedback) NEXT_PUBLIC_OPS_CHAT_API_URL=$(api_url agents "$AGENTS_PORT") NEXT_PUBLIC_OPS_CASES_API_URL=$(api_url agents "$AGENTS_PORT") NEXT_PUBLIC_OPS_REGISTRY_API_URL=$(api_url agents "$AGENTS_PORT") NEXT_PUBLIC_OPS_TOOLS_API_URL=$(api_url tools "$TOOLS_PORT") NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=$(api_url kb "$KB_PORT") NEXT_PUBLIC_OPS_FILES_API_URL=$(api_url files "$FILES_PORT") NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=$(api_url documents "$DOCUMENTS_PORT") NEXT_PUBLIC_OPS_MODELS_API_URL=$(api_url models "$MODELS_PORT") NEXT_PUBLIC_OPS_EMBED_URL=http://localhost:$EMBED_PORT NODE_OPTIONS=--max-old-space-size=${OPS_CONSOLE_HEAP_MB:-3072} ${CONSOLE_RUN}"
       ;;
     # The console's preview frame is the only page it allows to frame it besides a deployment's own sites.
     embed)
-      echo "env OPS_EMBED_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT pnpm --filter @ops-ai/embed exec next dev -p $EMBED_PORT"
+      echo "env OPS_EMBED_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT env -u AI_AGENT -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT pnpm --filter @ops-ai/embed exec next dev -p $EMBED_PORT"
       ;;
   esac
 }

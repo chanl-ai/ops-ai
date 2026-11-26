@@ -33,7 +33,7 @@ CANDIDATES = 10
 # The last port below macOS's ephemeral range (49152 up), which it hands to any server bound to port 0.
 MAX_PORT = 49151
 CONSOLE_BASE = 3016
-# Ports the stack does not bind when OPS_INFRA=external (postgres, opa and the mail servers run as side containers).
+# Ports the stack does not bind when OPS_INFRA=external or shared (postgres, opa and the mail servers are not its own).
 INFRA_PORTS = ("OPS_PG_PORT", "OPS_OPA_PORT", "OPS_GREENMAIL_", "OPS_MAILPIT_")
 
 
@@ -228,7 +228,7 @@ def ports_for(offset: int, env: dict[str, str]) -> dict[int, str]:
         name, _, val = line.partition("=")
         if not val.strip().isdigit():
             continue
-        if env.get("OPS_INFRA") == "external" and name.startswith(INFRA_PORTS):
+        if env.get("OPS_INFRA") in ("external", "shared") and name.startswith(INFRA_PORTS):
             continue
         out[int(val)] = name
     if not out:

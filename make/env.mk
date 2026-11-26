@@ -94,11 +94,21 @@ OPS_FAKE_OPENAI_PORT ?= $(call port,8746)
 OPS_FAKE_BANK_PORT ?= $(call port,8745)
 OPS_PLATFORM_PORT ?= $(call port,8710)
 OPS_PLATFORM_INTERNAL_PORT ?= $(call port,8711)
-OPS_OPA_PORT ?= $(call port,8181)
-OPS_PG_PORT ?= $(call port,5477)
+# OPS_INFRA=shared: an offset stack reuses the default stack's postgres, OPA and mail containers, so their ports stay
+# at the base values and the database is its own, ops_runtime_<offset>. The default stack (offset 0) owns the containers.
+ifeq ($(OPS_INFRA),shared)
+  ifeq ($(OPS_PORT_OFFSET),0)
+    $(error OPS_INFRA=shared is for an offset stack (OPS_PORT_OFFSET=N); the default stack starts the containers)
+  endif
+  infra_port = $(1)
+else
+  infra_port = $(call port,$(1))
+endif
+OPS_OPA_PORT ?= $(call infra_port,8181)
+OPS_PG_PORT ?= $(call infra_port,5477)
 # The test mail servers in compose: GreenMail takes mail in (SMTP) and serves it (IMAP); Mailpit catches sent mail.
 # Their bases differ by multiples of 1000, so they move by a tenth of the offset; the whole offset would land on another's.
-mail_port = $(shell echo $$(( $(1) + $(OPS_PORT_OFFSET) / 10 )))
+mail_port = $(if $(filter shared,$(OPS_INFRA)),$(1),$(shell echo $$(( $(1) + $(OPS_PORT_OFFSET) / 10 ))))
 OPS_GREENMAIL_SMTP_PORT ?= $(call mail_port,3025)
 OPS_GREENMAIL_IMAP_PORT ?= $(call mail_port,3143)
 OPS_MAILPIT_SMTP_PORT ?= $(call mail_port,1025)
@@ -146,7 +156,7 @@ ifeq ($(OPS_INFRA),external)
 else
   export OPS_OPA_URL ?= http://127.0.0.1:$(OPS_OPA_PORT)
   export OPS_TEST_DATABASE_URL ?= $(if $(filter environment command line,$(origin OPS_DATABASE_URL)),$(OPS_DATABASE_URL),postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_test_$(TEST_RUN))
-  export OPS_DATABASE_URL ?= postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_runtime
+  export OPS_DATABASE_URL ?= postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_runtime$(if $(filter shared,$(OPS_INFRA)),_$(OPS_PORT_OFFSET))
   export OPS_SMTP_HOST ?= 127.0.0.1
   export OPS_GREENMAIL_HOST ?= 127.0.0.1
   export OPS_MAILPIT_HOST ?= 127.0.0.1

@@ -7,6 +7,7 @@ the chain named and the fix, because migrating it would be guessing.
 
   uv run python scripts/schema_sync.py <database url>           # 0: every chain at or behind its head; 4: one ahead
   uv run python scripts/schema_sync.py <database url> --reset   # drop and recreate the database, empty (make reset-db)
+  uv run python scripts/schema_sync.py <database url> --create  # make the database when missing (OPS_INFRA=shared)
   uv run python scripts/schema_sync.py <database url> --recorded  # each chain's recorded revision, one line each
 
 Each service keeps its own chain and version table in the one database. The reset drops the whole database rather
@@ -94,11 +95,29 @@ async def reset(url: str) -> None:
     print(f"schema_sync: {name} dropped and recreated empty; make migrate builds it from the chains")
 
 
+async def create(url: str) -> None:
+    """Make the database when it is missing; one that exists is left alone. Only an offset stack's own
+    ops_runtime_<offset> on the shared postgres goes through here."""
+    dsn, name = _dsn(url)
+    if not name or name.startswith(REFUSED):
+        raise SystemExit(f"schema_sync: refusing to create {name!r}; its runner owns it")
+    admin = await asyncpg.connect(dsn.rsplit("/", 1)[0] + "/postgres")
+    try:
+        if not await admin.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", name):
+            await admin.execute(f'CREATE DATABASE "{name}"')
+            print(f"schema_sync: created {name}")
+    finally:
+        await admin.close()
+
+
 def main() -> int:
     if len(sys.argv) < 2:
         print(__doc__)
         return 2
     url = sys.argv[1]
+    if "--create" in sys.argv[2:]:
+        asyncio.run(create(url))
+        return 0
     if "--reset" in sys.argv[2:]:
         asyncio.run(reset(url))
         return 0

@@ -7,6 +7,8 @@
 db-up: ## PostgreSQL, OPA and the test mail servers (GreenMail, Mailpit) in compose, waiting until up
 ifeq ($(OPS_INFRA),external)
 	@echo "OPS_INFRA=external: postgres, opa, greenmail and mailpit are side containers"
+else ifeq ($(OPS_INFRA),shared)
+	@echo "OPS_INFRA=shared: using the default stack's postgres, opa and mail containers on localhost"
 else
 	@# --no-recreate: every checkout, worktree and verify export shares this compose project, and its OPA mounts the
 	@# policy folder by path; recreating from another checkout re-mounts OPA there and drops the review key the running
@@ -17,6 +19,8 @@ endif
 db-down: ## Stop compose; the data volume stays
 ifeq ($(OPS_INFRA),external)
 	@echo "OPS_INFRA=external: leaving side containers running"
+else ifeq ($(OPS_INFRA),shared)
+	@echo "OPS_INFRA=shared: leaving the default stack's containers running"
 else
 	$(COMPOSE) down
 endif
