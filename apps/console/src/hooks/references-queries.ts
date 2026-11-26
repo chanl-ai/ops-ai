@@ -1,12 +1,13 @@
 'use client';
 
 import * as React from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import type { Ref, RefKind, ReferenceContext, ReferenceItem, ReferenceSearch } from '@/lib/types/references';
 
-import { teamKey, useTeamQuery } from './team-query';
+import { teamKey, useTeamInfiniteQuery, useTeamQuery } from './team-query';
+import { useDebounced } from './use-debounced';
 
 const REFERENCES = ['references'] as const;
 const of = (context: ReferenceContext) => ('forAgent' in context ? `agent:${context.forAgent}` : `skill:${context.forSkill}`);
@@ -51,4 +52,23 @@ export function useAddReference(agentId: string) {
     mutationFn: (ref: Ref) => api.references.add(agentId, ref).catch((e: { code?: string }) => (e.code === 'stale_base' ? api.references.add(agentId, ref) : Promise.reject(e))),
     onSuccess: () => Promise.all([client.invalidateQueries({ queryKey: ['agent'] }), client.invalidateQueries({ queryKey: ['agents'] }), client.invalidateQueries({ queryKey: REFERENCES })]),
   });
+}
+
+/**
+ * One kind of reference, searched on the server and paged, for the insert dialog: the group of that kind in each page,
+ * continued with its cursor. `rows` is every item loaded so far.
+ */
+export function useReferencePicker(context: ReferenceContext, kind: RefKind, search: string, enabled: boolean) {
+  const debounced = useDebounced(search.trim(), 200);
+  const query = useTeamInfiniteQuery({
+    queryKey: [...REFERENCES, of(context), 'pick', kind, debounced],
+    queryFn: ({ pageParam }) => api.references.search(context, { search: debounced, kind, cursor: pageParam, limit: 25 }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last: ReferenceSearch) => last.groups.find((g) => g.kind === kind)?.nextCursor ?? undefined,
+    placeholderData: keepPreviousData,
+    retry: false,
+    enabled,
+  });
+  const rows: ReferenceItem[] = (query.data?.pages ?? []).flatMap((p) => p.groups.filter((g) => g.kind === kind).flatMap((g) => g.items));
+  return { ...query, rows, searching: debounced !== search.trim() || (query.isFetching && query.isPlaceholderData) };
 }
