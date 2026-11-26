@@ -827,6 +827,14 @@ class PublishReview(Out):
     id: str
     # Whether the caller may decide it now, by the same checks the decision route runs; absent outside Reviews.
     can_decide: bool | None = None
+    # What the caller may do with it now, each by the check its own route runs (hitl_facade.for_viewer): assign an
+    # unassigned task, reassign an assigned one, return it to who asked; absent outside Reviews.
+    can_assign: bool | None = None
+    can_reassign: bool | None = None
+    can_return: bool | None = None
+    # How many distinct people approve it, and whether the caller is already one of `approvals`.
+    approvals_needed: int = 1
+    viewer_approved: bool | None = None
     title: str
     customer: str
     workflow_id: str
@@ -1364,12 +1372,22 @@ class ThreadReview(Out):
     id: str
     # Whether the caller may decide it now, by the same checks the decision route runs; absent outside Reviews.
     can_decide: bool | None = None
+    # What the caller may do with it now, each by the check its own route runs (hitl_facade.for_viewer): assign an
+    # unassigned task, reassign an assigned one, return it to who asked; absent outside Reviews.
+    can_assign: bool | None = None
+    can_reassign: bool | None = None
+    can_return: bool | None = None
+    # How many distinct people approve it, and whether the caller is already one of `approvals`.
+    approvals_needed: int = 1
+    viewer_approved: bool | None = None
     title: str
     customer: str
     workflow_id: str
     workflow_name: str
     # A workflow runner's step: its name and its run, for the sheet's subtitle and link; None elsewhere.
     step_name: str | None = None
+    # What approving runs, in a reviewer's words ("Place hold"), never the tool's id; None when the step sends no call.
+    action_label: str | None = None
     run_id: str | None = None
     # The workflow version the run pinned, so a reviewer knows which definition paused it.
     workflow_version: int | None = None

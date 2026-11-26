@@ -561,7 +561,7 @@ retired id is not reused.
 | D09 | Whoever started a run cancels it, or a reviewer or admin of the run's team |
 | D10 | Whoever holds the decide cell in the reviewing team (Reviewer, Builder and Admin by default) decides a review, with separation of duties and step-up |
 | D11 | Every role in an agent's team may chat with it; every agent belongs to one team |
-| D12 | The console shows Decide or Cancel from the server: `canDecide` and `canCancel` on each record, filled by `can()` |
+| D12 | The console shows Decide or Cancel from the server: `canDecide` and `canCancel` on each record, filled by `can()`. A Human Task also says `canAssign`, `canReassign` and `canReturn`, each by the check its route runs (the decide cell in the acting team and on the task; return only on a publish request); no setting adds to them |
 | D13 | Whoever holds `access.view` in a team checks another person's access there; a workspace admin does so in every team. The check runs the same `can()`, so policies show as reasons |
 | D14 | The checked person is not told; each check is audited with who checked whom |
 | D15 | Policies start at the defaults in [Policies](#policies) and [Approvals](#approvals): access policies are open and an admin switches stricter rules on; approvals are safe by default (row E51) |

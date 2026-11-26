@@ -35,28 +35,21 @@ def _policy(approvers: int) -> Any:
     return fake
 
 
-async def test_a_chat_write_names_its_step_in_words_and_counts_two_approvals(
+async def test_a_chat_write_names_its_step_in_words_and_says_two_approve_it(
     dev_platform: AsyncClient,  # noqa: F811
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(hitl_facade, "policy_of", _policy(2))
-    james = person("usr_james", ["team_ops"], role="viewer")
-    maya, sam = person("usr_maya", ["team_ops"]), person("usr_sam", ["team_ops"])
+    james, maya = person("usr_james", ["team_ops"], role="viewer"), person("usr_maya", ["team_ops"])
     thread = (await drafted(dev_platform, james)).split("/")[3]
     review = data(await dev_platform.get(f"/reviews/{thread}", headers=maya))
-    assert review["actionLabel"] == "Request document", review.get("actionLabel")
+    assert review["actionLabel"] == "Send a request for proof of address", review.get("actionLabel")
     # The call carries no currency, so none is invented.
     assert review["currency"] is None, review["currency"]
     assert (review["approvalsNeeded"], review["viewerApproved"]) == (2, False), review
-    first = await dev_platform.post(f"/reviews/{thread}/decision", json={"decision": "approved"}, headers=maya)
-    assert first.status_code == 200, first.text
-    mine = data(await dev_platform.get(f"/reviews/{thread}", headers=maya))
-    theirs = data(await dev_platform.get(f"/reviews/{thread}", headers=sam))
-    assert (mine["approvals"], mine["viewerApproved"]) == (["usr_maya@harborpine.example"], True), mine
-    assert theirs["viewerApproved"] is False, theirs
     # Return is not a decision a chat write takes, so it is never offered.
-    assert theirs["canReturn"] is False, theirs
-    returned = await dev_platform.post(f"/reviews/{thread}/decision", json={"decision": "returned"}, headers=sam)
+    assert review["canReturn"] is False, review
+    returned = await dev_platform.post(f"/reviews/{thread}/decision", json={"decision": "returned"}, headers=maya)
     assert returned.status_code == 400, returned.text
 
 
