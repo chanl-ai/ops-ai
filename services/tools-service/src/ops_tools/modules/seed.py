@@ -57,7 +57,8 @@ DOCUMENT_SERVICE = {
 REQUESTERS = ("Maya Okafor", "Priya Shah", "Anika Singh")
 # Workflow tools the agents catalogue does not list but the Runtime runs locally; send_reply emails a customer.
 WORKFLOW_TOOLS = ("send_reply", "open_case", "send_acknowledgement", "read_file", "read_document", "search_knowledge")
-# The mail sends: a reply waits for a person; an acknowledgement to the sender of a message leaves at once.
+# The mail sends: a reply is declared to wait for a reviewer, a maker's ask that holds while the workspace keeps
+# makers' asks on (appChanges makersAsk) and is dropped when it turns them off; an acknowledgement leaves at once.
 SENDS = {
     "send_reply": ("Email a reply to a customer.", True),
     "send_acknowledgement": ("Email an automatic acknowledgement to the sender of a message; no approval.", False),
@@ -572,8 +573,8 @@ def _local_fields(module_id: str, n: int, name: str) -> StoredOperation:
         "requires_approval": approval,
     }
     if name in SENDS:
-        # Spelled out so the tool's own answer holds whatever the team's default: the acknowledgement always leaves at
-        # once and a reply always waits for a reviewer.
+        # Spelled out so the tool's own answer holds whatever the team's default: the acknowledgement leaves at once,
+        # and a reply waits for a reviewer unless the workspace turned makers' asks off.
         out["approval_mode"] = declared_mode(approval)
     out["approvers"] = 1
     out["amount_max"] = None
