@@ -56,6 +56,8 @@ export function RichTextToolbar({ editor, disabled, view, onView, onInsert }: { 
     { key: 'bullets', label: 'Bulleted list', icon: List, active: state.bullets, run: run((e) => e.chain().focus().toggleBulletList().run()) },
     { key: 'numbers', label: 'Numbered list', icon: ListOrdered, active: state.numbers, run: run((e) => e.chain().focus().toggleOrderedList().run()) },
   ];
+  // Nothing to format or insert in text a person may only read.
+  if (disabled) return null;
   return (
     <>
       <ToolbarPrimitive.Root aria-label="Text formatting and inserts" className="hidden flex-wrap items-center gap-1 border-b px-2 py-1.5 sm:flex" data-testid="rte-toolbar">

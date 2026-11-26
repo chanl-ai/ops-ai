@@ -26,7 +26,7 @@ can read what they may and change none of it.
 | S1 | A brief with seven fields saves, makes a prompt with Never last, and a waiting version is never edited in place | api | 1-4 | 3 |
 | S2 | A developer does the same through the Python SDK | sdk | 5, 6 | 6 |
 | S3 | A developer does the same from a file with `opsai` | cli | 7, 8 | 8 |
-| S4 | The page reads as designed for a builder, a viewer and a member at 1440 and 390 | ui | 9-23 | 20 |
+| S4 | The page reads as designed for a builder, a viewer and a member at 1440 and 390 | ui | 9-25 | 20 |
 
 ## Steps and expected results
 
@@ -55,6 +55,8 @@ can read what they may and change none of it.
 | 21 | Ravi opens the same agent | He sees it is in review and no Withdraw |
 | 22 | Ravi opens a draft agent; Lena opens it too | Ravi sees the view only note with no Save and no Test; Lena is told she has no access |
 | 23 | James opens an agent written as plain text whose prompt mentions a tool the team does not hold, and types a letter; he then removes the mention in the Markdown view | The mention shows as Missing, Save is off and the header says Unsaved and, on hover, to fix the highlighted fields; once the mention is gone Save is on and the save lands. The same prompt, saved with the mention, is refused a publish request that names the prompt |
+| 24 | James opens a draft agent, types `@` and the name of a tool it lacks in the brief, and presses Tab | The tool is written as a mention and granted to the agent, at 1440 and 390 |
+| 25 | Ravi opens a skill that no agent uses and that has no Not when line | No formatting bar, no empty Not when field, and Used by 0 agents is plain text |
 
 ## Scripts
 

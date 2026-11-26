@@ -209,6 +209,25 @@ await withUiStack(
         const stored = (await call(J, `/v1/agents/${plain.id}`, undefined, 'GET')).data?.instructions ?? '';
         note('23 a broken mention in a plain prompt turns Save off, and removing it turns Save on', blocked && /Unsaved \/ .*fix the highlighted fields/i.test(said) && missing > 0 && open_ && stored.includes('the lookup tool') && !stored.includes(GONE), { blocked, said, missing, open_, stored });
       }
+      // A viewer reads a skill: no formatting bar, no empty Not when field, and Used by 0 agents is text, not a link.
+      await go(ravi, `/build/skills/${skill.id}`, 'rich-text');
+      const bars = (await ravi.getByTestId('rte-toolbar').count()) + (await ravi.getByTestId('rte-menu').count());
+      const emptyNotWhen = await ravi.getByTestId('skill-not-when').count();
+      const usedLink = await ravi.getByTestId('skill-used-by-link').count();
+      note('25 a viewer reads a skill with no formatting bar, no empty Not when and Used by 0 agents as text', bars === 0 && emptyNotWhen === 0 && usedLink === 0 && (await ravi.getByTestId('skill-used-by-none').count()) === 1, { bars, emptyNotWhen, usedLink });
+
+      // Tab on the @ menu picks the highlighted row at every width: a tool the agent lacks is written and granted.
+      const tabDesk = await mk('Tab desk');
+      const found = (await (await fetch(`${agents}/v1/references?forAgent=${tabDesk.id}&search=`, { headers: J })).json()).data?.groups?.flatMap((g) => g.items) ?? [];
+      const lacking = found.find((i) => i.kind === 'tool' && i.held === false);
+      await go(james, `/build/agents/${tabDesk.id}`, 'agent-brief');
+      const granted = james.waitForRequest((r) => r.method() === 'POST' && r.url().endsWith(`/v1/agents/${tabDesk.id}/references`), { timeout: 15_000 }).then(() => true, () => false);
+      await james.getByTestId('agent-brief').locator('[contenteditable="true"]').first().click();
+      await james.keyboard.type(` Use @${lacking?.label ?? ''}`);
+      await james.locator('[cmdk-item]').first().waitFor({ timeout: 15_000 }).catch(() => undefined);
+      await james.keyboard.press('Tab');
+      const chips = await james.getByTestId('agent-brief').getByTestId('reference-chip').count().catch(() => 0);
+      note('24 Tab on the @ menu writes the tool and grants it to the agent', !!lacking && (await granted) && chips >= 1 && (await call(J, `/v1/agents/${tabDesk.id}`, undefined, 'GET')).data.toolIds.includes(lacking.id), { lacking: lacking?.id, chips });
       for (const p of [james, ravi, lena]) await p.context().close();
     }
     // One check per step of the doc, so each step shows as run: it passes when nothing under its number failed.
@@ -218,6 +237,8 @@ await withUiStack(
       15: 'the save state reads Unsaved then Saved after Cmd+S', 16: 'the header keeps one order and no label over two words', 17: 'tools, knowledge and skills are sections',
       18: 'a skill opens on its instructions with the button bar and a Used by list', 19: 'no page scrolls sideways and none logs an error', 20: 'Withdraw takes a waiting version out of review and offers Send again',
       21: 'a viewer sees a waiting version and no Withdraw', 22: 'a viewer reads the page and a member is refused it',
+      25: 'a viewer reads a skill with no formatting bar, no empty Not when and Used by 0 agents as text',
+      24: 'Tab on the @ menu writes the tool and grants it to the agent',
       23: 'a broken mention in a plain prompt turns Save off and refuses a publish until it is removed',
     };
     for (const [id, title] of Object.entries(TITLES)) {

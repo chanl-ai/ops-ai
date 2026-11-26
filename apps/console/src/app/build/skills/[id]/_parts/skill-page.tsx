@@ -128,9 +128,14 @@ function SkillView({ skill: s }: { skill: SkillDetail }) {
             <span className="text-xs text-muted-foreground">
               {s.publishedVersion ? `v${s.publishedVersion} published` : 'Not published'}
               {s.draftVersion && s.draftVersion !== s.publishedVersion ? ` · draft v${s.draftVersion}` : ''} · {s.ownerTeamName ?? s.ownerTeam} ·{' '}
-              <Button variant="link" size="sm" onClick={() => setPanel('used_by')} data-testid="skill-used-by-link">
-                Used by {plural(s.usedBy, 'agent')}
-              </Button>
+              {/* Nothing to open when no agent uses it, so it reads as text. */}
+              {s.usedBy > 0 ? (
+                <Button variant="link" size="sm" onClick={() => setPanel('used_by')} data-testid="skill-used-by-link">
+                  Used by {plural(s.usedBy, 'agent')}
+                </Button>
+              ) : (
+                <span data-testid="skill-used-by-none">Used by {plural(s.usedBy, 'agent')}</span>
+              )}
             </span>
           </>
         }
