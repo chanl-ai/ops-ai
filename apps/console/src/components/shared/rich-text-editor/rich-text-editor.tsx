@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 
 import { type MenuBridge, type Trigger, richTextExtensions } from './extensions';
 import { keepPlainText, mentionToken } from './markdown';
+import { type MarkdownIO, spliceEdit } from './splice';
 import { MentionLabels } from './mention-view';
 
 type Pick = (editor: Editor, range: Range) => void;
@@ -106,7 +107,8 @@ export function RichTextEditor({ value, onChange, readOnly = false, context, lab
     editorProps: { attributes: { role: 'textbox', 'aria-multiline': 'true', 'aria-label': ariaLabel, 'aria-haspopup': 'listbox', 'data-testid': 'rich-text', class: EDITOR_CLASS } },
     onCreate: ({ editor: e }) => keepPlainText(e.markdown),
     onUpdate: ({ editor: e }) => {
-      const text = e.getMarkdown();
+      // Only the blocks this edit touched are written again; the rest of the stored text keeps its bytes.
+      const text = spliceEdit(e.markdown as unknown as MarkdownIO, e.schema, emitted.current, e.getJSON());
       emitted.current = text;
       latest.current.onChange(text);
     },
