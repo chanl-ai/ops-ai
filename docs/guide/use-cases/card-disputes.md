@@ -38,8 +38,7 @@ approve; working alone, run it as a team Admin, who may approve their own run.
 
 | Step | Where | Expected |
 |---|---|---|
-| Start a dispute | **Workflows**, Card dispute intake, **Run**, with the cardholder Jordan Whitfield (last four 5555), merchant Northline Electronics, amount 482.10, posted
-2026-10-11, card type debit and the reason "Ordered a monitor on 11 October; the parcel never arrived." | The run starts and moves through the lookup and the agent's check |
+| Start a dispute | **Workflows**, Card dispute intake, **Run**, with the cardholder Jordan Whitfield (last four 5555), merchant Northline Electronics, amount 482.10, posted 2026-10-11, card type debit and the reason "Ordered a monitor on 11 October; the parcel never arrived." | The run starts and moves through the lookup and the agent's check |
 | Watch the run | The run's page | Each step with its input and output; it stops at the approval |
 | Approve | **Human Tasks**, the provisional credit task | The dispute, the assessment and the accounts; **Approve** with a reason |
 | Read the record | The case | The run ends at Credited; the case holds the credit and the decision |
