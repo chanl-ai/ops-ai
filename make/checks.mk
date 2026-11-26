@@ -29,7 +29,7 @@ CHECKS = \
   isolation-markings isolation-sites \
   store-inventory roles-matrix sbom k8s-base \
   ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards \
-  downgrades migration-heads token-lifetime cross-service standards service-standards service-standards-self-test list-routes \
+  downgrades migration-heads token-lifetime cross-service standards service-standards service-standards-self-test list-routes gateway-routes \
   ci-steps ci-steps-self-test ci-local-self-test new-migration-self-test builder-watch-self-test usecase-outputs
 
 # Access decided outside can(), the exceptions each lane may still hold, and the trailer a new line needs.
@@ -136,6 +136,11 @@ check-paths.service-standards-self-test = ^scripts/check_service_standards\.py$$
 # with its reason; the allowlist only shrinks. Read from the committed openapi.json files.
 check-run.list-routes = $(PY) scripts/check_list_routes.py && $(PY) scripts/check_list_routes.py --self-test
 check-paths.list-routes = ^services/[^/]+/openapi\.json$$|^list-routes-allowlist\.txt$$|^scripts/check_list_routes\.py$$
+
+# Every /api/<service>/ path the console's clients call has a route in each gateway config (deploy/**/Caddyfile); a
+# call the gateway leaves out falls through to the console and answers 404.
+check-run.gateway-routes = $(PY) scripts/check_gateway_routes.py && $(PY) scripts/check_gateway_routes.py --self-test
+check-paths.gateway-routes = ^deploy/.*Caddyfile$$|^deploy/compose/app\.yaml$$|^apps/console/src/lib/api/.*-http\.ts$$|^apps/console/src/lib/api/index\.ts$$|^scripts/check_gateway_routes\.py$$
 
 # Strict types on the code and its tests: `packages` as one run, and each service through its own typecheck target. A new
 # test file's untyped helper reached CI because nothing on this list type-checked tests. Pre-commit runs only the members

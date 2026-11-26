@@ -15,7 +15,7 @@ restarts one that exits, and stops the machine when one exits more than five tim
 | opa | `opa run --server` on tools-service's policy | 8181 | none |
 | platform | `python -m ops_platform` | 8710, 8711 internal | `/api/platform/` |
 | files | `python -m ops_files`, bytes in `/data/files` | 8750 | `/api/files/` |
-| models | `python -m ops_models` | 8730 | none |
+| models | `python -m ops_models` | 8730 | `/api/models/v1/` for the settings routes only (provider keys, connections, provider types, aliases) |
 | fake | `python -m fake_openai`: the only model; answers from committed rules, calls no provider | 8746 | none |
 | tools | `python -m ops_tools` | 8720 | `/api/tools/` |
 | kb | `python -m ops_kb`, bytes in `/data/kb-files` | 8740 | `/api/kb/` |
