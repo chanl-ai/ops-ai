@@ -1,26 +1,46 @@
 """Saved schedules, by failure mode: a slow machine overwrites a newer slot outcome, so a slot that ran reads as
 skipped; a builder's save wipes the clock's slot state or loses the old rule the audit entry needs; one tenant reads
-another's schedule; one team of a tenant reads another team's. Runs on the migrated test database, PostgreSQL or
-SQL Server."""
+another's schedule; one team of a tenant reads another team's. Runs on the migrated PostgreSQL test database and on a
+scratch SQL Server one holding the golden DDL."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import os
+from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
+from alembic import command
+from alembic.config import Config
 from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.store.schedules import WorkflowSchedules, workflow_schedules
 from ops_agents.store.tenancy import SCHEDULE_CLOCK, tenant_scope, tenant_tx
+from ops_service_kit.settings import Settings
 from ops_store import isolation
+from ops_store.testing import DATABASES, NO_SQL_SERVER, sql_server_schema
+
+CONFIG = str(Path(__file__).resolve().parents[2] / "alembic.ini")
+
+
+@pytest.fixture(scope="module", params=DATABASES)
+def url(request: pytest.FixtureRequest) -> Iterator[str]:
+    if request.param == "postgresql":
+        command.upgrade(Config(CONFIG), "head")
+        yield Settings().database_url
+        return
+    with sql_server_schema("agents", os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD")) as u:
+        if u is None:
+            pytest.skip(NO_SQL_SERVER)
+        yield u
 
 
 @pytest.fixture
-async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
-    e = create_async_engine(database_url)
+async def engine(url: str) -> AsyncIterator[AsyncEngine]:
+    e = create_async_engine(url)
     yield e
     await e.dispose()
 

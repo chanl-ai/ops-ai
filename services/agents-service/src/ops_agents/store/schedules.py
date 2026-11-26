@@ -63,6 +63,8 @@ workflow_schedules = sa.Table(
 )
 # The clock alone reads every team's schedules: it ticks each one under its tenant, between requests.
 CLOCK_READS = "the schedule clock ticks every team's saved schedules"
+# A live-places list names the teams its caller may view, which can be more than the acting one.
+VIEW_READS = "a live-places list shows the schedules of the teams its caller may view"
 
 
 @dataclass(frozen=True)
@@ -105,7 +107,13 @@ class WorkflowSchedules:
         t = workflow_schedules
         cols = [c for c in t.c if c.name != "tenant_id"]
         async with tenant_tx(self.engine) as c:
-            row = (await c.execute(sa.select(*cols).where(self._key(workflow_id, trigger_step)))).first()
+            q = sa.select(*cols).where(
+                t.c.tenant_id == current_tenant(),
+                t.c.workflow_id == workflow_id,
+                t.c.trigger_step == trigger_step,
+                team_visible(t),
+            )
+            row = (await c.execute(q)).first()
         return _row(row) if row else None
 
     async def for_workflow(self, workflow_id: str) -> list[ScheduleRow]:
@@ -124,7 +132,10 @@ class WorkflowSchedules:
         t = workflow_schedules
         cols = [c for c in t.c if c.name != "tenant_id"]
         q = sa.select(*cols).where(
-            t.c.tenant_id == current_tenant(), t.c.workflow_id.in_(workflow_ids), t.c.team_id.in_(list(teams))
+            t.c.tenant_id == current_tenant(),
+            t.c.workflow_id.in_(workflow_ids),
+            t.c.team_id.in_(list(teams)),
+            any_team(t, VIEW_READS),
         )
         with isolation.tenant_wide(SCHEDULE_VIEWS):
             async with tenant_tx(self.engine) as c:

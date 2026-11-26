@@ -315,7 +315,7 @@ jobs:
           # (ops_store.testing.sql_server_schema). The files that exercise stores, isolation and migrations only; the
           # provider, storage and route tests stay in the service job, on PostgreSQL.
           declare -A files=(
-            [agents-service]="tests/store/test_registry_policies.py tests/store/test_registry_policies_migration.py tests/store/test_registry_tenant_migration.py tests/store/test_registry_tenant_keys_migration.py tests/store/test_skill_list.py tests/store/test_threads_list.py tests/store/test_skill_step_tools_migration.py tests/store/test_stale_saves.py tests/store/test_schedule_teams_migration.py"
+            [agents-service]="tests/store/test_registry_policies.py tests/store/test_registry_policies_migration.py tests/store/test_registry_tenant_migration.py tests/store/test_registry_tenant_keys_migration.py tests/store/test_skill_list.py tests/store/test_threads_list.py tests/store/test_skill_step_tools_migration.py tests/store/test_stale_saves.py tests/store/test_schedule_teams_migration.py tests/store/test_workflow_schedules.py"
             [models-service]="tests/test_call_log_isolation_migration.py tests/test_call_log_rows_isolated.py tests/test_model_key_share_rows_isolated.py tests/test_provider_key_rows_isolated.py tests/test_alias_current_index.py tests/test_spend_caps.py tests/test_key_spend_race.py tests/test_spend_retention.py"
             [documents-service]="tests/test_isolation.py tests/test_template_copies.py"
             [files-service]="tests/test_isolation.py tests/test_store.py"
