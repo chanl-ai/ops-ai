@@ -22,32 +22,34 @@ agent reads the handbook, and a person approves the credit.
    wrong. The Card dispute intake workflow starts.
 2. **Fixed steps find the cardholder** and their accounts in the core banking system, through the tool gateway. A
    cardholder the workflow cannot find ends the run as Cardholder not found, rather than a guess.
-3. **An agent checks the dispute against the handbook** and answers in a fixed shape: in time or not, the rule that
-   applies, the credit allowed, with the handbook sections cited. The next step checks that shape before anything moves.
-4. **A person approves the credit** in **Human Tasks**, seeing the amount, the account and where each fact came from.
-   Approving sends the credit with a token bound to exactly what they saw.
-5. **The case keeps the record**: the run, the credit and every decision.
+3. **An agent checks the dispute against the handbook** and answers in a fixed shape: the reason category, whether provisional
+   credit is due, whether a team lead must approve it, and a short summary. The next step checks that shape before
+   anything moves.
+4. **The case opens** and holds the record of the run.
+5. **A person approves the credit** in **Human Tasks**, seeing the dispute, the agent's assessment, the accounts and the
+   case. Approving adds a note to the case, "Provisional credit approved by" the approver, and the run ends at Credited.
 
 ![The Card dispute intake workflow on the canvas, from Dispute received through the cardholder lookup, the agent's check and the case to the approval, with the failure ends below](../../media/workflow-light.png)
 
 ## Try it
 
-Run one dispute in the console, then approve its credit. With the team's Two-person rule on, the approver is someone
-other than the person who started the run.
+Run one dispute in the console, then approve its credit. With the team's Two-person rule on, a teammate must
+approve; working alone, run it as a team Admin, who may approve their own run.
 
 | Step | Where | Expected |
 |---|---|---|
-| Start a dispute | **Workflows**, Card dispute intake, **Run**, with the cardholder, merchant, amount and reason | The run starts and moves through the lookup and the agent's check |
+| Start a dispute | **Workflows**, Card dispute intake, **Run**, with the cardholder Jordan Whitfield (last four 5555), merchant Northline Electronics, amount 482.10, posted
+2026-10-11, card type debit and the reason "Ordered a monitor on 11 October; the parcel never arrived." | The run starts and moves through the lookup and the agent's check |
 | Watch the run | The run's page | Each step with its input and output; it stops at the approval |
-| Approve | **Human Tasks**, the provisional credit task | The amount, the account and the cited handbook section; **Approve** with a reason |
+| Approve | **Human Tasks**, the provisional credit task | The dispute, the assessment and the accounts; **Approve** with a reason |
 | Read the record | The case | The run ends at Credited; the case holds the credit and the decision |
 
 ![Riley Chen opens the Human Task for a 482.10 CAD provisional credit, reads where the amount came from, approves it, and the run ends at Credited](../../media/task.gif)
 
 ## Run it from code
 
-The same dispute from a script. Start a dispute, wait until it reaches the approval, and decide it. Create an API key under **Settings › Team › API
-keys** in the team that owns the workflow; the person who decides needs the approver role.
+The same dispute from a script. Start a dispute, wait until it reaches the approval, and decide it. An API key under **Settings › Team › API keys** can start a run and
+wait on it, but a key never decides a task: the approver signs in as themselves.
 
 ```python tab="Python"
 from ops_ai import OpsAI
@@ -66,7 +68,7 @@ started = ops.runs.start(
     },
 )
 run = ops.runs.wait(started["runId"])  # returns at the approval, with the task's id
-approver = OpsAI(api_key="ok_...approver", base_url="https://ops.example.com", team="team_customer_ops")
+approver = OpsAI(profile="approver")  # the approver signs in as themselves; a key never decides
 approver.tasks.decide(run["taskId"], "approved", reason="Inside the 90-day debit limit.")
 print(ops.runs.wait(started["runId"])["outcome"])  # credited
 ```
@@ -83,7 +85,7 @@ const started = await ops.runs.start('card_dispute_intake', {
   },
 });
 const run = await ops.runs.wait(started.runId);
-const approver = new OpsAI({ apiKey: 'ok_...approver', baseUrl: 'https://ops.example.com', team: 'team_customer_ops' });
+const approver = new OpsAI({ profile: 'approver' });  // the approver signs in as themselves; a key never decides
 await approver.tasks.decide(run.taskId!, 'approved', { reason: 'Inside the 90-day debit limit.' });
 console.log((await ops.runs.wait(started.runId)).outcome);   // credited
 ```
@@ -92,28 +94,31 @@ Expected: the first wait returns at the approval with a task id; after the decis
 
 ## How each run can end
 
-Every run ends in one of five outcomes, shown on the run's page.
+Every run ends in one of five outcomes, shown on the run's page; four are on the path below.
 
-<!-- site: decision source caption="The five ways a card dispute run can end" -->
-- **Does the lookup find a cardholder matching the details?**
-  - **The core banking system cannot be reached**: Lookup failed.
-  - **No match**: Cardholder not found. The run stops; nothing is guessed.
-  - **Yes**: The agent checks the handbook, then a person decides the credit.
-    - **Does the approver approve the provisional credit?**
-      - **Approves**: Credited. The case holds the credit and the decision.
-      - **Declines**: Declined. No credit is sent.
-      - **A later step fails**: Could not finish. The run's page shows which step and why.
+<!-- site: decision source caption="How a card dispute run ends: lookup, cardholder, then the approver" -->
+- **Can the lookup reach the core banking system?**
+  - **No**: Lookup failed.
+  - **Yes**: The cardholder search runs next.
+    - **Does it find a cardholder matching the details?**
+      - **No**: Cardholder not found. The run stops; nothing is guessed.
+      - **Yes**: The agent checks the handbook, then a person decides the credit.
+        - **Does the approver approve the provisional credit?**
+          - **Approves**: Credited. The case holds the credit note and the decision.
+          - **Declines**: Declined. No credit is sent.
+
+A step that fails after the lookup ends the run as Could not finish; the run's page shows which step and why.
 
 ## What success looks like
 
-The run stops at the approval with the amount, the account and the cited handbook section on the task. After the
+The run stops at the approval with the dispute, the assessment and the accounts on the task. After the
 approver decides, the run ends at Credited, and the case holds the credit, the decision and who made it. A dispute with
 no matching cardholder ends as Cardholder not found, not as a credit to the wrong person.
 
 ## What skipping it costs
 
-Without the approval step, a credit is sent on the strength of a lookup and a summary. The bank cannot later show
-what the approver saw, and a wrong credit is found when the cardholder's statement is reconciled.
+Without the approval step, a provisional credit rests on a lookup and a summary alone. The bank cannot later show
+who approved it or what they saw.
 
 ## Limits
 

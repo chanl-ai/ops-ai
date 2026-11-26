@@ -19,7 +19,7 @@ section and the version it quoted, so a reviewer can check the answer against th
 <!-- site: steps -->
 1. **Make a knowledge base** for one subject, such as branch procedures.
 2. **Add the manual**, and write a page for any rule that lives in nobody's document.
-3. **Ask it** in the Playground and read the passage it returns.
+3. **Ask it** with **Test** and read the passage it returns.
 4. **Give it to an agent**, so staff get the same cited answer in chat.
 
 ## Before you start
@@ -32,18 +32,17 @@ section and the version it quoted, so a reviewer can check the answer against th
 ## Try it in the console
 
 <!-- site: steps -->
-1. **Make the base.** Open **Knowledge**, press **New knowledge base**, give it a name such as Branch procedures, pick
-   **Precise**, and press **Create**. You land on the base's page.
-2. **Add the manual.** Press **Add source**, pick **Files**, upload the manual and press **Create and sync**. The
-   **Documents** tab shows it as **Indexed**. A file with no text layer shows its reason, such as "no text layer".
-3. **Write a page.** For a rule that lives in nobody's document, press **Add page** on the **Documents** tab and type
-   it. It is indexed at once.
-4. **Ask it.** On the **Playground** tab, ask "What is the daily ATM withdrawal limit?". The answer is a passage of the
+1. **Make the base.** Open **Knowledge bases**, press **New knowledge base**, give it a name such as Branch procedures, pick
+   **Precise**, and press **Create knowledge base**. You land on the base's page.
+2. **Add the manual.** Press **Add data source**, pick **Files** and upload a Markdown, Word or text-PDF manual (to follow the ATM
+   question, use one that states the daily ATM limit). The **Documents** tab shows it as **Indexed**. A file with no text layer shows its reason, such as "no text layer".
+3. **Write a page.** For a rule that lives in nobody's document, press **Add data source**, pick **Typed text** and type it, then press **Add page**. It is indexed at once.
+4. **Ask it.** Press **Test** on the base's page and ask "What is the daily ATM withdrawal limit?". The answer is a passage of the
    manual with its section, version and page.
 5. **Give it to an agent.** On an agent's page, add the base under **Knowledge** and publish. In chat, the agent answers
    from it and cites the section each answer came from.
 
-![The Playground answering from the branch manual, with the passage, its section and its page](../../usecases/knowledge/media/uc-096-playground-1440.png)
+![The test sheet answering from the branch manual, with the passage, its section and its page](../../usecases/knowledge/media/uc-096-playground-1440.png)
 
 ## From the CLI or SDK
 
@@ -79,7 +78,7 @@ Expected: the first passage quotes the page: "A night deposit bag is opened by t
 
 ## What success looks like
 
-The manual's **Documents** tab shows **Indexed**, the Playground returns a passage with its section, version and page,
+The manual's **Documents** tab shows **Indexed**, the test sheet returns a passage with its section, version and page,
 and an agent given the base answers the same question in chat and cites the same section. A question the base cannot
 answer gets its no-answer message, not a guess.
 

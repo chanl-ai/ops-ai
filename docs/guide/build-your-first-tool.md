@@ -36,8 +36,8 @@ form body behind a Bearer key. [Apps](apps.md) explains the Apps menu these step
    its Bearer key, and tests it. The key never shows again; the test answers from the App.
 2. **Make the Tool.** Open **Data Gateway › Tools**, press **New tool**, name it and pick the App, then add an operation
    with a name, read or write, and the method. The Tool's page shows the App's address in front of the request.
-3. **Write the request.** Write the path, with `{email}` for a value the agent supplies, and the body: JSON, Form or
-   Raw. Each `{name}` and `{{name}}` becomes an input.
+3. **Write the request.** Write the path, for example `/v1/customers`, and the body: JSON, Form or Raw. For the
+   example, pick Form with one field, `email` = `{email}`. Each `{name}` and `{{name}}` becomes an input.
 4. **Run it in Mock.** Type a value for each input and press **Run** in **Mock**. The Tool answers from its mock
    answers, and nothing leaves the gateway.
 5. **Save and publish.** Press **Save**, then publish; Security reviews the first version. A save that breaks a rule
@@ -45,12 +45,12 @@ form body behind a Bearer key. [Apps](apps.md) explains the Apps menu these step
 6. **Run it for real.** Switch to **Real** and press **Run**. You see the App's answer, badged Real, and Request sent:
    the address with its values, the key hidden, the body as encoded.
 7. **Give it to an agent.** Grant the Tool to an agent in a workflow, and publish the workflow. The agent calls the
-   Tool; a write waits only when your team turned approvals on.
+   Tool; a write waits when approvals are on for the team, the App or the Tool.
 
 ## What success looks like
 
 The Real run shows the App's answer badged Real, and **Request sent** with the key hidden. An agent given the Tool
-calls it, and a write waits only when your team turned approvals on.
+calls it, and a write waits when approvals are on for the team, the App or the Tool, or when it arrives over MCP.
 
 ## What skipping it costs
 
@@ -59,17 +59,17 @@ A request never run in Mock makes its first test a write to live data.
 
 ## Mock and Real
 
-Mock changes nothing and anyone can run it; Real sends the request.
+Mock changes nothing; Real sends the request.
 
 <!-- site: compare caption="The two ways to run a Tool, and what each one changes" -->
 - **Mock**: Answers from the Tool's mock answers
   - **Sends**: Nothing
   - **A write**: Changes nothing
-  - **Needs**: Nothing
-  - **Who**: Anyone who can see the Tool, viewers included
+  - **Needs**: The Tool's mock answers
+  - **Who**: People who may run tools in the Tool's team, Builders and Admins; an API key cannot
 - **Real**: Sends the request, signed in by the App's Account
   - **Sends**: The request, with its values filled in
-  - **A write**: Changes data in the App, and is logged under your name
+  - **A write**: Uses the App's test account when it has one; on a live account it asks you first by default
   - **Needs**: A published Tool; an Account when the App needs a sign-in
   - **Who**: People in the Tool's team; an API key cannot
 

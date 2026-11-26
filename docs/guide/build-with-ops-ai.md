@@ -30,7 +30,8 @@ Python and TypeScript SDKs. Each step links to an example folder in the reposito
 
 ## Try it
 
-Run the steps in order; each one builds on the account and team you signed in with.
+Run the steps in order. Each step's example folder holds the files and ids its command names, such as `agent.yaml`,
+`workflow.yaml` and `request.json`: open the folder first and copy them.
 
 <!-- site: steps -->
 1. **Chat**: send one message and read the reply.
@@ -63,7 +64,7 @@ step asks a published agent.
 
 ## What skipping it costs
 
-Without the ladder, the first agent is built before the first tool runs, and a failure in one piece looks like a
+Without taking the steps in order, the first agent is built before the first tool runs, and a failure in one piece looks like a
 failure in all of them. Each step is small enough that a failure points to the piece that caused it.
 
 The [workflows](workflows.md) and [agents](agents.md) pages list every further example: approvals, checklists,
@@ -74,11 +75,11 @@ delegation, evaluations.
 Agents and workflows call each other only through their public APIs, so either one works without the other.
 
 <!-- site: compare caption="The two ways an agent and a workflow call each other" -->
-- **A workflow asks an agent**: Step 6 of the ladder
+- **A workflow asks an agent**: Step 6 above
   - **How**: An Agent step names a published agent and maps the prompt from the run's data
   - **What runs**: The agent's published version
   - **What comes back**: The agent's final answer, as the step's output
-- **An agent starts a workflow**: Step 7 of the ladder
+- **An agent starts a workflow**: Step 7 above
   - **How**: The workflow is on the agent's published tool list
   - **What runs**: The workflow's live version, for the signed-in person
   - **What comes back**: The run's result, or a handle when the run waits for a person
@@ -89,7 +90,7 @@ Agents and workflows call each other only through their public APIs, so either o
 |---|---|---|---|---|---|
 | Validate, apply, publish, run and trace a workflow | built | built | built | built | built |
 | Apply an agent and chat with it | built | built | built | built | built |
-| Evaluate an agent | planned | planned | built | planned | built |
+| Evaluate an agent | built | built | built | built | built |
 | Run an agent in wait, stream or background mode | planned | built | built | planned | built |
 | Replay a workflow run | planned | planned | planned | planned | planned |
 
@@ -99,4 +100,5 @@ Agents and workflows call each other only through their public APIs, so either o
 - [Examples for builders](examples/README.md): short examples on each surface, in Python, TypeScript and the command line.
 - [Build your first tool](build-your-first-tool.md): a REST tool on your own API.
 - [Card disputes](use-cases/card-disputes.md): a full workflow with an agent and an approval.
-- [Python SDK](../sdk/python.md) and [TypeScript SDK](../sdk/typescript.md).
+- [Python SDK](../sdk/python.md): every call from this guide in Python.
+- [TypeScript SDK](../sdk/typescript.md): the same calls in TypeScript.
