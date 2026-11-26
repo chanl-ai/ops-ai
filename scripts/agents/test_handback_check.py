@@ -67,7 +67,23 @@ def test_refuses_a_running_preview(repos: tuple[Path, Path]) -> None:
     (main / ".run" / "offset-38000").mkdir()
     (main / ".run" / "offset-38000" / "console.pid").write_text(str(os.getpid()))
     ok, line = handback_check.check(main, BRANCH)
-    assert not ok and "make wt-stop" in line
+    assert not ok and "make wt-stop" in line and f"git worktree add <path> {BRANCH}" in line
+
+
+def test_refuses_a_worktree_whose_head_is_not_pushed(repos: tuple[Path, Path]) -> None:
+    main, wt = repos
+    (wt / "b.txt").write_text("b2\n")
+    run(wt, "commit", "-q", "-am", "more")
+    ok, line = handback_check.check(main, BRANCH)
+    assert not ok and "not pushed at its head" in line
+
+
+def test_refuses_a_branch_origin_never_had(repos: tuple[Path, Path]) -> None:
+    main, wt = repos
+    run(main, "worktree", "remove", str(wt))
+    run(main, "push", "-q", "origin", "--delete", BRANCH)
+    ok, line = handback_check.check(main, BRANCH)
+    assert not ok and "is not on origin" in line
 
 
 def test_passes_once_pushed_and_removed_and_the_branch_is_kept(repos: tuple[Path, Path]) -> None:

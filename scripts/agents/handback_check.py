@@ -80,7 +80,10 @@ def check(repo: Path, branch: str, remote: str = "origin") -> tuple[bool, str]:
         return False, f"local {branch} is at {local_sha[:9]}, {remote} at {remote_sha[:9]}: push the local commits"
     offset = running_preview(main, branch)
     if offset is not None:
-        return False, f"the preview for {branch} still runs at offset {offset}: make wt-stop BRANCH={branch}"
+        return False, (
+            f"the preview for {branch} still runs at offset {offset}, and make wt-stop needs the worktree it ran from: "
+            f"git worktree add <path> {branch}, make wt-stop BRANCH={branch}, then git worktree remove <path>"
+        )
     return True, f"{branch} pushed at {remote_sha[:9]}; worktree and preview gone"
 
 
