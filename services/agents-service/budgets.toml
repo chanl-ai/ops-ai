@@ -97,6 +97,13 @@ query = { version = "1" }
 ["GET /v1/agents/{agent_id}/runs"]
 queries = 3
 
+["GET /v1/agents/{agent_id}/tool-apps"]
+# Measured the same at 5 and 50 rows.
+queries = 6
+
+["GET /v1/agents/{agent_id}/tool-apps/{app_id}/tools"]
+queries = 6
+
 ["GET /v1/agents/{agent_id}/prompt"]
 queries = 2
 
