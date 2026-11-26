@@ -4,6 +4,7 @@ import type { Agent, AgentPublishRequest, AgentVersion, AgentVersionState, Revie
 import { ApiError, type OpsApi } from '../../contract';
 import type { EvalsMock } from '../evals';
 import { bulk, notFound, respond } from '../runtime';
+import { publishCheckOf } from '../references/agent-brief';
 import { AGENT_PUBLISH_SEED, seedPublished } from './seed';
 import type { MockAgent } from '../fixtures';
 
@@ -257,7 +258,8 @@ export function createAgentPublishMock(deps: AgentPublishDeps) {
 
   const requestPublish = (aid: string, version: number, note: string, _follows?: string): Review => {
     const a = agentOr404(aid);
-    const stop = evalProblems(aid, version);
+    // The same list the publish check shows: what the prompt names and the agent lacks, then the evals.
+    const stop = [...publishCheckOf(a).problems, ...evalProblems(aid, version)];
     if (stop.length) throw new ApiError(`This version cannot be published yet: ${stop.map((p) => p.message).join(' ')}`, 422, undefined, 'cannot_publish', { problems: stop });
     if (openReviewOf(aid)) throw new ApiError(`${a.name} already has a publish request waiting (${openReviewOf(aid)!.id}). Decide or return it first.`, 409);
     if (version !== a.version) throw new ApiError(`Only the newest version, v${a.version}, can be sent for publish.`, 422);

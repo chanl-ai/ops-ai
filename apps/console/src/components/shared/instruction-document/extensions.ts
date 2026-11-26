@@ -14,7 +14,8 @@ import { Suggestion, type SuggestionProps, findSuggestionMatch } from '@tiptap/s
 
 import type { Ref } from '@/lib/types/references';
 
-import { type DocNode, parseText, pickSetsUse, refToken, refsInNode, runsIndex, splitOwner } from './document-model';
+import { mentionToken } from '@/lib/mentions';
+import { type DocNode, parseText, pickSetsUse, refsInNode, runsIndex, splitOwner } from './document-model';
 import { BlockView, CheckView, IfNotView, ReferenceView, StepView, VariableView } from './node-views';
 
 export type Trigger = '@' | '{{' | '/';
@@ -84,9 +85,9 @@ const Reference = Node.create({
   atom: true,
   addAttributes: () => ({ ...attr('kind'), ...attr('id') }),
   // Copied text carries the stored token, so a paste into another document names the same item.
-  renderText: ({ node }) => refToken({ kind: node.attrs.kind, id: node.attrs.id }),
+  renderText: ({ node }) => mentionToken({ kind: node.attrs.kind, id: node.attrs.id }),
   parseHTML: () => [{ tag: 'span[data-reference]', getAttrs: (el) => ({ kind: el.getAttribute('data-kind'), id: el.getAttribute('data-id') }) }],
-  renderHTML: ({ node }) => ['span', { 'data-reference': '', 'data-kind': node.attrs.kind, 'data-id': node.attrs.id }, refToken({ kind: node.attrs.kind, id: node.attrs.id })],
+  renderHTML: ({ node }) => ['span', { 'data-reference': '', 'data-kind': node.attrs.kind, 'data-id': node.attrs.id }, mentionToken({ kind: node.attrs.kind, id: node.attrs.id })],
   // The chip's "runs" mark comes from a decoration (Runs), which moves without the node changing.
   addNodeView: () => ReactNodeViewRenderer(ReferenceView, { as: 'span', update: ({ oldNode, newNode, updateProps }) => (newNode.type === oldNode.type ? (updateProps(), true) : false) }),
 });

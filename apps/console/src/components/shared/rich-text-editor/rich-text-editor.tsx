@@ -14,7 +14,8 @@ import type { Ref, ReferenceContext, ReferenceGroup, ReferenceItem } from '@/lib
 import { cn } from '@/lib/utils';
 
 import { type MenuBridge, type Trigger, richTextExtensions } from './extensions';
-import { keepPlainText, mentionToken } from './markdown';
+import { mentionToken, mentionsIn } from '@/lib/mentions';
+import { keepPlainText } from './markdown';
 import { ReferencePickerDialog, type InsertableKind } from './reference-picker-dialog';
 import { type MarkdownIO, blockAtLine, spliceEdit } from './splice';
 import { IF_PATH, RichTextToolbar, type View, insertPath } from './toolbar';
@@ -59,14 +60,6 @@ const SLASH_ROWS: { key: string; label: string; icon: typeof List; trailing: str
   { key: 'quote', label: 'Note', icon: Quote, trailing: 'A quoted aside', run: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },
   { key: 'rule', label: 'Divider', icon: Minus, trailing: 'A line between parts', run: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
 ];
-
-const mentionsIn = (editor: Editor): Ref[] => {
-  const found: Ref[] = [];
-  editor.state.doc.descendants((n) => {
-    if (n.type.name === 'mention' && !found.some((r) => r.kind === n.attrs.kind && r.id === n.attrs.id)) found.push({ kind: n.attrs.kind, id: n.attrs.id });
-  });
-  return found;
-};
 
 const EDITOR_CLASS = cn(
   'min-h-48 px-4 py-3 text-sm leading-6 outline-hidden',
@@ -119,16 +112,25 @@ export function RichTextEditor({ value, onChange, readOnly = false, context, lab
     editor?.setEditable(!readOnly, false);
   }, [editor, readOnly]);
 
-  // Mentions the names do not hold, reported once per change of that set.
-  const gone = React.useRef('[]');
+  // Mentions the names do not hold, reported once per change of that set. They are read from the stored text, as the
+  // service reads it, so one inside a table, a task list, an image line or code counts too and `word@tool:x` does not.
+  // While the names are unread, every mention counts as unchecked, so a save never goes out on a guess. A first report
+  // is always made, and an empty one when the editor goes away, so a page holding the last answer never keeps a stale one.
+  const gone = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (!editor || !labels) return;
-    const refs = mentionsIn(editor).filter((r) => !labels.some((l) => l.kind === r.kind && l.id === r.id));
+    const refs = mentionsIn(value).filter((r) => !labels?.some((l) => l.kind === r.kind && l.id === r.id));
     const text = JSON.stringify(refs);
     if (text === gone.current) return;
     gone.current = text;
     latest.current.onMissingChange?.(refs);
-  }, [editor, labels, value]);
+  }, [labels, value]);
+  React.useEffect(
+    () => () => {
+      gone.current = null;
+      latest.current.onMissingChange?.([]);
+    },
+    [],
+  );
 
   // ---------- the button bar: view and insert dialogs ----------
   const [view, setView] = React.useState<View>('formatted');

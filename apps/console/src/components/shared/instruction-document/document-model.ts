@@ -9,6 +9,7 @@
  *     "…with @tool:open_dispute." is text. It does not start after a letter, digit, underscore or `@`.
  *   - A variable is `{{name}}` with a dotted name and no spaces inside the braces. Any other `{{` is text.
  */
+import { ENDS_IN_WORD, MENTION_SOURCE, NOT_AFTER_WORD, mentionToken } from '../../../lib/mentions.ts';
 import type { Ref, RefKind, ReferenceItem } from '@/lib/types/references';
 
 export interface StepCheck {
@@ -86,14 +87,10 @@ export interface DocNode {
   text?: string;
 }
 
-// A reference does not start after a letter, digit, underscore or `@`, in any script: the service reads stored text
-// with Unicode word characters (ops_contracts REF_TOKEN), and JavaScript's `\w` is ASCII only.
-const TOKEN = /(?<![\p{L}\p{N}_@])@(tool|knowledge|skill|agent|workflow):([A-Za-z0-9](?:[A-Za-z0-9_.\-]{0,126}[A-Za-z0-9_])?)|\{\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}\}/gu;
-const ENDS_IN_WORD = /[\p{L}\p{N}_@]$/u;
+const TOKEN = new RegExp(`${NOT_AFTER_WORD}${MENTION_SOURCE}|\\{\\{([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)\\}\\}`, 'gu');
 /** Text that, written straight after a reference, would be read as more of its id. */
 const EXTENDS_ID = /^[.-]*[A-Za-z0-9_]/;
 
-export const refToken = (r: Ref) => `@${r.kind}:${r.id}`;
 
 /** Stored text as the runs the editor draws: plain text, reference chips and variable chips. */
 export function parseText(text: string): Segment[] {
@@ -125,7 +122,7 @@ export function serializeSegments(segments: Segment[]): string {
       afterRef = false;
     } else {
       if (ENDS_IN_WORD.test(out)) out += ' ';
-      out += refToken(s);
+      out += mentionToken(s);
       afterRef = true;
     }
   }

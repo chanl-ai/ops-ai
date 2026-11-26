@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { getSchema } from '@tiptap/core';
+import { Node as PmNode } from '@tiptap/pm/model';
 import { MarkdownManager } from '@tiptap/markdown';
 import { StarterKit } from '@tiptap/starter-kit';
 
 import { MarkdownBlock, ReferenceNode, keepPlainText } from './markdown.ts';
-import { spliceEdit } from './splice.ts';
+import { blockAtLine, spliceEdit } from './splice.ts';
 
 const extensions = [StarterKit, MarkdownBlock, ReferenceNode];
 const manager = new MarkdownManager({ extensions });
@@ -78,4 +79,44 @@ test('an edit leaves a table, an image, a link definition and a task list exactl
   const out = typeInto(WIDE, 1, ' now');
   assert.equal(out, WIDE.replace('First step.', 'First step. now'));
   assert.equal(spliceEdit(manager as never, schema, WIDE, wide(WIDE)), WIDE);
+});
+
+// Adding and removing whole blocks. Each result must read back as the document the editor held, and the blocks the edit
+// did not touch must keep their text.
+const keyOf = (n: any) => JSON.stringify(PmNode.fromJSON(schema, n).toJSON());
+const readBack = (text: string) => ((manager.parse(text).content ?? []) as any[]).map(keyOf);
+const HEADING = { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Mid' }] };
+const withDoc = (src: string, change: (blocks: any[]) => any[]) => {
+  const next = change([...(manager.parse(src).content as any[])]);
+  return { out: spliceEdit(manager as never, schema, src, { type: 'doc', content: next } as never), next };
+};
+
+test('a block inserted between two empty paragraphs of one run of blank lines keeps both empty paragraphs', () => {
+  const { out, next } = withDoc('A\n\n\n\n\n\nB', (d) => (d.splice(2, 0, HEADING), d));
+  assert.deepEqual(readBack(out), next.map(keyOf));
+  assert.ok(out.startsWith('A') && out.endsWith('B'));
+});
+
+test('a block deleted between two runs of blank lines leaves both runs, and between plain blank lines leaves one', () => {
+  assert.equal(withDoc('A\n\n\n\nB\n\n\n\nC', (d) => d.filter((_, i) => i !== 2)).out, 'A\n\n\n\n\n\nC');
+  assert.equal(withDoc('A\n\nB\n\nC', (d) => d.filter((_, i) => i !== 1)).out, 'A\n\nC');
+});
+
+test('deleting the first or the last block leaves no stray blank lines at that end', () => {
+  assert.equal(withDoc('A\n\nB\n\nC', (d) => d.slice(1)).out, 'B\n\nC');
+  assert.equal(withDoc('A\n\nB\n\nC', (d) => d.slice(0, -1)).out, 'A\n\nB');
+  assert.equal(withDoc('A\n\nB', () => []).out, '');
+});
+
+test('a block added at the start or the end keeps the other blocks and the text ending with a line break', () => {
+  const start = withDoc('A\n\nB\n', (d) => [HEADING, ...d]);
+  assert.equal(start.out, '## Mid\n\nA\n\nB\n');
+  const end = withDoc('A\n\nB\n', (d) => [...d, HEADING]);
+  assert.ok(end.out.startsWith('A\n\nB\n') && readBack(end.out).length === 3, end.out);
+});
+
+test('a line of the text is found in the block that holds it, and one past the end in the last block', () => {
+  const src = 'A\n\n\n\nB\n\n- x\n- y\n\nC';
+  // Blocks: A, an empty paragraph, B, the list, C.
+  assert.deepEqual([1, 5, 7, 8, 10, 40].map((line) => blockAtLine(manager as never, schema, src, line)), [0, 2, 3, 3, 4, 4]);
 });

@@ -6,10 +6,10 @@
 import { Node } from '@tiptap/core';
 import Mention from '@tiptap/extension-mention';
 
+import { MENTION_SOURCE, NOT_AFTER_WORD, mentionAt, mentionToken } from '../../../lib/mentions.ts';
 import type { Ref } from '@/lib/types/references';
 
-export const MENTION_AT = /^@(tool|knowledge|skill|agent|workflow):([A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_])?)/;
-export const mentionToken = (r: Ref) => `@${r.kind}:${r.id}`;
+const MENTION_START = new RegExp(`${NOT_AFTER_WORD}${MENTION_SOURCE}`, 'u');
 
 /** The mention node's data and Markdown spelling; the editor adds the badge view and the `@` menu on top. */
 export const ReferenceNode = Mention.extend({
@@ -27,10 +27,11 @@ export const ReferenceNode = Mention.extend({
   markdownTokenizer: {
     name: 'mention',
     level: 'inline',
-    start: (src: string) => src.search(/@(?:tool|knowledge|skill|agent|workflow):/),
-    tokenize: (src: string) => {
-      const m = MENTION_AT.exec(src);
-      return m ? { type: 'mention', raw: m[0], kind: m[1], id: m[2] } : undefined;
+    start: (src: string) => src.search(MENTION_START),
+    // The text before it is the previous token's: `word@tool:x` is a word, as the service reads it.
+    tokenize: (src: string, tokens?: { raw?: string }[]) => {
+      const m = mentionAt(src, tokens?.at(-1)?.raw ?? '');
+      return m ? { type: 'mention', raw: m.raw, kind: m.kind, id: m.id } : undefined;
     },
   },
   parseMarkdown: (token, h) => h.createNode('mention', { kind: token.kind, id: token.id }),
@@ -43,15 +44,39 @@ export const ReferenceNode = Mention.extend({
  * the Markdown view.
  */
 const TABLE_RULE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+const LIST_ITEM = /^ *(?:[-*+]|\d{1,9}[.)])\s/;
+const TASK_ITEM = /^ *(?:[-*+]|\d{1,9}[.)])\s+\[[ xX]\]\s/m;
+const NON_BLANK_RUN = /^(?:[^\n]*\S[^\n]*(?:\n|$))+/;
+
+/**
+ * The text of the block that starts `src`: its lines up to a blank line. A list goes on past blank lines for as long as
+ * the next line is another item or is indented under one, because a task item anywhere in a list holds the whole list.
+ */
+function blockText(src: string): string | undefined {
+  const first = NON_BLANK_RUN.exec(src)?.[0];
+  if (!first) return undefined;
+  let block = first;
+  if (LIST_ITEM.test(first)) {
+    for (;;) {
+      const gap = /^\n+/.exec(src.slice(block.length))?.[0];
+      const more = gap ? NON_BLANK_RUN.exec(src.slice(block.length + gap.length))?.[0] : undefined;
+      if (!gap || !more || !(LIST_ITEM.test(more) || /^ {2,}\S/.test(more))) break;
+      block += gap + more;
+    }
+  }
+  return block.replace(/\n+$/, '');
+}
+
 export function opaqueBlockAt(src: string): string | undefined {
-  const block = /^(?:[^\n]*\S[^\n]*(?:\n|$))+/.exec(src)?.[0].replace(/\n+$/, '');
+  const block = blockText(src);
   if (!block) return undefined;
   const lines = block.split('\n');
-  const heading = /^ {0,3}(#{1,6}\s|```|~~~|>)/.test(block);
+  // Code keeps its characters as text, so an image written inside it is not an image.
+  const fenced = /^ {0,3}(```|~~~)/.test(block);
   const isTable = lines.length > 1 && lines[0].includes('|') && TABLE_RULE.test(lines[1]);
   const isDef = /^ {0,3}\[[^\]\n]+\]:\s*\S/.test(block);
-  const isTask = /^\s*[-*+]\s+\[[ xX]\]\s/.test(block);
-  const hasImage = !heading && /!\[[^\]\n]*\]\([^)\n]*\)/.test(block);
+  const isTask = LIST_ITEM.test(block) && TASK_ITEM.test(block);
+  const hasImage = !fenced && /!\[[^\]\n]*\]\([^)\n]*\)/.test(block);
   return isTable || isDef || isTask || hasImage ? block : undefined;
 }
 

@@ -199,7 +199,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const errors = { name: draft.name.trim() ? undefined : 'The agent needs a name.', role: mode === 'full' && !draft.role.trim() ? 'Describe the job in one line.' : undefined };
   // A plain prompt that mentions something the team no longer holds would save text the agent cannot follow.
   const [brokenMentions, setBrokenMentions] = React.useState(0);
-  const valid = !errors.name && !errors.role && !purposeMissing && !(mode === 'full' && brokenMentions);
+  const valid = !errors.name && !errors.role && !purposeMissing && !(mode === 'full' && brokenMentions > 0);
   const sections = changedSections(saved, draft);
   const dirty = sections.length > 0 || briefDirty;
   const [attach, setAttach] = React.useState<AttachFilter | null>(null);

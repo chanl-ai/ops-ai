@@ -4,8 +4,11 @@
 /** The editor's text box (the contenteditable element); a read-only copy of the text beside it is not it. */
 export const textBox = (page) => page.locator('[data-testid="rich-text"][contenteditable="true"]');
 
-/** The block that holds a line of the text. A paragraph keeps its lines, so a block may hold several. */
-export const lineOf = (page, text) => textBox(page).locator('p, li, h1, h2, h3', { hasText: text }).first();
+/**
+ * The one block that holds a line of the text; a list item's text is its paragraph, so `li` is not listed (it would match
+ * twice). Two blocks holding the same words fail the lookup instead of one being picked.
+ */
+export const lineOf = (page, text) => textBox(page).locator('p, h1, h2, h3', { hasText: text });
 
 /** Puts the caret at the end of the line that holds `text`, as a click and the End key did in a one-line-per-row editor. */
 export async function caretAtLineEnd(page, text) {

@@ -45,7 +45,7 @@ can read what they may and change none of it.
 | 11 | Each tab is pressed; Compare is opened | Each tab has its own address; Compare is its own page with no test panel |
 | 12 | James opens the channels of a published agent | One list of seven places (Chat, API and SDK, MCP, Embed on a page, Email, Slack, Teams), each On or Not set up |
 | 13 | James and Ravi press View prompt | The prompt is read-only and Never comes last |
-| 14 | The brief's footer | It holds the uses link and View prompt |
+| 14 | The brief card's top row | It holds the uses link and View prompt |
 | 15 | James renames the agent and presses Cmd+S | The header says Unsaved, then Saved, in the four words |
 | 16 | The header | Save state, Save, Test, Publish, menu in that order; no label over two words |
 | 17 | The page | Tools, Knowledge and Skills are sections on it |
@@ -54,7 +54,7 @@ can read what they may and change none of it.
 | 20 | James opens an agent whose publish waits and presses Withdraw | The request goes through, the version is a draft again and the page shows no open review, and Send again is offered |
 | 21 | Ravi opens the same agent | He sees it is in review and no Withdraw |
 | 22 | Ravi opens a draft agent; Lena opens it too | Ravi sees the view only note with no Save and no Test; Lena is told she has no access |
-| 23 | James opens an agent written as plain text whose prompt mentions a tool the team does not hold, and types a letter; he then removes the mention in the Markdown view | The mention shows as Missing, Save is off and the header says to fix the highlighted fields; once the mention is gone Save is on and the save lands |
+| 23 | James opens an agent written as plain text whose prompt mentions a tool the team does not hold, and types a letter; he then removes the mention in the Markdown view | The mention shows as Missing, Save is off and the header says Unsaved and, on hover, to fix the highlighted fields; once the mention is gone Save is on and the save lands. The same prompt, saved with the mention, is refused a publish request that names the prompt |
 
 ## Scripts
 

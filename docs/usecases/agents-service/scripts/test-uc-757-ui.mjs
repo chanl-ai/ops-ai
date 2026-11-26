@@ -7,7 +7,7 @@
 // server side of it is proved by the api script.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, evidenceDir, finish, shootBothWidths, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { agentBase, saveAgent } from '../../lib/agent_save.mjs';
-import { caretAtLineEnd, showView } from './rich-text.mjs';
+import { caretAtLineEnd, lineOf as lineOfIn, showView } from './rich-text.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
@@ -84,7 +84,7 @@ await withUiStack(
 
       // 10. The skill page: the notes and steps are one text, and the endings hint reads.
       const doc = page.getByTestId('rich-text');
-      const lineOf = (text) => page.getByTestId('rich-text').locator('p, li, h1, h2, h3', { hasText: text }).first();
+      const lineOf = (text) => lineOfIn(page, text);
       await page.goto(`${consoleUrl}/build/skills/${skill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await doc.waitFor({ timeout: 120_000 });
       await lineOf('Tell the cardholder what happens next').waitFor({ timeout: 60_000 });
@@ -190,7 +190,7 @@ await withUiStack(
         const real = window.setTimeout.bind(window);
         window.setTimeout = (fn, ms, ...rest) => real(fn, ms === undefined || ms === 0 ? 60 : ms, ...rest);
       });
-      const slowLine = (text) => slow.getByTestId('rich-text').locator('p, li, h1, h2, h3', { hasText: text }).first();
+      const slowLine = (text) => lineOfIn(slow, text);
       const rounds = [];
       for (let n = 1; n <= 5; n += 1) {
         await slow.goto(`${consoleUrl}/build/skills/${raced.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -222,17 +222,15 @@ await withUiStack(
 
       // 10. A skill written as text with an if line: each condition is marked, "checked" when the tool above returns what it
       // tests and "agent decides" when it is the agent's own words.
-      const guarded = await made('/v1/skills', {
-        name: `Guarded walk ${RUN}`,
-        ownerTeam: 'team_ops',
-        useWhen: 'The cardholder disputes a charge.',
-        instructions: '',
-        source: `Look the charge up with @${kept.use.kind}:${kept.use.id}\nif the cardholder sounds unsure:\n    Offer to explain the review.\nTell the cardholder what happens next`,
-      });
+      const guardedSource = `Look the charge up with @${kept.use.kind}:${kept.use.id}\nif the cardholder sounds unsure:\n    Offer to explain the review.\nTell the cardholder what happens next`;
+      const guarded = await made('/v1/skills', { name: `Guarded walk ${RUN}`, ownerTeam: 'team_ops', useWhen: 'The cardholder disputes a charge.', instructions: '', source: guardedSource });
       await page.setViewportSize({ width: 1440, height: 1000 });
       await page.goto(`${consoleUrl}/build/skills/${guarded.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       await lineOf('Offer to explain the review').waitFor({ timeout: 60_000 });
-      // The editor draws no per-line condition label; whether a condition is checked or judged shows in the hints list.
+      // The editor draws no per-line label; the text's reading marks each if line, and a condition in words is the agent's to decide.
+      const reading = (await (await fetch(`${agents}/v1/skills/${guarded.id}/text`, { method: 'POST', headers: J, body: JSON.stringify({ text: guardedSource }) })).json()).data;
+      const ifLine = (reading?.lines ?? []).find((l) => l.kind === 'if');
+      check('10 an if line in words is read as one the agent decides', ifLine?.how === 'agent', reading?.lines);
       await shootBothWidths(page, AREA, 'uc-757-skill-text-admin', async () => {});
 
       await page.setViewportSize({ width: 1440, height: 1000 });

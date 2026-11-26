@@ -50,8 +50,6 @@ function segmentsOf(io: MarkdownIO, schema: Schema, src: string): Segment[] | nu
 
 const newlinesAfter = (s: string) => /\n*$/.exec(s)![0].length;
 const newlinesBefore = (s: string) => /^\n*/.exec(s)![0].length;
-/** The line breaks that make `b` a block after `a`: two between blocks, none where the text already has them. */
-const between = (a: string, b: string) => (a && b ? '\n'.repeat(Math.max(0, 2 - newlinesAfter(a) - newlinesBefore(b))) : '');
 
 /** `src` with the blocks that differ from `doc` written again; `src` itself when none differ. */
 export function spliceEdit(io: MarkdownIO, schema: Schema, src: string, doc: JSONContent): string {
@@ -69,30 +67,65 @@ export function spliceEdit(io: MarkdownIO, schema: Schema, src: string, doc: JSO
   // The segments that hold a changed old node are replaced whole; a segment shared with an unchanged node keeps it.
   const oldMid = flat.slice(head, flat.length - tail);
   const first = oldMid.length ? oldMid[0].si : head < flat.length ? flat[head].si : segments.length;
-  const last = oldMid.length ? oldMid[oldMid.length - 1].si : first - 1;
+  // A block inserted between two nodes of one segment (two empty paragraphs of one run of blank lines) replaces that segment.
+  const splits = !oldMid.length && head > 0 && head < flat.length && flat[head - 1].si === flat[head].si;
+  const last = oldMid.length ? oldMid[oldMid.length - 1].si : splits ? first : first - 1;
   // Nodes of a replaced segment that were not changed are written again with it, so take them into the new middle.
   let keepBefore = 0;
   while (keepBefore < head && flat[head - 1 - keepBefore].si >= first) keepBefore++;
   let keepAfter = 0;
   while (keepAfter < tail && flat[flat.length - tail + keepAfter].si <= last) keepAfter++;
   const content = (doc.content ?? []).slice(head - keepBefore, next.length - tail + keepAfter);
-  const written = content.length ? io.serialize({ type: 'doc', content }) : '';
+  // The library writes an empty paragraph as nothing, so the ones at either end of what is written are counted here and
+  // become the blank lines around it.
+  const keys = content.map((n) => keyOf(schema, n));
+  let lead = 0;
+  while (lead < keys.length && keys[lead] === EMPTY) lead++;
+  let trail = 0;
+  while (trail < keys.length - lead && keys[keys.length - 1 - trail] === EMPTY) trail++;
+  const core = content.slice(lead, content.length - trail);
+  const written = core.length ? io.serialize({ type: 'doc', content: core }) : '';
   const before = segments.slice(0, first).map((s) => s.raw).join('');
   const after = segments.slice(last + 1).map((s) => s.raw).join('');
   const replaced = segments.slice(first, last + 1);
   // The text's last line break stays when its last block is the one written again.
   const ending = !after && replaced.length ? '\n'.repeat(Math.min(newlinesAfter(replaced[replaced.length - 1].raw), 1)) : '';
-  return before + between(before, written) + written + (written ? ending : '') + between(written || before, after) + after;
+  if (!written && before && after) return lead ? before + gap(before, after, lead) + after : joinAround(before, after);
+  if (!written && before) return before.replace(/\n+$/, '') + ending;
+  if (!written) return after.replace(/^\n+/, '');
+  return before + gap(before, written, lead) + written + ending + gap(written, after, trail) + after;
+}
+
+/** The line breaks that make `b` a block after `a` with `empties` empty paragraphs between: none where the text has them. */
+const gap = (a: string, b: string, empties: number) => (a && b ? '\n'.repeat(Math.max(0, 2 + 2 * empties - newlinesAfter(a) - newlinesBefore(b))) : '');
+
+/** The empty paragraphs a gap of `n` line breaks holds: two breaks end a block, and each further pair is one paragraph. */
+const emptiesIn = (n: number) => Math.max(0, Math.floor((n - 2) / 2));
+
+/**
+ * What lies between two blocks once the one between them is gone: the gaps on both sides become one gap that holds both
+ * sets of empty paragraphs, rather than the two gaps laid end to end, which would hold one empty paragraph too many.
+ */
+function joinAround(before: string, after: string): string {
+  const [n1, n2] = [newlinesAfter(before), newlinesBefore(after)];
+  if (n1 < 2 || n2 < 2) return before + gap(before, after, 0) + after;
+  const drop = n1 + n2 - (2 + 2 * (emptiesIn(n1) + emptiesIn(n2)));
+  const fromAfter = Math.min(drop, n2);
+  return before.slice(0, before.length - (drop - fromAfter)) + after.slice(fromAfter);
 }
 
 /** The index of the editor block that holds a line (from 1) of the stored text; the last block for a line past the end. */
 export function blockAtLine(io: MarkdownIO, schema: Schema, src: string, line: number): number {
-  let seen = 1;
+  const breaks = (t: string) => t.split('\n').length - 1;
+  // The line each segment's text starts on: a block begins on it, and the empty paragraphs of a run of blank lines sit
+  // on the blank lines after it.
+  let at = 1;
   let blocks = 0;
   for (const s of segmentsOf(io, schema, src) ?? []) {
-    const lines = s.raw.split('\n').length - (s.raw.endsWith('\n') ? 1 : 0);
-    if (s.nodes.length && line < seen + lines) return blocks;
-    seen += lines;
+    const gap = /^\n+$/.test(s.raw);
+    const last = gap ? at + breaks(s.raw) - 1 : at + breaks(s.raw.replace(/\n+$/, ''));
+    if (s.nodes.length && line <= last) return blocks;
+    at += breaks(s.raw);
     blocks += s.nodes.length;
   }
   return Math.max(0, blocks - 1);

@@ -11,7 +11,8 @@ import { NewerCopyNotice } from '@/components/shared/newer-copy-notice';
 import { RecordLayout } from '@/components/shared/record-layout';
 import { SettingsSection } from '@/components/shared/settings-section';
 import { TagInput } from '@/components/shared/tag-input';
-import { parseText, refToken } from '@/components/shared/instruction-document/document-model';
+import { parseText } from '@/components/shared/instruction-document/document-model';
+import { mentionToken } from '@/lib/mentions';
 import { RichTextEditor, type RichTextEditorHandle } from '@/components/shared/rich-text-editor';
 import { SkillInputsSection } from '@/components/skills/skill-inputs-section';
 import { UNWRITTEN_SECTIONS } from '@/components/skills/skill-meta';
@@ -116,7 +117,7 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
   const textDoc = React.useRef<RichTextEditorHandle>(null);
   const context = React.useMemo(() => ({ forSkill: sk.id }), [sk.id]);
   const reading = useSkillTextReading(sk.id, form.text, { loading: form.loading, hasParts: form.parts.length > 0, exit: form.ending.exit });
-  const mentioned = React.useMemo(() => [...new Set(parseText(form.text).flatMap((x) => (x.t === 'ref' ? [refToken(x).slice(1)] : [])))], [form.text]);
+  const mentioned = React.useMemo(() => [...new Set(parseText(form.text).flatMap((x) => (x.t === 'ref' ? [mentionToken(x).slice(1)] : [])))], [form.text]);
   const labels = useReferenceLabels({ forSkill: sk.id }, mentioned);
   // A step's first line, from the reader's last answer; line 1 until it has answered.
   const lineOfStep = (step: number) => reading.reading?.stepLines[step - 1] ?? 1;
@@ -234,7 +235,7 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
   const pickTools = (ids: string[]) => {
     const added = ids.filter((id) => !listedTools.includes(id));
     const removed = listedTools.filter((id) => !ids.includes(id) && !(stepped && textTools.includes(id)));
-    if (stepped) for (const id of added) textDoc.current?.insert(`${refToken({ kind: 'tool', id })} `);
+    if (stepped) for (const id of added) textDoc.current?.insert(`${mentionToken({ kind: 'tool', id })} `);
     setForm((f) => ({ ...f, toolIds: [...f.toolIds.filter((x) => !removed.includes(x)), ...(stepped ? [] : added)] }));
   };
   const toolRows: ListRow[] = listedTools.map((id) => {

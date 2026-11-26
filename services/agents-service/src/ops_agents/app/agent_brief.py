@@ -196,21 +196,30 @@ def rendered(text: str, spec: Json) -> str:
 
 
 def publish_problems(spec: Json) -> list[Problem]:
-    """What stops this version from being published, each with the field it is in: a reference the brief names that
-    the agent does not hold. A version saved before the brief has none."""
-    brief = brief_of(spec) if mode_of(spec) is not None else None
-    if brief is None:
+    """What stops this version from being published, each with the field it is in: a reference the brief names, or
+    the plain prompt of an agent in full prompt mode names, that the agent does not hold. A version saved before the
+    brief has none."""
+    mode = mode_of(spec)
+    if mode is None:
         return []
     held = _held(spec)
-    texts: list[tuple[Position, str]] = [
-        ({"field": "brief.purpose", "step": None, "index": None}, brief.purpose),
-        ({"field": "brief.goal", "step": None, "index": None}, brief.goal),
-        ({"field": "brief.howToAnswer", "step": None, "index": None}, brief.how_to_answer),
-        *(({"field": "brief.handOff", "step": None, "index": i}, rule) for i, rule in enumerate(brief.hand_off)),
-        ({"field": "brief.examples", "step": None, "index": None}, brief.examples),
-        *(({"field": "brief.sections", "step": None, "index": i}, s.text) for i, s in enumerate(brief.sections)),
-        *(({"field": "brief.never", "step": None, "index": i}, rule) for i, rule in enumerate(brief.never)),
-    ]
+    # In brief mode the instructions are written from the fields; in full prompt mode they are the prompt itself, and a
+    # full prompt may be saved without a brief.
+    texts: list[tuple[Position, str]] = []
+    if mode == "full":
+        texts.append(({"field": "instructions", "step": None, "index": None}, str(spec.get("instructions") or "")))
+    if (brief := brief_of(spec)) is not None:
+        texts.append(({"field": "brief.purpose", "step": None, "index": None}, brief.purpose))
+        texts.append(({"field": "brief.goal", "step": None, "index": None}, brief.goal))
+        texts.append(({"field": "brief.howToAnswer", "step": None, "index": None}, brief.how_to_answer))
+        texts.extend(
+            ({"field": "brief.handOff", "step": None, "index": i}, rule) for i, rule in enumerate(brief.hand_off)
+        )
+        texts.append(({"field": "brief.examples", "step": None, "index": None}, brief.examples))
+        texts.extend(
+            ({"field": "brief.sections", "step": None, "index": i}, s.text) for i, s in enumerate(brief.sections)
+        )
+        texts.extend(({"field": "brief.never", "step": None, "index": i}, rule) for i, rule in enumerate(brief.never))
     problems: list[Problem] = []
     seen: set[str] = set()
     for position, text in texts:
@@ -223,8 +232,8 @@ def publish_problems(spec: Json) -> list[Problem]:
                     "kind": "missing_reference",
                     "id": f"{ref.kind}:{ref.id}",
                     "position": position,
-                    "message": f"The brief mentions {ref.id}, which this agent does not have. Add it back or "
-                    "remove the mention.",
+                    "message": f"The {'prompt' if position['field'] == 'instructions' else 'brief'} mentions {ref.id}, "
+                    "which this agent does not have. Add it back or remove the mention.",
                 }
             )
     return problems
