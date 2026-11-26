@@ -58,7 +58,7 @@ await withUiStack(
 
       await ravi.goto(`${consoleUrl}/agents/${agentId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const notice = await ravi.getByTestId('read-only-notice').waitFor({ timeout: 60_000 }).then(() => true, () => false);
-      const raviAgent = { notice, save: await ravi.getByTestId('agent-save-status').count(), more: await ravi.getByRole('button', { name: 'More actions' }).count(), nameDisabled: await ravi.locator('#ag-name').isDisabled().catch(() => null) };
+      const raviAgent = { notice, save: await ravi.getByTestId('save-state').count(), more: await ravi.getByRole('button', { name: 'More actions' }).count(), nameDisabled: await ravi.locator('#ag-name').isDisabled().catch(() => null) };
       // The notice says why: which role changes agents here and who holds it (GET /v1/access/holders).
       const why = await ravi.getByTestId('read-only-why').filter({ hasText: 'ask' }).first().textContent({ timeout: 30_000 }).catch(() => '');
       check('the View only notice names the role that edits agents and who on the team holds it', /Builder/.test(why ?? '') && /James Richardson/.test(why ?? ''), why);
@@ -74,8 +74,8 @@ await withUiStack(
       const james = await signIn(browser, consoleUrl, JAMES, errors, mes);
       const jamesCreates = await creates(james, consoleUrl);
       await james.goto(`${consoleUrl}/agents/${agentId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await james.getByTestId('agent-save-status').waitFor({ timeout: 60_000 }).catch(() => undefined);
-      const jamesAgent = { save: await james.getByTestId('agent-save-status').count(), notice: await james.getByTestId('read-only-notice').count(), nameDisabled: await james.locator('#ag-name').isDisabled().catch(() => null) };
+      await james.getByTestId('save-state').waitFor({ timeout: 60_000 }).catch(() => undefined);
+      const jamesAgent = { save: await james.getByTestId('save-state').count(), notice: await james.getByTestId('read-only-notice').count(), nameDisabled: await james.locator('#ag-name').isDisabled().catch(() => null) };
       check('a builder on the same team sees every create button and edits the agent', Object.values(jamesCreates).every(Boolean) && jamesAgent.save === 1 && jamesAgent.notice === 0 && jamesAgent.nameDisabled === false, { jamesCreates, jamesAgent });
 
       await james.goto(`${consoleUrl}/workflows/dispute_email`, { waitUntil: 'domcontentloaded', timeout: 120_000 });

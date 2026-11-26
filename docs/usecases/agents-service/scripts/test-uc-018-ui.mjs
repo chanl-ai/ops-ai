@@ -71,7 +71,7 @@ await withUiStack(async (consoleUrl) => {
     await chooseMatchedTool(page, match);
     const patchRes = await patched;
     const saved = patchRes ? (await patchRes.json()).data : undefined;
-    const status = await page.getByTestId('agent-save-status').filter({ hasText: /^Draft v1 saved$/ }).first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
+    const status = await page.locator('[data-testid="save-state"][data-state="saved"]').first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
     const dialogs = await page.getByRole('dialog').count();
     check('the grant autosaves into the one draft, v1, with no save dialog', patchRes?.status() === 200 && saved?.version === 1 && JSON.stringify(saved?.toolIds) === '["lookup_account"]' && status && dialogs === 0, { status: patchRes?.status(), version: saved?.version, toolIds: saved?.toolIds, shown: status, dialogs });
 

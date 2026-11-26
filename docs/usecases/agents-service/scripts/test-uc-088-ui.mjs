@@ -66,15 +66,19 @@ await withUiStack(async (consoleUrl) => {
     const refused = await refusedP;
     const refusal = refused ? (await refused.json()).error : undefined;
     check('an out-of-range default is refused with 422 naming limits.temperature.default', refused?.status() === 422 && refusal?.code === 'invalid_limits' && refusal?.message.startsWith('limits.temperature.default'), { status: refused?.status(), refusal });
-    const shownError = await page.getByTestId('agent-save-status').filter({ hasText: /^Not saved: limits\.temperature/ }).first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
-    check('the refused save changed nothing and the page says why', (await api(`/v1/agents/${created.id}`)).data.version === before && shownError, { shownError });
+    // The header's save state reads Not saved and carries the server's reason as its detail.
+    const saveState = page.locator('[data-testid="save-state"][data-state="failed"]').first();
+    const failed = await saveState.waitFor({ timeout: 30_000 }).then(() => true, () => false);
+    const reason = failed ? (await saveState.getAttribute('title')) ?? '' : '';
+    const shownError = failed && reason.startsWith('limits.temperature');
+    check('the refused save changed nothing and the page says why', (await api(`/v1/agents/${created.id}`)).data.version === before && shownError, { shownError, reason });
     // A refused draft is not sent again by itself: only a change or Retry sends it.
     let resent = 0;
     const countPatch = (r) => { if (r.method() === 'PATCH' && r.url() === `${agents}/v1/agents/${created.id}`) resent += 1; };
     page.on('request', countPatch);
     await page.waitForTimeout(4_000);
     const retryP = nextPatch();
-    await page.getByTestId('agent-save-retry').click();
+    await page.getByTestId('save-state-retry').click();
     const retried = await retryP;
     page.off('request', countPatch);
     check('a refused draft waits for a change or Retry instead of resending every second', resent === 1 && retried?.status() === 422, { resent, retried: retried?.status() });

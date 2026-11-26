@@ -64,7 +64,7 @@ await withUiStack(
 
       // Step 4: the draft autosaves, and the version holds ids.
       await saved;
-      await page.getByTestId('agent-save-status').filter({ hasText: /saved$/ }).first().waitFor({ timeout: 30_000 }).catch(() => undefined);
+      await page.locator('[data-testid="save-state"][data-state="saved"]').first().waitFor({ timeout: 30_000 }).catch(() => undefined);
       const stored = await data(await fetch(`${agents}/v1/agents/${agent.id}`, { headers: J }));
       check('the version stores the base id and the tool id', stored.collections?.includes(target.id) && stored.toolIds?.includes('lookup_account'), { collections: stored.collections, toolIds: stored.toolIds });
 
