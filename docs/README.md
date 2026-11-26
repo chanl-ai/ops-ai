@@ -46,6 +46,11 @@ Each page opens with the problem it solves and says what is built. Images sit be
 | `design/research/node-sdk-and-forms.md` | Prior art: how workflow tools define nodes, settings forms, credentials, triggers and versions; a recommended Node SDK contract |
 | `design/research/forge-workflow-study.md` | A study of an open-source workflow engine on LangGraph, concern by concern |
 | `design/research/workflow-node-improvements.md` | Ten workflow node improvements compared across workflow products, with what is built since |
+| `design/agents-v2/runtime-contract-and-strands-loop.md` | Agents version 2: the contract between the runtime and the agent loop, Strands behind it, the event mapping, a pause saved and resumed on another server, and each kernel feature ported |
+| `design/agents-v2/model-gateway.md` | Agents version 2: the budget check and the model-call record moved into the model gateway, with cached tokens counted |
+| `design/agents-v2/agent-spec-file.md` | Agents version 2: the one versioned document that describes an agent, its fields, rules, schema and two worked examples |
+| `design/agents-v2/automatic-mode-and-loop-kinds.md` | Agents version 2: how an agent picks direct, plan, helpers or sandbox per request, the seven fixed loop kinds, and hand-overs |
+| `design/agents-v2/chat-builder.md` | Agents version 2: drafting a whole agent spec from a description, approved section by section |
 
 ## How the docs site shows a page
 
