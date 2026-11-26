@@ -57,9 +57,14 @@ git-rules: ## Print the git rules for the shared tree and check them
 .PHONY: review builder-watch review-dry-run
 REVIEW_DIR ?= $(STACK_HOME)-review
 
-review-dry-run: ## A read-only dry run in a `git archive` export: make review-dry-run EXPORT=<dir> ARGS='up OPS_PORT_OFFSET=400'; refuses a checkout
+# REPO is any checkout of this repository; from an export (which has no git history) name it, or the check cannot tell
+# which folders are checkouts. ARGS never redirects make to another folder.
+REPO ?= $(STACK_HOME)
+
+review-dry-run: ## A read-only dry run in a `git archive` export: make review-dry-run EXPORT=<dir> ARGS='up OPS_PORT_OFFSET=400' [REPO=<checkout>]; refuses a checkout or a clone
 	@[ -n "$(EXPORT)" ] || { echo "review-dry-run: give EXPORT=<dir>, a git archive export (git archive HEAD | tar -x -C <dir>)"; exit 2; }
-	@python3 $(ROOT)/scripts/in_export_only.py "$(EXPORT)"
+	@case " $(ARGS) " in *" -C "*|*" -C"[!\ ]*|*" --directory"*|*" -f "*|*" --file"*|*" --makefile"*) echo "review-dry-run: ARGS may not move make to another folder or makefile"; exit 2;; esac
+	@python3 $(ROOT)/scripts/in_export_only.py --repo "$(REPO)" "$(EXPORT)"
 	@$(MAKE) -n -C "$(EXPORT)" $(ARGS)
 
 review: ## Check BRANCH out from origin into the review worktree and run the stack from it, restarting only what changed
