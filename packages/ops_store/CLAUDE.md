@@ -97,6 +97,10 @@ images crash under Docker Desktop's emulation; the pinned 2025 image runs on the
 | Importing `ops_store` installs the connect retry on every SQLAlchemy engine in the process (`src/ops_store/__init__.py:11`) | Engines made in scripts and tests get it without passing anything |
 | A migration's stand-in `sa.Table` for `tenants` given a `tenant_id` column makes SQL Server's policy name a column dbo.tenants lacks (207) | Give the stand-in `id` as its primary key; `backfill_ddl` refuses it otherwise, on both databases |
 
+## Known traps
+
+- A lease test that waits on real time against a short ttl => build the lease on the suite's `LeaseClock` (`make(clock)`) and lapse it with `clock.advance`; a loaded CI runner can take longer than the ttl between two acquires, so a live lease reads as lapsed
+
 ## Reference docs
 
 - [docs/architecture/data.md](../../docs/architecture/data.md): store inventory and data rules
