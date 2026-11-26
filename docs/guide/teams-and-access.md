@@ -2,9 +2,16 @@
 
 Status: current. Rows marked planned are designed and not built.
 
-A card team and a lending team should not read each other's cases, and a new joiner should be able to chat with an
-agent before they can change one. Ops AI groups people into teams, and gives each person roles in each team they belong
-to. Use teams to draw the data boundary, and roles to decide what each person may do inside it.
+**Draw the data boundary around each team, and give each person only the actions their job needs.**
+
+## Two teams should not read each other's work
+
+A card team and a lending team should not read each other's cases, and a new joiner should be able to chat with an agent
+before they can change one. If everyone in the workspace can open everything, a risk review cannot approve the rollout.
+If access is arranged by hand for each person, it drifts.
+
+Ops AI groups people into teams, and gives each person roles in each team they belong to. Use teams to draw the data
+boundary, and roles to decide what each person may do inside it.
 
 ## Try it
 
@@ -59,6 +66,12 @@ opsai people invite a.osei@example.com --role viewer
 - Team and organisation separation is enforced in every service. Enforcement in the database itself as well is partial:
   files, documents, agents and platform data today, the rest planned.
 - Admins can do everything in their team. A few security actions still need the Security team.
+
+## What success looks like
+
+An invited person starts as a Viewer and can read and chat. Someone outside a team who opens a record by direct link is
+refused, and the refusal names the team that owns it. A change to a person's roles applies on their next request,
+without signing out.
 
 ## Next
 

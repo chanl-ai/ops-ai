@@ -2,11 +2,19 @@
 
 Status: current. Rows marked planned are designed and not built.
 
-An agent that can only talk is of little use to an operations team: it needs to look up the customer, read the account
-and, with a person's approval, change something. An app is a system outside Ops AI that agents and workflows work with,
-such as Salesforce, a core banking API or a mailbox. Each app brings tools: the single operations an agent or a workflow
-step can take with it, such as "get account" or "place hold". Every tool call leaves through one gateway that checks who
-is calling, the approval, and which hosts may be reached.
+**Let agents look up your customer and, with a person's approval, change a record in the systems you already use.**
+
+## An agent that only talks cannot clear the queue
+
+An operations team needs an agent to look up the customer, read the account and, once someone approves, place the hold.
+An agent that can only talk leaves all of that to the person, so the queue stays as long as it was. An agent wired to
+your systems with no checks is worse: nobody can say who it signed in as or what it changed.
+
+An app is a system outside Ops AI that agents and workflows work with, such as Salesforce, a core banking API or a
+mailbox. Each app brings tools: the single operations an agent or a workflow step can take with it, such as "get
+account" or "place hold". Every tool call leaves through one gateway that checks who is calling, the approval, and which
+hosts may be reached. Skipping the gateway means each agent carries its own keys and its own rules, and a risk review
+has nothing single to read.
 
 ## Try it
 
@@ -107,6 +115,12 @@ level answers don't ask, ask the person in the chat, or ask a reviewer. A waitin
 
 - A scheduled or polled trigger from an app, and signed incoming webhooks, are planned.
 - AI assistants calling the team's tools over MCP get read tools only, as test runs.
+
+## What success looks like
+
+A team admin has turned on the apps the team uses, and each tool is marked read or write. An agent reads the account
+without asking anyone, and a write waits for a person when the team has turned approvals on. The app's **Logs** tab
+shows every call and who it ran as.
 
 ## Next
 

@@ -2,8 +2,15 @@
 
 Status: current. Rows marked planned are designed and not built.
 
-Work such as a court order on an account, a complaint or a claim lives for days and passes through several people and
-runs. A case is the one record of that work: what it is about, what it is waiting on, who owns it, and everything that
+**Keep one record for a piece of work that takes days, so the next person picks it up where the last one left off.**
+
+## Work that lasts days gets lost between people
+
+A court order on an account, a complaint or a claim passes through several people and several runs. Without one record,
+each person reads the email chain to learn what happened, and nobody can say what the work is waiting on or who owns it.
+A deadline slips because no one could see the clock.
+
+A case is the one record of that work: what it is about, what it is waiting on, who owns it, and everything that
 happened to it. Use cases when a person needs to pick up a piece of work where someone else left it.
 
 ## Try it
@@ -61,6 +68,11 @@ In the console the case is under **Work › Cases**.
 - The console has no button to open a case by hand. A workflow or the API opens it.
 - Waiting on the customer pauses both clocks; leaving that status moves both deadlines on by the time it waited.
 - A conversation tab for email cases is planned; linked emails show as a list today.
+
+## What success looks like
+
+A workflow opens the case with its fields filled in. Anyone on the team with the Cases permission finds it, reads the
+history in plain words, sees the Human Tasks it waits on and adds a note. The owner and the two clocks are on its page.
 
 ## Next
 

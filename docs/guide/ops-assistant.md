@@ -2,9 +2,17 @@
 
 Status: current. Rows marked planned are designed and not built.
 
-Staff should be able to ask for something in plain words, and other systems should reach the same agents without a
-person in between. A chat is a conversation with an agent or with the team's Ops Assistant, which looks things up in
-your team's apps and replies with what it read. A channel is where that conversation, or a workflow run, comes in.
+**Let staff ask for work in plain words, and let other systems reach the same agents without a person in between.**
+
+## Staff ask in plain words, and systems should ask too
+
+An operations team gets the same questions all day: which customers have a dispute open, what the branch cash limit is,
+who owns this case. Answering each by hand means opening three systems and copying the result. Meanwhile another system
+that wants the same answer has no way in except a person.
+
+A chat is a conversation with an agent or with the team's Ops Assistant, which looks things up in your team's apps and
+replies with what it read. A channel is where that conversation, or a workflow run, comes in. Without channels, every
+new way of asking, from a mailbox to an API call, would need its own copy of the agent and its own rules.
 
 ## Try it
 
@@ -87,6 +95,12 @@ numbers. It does not replace a correct answer with "nothing found".
 - An App your team has off shows a card with **Ask an admin**.
 
 Your sign-ins are managed on **Apps › Mine** ([Apps](apps.md#your-own-sign-ins)).
+
+## What success looks like
+
+A member of staff asks a question in the console and the reply streams with its sources, acting only on what that
+person's own sign-in allows. A change to an app waits until they say **Save**. A mailbox, the HTTP API or a due date
+starts the same agent with no one typing.
 
 ## Next
 
