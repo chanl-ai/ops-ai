@@ -17,7 +17,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import JSONResponse
-from pydantic import Field, JsonValue
+from pydantic import Field
 
 from ops_access import can
 from ops_files.app import Caller, service_scope
@@ -27,7 +27,7 @@ from ops_files.tenant_files import Who
 from ops_identity import CurrentPrincipal
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, In, ListResult, Option, OptionsPage, Out, ok, options_window
+from ops_service_kit.http import Envelope, In, JsonValue, ListResult, Option, OptionsPage, Out, ok, options_window
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.names import Name

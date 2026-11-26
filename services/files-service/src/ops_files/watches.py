@@ -19,6 +19,7 @@ import asyncio
 import base64
 import dataclasses
 import hashlib
+import itertools
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -208,7 +209,7 @@ class WatchChecks:
         tools = found.tools
         state = FileState(self.store, self.watches, watch, owner)
         await state.load()
-        place = Place(**cast(dict[str, object], watch.place)) if watch.place else Place()  # pyright: ignore[reportArgumentType]
+        place = Place(**watch.place) if watch.place else Place()  # pyright: ignore[reportArgumentType]
         counts = {"listed": 0, "unchanged": 0, "skipped": 0, "failed": 0}
         gets = _Gets(self.reader, tools.get)
         refused = await self.watches.refused_sizes(watch_id)
@@ -316,8 +317,8 @@ class WatchChecks:
         by_row = {str(r["id"]): r for r in listing.changed}
         gone_now: list[str] = []
         errors: list[SourceError] = []
-        for start in range(0, len(listing.changed), CHUNK):
-            part = dataclasses.replace(listing, changed=listing.changed[start : start + CHUNK])
+        for chunk in itertools.batched(listing.changed, CHUNK):
+            part = dataclasses.replace(listing, changed=list(chunk))
             fetcher = Fetcher(gets, state, tools, part, tenant=tenant, team=team, act="watch")
             done = await fetcher.fetch_changed(
                 place, counts, errors, listing.log, on_listed=on_item, on_fetched=on_item, final=TOO_LARGE

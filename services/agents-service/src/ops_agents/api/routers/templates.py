@@ -46,6 +46,7 @@ from ops_service_kit.http import Envelope, In, Json, JsonList, JsonValue, ListRe
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.names import Name
+from ops_service_kit.narrow import json_object
 from ops_service_kit.template_merge import Choice, FieldOutcome, Strictness, apply, merge
 
 from ...store.agent_registry import SPEC_FIELDS
@@ -613,7 +614,7 @@ async def _held_documents(rt: Runtime, me: Principal, team: str) -> dict[str, st
     finally:
         await documents.aclose()
     return {
-        f"{r['source']}:{r['id']}": str(r["copy"]["recordId"])
+        f"{r['source']}:{r['id']}": str(json_object(r["copy"]).get("recordId"))
         for r in rows
         if r.get("copy") and r.get("state") != "available"
     }

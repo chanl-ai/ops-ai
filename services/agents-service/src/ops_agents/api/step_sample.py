@@ -8,7 +8,7 @@ team's values."""
 from __future__ import annotations
 
 import json
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 from pydantic import ValidationError
 
@@ -16,7 +16,7 @@ from ops_engine import default_registry
 from ops_engine.definition import Connection, NodeInstance, WorkflowDefinition, ancestors
 from ops_engine.shapes import Ports
 from ops_engine.store.runs import RunRow
-from ops_service_kit.http import Json
+from ops_service_kit.http import Json, JsonValue
 
 from .review_text import humanize
 
@@ -60,6 +60,38 @@ def shown(value: Any) -> str | None:
     return text if len(text) <= SAMPLE_VALUE_MAX_CHARS else text[:SAMPLE_VALUE_MAX_CHARS] + "…"
 
 
+class SampleField(TypedDict):
+    name: str
+    label: str
+    path: str
+    sample: str | None
+
+
+class SampleStep(TypedDict):
+    id: str
+    name: str
+    kind: str | None
+    installed: bool
+    fields: list[SampleField]
+
+
+class SampleRun(TypedDict):
+    id: str
+    version: int
+    createdAt: str
+
+
+class StepSample(TypedDict):
+    """What `step` receives (GET .../definitions/{workflow_id}/sample), as the route's reply."""
+
+    workflowId: str
+    step: str | None
+    saved: bool
+    run: SampleRun | None
+    steps: list[SampleStep]
+    given: SampleStep | None
+
+
 def _label(name: str, schema: Any) -> str:
     title = cast(Json, schema).get("title") if isinstance(schema, dict) else None
     return title if isinstance(title, str) and title else humanize(name)
@@ -67,7 +99,7 @@ def _label(name: str, schema: Any) -> str:
 
 def _field_names(ports: Ports, output: Any) -> list[tuple[str, Any]]:
     """Every field a step's ports declare, then any other field its last output carried (an open shape), in order."""
-    seen: dict[str, Any] = {}
+    seen: dict[str, JsonValue] = {}
     for shape in ports.values():
         for name, schema in cast(Json, shape.get("properties") or {}).items():
             seen.setdefault(name, schema)
@@ -85,7 +117,7 @@ def sample_view(
     shapes: dict[str, Ports],
     run: RunRow | None,
     values: Json,
-) -> dict[str, Any]:
+) -> StepSample:
     """The reply: `saved` is false when the working copy does not hold `step` yet (the sheet asks to save first).
     `values` holds the run's `input` and each node's last `output` by node id, as people may see them."""
     d = WorkflowDefinition.model_validate(definition)
@@ -103,14 +135,14 @@ def sample_view(
     # A Join gives one field per branch under that branch step's id; the field is labelled with the step's name.
     step_names = {n.id: called(n) for n in d.nodes}
 
-    def entry(n: NodeInstance) -> dict[str, Any]:
+    def entry(n: NodeInstance) -> SampleStep:
         t = registry.find(n.type, n.type_version)
         output = last.get(n.id)
         trigger = t is not None and t.group == TRIGGER
         joins = t is not None and t.deferred
         if trigger and output is None:
             output = values.get("input")
-        fields: list[dict[str, Any]] = [
+        fields: list[SampleField] = [
             {
                 "name": name,
                 "label": step_names.get(name) or _label(name, schema) if joins else _label(name, schema),
@@ -128,7 +160,7 @@ def sample_view(
         "workflowId": workflow_id,
         "step": step,
         "saved": saved,
-        "run": run and {"id": run.id, "version": run.version, "createdAt": run.created_at},
+        "run": {"id": run.id, "version": run.version, "createdAt": run.created_at} if run else None,
         "steps": listed,
         # What the step itself gives the steps after it, with its own last value.
         "given": entry(own) if own is not None else None,

@@ -39,6 +39,7 @@ from ..schedule_clock import required_beyond_due
 from ..schedule_view import ScheduleView, next_runs, schedulable, schedule_views
 from ..schemas import Out  # pyright: ignore[reportPrivateImportUsage]
 from .engine import REGISTRY, Me, Reader, Rt, definitions
+from .tool_catalog import options_cut
 
 log = get_logger("ops_agents.api.routers.schedules")
 router = APIRouter(prefix="/v1/schedules", dependencies=[Depends(principal)])
@@ -89,9 +90,8 @@ def checked(rt: Runtime, raw: dict[str, JsonValue], now: datetime) -> Json:
         raise Unprocessable(str(e), code="schedule_invalid", details={"field": e.field}) from e
 
 
-def preview(rule: Json, now: datetime) -> dict[str, Any]:
-    upcoming = next_runs(rule, now)
-    return PreviewView(rule=rule, words=KINDS.words(rule), next_runs=upcoming).model_dump(mode="json", by_alias=True)
+def preview(rule: Json, now: datetime) -> PreviewView:
+    return PreviewView(rule=rule, words=KINDS.words(rule), next_runs=next_runs(rule, now))
 
 
 @router.get("/kinds", response_model=Envelope[list[KindView]])
@@ -108,8 +108,8 @@ async def schedule_zones(
     the save checks against, so a zone listed here is never refused."""
     q = search.strip().lower()
     zones = [z for z in sorted(available_timezones()) if q in z.lower()]
-    offset, window = options_window(cursor, limit)
-    return ok(options_page([{"id": z, "label": z} for z in zones[offset : offset + window]], offset, limit))
+    offset, _ = options_window(cursor, limit)
+    return ok(options_page([{"id": z, "label": z} for z in options_cut(zones, offset, limit)], offset, limit))
 
 
 @router.post("/preview", response_model=Envelope[PreviewView])
@@ -117,7 +117,7 @@ async def preview_schedule(rt: Rt, me: Me, body: PreviewIn) -> JSONResponse:
     """The rule as it would be saved, in words, with its next three runs. 422 naming the field for a rule a save would
     refuse, including one under the install's shortest interval."""
     now = datetime.now(UTC)
-    return ok(preview(checked(rt, body.rule, now), body.after or now))
+    return ok(preview(checked(rt, body.rule, now), body.after or now).model_dump(mode="json", by_alias=True))
 
 
 async def _rights(rt: Runtime, me: Any, workflow_id: str) -> Any:

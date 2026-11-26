@@ -87,7 +87,7 @@ def lease_key(tenant: str, workflow_id: str, step: str) -> str:
     return POLL_LEASE_PREFIX + "s" + hashlib.sha256(f"{tenant}:{workflow_id}:{step}".encode()).hexdigest()[:31]
 
 
-def digest(rule: Mapping[str, Any]) -> str:
+def digest(rule: Json) -> str:
     return hashlib.sha256(json.dumps(rule, sort_keys=True).encode()).hexdigest()[:32]
 
 

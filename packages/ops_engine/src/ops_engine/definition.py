@@ -330,24 +330,22 @@ _TYPE_WORDS = {
 }
 
 
-def _form_labels(err: Any, field: str | None, ui: Mapping[str, JsonValue]) -> tuple[list[str], dict[str, Any]]:
+def _form_labels(err: Any, field: str | None, ui: Mapping[str, JsonValue]) -> tuple[list[str], Json]:
     """Where in the form an error is, in the labels the form shows (`Conditions`, `row 2`), and the fields of the entry
     it is in. A list entry reads as its row; a name a person typed (a formula's, a field's) stays as typed."""
-    fields = cast(dict[str, Any], ui.get("fields") or {})
-    spec = cast(dict[str, Any], fields.get(field) or {}) if field else {}
+    fields = cast(Json, ui.get("fields") or {})
+    spec = cast(Json, fields.get(field) or {}) if field else {}
     parts = [str(spec.get("label") or field or "A setting")]
     item = spec.get("item")
-    entry = cast(dict[str, Any], cast(dict[str, Any], item).get("fields") or {}) if isinstance(item, dict) else {}
+    entry = cast(Json, cast(Json, item).get("fields") or {}) if isinstance(item, dict) else {}
     for step in list(cast(list[object], err.path))[1:]:
         if isinstance(step, int):
             parts.append(f"row {step + 1}")
             continue
-        sub = cast(dict[str, Any], entry.get(str(step)) or {})
+        sub = cast(Json, entry.get(str(step)) or {})
         parts.append(str(sub.get("label") or step))
         nested = sub.get("item")
-        entry = (
-            cast(dict[str, Any], cast(dict[str, Any], nested).get("fields") or {}) if isinstance(nested, dict) else {}
-        )
+        entry = cast(Json, cast(Json, nested).get("fields") or {}) if isinstance(nested, dict) else {}
     return parts, entry
 
 
@@ -356,7 +354,7 @@ def _plain(err: Any, field: str | None, ui: Mapping[str, JsonValue]) -> str:
     A setting's schema may say its own problem in `x-problem`; no validator text reaches a builder."""
     parts, entry = _form_labels(err, field, ui)
     rule, value = str(err.validator), cast(object, err.validator_value)
-    schema = cast(dict[str, Any], err.schema)
+    schema = cast(Json, err.schema)
     # A value inside a setting that has no form of its own (a field list kept as text) names itself by its `title`.
     if rule != "required" and len(parts) > 1 and isinstance(schema.get("title"), str):
         parts[-1] = str(schema["title"])
@@ -367,7 +365,7 @@ def _plain(err: Any, field: str | None, ui: Mapping[str, JsonValue]) -> str:
         instance = err.instance
         missing = [k for k in cast(list[str], value) if not isinstance(instance, dict) or k not in instance]
         name = missing[0] if missing else "A value"
-        label = str(cast(dict[str, Any], entry.get(name) or {}).get("label") or name)
+        label = str(cast(Json, entry.get(name) or {}).get("label") or name)
         return f"{where}, {label} needs a value."
     if said := schema.get("x-problem"):
         return f"{where} {said}."
@@ -375,8 +373,9 @@ def _plain(err: Any, field: str | None, ui: Mapping[str, JsonValue]) -> str:
         wanted = cast(list[object], value) if isinstance(value, list) else [value]
         return f"{where} must be {' or '.join(_TYPE_WORDS.get(str(w), str(w)) for w in wanted)}."
     if rule == "enum" and isinstance(value, list):
-        titled = schema.get("oneOf")
-        words = {str(o["const"]): str(o["title"]) for o in titled if "const" in o and "title" in o} if titled else {}
+        one_of = schema.get("oneOf")
+        titled = [json_object(o) for o in one_of] if isinstance(one_of, list) else []
+        words = {str(o["const"]): str(o["title"]) for o in titled if "const" in o and "title" in o}
         return f"{where} must be one of {', '.join(words.get(str(v), str(v)) for v in cast(list[object], value))}."
     if rule == "minLength":
         return f"{where} cannot be empty." if value == 1 else f"{where} needs at least {value} characters."

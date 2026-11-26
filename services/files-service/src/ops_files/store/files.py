@@ -927,11 +927,9 @@ class FilesStore(Store):
 
     async def mark_source(self, file_id: str, *, marker: str | None, gone_count: int | None = None) -> None:
         """Keeps the listing's marker for a source file (or how many checks in a row found it gone)."""
-        given: dict[str, object] = {"source_marker": marker} if gone_count is None else {"gone_count": gone_count}
+        q = sa.update(files).where(files.c.tenant_id == isolation.tenant(), files.c.id == file_id)
         async with self.tx() as c:
-            await c.execute(
-                sa.update(files).where(files.c.tenant_id == isolation.tenant(), files.c.id == file_id).values(**given)
-            )
+            await c.execute(q.values(source_marker=marker) if gone_count is None else q.values(gone_count=gone_count))
 
     async def remove_sources(
         self, file_ids: Sequence[str], at: datetime, *, then: Callable[[AsyncConnection], Awaitable[None]] | None = None

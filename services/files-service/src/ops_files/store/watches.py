@@ -106,6 +106,16 @@ class NewWatch(TypedDict):
     created_at: datetime
 
 
+class _WatchChange(TypedDict, total=False):
+    """The columns a watch's change writes."""
+
+    updated_at: datetime
+    name: str
+    values: dict[str, JsonValue]
+    place: dict[str, JsonValue]
+    value_names: dict[str, dict[str, str]]
+
+
 class Audit(TypedDict):
     """A person's change to a watch, written to the account's audit log in the change's transaction."""
 
@@ -282,7 +292,7 @@ class WatchesStore(Store):
     ) -> bool:
         """New folders start a fresh place, so the next check lists the new folders whole. `names` replaces the
         picked places' names when given; else the names kept still label the ids that remain."""
-        given: dict[str, object] = {"updated_at": at}
+        given: _WatchChange = {"updated_at": at}
         if name is not None:
             given["name"] = name
         if values is not None:
@@ -420,7 +430,7 @@ class WatchesStore(Store):
                     sa.select(file_watches.c.refused_sizes).where(*self._mine(watch_id), team_visible(file_watches))
                 )
             ).scalar()
-        sizes = cast(dict[str, object], found or {})
+        sizes = cast(dict[str, JsonValue], found or {})
         return {k: v for k, v in sizes.items() if isinstance(v, str)}
 
     async def save_refused_sizes(self, watch_id: str, *, owner: str, sizes: dict[str, str]) -> bool:

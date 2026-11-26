@@ -57,7 +57,7 @@ from ops_service_kit.http import Envelope, In, Json, JsonList, JsonValue, Labell
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
-from ops_service_kit.narrow import a_list, an_object, json_object
+from ops_service_kit.narrow import a_list, an_object, json_object, required
 from ops_store import isolation
 
 from ...store.actor_names import UNNAMED_WORKFLOW
@@ -517,7 +517,7 @@ async def _newest_versions(rt: Runtime, type_ids: set[str], *, team: str | None)
                 found = await documents.document_type(current_tenant(), team, type_id)
             except DocumentNotFound as e:
                 raise Unprocessable(f"No document type {type_id} in this team.", code="document_type_not_found") from e
-            out[type_id] = int(found["latestVersion"])
+            out[type_id] = required(found, "latestVersion", int)
         return out
     finally:
         await documents.aclose()

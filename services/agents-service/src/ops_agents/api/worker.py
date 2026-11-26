@@ -73,6 +73,7 @@ from .fencing import ToolsFence
 from .mailbox_gateway import mailbox_client, mailbox_source
 from .platform_policies import PlatformPolicies
 from .review_sla import PlatformReviewSla
+from .schedule_clock import KEY as CLOCK_KEY
 from .schedule_clock import ScheduleClock, keep_schedules_ticking
 from .service_events import reminders
 from .sweeper import reconcile_forever
@@ -214,8 +215,8 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
         stack.push_async_callback(lambda: asyncio.wait_for(starting, None))
         # The API key copy's resync reads platform-service's keys as this service (settings:view).
         key_reader = service_client(settings, platform_http, "platform") if platform_http is not None else None
-        if tools is not None or key_reader is not None:
-            await stack.enter_async_context(background.supervisor())
+        # The lifespan's supervisor: every loop started below runs on it, its failure on /health/background.
+        await stack.enter_async_context(background.supervisor())
         if tools is not None:
             # The tool catalogue copy's resync: a pass at start, then hourly, on the lifespan's supervisor.
             await background.start(
@@ -230,8 +231,7 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             )
         # The schedule clock: each minute, every saved schedule on a live workflow (schedule_clock.py).
         clock = ScheduleClock(db, Leases(db, owner=owner, ttl=settings.lease_ttl_seconds))
-        ticking = asyncio.create_task(keep_schedules_ticking(clock, stop, heartbeats(db)))
-        stack.push_async_callback(lambda: asyncio.wait_for(ticking, None))
+        await background.start(keep_schedules_ticking(clock, stop, heartbeats(db)), key=CLOCK_KEY, store=heartbeats(db))
         # The audit entries of schedule saves and clears reach platform-service's audit log. With no internal endpoint
         # no relay runs, so the entries wait in the outbox until an install that has one starts it.
         audit_log = (
@@ -242,12 +242,13 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             else None
         )
         if audit_log is not None:
-            handing = asyncio.create_task(
+            await background.start(
                 run_relay(
                     outbox_relay(db, {"platform": audit_log}), key="agents_relay", stop=stop, store=heartbeats(db)
-                )
+                ),
+                key="agents_relay",
+                store=heartbeats(db),
             )
-            stack.push_async_callback(lambda: asyncio.wait_for(handing, None))
         listener = email_listener(settings, db, owner, stack)
         if listener is not None:
             listening = asyncio.create_task(keep_mail_listening(listener, stop, settings.email_poll_seconds))

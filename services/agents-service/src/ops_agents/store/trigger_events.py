@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, ClassVar, Literal, cast
+from typing import ClassVar, Literal, cast
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -83,7 +83,7 @@ class TriggerEvent:
     received_at: str
     outcome: Outcome
     run_id: str | None = None
-    detail: dict[str, Any] | None = None
+    detail: Json | None = None
     item: str | None = None
 
 
@@ -216,7 +216,7 @@ class TriggerEvents:
         wanted = set(slots)
         out: dict[tuple[str, str], str] = {}
         for source, key, detail in found:
-            body = cast(dict[str, object], json.loads(detail) if detail else {})
+            body = cast(Json, json.loads(detail) if detail else {})
             reason = body.get("reason")
             step = str(source)[len(SCHEDULE_SOURCE) :]
             if isinstance(reason, str) and (step, str(key)) in wanted:

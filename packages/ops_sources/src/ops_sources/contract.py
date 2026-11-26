@@ -16,9 +16,8 @@ module names them for every reader and turns each answer into the shape the loop
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from pydantic import BaseModel, ConfigDict
 
@@ -48,6 +47,18 @@ class Answer:
     message: str = ""
 
 
+class ToolNames(TypedDict, total=False):
+    """The keys `SourceTools.of` reads from a declared source or a reading service's stored copy of one; each admits
+    the null an older writer may have stored, and `fetchAtOnce` the string or float one may have."""
+
+    listTool: str | None
+    getTool: str | None
+    changesTool: str | None
+    listsWhole: bool | None
+    fetchAtOnce: int | float | str | None
+    getTakesTag: bool | None
+
+
 @dataclass(frozen=True)
 class SourceTools:
     """The tools one source is read with, by role, and how its system wants to be read."""
@@ -62,7 +73,7 @@ class SourceTools:
     get_takes_tag: bool = False
 
     @classmethod
-    def of(cls, row: Mapping[str, object]) -> SourceTools:
+    def of(cls, row: ToolNames) -> SourceTools:
         """The tools named by a declared source, or by a reading service's stored copy of one (the same keys). A tool
         the row names as null stays None, so the loop refuses to call it rather than call a tool named "None"."""
 
@@ -110,7 +121,7 @@ class Declared(BaseModel):
 
     @property
     def tools(self) -> SourceTools:
-        return SourceTools.of(self.model_dump())
+        return SourceTools.of(cast(ToolNames, self.model_dump()))
 
 
 # Sign-ins a source with no person behind it (a sync, a watched folder's check) may read through.
