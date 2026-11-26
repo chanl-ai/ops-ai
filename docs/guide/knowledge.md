@@ -42,13 +42,19 @@ the base.
 
 ## How a base keeps answers current
 
-- A base is fed by one or more sources. Each source is read, split into passages, and indexed for search by meaning and
-  by keywords together; every result says which kind of search found it.
-- A source syncs on its schedule or on demand. A changed item is read again; an unchanged one is skipped.
-- An agent searches only the bases it was given, unless its **All team knowledge bases** option is on.
-- When an answer cites no passage, the base can withhold it and send its no-answer message instead. This is on by
-  default in the Balanced and Precise presets.
-- A base belongs to a team. People and agents outside the team cannot search it.
+```mermaid caption="How a knowledge base keeps answers current: sources are read and indexed, and an agent answers with a citation or says it has nothing"
+flowchart TD
+  A[Files, pages, websites] -->|Sync| B[Read, split, indexed]
+  B --> C[Knowledge base]
+  C --> D[Agent searches it]
+  D -->|Found| E[Cited answer]
+  D -->|Nothing| F[No-answer message]
+```
+
+Sources sync on a schedule or on demand, and an unchanged item is skipped. Passages are indexed by meaning and by
+keywords together, and every result says which kind of search found it. Withholding an uncited answer is on by default
+in the Balanced and Precise presets. An agent searches only the bases it was given, unless its **All team knowledge
+bases** option is on. A base belongs to a team, and people and agents outside the team cannot search it.
 
 ## Sources
 

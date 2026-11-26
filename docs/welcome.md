@@ -54,17 +54,16 @@ A dispute reaches a person already checked against the handbook, and the approva
 asks.
 
 ```mermaid caption="A card dispute from arrival to a recorded approval: each step is done before a person opens the case"
-flowchart LR
-  A[Dispute arrives] --> B[Workflow finds the cardholder and accounts]
-  B --> C[Agent checks the handbook and cites sections]
-  C --> D[Person approves the credit on one screen]
-  D --> E[Case records who, which version, what data]
+flowchart TD
+  A[Dispute arrives] --> B[Workflow finds the cardholder]
+  B --> C[Agent checks the handbook]
+  C --> D[Person approves the credit]
+  D --> E[Case records who, version, data]
 ```
 
 <!-- site: cards -->
-| Without Ops AI | With Ops AI |
-|---|---|
-| The same request is retyped across three systems, the approval lives in an email thread, and the audit answer is rebuilt by hand each time someone asks. | The case already holds who approved the credit, on which version, with what data ([Card disputes](guide/use-cases/card-disputes.md) walks through it). |
+- **Without Ops AI**: The same request is retyped across three systems, the approval lives in an email thread, and the audit answer is rebuilt by hand each time someone asks.
+- **With Ops AI**: The case already holds who approved the credit, on which version, with what data ([Card disputes](guide/use-cases/card-disputes.md) walks through it).
 
 ## Read next
 

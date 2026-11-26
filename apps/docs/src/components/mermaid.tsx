@@ -22,6 +22,10 @@ export function OpsMermaid({ chart, caption }: { chart: string; caption?: string
     // A diagram that cannot render fails the build rather than shipping an empty figure.
     throw new Error(`a Mermaid diagram failed to render: ${(err as Error).message}\n${chart}`);
   }
+  // On a narrow page the drawing shrinks to the frame, but never below 80% of its drawn size (13px labels stay about
+  // 10px or more); a wider drawing scrolls instead.
+  const drawn = Number(svg.match(/<svg[^>]*\swidth="([\d.]+)"/)?.[1]);
+  if (drawn) svg = svg.replace(/<svg([^>]*)\sstyle="/, `<svg$1 style="min-width:${Math.round(drawn * 0.8)}px;`);
   return (
     <figure className="ops-figure ops-mermaid not-prose">
       {/* The caption doubles as the accessible name: the drawing itself carries no alt text. */}

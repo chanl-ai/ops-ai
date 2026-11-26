@@ -232,6 +232,10 @@ body {
   font-size: 15px;
   line-height: 1.55;
 }
+.ops-card-without { background: var(--ops-soft); color: var(--ops-muted); }
+.ops-card-without .ops-card-title { color: var(--ops-muted); }
+.ops-card-with { border-color: var(--ops-accent); }
+.ops-card-with .ops-card-title { color: var(--ops-accent); }
 .ops-card-link { text-decoration: none; transition: border-color 120ms; }
 .ops-card-link:hover { border-color: var(--ops-accent); }
 .ops-card-title { margin: 0; font-size: 1.05rem; font-weight: 600; }
@@ -250,8 +254,8 @@ body {
 .ops-figure-media { display: flex; justify-content: safe center; overflow-x: auto; }
 .ops-figure-media p { margin: 0; }
 .ops-figure-media img { border-radius: 6px; margin: 0; max-width: 100%; height: auto; }
-/* Diagrams keep their drawn size and scroll sideways rather than shrink below legible text. */
-.ops-mermaid svg { flex: none; max-width: none; height: auto; display: block; }
+/* Diagrams shrink to the frame down to 80% of their drawn size (min-width, set in mermaid.tsx), then scroll sideways. */
+.ops-mermaid svg { flex: none; max-width: 100%; height: auto; display: block; }
 /* Architecture diagrams fit the column down to 720px wide, then scroll, so their 13px labels stay readable. */
 .ops-diagram svg { flex: none; width: 100%; min-width: 720px; max-width: 980px; height: auto; display: block; }
 .ops-figure figcaption {

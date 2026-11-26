@@ -14,7 +14,7 @@ or that repeats a paragraph left beside it, is cut.
 | A lifecycle with states (draft, review, published) | Mermaid flowchart with the states as boxes and the triggers on the arrows | Same block |
 | Steps a reader performs | Steps | `<!-- site: steps -->` above a numbered list |
 | Options, roles or parts, three to six of them | Cards | `<!-- site: cards -->` above a table or list; the first cell or bold opening is the title |
-| A before and after, or with and without | A pair of two cards | `<!-- site: cards -->` above a two-row table: "Without Ops AI" and "With Ops AI" |
+| A before and after, or with and without | A pair of two cards | `<!-- site: cards -->` above a two-item list: `- **Without Ops AI**: ...` and `- **With Ops AI**: ...` |
 | Status of several things | Badges inside a table | A cell starting with built, partial or planned |
 | A screen | A framed screenshot | `![caption](../media/name-light.png)` alone in a paragraph, light and dark variants as the page already does |
 | A system's boxes and their links | The live architecture diagram | `![caption](../diagrams/name.svg)` where `diagrams/name.yaml` exists |
@@ -81,15 +81,17 @@ figure contains a hex value.
 | Figures per page | One to two. A third means the page is two pages |
 | Boxes in a diagram | At most 8, labels at most 6 words |
 | Cards in a set | Three to six |
+| With and without pair | Two list items titled "Without ..." and "With ..."; the site mutes the first and accents the second. The title is the visible label, so a table with one row is never used for a pair |
 | Paragraphs replaced | Two to four per figure |
-| Diagram direction | Left to right up to 5 boxes; top to bottom beyond that or when labels are long |
+| Diagram direction | Top to bottom (`flowchart TD`) for any flow of more than 3 boxes. Left to right only for 3 boxes or fewer, drawn 420px wide or less |
 
 Labels are in the reader's words. No file paths, service names, card ids, ports or customer names on a reader page.
 
 ## How a figure reads at 390 wide
 
-A mermaid diagram keeps its drawn size and scrolls sideways inside its frame rather than shrinking under legible text,
-so a diagram wider than about 600px when drawn is redrawn top to bottom. Cards stack to one column. The page itself
+A mermaid diagram shrinks to its frame (336px at 390 wide) down to 80% of its drawn size, so labels stay about 10px or
+more, and scrolls sideways below that. Draw it to 420px or less, which means short labels and at most two boxes side by
+side; a figure that scrolls sideways at 390 is a defect. Cards stack to one column. The page itself
 never scrolls sideways. Check each changed page at 1440 and 390, in light and dark, before it is pushed.
 
 ## Sourcing

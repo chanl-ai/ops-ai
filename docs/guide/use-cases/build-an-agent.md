@@ -191,10 +191,9 @@ Only a published version reaches the team. A first publish waits for a second pe
 the name or role publishes at once. A team admin can change this per team.
 
 ```mermaid caption="How an agent version moves from draft to published, and why an edit never changes a conversation under way"
-flowchart LR
-  A[Draft: only you, in Test] -->|Publish| B[Second person reviews]
-  B -->|Approved| C[Published version: the team chats with it]
-  A -->|Name or role change| C
+flowchart TD
+  A[Draft, in Test] -->|Publish| B[Second person reviews]
+  B -->|Approved| C[Published version]
   C -->|Edit| A
 ```
 

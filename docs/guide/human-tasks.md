@@ -48,14 +48,22 @@ Make every write in your team wait for a person, then approve one.
 
 ## What the person is protected by
 
+A decision is tied to what the reviewer saw, and it counts once.
+
+```mermaid caption="What happens to a write that waits for a person: it runs once if approved in time, and never runs on a timeout"
+flowchart TD
+  A[Agent reaches a write] --> B[Run pauses, using no worker]
+  B --> C[Task shows the exact input]
+  C --> D{Person decides}
+  D -->|Approve| E[Write runs once]
+  D -->|Reject| F[No change made]
+```
+
+A run can wait a minute or a week. An approval is good for 15 minutes, and changing one character of the input after it
+voids it. A deadline that passes marks the task overdue and never approves it. Deciding twice resumes the run once.
+
 - **Reads never wait.** Writes run at once until a team turns approvals on.
-- **The approval is bound to what the reviewer saw.** If one character of the input changes after approval, the approval
-  no longer counts and the write is refused. An approval is good for 15 minutes.
 - **Nobody approves their own request**, unless the team allows it.
-- **Deciding twice resumes once.** A decision is recorded with who made it, when and why, then the paused run resumes
-  from where it stopped.
-- **Waiting is free.** A waiting run uses no worker, so it can wait a minute or a week.
-- **A timeout never approves.** A deadline that passes marks the task overdue or sends the run down its timeout path.
 - **Workflows and other systems can ask too.** A workflow asks a person with a **Human review** step, or an **Ask** step
   for a free-text answer. Another system can open a task through the API and read the decision back.
 

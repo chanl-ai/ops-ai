@@ -40,9 +40,18 @@ opsai people invite a.osei@example.com --role viewer
 
 ## What the boundary covers
 
-- A team owns its agents, workflows, knowledge, files and cases, and the work they produce. Someone outside the team
-  cannot open them, even with a direct link: the server refuses and names the team that owns the record.
-- Your organisation is the outer boundary. Records of another organisation on the same install are never found.
+A team owns its agents, workflows, knowledge, files and cases, and the work they produce.
+
+```mermaid caption="The data boundary: your organisation holds teams, each team owns its work, and a person reaches it through a role in that team"
+flowchart TD
+  O[Your organisation] --> T[A team]
+  P[A person] -->|Role in that team| T
+  T --> W[Its work and records]
+```
+
+Records of another organisation on the same install are never found. Someone outside a team cannot open its records, even with a direct link: the server refuses and names the team that
+owns the record.
+
 - A person holds roles per team, and may hold different roles in different teams. The Admin role given in every team makes
   that person a workspace admin. A role can be given with an expiry date.
 - What you may do is the sum of your roles in that team. Each permission is an area (agents, workflows, cases,
@@ -82,7 +91,7 @@ opsai people invite a.osei@example.com --role viewer
 
 ## What success looks like
 
-An invited person starts as a Viewer and can read and chat. Someone outside a team who opens a record by direct link is
+An invited person starts as a Viewer and can read and chat. Records of another organisation on the same install are never found. Someone outside a team who opens a record by direct link is
 refused, and the refusal names the team that owns it. A change to a person's roles applies on their next request,
 without signing out. A risk review reads the roles grid and the answer is on one page.
 

@@ -58,7 +58,15 @@ opsai workflows apply route.yaml
 opsai workflows run route_support_message --wait --input '{"text": "I was charged twice this month."}'
 ```
 
-The run ends with the outcome `billing`. A model answer outside the categories leaves by `error` and ends as
+```mermaid caption="Where each support message ends: a clear category goes to its own end, anything unsure goes to Other, and a model error ends as failed"
+flowchart TD
+  A[Message arrives] --> B[Classify]
+  B -->|Billing| C[billing]
+  B -->|Technical| D[technical]
+  B -->|Below 0.6| E[other]
+```
+
+The sample message ends with the outcome `billing`. A model answer outside the categories leaves by `error` and ends as
 `classify_failed`. `opsai workflows types` lists every step type with its ports and settings.
 
 You do not need the console to build a workflow, but it shows and edits the same graph under **Build › Workflows**.

@@ -51,16 +51,14 @@ In the console the case is under **Work › Cases**.
 
 ## What a case holds
 
-- A case belongs to a team, and only that team's members with the Cases permission can open it.
-- Its page shows the subject, status, priority, owner, customer and two clocks (first response and resolution), the
-  fields the workflow set in the case type's order, the Human Tasks it is waiting on, and its linked files, runs, emails
-  and other cases.
-- The history is written in plain words ("Maria approved the hold"), not run ids. The five newest events show on the
-  case; **View all** opens the full activity.
-- A drafted action, such as a hold waiting for approval, shows on the case with its approval progress. It is approved on
-  its Human Task, where step-up and two-person rules apply.
-- A case type is a versioned record that names the fields and their order. Builders edit case types; no case type needs
-  code.
+A case holds everything a colleague needs to pick the work up.
+
+<!-- site: cards -->
+- **Owned by one team**: Only that team's members with the Cases permission can open it.
+- **One page of facts**: Subject, status, priority, owner, customer and two clocks (first response and resolution), then the fields the workflow set in the case type's order.
+- **History in plain words**: Events read "Maria approved the hold", not run ids. The five newest show on the case; **View all** opens the full activity.
+- **Waiting work in view**: Human Tasks it waits on, linked files, runs, emails and other cases. A drafted action, such as a hold waiting for approval, shows its progress and is approved on its Human Task, where step-up and two-person rules apply.
+- **A versioned case type**: It names the fields and their order. Builders edit case types; no case type needs code.
 
 ## Options
 
