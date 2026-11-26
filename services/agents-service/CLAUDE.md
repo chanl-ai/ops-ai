@@ -82,6 +82,12 @@ stack's chat alias points at one. Reference: [make/CLAUDE.md](../../make/CLAUDE.
 | Definitions are data | Agents, workflows, guardrails, skills, task and case types are records seeded from `seed/`, never code |
 | Experiments | Each `experiments/e<n>_*.py` has a write-up under 60 lines in `docs/services/agents-service/experiments/`; its code stays only while `make verify` is green |
 
+## Known traps
+
+- A migration that creates a tenant or team table creates its SQL Server security policy after the table
+  (`mssql_predicates_ddl`, then `isolation_ddl`) and drops it before the table (`isolation_drop_ddl`): SQL Server refuses
+  to drop a table a policy is bound to (error 3729), and only the store-mssql CI job runs that path.
+
 ## Reference docs
 
 | Doc | Covers |
