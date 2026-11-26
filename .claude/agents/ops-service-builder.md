@@ -17,6 +17,7 @@ belongs to `ops-sdk-builder`.
    [API contracts and models](../../docs/architecture/standards/api-and-models.md) and
    [observability](../../docs/architecture/standards/observability.md); then `services/CLAUDE.md`, the service's own
    `CLAUDE.md`, `packages/ops_service_kit/CLAUDE.md`, `docs/architecture/api.md` and `docs/architecture/service-map.md`.
+4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section.
 
 ## Owns
 | Paths | What |

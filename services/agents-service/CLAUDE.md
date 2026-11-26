@@ -82,6 +82,18 @@ stack's chat alias points at one. Reference: [make/CLAUDE.md](../../make/CLAUDE.
 | Definitions are data | Agents, workflows, guardrails, skills, task and case types are records seeded from `seed/`, never code |
 | Experiments | Each `experiments/e<n>_*.py` has a write-up under 60 lines in `docs/services/agents-service/experiments/`; its code stays only while `make verify` is green |
 
+## Known traps
+
+- A migration that adds a tenant-scoped table => create its row policy after the table and drop it before the table on downgrade; the policy names the table, so neither order works the other way round, and `make db-ddl-golden` (reviewed) records it
+- A store helper that takes a team list => an empty list reads every team; pass the caller's teams and test the empty case
+- A new team-owned table such as an outbox or schedule table => add it to the team-boundary list and regenerate the store inventory
+- A list route that accepts `search` => pass the search columns to `list_page`; five lists took the parameter and ignored it
+- A reply that gains a field => its pin test fails; run once with `AGENTS_REPIN=1`, read the fixture diff, commit it
+- A chat write that waits for approval => save the wait before drawing its card, or the card reads waiting while the write runs
+- A worker loop or queue supervisor => start it through `background.start` and hold the task; an unreferenced task is dropped
+- A new `GET` route => add its row to `budgets.toml`, and open no second transaction in its session check; `tests/api/test_statement_budget.py` fails any route without a row
+- A store change (tables, repositories, migrations, queries) pushed after `make ci-local` alone => ci-local lists `store-mssql` as skipped, so run `deploy/database/mssql_remote.sh test services/agents-service -q <tests>` before the push
+
 ## Reference docs
 
 | Doc | Covers |

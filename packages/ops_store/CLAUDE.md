@@ -96,6 +96,19 @@ images crash under Docker Desktop's emulation; the pinned 2025 image runs on the
 | The conformance database is `<test database>_conformance`, created on first use | Two sessions with different test databases never migrate each other's |
 | Importing `ops_store` installs the connect retry on every SQLAlchemy engine in the process (`src/ops_store/__init__.py:11`) | Engines made in scripts and tests get it without passing anything |
 
+## Known traps
+
+- A migration that adds a tenant-scoped table => create its row policy after the table and drop it before the table on downgrade; the policy names the table, so neither order works the other way round, and `make db-ddl-golden` (reviewed) records it
+- A local variable spelled like a `TEAM_OWNED` table name (`cases`) => rename it (`case_count`); `tests/test_team_reads.py` scans source by name, so do not touch the test
+- A read of a team-owned table in a helper => name the caller's team in the statement the isolation scans see, and pass no empty team list
+- A boolean compared with `.is_(True)` or `.is_(False)` => use `sa.true()` and `sa.false()`; SQL Server refuses `IS 1`
+- A list keyed on `(tenant_id, id)` => pick the ids under the caller's tenant, or another tenant's row of that id comes back
+- A migration number another branch also took => renumber it, regenerate the golden DDL and run `scripts/check_migration_heads.py` after every develop merge
+- A migration with a data-only downgrade => state it as such; `check_downgrades` refuses an empty one
+- A system user that reads a table => grant the table in `SYSTEM_USERS` of `deploy/database/mssql.py`, and name the user in its SQL Server team functions
+- A system transaction on SQL Server => revert inside it; reverting after the commit counts two transactions
+- A store change (tables, repositories, migrations, queries) pushed after `make ci-local` alone => ci-local lists `store-mssql` as skipped, so run `deploy/database/mssql_remote.sh test <member> -q <tests>` before the push
+
 ## Reference docs
 
 - [docs/architecture/data.md](../../docs/architecture/data.md): store inventory and data rules

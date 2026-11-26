@@ -15,6 +15,7 @@ written on the roles page in the same change; every exception is in the register
    and [security](../../docs/architecture/standards/security.md); then `docs/architecture/roles-and-permissions.md`
    (the grid, the policies and the exceptions register), `docs/architecture/identity-and-tenancy.md`,
    `packages/ops_access/CLAUDE.md`, `packages/ops_identity/CLAUDE.md`, `docs/architecture/saml-sign-in.md`.
+4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section.
 
 ## Owns
 | Paths | What |
