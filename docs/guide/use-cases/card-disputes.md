@@ -2,18 +2,20 @@
 
 Status: current. The workflow runs in the demo team, and the code below is the SDK calls its tests run end to end.
 
-A cardholder disputes a charge. The bank has to confirm who they are, check the dispute against its rules, and credit
-the money while the dispute runs, with a person approving the credit and a record a reviewer accepts. This guide runs
-one dispute from intake to credit with the Card dispute intake workflow.
+**Run a card dispute from intake to a provisional credit, with an agent that checks the handbook and a person who
+approves the money.**
 
-## The problem
+## A dispute is mostly lookup, and one decision that moves money
 
 A card team works through hundreds of disputes a week, and most of the work repeats: find the cardholder, list their
 accounts, read the handbook's rules for this kind of dispute. The judgement is small but it matters: is the dispute in
-time, which rule applies, how much provisional credit is allowed. The credit moves money, so a person approves it, and
-the bank has to show who approved what.
+time, which rule applies, how much provisional credit is allowed. The credit moves money, so a person has to approve it,
+and the bank has to show later who approved what and what they saw.
 
-## How the workflow runs it
+This guide runs one dispute with the Card dispute intake workflow in the demo team. Fixed steps do the lookups, an
+agent reads the handbook, and a person approves the credit.
+
+## The plan
 
 <!-- site: steps -->
 1. **The dispute comes in** through a form or the API: who the cardholder is, the merchant, the amount and what went
@@ -28,7 +30,10 @@ the bank has to show who approved what.
 
 ![The Card dispute intake workflow on the canvas, from Dispute received through the cardholder lookup, the agent's check and the case to the approval, with the failure ends below](../../media/workflow-light.png)
 
-## In the console
+## Try it
+
+Run one dispute in the console, then approve its credit. With the team's Two-person rule on, the approver is someone
+other than the person who started the run.
 
 | Step | Where | Expected |
 |---|---|---|
@@ -41,7 +46,7 @@ the bank has to show who approved what.
 
 ## Run it from code
 
-Start a dispute, wait until it reaches the approval, and decide it. Create an API key under **Settings › Team › API
+The same dispute from a script. Start a dispute, wait until it reaches the approval, and decide it. Create an API key under **Settings › Team › API
 keys** in the team that owns the workflow; the person who decides needs the approver role.
 
 ```python tab="Python"
@@ -87,17 +92,32 @@ Expected: the first wait returns at the approval with a task id; after the decis
 
 ## How each run can end
 
-| End | When |
-|---|---|
-| Credited | The approver approves the provisional credit; the case holds it |
-| Declined | The approver declines; no credit is sent |
-| Cardholder not found | The lookup finds no cardholder matching the details |
-| Lookup failed | The core banking system could not be reached |
-| Could not finish | A later step failed; the run's page shows which and why |
+Every run ends in one of five outcomes, shown on the run's page.
+
+<!-- site: decision source caption="The five ways a card dispute run can end" -->
+- **Does the lookup find a cardholder matching the details?**
+  - **The core banking system cannot be reached**: Lookup failed.
+  - **No match**: Cardholder not found. The run stops; nothing is guessed.
+  - **Yes**: The agent checks the handbook, then a person decides the credit.
+    - **Does the approver approve the provisional credit?**
+      - **Approves**: Credited. The case holds the credit and the decision.
+      - **Declines**: Declined. No credit is sent.
+      - **A later step fails**: Could not finish. The run's page shows which step and why.
+
+## What success looks like
+
+The run stops at the approval with the amount, the account and the cited handbook section on the task. After the
+approver decides, the run ends at Credited, and the case holds the credit, the decision and who made it. A dispute with
+no matching cardholder ends as Cardholder not found, not as a credit to the wrong person.
+
+## What skipping it costs
+
+Without the approval step, a credit is sent on the strength of a lookup and a summary. The bank cannot later show
+what the approver saw, and a wrong credit is found when the cardholder's statement is reconciled.
 
 ## Limits
 
-- The approver cannot be the person who started the run unless the team turns on **Requester may decide**.
+- While the team's **Two-person rule** is on (**Settings › Approvals**), the approver cannot be the person who started the run. An Admin of the team still decides their own request.
 - The workflow, its agent and its tools are records your team owns. Change them in the console or through the same API;
   the demo team's copy is a starting point, not a bank's policy.
 

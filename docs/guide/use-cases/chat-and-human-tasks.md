@@ -2,12 +2,18 @@
 
 Status: current. In the console today; the SDK calls below were run against a running install.
 
-An operations person's morning is spread across tools: approvals in one queue, case notes in another, the handbook in
-a third, and a colleague to ask what happened to yesterday's run. The approvals that block a customer wait the longest.
-This guide starts the day from the chat home instead, where one question lists what needs you and each answer is one
-click from done.
+**Open the chat home, ask what needs you, and decide each waiting task where you stand.**
 
-## Steps
+## Your morning is spread across several tools
+
+An operations person's morning is spread across tools: approvals in one queue, case notes in another, the handbook in a
+third, and a colleague to ask what happened to yesterday's run. The approvals that block a customer wait the longest,
+because nobody knows they are waiting.
+
+The chat home puts them in one place. One question lists what needs you, each answer is one click from done, and the
+same chat answers questions from the handbook and follows up on a run.
+
+## The plan
 
 <!-- site: steps -->
 1. **Sign in.** The chat home opens first. Under the message box sit four starting points: **What needs me today**,
@@ -22,10 +28,22 @@ click from done.
 5. **Follow up on a run.** Press **What happened to a run** and name it. The assistant reads the run and says where it
    is.
 
+## Try it
+
+Sign in, press **What needs me today** and decide the first card. Nothing else is needed: the chat home is the first
+page you land on.
+
 ![The chat home: Good morning, Maya; a message box; four starting points (What needs me today, Find a case, Start a workflow, What happened to a run); and Needs you below](images/chat-home-light.png)
 
-Expected: every task waiting on you is listed once, decided tasks leave the list, and **Human Tasks** shows the same
-decisions.
+## What success looks like
+
+Every task waiting on you is listed once, a task you decide leaves the list, and the **Human Tasks** page shows the
+same decision with who made it and when. A question about policy comes back with the section it came from.
+
+## What skipping it costs
+
+Without one place to start, an approval waits in a queue nobody opened and the customer behind it waits with it. The
+approver then decides from a queue instead of from the question that made the task.
 
 ## What the assistant can see
 

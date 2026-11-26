@@ -2,9 +2,24 @@
 
 Status: current. Run end to end against a Salesforce stand-in, in the console, the API, the SDK and the CLI.
 
-A service desk wants an agent that can look up a case in Salesforce and escalate it when asked, without handing the
-agent a password and without an unseen change reaching the CRM. This guide turns the Salesforce app on, gives its tools
-to an agent, and works a case in chat. The same steps fit any App.
+**Turn an App on, give its tools to an agent, and work a real case in chat, without handing the agent a password.**
+
+## The agent needs your CRM, and no one should hand it a password
+
+A service desk wants an agent that can look up a case in Salesforce and escalate it when asked. Pasting a password into a
+prompt gives the agent more than it should have and leaves no record of what it did, and an unseen change reaching the
+CRM is how a case gets escalated by mistake.
+
+An App holds the sign-in, so the agent never sees it. The agent gets only the tools you add, each call is logged with
+who it ran as, and a write can wait for a person. This guide uses Salesforce; the same steps fit any App.
+
+## The plan
+
+<!-- site: steps -->
+1. **Turn the App on** and sign in the team login.
+2. **Try a tool** in Mock, then Real.
+3. **Give the tools to an agent** and publish it.
+4. **Work a case in chat**, then ask for a change and approve it.
 
 ## Before you start
 
@@ -14,7 +29,7 @@ to an agent, and works a case in chat. The same steps fit any App.
 | A builder | To add tools to an agent and publish it |
 | A Salesforce user | Access to Ops AI's connected app in your org (see [Salesforce](../integrations/salesforce.md#if-sign-in-fails)) |
 
-## Steps
+## Try it
 
 <!-- site: steps -->
 1. **Turn Salesforce on.** A team admin opens **Data Gateway › Apps**, presses **Turn on** on Salesforce, picks where
@@ -30,8 +45,15 @@ to an agent, and works a case in chat. The same steps fit any App.
 6. **Ask it to change something.** "Escalate case 00044818." If your team asks before writes, a card names the tool,
    Update a record, and the change, Status: Escalated, and waits for a yes. Salesforce is unchanged until then.
 
-Expected: after the approval, the case reads Escalated in Salesforce, changed by the account the App signed in with,
-and the App's **Logs** tab lists both calls with who each ran as.
+## What success looks like
+
+After the approval, the case reads Escalated in Salesforce, changed by the account the App signed in with, and the
+App's **Logs** tab lists both calls with who each ran as. Before the approval Salesforce is unchanged.
+
+## What skipping it costs
+
+An agent without an App cannot look at the case at all. An agent given a pasted password can do anything that
+password allows, and nothing in Ops AI records which person asked or what the agent did.
 
 ## From the CLI
 

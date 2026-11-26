@@ -2,9 +2,23 @@
 
 Status: current. Each step has a runnable example folder in the repository, tested on every change.
 
-A developer new to Ops AI needs a path from one chat message to an agent and a workflow that call each other. This
-guide is that path, seven short steps, each through the Ops AI command line with the same calls available in the
-Python and TypeScript SDKs. Each step links to an example folder you can run and copy.
+**Climb from one chat message to an agent and a workflow that call each other, in seven steps you can run.**
+
+## You know what you want to build, not where to start
+
+A developer new to Ops AI has an agent or a workflow in mind and no path to it. The pieces (chat, knowledge, tools,
+agents, workflows) each have a page, and each page assumes the one before it.
+
+This guide is the path: seven short steps, each through the Ops AI command line, with the same calls available in the
+Python and TypeScript SDKs. Each step links to an example folder in the repository that you can run and copy.
+
+## The plan
+
+<!-- site: steps -->
+1. **Talk to it**: one chat message, then a knowledge page.
+2. **Give it a tool**: one read operation, in Mock and then for real.
+3. **Make an agent and a workflow**: each applied from a file.
+4. **Make them call each other**: a workflow step asks an agent, and an agent starts a workflow.
 
 ## Before you start
 
@@ -14,7 +28,9 @@ Python and TypeScript SDKs. Each step links to an example folder you can run and
 | The command line | [Install the CLI](install-cli.md), then `opsai login` |
 | The Builder role in a team | Builders create agents, workflows and knowledge bases |
 
-## The ladder
+## Try it
+
+Run the steps in order; each one builds on the account and team you signed in with.
 
 <!-- site: steps -->
 1. **Chat**: send one message and read the reply.
@@ -39,8 +55,16 @@ Python and TypeScript SDKs. Each step links to an example folder you can run and
 7. **An agent starts a workflow**: a chat calls a published workflow as a tool
    ([example](../../examples/compositions/02-agent-starts-workflow/README.md)).
 
-Expected at each step: the command prints the record it made or the answer it got. A refused step prints why, such as
-a workflow input missing a required field, naming the field.
+## What success looks like
+
+At each step the command prints the record it made or the answer it got. A refused step prints why, such as a workflow
+input missing a required field, naming the field. After step 7 a chat starts a published workflow and a workflow
+step asks a published agent.
+
+## What skipping it costs
+
+Without the ladder, the first agent is built before the first tool runs, and a failure in one piece looks like a
+failure in all of them. Each step is small enough that a failure points to the piece that caused it.
 
 The [workflows](workflows.md) and [agents](agents.md) pages list every further example: approvals, checklists,
 delegation, evaluations.
@@ -49,17 +73,15 @@ delegation, evaluations.
 
 Agents and workflows call each other only through their public APIs, so either one works without the other.
 
-```mermaid
-flowchart LR
-  WF["Workflow"] -->|"Agent step: names a published agent<br/>and maps the prompt"| AG["Agent"]
-  AG -->|"a workflow tool on its published tool list"| WF2["Published workflow,<br/>live version"]
-  AG -.->|"final answer"| WF
-```
-
-| Direction | How | What comes back |
-|---|---|---|
-| A workflow asks an agent | An Agent step names a published agent and maps the prompt from the run's data | The agent's final answer, as the step's output |
-| An agent starts a workflow | The workflow is on the agent's published tool list; calling it starts the workflow's live version for the signed-in person | The run's result, or a handle when the run waits for a person |
+<!-- site: compare caption="The two ways an agent and a workflow call each other" -->
+- **A workflow asks an agent**: Step 6 of the ladder
+  - **How**: An Agent step names a published agent and maps the prompt from the run's data
+  - **What runs**: The agent's published version
+  - **What comes back**: The agent's final answer, as the step's output
+- **An agent starts a workflow**: Step 7 of the ladder
+  - **How**: The workflow is on the agent's published tool list
+  - **What runs**: The workflow's live version, for the signed-in person
+  - **What comes back**: The run's result, or a handle when the run waits for a person
 
 ## The same operations on every surface
 
