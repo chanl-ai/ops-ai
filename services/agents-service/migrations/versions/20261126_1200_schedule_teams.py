@@ -8,7 +8,8 @@ showed another team's schedules. The table is now team-owned like the chain's ot
 every read by the acting team and the database's team policy does the same, while a tenant-wide block (the schedule
 clock) still reads every team. Every row already names its workflow's team (team_id is NOT NULL), so no row moves.
 
-The down path puts the tenant policy back. Runs on PostgreSQL and SQL Server.
+The down path puts back the tenant policy 20261123_1900 made, as it made it: on PostgreSQL its own text, on SQL Server
+the security policy over the chain's tenant predicates. Runs on PostgreSQL and SQL Server.
 """
 
 from __future__ import annotations
@@ -57,5 +58,18 @@ def upgrade() -> None:
     _policy(team=True)
 
 
+# 20261123_1900's policy, word for word, so a downgrade leaves the schema as that revision left it.
+TENANT_POLICY = (
+    f"CREATE POLICY {TABLE}_tenant ON {TABLE} "
+    "USING (tenant_id = current_setting('app.tenant_id', true)) "
+    "WITH CHECK (tenant_id = current_setting('app.tenant_id', true))"
+)
+
+
 def downgrade() -> None:
-    _policy(team=False)
+    if op.get_bind().dialect.name != "postgresql":
+        _policy(team=False)
+        return
+    op.execute(f"DROP POLICY IF EXISTS {TABLE}_isolation ON {TABLE}")
+    op.execute(f"DROP POLICY IF EXISTS {TABLE}_tenant ON {TABLE}")
+    op.execute(TENANT_POLICY)

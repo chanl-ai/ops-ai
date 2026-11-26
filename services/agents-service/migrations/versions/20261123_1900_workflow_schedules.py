@@ -7,13 +7,19 @@ Outside the workflow's versions, so a save applies at once (store/schedules.py).
 with team_id a plain column: a schedule is read and written through its workflow's own rights, which cover shared
 workflows the team policy has no branch for. The runtime role may delete, because clearing a schedule and deleting its
 workflow remove the row, and may delete trigger_events, because the schedule clock drops its own rows after
-KEEP_SCHEDULE_DAYS (store/trigger_events.py).
+KEEP_SCHEDULE_DAYS (store/trigger_events.py). On SQL Server the tenant policy is the security policy the golden DDL
+gives a tenant-scoped table, and the down path drops it first, since a schema-bound policy refuses DROP TABLE.
 """
 
 from __future__ import annotations
 
+from typing import Any
+
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import mssql
+
+from ops_store.schema import TENANT_SCOPED, isolation_ddl, isolation_drop_ddl, mssql_predicates_ddl
 
 revision = "20261123_1900_workflow_schedules"
 down_revision = "20261124_0257_skill_owner_ids"
@@ -21,6 +27,18 @@ branch_labels = None
 depends_on = None
 
 TENANT_ROLE = "ops_runtime_tenant"
+CHAIN = "agents"
+SYSTEM_ROLE = "ops_runtime_system"
+
+
+def _marked() -> sa.Table:
+    """The table as far as its policy needs, as of this revision."""
+    cols = [sa.Column("tenant_id", sa.String(64)), sa.Column("team_id", sa.String(64))]
+    return sa.Table("workflow_schedules", sa.MetaData(), *cols, info=TENANT_SCOPED)
+
+
+def _column_type(column: sa.Column[Any]) -> str:
+    return column.type.compile(dialect=mssql.dialect())
 
 
 def upgrade() -> None:
@@ -40,6 +58,11 @@ def upgrade() -> None:
         sa.Column("last_run_id", sa.String(64), nullable=True),
         sa.Column("seen_at", sa.String(32), nullable=True),
     )
+    if op.get_bind().dialect.name == "mssql":
+        for statement in mssql_predicates_ddl(CHAIN, [_marked()], column_type=_column_type, system_user=SYSTEM_ROLE):
+            op.execute(statement)
+        for statement in isolation_ddl(_marked(), "mssql", chain=CHAIN):
+            op.execute(statement)
     if op.get_bind().dialect.name != "postgresql":
         return
     op.execute(f"DO $$ BEGIN CREATE ROLE {TENANT_ROLE} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$")
@@ -60,6 +83,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if op.get_bind().dialect.name == "mssql":
+        for statement in isolation_drop_ddl(_marked(), "mssql"):
+            op.execute(statement)
     if op.get_bind().dialect.name == "postgresql":
         op.execute("DROP POLICY IF EXISTS trigger_events_schedule_delete ON trigger_events")
         op.execute(f"REVOKE DELETE ON trigger_events FROM {TENANT_ROLE}")
