@@ -129,7 +129,7 @@ the gate's address and nothing else.
 | Rule | Detail |
 |---|---|
 | Two lists | A host must be on the tenant's egress list and in the agent's `sandbox.network.allow`. The agent's list can only narrow the tenant's |
-| Pinned address | The gate resolves the host once and connects to that address, as tool calls do today (`services/tools-service/src/ops_tools/egress.py:231`) |
+| Pinned address | The gate resolves the host once and connects to that address, as tool calls do today (`services/tools-service/src/ops_tools/egress.py:227`) |
 | Identity | Each sandbox gets a short-lived gate token, minted by the tool gateway's signer (`services/tools-service/src/ops_tools/code_runs.py:61`) and sent as proxy authorization. It names tenant, team, conversation, agent version and the allowed hosts and secrets |
 | Two ways a host is handled | `tunnel`: the gate allows or refuses the connection by host and sees no content. `inspect`: the gate ends the encrypted connection with a certificate the image trusts, so it can add secrets, read the method and scrub answers |
 | When `inspect` is used | For a host a secret is tied to, and for every host when `approve` lists `network_write` or `install_packages` |

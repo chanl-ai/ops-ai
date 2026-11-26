@@ -29,14 +29,14 @@ These restate the standards for routes; a new route that breaks one fails an exi
 
 | Convention | Rule | Standard |
 |---|---|---|
-| Envelope | Success is `{success: true, data}`. An error is `{success: false, error: {code, message, status, requestId, kind, retryable}}` (`packages/ops_service_kit/src/ops_service_kit/http.py:84`, `:356`) | CF |
-| Request models | Every body is a model with unknown fields refused. No route takes a bare dictionary | LY |
+| Envelope | Success is `{success: true, data}`. An error is `{success: false, error: {code, message, status, requestId, kind, retryable}}` (`packages/ops_service_kit/src/ops_service_kit/http.py:84`, `:358`) | OB3 |
+| Request models | Every body is a model with unknown fields refused. No route takes a bare dictionary | LY2 |
 | Lists | Return `{data, pagination, facets}` (`http.py:179`), filter, sort and page in SQL, and take `page`, `pageSize`, `sort`, `q` | DA5 |
-| Errors | A stable `code` per failure, declared on the route so both SDKs get a typed error | EV |
-| Idempotency | A POST that creates or acts takes `Idempotency-Key`; a repeat returns the first answer | DL |
-| Permissions | Each route names the action and resource it checks with `can()`. Lists are filtered by the same rule | SC |
-| Public marker | A route meant for the SDK's hand-written layer carries the public marker so `make sdk` includes it | |
-| Streams | Server-sent events, each frame a typed model with a `type` field; the frame union is in the contracts package | EV |
+| Errors | A stable `code` per failure, declared on the route so both SDKs get a typed error | OB3 |
+| Idempotency | A POST that creates or acts takes `Idempotency-Key`; a repeat returns the first answer | EV3 |
+| Permissions | Each route names the action and resource it checks with `can()`. Lists are filtered by the same rule | Tenancy and access |
+| Public marker | A route meant for the SDK's hand-written layer carries the public marker so `make sdk` includes it | UI6 |
+| Streams | Server-sent events, each frame a typed model with a `type` field; the frame union is in the contracts package | UI6 |
 | Field names | JSON is camelCase; Python is snake_case with aliases generated | |
 
 ## Routes

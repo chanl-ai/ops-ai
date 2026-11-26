@@ -221,7 +221,7 @@ The `sdk` layer of each component's use cases runs these methods in both languag
 | `sdk/python/src/ops_ai` | `_spec.py` (read, write and order a spec file), `_sandbox.py`, generated `AgentSpec` types | `_agents.py`, `_chat.py`, `_client.py` (tasks, runs, the sandbox noun), `_workflows.py`, `_words.py`, `errors.py`, `_generated/` (by `make sdk`) | The update key list and the definition forms in `_agents.py` |
 | `sdk/typescript/src` | `spec.ts`, `sandbox.ts` | `agents.ts`, `chat.ts`, `client.ts`, `workflows.ts`, `words.ts`, `errors.ts`, `generated/` | The same forms in `agents.ts` |
 | `sdk/generate.py` | A step that turns the spec's JSON Schema into `AgentSpec` types for both languages | | |
-| `sdk/examples` | `agent-from-spec`, `sandbox-files`, `team-run`, each run by `make sdk-check` | | Examples that use the removed forms |
+| `sdk/python/examples`, `sdk/typescript/examples` | `agent-from-spec`, `sandbox-files`, `team-run`, each run by `make sdk-check` | | Examples that use the removed forms |
 
 ## Open points
 

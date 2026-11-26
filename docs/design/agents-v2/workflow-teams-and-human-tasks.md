@@ -176,7 +176,7 @@ Settings every task has:
 
 A role is a reviewer group of the team, resolved to people when the task opens and again at each move, so a change of
 who is on duty takes effect. Who may decide is still `can()` with the rule that the person who started the run cannot
-approve its changes (`services/agents-service/src/ops_agents/api/engine_reviews.py:1330`).
+approve its changes (`services/agents-service/src/ops_agents/api/engine_reviews.py:1215`).
 
 Answering outside the console:
 

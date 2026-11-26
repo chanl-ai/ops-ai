@@ -243,7 +243,7 @@ sequenceDiagram
 
 | Concern | Rule |
 |---|---|
-| Tenant isolation | All three tables are tenant scoped and read under the gateway's tenant role (`services/models-service/src/ops_models/store/provider_keys.py:20`). A budget id from another tenant answers 404 |
+| Tenant isolation | All three tables are tenant scoped and read under the gateway's tenant role (`services/models-service/src/ops_models/store/provider_keys.py:25`). A budget id from another tenant answers 404 |
 | Who may set a budget | Only a service token with scope `models:budgets`. A person changes a budget through the agents service, which decides with `can()` |
 | Completion text at rest | Only in `model_replays`, tenant scoped, short lived, never returned by a list route and never logged |
 | A loop that omits the headers | A call with no `X-Budget-Id` is admitted only for model keys whose purpose is not `agent`; an agent's model key without a budget header answers 400 `budget_required`. This is what makes the budget hold whatever the loop does |

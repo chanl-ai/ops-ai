@@ -29,7 +29,7 @@ would hold credentials inside the loop.
 
 Today the client does three things over streamable HTTP: initialize, list tools and call a tool
 (`services/tools-service/src/ops_tools/mcp.py:1`, methods at `:131`, `:137`, `:151`). The protocol version sent is
-`2025-06-18` (`mcp.py:29`).
+`2025-06-18` (`mcp.py:30`).
 
 | Addition | Today | Change | Why it matters |
 |---|---|---|---|
@@ -45,7 +45,7 @@ Today the client does three things over streamable HTTP: initialize, list tools 
 | The process transport (stdio) | Not supported | Not built in the gateway. A stdio server can run inside a sandbox, where its calls leave through the exit gate | The gateway starts no process |
 
 Every request still goes through the egress policy's client, so a tool server is reached only on a listed host at an
-address resolved once and pinned (`services/tools-service/src/ops_tools/egress.py:231`).
+address resolved once and pinned (`services/tools-service/src/ops_tools/egress.py:227`).
 
 ## Web search and page fetch
 

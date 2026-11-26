@@ -287,4 +287,4 @@ sequenceDiagram
 |---|---|---|
 | 1 | The default gate for small sets (1.0 under 10 cases) may block publishing on one flaky judge | Owner, after the first agents are moved to version 2 |
 | 2 | Whether eval runs should run on a schedule against the published version to catch a model's drift | Later release; the run and result shapes already allow it |
-| 3 | How well a model keeps to `mode` on real requests, so that `mode_in` is a stable check | Trial 3, part e |
+| 3 | How well a model keeps to `mode` on real requests, so that `mode_in` is a stable check | Trial 3, part d |

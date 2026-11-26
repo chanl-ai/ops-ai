@@ -36,7 +36,7 @@ this spec.
 |---|---|---|
 | The model port returns a library model object | `packages/ops_agent_kernel/src/ops_agent_kernel/ports.py:70` (`ModelSource.model_for`), `:88` (`KernelPorts.model`) | `ModelSource.endpoint_for(alias)` returns a `ModelEndpoint`: a URL, a key and headers |
 | A pause carries the library's serialised message history | `packages/ops_agent_kernel/src/ops_agent_kernel/types.py:282` (`Interrupt.history: bytes`) | `Interrupt.loop_state: LoopState`, opaque bytes with the loop's name and schema version |
-| The tool gateway imports a kernel type | `services/tools-service/src/ops_tools/code_runs.py:22` imports `ToolOutcome` from the kernel | `ToolOutcome` moves to the shared contracts package, so the tool gateway does not install the loop library |
+| The tool gateway imports a kernel type | `services/tools-service/src/ops_tools/code_runs.py:20` imports `ToolOutcome` from the kernel | `ToolOutcome` moves to the shared contracts package, so the tool gateway does not install the loop library |
 | The scripted model used by tests is a library class | `services/agents-service/src/ops_agents/api/model_ledger.py:39` (`FunctionModel`), and about fifty test files | A scripted model at the HTTP edge, described under [The scripted model](#the-scripted-model) |
 
 ## Interfaces
@@ -444,7 +444,7 @@ Failure modes first. Each is one test through `run_turn` on the scripted model u
 | `packages/ops_agent_kernel` | `contract.py` (`LoopDriver`, `LoopJob`, `LoopSeams`, signals), `seams.py` (the kernel's `LoopSeams`), `strands_loop/` (`driver.py`, `state.py`, `signals.py`, `telemetry.py`), `structured.py`, `hooks.py`, `modes.py`, `testing.py` | `kernel.py` (rebuilt on the contract), `ports.py`, `types.py`, `events.py`, `guard.py`, `judge.py`, `search.py`, `context.py`, `pyproject.toml` (`strands-agents` in, `pydantic-ai-slim` out) | `models.py`, `aliases.py` |
 | `packages/contracts` | `tools.py` (`ToolOutcome`) | | |
 | `services/agents-service` | `api/model_endpoints.py` (the `ModelSource` and `StructuredCalls` implementations), `store/hook_policies.py` | `api/app.py:327`, `graphs/common.py` (new events, `loop_state` in `pending`), `graphs/agent_wrapper.py`, `graphs/models.py`, `api/engine_agents.py`, `api/agent_test.py`, `tests/conftest.py` | `api/model_ledger.py`, `api/chat_history.py`, `store/model_calls.py` (after the gateway holds the record) |
-| `services/tools-service` | | `code_runs.py:22` and every other import of `ToolOutcome` | |
+| `services/tools-service` | | `code_runs.py:20` and every other import of `ToolOutcome` | |
 | Root | `.importlinter` contract `strands-only-in-its-adapter` | `docs/architecture/dependencies.md` through `make sbom` | |
 
 ## Open points

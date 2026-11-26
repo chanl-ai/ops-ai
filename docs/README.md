@@ -62,6 +62,10 @@ Each page opens with the problem it solves and says what is built. Images sit be
 | `design/agents-v2/api.md` | Agents version 2: every route the three releases add, change or remove |
 | `design/agents-v2/sdk.md` | Agents version 2: the Python and TypeScript SDK methods and typed errors |
 | `design/agents-v2/cli.md` | Agents version 2: the command line's new commands and exit codes |
+| `design/agents-v2/console-screens.md` | Agents version 2: the nine console screens, their states and the component each region uses |
+| `design/agents-v2/coding-guide.md` | Agents version 2: where code goes, how each protection is enforced and tested, and what never to do |
+| `design/agents-v2/trials.md` | Agents version 2: fifteen experiments, each with a pass line, the build step it gates and a fallback |
+| `design/agents-v2/README.md` | Agents version 2: the mission, the map of specs, the release split, build order and done-when per release |
 
 ## How the docs site shows a page
 

@@ -47,7 +47,7 @@ document's fields, how it is stored as versions, and how it is checked.
 | `agents` | Helper agents and how each is used | New | none; today a team's default agent asks specialists (`api/agent_calls.py:72`) |
 | `sandbox` | The workspace: image, size, hosts, secrets, approvals, files | New | none |
 | `hooks` | Named policies per moment | New | none |
-| `output` | A schema the answer must match, and a quality bar | New for chat; a workflow agent step has `outputSchema` today | `AgentRequest.output_schema` (`packages/ops_engine/src/ops_engine/ports.py:155`) |
+| `output` | A schema the answer must match, and a quality bar | New for chat; a workflow agent step has `outputSchema` today | `AgentRequest.output_schema` (`packages/ops_engine/src/ops_engine/ports.py:153`) |
 | `evals` | Test cases and the pass rate the publish gate needs | Changed: in the file; the cases and gate exist | eval cases (`api/routers/assurance.py:172`) |
 
 Fields removed from the old `guardrails` object, and where each goes:
@@ -135,7 +135,7 @@ class SpecDiff(Out):
 ```
 
 A save made from an older copy answers 409 `stale_base`, as today's update does
-(`sdk/python/src/ops_ai/_agents.py:52`).
+(`sdk/python/src/ops_ai/_agents.py:54`).
 
 ### Events
 
