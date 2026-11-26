@@ -5,6 +5,7 @@
 // run fails if any step fails or the total is over BUDGET_SECONDS. Platform sign-in, the scripted model, 1440 wide.
 import { check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { JAMES, MAYA, PASSWORD, publishReviewOn } from '../../lib/workflow_ui.mjs';
+import { setText } from './rich-text.mjs';
 
 const BUDGET_SECONDS = Number(process.env.UC771_BUDGET_SECONDS ?? 600);
 const RUN = Math.random().toString(36).slice(2, 6);
@@ -70,13 +71,14 @@ await withUiStack(
         await fill(dialog.getByLabel('Use when'), USE_WHEN);
         await click(james.getByTestId('new-skill-submit'));
         await james.waitForURL(/\/build\/skills\/[^/?#]+/, { timeout: 60_000 });
-        await james.getByTestId('sop-editor-content').waitFor({ timeout: 120_000 });
+        await james.getByTestId('rich-text').waitFor({ timeout: 120_000 });
       });
       await step('3 write the SOP with one guard', async () => {
-        await click(james.getByTestId('sop-editor-content'));
-        await press(james, 'ControlOrMeta+A');
-        await typeText(james, SOP);
-        await james.getByTestId('sop-editor').locator('.cm-line', { hasText: 'Never refund over 500' }).waitFor({ timeout: 30_000 });
+        // The whole text goes in through the Markdown view, which keeps its lines and their indent exactly.
+        actions.fields++;
+        actions.chars += SOP.length;
+        await setText(james, SOP);
+        await james.getByTestId('rich-text').locator('p, li', { hasText: 'Never refund over 500' }).first().waitFor({ timeout: 30_000 });
       });
       await step('4 save the draft', async () => {
         const saved = james.locator('[data-testid="save-state"][data-state="saved"]');
