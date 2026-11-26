@@ -42,10 +42,12 @@ await withUiStack(async (consoleUrl) => {
     const actingTeam = createRes.request().headers()['x-team-id'];
     check('the new agent is owned by the current team, and the request names no owner', !!ownTeam && !('owner' in sent) && !!actingTeam && agent?.teamId === actingTeam && stated.includes(`owned by ${ownTeam}`), { teamId: agent?.teamId, actingTeam, sent, ownTeam, stated });
     check('New agent creates a draft in the registry (201, not published)', createRes.status() === 201 && agent?.availability === 'not_published', { status: createRes.status(), availability: agent?.availability });
-    const opened = await page.waitForURL(`**/agents/${agent?.id}`, { timeout: 60_000 }).then(() => true, () => false);
+    const opened = await page.waitForURL(new RegExp(`/agents/${agent?.id}(/[a-z-]+)?([?#]|$)`), { timeout: 60_000 }).then(() => true, () => false);
     const header = await page.getByText(/ · used in \d+ workflow/).first().innerText({ timeout: 30_000 }).catch(() => '');
     check('the agent page names its team from the teams list', !!ownTeam && header.startsWith(`${ownTeam} · used in`), { header, ownTeam });
-    check('the agent page opens on the new record', opened && (await page.getByTestId('page-title').first().innerText()) === NAME);
+    // A builder's agent page shows its name as an editable title.
+    const title = await page.getByTestId('page-title-input').first().inputValue({ timeout: 30_000 }).catch(() => '');
+    check('the agent page opens on the new record', opened && title === NAME, { opened, title });
 
     // Non-vacuous pair with the run below: before the publish the agent has no graph, so a thread on it is refused.
     const early = await fetch(`${agents}/v1/threads`, { method: 'POST', headers: { ...TEAM, 'Content-Type': 'application/json' }, body: JSON.stringify({ graph: `agent:${agent?.id}` }) });
@@ -88,7 +90,8 @@ await withUiStack(async (consoleUrl) => {
     check('after the publish the header no longer offers Request publish', (await page.getByTestId('request-agent-publish').count()) === 0);
     // An edit after publish opens v2 as the draft; the history lists the draft and the published v1 only.
     const reopened = armed(page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url() === `${agents}/v1/agents/${agent?.id}`, { timeout: 60_000 }));
-    await page.locator('#ag-role').fill('Checks new payees twice');
+    // The name is the header's editable title; any saved field opens the draft.
+    await page.getByTestId('page-title-input').fill(`${NAME} (checks new payees twice)`);
     const after = reopened ? (await (await reopened)?.json())?.data : undefined;
     const history = (await (await fetch(`${agents}/v1/agents/${agent?.id}/versions`, { headers: TEAM })).json()).data ?? [];
     check('an edit after publish opens draft v2 and history lists v2 and v1', after?.version === 2 && after?.publishedVersion === 1 && JSON.stringify(history.map((v) => [v.version, v.state])) === '[[2,"draft"],[1,"published"]]', { version: after?.version, history: history.map((v) => [v.version, v.state]) });
