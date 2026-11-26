@@ -4,7 +4,6 @@ services run the same suites on their own repositories."""
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncIterator, Mapping
 from typing import ClassVar
 
@@ -18,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_service_kit.settings import Settings
 from ops_store import Backend, Guarantee
 from ops_store.backends import backends
-from ops_store.conformance import audit_suite, engine_for, lease_suite, timer_claim_suite
+from ops_store.conformance import LeaseClock, audit_suite, engine_for, lease_suite, timer_claim_suite
 from ops_store.reference import SqlAuditLog
 
 meta = sa.MetaData()
@@ -37,23 +36,23 @@ timers = sa.Table(
     sa.Column("generation", sa.Integer, nullable=False),
     sa.Column("claimed", sa.Boolean, nullable=False),
 )
-NOW = sa.func.extract("epoch", sa.func.clock_timestamp())
 
 
 class Leases:
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.CLOCK})
     ttl = 0.4
 
-    def __init__(self, engine: AsyncEngine, *, cas: bool = True) -> None:
-        self.engine, self.cas = engine, cas
+    def __init__(self, engine: AsyncEngine, clock: LeaseClock, *, cas: bool = True) -> None:
+        self.engine, self.clock, self.cas = engine, clock, cas
 
     async def try_acquire(self, key: str, holder: str) -> int | None:
+        now = self.clock.sql()
         async with self.engine.begin() as c:
-            ins = insert(leases).values(key=key, holder=holder, generation=1, expires_at=NOW + self.ttl)
+            ins = insert(leases).values(key=key, holder=holder, generation=1, expires_at=now + self.ttl)
             took = ins.on_conflict_do_update(
                 index_elements=[leases.c.key],
-                set_={"holder": holder, "generation": leases.c.generation + 1, "expires_at": NOW + self.ttl},
-                where=leases.c.expires_at < NOW if self.cas else sa.true(),
+                set_={"holder": holder, "generation": leases.c.generation + 1, "expires_at": now + self.ttl},
+                where=leases.c.expires_at < now if self.cas else sa.true(),
             ).returning(leases.c.generation)
             return (await c.execute(took)).scalar()
 
@@ -74,36 +73,28 @@ class ReadThenWrite(Leases):
     async def try_acquire(self, key: str, holder: str) -> int | None:
         async with self.engine.begin() as c:
             live = (
-                await c.execute(sa.select(leases.c.key).where(leases.c.key == key, leases.c.expires_at >= NOW))
+                await c.execute(
+                    sa.select(leases.c.key).where(leases.c.key == key, leases.c.expires_at >= self.clock.sql())
+                )
             ).first()
-        return None if live else await Leases(self.engine, cas=False).try_acquire(key, holder)
+        return None if live else await Leases(self.engine, self.clock, cas=False).try_acquire(key, holder)
 
 
-class Stalled(Leases):
-    """A correct lease whose call is held up past the ttl for one contender of each race, as on a loaded host."""
-
-    async def try_acquire(self, key: str, holder: str) -> int | None:
-        if holder in ("r1", "s1"):
-            await asyncio.sleep(self.ttl * 1.5)
-        return await super().try_acquire(key, holder)
-
-
-class StalledSameGeneration(Leases):
-    """As Stalled, but the held-up contender takes the lapsed lease without a newer generation, so two winners hold
-    one generation and the first holder's fenced writes still land."""
+class SameGeneration(Leases):
+    """Takes a lapsed lease without a newer generation, so the old holder's fenced writes still land."""
 
     async def try_acquire(self, key: str, holder: str) -> int | None:
-        if holder not in ("r1", "s1"):
-            return await super().try_acquire(key, holder)
-        await asyncio.sleep(self.ttl * 1.5)
+        now = self.clock.sql()
         async with self.engine.begin() as c:
             took = (
                 leases.update()
-                .where(leases.c.key == key, leases.c.expires_at < NOW)
-                .values(holder=holder, expires_at=NOW + self.ttl)
+                .where(leases.c.key == key, leases.c.expires_at < now)
+                .values(holder=holder, expires_at=now + self.ttl)
                 .returning(leases.c.generation)
             )
-            return (await c.execute(took)).scalar()
+            if (g := (await c.execute(took)).scalar()) is not None:
+                return g
+        return await super().try_acquire(key, holder)
 
 
 class Timers:
@@ -151,18 +142,13 @@ async def backend(request: pytest.FixtureRequest) -> AsyncIterator[tuple[Backend
 
 async def test_leases_conform_and_a_lease_without_cas_does_not(backend: tuple[Backend, AsyncEngine]) -> None:
     b, engine = backend
-    await lease_suite(b, lambda: _ready(Leases(engine)))
+    await lease_suite(b, lambda clock: _ready(Leases(engine, clock)))
     with pytest.raises(AssertionError, match="refuses a second holder"):
-        await lease_suite(b, lambda: _ready(Leases(engine, cas=False)))
+        await lease_suite(b, lambda clock: _ready(Leases(engine, clock, cas=False)))
     with pytest.raises(AssertionError, match="contenders took one free key"):
-        await lease_suite(b, lambda: _ready(ReadThenWrite(engine)))
-
-
-async def test_a_contender_held_up_past_the_ttl_may_take_the_lapsed_lease(backend: tuple[Backend, AsyncEngine]) -> None:
-    b, engine = backend
-    await lease_suite(b, lambda: _ready(Stalled(engine)))
-    with pytest.raises(AssertionError, match="contenders took one free key"):
-        await lease_suite(b, lambda: _ready(StalledSameGeneration(engine)))
+        await lease_suite(b, lambda clock: _ready(ReadThenWrite(engine, clock)))
+    with pytest.raises(AssertionError, match="newer generation"):
+        await lease_suite(b, lambda clock: _ready(SameGeneration(engine, clock)))
 
 
 async def test_timer_claims_conform_and_a_read_then_write_claim_does_not(backend: tuple[Backend, AsyncEngine]) -> None:
@@ -183,7 +169,7 @@ async def test_a_backend_missing_a_guarantee_is_refused(backend: tuple[Backend, 
     _, engine = backend
     no_clock = Backend("no-clock", "", frozenset({Guarantee.CAS}))
     with pytest.raises(AssertionError, match="needs \\['clock'\\]"):
-        await lease_suite(no_clock, lambda: _ready(Leases(engine)))
+        await lease_suite(no_clock, lambda clock: _ready(Leases(engine, clock)))
 
 
 async def _ready[T](x: T) -> T:
