@@ -86,7 +86,7 @@ stack's chat alias points at one. Reference: [make/CLAUDE.md](../../make/CLAUDE.
 
 | Trap | Detail |
 |---|---|
-| No gateway, no tool steps | Every deployment sets `OPS_GATEWAY_URL` (fly, k8s, compose, `make up`). Without it the tool list is the in-process catalogue, which holds no platform tool (send_reply) and no app's, and the runner calls no tool step at all (`NoGatewayError`); a use case that publishes or runs a tool step starts `tools()` and passes `gateway_url`, as uc-223 and uc-620 do |
+| No gateway, no tool steps | Every deployment sets `OPS_GATEWAY_URL` (fly, k8s, compose, `make up`). Without it the publish check reads the in-process catalogue, which holds no platform tool (send_reply) and no app's, and refuses such a step naming the missing gateway; a catalogue tool step still publishes, and the runner calls no tool step at all (`NoGatewayError`). A use case that publishes or runs a tool step starts `tools()` and passes `gateway_url`, as uc-223 and uc-620 do |
 
 ## Reference docs
 
