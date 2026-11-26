@@ -23,7 +23,7 @@ lint: ## ruff format check and lint
 typecheck: ## Strict pyright, test-file errors held to tests-typecheck-baseline.txt
 	uv run python $(ROOT)/scripts/check_tests_typecheck.py $(PY_DIRS)
 
-test: ## Registry and API tests on the test database (starts compose); T= runs only those files
+test: ## Registry and API tests on the test database (runs the root db-up first); T= runs only those files
 	$(MAKE) -C $(ROOT) db-up
 	$(TEST_DB) uv run pytest $(PYTEST_PAR) $(T)
 

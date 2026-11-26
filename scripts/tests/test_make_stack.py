@@ -248,6 +248,13 @@ def test_a_shared_stack_starts_and_stops_no_container_and_a_dry_run_writes_no_ma
     assert not list(tmp_path.iterdir()), list(tmp_path.iterdir())
 
 
+def test_a_real_sample_install_writes_its_markers_whatever_the_command_line_holds(tmp_path: Path) -> None:
+    # MAKE=true stands in for the two sample installs; a spaced value with an n must not read as make -n.
+    out = make(ROOT, "sample-install", "MAKE=true", f"OPS_RUN_DIR={tmp_path}", "NAME=sample team now")
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["sample-library.installed", "sample-team.installed"]
+
+
 def test_a_shared_stacks_service_makefiles_start_and_stop_no_container() -> None:
     shared = ("OPS_INFRA=shared", "OPS_PORT_OFFSET=400")
     runs = [("services/agents-service", "db-up"), ("services/agents-service", "db-down")]

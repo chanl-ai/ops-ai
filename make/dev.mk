@@ -1,6 +1,6 @@
 # The local stack: compose (PostgreSQL, OPA), migrations, then the agents service, tools service and console in the
 # background. scripts/stack.sh is the process manager: logs in .logs/<svc>.log, pids in .run/<svc>.pid.
-.PHONY: offset-guard port-list up down restart reset-db health logs ports demo-model sample-team sample-library sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
+.PHONY: offset-guard port-list up sample-install down restart reset-db health logs ports demo-model sample-team sample-library sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
 
 ##@ Stack (one per machine)
 
@@ -13,10 +13,6 @@ DEMO_MODEL ?= $(if $(OPENAI_API_KEY),gpt-5-mini,fake)
 # provider connection, so DEMO_MODEL=fake puts all of them on the fake.
 DEMO_FAST_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-4.1-mini)
 DEMO_CHAT_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-5-nano)
-
-# make -n still runs a recipe line holding $(MAKE); MARK keeps such a line from writing its marker on a dry run. The
-# short flags are the MAKEFLAGS words that are neither a long option nor a variable (make 3.81 puts long options first).
-MARK = $(if $(findstring n,$(foreach w,$(filter-out --%,$(MAKEFLAGS)),$(if $(findstring =,$(w)),,$(w)))),:,touch)
 
 up: offset-guard db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); a new database gets the sample team (SAMPLE=0 skips); OPS_INFRA=external uses side containers and skips db-up/db-down; OPS_INFRA=shared (offset stacks) reuses the default stack's containers with its own database
 	@# Services started before their code last changed run old code: stopped here, started again after the schema step.
@@ -50,15 +46,16 @@ up: offset-guard db-up ## Compose, migrate every chain in place, then the servic
 	@# Every member role has an account that signs in, so a walk or a use case as any role never needs a manual seed.
 	@# A warning, not a stop: a stack started with its own seed file or everyone as admin holds other roles by design.
 	@$(MAKE) -s seed-roles ENV=local || echo "make up: a member role cannot sign in with its seeded account (lines above); walks as that role will fail"
-	@# A new database gets the sample team once, so a fresh clone has people, knowledge and agents to try; the marker
-	@# goes with the database (make reset-db removes it). SAMPLE=0 skips it.
-	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-team.installed" ]; then \
-		$(MAKE) -s sample-team && $(MARK) "$(OPS_RUN_DIR)/sample-team.installed"; \
-	fi
-	@# The demo policy library, once per database, in team Platform where the signed-in dev admin sees it.
-	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-library.installed" ]; then \
-		$(MAKE) -s sample-library && $(MARK) "$(OPS_RUN_DIR)/sample-library.installed"; \
-	fi
+	@$(MAKE) -s sample-install
+
+# A new database gets the sample team once, so a fresh clone has people, knowledge and agents to try, and the demo
+# policy library in team Platform where the signed-in dev admin sees it; the markers go with the database (make reset-db
+# removes them). Each touch has a line of its own with no $(MAKE): make -n runs a line holding $(MAKE), skips this one.
+sample-install: ## The sample team and the demo policy library, once per database (make up runs it; SAMPLE=0 skips)
+	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-team.installed" ]; then $(MAKE) -s sample-team; fi
+	@if [ "$(SAMPLE)" != "0" ]; then touch "$(OPS_RUN_DIR)/sample-team.installed"; fi
+	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-library.installed" ]; then $(MAKE) -s sample-library; fi
+	@if [ "$(SAMPLE)" != "0" ]; then touch "$(OPS_RUN_DIR)/sample-library.installed"; fi
 
 reset-db: ## Wipe the stack's database and rebuild it empty from the chains; asks first (CONFIRM=yes skips)
 	@if [ "$(CONFIRM)" != yes ]; then \
