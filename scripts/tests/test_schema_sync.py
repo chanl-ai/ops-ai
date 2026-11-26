@@ -96,3 +96,61 @@ def test_a_chain_behind_the_code_is_migrated_not_wiped(database: str) -> None:
     behind = check(database)
     assert behind.returncode == 0, behind.stdout + behind.stderr
     assert f"platform database at {first}" in behind.stdout and "migrates it forward" in behind.stdout, behind.stdout
+
+
+def refused(url: str, *flags: str, **env: str) -> str:
+    """The refusal message, or fails: URLs here point at port 1, so a guard that lets a call through cannot reach a
+    database, it errors on the connection instead."""
+    out = subprocess.run(
+        [sys.executable, str(SCRIPT), url, *flags],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+        env={**os.environ, **env},
+        check=False,
+    )
+    assert out.returncode != 0 and "refusing" in out.stdout + out.stderr, (flags, out.stdout, out.stderr[-300:])
+    return out.stdout + out.stderr
+
+
+def test_a_reset_of_a_stack_database_needs_the_flag_only_make_reset_db_passes() -> None:
+    url = "postgresql+asyncpg://ops:ops@localhost:1/ops_runtime"
+    assert "only make reset-db" in refused(url, "--reset")
+
+
+def test_a_shared_stack_never_resets_or_creates_a_database_but_its_own() -> None:
+    env = {"OPS_INFRA": "shared", "OPS_PORT_OFFSET": "400"}
+    for name in ("ops_runtime", "ops_runtime_300"):
+        url = f"postgresql+asyncpg://ops:ops@localhost:1/{name}"
+        assert "owns only ops_runtime_400" in refused(url, "--reset", "--confirmed-by-reset-db", **env)
+        assert "owns only ops_runtime_400" in refused(url, "--create", **env)
+
+
+def test_create_makes_a_missing_database_once_and_leaves_an_existing_one(database: str) -> None:
+    asyncio.run(drop())
+    # ops_test_ names are the test runners'; the create path takes any other name.
+    scratch = database.rsplit("/", 1)[0] + f"/ops_scratch_{os.getpid()}"
+
+    def create() -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), scratch, "--create"], capture_output=True, text=True, cwd=ROOT, check=False
+        )
+
+    async def exists(drop_it: bool = False) -> bool:
+        admin = await asyncpg.connect(ADMIN)
+        try:
+            name = f"ops_scratch_{os.getpid()}"
+            found = bool(await admin.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", name))
+            if drop_it:
+                await admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+            return found
+        finally:
+            await admin.close()
+
+    try:
+        first, second = create(), create()
+        assert first.returncode == 0 and "created" in first.stdout, first.stdout + first.stderr
+        assert second.returncode == 0 and "created" not in second.stdout, second.stdout + second.stderr
+        assert asyncio.run(exists())
+    finally:
+        asyncio.run(exists(drop_it=True))

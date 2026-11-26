@@ -63,7 +63,7 @@ reset-db: ## Wipe the stack's database and rebuild it empty from the chains; ask
 	fi
 	@$(STACK) stop-for-reset
 	@rm -f "$(OPS_RUN_DIR)/sample-team.installed" "$(OPS_RUN_DIR)/sample-library.installed"
-	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/schema_sync.py "$(OPS_DATABASE_URL)" --reset
+	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/schema_sync.py "$(OPS_DATABASE_URL)" --reset --confirmed-by-reset-db
 	@$(MAKE) -s migrate
 
 down: ## Stop what `make up` started, then compose (KEEP_DB=1 leaves compose running)

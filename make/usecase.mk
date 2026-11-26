@@ -41,7 +41,7 @@ usecase-new: ## Register a use case: make usecase-new SERVICE=<service> TITLE="<
 
 usecase-reset: ## Drop runner-made use-case databases, including ones a killed run left (a pinned OPS_USECASE_DB is yours)
 	@printf '%s\n' "SELECT format('DROP DATABASE %I WITH (FORCE)', datname) FROM pg_database WHERE datname ~ '^ops_usecase(_isolated|_r[0-9]+_[0-9a-f]{6})?$$'" '\gexec' \
-	  | $(COMPOSE) exec -T postgres psql -U ops -d postgres -q
+	  | $(DB_COMPOSE) exec -T postgres psql -U ops -d postgres -q
 
 usecase-runner-test: ## Type-check and test packages/usecase-runner
 	pnpm --filter @ops-ai/usecase-runner verify

@@ -6,7 +6,7 @@ a revision this checkout does not have (another session's newer code, or an edit
 the chain named and the fix, because migrating it would be guessing.
 
   uv run python scripts/schema_sync.py <database url>           # 0: every chain at or behind its head; 4: one ahead
-  uv run python scripts/schema_sync.py <database url> --reset   # drop and recreate the database, empty (make reset-db)
+  uv run python scripts/schema_sync.py <database url> --reset --confirmed-by-reset-db  # empty it (make reset-db only)
   uv run python scripts/schema_sync.py <database url> --create  # make the database when missing (OPS_INFRA=shared)
   uv run python scripts/schema_sync.py <database url> --recorded  # each chain's recorded revision, one line each
 
@@ -19,6 +19,7 @@ first; the drop uses FORCE. Only `make reset-db` (or `make up RESET=1`) calls it
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -41,6 +42,18 @@ CHAINS = (
 )
 # The tests' and use cases' databases are made and dropped by their own runners.
 REFUSED = ("ops_test", "ops_usecase")
+# The only flag `make reset-db` passes, after its yes prompt: a reset of any other database is refused without it.
+CONFIRMED = "--confirmed-by-reset-db"
+
+
+def own_shared_database(name: str) -> None:
+    """OPS_INFRA=shared: an offset stack's database is ops_runtime_<offset>; the default stack's ops_runtime and every
+    other stack's database live in the same postgres and are never this stack's to create or drop."""
+    offset = os.environ.get("OPS_PORT_OFFSET", "0")
+    if os.environ.get("OPS_INFRA") == "shared" and not name.startswith(REFUSED) and name != f"ops_runtime_{offset}":
+        raise SystemExit(
+            f"schema_sync: refusing {name!r}: OPS_INFRA=shared stack at offset {offset} owns only ops_runtime_{offset}"
+        )
 
 
 def code_head(directory: str) -> str:
@@ -82,10 +95,15 @@ async def recorded(url: str) -> dict[str, str | None]:
     return found
 
 
-async def reset(url: str) -> None:
+async def reset(url: str, confirmed: bool = False) -> None:
     dsn, name = _dsn(url)
-    if not name or name.startswith(REFUSED):
-        raise SystemExit(f"schema_sync: refusing to reset {name!r}; its runner owns it")
+    if not name:
+        raise SystemExit("schema_sync: refusing to reset a database with no name")
+    if not confirmed and not name.startswith(REFUSED):
+        raise SystemExit(
+            f"schema_sync: refusing to reset {name!r}: only make reset-db, after its yes prompt, resets it"
+        )
+    own_shared_database(name)
     admin = await asyncpg.connect(dsn.rsplit("/", 1)[0] + "/postgres")
     try:
         await admin.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
@@ -101,6 +119,7 @@ async def create(url: str) -> None:
     dsn, name = _dsn(url)
     if not name or name.startswith(REFUSED):
         raise SystemExit(f"schema_sync: refusing to create {name!r}; its runner owns it")
+    own_shared_database(name)
     admin = await asyncpg.connect(dsn.rsplit("/", 1)[0] + "/postgres")
     try:
         if not await admin.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", name):
@@ -119,7 +138,7 @@ def main() -> int:
         asyncio.run(create(url))
         return 0
     if "--reset" in sys.argv[2:]:
-        asyncio.run(reset(url))
+        asyncio.run(reset(url, CONFIRMED in sys.argv[2:]))
         return 0
     db = asyncio.run(recorded(url))
     if "--recorded" in sys.argv[2:]:

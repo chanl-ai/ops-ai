@@ -216,3 +216,46 @@ def test_a_failing_secrets_command_warns_once_and_make_goes_on(tmp_path: Path) -
     out = env_check(fake_secrets(tmp_path, fail=True))
     assert out.returncode == 0 and out.stdout == "SEC_KEY: not set\nSEC_TWO: not set\n"
     assert out.stderr == "OPS_SECRETS_CMD failed; using .env and the environment\n"
+
+
+def dry(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    """`make -n` from the real root: what would run, nothing run."""
+    return make(ROOT, "-n", *args, env=env)
+
+
+def test_a_shared_stack_resets_only_its_own_database_whatever_the_env_names() -> None:
+    env = {"OPS_DATABASE_URL": "postgresql+asyncpg://ops:ops@localhost:5477/ops_runtime"}
+    out = dry("reset-db", "CONFIRM=yes", "OPS_INFRA=shared", "OPS_PORT_OFFSET=36000", env=env)
+    assert out.returncode == 0, out.stderr
+    assert '5477/ops_runtime_36000" --reset --confirmed-by-reset-db' in out.stdout, out.stdout
+    assert '/ops_runtime" ' not in out.stdout, out.stdout
+
+
+def test_a_shared_stack_keeps_the_infra_ports_and_moves_the_rest() -> None:
+    plain, shared = stack_values(env={}), stack_values("OPS_INFRA=shared", "OPS_PORT_OFFSET=400", env={})
+    infra = ("OPS_PG_PORT", "OPS_OPA_PORT", "OPS_GREENMAIL_SMTP_PORT", "OPS_GREENMAIL_IMAP_PORT")
+    infra += ("OPS_MAILPIT_SMTP_PORT", "OPS_MAILPIT_HTTP_PORT")
+    assert all(shared[n] == plain[n] for n in infra), {n: shared[n] for n in infra}
+    assert shared["OPS_AGENTS_PORT"] != plain["OPS_AGENTS_PORT"]
+
+
+def test_a_shared_stack_starts_and_stops_no_container() -> None:
+    for goal in ("up", "down"):
+        out = dry(goal, "OPS_INFRA=shared", "OPS_PORT_OFFSET=400")
+        assert out.returncode == 0, out.stderr
+        assert "docker compose" not in out.stdout, (goal, out.stdout)
+
+
+def test_shared_needs_a_plain_numeric_offset_except_for_the_preview_targets() -> None:
+    for offset in ("0", "00", "04", "4/5", "4?x"):
+        out = dry("up", "OPS_INFRA=shared", f"OPS_PORT_OFFSET={offset}")
+        assert out.returncode != 0 and "OPS_INFRA=shared" in out.stderr, (offset, out.stderr)
+    assert dry("wt", "BRANCH=x", "OPS_INFRA=shared").returncode == 0
+    assert dry("wt-stop", "BRANCH=x", "OPS_INFRA=shared").returncode == 0
+
+
+def test_a_shared_stacks_shell_and_use_case_reset_reach_the_default_containers() -> None:
+    for goal in ("db-shell", "usecase-reset"):
+        out = dry(goal, "OPS_INFRA=shared", "OPS_PORT_OFFSET=400")
+        assert "-p ops-runtime " in out.stdout and "ops-runtime-400" not in out.stdout, (goal, out.stdout)
+    assert "-d ops_runtime_400" in dry("db-shell", "OPS_INFRA=shared", "OPS_PORT_OFFSET=400").stdout

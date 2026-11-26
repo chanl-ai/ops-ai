@@ -206,3 +206,15 @@ def test_missing_lsof_and_docker_warn_and_the_rest_of_the_check_runs(tmp_path: P
     r = run(tmp_path, "check-offset", "--offset", "41000", env=env)
     assert "lsof not found" in r.stderr and "docker not found" in r.stderr and "49151" in r.stderr
     assert "Traceback" not in r.stderr
+
+
+def test_a_shared_stack_is_not_blocked_by_the_containers_it_reuses() -> None:
+    """The default stack's postgres and OPA hold their base ports; a shared offset stack must not count them."""
+    spec = importlib.util.spec_from_file_location("preview", ROOT / "scripts" / "preview.py")
+    assert spec and spec.loader
+    preview = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(preview)
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("OPS_", "MAKE", "STACK_"))}
+    shared = preview.ports_for(400, {**env, "OPS_INFRA": "shared"})
+    assert {5477, 8181, 3025, 1025}.isdisjoint(shared), sorted(shared)
+    assert 5477 + 400 in preview.ports_for(400, env)

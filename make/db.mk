@@ -32,7 +32,7 @@ test-db-prune: ## Drop idle ops_test_/ops_usecase_ databases older than HOURS (d
 	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/scratch_db_sweep.py --prune --hours $(or $(HOURS),3) $(if $(DRY),--dry-run)
 
 db-shell: ## psql into the stack's database
-	$(COMPOSE) exec postgres psql -U ops -d ops_runtime
+	$(DB_COMPOSE) exec postgres psql -U ops -d $(DB_NAME)
 
 db-reset: ## The same as make reset-db (kept so old commands work)
 	@$(MAKE) -s reset-db
