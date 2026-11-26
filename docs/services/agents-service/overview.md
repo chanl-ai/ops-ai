@@ -381,7 +381,7 @@ reads. A thread that named one keeps its name, and a later turn tells the agent 
 |---|---|
 | Test thread | `POST /chat/threads` with `test: true` runs the agent's newest version, draft included; with `testVersion` a saved version instead, which is how the test panel's Compare asks two versions one question. Test threads are left out of counts and memory. |
 | Reply usage | Each reply in a thread carries `usage`: model calls, tokens, cost and seconds, joined from the model call records and the run's start and finish. |
-| Who may decide | A review step's `requestedBy` names who asked for a decision when the run's starter did not (an event a service reported); they decide unless the team's two-person rule is on and they are not an Admin of the team, as the starter does. |
+| Who may decide | Every review step pauses for a click, also in a run started by someone who may decide it. A review step's `requestedBy` names who asked for a decision when the run's starter did not (an event a service reported); they decide unless the team's two-person rule is on and they are not an Admin of the team, as the starter does. |
 | Task assist | A typed task's assist is recorded pending at the pause and written beside it by its own prompt port, gated by `taskAssist` alone; a stopping worker waits for it. |
 
 ## Microsoft 365 mailboxes

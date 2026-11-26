@@ -63,7 +63,6 @@ from .engine_host import (
     KillAfterNode,
     RunEvents,
     RunReviews,
-    StarterApprovals,
     ThreadLeases,
     assisted_reviews,
 )
@@ -125,11 +124,7 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
         )
         minter = ApprovalMinter(db, settings.review_key.get_secret_value(), settings.review_token_ttl_seconds)
         # One kernel for agent steps and AI steps: an AI step's call is the agent port's prompt.
-        # A step approving a write its starter may approve is decided as theirs.
-        starters = StarterApprovals(db, gateway)
-        ports = EnginePorts(
-            tools=GatewayTools(gateway, minter), reviews=RunReviews(starters=starters), agents=agents, prompts=agents
-        )
+        ports = EnginePorts(tools=GatewayTools(gateway, minter), reviews=RunReviews(), agents=agents, prompts=agents)
         if kb_http is not None:
             from ops_agents.activities.knowledge import KbService  # noqa: PLC0415
 
@@ -171,7 +166,7 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             if agents is not None:
                 # Task assist writes a typed task's help as its step pauses, where the team turned it on.
                 policies = PlatformPolicies(service_client(settings, platform_http, "platform"))
-                ports.reviews = assisted_reviews(stack, db, agents, policies, StarterApprovals(db, gateway, policies))
+                ports.reviews = assisted_reviews(stack, db, agents, policies)
                 # AI steps run only where the run's team allows them, masked unless it turned that off.
                 agents.rules = RunTeamRules(db, policies)
         # The chat runtime, as the API builds it: a reply whose process died is continued here (chat_turns.py).
