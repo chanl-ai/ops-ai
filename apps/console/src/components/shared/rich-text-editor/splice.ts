@@ -1,7 +1,7 @@
 /**
  * An edit changes only the blocks the person touched. The stored text is the source: its blocks are found with the
  * Markdown lexer, the editor's document is compared to them block by block, and only the blocks that differ are
- * written again, so every other line keeps its exact bytes (its `*`, `_`, `<`, bullets and spacing).
+ * written again, so every other line keeps its exact bytes (its `*`, `_`, `<`, bullets, tables and spacing).
  */
 import { Node as PmNode, type Schema } from '@tiptap/pm/model';
 import type { JSONContent } from '@tiptap/core';
@@ -14,24 +14,52 @@ export interface MarkdownIO {
 }
 
 interface Segment {
-  /** The source text of one top-level block, with the blank lines after it. */
+  /** The source text of one top-level block, or of the blank lines between two. */
   raw: string;
   /** The editor nodes it reads as, in the schema's own JSON, so they compare with the editor's. */
   nodes: string[];
 }
 
 const keyOf = (schema: Schema, json: JSONContent) => JSON.stringify(PmNode.fromJSON(schema, json).toJSON());
+const EMPTY = JSON.stringify({ type: 'paragraph' });
 
-function segmentsOf(io: MarkdownIO, schema: Schema, src: string): Segment[] {
-  // Blank lines between blocks are a token of their own and read as no node; trailing ones are not part of a block.
-  return io.instance.lexer(src).map((t) => ({ raw: t.raw, nodes: t.type === 'space' ? [] : (io.parse(t.raw.replace(/\n+$/, '')).content ?? []).map((n) => keyOf(schema, n)) }));
+/**
+ * The text cut into blocks, each with the nodes it reads as. A block is read on its own; the blank lines between blocks
+ * hold the empty paragraphs the whole text reads as, so they are taken from the whole text's reading. Null when the
+ * two readings do not line up, which makes the caller write the whole text again.
+ */
+function segmentsOf(io: MarkdownIO, schema: Schema, src: string): Segment[] | null {
+  const whole = (io.parse(src).content ?? []).map((n) => keyOf(schema, n));
+  const segments: Segment[] = [];
+  let at = 0;
+  for (const t of io.instance.lexer(src)) {
+    if (t.type === 'space') {
+      let n = 0;
+      while (whole[at + n] === EMPTY) n++;
+      segments.push({ raw: t.raw, nodes: whole.slice(at, at + n) });
+      at += n;
+      continue;
+    }
+    const nodes = (io.parse(t.raw.replace(/\n+$/, '')).content ?? []).map((n) => keyOf(schema, n));
+    if (nodes.some((k, i) => whole[at + i] !== k)) return null;
+    segments.push({ raw: t.raw, nodes });
+    at += nodes.length;
+  }
+  return at === whole.length ? segments : null;
 }
+
+const newlinesAfter = (s: string) => /\n*$/.exec(s)![0].length;
+const newlinesBefore = (s: string) => /^\n*/.exec(s)![0].length;
+/** The line breaks that make `b` a block after `a`: two between blocks, none where the text already has them. */
+const between = (a: string, b: string) => (a && b ? '\n'.repeat(Math.max(0, 2 - newlinesAfter(a) - newlinesBefore(b))) : '');
 
 /** `src` with the blocks that differ from `doc` written again; `src` itself when none differ. */
 export function spliceEdit(io: MarkdownIO, schema: Schema, src: string, doc: JSONContent): string {
   const segments = segmentsOf(io, schema, src);
-  const flat = segments.flatMap((s, si) => s.nodes.map((key) => ({ key, si })));
   const next = (doc.content ?? []).map((n) => keyOf(schema, n));
+  // Blocks that do not line up with the text are written again whole.
+  if (!segments) return next.length ? io.serialize(doc) : '';
+  const flat = segments.flatMap((s, si) => s.nodes.map((key) => ({ key, si })));
   let head = 0;
   while (head < flat.length && head < next.length && flat[head].key === next[head]) head++;
   let tail = 0;
@@ -52,18 +80,16 @@ export function spliceEdit(io: MarkdownIO, schema: Schema, src: string, doc: JSO
   const before = segments.slice(0, first).map((s) => s.raw).join('');
   const after = segments.slice(last + 1).map((s) => s.raw).join('');
   const replaced = segments.slice(first, last + 1);
-  const trailing = replaced.length ? (/\n*$/.exec(replaced[replaced.length - 1].raw)?.[0] ?? '') : '';
-  // A replaced block keeps the blank lines it had after it (a paragraph has none: the lexer holds them as their own token).
-  const gap = replaced.length ? trailing : after ? '\n\n' : '';
-  const sep = !replaced.length && before && !before.endsWith('\n\n') ? (before.endsWith('\n') ? '\n' : '\n\n') : '';
-  return before + sep + written + (written ? gap : '') + after;
+  // The text's last line break stays when its last block is the one written again.
+  const ending = !after && replaced.length ? '\n'.repeat(Math.min(newlinesAfter(replaced[replaced.length - 1].raw), 1)) : '';
+  return before + between(before, written) + written + (written ? ending : '') + between(written || before, after) + after;
 }
 
 /** The index of the editor block that holds a line (from 1) of the stored text; the last block for a line past the end. */
 export function blockAtLine(io: MarkdownIO, schema: Schema, src: string, line: number): number {
   let seen = 1;
   let blocks = 0;
-  for (const s of segmentsOf(io, schema, src)) {
+  for (const s of segmentsOf(io, schema, src) ?? []) {
     const lines = s.raw.split('\n').length - (s.raw.endsWith('\n') ? 1 : 0);
     if (s.nodes.length && line < seen + lines) return blocks;
     seen += lines;

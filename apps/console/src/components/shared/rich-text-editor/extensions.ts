@@ -11,7 +11,7 @@ import { PluginKey } from '@tiptap/pm/state';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import { Suggestion, type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion';
 
-import { ReferenceNode } from './markdown';
+import { MarkdownBlock, ReferenceNode } from './markdown';
 import { MentionView } from './mention-view';
 
 export type Trigger = '@' | '/';
@@ -64,6 +64,7 @@ export const richTextExtensions = (bridge: () => MenuBridge | null, placeholder:
   StarterKit.configure({ link: { openOnClick: false } }),
   Placeholder.configure({ placeholder }),
   Markdown,
+  MarkdownBlock,
   ReferenceMention(bridge),
   SlashMenu(bridge),
 ];

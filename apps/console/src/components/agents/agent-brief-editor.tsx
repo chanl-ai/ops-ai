@@ -93,6 +93,7 @@ export function AgentBriefEditor({
   mode,
   instructions,
   onInstructions,
+  onMissingChange,
   readOnly,
   problems,
   onInsert,
@@ -109,6 +110,8 @@ export function AgentBriefEditor({
   mode: PromptMode;
   instructions: string;
   onInstructions: (next: string) => void;
+  /** The plain prompt's mentions the team does not hold, whenever that set changes. */
+  onMissingChange?: (refs: Ref[]) => void;
   readOnly?: boolean;
   /** The publish check's problems: one that names a heading is written under it. */
   problems?: PublishBlocker[];
@@ -175,7 +178,7 @@ export function AgentBriefEditor({
         <div className="flex flex-col gap-2">
           {toolbar && <div className="flex flex-wrap justify-end gap-2">{toolbar}</div>}
           <div className="rounded-lg border bg-card" data-testid="agent-plain-text">
-            <RichTextEditor value={instructions} onChange={onInstructions} readOnly={readOnly} context={context} labels={textLabels.data} ariaLabel="Instructions" />
+            <RichTextEditor value={instructions} onChange={onInstructions} readOnly={readOnly} context={context} labels={textLabels.data} onMissingChange={onMissingChange} ariaLabel="Instructions" />
           </div>
           <p className="text-xs text-muted-foreground">Brief fields other than Never are not used while this is on. Never is written after your text.</p>
           {footer}

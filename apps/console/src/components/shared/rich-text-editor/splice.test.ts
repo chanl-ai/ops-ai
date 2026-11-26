@@ -6,10 +6,10 @@ import { getSchema } from '@tiptap/core';
 import { MarkdownManager } from '@tiptap/markdown';
 import { StarterKit } from '@tiptap/starter-kit';
 
-import { ReferenceNode, keepPlainText } from './markdown.ts';
+import { MarkdownBlock, ReferenceNode, keepPlainText } from './markdown.ts';
 import { spliceEdit } from './splice.ts';
 
-const extensions = [StarterKit, ReferenceNode];
+const extensions = [StarterKit, MarkdownBlock, ReferenceNode];
 const manager = new MarkdownManager({ extensions });
 keepPlainText(manager);
 const schema = getSchema(extensions);
@@ -56,4 +56,26 @@ test('an edit inside a nested bullet rewrites only that list', () => {
 test('text edited in the Markdown view is unchanged by a visit to the formatted view', () => {
   const typed = SRC.replace('Last line @tool:order_lookup.', 'Last line @tool:order_lookup and @knowledge:refund-policy, 2 * 3 = 6.');
   assert.equal(spliceEdit(manager as never, schema, typed, manager.parse(typed)), typed);
+});
+
+// Markdown the editor has no node for, and blank lines the editor reads as empty paragraphs.
+const WIDE = ['# Plan', '', 'First step.', '', '', '', 'Second step.', '', '| a | b |', '|---|---|', '| 1 | 2 |', '', '![diagram](https://example.com/d.png)', '', '[policy]: https://example.com/policy "Policy"', '', 'See [policy].', '', '- [ ] check the id', '- [x] ask the cardholder', '', 'Last step @tool:order_lookup and done'].join('\n');
+const wide = (src: string) => manager.parse(src) as { content: any[] };
+const typeInto = (src: string, at: number, more: string) => {
+  const doc = wide(src);
+  const para = doc.content[at];
+  para.content[para.content.length - 1].text += more;
+  return spliceEdit(manager as never, schema, src, doc);
+};
+
+test('typing in a paragraph beside empty paragraphs adds only the typed letters, however many times', () => {
+  let src = WIDE;
+  for (let i = 0; i < 5; i++) src = typeInto(src, 1, 'x');
+  assert.equal(src, WIDE.replace('First step.', 'First step.xxxxx'));
+});
+
+test('an edit leaves a table, an image, a link definition and a task list exactly as they were', () => {
+  const out = typeInto(WIDE, 1, ' now');
+  assert.equal(out, WIDE.replace('First step.', 'First step. now'));
+  assert.equal(spliceEdit(manager as never, schema, WIDE, wide(WIDE)), WIDE);
 });

@@ -3,6 +3,7 @@
  * is Markdown with `@kind:id` tokens, so `@` mentions get their own token and the library's escaping is narrowed to what
  * would change the text on the next read.
  */
+import { Node } from '@tiptap/core';
 import Mention from '@tiptap/extension-mention';
 
 import type { Ref } from '@/lib/types/references';
@@ -34,6 +35,52 @@ export const ReferenceNode = Mention.extend({
   },
   parseMarkdown: (token, h) => h.createNode('mention', { kind: token.kind, id: token.id }),
   renderMarkdown: (node) => mentionToken(node.attrs as Ref),
+});
+
+/**
+ * Markdown the editor has no node for (a table, an image, a link definition, a task list) is held as one block of its
+ * own text and written back exactly as it was read, so opening and saving never drops or flattens it. It is edited in
+ * the Markdown view.
+ */
+const TABLE_RULE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+export function opaqueBlockAt(src: string): string | undefined {
+  const block = /^(?:[^\n]*\S[^\n]*(?:\n|$))+/.exec(src)?.[0].replace(/\n+$/, '');
+  if (!block) return undefined;
+  const lines = block.split('\n');
+  const heading = /^ {0,3}(#{1,6}\s|```|~~~|>)/.test(block);
+  const isTable = lines.length > 1 && lines[0].includes('|') && TABLE_RULE.test(lines[1]);
+  const isDef = /^ {0,3}\[[^\]\n]+\]:\s*\S/.test(block);
+  const isTask = /^\s*[-*+]\s+\[[ xX]\]\s/.test(block);
+  const hasImage = !heading && /!\[[^\]\n]*\]\([^)\n]*\)/.test(block);
+  return isTable || isDef || isTask || hasImage ? block : undefined;
+}
+
+export const MarkdownBlock = Node.create({
+  name: 'markdownBlock',
+  group: 'block',
+  atom: true,
+  addAttributes() {
+    return { raw: { default: '' } };
+  },
+  parseHTML() {
+    return [{ tag: 'pre[data-markdown-block]', getAttrs: (el) => ({ raw: (el as HTMLElement).textContent ?? '' }) }];
+  },
+  renderHTML({ node }) {
+    return ['pre', { 'data-markdown-block': '', class: 'whitespace-pre-wrap' }, node.attrs.raw];
+  },
+  renderText: ({ node }) => node.attrs.raw,
+  markdownTokenizer: {
+    name: 'markdownBlock',
+    level: 'block',
+    // Never cuts a paragraph short: only a block that begins with it is held.
+    start: () => -1,
+    tokenize: (src: string) => {
+      const raw = opaqueBlockAt(src);
+      return raw ? { type: 'markdownBlock', raw, text: raw } : undefined;
+    },
+  },
+  parseMarkdown: (token, h) => h.createNode('markdownBlock', { raw: token.raw }),
+  renderMarkdown: (node) => String(node.attrs?.raw ?? ''),
 });
 
 interface Writer {
