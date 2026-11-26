@@ -6,6 +6,7 @@
 // reviews) and the demo stack's fake model; no model is called.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { agentBase } from '../../lib/agent_save.mjs';
+import { showView } from './rich-text.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
@@ -38,6 +39,10 @@ await withUiStack(
     const waits = { 1440: await mk('Waiting desk wide'), 390: await mk('Waiting desk narrow') };
     // One that stays in review for the viewer to read.
     const kept = await mk('Waiting desk kept');
+    // An agent written as plain text, whose prompt mentions a tool the team does not hold.
+    const GONE = '@tool:no_such_tool_walk';
+    const plain = (await call(J, '/v1/agents', { name: `Plain desk ${RUN}`, role: 'Helps cardholders' })).data;
+    await call(J, `/v1/agents/${plain.id}`, { promptMode: 'full', instructions: `Greet the cardholder. Look it up with ${GONE}.`, ...(await agentBase(agents, J, plain.id)) }, 'PATCH');
     const askFor = async (a) => call(J, `/v1/agents/${a.id}/publish-requests`, { version: (await call(J, `/v1/agents/${a.id}`, undefined, 'GET')).data.version });
     const liveRequest = (await askFor(live)).data;
     if (liveRequest?.status === 'pending') await call(M, `/v1/publish-requests/${liveRequest.id}/decision`, { decision: 'approved' });
@@ -80,7 +85,7 @@ await withUiStack(
         const text = await mainText(page);
         note(`9 ${who} brief bands`, heads.every((h) => brief_.includes(h)) && !/Success/.test(brief_), brief_.slice(0, 200));
         note(`10 ${who} no identity box`, !/Identity/.test(text), text.slice(0, 120));
-        note(`14 ${who} footer holds the uses link and View prompt`, (await page.getByTestId('agent-brief-footer').getByTestId('agent-uses-link').count()) === 1 && (await page.getByTestId('agent-brief-footer').getByTestId('agent-view-prompt').count()) === 1, '');
+        note(`14 ${who} footer holds the uses link and View prompt`, (await page.getByTestId('agent-brief-footer').getByTestId('agent-uses-link').count()) === 1 && (await page.getByTestId('agent-brief').getByTestId('agent-view-prompt').count()) === 1, '');
         await page.getByTestId('agent-view-prompt').click();
         const dialog = page.getByRole('dialog');
         await dialog.waitFor({ timeout: 10_000 }).catch(() => undefined);
@@ -167,6 +172,29 @@ await withUiStack(
       note('22 a viewer sees the view only note, with no Save and no Test', (await ravi.getByTestId('read-only-notice').count()) === 1 && !names.includes('Save') && !names.includes('Test'), names);
       await go(lena, `/build/agents/${draft.id}`, 'page-header');
       note('22 a member who only chats is told they have no access', /don’t have access here/.test(await lena.locator('main').innerText()), (await lena.locator('main').innerText()).slice(0, 120));
+
+      // A plain-text prompt that mentions something the team no longer holds cannot be saved until the mention is gone.
+      if (width === 1440) {
+        await go(james, `/build/agents/${plain.id}`, 'agent-plain-text');
+        const box = james.getByTestId('agent-plain-text').getByTestId('rich-text');
+        await box.click();
+        await james.keyboard.press('ControlOrMeta+End');
+        await james.keyboard.type(' Thanks.');
+        await james.waitForTimeout(600);
+        const blocked = await james.getByTestId('agent-save').isDisabled();
+        const said = (await james.getByTestId('save-state').innerText()).trim();
+        const missing = await james.getByTestId('agent-plain-text').getByText('Missing').count();
+        await showView(james, 'markdown');
+        const area = james.getByTestId('agent-plain-text').getByTestId('rte-markdown');
+        await area.fill((await area.inputValue()).replace(GONE, 'the lookup tool'));
+        await showView(james, 'formatted');
+        await james.waitForTimeout(600);
+        const open_ = !(await james.getByTestId('agent-save').isDisabled());
+        await james.getByTestId('agent-save').click();
+        await james.waitForFunction(() => /Saved/.test(document.querySelector('[data-testid="save-state"]')?.textContent ?? ''), null, { timeout: 15_000 }).catch(() => undefined);
+        const stored = (await call(J, `/v1/agents/${plain.id}`, undefined, 'GET')).data?.instructions ?? '';
+        note('23 a broken mention in a plain prompt turns Save off, and removing it turns Save on', blocked && missing > 0 && open_ && stored.includes('the lookup tool') && !stored.includes(GONE), { blocked, said, missing, open_, stored });
+      }
       for (const p of [james, ravi, lena]) await p.context().close();
     }
     // One check per step of the doc, so each step shows as run: it passes when nothing under its number failed.
@@ -176,6 +204,7 @@ await withUiStack(
       15: 'the save state reads Unsaved then Saved after Cmd+S', 16: 'the header keeps one order and no label over two words', 17: 'tools, knowledge and skills are sections',
       18: 'a skill opens on its instructions with the button bar and a Used by list', 19: 'no page scrolls sideways and none logs an error', 20: 'Withdraw takes a waiting version out of review and offers Send again',
       21: 'a viewer sees a waiting version and no Withdraw', 22: 'a viewer reads the page and a member is refused it',
+      23: 'a broken mention in a plain prompt turns Save off until it is removed',
     };
     for (const [id, title] of Object.entries(TITLES)) {
       const mine = fails.filter((f) => f.name.startsWith(`${id} `));

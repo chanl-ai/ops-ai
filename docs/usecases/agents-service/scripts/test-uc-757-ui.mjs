@@ -7,7 +7,7 @@
 // server side of it is proved by the api script.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, evidenceDir, finish, shootBothWidths, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { agentBase, saveAgent } from '../../lib/agent_save.mjs';
-import { caretAtLineEnd } from './rich-text.mjs';
+import { caretAtLineEnd, showView } from './rich-text.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
@@ -809,6 +809,65 @@ await withUiStack(
         splits.every((x) => /Made 2 skills/.test(x.text) && x.text.includes(`Charge look-up ${x.width} ${RUN}`) && !x.sideways && x.reviewerSees === 0),
         splits,
       );
+      // 37. The editor's button bar, its insert dialog and its Markdown view, at 1440 and 390, and what an edit leaves alone:
+      // a table, an image, a link definition, a task list and the blank lines between blocks keep their bytes.
+      const WIDE = ['# Plan', '', 'First step.', '', '', '', 'Second step.', '', '| a | b |', '|---|---|', '| 1 | 2 |', '', '![diagram](https://example.com/d.png)', '', '[policy]: https://example.com/policy "Policy"', '', 'See [policy].', '', '- [ ] check the id', '- [x] ask the cardholder', '', 'Last step.'].join('\n');
+      const wideSkill = await made('/v1/skills', { name: `Editor walk ${RUN}`, ownerTeam: 'team_ops', useWhen: 'Never, it is a walk.', instructions: WIDE });
+      await page.goto(`${consoleUrl}/build/skills/${wideSkill.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await doc.waitFor({ timeout: 120_000 });
+      await lineOf('First step.').waitFor({ timeout: 60_000 });
+      const bar = ['rte-bold', 'rte-heading', 'rte-bullets', 'rte-numbers', 'rte-indent', 'rte-outdent', 'rte-insert-tool', 'rte-insert-knowledge', 'rte-insert-skill', 'rte-insert-path', 'rte-view-formatted', 'rte-view-markdown'];
+      const onBar = await Promise.all(bar.map((id) => page.getByTestId(id).isVisible()));
+      check('37 the button bar shows formatting, indent, the four inserts and the two views', onBar.every(Boolean), Object.fromEntries(bar.map((id, i) => [id, onBar[i]])));
+      const stored = () => page.getByTestId('rte-markdown').inputValue();
+      await showView(page, 'markdown');
+      const opened = await stored();
+      await showView(page, 'formatted');
+      check('37 the Markdown view shows the saved text as it is, and back again changes nothing', opened === WIDE, opened);
+      await caretAtLineEnd(page, 'First step.');
+      await page.keyboard.type('xxxxx', { delay: 40 });
+      await showView(page, 'markdown');
+      const typed = await stored();
+      await showView(page, 'formatted');
+      check('37 five letters typed beside blank lines add five letters, and the table, image, link and task list keep their bytes', typed === WIDE.replace('First step.', 'First step.xxxxx'), typed);
+      await caretAtLineEnd(page, 'Second step.');
+      await page.getByTestId('rte-heading').click();
+      await page.getByTestId('rte-insert-path').click();
+      await showView(page, 'markdown');
+      const formatted = await stored();
+      await showView(page, 'formatted');
+      check('37 Heading and If / else write Markdown a person can read', /^## Second step\./m.test(formatted) && /if …:/.test(formatted) && /otherwise:/.test(formatted), formatted);
+      const before = await page.getByTestId('reference-chip').count();
+      await page.getByTestId('rte-insert-tool').click();
+      const picker = page.getByTestId('reference-picker');
+      await picker.getByTestId('reference-picker-row').first().waitFor({ timeout: 60_000 });
+      await picker.getByTestId('reference-picker-row').first().click();
+      const previewed = (await picker.getByTestId('reference-picker-preview').innerText()).trim();
+      await picker.getByTestId('reference-picker-add').click();
+      await page.getByTestId('reference-chip').nth(before).waitFor({ timeout: 30_000 }).catch(() => undefined);
+      await showView(page, 'markdown');
+      const withTool = await stored();
+      await showView(page, 'formatted');
+      check('37 Insert tool searches, shows what the tool is before it goes in, and writes a badge as @tool:id', previewed.length > 10 && (await page.getByTestId('reference-chip').count()) === before + 1 && /@tool:[A-Za-z0-9_.-]+/.test(withTool), { previewed, withTool });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.getByTestId('rte-menu').waitFor({ timeout: 10_000 });
+      const wideToolbarHidden = !(await page.getByTestId('rte-toolbar').isVisible());
+      await page.getByTestId('rte-menu').click();
+      const menuItems = await Promise.all(['rte-menu-insert-tool', 'rte-menu-insert-knowledge', 'rte-menu-insert-skill', 'rte-menu-insert-path', 'rte-menu-view-formatted', 'rte-menu-view-markdown'].map((id) => page.getByTestId(id).isVisible()));
+      await page.getByTestId('rte-menu-insert-skill').click();
+      await page.getByTestId('reference-picker').waitFor({ timeout: 30_000 });
+      const dialogBox = await page.getByTestId('reference-picker').boundingBox();
+      await page.keyboard.press('Escape');
+      await showView(page, 'markdown');
+      const narrowText = await stored();
+      await showView(page, 'formatted');
+      check(
+        '37 at 390 the bar is one menu with every insert and both views, the insert dialog fits, and the page does not scroll sideways',
+        wideToolbarHidden && menuItems.every(Boolean) && dialogBox && dialogBox.x >= 0 && dialogBox.x + dialogBox.width <= 391 && narrowText === withTool && !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)),
+        { wideToolbarHidden, menuItems, dialogBox },
+      );
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await saveSkill(page);
       // A skill publish waiting on Maya, the way the walk made one: the team's skill publishes always need a review.
       const policy = await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/policies/publishReview`, { method: 'PUT', headers: as(await tokenFor(PRIYA)), body: JSON.stringify({ value: { skills: 'always' } }) });
       // A policy change ends the tokens issued before it.

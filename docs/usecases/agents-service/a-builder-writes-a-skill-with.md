@@ -40,6 +40,7 @@ with a read and a write on a mock bank, published for the team, and platform sig
 | S9 | A builder finds a section in a grouped menu he can search, and a preset writes a sentence he can edit | ui | 33 | 33 |
 | S10 | A builder picks connectors before the first test message, and the test panel stays beside the settings he scrolls | ui | 34, 35 | 34 |
 | S11 | A builder splits a skill with parts into one skill per part; a reviewer cannot | ui | 36 | 36 |
+| S12 | A builder uses the editor's button bar, insert dialog and Markdown view at 1440 and 390, and an edit leaves a table, an image, a link definition, a task list and blank lines as they were | ui | 37 | 37 |
 
 ## Preconditions
 
@@ -83,6 +84,7 @@ with a read and a write on a mock bank, published for the team, and platform sig
 | 34 | James opens an agent he has never tested and presses Connectors on the test panel before sending anything (ui, 1440) | Connectors is on the panel from the start and no test chat exists yet; pressing it makes one test chat for the agent and opens the list |
 | 35 | James scrolls the settings beside the test panel at 1440, then at 390 (ui) | At 1440 the panel reaches the end of the page with no room under the composer and stays whole in view, not covered, while the settings scroll; at 390 it sits under the settings and scrolls with them |
 | 36 | James opens a skill with two parts and presses Split skills, once at 1440 and once at 390; Maya, a reviewer, opens the same page (ui) | Each press makes one skill per part and the page names them; the page does not scroll sideways; Maya sees the parts and no Split skills button |
+| 37 | James opens a skill whose text holds a table, an image, a link definition, a task list and blank lines, types five letters beside the blank lines, adds a heading and an If / else, inserts a tool from the dialog, then repeats the bar at 390 (ui) | The bar shows formatting, indent, Tool, Knowledge, Skill, If / else and both views; the Markdown view shows the saved text as it is and back changes nothing; five typed letters add five letters and every other byte stays; Insert tool shows what the tool is before it goes in and writes `@tool:id`; at 390 the bar is one menu with every insert and both views, the dialog fits and the page does not scroll sideways |
 
 ## Acceptance layers
 
