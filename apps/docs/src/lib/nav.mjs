@@ -233,6 +233,7 @@ export const SITE = [
         entries: [
           { page: 'contributing/README.md', title: 'Contributing', icon: 'hammer' },
           { page: 'contributing/figure-guide.md', title: 'Figure guide', icon: 'shapes' },
+          { page: 'contributing/figures.md', title: 'Figures', icon: 'gallery-horizontal' },
           { page: 'README.md', title: 'All documents', icon: 'list' },
         ],
       },

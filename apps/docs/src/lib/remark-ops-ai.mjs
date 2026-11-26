@@ -7,7 +7,8 @@
  * - a table cell that starts with built, partial, planned, upcoming or not built shows that word as a badge
  * - `<!-- site: cards -->` above a table or a list renders it as summary cards
  * - `<!-- site: steps -->` above a numbered list renders it as steps
- * - `<!-- site: journey | annotated | layers caption="..." -->` above a list renders that figure (figure guide)
+ * - `<!-- site: <figure> caption="..." -->` above a list or code blocks renders a figure from the figure library
+ *   (src/components/figures; every kind with its markdown on docs/contributing/figures.md); an unknown kind is an error
  * - `<!-- site: whats-new -->` becomes the What's new entries in changelog/, newest first, so release notes never go stale
  * - a GitHub alert (`> [!NOTE]`, `> [!WARNING]` ...) becomes a callout
  * - ```mermaid blocks render as diagrams that follow the light and dark theme; ```mermaid caption="..." adds the caption
@@ -27,7 +28,10 @@ import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import { SKIP, visit } from 'unist-util-visit';
 
+import { FIGURE_KINDS, figureFromMarker } from '../components/figures/markdown.mjs';
 import { githubUrl, isSitePage, pageAnchors, repoIndex } from './repo.mjs';
+
+const SITE_MARKERS = ['cards', 'steps', 'whats-new'];
 
 const BADGE = /^(not built|built|partial|planned|upcoming)(?=$|[\s,.;:)])[\s,.;:)-]*/i;
 const STATUS_WORDS =
@@ -170,75 +174,6 @@ function whatsNew() {
   return remark().use(remarkGfm).parse(lines.join('\n')).children;
 }
 
-/** `**Lead**: rest` as { lead, rest }, both plain text; a paragraph with no bold opening has no lead. */
-function leadAndRest(para) {
-  const kids = para?.type === 'paragraph' ? para.children : [];
-  const first = kids[0];
-  if (!first || first.type !== 'strong') return { lead: '', rest: mdToString(para ?? { type: 'text', value: '' }).trim() };
-  const rest = mdToString({ type: 'paragraph', children: kids.slice(1) }).replace(/^\s*[:—–-]\s*/, '').trim();
-  return { lead: mdToString(first).trim(), rest };
-}
-
-/** "Inbox · A dispute arrives" as the screen's surface and its title. */
-function surfaceAndTitle(lead) {
-  const [surface, ...title] = lead.split(/\s+·\s+/);
-  return title.length ? { surface, title: title.join(' · ') } : { surface: '', title: lead };
-}
-
-const nestedList = (item) => item.children.find((c) => c.type === 'list');
-const firstNote = (item) => {
-  const list = nestedList(item);
-  return list ? mdToString(list.children[0]).trim() : undefined;
-};
-
-/** A screen's fields from list items: `**Label**: value`, a code block as the value, a nested bullet as the note. */
-function fragmentFields(items) {
-  const fragment = { fields: [], actions: [] };
-  for (const item of items) {
-    const { lead, rest } = leadAndRest(item.children[0]);
-    if (/^actions?$/i.test(lead)) {
-      fragment.actions = rest.split(/\s*,\s*/).filter(Boolean);
-      fragment.actionsNote = firstNote(item);
-      continue;
-    }
-    const code = item.children.find((c) => c.type === 'code')?.value;
-    fragment.fields.push({ label: lead, value: rest, code, note: firstNote(item) });
-  }
-  return fragment;
-}
-
-/** The data of a figure marker (`journey`, `annotated`, `layers`), or an error message. */
-function figureData(kind, list) {
-  if (kind === 'journey') {
-    if (!list.ordered) return { error: 'must sit directly above a numbered list' };
-    return {
-      data: list.children.map((item) => {
-        const { lead, rest } = leadAndRest(item.children[0]);
-        const nested = nestedList(item);
-        return { ...surfaceAndTitle(lead), callout: rest, ...fragmentFields(nested ? nested.children : []) };
-      }),
-    };
-  }
-  if (kind === 'annotated') {
-    const [head, ...items] = list.children;
-    const { lead, rest } = leadAndRest(head.children[0]);
-    return { data: { ...surfaceAndTitle(lead), text: rest || undefined, ...fragmentFields(items) } };
-  }
-  return {
-    data: list.children.map((item) => {
-      const { lead, rest } = leadAndRest(item.children[0]);
-      const nested = nestedList(item);
-      const parts = (nested ? nested.children : []).map((p) => {
-        const part = leadAndRest(p.children[0]);
-        return part.lead ? { title: part.lead, text: part.rest || undefined } : { title: part.rest };
-      });
-      return { title: lead || rest, text: lead ? rest || undefined : undefined, parts };
-    }),
-  };
-}
-
-const FIGURES = { journey: 'JourneyFigure', annotated: 'AnnotatedFigure', layers: 'LayerMap' };
-
 export function remarkOpsAi(options = {}) {
   const throwOnError = options.throwOnError ?? true;
 
@@ -348,20 +283,27 @@ export function remarkOpsAi(options = {}) {
       return [SKIP, i];
     });
 
-    // Figure markers: `<!-- site: journey caption="..." -->` above a list becomes that figure.
+    // Figure markers: `<!-- site: <kind> caption="..." -->` above a block becomes that figure (the figure library).
+    // With a bare `source` attribute the figure is followed by its own markdown, for the gallery.
     visit(tree, 'html', (n, i, parent) => {
-      const m = n.value.trim().match(/^<!--\s*site:\s*(journey|annotated|layers)\b([^>]*?)-->$/);
+      const m = n.value.trim().match(/^<!--\s*site:\s*([a-z-]+)\b([^>]*?)-->$/);
       if (!m || !parent || i === undefined) return;
       const [, kind, attrs] = m;
-      const next = parent.children[i + 1];
-      const fail = (why) => errors.push(`${source}: <!-- site: ${kind} --> ${why}`);
-      if (next?.type !== 'list') return fail('must sit directly above a list');
-      const { data, error } = figureData(kind, next);
-      if (error) return fail(error);
-      const attr = (name) => attrs.match(new RegExp(`${name}="([^"]*)"`))?.[1];
-      if (!attr('caption')) return fail('needs caption="...", which is also its accessible name');
-      parent.children.splice(i, 2, jsx(FIGURES[kind], { data: JSON.stringify(data), caption: attr('caption'), frame: attr('frame') }));
-      return [SKIP, i];
+      if (!FIGURE_KINDS.includes(kind)) {
+        if (!SITE_MARKERS.includes(kind)) errors.push(`${source}: <!-- site: ${kind} --> is not a marker (${[...SITE_MARKERS, ...FIGURE_KINDS].join(', ')})`);
+        return;
+      }
+      const fig = figureFromMarker(kind, attrs, parent.children.slice(i + 1));
+      if (fig.error) return void errors.push(`${source}: <!-- site: ${kind} --> ${fig.error}`);
+      const out = [jsx(fig.component, fig.props)];
+      const last = parent.children[i + fig.take];
+      const text = typeof file.value === 'string' ? file.value : String(file.value ?? '');
+      if (fig.showSource && text && n.position && last?.position) {
+        const md = text.slice(n.position.start.offset, last.position.end.offset).replace(/\s+source(?=[\s>-])/, '');
+        out.push({ type: 'code', lang: 'md', meta: 'title="Markdown"', value: md });
+      }
+      parent.children.splice(i, 1 + fig.take, ...out);
+      return [SKIP, i + out.length];
     });
 
     // Markers: an HTML comment above a block.

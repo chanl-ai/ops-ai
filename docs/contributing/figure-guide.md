@@ -8,58 +8,38 @@ or that repeats a paragraph left beside it, is cut.
 
 ## Pick the figure for the content
 
+Every figure in the library, with its markdown and when to pick it over the others, is on [Figures](figures.md). Start
+there; the rows below cover what the library does not draw.
+
 | The text explains | Use | How to write it |
 |---|---|---|
-| A flow a person sees, step by step (a request becoming a record) | Journey: each step drawn as the screen it happens on, joined by a numbered path, with what it means beside it | `<!-- site: journey caption="..." -->` above a numbered list (below) |
-| One screen whose parts protect the reader (an approval, a policy) | Annotated screen: the screen drawn large, a numbered pin on each part, the notes beside it | `<!-- site: annotated caption="..." -->` above a list (below) |
-| A system at a glance: where work comes in, its layers, where calls leave | Layers: stacked bands, the platform's own inside one frame | `<!-- site: layers frame="..." caption="..." -->` above a list (below) |
-| A flow or sequence of steps, or who talks to whom | Mermaid flowchart or sequence diagram | A ```` ```mermaid caption="..." ```` block |
-| A lifecycle with states (draft, review, published) | Mermaid flowchart with the states as boxes and the triggers on the arrows | Same block |
+| A flow, screens, a lifecycle, a choice, options, a span of time, a request and its response | A library figure | `<!-- site: <kind> caption="..." -->` above a list or two code blocks ([Figures](figures.md)) |
 | Steps a reader performs | Steps | `<!-- site: steps -->` above a numbered list |
-| Options, roles or parts, three to six of them | Cards | `<!-- site: cards -->` above a table or list; the first cell or bold opening is the title |
-| A before and after, or with and without | A pair of two cards | `<!-- site: cards -->` above a two-item list: `- **Without Ops AI**: ...` and `- **With Ops AI**: ...` |
+| Options, roles or parts, three to six of them, each a link | Cards | `<!-- site: cards -->` above a table or list; the first cell or bold opening is the title |
 | Status of several things | Badges inside a table | A cell starting with built, partial or planned |
-| A screen | A framed screenshot | `![caption](../media/name-light.png)` alone in a paragraph, light and dark variants as the page already does |
+| A screen as it ships | A framed screenshot | `![caption](../media/name-light.png)` alone in a paragraph, light and dark variants as the page already does |
 | A system's boxes and their links | The live architecture diagram | `![caption](../diagrams/name.svg)` where `diagrams/name.yaml` exists |
+| A data model | Mermaid `erDiagram` | A ```` ```mermaid caption="..." ```` block |
 | A comparison across many attributes | A table, not a figure | Plain table |
 
-Anything else stays prose. A carousel from the website is not used: the docs print, are searched by the browser and
-are read at 390 wide, so options go in cards that stack.
+A sequence or state that mermaid draws today moves to the library's sequence or state figure when its page is next
+edited. Anything else stays prose. A carousel from the website is not used: the docs print, are searched by the
+browser and are read at 390 wide.
 
-## What exists, in the order to try it
+## Where the library lives
 
-| Need | Component | Where |
-|---|---|---|
-| Framed screenshot or wireframe | `OpsFigure` | `apps/docs/src/components/figure.tsx` |
-| Flow, sequence, state | `OpsMermaid` (takes `caption`) | `apps/docs/src/components/mermaid.tsx` |
-| Architecture boxes | `BoxDiagram` | `apps/docs/src/components/box-diagram.tsx`, drawn from `docs/diagrams/*.yaml` |
-| Cards, pairs, option sets | `SummaryCards`, `SummaryCard` | `apps/docs/src/components/summary-cards.tsx` |
-| Status | `StatusBadge` | `apps/docs/src/components/status-badge.tsx` |
-| A step's screen | `UiFragment` | `apps/docs/src/components/ui-fragment.tsx` |
-| Journey, annotated screen, layers | `JourneyFigure`, `AnnotatedFigure`, `LayerMap` | `apps/docs/src/components/journey-figure.tsx`, `annotated-figure.tsx`, `layer-map.tsx` |
+All figures are one module, `apps/docs/src/components/figures`:
 
-A new component goes in `apps/docs/src/components`, is composed from these and the Fumadocs primitives, takes its
-colours and spacing from the tokens below, and is mapped in `mdx.tsx` and `src/lib/remark-ops-ai.mjs` so authors write
-plain markdown. A component that needs its own colours or spacing values is rejected in review.
+| Part | File |
+|---|---|
+| What each marker reads from the markdown below it, and the errors it raises | `apps/docs/src/components/figures/markdown.mjs` |
+| The frame, caption, numbered pins, notes and path node every figure shares | `apps/docs/src/components/figures/parts.tsx` |
+| The styles, from the theme variables only | `apps/docs/src/components/figures/figures.css` |
+| One component per kind, exported from | `apps/docs/src/components/figures/index.ts` |
 
-## Writing a journey, an annotated screen or layers
-
-All three are plain lists, so the page still reads on GitHub. Pages using them: [Welcome](../welcome.md) (journey),
-[Human tasks](../guide/human-tasks.md) (annotated), [Overview](../guide/overview.md) (layers).
-
-| Figure | Each list item | Nested bullets |
-|---|---|---|
-| Journey | `**Surface · What happens**: what it means`. The surface (Team mailbox, Workflow, Agent, Human task, Case) names the screen and picks its icon | `**Label**: value` rows on that screen; `**Actions**: Approve, Reject` draws buttons |
-| Annotated | First item: `**Surface · Title**: one line`. Then one `**Label**: value` per row; a code block under an item is shown as code; `**Actions**: ...` draws buttons | A bullet under a row is its numbered note |
-| Layers | `**Band**: one line`. The first and last bands are outside the frame; the band just above the last is the boundary every call leaves through and carries the accent | `**Part**: one line` per box in the band |
-
-Each needs `caption`, which is also its accessible name. A journey has three to six steps, each screen two to four rows;
-an annotated screen has at most five notes. Sample data comes from several industries across a page set, and no step
-shows a customer's real name.
-
-The journey reveals its steps once when it scrolls into view (opacity and an 8px rise, 70ms apart, ease-out). Without
-JavaScript, in print or with reduced motion the steps are simply there. Nothing in a figure takes focus: the buttons are
-drawn, not working.
+A new kind needs a parser in `markdown.mjs`, a component built from `parts.tsx`, its styles in `figures.css`, and a
+section on [Figures](figures.md) with its markdown and when to use it. A component that needs its own colours or
+spacing values is rejected in review. Add a kind only when a reader page needs it and no kind fits.
 
 ## How the website's patterns carry over
 
@@ -68,9 +48,10 @@ drawn, not working.
 | Feature cards: a title that carries its meaning, one line below | Cards: the title is the sentence a reader would say to a colleague |
 | Three-step section | Steps |
 | Persona and voice-agent carousels | Cards that stack; never a carousel |
-| Problem section: the workaround, then the product's answer | A with and without pair |
+| Problem section: the workaround, then the product's answer | Before and after |
 | Section with a lead line, a visual, then proof | A one or two sentence lead, the figure, then the next heading |
-| Feature cards that hold a live product widget | Journey and annotated screens: the step shown as the screen it happens on |
+| Feature cards that hold a live product widget | Widget: one panel beside the text; journey: each step shown as the screen it happens on |
+| Whole product screens, scaled to fit, as "what you will see" | Preview: the console's sidebar and one page, one cropped panel on a phone, no tabs or rotation |
 | Numbered callouts beside a product shot | Annotated screen pins and the journey's numbered path |
 
 The wording follows the landing-copy rules: concrete nouns, a title that carries its meaning alone, no filler words,
@@ -90,11 +71,18 @@ figure contains a hex value.
 | Diagram colours | `--ops-mm-*`, set from the variables above, so one drawing serves both themes |
 | Type | `--ops-font` at the page's 15px; captions 0.85rem in `--ops-muted`; code in `--ops-mono` |
 
+## Motion and focus
+
+Motion is on transform and opacity only, and only where a figure is read once: the journey reveals its steps when it
+scrolls into view (an 8px rise, 260ms, ease-out, 70ms apart). Nothing rotates or plays on its own. With reduced motion
+the steps fade without moving; without JavaScript and in print they are simply there. Nothing in a figure takes focus:
+drawn buttons and tabs are text, and a figure never scrolls inside itself.
+
 ## Caption and alt text
 
 - The caption is one sentence that says what the figure shows and what to take from it. "How a version moves from draft
   to published" passes; "Diagram" and "Figure 1" fail.
-- A mermaid caption is also the figure's accessible name, so it must make sense read alone. A screenshot's alt text is
+- A figure's caption is also its accessible name, so it must make sense read alone. A screenshot's alt text is
   its caption.
 - Each figure has a lead of one or two sentences before it that says why it is there. The lead does not repeat the
   caption.
@@ -107,8 +95,9 @@ figure contains a hex value.
 | Figures per page | One to two. A third means the page is two pages |
 | Boxes in a diagram | At most 8, labels at most 6 words |
 | Cards in a set | Three to six |
-| With and without pair | Two list items titled "Without ..." and "With ..."; the site mutes the first and accents the second. The title is the visible label, so a table with one row is never used for a pair |
+| Before and after | The before-after figure, two labelled sides. A table with one row is never used for a pair |
 | Paragraphs replaced | Two to four per figure |
+| Library figures | The per-kind limits (steps, notes, participants, options) are checked by the build; see [Figures](figures.md) |
 | Diagram direction | Top to bottom (`flowchart TD`) for any flow of more than 3 boxes. Left to right only for 3 boxes or fewer, drawn 420px wide or less |
 
 Labels are in the reader's words. No file paths, service names, card ids, ports or customer names on a reader page.
@@ -117,8 +106,8 @@ Labels are in the reader's words. No file paths, service names, card ids, ports 
 
 A mermaid diagram shrinks to its frame (336px at 390 wide) down to 80% of its drawn size, so labels stay about 10px or
 more, and scrolls sideways below that. Draw it to 420px or less, which means short labels and at most two boxes side by
-side; a figure that scrolls sideways at 390 is a defect. Cards stack to one column. The page itself
-never scrolls sideways. Check each changed page at 1440 and 390, in light and dark, before it is pushed.
+side; a figure that scrolls sideways at 390 is a defect. Cards stack to one column, and every library figure has a phone layout of its own (rows instead of lanes, one panel
+instead of a whole screen). The page itself never scrolls sideways. Check each changed page at 1440 and 390, in light and dark, before it is pushed.
 
 ## Sourcing
 
@@ -130,7 +119,7 @@ the caption.
 ## Check before pushing
 
 1. The figure replaces paragraphs; the page has fewer words than before and no fact is lost.
-2. It is one of the types in the first table, built from an existing component.
+2. It is a kind on [Figures](figures.md) or a row in the first table, written as its marker.
 3. Caption, lead and reader-language labels are in place; no internals.
 4. It reads at 390 wide in both themes.
 5. `pnpm -C apps/docs build` passes.

@@ -1,12 +1,14 @@
 import { ArrowDown } from 'lucide-react';
 
+import { FigureFrame } from './parts';
+
 type Band = { title: string; text?: string; parts: { title: string; text?: string }[] };
 
 /**
  * A system at a glance as stacked bands, read top to bottom: where work comes from, the platform's own layers inside
  * one frame, and the outside systems everything leaves to. The first and last bands sit outside the frame; the band
  * just above the last is the boundary every call leaves through and carries the accent. Written in markdown as
- * `<!-- site: layers -->` above a list (src/lib/remark-ops-ai.mjs).
+ * `<!-- site: layers -->` above a list.
  */
 export function LayerMap({ data, caption, frame }: { data: string; caption?: string; frame?: string }) {
   const bands = JSON.parse(data) as Band[];
@@ -31,8 +33,7 @@ export function LayerMap({ data, caption, frame }: { data: string; caption?: str
   );
   const arrow = <ArrowDown aria-hidden className="ops-band-arrow" strokeWidth={1.5} />;
   return (
-    <figure className="ops-figure ops-fig not-prose">
-      <div className="ops-fig-stage ops-layers">
+    <FigureFrame caption={caption} stageClass="ops-layers">
         {band(first, 'outside')}
         {arrow}
         <div className="ops-layers-frame">
@@ -50,8 +51,6 @@ export function LayerMap({ data, caption, frame }: { data: string; caption?: str
             {band(last, 'outside')}
           </>
         )}
-      </div>
-      {caption && <figcaption>{caption}</figcaption>}
-    </figure>
+    </FigureFrame>
   );
 }
