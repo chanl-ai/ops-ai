@@ -76,8 +76,8 @@ await withUiStack(
         await priya.getByTestId('access-invite').click();
         const dialog = priya.getByRole('dialog');
         await dialog.getByRole('textbox').first().fill(NEWCOMER);
-        // It starts on the least role, so an unchanged choice never hands out approval rights.
-        const startsOnViewer = await dialog.getByRole('radio', { name: /Viewer/ }).isChecked();
+        // It starts on Builder, which makes and changes agents but holds no approval rights; Viewer is one click away.
+        const startsOnBuilder = await dialog.getByRole('radio', { name: /Builder/ }).isChecked();
         await dialog.getByRole('radio', { name: /Viewer/ }).click();
         // The dialog says what happens (a link, shown once), names the team, offers no team the service ignores, and is one form.
         const said = await dialog.innerText();
@@ -100,7 +100,7 @@ await withUiStack(
         // The service keeps only a hash of the link, so the invited row offers none afterwards.
         const invitedRow = priya.getByRole('row', { name: new RegExp(NEWCOMER.replace(/\./g, '\\.')) });
         await invitedRow.waitFor({ timeout: 60_000 });
-        check('2b the invite dialog starts on Viewer, the least role', startsOnViewer, { startsOnViewer });
+        check('2b the invite dialog starts on Builder, a role with no approval rights', startsOnBuilder, { startsOnBuilder });
         check('2 an invited row shows no link to copy again', (await invitedRow.innerText()).includes('Invited') && (await invitedRow.getByRole('link').count()) === 0);
       });
 

@@ -27,6 +27,7 @@ from ops_identity import Auth, Principal, dev_service_signer, mint_service_token
 from ops_identity.fastapi import current_caller, current_principal
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
+from ops_sources import Reader
 from ops_storage.azure_blob import AzureBlobConfig, AzureBlobObjectStore
 from ops_storage.base import StreamingObjectStore
 from ops_storage.local import LocalObjectStore
@@ -56,6 +57,7 @@ def client(engine: AsyncEngine, tenant: str, tmp_path: Path) -> Client:
         admin: bool = False,
         store: StreamingObjectStore | None = None,
         role: str | None = None,
+        reader: Reader | None = None,
     ) -> httpx.AsyncClient:
         files = TenantFiles(
             store or LocalObjectStore(tmp_path / "objects", signing_key=b"k" * 32),
@@ -66,7 +68,7 @@ def client(engine: AsyncEngine, tenant: str, tmp_path: Path) -> Client:
         auth = Auth.for_dev(
             Settings(), audience="files", name="james", email="james@harborpine.example", tenant_id=tenant
         )
-        app = create_files_app(files, engine=engine, auth=auth)
+        app = create_files_app(files, engine=engine, auth=auth, reader=reader)
 
         sign_in(app, tenant, role or ("admin" if admin else "builder"))
         hooks = {"response": [response_checker(app)]}

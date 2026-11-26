@@ -10,7 +10,7 @@ const LINKED = [
 ] as const;
 
 /**
- * "Uses 3 tools · 2 knowledge bases · 3 skills" in the brief card's footer: each count is a link down to its section
+ * "Uses 3 tools · 2 knowledge bases · 3 skills" in the brief card's header row: each count is a link down to its section
  * on the same page, from the service's counts, with a kind left out when it is zero.
  */
 export function AgentUsesLink({ uses }: { uses: AgentUses | undefined }) {
@@ -24,7 +24,7 @@ export function AgentUsesLink({ uses }: { uses: AgentUses | undefined }) {
     ...(uses?.workflows ? [<span key="workflows">{plural(uses.workflows, 'workflow')}</span>] : []),
   ];
   return (
-    <p className="text-sm text-muted-foreground" data-testid="agent-uses-link">
+    <p className="text-xs text-muted-foreground" data-testid="agent-uses-link">
       {parts.length ? (
         <>
           Uses{' '}

@@ -1,6 +1,6 @@
 import type { Icon } from '@tabler/icons-react';
 import { PERSONAL_SETTINGS, SETTINGS_NAV } from './settings-tree.ts';
-import { IconChecklist, IconCpu, IconGavel, IconDatabase, IconFileSearch, IconFileText, IconFolder, IconHeartbeat, IconHistory, IconHome, IconInbox, IconKey, IconLayoutDashboard, IconList, IconListDetails, IconMail, IconMessage, IconMessages, IconPlayerPlay, IconPlugConnected, IconRobot, IconRoute, IconSettings, IconShield, IconShieldCheck, IconShieldLock, IconSparkles, IconTool, IconUserCheck, IconUsers, IconUserShield } from '@tabler/icons-react';
+import { IconChecklist, IconCpu, IconGavel, IconDatabase, IconFileSearch, IconFileText, IconFolder, IconFolderSearch, IconHeartbeat, IconHistory, IconHome, IconInbox, IconKey, IconLayoutDashboard, IconList, IconListDetails, IconMail, IconMessage, IconMessages, IconPlayerPlay, IconPlugConnected, IconRobot, IconRoute, IconSettings, IconShield, IconShieldCheck, IconShieldLock, IconSparkles, IconTool, IconUserCheck, IconUsers, IconUserShield } from '@tabler/icons-react';
 
 /** A page under its parent item: an indented row in the sidebar and an entry in the page-title switcher. */
 export interface NavChild {
@@ -111,7 +111,7 @@ export const NAV: NavGroup[] = [
       { title: 'Tools', url: '/data/tools', icon: IconTool, needs: cell('tools', 'view') },
       { title: 'Secrets', url: '/data/secrets', icon: IconKey, needs: cell('secrets_egress', 'view') },
       // Every file the platform stores, whatever brought it in (wiki, chat, mail, imports, exports).
-      { title: 'Files', url: '/data/files', icon: IconFolder, needs: cell('files', 'view') },
+      { title: 'Files', tabTitle: 'All files', url: '/data/files', icon: IconFolder, needs: cell('files', 'view'), foldedAtStart: true, children: [{ title: 'Watched folders', url: '/data/files/watches', icon: IconFolderSearch }] },
       { title: 'Document types', url: '/data/document-types', icon: IconFileText, needs: cell('documents', 'view') },
     ],
   },

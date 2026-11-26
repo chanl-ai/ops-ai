@@ -198,21 +198,29 @@ await withUiStack(
               await open(path);
               const r = await rowsOf();
               if (r.lone) bad.push(`${name}: a lone action on its own row ${JSON.stringify(r.rows)}`);
+              if (width < 640 && r.rows.length > 2) bad.push(`${name}: the header takes ${r.rows.length} rows at 390`);
               if (builder && width >= 1024 && r.gap !== null && r.gap > 24) bad.push(`${name}: Saved is ${r.gap}px from Save`);
             }
             if (builder) {
               // Paused: the Pause button reads Resume and the lifecycle chip says Paused.
               await open(workflow);
-              await page.getByTestId('definition-pause').click();
+              // On a phone Pause is in the header's menu, which a keyboard reaches like the desktop button.
+              if (width < 640) {
+                await page.getByTestId('definition-more').click();
+                await page.getByTestId('definition-pause-menu').click();
+              } else await page.getByTestId('definition-pause').click();
               await page.getByTestId('definition-pause-confirm').click();
               await page.getByTestId('definition-pause-confirm').waitFor({ state: 'hidden' });
-              await page.getByTestId('definition-resume').waitFor();
+              await page.getByTestId(width < 640 ? 'definition-more' : 'definition-resume').waitFor();
               const r = await rowsOf();
               if (r.lone) bad.push(`workflow paused: a lone action ${JSON.stringify(r.rows)}`);
-              await page.getByTestId('definition-resume').click();
+              if (width < 640) {
+                await page.getByTestId('definition-more').click();
+                await page.getByTestId('definition-resume-menu').click();
+              } else await page.getByTestId('definition-resume').click();
               await page.getByTestId('definition-pause-confirm').click();
               await page.getByTestId('definition-pause-confirm').waitFor({ state: 'hidden' });
-              await page.getByTestId('definition-pause').waitFor();
+              await page.getByTestId(width < 640 ? 'definition-more' : 'definition-pause').waitFor();
             }
             check(`3b ${tag} no action alone on its row, Saved beside Save`, !bad.length, bad);
           });

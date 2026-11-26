@@ -20,6 +20,7 @@ from ops_files_client import FileInfo, FileNotFound, FilesClient, FilesRefused
 from ops_identity import ServiceUnreachable
 from ops_service_kit.errors import NotFound, ServiceUnavailable
 from ops_service_kit.http import Json
+from ops_service_kit.narrow import json_object
 
 # How long a turn waits for documents-service to read a large file in the background before answering without it.
 READ_WAIT_S = 20.0
@@ -110,7 +111,7 @@ class ChatAttachmentReader:
         if status in READING_PENDING:
             return STILL_READING, []
         if status != "done":
-            error: Json = read.get("error") or {}
+            error = json_object(read.get("error"))
             return str(error.get("message") or "the document reader could not read it").rstrip("."), []
         pages = attachments.pages_of(read)
         return (None, pages) if pages else (NO_TEXT, [])

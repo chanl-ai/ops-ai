@@ -3,12 +3,13 @@
 import { SCHEDULE_KIND_LABEL, WEEKDAY_LABEL } from '@/components/knowledge/knowledge-meta';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { localTimeZone } from '@/lib/format';
 import type { Schedule, Weekday } from '@/lib/types/knowledge';
+
+export { localTimeZone };
 
 const HOURS = [1, 2, 4, 6, 12] as const;
 
-/** The browser's time zone, which a new daily or weekly schedule starts in. */
-export const localTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 
 /** A schedule of `kind`, keeping the time and zone of the one it replaces. */
 export function scheduleOfKind(kind: Schedule['kind'], from: Schedule): Schedule {

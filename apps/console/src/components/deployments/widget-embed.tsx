@@ -5,6 +5,7 @@ import { AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ConfirmActionDialog } from '@/components/shared/confirm-action-dialog';
+import { ListCell } from '@/components/shared/table-cells';
 import { CopyButton } from '@/components/shared/copy-button';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
@@ -268,7 +269,7 @@ export function WidgetEmbeds({
                   <TableCell className="font-medium">
                     {d.name} {d.retiredAt ? <Badge variant="outline">Retired</Badge> : d.paused ? <Badge variant="secondary">Paused</Badge> : null}
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{d.origins.join(', ')}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground"><ListCell values={d.origins} label="Origins" /></TableCell>
                   <TableCell className="tabular-nums" data-testid="widget-embed-keys">
                     {d.activeKeys ?? 0}
                   </TableCell>

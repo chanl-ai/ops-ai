@@ -20,6 +20,7 @@ EXEMPT = {
     ("ops_agents.api.routers.step_up", "step_up"): "re-checks the caller's own password for their own session",
     ("ops_agents.api.routers.step_up", "sso_step_up"): "the same for a single sign-on session",
     ("ops_agents.api.routers.engine", "validate_definition"): "checks a posted definition and stores nothing",
+    ("ops_agents.api.routers.schedules", "preview_schedule"): "reads a rule's words and next runs and stores nothing",
     ("ops_agents.api.routers.widget", "server_session"): "authenticated by the deployment's mint key, not a principal",
     ("ops_agents.api.routers.run_resume", "resume_step"): (
         "authenticated by the step's own resume token, bound to its run, step, pass and team"

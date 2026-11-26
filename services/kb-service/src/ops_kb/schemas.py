@@ -967,6 +967,10 @@ class SourceKind(Out):
     source: str | None = None
     # Its items are one website's pages.
     site: bool = False
+    # Its items are files a watched folder can copy into Files (Files > Watch a folder offers only these).
+    files: bool = False
+    # The team's connection the kind reads through; a watched folder keeps it as part of each file's identity.
+    connection_id: str | None = None
     # It needs the team's connection, and whether the team has one that works.
     needs_connection: bool = False
     connected: bool = False

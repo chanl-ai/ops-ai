@@ -45,15 +45,18 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.form_links` | `FormLinks` | none | `form_links` |
 | agents-service | `ops_agents.store.graphs` | `GraphStore` | CAS, TRANSACTION | `graph_runs`, `graph_threads`, `graph_versions` |
 | agents-service | `ops_agents.store.guardrails` | `GuardrailRegistry` | CAS, TRANSACTION | `registry_guardrail_versions`, `registry_guardrails` |
+| agents-service | `ops_agents.store.instruction_sections` | `InstructionSections` | CLOCK, TRANSACTION | `agent_instruction_sections` |
 | agents-service | `ops_agents.store.journal` | `GraphJournal` | none | none |
 | agents-service | `ops_agents.store.leases` | `Leases` | CAS, CLOCK, LOCK | `thread_leases` |
 | agents-service | `ops_agents.store.mailboxes` | `MailboxStore` | CAS | `mailboxes` |
 | agents-service | `ops_agents.store.memories` | `Memories` | TRANSACTION | `agent_memories`, `memory_audit`, `message_memory_use` |
 | agents-service | `ops_agents.store.model_calls` | `ModelCallLedger` | CAS | `model_call_records`, `model_call_records_unattributed` |
+| agents-service | `ops_agents.store.outbox` | none: no repository class | | `agents_outbox` |
 | agents-service | `ops_agents.store.pin_users` | `PinUsers` | none | none |
 | agents-service | `ops_agents.store.poll_cursors` | `PollCursors` | none | `poll_cursors` |
 | agents-service | `ops_agents.store.review_assignments` | `ReviewAssignments` | none | `review_assignments` |
 | agents-service | `ops_agents.store.reviews` | `ReviewStore` | CAS, TRANSACTION | `review_approvals`, `review_decisions` |
+| agents-service | `ops_agents.store.schedules` | `WorkflowSchedules` | none | `workflow_schedules` |
 | agents-service | `ops_agents.store.service_events` | `ServiceEvents` | RLS, TRANSACTION | `service_events` |
 | agents-service | `ops_agents.store.skill_names` | `SkillNames` | none | none |
 | agents-service | `ops_agents.store.skills` | `SkillRegistry` | CAS, TRANSACTION | `registry_skill_versions`, `registry_skills` |
@@ -78,6 +81,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | files-service | `ops_files.store.files` | `FilesStore` | TRANSACTION | `file_blobs`, `file_idempotency`, `file_legal_holds`, `file_references`, `file_versions`, `files`, `files_outbox` |
 | files-service | `ops_files.store.read_requests` | none: no repository class | | `file_read_requests` |
 | files-service | `ops_files.store.settings` | none: no repository class | | `storage_credentials`, `storage_settings`, `storage_settings_audit` |
+| files-service | `ops_files.store.watches` | none: no repository class | | `file_watch_events`, `file_watches` |
 | kb-service | `ops_kb.store.knowledge` | `KnowledgeStore` | TRANSACTION | `kb_base_sources`, `kb_bases`, `kb_changes`, `kb_chunks`, `kb_item_versions`, `kb_items`, `kb_outbox`, `kb_retired_bases`, `kb_runs`, `kb_sources`, `kb_unit_vectors`, `kb_units` |
 | models-service | `ops_models.store.aliases` | `Aliases` | CAS, TRANSACTION | none |
 | models-service | `ops_models.store.calls` | `KeySpend` | CAS, TRANSACTION | none |

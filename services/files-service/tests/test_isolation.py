@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_files.store import metadata
 from ops_files.store.files import ROLE, SYSTEM_ROLE, files, service_outbox
+from ops_files.store.watches import file_watch_events, file_watches
 from ops_store.conformance import isolation_suite
 from ops_store.dialect import system_tx
 from ops_store.schema import isolation_ddl, isolation_drop_ddl, isolation_kind
@@ -50,11 +51,17 @@ async def test_the_system_role_reads_its_outbox_and_the_file_list_and_nothing_el
         await c.execute(service_outbox.update().where(sa.false()).values(attempts=0))
         # The retention process lists released files past their date; it deletes each as the file's own tenant.
         await c.execute(sa.select(sa.func.count()).select_from(files))
+        # The check process lists asked-for watches; the retention process deletes old watch events.
+        await c.execute(sa.select(sa.func.count()).select_from(file_watches))
+        await c.execute(file_watch_events.delete().where(sa.false()))
+    with pytest.raises(ProgrammingError, match=DENIED):
+        async with system_tx(engine, role=SYSTEM_ROLE) as c:
+            await c.execute(file_watches.update().where(sa.false()).values(name=""))
     with pytest.raises(ProgrammingError, match=DENIED):
         async with system_tx(engine, role=SYSTEM_ROLE) as c:
             await c.execute(files.delete().where(sa.false()))
     for table in TABLES:
-        if table.name in (service_outbox.name, files.name):
+        if table.name in (service_outbox.name, files.name, file_watches.name, file_watch_events.name):
             continue
         with pytest.raises(ProgrammingError, match=DENIED):
             async with system_tx(engine, role=SYSTEM_ROLE) as c:

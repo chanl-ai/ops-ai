@@ -55,10 +55,13 @@ await withUiStack(
       current = james;
       const wall = performance.now();
       let reviewUrl;
+      // No server serves skill import yet, so the list must not offer it (a click would only fail).
+      let importOffered;
 
       await step('1 open the skills list', async () => {
         await james.goto(`${consoleUrl}/build/skills`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await james.getByTestId('new-skill-button').waitFor({ timeout: 60_000 });
+        importOffered = await james.getByTestId('import-skill-button').count();
       });
       await step('2 create the skill (name, when to use it, Create)', async () => {
         await click(james.getByTestId('new-skill-button'));
@@ -145,6 +148,7 @@ await withUiStack(
       console.log(`EFFORT ${actions.clicks} clicks, ${actions.fields} fields typed or pasted (${actions.chars} characters), ${actions.keys} key presses`);
       check(`1 a new skill goes from the list to published in ${total.toFixed(0)} s, under ${BUDGET_SECONDS} s`, rows.every((r) => r.ok) && total <= BUDGET_SECONDS, { total, rows });
       check('2 no page errors', errors.length === 0, errors.slice(0, 3));
+      check('3 the skills list offers no Import', importOffered === 0, importOffered);
     } finally {
       await browser.close();
     }

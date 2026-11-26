@@ -32,8 +32,8 @@ GRANT SELECT, INSERT, UPDATE ON dbo.cases TO ops_agents_runtime;
 REVOKE UPDATE, DELETE ON dbo.case_events FROM ops_agents_runtime;
 GRANT SELECT, INSERT ON dbo.case_events TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.thread_events TO ops_agents_runtime;
-REVOKE UPDATE, DELETE ON dbo.trigger_events FROM ops_agents_runtime;
-GRANT SELECT, INSERT ON dbo.trigger_events TO ops_agents_runtime;
+REVOKE UPDATE ON dbo.trigger_events FROM ops_agents_runtime;
+GRANT SELECT, INSERT, DELETE ON dbo.trigger_events TO ops_agents_runtime;
 GRANT UPDATE ON dbo.trigger_events (detail, item, outcome, run_id) TO ops_agents_runtime;
 REVOKE DELETE ON dbo.form_links FROM ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE ON dbo.form_links TO ops_agents_runtime;
@@ -73,14 +73,18 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.thread_inbox TO ops_agents_runtime;
 REVOKE UPDATE ON dbo.chat_search FROM ops_agents_runtime;
 GRANT SELECT, INSERT, DELETE ON dbo.chat_search TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_guardrails TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.agent_instruction_sections TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.agent_memories TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.memory_audit TO ops_agents_runtime;
 REVOKE UPDATE, DELETE ON dbo.message_memory_use FROM ops_agents_runtime;
 GRANT SELECT, INSERT ON dbo.message_memory_use TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_call_records TO ops_agents_runtime;
 REVOKE SELECT, INSERT, UPDATE, DELETE ON dbo.model_call_records_unattributed FROM ops_agents_runtime;
+REVOKE SELECT, UPDATE, DELETE ON dbo.agents_outbox FROM ops_agents_runtime;
+GRANT INSERT ON dbo.agents_outbox TO ops_agents_runtime;
 REVOKE UPDATE, DELETE ON dbo.review_assignments FROM ops_agents_runtime;
 GRANT SELECT, INSERT ON dbo.review_assignments TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.workflow_schedules TO ops_agents_runtime;
 REVOKE DELETE ON dbo.task_assists FROM ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE ON dbo.task_assists TO ops_agents_runtime;
 REVOKE DELETE ON dbo.task_types FROM ops_agents_runtime;
@@ -124,6 +128,8 @@ GRANT SELECT, UPDATE ON dbo.engine_work TO ops_runtime_system;
 GRANT SELECT ON dbo.engine_runs TO ops_runtime_system;
 GRANT SELECT ON dbo.engine_steps TO ops_runtime_system;
 GRANT SELECT ON dbo.agent_memories (tenant_id) TO ops_runtime_system;
+GRANT SELECT ON dbo.workflow_schedules (tenant_id) TO ops_runtime_system;
+GRANT SELECT, UPDATE, DELETE ON dbo.agents_outbox TO ops_runtime_system;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.background_heartbeats TO ops_runtime_system;
 GRANT SELECT ON dbo.background_jobs TO ops_runtime_system;
 GRANT SELECT ON dbo.run_batches TO ops_runtime_system;
@@ -279,12 +285,16 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.file_read_requests TO ops_files_runt
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.storage_settings TO ops_files_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.storage_credentials TO ops_files_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.storage_settings_audit TO ops_files_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.file_watches TO ops_files_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.file_watch_events TO ops_files_runtime;
 GRANT SELECT ON dbo.alembic_version_files TO ops_files_runtime;
 GO
 IF USER_ID(N'ops_files_system') IS NULL CREATE USER ops_files_system WITHOUT LOGIN;
 GO
 GRANT SELECT, UPDATE, DELETE ON dbo.files_outbox TO ops_files_system;
 GRANT SELECT ON dbo.files TO ops_files_system;
+GRANT SELECT ON dbo.file_watches TO ops_files_system;
+GRANT SELECT, DELETE ON dbo.file_watch_events TO ops_files_system;
 GRANT IMPERSONATE ON USER::ops_files_system TO ops_files_runtime;
 GO
 -- documents-service

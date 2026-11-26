@@ -140,6 +140,14 @@ PROCESSES: list[Process] = [
         "Every team's live mailbox workflows are read; each run starts in its workflow's team.",
     ),
     Process(
+        "schedule_clock",
+        "agents",
+        "Schedule clock",
+        "Starts each live workflow's scheduled runs at their times, and records a tick it skipped or could not start.",
+        60.0,
+        "Every team's saved schedules are read beside their live workflows; each run starts in its workflow's team.",
+    ),
+    Process(
         "event_workflows",
         "agents",
         "Event workflows",
@@ -160,9 +168,19 @@ PROCESSES: list[Process] = [
         "files_retention",
         "files",
         "File retention",
-        "Deletes knowledge snapshots their sources let go once their days have passed.",
+        "Deletes knowledge snapshots their sources let go once their days have passed, and watched-folder events "
+        "older than 90 days.",
         3600.0,
-        "It lists every team's released snapshots past their date, then deletes each as its own team.",
+        "It lists every team's released snapshots past their date, then deletes each as its own team; it deletes "
+        "every team's old watch events in one statement.",
+    ),
+    Process(
+        "files_watch_checks",
+        "files",
+        "Watched folder checks",
+        "Checks each watched folder someone asked to check, bringing its new and changed files into Files.",
+        5.0,
+        "It lists every team's asked-for checks, then checks each folder as its own team under the folder's lease.",
     ),
     Process(
         "documents_relay",
@@ -203,6 +221,14 @@ PROCESSES: list[Process] = [
         "Reads queued files and runs document type tests.",
         None,
         "Reads queued before a restart are resumed for every team, each in its own team.",
+    ),
+    Process(
+        "agents_relay",
+        "agents",
+        "Agents hand-off",
+        "Sends schedule saves and clears to the account's audit log.",
+        2.0,
+        "It delivers every team's entries, each as its own team.",
     ),
     Process(
         "kb_relay",

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "A stopped schedule shows why, and Enter works in the sheet",
+  "description": "Next runs now show in the time zone you chose, and a schedule's panel shows an error when it cannot load. Resume needs only the right to edit the workflow.",
+  "tag": "improved"
+}
