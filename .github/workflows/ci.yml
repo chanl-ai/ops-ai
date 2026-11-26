@@ -429,12 +429,67 @@ jobs:
           echo "maintainer review: $review"
           OPS_STANDARDS_BASE=$(git merge-base "$BASE_SHA" HEAD) OPS_STANDARDS_REVIEW="$review" make -s checks-history
 
+  usecases:
+    # Only the use cases the changed files affect (scripts/agents/usecase_map.json, the map `make usecase-pick` prints),
+    # on a pull request and on the merge queue's group alike, so a use case is never run on the owner's Mac. A failure
+    # config/quarantine.json covers is printed and does not fail the job; the nightly runs every use case (nightly.yml).
+    needs: plan
+    if: needs.plan.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        # PostgreSQL 17 with pgvector, which knowledge search by meaning needs (kb_0021).
+        image: pgvector/pgvector:pg17
+        env: { POSTGRES_USER: ops, POSTGRES_PASSWORD: ops, POSTGRES_DB: ops_runtime }
+        ports: ["5477:5432"]
+        options: --health-cmd "pg_isready -U ops -d ops_runtime" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Pick the use cases
+        id: pick
+        run: |
+          base=$(git merge-base "$BASE_SHA" HEAD)
+          ids=$(python3 scripts/ci_usecases.py pick --base "$base" | tr '\n' ' ')
+          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+          echo "use cases: ${ids:-none}"
+      - if: steps.pick.outputs.ids != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .data/runner
+          key: runner-wasm-${{ hashFiles('packages/ops_service_kit/src/ops_service_kit/settings.py') }}
+      - if: steps.pick.outputs.ids != ''
+        uses: ./.github/actions/setup
+        with:
+          node: "true"
+          browser: "true"
+          infra: "true"
+      - if: steps.pick.outputs.ids != ''
+        name: Run them on the scripted model
+        env:
+          IDS: ${{ steps.pick.outputs.ids }}
+        run: |
+          scripts/ensure-sdk-ts-built.sh
+          # shellcheck disable=SC2086
+          python3 scripts/ci_usecases.py run --out "$RUNNER_TEMP/usecases.json" $IDS
+      - if: always() && steps.pick.outputs.ids != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: usecase-logs
+          path: |
+            .logs/usecases
+            ${{ runner.temp }}/usecases.json
+          if-no-files-found: ignore
+          retention-days: 7
+
   ci-ok:
     # The one required check: it always runs, waits for every other job, and fails when any of them failed or was
     # cancelled. A job the plan skipped counts as passed, so a narrow change is not held up by suites it did not touch.
     name: ci-ok
     if: always()
-    needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, maintainer-review]
+    needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, usecases, maintainer-review]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

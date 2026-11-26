@@ -1,23 +1,80 @@
-# A merge into develop of the pull request `release: X.Y.Z into develop` (or `hotfix: X.Y.Z into develop`) is tagged
-# `vX.Y.Z` with `make release-tag`, which runs the same way locally (DRY=1 prints the name). Then main is fast-forwarded to
-# that commit with a plain push over SSH with the deploy key in RELEASE_MAIN_DEPLOY_KEY (`make release-main`); with no
-# key main's rules refuse the workflow token, and then the
-# job stops red and prints the one command the owner runs, after which re-running the job starts the publish below. A
-# push to develop that is no release gets no tag. The tag push made with the workflow token starts no workflow of its
-# own, so this one starts sdk-publish.yml and release-images.yml on the new tag with workflow_dispatch, which the token
-# may start. A merge to develop that is no release deploys to staging as before; to put another commit there, run
-# deploy-staging.yml by hand (`make stg-deploy-ci REF=<ref>`).
+# The version tag of a develop commit, made after that commit's staging walk is recorded as passed. Two starts, both
+# gated, and no agent pushes a tag by hand:
+#   - workflow_run: ci.yml finished on develop. The job reads that run's jobs and goes on only when the `staging` deploy
+#     (the deploy, then the click walk and smoke check, which a failed step rolls back) concluded success for the commit.
+#     A skipped staging deploy (staging frozen, STAGING_HOLD) or a red walk leaves the commit untagged.
+#   - workflow_dispatch: a person names a commit and sets walk_passed to true, for a walk they ran or watched.
+# The version is `release: X.Y.Z into develop` in the commit's title when there is one (docs/deploy/release.md), else
+# the merge-queue rule (BUMP=auto, scripts/release-tag.sh): a `feat` commit is the next minor version, `fix` or `perf`
+# the next patch, any other type gets no tag. scripts/release-tag.sh itself refuses to push on GitHub without
+# WALK_PASSED=1. Then main is fast-forwarded to that commit with a plain push over SSH with the deploy key in
+# RELEASE_MAIN_DEPLOY_KEY (`make release-main`); with no key main's rules refuse the workflow token, and then the job
+# stops red and prints the one command the owner runs, after which re-running the job starts the publish below. The tag
+# push made with the workflow token starts no workflow of its own, so this one starts sdk-publish.yml and
+# release-images.yml on the new tag with workflow_dispatch, which the token may start.
 name: release-tag
 
 on:
-  push:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
     branches: [develop]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: The develop commit to tag
+        type: string
+        required: true
+      walk_passed:
+        description: The staging walk of this commit passed (set only for a walk you ran or watched)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
+  walk:
+    # The recorded walk result: the staging job of the ci run this one follows, or the person's input.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      ref: ${{ steps.walk.outputs.ref }}
+      passed: ${{ steps.walk.outputs.passed }}
+    steps:
+      - id: walk
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          INPUT_REF: ${{ inputs.ref }}
+          INPUT_PASSED: ${{ inputs.walk_passed }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+        run: |
+          passed=false
+          if [ "$EVENT" = workflow_dispatch ]; then
+            ref=$INPUT_REF; passed=$INPUT_PASSED
+          elif [ "$RUN_EVENT" = push ]; then
+            ref=$RUN_SHA
+            # `staging / deploy` is the called deploy-staging.yml job. Its `Deploy` step runs the deploy, the click walk and
+            # the smoke check, and is skipped while staging is held, so only a `Deploy` step that succeeded counts.
+            result=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" \
+              --jq '[.jobs[] | select(.name | startswith("staging")) | select(.conclusion == "success") | .steps[] | select(.name == "Deploy" and .conclusion == "success")] | length')
+            [ "${result:-0}" -gt 0 ] && passed=true
+          else
+            ref=$RUN_SHA
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "passed=$passed" >> "$GITHUB_OUTPUT"
+          echo "staging walk passed for $ref: $passed"
+
   tag:
+    needs: walk
+    if: needs.walk.outputs.passed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -29,11 +86,21 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The commit being tagged, so the script that tags it is the one on develop.
+          ref: ${{ needs.walk.outputs.ref }}
           fetch-depth: 0
+      - name: Only a develop commit is tagged
+        env:
+          REF: ${{ needs.walk.outputs.ref }}
+        run: |
+          git fetch --quiet origin develop
+          git merge-base --is-ancestor "$REF" origin/develop || { echo "::error::$REF is not on develop"; exit 1; }
       - name: Tag the merge
         id: tag
         env:
-          REF: ${{ github.sha }}
+          REF: ${{ needs.walk.outputs.ref }}
+          BUMP: auto
+          WALK_PASSED: "1"
         run: |
           out=$(make -s release-tag)
           echo "$out"
@@ -43,7 +110,7 @@ jobs:
       - name: Fast-forward main to the tag
         if: steps.tag.outputs.tag != ''
         env:
-          REF: ${{ github.sha }}
+          REF: ${{ needs.walk.outputs.ref }}
           # A write deploy key that main's ruleset lets bypass the pull request rule; the workflow token cannot. With no
           # key the push goes over the token and is refused, which prints the owner's command (docs/deploy/release.md).
           DEPLOY_KEY: ${{ secrets.RELEASE_MAIN_DEPLOY_KEY }}

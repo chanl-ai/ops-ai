@@ -85,3 +85,28 @@ def test_a_queue_merge_commit_is_tagged_from_the_pull_request_title_in_its_body(
     assert tag(work, REF=merge).returncode == 0 and tag(work, REF=squash).returncode == 0
     assert git(remote, "rev-list", "-n", "1", "v1.2.0") == merge
     assert git(remote, "rev-list", "-n", "1", "v1.2.1") == squash
+
+
+def test_auto_bump_tags_a_feature_as_the_next_minor_a_fix_as_the_next_patch_and_nothing_else(tmp_path: Path) -> None:
+    remote, work = clone_pair(tmp_path)
+    commit(work, "b", RELEASE)
+    tag(work)
+    git(work, "tag", "v2026-11-24.1")  # an old date tag never counts as the highest version
+    feat = commit(work, "c", "feat(console): saved views (#40)")
+    assert tag(work, BUMP="auto").returncode == 0
+    fix = commit(work, "d", "fix(api): paging (#41)")
+    assert tag(work, BUMP="auto").returncode == 0
+    commit(work, "e", "chore(ci): tidy (#42)")
+    assert "gets no tag" in tag(work, BUMP="auto").stdout
+    assert git(remote, "rev-list", "-n", "1", "v1.3.0") == feat
+    assert git(remote, "rev-list", "-n", "1", "v1.3.1") == fix
+
+
+def test_a_tag_made_on_github_needs_a_recorded_walk_and_a_local_run_does_not(tmp_path: Path) -> None:
+    remote, work = clone_pair(tmp_path)
+    commit(work, "b", RELEASE)
+    refused = tag(work, GITHUB_ACTIONS="true")
+    assert refused.returncode == 1 and "no passed staging walk" in refused.stderr
+    assert git(remote, "tag", "--list") == ""
+    assert tag(work, GITHUB_ACTIONS="true", WALK_PASSED="1").returncode == 0
+    assert git(remote, "tag", "--list") == "v1.2.0"

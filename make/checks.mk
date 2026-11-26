@@ -30,7 +30,8 @@ CHECKS = \
   store-inventory roles-matrix sbom k8s-base \
   ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards \
   downgrades migration-heads token-lifetime cross-service standards service-standards service-standards-self-test list-routes \
-  ci-steps ci-steps-self-test ci-local-self-test new-migration-self-test builder-watch-self-test usecase-outputs
+  ci-steps ci-steps-self-test ci-local-self-test new-migration-self-test builder-watch-self-test usecase-outputs \
+  quarantine-self-test ci-usecases-self-test
 
 # Access decided outside can(), the exceptions each lane may still hold, and the trailer a new line needs.
 CHECK_ACCESS_PATHS = ^(services|packages)/[^/]+/src/.*\.py$$|^apps/(console|embed)/src/|^access-exceptions-allowlist\.txt$$|^docs/architecture/roles-and-permissions\.md$$|^scripts/(check_access_exceptions\.py|access-baselines/)
@@ -179,6 +180,10 @@ check-run.ci-steps-self-test = $(PY) scripts/ci_steps.py --self-test
 check-paths.ci-steps-self-test = ^scripts/ci_steps\.py$$
 
 # The jobs CI would run for this change (scripts/ci-plan.sh + ci.yml), side by side, each on its own database and ports.
+check-run.quarantine-self-test = $(PY) scripts/quarantine.py --self-test
+check-paths.quarantine-self-test = ^scripts/quarantine\.py$$
+check-run.ci-usecases-self-test = $(PY) scripts/ci_usecases.py --self-test
+check-paths.ci-usecases-self-test = ^scripts/(ci_usecases|quarantine)\.py$$|^scripts/agents/(affected_usecases\.py|usecase_map\.json)$$
 check-run.ci-local-self-test = $(PY) scripts/ci_local.py --self-test
 check-paths.ci-local-self-test = ^scripts/ci_local\.py$$|^\.github/workflows/ci\.yml$$
 

@@ -8,6 +8,10 @@
 #   REMOTE=<name>  where tags are read from and pushed to (default origin; with no such remote, the tag stays local)
 #   VERSION=X.Y.Z  tag this version instead of reading it from the commit's title
 #   DRY=1          print the tag it would make and stop
+#   BUMP=auto      a commit that is no release merge is tagged by its type instead: `feat` raises the minor version of the
+#                  highest vX.Y.Z tag, `fix` or `perf` its patch, any other type gets no tag (the merge-queue flow, where one
+#                  feature is one release and no release pull request exists)
+#   WALK_PASSED=1  the staging walk of this commit passed; a run on GitHub (GITHUB_ACTIONS) refuses to push a tag without it
 # A commit that is not a release or hotfix merge gets no tag. A rerun on a commit that already has the tag changes
 # nothing; a tag that names another commit is an error, never moved. Older installs hold date tags (vYYYY-MM-DD.N);
 # nothing here touches them.
@@ -23,6 +27,15 @@ if [ -z "$version" ]; then
     version=$(printf '%s\n' "$line" | sed -nE 's@^(release|hotfix): ([0-9]+\.[0-9]+\.[0-9]+) into develop( \(#[0-9]+\))?$@\2@p')
     [ -z "$version" ] || break
   done
+  if [ -z "$version" ] && [ "${BUMP:-}" = auto ]; then
+    last=$(git tag --list 'v[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
+    last=${last:-0.0.0}
+    major=${last%%.*}; rest=${last#*.}; minor=${rest%%.*}; patch=${rest#*.}
+    case "$title" in
+      feat\(*\)!:* | feat!:* | feat:* | feat\(*\):*) version="$major.$((minor + 1)).0" ;;
+      fix:* | fix\(*\):* | perf:* | perf\(*\):*) version="$major.$minor.$((patch + 1))" ;;
+    esac
+  fi
   if [ -z "$version" ]; then
     echo "release-tag: '$title' is not a release or hotfix merge into develop, so $sha gets no tag"
     exit 0
@@ -44,6 +57,10 @@ fi
 if [ "${DRY:-0}" = 1 ]; then
   echo "release-tag: next is $name for $sha (dry run)"
   exit 0
+fi
+if [ -n "${GITHUB_ACTIONS:-}" ] && [ "${WALK_PASSED:-}" != 1 ]; then
+  echo "release-tag: refused, no passed staging walk is recorded for $sha (WALK_PASSED=1)" >&2
+  exit 1
 fi
 git tag "$name" "$sha"
 if [ "$has_remote" = 0 ]; then

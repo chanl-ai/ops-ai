@@ -1,0 +1,4 @@
+{
+  "about": "Use cases a run may fail without failing the merge queue. A quarantined use case still runs and its failure is printed; it just does not gate. Each entry needs an owner and an expiry date, and an expired entry fails `make quarantine-check`, so nothing stays here without someone fixing or deleting it. Edit with `make quarantine ADD=<id> OWNER=<name> UNTIL=<date> WHY=<reason>` or `make quarantine REMOVE=<id>`.",
+  "entries": []
+}

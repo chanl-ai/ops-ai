@@ -1,0 +1,105 @@
+# Every use case, on develop, every night, split over parallel runners (scripts/ci_usecases.py all --shard). It records
+# what failed in the run summary, in the `nightly-usecases` artifact and in one open issue per night, so a red reaches
+# the lane that owns the use case the next morning. It does not gate: a quarantined failure (config/quarantine.json)
+# is printed and listed as quarantined, and an expired quarantine entry fails the `quarantine` job.
+name: nightly-usecases
+
+on:
+  schedule:
+    - cron: "37 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  OPS_INFRA: external
+  OPS_DATABASE_URL: postgresql+asyncpg://ops:ops@localhost:5477/ops_runtime
+  OPS_TEST_DATABASE_URL: postgresql+asyncpg://ops:ops@localhost:5477/ops_test
+  OPS_OPA_URL: http://127.0.0.1:8181
+  OPS_SMTP_HOST: 127.0.0.1
+  OPS_GREENMAIL_HOST: 127.0.0.1
+  OPS_MAILPIT_HOST: 127.0.0.1
+
+jobs:
+  quarantine:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+      - run: python3 scripts/quarantine.py check
+
+  usecases:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env: { POSTGRES_USER: ops, POSTGRES_PASSWORD: ops, POSTGRES_DB: ops_runtime }
+        ports: ["5477:5432"]
+        options: --health-cmd "pg_isready -U ops -d ops_runtime" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          fetch-depth: 0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .data/runner
+          key: runner-wasm-${{ hashFiles('packages/ops_service_kit/src/ops_service_kit/settings.py') }}
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
+          browser: "true"
+          infra: "true"
+      - name: Run this shard
+        env:
+          SHARD: ${{ matrix.shard }}/8
+        run: |
+          scripts/ensure-sdk-ts-built.sh
+          mapfile -t ids < <(python3 scripts/ci_usecases.py all --shard "$SHARD")
+          # --no-gate: the job records failures in its result file and the report job below turns them into the issue.
+          python3 scripts/ci_usecases.py run --shard 1/1 --no-gate --out "$RUNNER_TEMP/shard.json" "${ids[@]}"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nightly-usecases-${{ matrix.shard }}
+          path: |
+            ${{ runner.temp }}/shard.json
+            .logs/usecases
+          if-no-files-found: ignore
+          retention-days: 14
+
+  report:
+    needs: usecases
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: nightly-usecases-*
+          path: shards
+      - name: Record the failures
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHARDS_RESULT: ${{ needs.usecases.result }}
+        run: |
+          python3 scripts/ci_usecases.py report shards --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+          # A shard that died before writing its result file is a red night too.
+          if grep -q '^FAILED' report.md || [ "$SHARDS_RESULT" != success ]; then
+            gh issue create --title "nightly use cases red on develop, $(date -u +%F)" --label nightly --body-file report.md \
+              || gh issue create --title "nightly use cases red on develop, $(date -u +%F)" --body-file report.md
+            exit 1
+          fi
