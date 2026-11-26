@@ -357,6 +357,9 @@ def engine_worker(name: str, env: dict[str, str] | None = None) -> Generator[sub
     """The workflow worker on the use case database, polling every 0.2 s, logging to `worker-<name>.log` in LOG_DIR.
     `env` adds the services a use case's steps call (OPS_GATEWAY_URL, OPS_MODELS_URL, ...)."""
     full = _env() | {"OPS_DATABASE_URL": pg_url(), "OPS_ENGINE_POLL_SECONDS": "0.2"} | (env or {})
+    # A worker refuses to start with no gateway; a use case that names none runs no tool step, so it opts out.
+    if "OPS_GATEWAY_URL" not in full:
+        full["OPS_ALLOW_NO_GATEWAY"] = "true"
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     with (LOG_DIR / f"worker-{name}.log").open("ab") as fh:
         proc = _start(

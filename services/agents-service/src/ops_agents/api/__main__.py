@@ -20,6 +20,7 @@ def main() -> None:
     configure_logging(service="agents-service")
     settings = Settings()
     settings.require(*settings.identity_endpoints)
+    settings.require_gateway()
     require_keys(settings, "review_key")
     require_current_schema(settings.database_url, MIGRATIONS)
     uvicorn.run(create_app(settings), host=settings.bind_host, port=settings.port, log_config=None, access_log=False)

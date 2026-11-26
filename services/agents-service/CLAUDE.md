@@ -86,7 +86,7 @@ stack's chat alias points at one. Reference: [make/CLAUDE.md](../../make/CLAUDE.
 
 | Trap | Detail |
 |---|---|
-| No gateway, no tool steps | Every deployment sets `OPS_GATEWAY_URL` (fly, k8s, compose, `make up`). Without it the tool list is the in-process catalogue, which holds no platform tool (send_reply) and no app's, and the runner calls no tool step at all (`NoGatewayError`); a use case that publishes or runs a tool step starts `tools()` and passes `gateway_url`, as uc-223 and uc-620 do |
+| No gateway, no start | agents-service and its worker exit at boot when `OPS_GATEWAY_URL` is unset (`Settings.require_gateway`), since the runner calls a tool step only through the gateway and the publish check reads its tool list. Every start path sets it (fly, k8s, compose, `make up`). `OPS_ALLOW_NO_GATEWAY` is for tests only: unit tests build the app themselves and need none; `engine_worker` sets it for use cases that name no gateway, and uc-124, uc-244, uc-331 and uc-568 set it on their own workers |
 
 ## Reference docs
 
