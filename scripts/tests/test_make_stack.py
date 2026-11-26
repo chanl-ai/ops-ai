@@ -239,12 +239,23 @@ def test_a_shared_stack_keeps_the_infra_ports_and_moves_the_rest() -> None:
     assert shared["OPS_AGENTS_PORT"] != plain["OPS_AGENTS_PORT"]
 
 
-def test_a_shared_stack_starts_and_stops_no_container() -> None:
+def test_a_shared_stack_starts_and_stops_no_container_and_a_dry_run_writes_no_marker(tmp_path: Path) -> None:
     for goal in ("up", "down"):
-        # SAMPLE=0: make -n still runs a line that holds $(MAKE), and the sample-install line ends in a touch.
-        out = dry(goal, "SAMPLE=0", "OPS_INFRA=shared", "OPS_PORT_OFFSET=400")
+        # make -n still runs a line that holds $(MAKE); the sample-install lines must not write their markers then.
+        out = dry(goal, "OPS_INFRA=shared", "OPS_PORT_OFFSET=400", f"OPS_RUN_DIR={tmp_path}")
         assert out.returncode == 0, out.stderr
         assert "docker compose" not in out.stdout, (goal, out.stdout)
+    assert not list(tmp_path.iterdir()), list(tmp_path.iterdir())
+
+
+def test_a_shared_stacks_service_makefiles_start_and_stop_no_container() -> None:
+    shared = ("OPS_INFRA=shared", "OPS_PORT_OFFSET=400")
+    runs = [("services/agents-service", "db-up"), ("services/agents-service", "db-down")]
+    runs += [("services/tools-service", "test"), ("services/tools-service", "test-gateway")]
+    for folder, goal in runs:
+        out = make(ROOT / folder, "-n", goal, "T=tests/none.py", *shared)
+        assert out.returncode == 0, (folder, goal, out.stderr)
+        assert "docker compose" not in out.stdout and "OPS_INFRA=shared" in out.stdout, (folder, goal, out.stdout)
 
 
 def test_shared_needs_a_plain_numeric_offset_except_for_the_preview_targets() -> None:
@@ -254,7 +265,7 @@ def test_shared_needs_a_plain_numeric_offset_except_for_the_preview_targets() ->
     assert dry("wt", "BRANCH=x", "OPS_INFRA=shared").returncode == 0
     assert dry("wt-stop", "BRANCH=x", "OPS_INFRA=shared").returncode == 0
     mixed = dry("wt-list", "reset-db", "CONFIRM=yes", "OPS_INFRA=shared")
-    assert mixed.returncode != 0 and "OPS_INFRA=shared" in mixed.stderr, mixed.stdout
+    assert "schema_sync" not in mixed.stdout and "OPS_INFRA=shared" in mixed.stderr, mixed.stdout
 
 
 def test_a_shared_stacks_shell_and_use_case_reset_reach_the_default_containers() -> None:

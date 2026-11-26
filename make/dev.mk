@@ -14,6 +14,10 @@ DEMO_MODEL ?= $(if $(OPENAI_API_KEY),gpt-5-mini,fake)
 DEMO_FAST_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-4.1-mini)
 DEMO_CHAT_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-5-nano)
 
+# make -n still runs a recipe line holding $(MAKE); MARK keeps such a line from writing its marker on a dry run. The
+# short flags are the MAKEFLAGS words that are neither a long option nor a variable (make 3.81 puts long options first).
+MARK = $(if $(findstring n,$(foreach w,$(filter-out --%,$(MAKEFLAGS)),$(if $(findstring =,$(w)),,$(w)))),:,touch)
+
 up: offset-guard db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); a new database gets the sample team (SAMPLE=0 skips); OPS_INFRA=external uses side containers and skips db-up/db-down; OPS_INFRA=shared (offset stacks) reuses the default stack's containers with its own database
 	@# Services started before their code last changed run old code: stopped here, started again after the schema step.
 	@$(STACK) stop-stale
@@ -49,11 +53,11 @@ up: offset-guard db-up ## Compose, migrate every chain in place, then the servic
 	@# A new database gets the sample team once, so a fresh clone has people, knowledge and agents to try; the marker
 	@# goes with the database (make reset-db removes it). SAMPLE=0 skips it.
 	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-team.installed" ]; then \
-		$(MAKE) -s sample-team && touch "$(OPS_RUN_DIR)/sample-team.installed"; \
+		$(MAKE) -s sample-team && $(MARK) "$(OPS_RUN_DIR)/sample-team.installed"; \
 	fi
 	@# The demo policy library, once per database, in team Platform where the signed-in dev admin sees it.
 	@if [ "$(SAMPLE)" != "0" ] && [ ! -f "$(OPS_RUN_DIR)/sample-library.installed" ]; then \
-		$(MAKE) -s sample-library && touch "$(OPS_RUN_DIR)/sample-library.installed"; \
+		$(MAKE) -s sample-library && $(MARK) "$(OPS_RUN_DIR)/sample-library.installed"; \
 	fi
 
 reset-db: ## Wipe the stack's database and rebuild it empty from the chains; asks first (CONFIRM=yes skips)
