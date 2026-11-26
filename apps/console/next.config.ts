@@ -4,15 +4,18 @@ import { join, resolve } from 'node:path';
 
 import type { NextConfig } from 'next';
 
-// What's new and Coming next: the entries under the repo's changelog/ (one file each, the file name its id) and
-// roadmap.json, read once here and inlined into the build, so the console shows the list it was built with.
+// What's new and Coming next: the unreleased fragments under the repo's changelog/ (one file each, the file name its id)
+// and the folded releases under changelog/releases/ (one file each, the version its name), with roadmap.json, read once
+// here and inlined into the build, so the console shows the list it was built with.
 const repoRoot = resolve(process.cwd(), '../..');
 const changelogDir = join(repoRoot, 'changelog');
-const changelog = existsSync(changelogDir)
-  ? readdirSync(changelogDir)
-      .filter((f) => f.endsWith('.json'))
-      .map((f) => ({ id: f.replace(/\.json$/, ''), ...JSON.parse(readFileSync(join(changelogDir, f), 'utf8')) }))
-  : [];
+const jsonFiles = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.json')) : []);
+const fragments = jsonFiles(changelogDir).map((f) => ({ id: f.replace(/\.json$/, ''), version: '', ...JSON.parse(readFileSync(join(changelogDir, f), 'utf8')) }));
+const releases = jsonFiles(join(changelogDir, 'releases')).flatMap((f) => {
+  const release = JSON.parse(readFileSync(join(changelogDir, 'releases', f), 'utf8'));
+  return (release.entries ?? []).map((e: object, i: number) => ({ ...e, id: `${release.version}-${i}`, version: release.version, date: release.date }));
+});
+const changelog = [...fragments, ...releases];
 const roadmapFile = join(repoRoot, 'roadmap.json');
 const roadmap = existsSync(roadmapFile) ? JSON.parse(readFileSync(roadmapFile, 'utf8')) : [];
 

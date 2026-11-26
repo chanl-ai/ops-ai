@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-14",
-  "title": "Tool test panel runs as the owner only",
-  "description": "Run as in a tool module's test panel now offers the module's owner, with no sample-values entries for workflows. Type the record a bound input reads and run it.",
-  "tag": "fix"
-}

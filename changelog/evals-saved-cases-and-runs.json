@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-14",
-  "title": "Evals keep saved test cases and every run",
-  "description": "Agents and skills can save test cases, run them again and compare each run with the live version. The Evals page reads suites, runs and publish checks for your team from what was saved.",
-  "tag": "new"
-}
