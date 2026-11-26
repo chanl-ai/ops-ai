@@ -14,8 +14,9 @@ These documents design an operational AI platform for banks and describe the con
 | Deploy and operate | `deploy-and-operate.md` | The operator's tab: choose a deployment, install, the database, upgrade, back up and monitor |
 | Security | `security/README.md` | The security reviewer's tab: isolation, sign-in, approvals and audit, data handling, model calls |
 | Reference | `reference/README.md` | The HTTP API, the SDKs, the CLI and MCP, and the changelog |
-| Contributing | `contributing.md` | How Ops AI is built: architecture, standards, services, packages, the use-case catalogue, designs, agent skills, releases |
-| Background | `background/problem-statement.md` | Why bank AI workflows stall and what the platform needs |
+| Contributing | `contributing/README.md` | How Ops AI is built: architecture, standards, services, packages, the use-case catalogue, designs, agent skills, releases |
+| Background | `contributing/figure-guide.md` | Which figure fits which content, the tokens, caption and size rules, and how a figure reads at 390 wide |
+| `background/problem-statement.md` | Why bank AI workflows stall and what the platform needs |
 | Architecture | `architecture/README.md` | The system as built: services, runtime, human in the loop, identity, data, operations, and the decision records in `architecture/decisions/` |
 | Design, by area | The design table below | Proposed and approved designs with their wireframes and mocks: workflows and agents, tools, human tasks, cases, chat, data, and the prior-art research behind them |
 | Console | `console/page-plan.md` | Console pages, the UI standard, user guides, and screens approved (`console/approved/`) or waiting for approval (`console/proposed/`) |
@@ -62,7 +63,7 @@ shared list: the shareable guide built from `guide/*.md` is meant to present the
 | `<!-- site: cards -->` directly above a table or a list | Summary cards: a table row or list item each; the first cell, or the item's opening **bold** or link, is the title |
 | `<!-- site: steps -->` directly above a numbered list | Numbered steps |
 | `> [!NOTE]`, `> [!WARNING]` (GitHub alerts) | A callout |
-| A ```` ```mermaid ```` block (flowchart, sequence, state, ER) | The diagram in the site's theme |
+| A ```` ```mermaid ```` block (flowchart, sequence, state, ER); `caption="..."` after the fence adds a caption | The diagram in the site's theme |
 | `![caption](../diagrams/<name>.svg)` where `diagrams/<name>.yaml` exists | The live architecture diagram drawn from that data file; GitHub shows the exported SVG |
 | Any other image alone in a paragraph | A framed figure with the alt text as its caption |
 | A relative link, or a code span naming a file (`services/x/y.py:42`) | A link to the page here, or to the file on GitHub |
@@ -79,7 +80,7 @@ names it or a folder it takes whole, and a page it does not place fails the site
 
 | Reader | Read in this order |
 |---|---|
-| Engineer | `background/problem-statement.md` → `architecture/README.md` → `architecture/service-map.md` → the topic spec for the area you work on → `contributing.md` |
+| Engineer | `background/problem-statement.md` → `architecture/README.md` → `architecture/service-map.md` → the topic spec for the area you work on → `contributing/README.md` |
 | Architect | `background/problem-statement.md` → `architecture/enterprise-architecture.md` → `architecture/platform-choices.md` (the current choice per area; `architecture/decisions/` keeps the options behind each) → [tool system design](design/tools/tool-system.md) → `architecture/service-map.md` |
 | Risk reviewer | `background/problem-statement.md` → `architecture/enterprise-architecture.md` → `architecture/delivery.md` (what is proven, open questions) → [ADR-0012 Assurance: governance and testing as one system](architecture/decisions/assurance.md) → ADR-0005 |
 

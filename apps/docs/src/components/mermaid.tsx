@@ -4,7 +4,7 @@ import { renderMermaidSVG } from 'beautiful-mermaid';
  * A Mermaid diagram drawn at build time. Its colours are CSS variables (global.css, .ops-mermaid), so one SVG follows
  * the light and dark theme without a second render; it keeps its drawn size and scrolls when wider than the page.
  */
-export function OpsMermaid({ chart }: { chart: string }) {
+export function OpsMermaid({ chart, caption }: { chart: string; caption?: string }) {
   let svg: string;
   try {
     svg = renderMermaidSVG(chart, {
@@ -24,7 +24,14 @@ export function OpsMermaid({ chart }: { chart: string }) {
   }
   return (
     <figure className="ops-figure ops-mermaid not-prose">
-      <div className="ops-figure-media" dangerouslySetInnerHTML={{ __html: svg }} />
+      {/* The caption doubles as the accessible name: the drawing itself carries no alt text. */}
+      <div
+        className="ops-figure-media"
+        role={caption ? 'img' : undefined}
+        aria-label={caption}
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      {caption && <figcaption>{caption}</figcaption>}
     </figure>
   );
 }

@@ -9,7 +9,7 @@
  * - `<!-- site: steps -->` above a numbered list renders it as steps
  * - `<!-- site: whats-new -->` becomes the What's new entries in changelog/, newest first, so release notes never go stale
  * - a GitHub alert (`> [!NOTE]`, `> [!WARNING]` ...) becomes a callout
- * - ```mermaid blocks render as diagrams that follow the light and dark theme
+ * - ```mermaid blocks render as diagrams that follow the light and dark theme; ```mermaid caption="..." adds the caption
  * - an image of docs/diagrams/<name>.svg, where docs/diagrams/<name>.yaml exists, becomes the live diagram
  * - any other lone image becomes a framed figure with its alt text as the caption
  * - every relative link resolves to a page here, a standalone HTML page, or a file on GitHub; a code span that names
@@ -318,7 +318,8 @@ export function remarkOpsAi(options = {}) {
     visit(tree, (node, i, parent) => {
       if (!parent || i === undefined) return;
       if (node.type === 'code' && node.lang === 'mermaid') {
-        parent.children[i] = jsx('OpsMermaid', { chart: node.value });
+        const caption = node.meta?.match(/caption="([^"]*)"/)?.[1];
+        parent.children[i] = jsx('OpsMermaid', { chart: node.value, caption });
         return SKIP;
       }
       if (node.type !== 'paragraph' || parent.type !== 'root') return;

@@ -133,8 +133,7 @@ an API key from the console's Settings › API keys in `X-Api-Key` and your team
    No tools yet? [Connect an app to an agent](connect-an-app.md) turns one on.
 
 5. **Publish it.** People chat with the published version, so a change reaches them only after you publish. A first
-   publish waits for a second person on the team to review it; later changes to the name or role publish at once. A
-   team admin can change this per team.
+   publish waits for a second person to review it ([how a version moves](#how-a-version-moves)).
 
    ```python tab="Python"
    request = ops.agents.publish(agent["id"], note="First version")
@@ -186,10 +185,24 @@ reply lists the call.
 | Who reviews a publish | Every publish, a major change only, or none except security changes; set per team | A first publish and other major changes |
 | Writes wait for a person | Per tool, App or team | Off until a team turns it on |
 
+## How a version moves
+
+Only a published version reaches the team. A first publish waits for a second person to review it; a later change to
+the name or role publishes at once. A team admin can change this per team.
+
+```mermaid caption="How an agent version moves from draft to published, and why an edit never changes a conversation under way"
+flowchart LR
+  A[Draft: only you, in Test] -->|Publish| B[Second person reviews]
+  B -->|Approved| C[Published version: the team chats with it]
+  A -->|Name or role change| C
+  C -->|Edit| A
+```
+
+A published version does not change. Editing makes a new draft, and a conversation already under way keeps the version
+it started on.
+
 ## Limits
 
-- A published version does not change. Editing makes a new draft, and a conversation already under way keeps the
-  version it started on.
 - `apply` in TypeScript creates a new agent each call; use `update` with the id to change a draft.
 - Adding knowledge and granting tools over HTTP need the draft's version with each change; use an SDK or the command
   line for those steps.

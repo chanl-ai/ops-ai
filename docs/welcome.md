@@ -50,13 +50,21 @@ The full answers, with their limits, are on the [Security](security/README.md) p
 
 ## What changes when it works
 
-A dispute arrives and the workflow finds the cardholder and their accounts, and an agent checks the dispute against
-the handbook, citing the sections it used, before anyone opens it. A person reads one screen and approves the credit.
-When the risk team asks about that credit, the answer is already on the case: who approved it, on which version, with
-what data ([Card disputes](guide/use-cases/card-disputes.md) walks through it).
+A dispute reaches a person already checked against the handbook, and the approval is on the case when the risk team
+asks.
 
-Without it, the same request is retyped across three systems, the approval lives in an email thread, and the audit
-answer is rebuilt by hand each time someone asks.
+```mermaid caption="A card dispute from arrival to a recorded approval: each step is done before a person opens the case"
+flowchart LR
+  A[Dispute arrives] --> B[Workflow finds the cardholder and accounts]
+  B --> C[Agent checks the handbook and cites sections]
+  C --> D[Person approves the credit on one screen]
+  D --> E[Case records who, which version, what data]
+```
+
+<!-- site: cards -->
+| Without Ops AI | With Ops AI |
+|---|---|
+| The same request is retyped across three systems, the approval lives in an email thread, and the audit answer is rebuilt by hand each time someone asks. | The case already holds who approved the credit, on which version, with what data ([Card disputes](guide/use-cases/card-disputes.md) walks through it). |
 
 ## Read next
 

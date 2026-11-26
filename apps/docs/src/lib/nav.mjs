@@ -231,7 +231,8 @@ export const SITE = [
         icon: 'flag',
         open: true,
         entries: [
-          { page: 'contributing.md', title: 'Contributing', icon: 'hammer' },
+          { page: 'contributing/README.md', title: 'Contributing', icon: 'hammer' },
+          { page: 'contributing/figure-guide.md', title: 'Figure guide', icon: 'shapes' },
           { page: 'README.md', title: 'All documents', icon: 'list' },
         ],
       },
