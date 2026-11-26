@@ -40,23 +40,28 @@ await withUiStack(
       const note = await panel.getByTestId('guardrail-refusal').count();
       check('2 the reply streams into the panel through the chat page\'s message view', note === 1, { note });
 
-      await panel.getByTestId('why-tab').click();
-      const why = await panel.getByTestId('test-steps').innerText();
+      // The panel is the test chat; Show steps under the reply says what the agent did to answer it.
+      await panel.getByTestId('show-steps-toggle').last().click();
+      const why = await panel.getByTestId('test-steps').last().innerText();
       check('3 Why names the knowledge searched, the tools called and the guardrail that changed the answer', /knowledge|knowledge bases/i.test(why) && /tool/i.test(why) && why.includes('No investment advice'), why.slice(0, 400));
       // The spend is the stored reply's, read once the thread reloads after the turn.
       await panel.getByTestId('test-step-spent').getByText(/tokens?/).first().waitFor({ timeout: 30_000 }).catch(() => {});
-      const spent = await panel.getByTestId('test-step-spent').innerText();
+      const spent = await panel.getByTestId('test-step-spent').last().innerText();
       check('3b Why says what the reply spent: tokens, cost and seconds', /\d[\d,]* tokens?/.test(spent) && /\d+\.\d{2}/.test(spent) && / s\b/.test(spent), spent);
       await page.screenshot({ path: join(SHOTS, 'agent-test-panel-why.png'), fullPage: false });
 
-      await panel.getByRole('tab', { name: 'Versions' }).click();
-      const versions = await panel.innerText();
-      await panel.getByRole('tab', { name: 'Used in' }).click();
-      const used = await panel.innerText();
-      check('4 Versions and Used in hold what the right column showed: history, workflows and recent runs', /version/i.test(versions) && /(used in|workflow|runs)/i.test(used), { versions: versions.slice(0, 160), used: used.slice(0, 160) });
+      // Versions and Usage are the agent page's own tabs, not the panel's.
+      await page.getByRole('tab', { name: 'Versions' }).click();
+      await page.waitForURL(/\/versions$/, { timeout: 30_000 });
+      const versions = await page.locator('main').innerText();
+      await page.getByRole('tab', { name: 'Usage' }).click();
+      await page.getByTestId('agent-usage').waitFor({ timeout: 30_000 });
+      const used = await page.getByTestId('agent-usage').innerText();
+      check('4 the Versions and Usage tabs hold the history, the workflows it is used in and recent runs', /version/i.test(versions) && /(used in|workflow|runs)/i.test(used), { versions: versions.slice(0, 160), used: used.slice(0, 160) });
+      await page.getByRole('tab', { name: 'Settings' }).click();
+      await panel.waitFor({ timeout: 30_000 });
 
       mkdirSync(SHOTS, { recursive: true });
-      await panel.getByTestId('test-tab').click();
       await page.screenshot({ path: join(SHOTS, 'agent-test-panel-1280.png'), fullPage: false });
 
       // At phone width the columns stack; Test in the header brings the panel into view, ready to type.
@@ -80,14 +85,15 @@ await withUiStack(
       const advisor = (await (await fetch(agentsUrl, { headers: J })).json()).data;
       const drafted = await saveAgent(`http://127.0.0.1:${AGENTS_PORT}`, J, 'ag_advisor', { instructions: `${advisor.instructions} UC253 DRAFT` });
       await page.setViewportSize({ width: 1280, height: 900 });
-      await page.goto(`${consoleUrl}/agents/ag_advisor`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await panel.waitFor({ timeout: 120_000 });
-      await panel.getByTestId('compare-tab').click();
-      await panel.getByLabel('Message').fill('UC253 COMPARE: what does the Harbor & Pine fund charge?');
-      await panel.locator('button[aria-label="Send"]').click();
-      const sideSpend = panel.getByTestId('compare-spent');
+      // Compare is a full-width page under Versions.
+      await page.goto(`${consoleUrl}/build/agents/ag_advisor/versions/compare`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      const compare = page.getByTestId('agent-compare');
+      await compare.waitFor({ timeout: 120_000 });
+      await compare.getByLabel('Message').fill('UC253 COMPARE: what does the Harbor & Pine fund charge?');
+      await compare.locator('button[aria-label="Send"]').click();
+      const sideSpend = compare.getByTestId('compare-spent');
       await sideSpend.nth(1).waitFor({ timeout: 120_000 });
-      const sides = await panel.getByTestId('compare-side').allInnerTexts();
+      const sides = await compare.getByTestId('compare-side').allInnerTexts();
       const costs = await sideSpend.allInnerTexts();
       check('7 Compare asks the newest draft and the published version the same question, each reply with its spend', drafted.ok && sides.length === 2 && /\(newest\)/.test(sides[0]) && costs.length === 2 && costs.every((c) => /tokens/.test(c)), { status: drafted.status, sides: sides.map((x) => x.slice(0, 80)), costs });
       await page.screenshot({ path: join(SHOTS, 'agent-test-panel-compare.png'), fullPage: false });

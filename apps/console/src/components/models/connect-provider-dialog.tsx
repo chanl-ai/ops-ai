@@ -1,161 +1,209 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
+import { CheckCircle2, Plug } from 'lucide-react';
 
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { SearchSelect } from '@/components/shared/search-select';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { SchemaForm, type Schema } from '@/components/shared/schema-form';
+import { Stepper } from '@/components/shared/stepper';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { providerKeyOptions } from '@/hooks/provider-key-queries';
-import type { ProviderConnectionInput } from '@/lib/types/models';
+import { Skeleton } from '@/components/ui/skeleton';
+import { providerTypeOptions } from '@/hooks/options-queries';
+import { useProviderTypes } from '@/hooks/model-queries';
+import { useCreateProviderConnection } from '@/hooks/provider-connection-queries';
+import { useCheckProviderKey } from '@/hooks/provider-key-queries';
+import { connectionBody, connectionDefaults, connectionProblems, keyWhere } from '@/lib/model-forms';
+import type { KeyCheck } from '@/lib/types/provider-keys';
+import type { ProviderConnection, ProviderConnectionInput, ProviderTypeInfo } from '@/lib/types/models';
+import { QueryError } from '@/components/shared/query-states';
 
-import { CONNECTABLE_TYPES, type ConnectableType, ENDPOINT_FIELD, PROVIDER_TYPES } from './provider-meta';
-import { nameError } from '@/lib/validation/names';
-
-type Field = 'name' | 'baseUrl' | 'apiVersion' | 'region' | 'keyRef';
-type Errors = Partial<Record<Field | 'submit', string>>;
-const NO_KEY = '__none__';
+const STEPS = ['Provider', 'Details', 'Test'] as const;
 // The field a models-service refusal names ("apiVersion is missing: …"), so its message shows under that field.
-const NAMED: Field[] = ['baseUrl', 'apiVersion', 'region', 'keyRef', 'name'];
+const NAMED = ['baseUrl', 'apiVersion', 'region', 'keyRef', 'name'];
 
 /**
- * Connect a model provider: the picked type decides the fields asked. Azure OpenAI asks its endpoint, API version and
- * an optional region; OpenAI-compatible its base URL. Both name a key saved under Keys (`keys`), never the key itself. The rules
- * on each value are models-service's, and its refusal shows under the field it names.
+ * Connect a model provider in three steps: pick the provider from the registry models-service serves (searched, with
+ * the endpoint-only types last), fill the form its JSON Schema describes, then see the provider's answer to the saved
+ * key. A key is saved with the connection and tested after it, because the test reads the sealed key; a refused key
+ * is shown with its reason and tested again after the key is replaced on this page. No provider is named here.
  */
-export function ConnectProviderDialog({
-  open,
-  onOpenChange,
-  hasKeys,
-  saving,
-  onSave,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  /** Whether the account has saved any model provider key; the picker searches them. */
-  hasKeys: boolean;
-  saving: boolean;
-  onSave: (input: ProviderConnectionInput) => Promise<void>;
-}) {
-  const [type, setType] = React.useState<ConnectableType>('azure-openai');
+export function ConnectProviderDialog({ open, onOpenChange, onConnected }: { open: boolean; onOpenChange: (open: boolean) => void; onConnected?: (row: ProviderConnection) => void }) {
+  const types = useProviderTypes(open);
+  const create = useCreateProviderConnection();
+  const check = useCheckProviderKey();
+  const [step, setStep] = React.useState(1);
+  const [type, setType] = React.useState<ProviderTypeInfo>();
   const [name, setName] = React.useState('');
-  const [baseUrl, setBaseUrl] = React.useState('');
-  const [apiVersion, setApiVersion] = React.useState('');
-  const [region, setRegion] = React.useState('');
-  const [keyRef, setKeyRef] = React.useState('');
-  const [errors, setErrors] = React.useState<Errors>({});
+  const [values, setValues] = React.useState<Record<string, unknown>>({});
+  const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [made, setMade] = React.useState<{ body: ProviderConnectionInput; result?: KeyCheck; failure?: string }>();
+
   React.useEffect(() => {
     if (!open) return;
-    setType('azure-openai');
+    setStep(1);
+    setType(undefined);
     setName('');
-    setBaseUrl('');
-    setApiVersion('');
-    setRegion('');
-    setKeyRef('');
+    setValues({});
     setErrors({});
+    setMade(undefined);
   }, [open]);
-  const azure = type === 'azure-openai';
-  const edit = (set: (v: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => (set(e.target.value), setErrors({}));
 
-  const submit = async () => {
-    const missing: Errors = {
-      name: nameError(name, 'Name the connection.'),
-      baseUrl: baseUrl.trim() ? undefined : 'Enter the endpoint.',
-      apiVersion: !azure || apiVersion.trim() ? undefined : 'Enter v1 or a dated version, such as 2024-10-21.',
-      keyRef: !azure || keyRef ? undefined : 'Pick the key it signs in with.',
-    };
-    if (Object.values(missing).some(Boolean)) return setErrors(missing);
-    const key = keyRef && keyRef !== NO_KEY ? keyRef : null;
-    const input: ProviderConnectionInput = { name: name.trim(), type, baseUrl: baseUrl.trim(), keyRef: key };
+  const pick = (t: ProviderTypeInfo) => {
+    setType(t);
+    setValues(connectionDefaults(t));
+    setName('');
+    setErrors({});
+    setStep(2);
+  };
+
+  const test = async (body: ProviderConnectionInput) => {
+    if (!body.keyRef) return setMade({ body });
     try {
-      await onSave(azure ? { ...input, apiVersion: apiVersion.trim(), ...(region.trim() ? { region: region.trim() } : {}) } : input);
-      onOpenChange(false);
+      const result = await check.mutateAsync({ name: body.keyRef, where: keyWhere(body.type, body) });
+      setMade({ body, result });
     } catch (e) {
-      const message = (e as Error).message.replace(/^Value error, /, '');
-      const field = NAMED.find((f) => message.startsWith(f));
-      setErrors(field ? { [field]: message } : { submit: message });
+      setMade({ body, failure: (e as Error).message });
     }
   };
+
+  const connect = async () => {
+    if (!type) return;
+    const found = connectionProblems(type, name, values);
+    if (Object.keys(found).length) return setErrors(found);
+    const body = connectionBody(type, name, values);
+    try {
+      const saved = await create.mutateAsync(body);
+      onConnected?.({ id: saved.id, name: body.name, type: body.type, baseUrl: body.baseUrl ?? null, keyRef: body.keyRef ?? null, apiVersion: body.apiVersion ?? null, region: body.region ?? null, observedRegion: null, regionMismatch: null });
+      setStep(3);
+      await test(body);
+    } catch (e) {
+      // A key name another connection signs in with is never taken over: the person names this connection differently.
+      if ((e as { code?: string }).code === 'key_ref_in_use') return setErrors({ name: 'Another connection already signs in with a key of this name. Give this connection a different name.' });
+      const message = (e as Error).message.replace(/^Value error, /, '');
+      const field = NAMED.find((f) => message.startsWith(f));
+      setErrors({ [field ?? 'submit']: message });
+    }
+  };
+
+  const footer =
+    step === 1 ? (
+      <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+        Cancel
+      </Button>
+    ) : step === 2 ? (
+      <>
+        <Button type="button" variant="outline" onClick={() => setStep(1)}>
+          Back
+        </Button>
+        <LoadingButton type="submit" isLoading={create.isPending} loadingText="Connecting…" data-testid="provider-connect-save">
+          Connect
+        </LoadingButton>
+      </>
+    ) : (
+      <>
+        {made?.body.keyRef && (
+          <Button type="button" variant="outline" disabled={check.isPending} onClick={() => made && test(made.body)} data-testid="provider-connect-test-again">
+            <Plug /> Test again
+          </Button>
+        )}
+        <Button type="button" variant="outline" asChild>
+          <Link href="/settings/workspace/model-aliases" onClick={() => onOpenChange(false)}>
+            Make alias
+          </Link>
+        </Button>
+        <Button type="button" onClick={() => onOpenChange(false)} data-testid="provider-connect-done">
+          Done
+        </Button>
+      </>
+    );
 
   return (
     <DialogShell
       open={open}
       onOpenChange={onOpenChange}
-      onSubmit={submit}
-      title="Connect a model provider"
-      description="Only an account admin connects a provider. The key is saved under Keys and never shown again."
-      footer={
-        <>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <LoadingButton type="submit" isLoading={saving} loadingText="Connecting…" data-testid="provider-connect-save">
-            Connect
-          </LoadingButton>
-        </>
-      }
+      size="lg"
+      title={step === 1 || !type ? 'Connect a model provider' : `Connect ${type.label}`}
+      description="Only an account admin connects a provider. A key is kept by the models service and never shown again."
+      headerExtra={<Stepper steps={STEPS} current={step} className="pt-3" testId="provider-connect-steps" />}
+      onSubmit={step === 2 ? connect : undefined}
+      footer={footer}
     >
-      <div className="flex flex-col gap-4">
-        <FormField id="provider-type" label="Provider" hint="Each type asks only for what it needs.">
-          <Select value={type} onValueChange={(v) => (setType(v as ConnectableType), setErrors({}))}>
-            <SelectTrigger id="provider-type" className="w-full" data-testid="provider-type">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CONNECTABLE_TYPES.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {PROVIDER_TYPES[t].label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </FormField>
-        <FormField id="provider-name" label="Name" error={errors.name} hint="How aliases and the request log name it.">
-          <Input id="provider-name" value={name} aria-invalid={!!errors.name} onChange={edit(setName)} placeholder="e.g. claims-azure" />
-        </FormField>
-        <FormField id="provider-endpoint" label="Endpoint" error={errors.baseUrl} hint={ENDPOINT_FIELD[type].hint}>
-          <Input id="provider-endpoint" value={baseUrl} aria-invalid={!!errors.baseUrl} onChange={edit(setBaseUrl)} placeholder={ENDPOINT_FIELD[type].placeholder} className="font-mono text-sm" />
-        </FormField>
-        {azure && (
-          <>
-            <FormField id="provider-api-version" label="API version" error={errors.apiVersion} hint="v1 for Azure’s v1 API, or a dated version from 2024-10-21 on.">
-              <Input id="provider-api-version" value={apiVersion} aria-invalid={!!errors.apiVersion} onChange={edit(setApiVersion)} placeholder="e.g. 2024-10-21" className="font-mono text-sm" />
-            </FormField>
-            <FormField id="provider-region" label="Region" optional error={errors.region} hint="Where the resource runs. A call answered from another region is flagged on the connection and in the call log.">
-              <Input id="provider-region" value={region} aria-invalid={!!errors.region} onChange={edit(setRegion)} placeholder="e.g. swedencentral" />
-            </FormField>
-          </>
-        )}
-        <FormField
-          id="provider-key"
-          label="Key"
-          error={errors.keyRef}
-          hint={hasKeys ? (azure ? 'The saved key it signs in with. The alias’s model is the deployment name.' : 'Sent as a bearer token.') : 'No key saved yet: add one under Keys first.'}
-        >
-          <SearchSelect
-            source={providerKeyOptions}
-            value={keyRef === NO_KEY ? null : keyRef ? { id: keyRef, label: keyRef } : null}
-            onChange={(id) => (setKeyRef(id || NO_KEY), setErrors({}))}
-            placeholder={!azure && keyRef === NO_KEY ? 'None (the endpoint takes no key)' : 'Pick a saved key'}
-            searchPlaceholder="Search keys…"
-            emptyText="No saved key matches."
-            noneLabel={azure ? undefined : 'None (the endpoint takes no key)'}
-            id="provider-key"
-            testId="provider-key-ref"
-            className="w-full font-mono text-sm"
+      {step === 1 && (types.isPending ? <Skeleton className="h-40 w-full" /> : types.isError ? <QueryError what="model providers" onRetry={() => types.refetch()} retrying={types.isFetching} error={types.error} testId="provider-types-error" /> : <ProviderPicker types={types.data ?? []} onPick={pick} />)}
+      {step === 2 && type && (
+        <div className="flex flex-col gap-4">
+          <FormField id="pc-name" label="Name" error={errors.name} hint="How aliases and the call log name this connection.">
+            <Input id="pc-name" value={name} onChange={(e) => (setName(e.target.value), setErrors({}))} placeholder="e.g. anthropic-main" aria-invalid={!!errors.name} data-testid="provider-connect-name" />
+          </FormField>
+          <SchemaForm
+            schema={type.connection as Schema}
+            value={values}
+            idPrefix="pc"
+            errors={errors}
+            testIds={Object.fromEntries(Object.keys(type.connection.properties ?? {}).map((k) => [k, `provider-connect-${k}`]))}
+            onChange={(v) => (setValues(v), setErrors({}))}
+            testId="provider-connect-form"
           />
-        </FormField>
-        {azure && (
-          <Alert>
-            <AlertDescription>Global and Data Zone deployments may process a request outside this region. Use a Standard (regional) deployment to keep data in it.</AlertDescription>
-          </Alert>
-        )}
-        {errors.submit && <p className="text-sm text-destructive-text">{errors.submit}</p>}
-      </div>
+          {errors.submit && (
+            <Alert variant="destructive" data-testid="provider-connect-error">
+              <AlertDescription>{errors.submit}</AlertDescription>
+            </Alert>
+          )}
+        </div>
+      )}
+      {step === 3 && <TestResult label={type?.label ?? ''} made={made} testing={check.isPending || !made} />}
     </DialogShell>
+  );
+}
+
+/** Searchable list of the registry's types; with no match it says which type takes any endpoint. */
+function ProviderPicker({ types, onPick }: { types: ProviderTypeInfo[]; onPick: (t: ProviderTypeInfo) => void }) {
+  const endpoint = types.find((t) => !t.catalogued);
+  return (
+    <div className="flex flex-col gap-2" data-testid="provider-picker">
+      <FormField id="pc-provider" label="Provider" hint="Pick one. Each asks only for what it needs.">
+        <SearchSelect
+          id="pc-provider"
+          source={providerTypeOptions}
+          value={null}
+          onChange={(_id, o) => o && onPick(o.type)}
+          placeholder="Search providers…"
+          searchPlaceholder="Search providers…"
+          emptyText={endpoint ? `No built-in provider is called that. ${endpoint.label} works for most others.` : 'No provider is called that.'}
+          testId="provider-search"
+        />
+      </FormField>
+    </div>
+  );
+}
+
+function TestResult({ label, made, testing }: { label: string; made?: { body: ProviderConnectionInput; result?: KeyCheck; failure?: string }; testing: boolean }) {
+  if (testing) return <Skeleton className="h-16 w-full" data-testid="provider-connect-testing" />;
+  if (!made?.body.keyRef)
+    return (
+      <Alert data-testid="provider-connect-untested">
+        <CheckCircle2 />
+        <AlertTitle>Connected</AlertTitle>
+        <AlertDescription>This connection takes no key, so there is nothing to test. Make an alias to use it.</AlertDescription>
+      </Alert>
+    );
+  if (made.failure || !made.result?.ok)
+    return (
+      <Alert variant="destructive" data-testid="provider-connect-refused">
+        <AlertTitle>{label || 'The provider'} did not accept the key</AlertTitle>
+        <AlertDescription>{made.failure ?? made.result?.reason ?? 'The provider refused the key.'} The connection is saved; replace its key under Keys, then test again.</AlertDescription>
+      </Alert>
+    );
+  return (
+    <Alert data-testid="provider-connect-passed">
+      <CheckCircle2 />
+      <AlertTitle>Key accepted</AlertTitle>
+      <AlertDescription>The provider answered. This key reaches {made.result.models} {made.result.models === 1 ? 'model' : 'models'}; make an alias for each one builders may pick.</AlertDescription>
+    </Alert>
   );
 }

@@ -99,6 +99,7 @@ from .routers import (
     service_events,
     step_up,
     templates,
+    tool_apps,
     tool_catalog,
     workflows,
 )
@@ -110,12 +111,14 @@ from .routers import chat_connectors as chat_connectors_routes
 from .routers import chat_settings as chat_settings_routes
 from .routers import engine as engine_routes
 from .routers import guardrails as guardrail_routes
+from .routers import instruction_sections as instruction_section_routes
 from .routers import knowledge_usage as knowledge_usage_routes
 from .routers import mailboxes as mailbox_routes
 from .routers import memories as memory_routes
 from .routers import references as reference_routes
 from .routers import routing as routing_routes
 from .routers import run_resume as run_resume_routes
+from .routers import schedules as schedule_routes
 from .routers import skills as skill_routes
 from .routers import task_types as task_type_routes
 from .routers import tasks as task_routes
@@ -564,6 +567,8 @@ def create_app(
     mount(agents.router, "Agents")
     # Before workflows.router: its /v1/workflows/{workflow_id} would take /v1/workflows/node-types as an id.
     mount(engine_routes.router, "Workflows")
+    mount(schedule_routes.workflow_router, "Workflows")
+    mount(schedule_routes.router, "Schedules")
     mount(engine_routes.runs_router, "Workflows")
     mount(engine_routes.run_start_router, "Workflows")
     # An outside system resumes the step it was handed, by the step's own token; no person's.
@@ -575,8 +580,10 @@ def create_app(
     mount(team_assistant_routes.router, "Agents")
     mount(tool_uses_routes.document_type_router, "Workflows")
     mount(tool_uses_routes.account_router, "Workflows")
+    mount(tool_uses_routes.model_alias_router, "Agents")
     mount(team_usage_routes.router, "Workflows")
     mount(tool_catalog.router, "Agents")
+    mount(tool_apps.router, "Agents")
     mount(assurance_routes.router, "Assurance")
     mount(guardrail_routes.router, "Agents")
     mount(skill_routes.router, "Agents")
@@ -585,6 +592,7 @@ def create_app(
     mount(widget_routes.router, "Agents")
     mount(model_alias_catalog.router, "Agents")
     mount(prompt_variables.router, "Agents")
+    mount(instruction_section_routes.router, "Agents")
     mount(publish_requests.router, "Reviews")
     mount(publish_requests.open_router, "Reviews")
     mount(graphs.versions_router, "Graphs")

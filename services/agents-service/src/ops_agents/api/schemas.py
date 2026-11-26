@@ -12,9 +12,10 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
 
+from ops_agent_kernel.prompt_writer import titled
 from ops_agent_kernel.steps import IfNot, Jump, Ref, ReturnField, StepCheck
 from ops_agents.activities.agent_limits import AgentLimits
 
@@ -183,6 +184,20 @@ class WidgetSettings(Out):
     per_turn: int | None = Field(default=None, ge=1)
 
 
+class BriefSectionView(Out):
+    """A section added to a brief, as replied: `kind` is the id of a menu section in the workspace's list (the tag
+    evals read) or `custom`; `name` is the heading it was saved under."""
+
+    kind: str
+    name: str = ""
+    text: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _titled(cls, data: object) -> object:
+        return titled(data)
+
+
 class BriefView(Out):
     """An agent's brief as replied (`ops_agent_kernel.prompt_writer.Brief` is the request form)."""
 
@@ -193,6 +208,8 @@ class BriefView(Out):
     examples: str = ""
     never: list[str] = Field(default_factory=list[str])
     success: list[str] = Field(default_factory=list[str])
+    # Empty on a brief stored before sections.
+    sections: list[BriefSectionView] = Field(default_factory=list[BriefSectionView])
 
 
 class PatternsView(Out):
@@ -264,6 +281,8 @@ class Agent(Out):
     # brief: the prompt is written from the brief. full: the builder's own instructions, with the never rules last.
     prompt_mode: Literal["brief", "full"] | None = None
     patterns: PatternsView = Field(default_factory=PatternsView)
+    # The model settings the version saved, by knob name; empty runs on the model's defaults.
+    model_settings: dict[str, float | int | str] = Field(default_factory=dict[str, float | int | str])
     uses: AgentUses = Field(default_factory=AgentUses)
     controls: AgentControls
     used_in: list[UsedIn]
@@ -539,6 +558,60 @@ class ToolOptionsPage(OptionsPage):
     not_added: list[ToolsNotAdded] = Field(default_factory=list[ToolsNotAdded])
 
 
+class AgentToolAppMatch(Out):
+    """One of an app's tools whose words match the search, so the picker can offer it under its app."""
+
+    id: str
+    label: str
+    access: str
+    granted: bool
+
+
+class AgentToolApp(Out):
+    """An app as an agent's tools picker shows it: its state for the person asking, and how many of its tools the team
+    added and the agent holds. A tool with no app card groups under its module, or under Workflows or Agents."""
+
+    id: str
+    name: str
+    # `other` holds the agent's grants that nothing offers now (a paused agent, or any tool while tools-service is
+    # down), so each can still be removed.
+    kind: Literal["plugin", "builtin", "custom", "workflows", "agents", "other"]
+    connected: bool
+    # The app card's state as tools-service sends it, which the console's app state badge draws; none with no card.
+    app_state: str | None = None
+    # tools-service's group for the app (`on`, `needs_you`, `needs_admin`, ...); none for a group with no app card.
+    app_group: str | None = None
+    sign_in: str | None = None
+    # Every tool the app has; the tools the team added, which an agent may be granted; the ones this agent holds.
+    tools_total: int
+    tools_offered: int
+    tools_granted: int
+    # The app's tools the team has not added, which the agent cannot be granted here: total less offered, at least 0.
+    not_added: int
+    # At most five, the first by label, and only when the search matched a tool's words.
+    matches: list[AgentToolAppMatch]
+
+
+class AgentToolAppsPage(OptionsPage):
+    data: list[AgentToolApp]  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
+class AppTool(Out):
+    """One of an app's tools the team added, and whether this agent holds it."""
+
+    id: str
+    label: str
+    description: str
+    access: str
+    requires_approval: bool
+    approval: str | None = None
+    granted: bool
+
+
+class AppToolsPage(OptionsPage):
+    data: list[AppTool]  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
 class PromptVariable(Out):
     """A `{key}` an agent's instructions may name, filled at run time from the turn's variables."""
 
@@ -557,6 +630,17 @@ class ModelAlias(Out):
     cleared_sensitivity: str | None = None
     input_per_million: str | None = None
     output_per_million: str | None = None
+
+
+class ModelAliasKnobs(Out):
+    """The settings an agent on the alias may save, from models-service: `knobs` is a JSON Schema object of only the
+    knobs the alias's model takes, each with its type, title, description, range and catalog default."""
+
+    alias: str
+    version: int
+    model_id: str
+    catalogued: bool
+    knobs: Json
 
 
 # ── reviews of publish requests ──

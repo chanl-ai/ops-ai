@@ -194,7 +194,10 @@ class Access:
             policy(p, "requesterMayDecide"), deciding_in, area, policy(p, "approvalsFloor")
         )
         refused = [*not_by, *(requested_by if not may_decide else ())]
-        if any(n and n.lower() in (p.email.lower(), p.sub.lower()) for n in refused):
+        # The names a person is recorded under: the email, the subject, and the services' `actor` (email, else subject,
+        # else name) for a caller with neither, so a requester recorded by any of them is recognised.
+        recorded = {p.email.lower(), p.sub.lower(), (p.email or p.sub or p.name).lower()} - {""}
+        if any(n and n.lower() in recorded for n in refused):
             raise Forbidden(f"{you} asked for {what}, so someone else has to decide it.", code="own_request")
         if p.auth_method == "dev" and not p.roles and not p.access:
             # The dev header caller holds no role, so it passes every role rule; on a record with an owner it acts on

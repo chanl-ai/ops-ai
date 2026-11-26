@@ -7,6 +7,8 @@ import { api } from '@/lib/api';
 import { pageOptions } from '@/lib/api/options';
 import { fetchAgents, fetchWorkflows } from './queries';
 import { sdk } from '@/lib/api/ops-sdk';
+import { keyWhere } from '@/lib/model-forms';
+import type { CatalogModel, ProviderConnection, ProviderTypeInfo } from '@/lib/types/models';
 import type { Team } from '@/lib/types/team';
 import type { AgentFilters, ConnectionOptionsPage, Option, OptionsPage, OptionsParams, ToolOptionsPage, WorkflowFilters } from '@/lib/types/query';
 import type { RefKind, ReferenceContext } from '@/lib/types/references';
@@ -219,3 +221,57 @@ export function useOptionLabels(source: OptionSource, ids: string[]) {
     staleTime: 60_000,
   });
 }
+
+/** A page of connection choices; each carries its connection, so the model picker needs no second read. */
+export interface ProviderConnectionOptionsPage extends OptionsPage {
+  data: (OptionsPage['data'][number] & { connection: ProviderConnection })[];
+}
+
+/** The account's connections by name, searched on the server; `ids` names the ones a stored choice holds. */
+export const providerConnectionOptions: OptionSource<ProviderConnectionOptionsPage> = {
+  key: 'provider-connection-options',
+  fetch: async ({ search, cursor, limit = 25, ids }) => {
+    const page = Number(cursor ?? 1);
+    const res = await api.providerConnections.list(ids?.length ? { page: 1, pageSize: Math.min(ids.length, 50), ids } : { page, pageSize: limit, search: search || undefined });
+    return { data: res.data.map((c) => ({ id: c.id, label: c.name, hint: c.type, connection: c })), nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null };
+  },
+};
+
+/** A model choice carries what the catalog says of it, so the alias form prefills its price and shows what it can do. */
+export interface ModelOptionsPage extends OptionsPage {
+  data: (OptionsPage['data'][number] & { model: CatalogModel | null })[];
+}
+
+/**
+ * The models of one connection: the catalog's, and for a type the catalog does not hold the ids its key lists. Each
+ * list comes whole from models-service, so the search narrows it here and no model is hidden by paging.
+ */
+export const modelOptions = (connection: ProviderConnection): OptionSource<ModelOptionsPage> => ({
+  key: `model-options:${connection.id}`,
+  fetch: async ({ search, ids }) => {
+    const catalog = await api.providerConnections.catalog(connection.id);
+    const all: ModelOptionsPage['data'] = catalog.length
+      ? catalog.map((m) => ({ id: m.id, label: m.id, hint: m.name === m.id ? null : m.name, model: m }))
+      : connection.keyRef
+        ? (await api.providerKeys.models(connection.keyRef, keyWhere(connection.type, connection))).map((m) => ({ id: m.id, label: m.id, hint: m.model && m.model !== m.id ? m.model : null, model: null }))
+        : [];
+    const q = search?.toLowerCase();
+    return { data: all.filter((m) => (ids?.length ? ids.includes(m.id) : !q || m.label.toLowerCase().includes(q))), nextCursor: null };
+  },
+});
+
+/** A provider type choice carries the registry entry, so the connect form needs no second read. */
+export interface ProviderTypeOptionsPage extends OptionsPage {
+  data: (OptionsPage['data'][number] & { type: ProviderTypeInfo })[];
+}
+
+/** The provider types a connection can be made of, by name; the registry lists them whole, so the search narrows that list here. */
+export const providerTypeOptions: OptionSource<ProviderTypeOptionsPage> = {
+  key: 'provider-type-options',
+  fetch: async ({ search }) => {
+    const q = search?.toLowerCase();
+    const all = await api.providerConnections.types();
+    return { data: all.filter((t) => !q || t.label.toLowerCase().includes(q)).map((t) => ({ id: t.id, label: t.label, hint: t.catalogued ? 'Built in' : 'Any endpoint', type: t })), nextCursor: null };
+  },
+};
+

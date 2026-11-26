@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable, Mapping
-from typing import Any, TypedDict
+from typing import TypedDict
 
 import httpx
 
@@ -126,7 +126,7 @@ class DocumentsClient:
         wait_s: float = 0.0,
         poll_s: float = 1.0,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
-    ) -> dict[str, Any]:
+    ) -> Json:
         """The file's reading: every page's text in reading order, with how each page was read, its blocks, words,
         form fields and OCR quality. Keyed by the file's bytes and the OCR settings, so every caller of the same file
         (a knowledge base, a chat attachment, an agent's read_file) gets the one reading already made. A reading made
@@ -151,7 +151,17 @@ class DocumentsClient:
             raise _refused(e) from e
         return answer
 
-    async def document_type(self, tenant: str, team: str, type_id: str) -> dict[str, Any]:
+    async def reading_now(self, tenant: str, team: str, file_id: str, *, ocr: str = "auto") -> Json:
+        """The file's reading as it is now, never asked for: status `none` when nobody asked, and a failed one stays
+        failed (asking again with `reading` reads the file again)."""
+        try:
+            return await self._documents.request(
+                "GET", f"/v1/documents/readings/{_id(file_id)}", params={"ocr": ocr}, tenant=tenant, team=team
+            )
+        except ServiceCallError as e:
+            raise _refused(e) from e
+
+    async def document_type(self, tenant: str, team: str, type_id: str) -> Json:
         """The team's document type with its versions; another team's or an unknown one is DocumentNotFound."""
         try:
             found = await self._documents.request("GET", f"/v1/document-types/{_id(type_id)}", tenant=tenant, team=team)
@@ -178,7 +188,7 @@ class DocumentsClient:
             raise _refused(e) from e
         return listed
 
-    async def template_copies(self, tenant: str, team: str) -> list[dict[str, Any]]:
+    async def template_copies(self, tenant: str, team: str) -> list[Json]:
         """The document types the team's apps bring, each with its state for the team and the team's copy: every page
         of the list."""
         rows: list[Json] = []

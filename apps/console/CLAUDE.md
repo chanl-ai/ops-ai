@@ -102,9 +102,11 @@ A `feat` that changes this folder needs a What's new fragment (`changelog/<topic
 | Inspect a row | `DetailSheet` with prev/next and `scrollKey` | navigating away for a peek |
 | Delete | `DeleteDialog` with consequence text (`count` for bulk) | `confirm()` |
 | Bulk change | `BulkConfirmDialog` / `BulkFieldDialog` + `toastBulk` (skipped items named by reason) + `useSticky` | silent partial success |
+| A list of values or long text in a table cell | `ListCell` / `TextCell` (`components/shared/table-cells.tsx`) | a raw `TableCell` that joins an array or wraps (`check-standards` rule 29) |
 | Record page | `RecordLayout` / `AttributeCard` / `FieldRow`, or a settings form with a right rail | bespoke grids |
 | Field | `FormField` (label, "(optional)", hint, inline error, `aria-invalid`) | placeholder-as-label |
 | Any form | One zod schema (shared with the API types where one exists) + `react-hook-form` with `zodResolver`, rendered through the shadcn `Form` parts and `FormField`; validate on blur and submit, show server errors on the field they belong to, disable submit while saving, keep unsaved changes guarded | `useState` per field, hand-written validation, `<form onSubmit>` reading inputs directly |
+| A form drawn from a JSON Schema (a provider's connection fields, an alias's knobs, a workflow step's settings) | `SchemaForm` (`components/shared/schema-form.tsx`): number bounds and defaults from `minimum`, `maximum` and `default`, a field marked `x-secret` always masked, and `defaults` mode for a setting that starts at the catalog default (Default or Changed, Reset per field). The request body and the checks are built in `lib/model-forms.ts` | a screen per provider or a hand-written list of settings |
 | Upload a file | `FileUpload` (`components/shared/file-upload.tsx`): presigned upload through the Files API, progress, scan state, limits from Settings → Storage; pass the `fileId` on | `<input type="file">` with your own request, `FormData`, `fetch` PUT of a `File` (`check-standards` rule 13) |
 
 `components/ui/*` are shadcn primitives adapted from the shared component library: do not edit them; wrap them in

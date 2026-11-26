@@ -11,6 +11,7 @@ import { DataTableWithViews } from '@/components/data-table-with-views';
 import { ItemStatusBadge, MimeIcon } from '@/components/knowledge/knowledge-meta';
 import { PageLayout } from '@/components/page-layout';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
+import { ListCell } from '@/components/shared/table-cells';
 import { DialogShell } from '@/components/shared/dialog-shell';
 import { FileUpload } from '@/components/shared/file-upload';
 import { StopRowClick } from '@/components/shared/form-field';
@@ -77,7 +78,7 @@ function Preview() {
         id: 'citedBy',
         accessorFn: (d) => d.citedBy.length,
         header: ({ column }) => <DataTableColumnHeader column={column} title="Cited by" />,
-        cell: ({ row }) => (row.original.citedBy.length ? <span className="text-sm">{row.original.citedBy.join(', ')}</span> : <span className="text-sm text-muted-foreground">No agent</span>),
+        cell: ({ row }) => <span className="text-sm"><ListCell values={row.original.citedBy} empty="No agent" label="Cited by" /></span>,
       },
       { accessorKey: 'updatedAt', header: ({ column }) => <DataTableColumnHeader column={column} title="Updated" />, cell: ({ row }) => <span className="text-sm text-muted-foreground">{relativeTime(row.original.updatedAt)}</span> },
       {

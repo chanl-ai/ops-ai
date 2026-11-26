@@ -1413,7 +1413,9 @@ class SourceKind(TypedDict, closed=True):
     cannotCreateBecause: NotRequired[str | None]
     cannotCreateCode: NotRequired[str | None]
     connected: NotRequired[bool]
+    connectionId: NotRequired[str | None]
     defaults: SourceKindDefaults
+    files: NotRequired[bool]
     group: Literal["built_in", "apps"]
     inputs: NotRequired[dict[str, JsonValue]]
     kind: str

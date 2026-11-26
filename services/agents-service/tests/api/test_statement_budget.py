@@ -44,6 +44,7 @@ HOLDS = {"toolIds": ["lookup_account"], "accounts": {"salesforce": "Main"}}
 RUN_INPUT = {"email": {"sender": "ops@bank.example", "subject": "Hold the wire", "body": "Please hold wire 4411."}}
 PATH_IDS = (
     "agent_id",
+    "app_id",
     "batch_id",
     "case_id",
     "copy",
@@ -267,6 +268,12 @@ def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> See
             )
         ids["batch_id"] = batch.id
         await _eval_runs(served[0], n, ids["agent_id"])
+        # `{app_id}` names the app the agent's granted tool comes from, as the picker's app list answers it.
+        apps = await client.get(
+            f"/v1/agents/{ids['agent_id']}/tool-apps", params={"search": "lookup_account"}, headers=DEV
+        )
+        assert apps.status_code == 200, apps.text
+        ids["app_id"] = str(apps.json()["data"]["data"][0]["id"])
         # `{run_id}` names a queued engine run; the eval-run read reads the first kept run instead.
         swaps[f"/v1/eval-runs/{ids['run_id']}"] = "/v1/eval-runs/evr_budget5x00"
         return Seeded(headers=DEV, ids=ids)

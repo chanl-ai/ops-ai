@@ -35,3 +35,17 @@ queries = 0
 
 ["GET /v1/settings/storage/credentials"]
 queries = 1
+
+# The page and its count; each row carries its last check, so the statements do not grow with the watches.
+["GET /v1/watches"]
+queries = 2
+
+["GET /v1/watches/options"]
+queries = 1
+
+["GET /v1/watches/{watch_id}"]
+queries = 1
+
+# The watch, then its events after the place asked for.
+["GET /v1/watches/{watch_id}/events"]
+queries = 2

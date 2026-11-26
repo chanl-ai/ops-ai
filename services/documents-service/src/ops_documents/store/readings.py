@@ -22,6 +22,7 @@ from pydantic import Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_contracts import readings as readings_contract
 from ops_documents.store.columns import JSON_TEXT
 from ops_documents.store.extractions import service_outbox
 from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
@@ -37,8 +38,8 @@ from ops_store.team_scope import any_team, team_visible
 
 ReadingStatus = Literal["queued", "reading", "done", "failed"]
 PENDING: tuple[ReadingStatus, ...] = ("queued", "reading")
-FINISHED_EVENT = "reading.finished"
-FAILED_EVENT = "reading.failed"
+FINISHED_EVENT = readings_contract.FINISHED
+FAILED_EVENT = readings_contract.FAILED
 
 TEAM_OWNED = {**TENANT_SCOPED, **team_owned("team")}
 
@@ -348,7 +349,10 @@ class ReadingsStore(Store):
             payload = {"fileId": file_id, "digest": digest, "readerVersion": version, "settingsKey": key, **said}
             await add(
                 c, service_outbox, tenant_id=tenant, team_id=team, name=name,
-                key=f"{name}:{digest}:{version}:{key}:{file_id}", payload=payload,
+                key=readings_contract.event_key(
+                    name, digest=digest, reader_version=version, settings_key=key, file_id=file_id
+                ),
+                payload=payload,
             )  # fmt: skip
 
     async def pages(self, team: str, digest: str, version: str, key: str, *, page: int | None = None) -> list[Page]:

@@ -23,7 +23,7 @@ It does not own agents or their grants: "used by" asks agents-service (`agents.p
 | `src/ops_kb/query_steps.py` | Rerank and question rewrite around a search, through models-service on a chat-model alias |
 | `src/ops_kb/files.py` | Where a source's files are kept, through files-service |
 | `src/ops_kb/readings.py` | A file's reading from documents-service and its split; `POST /v1/events` takes `reading.finished` and `reading.failed`, and the knowledge schedule asks again for items still `reading` |
-| `src/ops_kb/tool_sources.py`, `schedule.py` | Knowledge read through a connection's tools, and the beat that syncs them on schedule |
+| `src/ops_kb/tool_sources.py`, `schedule.py` | Knowledge read through a connection's tools (the loop is `packages/ops_sources`; this file is its knowledge state and what a fetched item becomes), and the beat that syncs them on schedule |
 | `src/ops_kb/seed.py`, `seed/` | The banker demo's two knowledge bases (markdown rendered to PDFs), seeded when a dev kb-service starts |
 | `src/ops_kb/store/` | All database code; `store/knowledge.py:34` names the tenant role `ops_kb_tenant` |
 | `scripts/seed_demo_knowledge.py` | Seeds the demo through the API against a running stack (`--agents` also wires the agents) |

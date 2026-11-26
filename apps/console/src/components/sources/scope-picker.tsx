@@ -15,7 +15,28 @@ const SEARCH_DEBOUNCE_MS = 300;
  * name, and also whatever each value already picked in another picker holds (a picked site's libraries). Only scopes of
  * `kind` are offered. Nothing here knows an app: the kind and the parents come from the plugin's declared inputs.
  */
-export function ScopePicker({ id, plugin, source, kind, parents, value, onChange, disabled }: { id: string; plugin: string; source: string; kind: string; parents: string[]; value: string[]; onChange: (v: string[]) => void; disabled?: boolean }) {
+export function ScopePicker({
+  id,
+  plugin,
+  source,
+  kind,
+  parents,
+  value,
+  onChange,
+  onNames,
+  disabled,
+}: {
+  id: string;
+  plugin: string;
+  source: string;
+  kind: string;
+  parents: string[];
+  value: string[];
+  onChange: (v: string[]) => void;
+  /** Told the name shown for each picked id on every pick, so a caller can keep names beside the ids. */
+  onNames?: (names: Record<string, string>) => void;
+  disabled?: boolean;
+}) {
   const [query, setQuery] = React.useState('');
   const [searched, setSearched] = React.useState('');
   React.useEffect(() => {
@@ -33,7 +54,11 @@ export function ScopePicker({ id, plugin, source, kind, parents, value, onChange
   const seen = React.useRef(new Map<string, string>());
   for (const s of offered) seen.current.set(s.id, s.title);
   const hidden = value.filter((v) => !offered.some((s) => s.id === v));
-  const toggle = (s: ScopeOption) => onChange(picked.has(s.id) ? value.filter((v) => v !== s.id) : [...value, s.id]);
+  const pick = (next: string[]) => {
+    onChange(next);
+    onNames?.(Object.fromEntries(next.flatMap((v) => (seen.current.has(v) ? [[v, seen.current.get(v)!]] : []))));
+  };
+  const toggle = (s: ScopeOption) => pick(picked.has(s.id) ? value.filter((v) => v !== s.id) : [...value, s.id]);
   const error = found.error ?? options.error;
   return (
     <div className="flex flex-col gap-2" data-testid={`${id}-picker`}>
@@ -42,10 +67,10 @@ export function ScopePicker({ id, plugin, source, kind, parents, value, onChange
           {picked.size} picked{offered.length ? ` · ${offered.length} listed` : ''}
         </span>
         <span className="flex gap-1">
-          <Button variant="ghost" size="sm" className="h-7" disabled={disabled || !offered.length} onClick={() => onChange([...new Set([...value, ...offered.map((s) => s.id)])])}>
+          <Button variant="ghost" size="sm" className="h-7" disabled={disabled || !offered.length} onClick={() => pick([...new Set([...value, ...offered.map((s) => s.id)])])}>
             Select all
           </Button>
-          <Button variant="ghost" size="sm" className="h-7" disabled={disabled || !value.length} onClick={() => onChange([])}>
+          <Button variant="ghost" size="sm" className="h-7" disabled={disabled || !value.length} onClick={() => pick([])}>
             Clear
           </Button>
         </span>

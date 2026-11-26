@@ -26,7 +26,7 @@ and this page links to it instead of repeating them. Table layout is in [data](d
 | Likely questions and FAQ drafts with approval, estimate and ceilings | Built | `source_settings.py:61`; `service.py:2782`; `app.py:498-509`, `:572-600` |
 | One schedule rule for every source kind | Built | `packages/ops_store/src/ops_store/schedule.py:21`, `:92` |
 | Health, tombstones, failing alert event | Built | `store/knowledge.py:197`; `service.py:186`; `app.py:489-497` |
-| Plugin contract: list, get, changes, deleted, scopes, preview, allowed | Built | `packages/ops_plugin_sdk/src/ops_plugin_sdk/manifest.py:343-345`; `tool_sources.py:601` |
+| Plugin contract: list, get, changes, deleted, scopes, preview, allowed | Built | `packages/ops_plugin_sdk/src/ops_plugin_sdk/manifest.py:343-345`; the loop in `packages/ops_sources`, kb's state in `tool_sources.py` |
 | Contract test any knowledge-source plugin must pass | Built | `packages/ops_plugin_sdk/src/ops_plugin_sdk/testing.py:179` |
 | Website, SharePoint and Confluence plugins | Built, not run against a real tenant | pinned in `deploy/plugins.json` |
 | An agent searches only its own bases, unless its "all team knowledge bases" option is on | Built | `packages/ops_agent_kernel/src/ops_agent_kernel/kernel.py:83`, `:631-635` |

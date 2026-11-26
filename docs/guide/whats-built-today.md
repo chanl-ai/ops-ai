@@ -18,7 +18,7 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | An agent as a workflow step, and a published workflow as an agent's tool | Built |
 | Starting a published agent from code, waiting for it, streaming it or running it in the background | Built: REST API, Python and the command line; TypeScript planned. A background run is lost if the program that started it exits first |
 | Chat widgets on your other web pages ([Chat on your own pages](../console/embedding-the-chat.md)) | Partial: widgets are configured, published and keyed in the console, and the embed app is built; the installer does not run it yet |
-| Agents that run on a schedule toward a goal and report back, with no chat | Partial: one run at a due time, once per key; repeating schedules planned |
+| Agents that run on a schedule toward a goal and report back, with no chat | Partial: a workflow runs on a repeating schedule set from the console or a script, and an agent runs on one through a workflow made from its Channels tab; an agent still has no goal of its own |
 
 ## Workflows, tasks and cases
 
@@ -34,7 +34,8 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | Versions pinned per run; publishing through a second person's review | Built |
 | Triggers: an API request, a team mailbox, an event from another service | Built |
 | Triggers: a due time on the platform clock, one run per key | Built |
-| Triggers: a recurring schedule, an incoming webhook, polling a system | Planned |
+| Triggers: a recurring schedule | Built: set on the Schedule trigger in the console, the CLI or the SDKs |
+| Triggers: an incoming webhook, polling a system | Planned |
 | Code steps | Partial: formulas and transforms in a bounded sandbox; no general code runtime |
 | Load figures for many concurrent runs | Planned |
 

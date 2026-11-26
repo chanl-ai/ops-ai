@@ -173,6 +173,17 @@
             "title": "Providerid",
             "type": "string"
           },
+          "providerName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providername"
+          },
           "reasoningEffort": {
             "anyOf": [
               {
@@ -187,6 +198,17 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "usedBy": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usedby"
           },
           "version": {
             "title": "Version",
@@ -622,6 +644,92 @@
           "byKey"
         ],
         "title": "CallPage",
+        "type": "object"
+      },
+      "CatalogModelOut": {
+        "additionalProperties": false,
+        "description": "One catalogued model: what it can do, its limits and list prices (per million tokens, None when unknown), and\nthe knobs it takes.",
+        "properties": {
+          "context": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "images": {
+            "title": "Images",
+            "type": "boolean"
+          },
+          "inputPerMillion": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inputpermillion"
+          },
+          "knobs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Knobs",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output"
+          },
+          "outputPerMillion": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outputpermillion"
+          },
+          "reasoning": {
+            "title": "Reasoning",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "context",
+          "output",
+          "reasoning",
+          "images",
+          "inputPerMillion",
+          "outputPerMillion",
+          "knobs"
+        ],
+        "title": "CatalogModelOut",
         "type": "object"
       },
       "ChatChoice": {
@@ -1142,6 +1250,25 @@
         "title": "Envelope[KeySecret]",
         "type": "object"
       },
+      "Envelope_KnobsOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/KnobsOut"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[KnobsOut]",
+        "type": "object"
+      },
       "Envelope_ListResult_AliasOut__": {
         "additionalProperties": false,
         "properties": {
@@ -1275,6 +1402,29 @@
         "title": "Envelope[ProviderOut]",
         "type": "object"
       },
+      "Envelope_list_CatalogModelOut__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogModelOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[list[CatalogModelOut]]",
+        "type": "object"
+      },
       "Envelope_list_ProviderModelOut__": {
         "additionalProperties": false,
         "properties": {
@@ -1296,6 +1446,29 @@
           "data"
         ],
         "title": "Envelope[list[ProviderModelOut]]",
+        "type": "object"
+      },
+      "Envelope_list_ProviderTypeOut__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderTypeOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[list[ProviderTypeOut]]",
         "type": "object"
       },
       "ErrorBody": {
@@ -1380,6 +1553,7 @@
         "title": "Health",
         "type": "object"
       },
+      "JsonValue": {},
       "KeyCheckIn": {
         "additionalProperties": false,
         "description": "Which provider the key is for, and for Azure OpenAI the resource's endpoint and API version.",
@@ -1410,13 +1584,21 @@
             "title": "Endpoint"
           },
           "provider": {
-            "enum": [
-              "openai",
-              "azure-openai",
-              "anthropic"
-            ],
+            "pattern": "^[a-z0-9][a-z0-9-]{1,31}$",
             "title": "Provider",
             "type": "string"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
           }
         },
         "required": [
@@ -1652,6 +1834,44 @@
         "title": "KeySpend",
         "type": "object"
       },
+      "KnobsOut": {
+        "additionalProperties": false,
+        "description": "The settings an agent on an alias may set: `knobs` is a JSON Schema object of only the knobs the alias's model\ntakes, each with its type, title, description, range and catalog default.",
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "catalogued": {
+            "title": "Catalogued",
+            "type": "boolean"
+          },
+          "knobs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Knobs",
+            "type": "object"
+          },
+          "modelId": {
+            "title": "Modelid",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "alias",
+          "version",
+          "modelId",
+          "catalogued",
+          "knobs"
+        ],
+        "title": "KnobsOut",
+        "type": "object"
+      },
       "ListResult_AliasOut_": {
         "additionalProperties": false,
         "properties": {
@@ -1873,7 +2093,7 @@
           "keyRef": {
             "anyOf": [
               {
-                "maxLength": 120,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$",
                 "type": "string"
               },
               {
@@ -1900,8 +2120,25 @@
             ],
             "title": "Region"
           },
+          "secrets": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "maxLength": 4000,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxProperties": 8,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secrets"
+          },
           "type": {
-            "pattern": "^(openai-compatible|azure-openai|anthropic|scripted)$",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,31}$",
             "title": "Type",
             "type": "string"
           }
@@ -2139,6 +2376,49 @@
           "baseUrl"
         ],
         "title": "ProviderRebind",
+        "type": "object"
+      },
+      "ProviderTypeOut": {
+        "additionalProperties": false,
+        "description": "A provider type a connection can be made of, from the registry. `connection` is a JSON Schema object of the\nfields a connection of it takes; a field marked `x-secret` is saved as a provider key and never returned.",
+        "properties": {
+          "catalogued": {
+            "title": "Catalogued",
+            "type": "boolean"
+          },
+          "connection": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Connection",
+            "type": "object"
+          },
+          "icon": {
+            "title": "Icon",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "listsModels": {
+            "title": "Listsmodels",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "icon",
+          "connection",
+          "listsModels",
+          "catalogued"
+        ],
+        "title": "ProviderTypeOut",
         "type": "object"
       },
       "RotateIn": {
@@ -2401,7 +2681,7 @@
     },
     "/v1/models/aliases": {
       "get": {
-        "description": "Each alias's serving version, by name. `search` matches the name, the kind or the model; `ids` names\naliases by name.",
+        "description": "Each alias's serving version, by name. `search` matches the name, the kind or the model; `ids` names\naliases by name. `usedBy`: how many agents name the alias, for a person; null for a service or when\nagents-service did not answer.",
         "operationId": "aliases_list_aliases",
         "parameters": [
           {
@@ -2513,6 +2793,54 @@
               ],
               "title": "Authorization"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
           }
         ],
         "responses": {
@@ -2621,7 +2949,7 @@
         "tags": [
           "aliases"
         ],
-        "x-ops-public": "internal"
+        "x-ops-public": "sdk"
       },
       "post": {
         "operationId": "aliases_create_alias",
@@ -2640,6 +2968,54 @@
                 }
               ],
               "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
             }
           }
         ],
@@ -2759,7 +3135,195 @@
         "tags": [
           "aliases"
         ],
-        "x-ops-public": "internal"
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/models/aliases/{name}/knobs": {
+      "get": {
+        "description": "The settings an agent on this alias may set, as a JSON Schema object: only the knobs its model takes, each\nwith its range and catalog default. A model the catalog does not hold gets the common knobs with no range;\n404 when there is no such alias.",
+        "operationId": "aliases_alias_knobs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_KnobsOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Alias Knobs",
+        "tags": [
+          "aliases"
+        ],
+        "x-ops-public": "sdk"
       }
     },
     "/v1/models/aliases/{name}/versions": {
@@ -2885,6 +3449,54 @@
               ],
               "title": "Authorization"
             }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
           }
         ],
         "responses": {
@@ -2993,7 +3605,7 @@
         "tags": [
           "aliases"
         ],
-        "x-ops-public": "internal"
+        "x-ops-public": "sdk"
       },
       "post": {
         "operationId": "aliases_add_version",
@@ -3021,6 +3633,54 @@
                 }
               ],
               "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
             }
           }
         ],
@@ -3140,7 +3800,7 @@
         "tags": [
           "aliases"
         ],
-        "x-ops-public": "internal"
+        "x-ops-public": "sdk"
       }
     },
     "/v1/models/calls": {
@@ -3434,7 +4094,7 @@
     },
     "/v1/models/chat-model": {
       "put": {
-        "description": "Points chat (the runtime's `default` alias and the team assistant's) at `model` on the provider the saved key\nbelongs to. One connection per provider is kept and moved on a later choice; each alias gets a new version, or\nversion 1 on a fresh install, where no chat alias exists yet.",
+        "description": "Points chat (the runtime's `default` alias and the team assistant's) at `model` on the provider the saved key\nbelongs to. One connection per provider is kept and moved on a later choice; each alias gets a new version, or\nversion 1 on a fresh install, where no chat alias exists yet. The chat aliases are the install's, so this\nalso needs `install.manage` (403 `install_admin_only`).",
         "operationId": "providers_set_chat_model",
         "parameters": [
           {
@@ -4635,6 +5295,185 @@
         "x-ops-public": "internal"
       }
     },
+    "/v1/models/provider-types": {
+      "get": {
+        "description": "The provider types a connection can be made of, by label: the fields each takes as a JSON Schema (an\n`x-secret` field is saved as a provider key and never returned), and whether its models can be listed and are\nin the model catalog.",
+        "operationId": "providers_list_provider_types",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_ProviderTypeOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "A value the connection's type refuses"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not an account admin"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "List Provider Types",
+        "tags": [
+          "providers"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/models/providers": {
       "get": {
         "description": "The provider connections by name: where their calls go and the name of the key each signs in with, never\na key. `search` matches the name or the type; `ids` names connections by id.",
@@ -4908,7 +5747,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Adds a connection; 400 naming the field its type refuses (an Azure OpenAI connection needs its endpoint and\napi-version; its region is optional).",
+        "description": "Adds a connection of a registry type; 400 naming the field its type refuses (an Azure OpenAI connection\nneeds its endpoint and api-version; a Bedrock one its region). `secrets` are saved as the account's provider\nkey `keyRef` names, one value for a type with one secret field, else a JSON object of them.",
         "operationId": "providers_create_provider",
         "parameters": [
           {
@@ -5287,6 +6126,194 @@
           }
         },
         "summary": "Rebind Provider",
+        "tags": [
+          "providers"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/models/providers/{provider_id}/catalog": {
+      "get": {
+        "description": "The catalogued models of the connection's provider type, by id, each with its context, output limit, prices\nand the knobs it takes; empty for a type the catalog does not hold (an OpenAI-compatible URL).",
+        "operationId": "providers_list_catalog_models",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_CatalogModelOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not an account admin"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "No such connection"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "List Catalog Models",
         "tags": [
           "providers"
         ],
@@ -6146,7 +7173,7 @@
     },
     "/v1/provider-keys/{name}/models": {
       "get": {
-        "description": "The models (OpenAI, Anthropic) or deployments (Azure OpenAI) the saved key reaches, for choosing which one\nchat uses; 422 key_refused with the provider's reason.",
+        "description": "The models (OpenAI, Anthropic, Gemini, Bedrock) or deployments (Azure OpenAI) the saved key reaches, for\nchoosing which one an alias uses; 422 key_refused with the provider's reason.",
         "operationId": "provider_keys_list_provider_models",
         "parameters": [
           {
@@ -6164,11 +7191,7 @@
             "name": "provider",
             "required": true,
             "schema": {
-              "enum": [
-                "openai",
-                "azure-openai",
-                "anthropic"
-              ],
+              "pattern": "^[a-z0-9][a-z0-9-]{1,31}$",
               "title": "Provider",
               "type": "string"
             }
@@ -6206,6 +7229,23 @@
                 }
               ],
               "title": "Apiversion"
+            }
+          },
+          {
+            "in": "query",
+            "name": "region",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Region"
             }
           },
           {

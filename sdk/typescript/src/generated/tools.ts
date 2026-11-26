@@ -4113,6 +4113,11 @@ export interface components {
              */
             fetchAtOnce: number;
             /**
+             * Files
+             * @default false
+             */
+            files: boolean;
+            /**
              * Gettakestag
              * @default false
              */

@@ -16,7 +16,9 @@ import { LoadingButton } from '@/components/shared/loading-button';
 import { QueryError } from '@/components/shared/query-states';
 import { ReadableValue } from '@/components/shared/readable-value';
 import { Row, Rows, Section } from '@/components/shared/surface';
+import { useDocumentTitle } from '@/hooks/use-document-title';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ApiError } from '@/lib/api/contract';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RunCanvas } from '@/components/workflows/run-canvas';
@@ -61,6 +63,7 @@ export default function EngineRunPage() {
   const redrive = useRedriveEngineRun();
   const [retryError, setRetryError] = React.useState<string>();
   // The run that started it (`run:<id>`). The runs it started and the files it was given come with the run.
+  useDocumentTitle(run ? (run.workflowName ?? definition.data?.name ?? run.workflowId) : undefined);
   const parentRun = run?.createdBy.startsWith('run:') ? run.createdBy.slice(4) : undefined;
   const files = run?.files ?? [];
 
@@ -82,7 +85,7 @@ export default function EngineRunPage() {
   return (
     <PageLayout
       icon={Workflow}
-      title={definition.data?.name ?? run.workflowId}
+      title={run.workflowName ?? definition.data?.name ?? run.workflowId}
       description={`Version ${run.version} · started ${relativeTime(run.createdAt)}`}
       badge={<RunStatus status={run.status} testId="run-status" />}
       backHref="/build/runs"
@@ -199,8 +202,8 @@ export default function EngineRunPage() {
               <Section title="Result" description={run.outcomeText ?? run.result.outcome}>
                 <div data-testid="run-result" data-outcome={run.result.outcome}>
                   {/* The story below tells what the run did; the result's own fields stay behind Raw. An end with no
-                      output shows no value at all rather than "Nothing" above an empty Raw. */}
-                  {hasValue(run.result.output) && <ReadableValue value={run.result.output ?? null} testId="run-result-value" rawOnly={told} />}
+                      output says so rather than leaving the card empty. */}
+                  {hasValue(run.result.output) ? <ReadableValue value={run.result.output ?? null} testId="run-result-value" rawOnly={told} /> : <p className="text-sm text-muted-foreground" data-testid="run-result-empty">It ended without a value to show.</p>}
                 </div>
               </Section>
             )}
@@ -227,7 +230,12 @@ export default function EngineRunPage() {
             {!!run.story?.lines?.length && <StoryFeed title="What happened" description="Each step of this run, oldest first." lines={run.story.lines} testId="run-story-feed" />}
             {run.story && <RunStoryView story={run.story} />}
             <Section title="Graph" description="The workflow as this run met it: what passed, failed or was skipped, and the paths it took. Click a step for its input and output.">
-              {definition.isError || nodeTypes.isError ? (
+              {[definition.error, nodeTypes.error].some((e) => e instanceof ApiError && e.status === 403) ? (
+                <Alert data-testid="run-graph-forbidden">
+                  <AlertTitle>You may see this run, not its workflow graph</AlertTitle>
+                  <AlertDescription>The graph needs the right to view workflows. The steps below show what each one did.</AlertDescription>
+                </Alert>
+              ) : definition.isError || nodeTypes.isError ? (
                 <QueryError
                   what="the workflow graph"
                   testId="run-graph-error"

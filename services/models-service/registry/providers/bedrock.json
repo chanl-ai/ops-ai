@@ -1,0 +1,44 @@
+{
+  "id": "bedrock",
+  "label": "Amazon Bedrock",
+  "icon": "aws",
+  "adapter": "bedrock",
+  "catalog": "amazon-bedrock",
+  "baseUrl": "https://bedrock-runtime.{region}.amazonaws.com/openai/v1",
+  "connection": {
+    "type": "object",
+    "properties": {
+      "region": {
+        "type": "string",
+        "title": "Region",
+        "description": "The AWS region the models run in, such as us-east-1.",
+        "pattern": "^[a-z]{2}(-[a-z]+)+-[0-9]$",
+        "x-column": "region"
+      },
+      "accessKeyId": {
+        "type": "string",
+        "title": "Access key ID",
+        "description": "An IAM access key allowed bedrock:InvokeModel and bedrock:ListFoundationModels.",
+        "x-secret": true
+      },
+      "secretAccessKey": {
+        "type": "string",
+        "title": "Secret access key",
+        "x-secret": true
+      }
+    },
+    "required": [
+      "region",
+      "accessKeyId",
+      "secretAccessKey"
+    ]
+  },
+  "modelList": {
+    "base": "https://bedrock.{region}.amazonaws.com",
+    "path": "/foundation-models",
+    "auth": "sigv4",
+    "items": "modelSummaries",
+    "id": "modelId"
+  },
+  "test": "modelList"
+}

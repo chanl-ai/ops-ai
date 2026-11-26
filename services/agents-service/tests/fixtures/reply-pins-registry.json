@@ -63,6 +63,7 @@
           ]
         },
         "model": "",
+        "modelSettings": {},
         "name": "Branch Desk",
         "patterns": {
           "parallelReads": true,
@@ -196,6 +197,7 @@
               ]
             },
             "model": "default",
+            "modelSettings": {},
             "name": "Branch Concierge",
             "patterns": {
               "parallelReads": true,
@@ -311,6 +313,7 @@
               ]
             },
             "model": "default",
+            "modelSettings": {},
             "name": "Card Dispute Resolver",
             "patterns": {
               "parallelReads": true,
@@ -428,6 +431,7 @@
               ]
             },
             "model": "default",
+            "modelSettings": {},
             "name": "Wire Fraud Sentinel",
             "patterns": {
               "parallelReads": true,
@@ -704,6 +708,7 @@
           ]
         },
         "model": "default",
+        "modelSettings": {},
         "name": "Wire Fraud Sentinel",
         "patterns": {
           "parallelReads": true,
@@ -830,6 +835,7 @@
           ]
         },
         "model": "",
+        "modelSettings": {},
         "name": "Branch Desk",
         "patterns": {
           "parallelReads": true,
@@ -942,6 +948,7 @@
           ]
         },
         "model": "",
+        "modelSettings": {},
         "name": "Branch Desk",
         "patterns": {
           "parallelReads": true,
