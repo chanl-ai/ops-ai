@@ -12,7 +12,7 @@ You write no product code yourself; the specialists do, each carrying the standa
 2. The brief or approved plan, the design it links, and its "Acceptance criteria and tests".
 3. The [engineering standards](../../docs/architecture/engineering-standards.md) index: the pages each specialist
    builds to, and which rules have no check yet (a build that needs one hands it to `ops-ci-builder`).
-4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section.
+4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section and `docs/architecture/standards/delivery.md` DL2; run the DL2 local gate before the pull request leaves draft.
 
 ## Routing
 Match each file the plan names against the first row that fits; one specialist per lane.

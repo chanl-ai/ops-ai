@@ -108,6 +108,7 @@ images crash under Docker Desktop's emulation; the pinned 2025 image runs on the
 - A system user that reads a table => grant the table in `SYSTEM_USERS` of `deploy/database/mssql.py`, and name the user in its SQL Server team functions
 - A system transaction on SQL Server => revert inside it; reverting after the commit counts two transactions
 - A store change (tables, repositories, migrations, queries) pushed after `make ci-local` alone => ci-local lists `store-mssql` as skipped, so run `deploy/database/mssql_remote.sh test <member> -q <tests>` before the push
+- The relay or a worker loop throws `ProgrammingError` after a stack starts on an empty database without migrating => run `make migrate`, then restart the stack
 
 ## Reference docs
 

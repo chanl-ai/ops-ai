@@ -17,7 +17,7 @@ belongs to `ops-sdk-builder`.
    [API contracts and models](../../docs/architecture/standards/api-and-models.md) and
    [observability](../../docs/architecture/standards/observability.md); then `services/CLAUDE.md`, the service's own
    `CLAUDE.md`, `packages/ops_service_kit/CLAUDE.md`, `docs/architecture/api.md` and `docs/architecture/service-map.md`.
-4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section.
+4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section and `docs/architecture/standards/delivery.md` DL2; run the DL2 local gate before the pull request leaves draft.
 
 ## Owns
 | Paths | What |

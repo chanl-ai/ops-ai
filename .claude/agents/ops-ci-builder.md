@@ -16,7 +16,7 @@ runs the same locally and in CI; a deploy migrates, checks every process and wal
    ([engineering standards](../../docs/architecture/engineering-standards.md) lists which rules have none); then
    `deploy/CLAUDE.md`, `make/CLAUDE.md`, `scripts/CLAUDE.md`, `docs/architecture/make.md`, `docs/architecture/delivery.md`
    and `docs/deploy/`.
-4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section.
+4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section and `docs/architecture/standards/delivery.md` DL2; run the DL2 local gate before the pull request leaves draft.
 
 ## Owns
 | Paths | What |
