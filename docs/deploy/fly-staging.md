@@ -151,14 +151,14 @@ is replaced by a newer one, a running one finishes). It starts two ways:
 
 | Trigger | When | Pin |
 |---|---|---|
-| A merge to `develop` | `ci.yml` job `staging` calls it once `ci-ok` passed for that commit | Skipped with a notice while a `release/*` or `hotfix/*` branch exists on origin, or `STAGING_HOLD` is set |
-| A push to `release/*` or `hotfix/*` | The same job | Not frozen: it is the release being tested |
+| A merge to `develop` | `ci.yml` job `staging` calls it once `ci-ok` passed for that commit | Not deployed, and the `staging` job fails red, while a `release/*` or `hotfix/*` branch exists on origin or a live `STAGING_HOLD` is set (docs/deploy/release.md, The staging hold) |
+| A push to `release/*` or `hotfix/*` | The same job | Not frozen by a branch: it is the release being tested. A live `STAGING_HOLD` still stops it and fails the job, whatever the ref |
 | By hand | `make stg-deploy-ci REF=<branch, tag or commit>` (`SKIP_WALK=1`, `REASON=`), or Actions, deploy-staging, Run workflow | Deploys anyway; the summary says which pin it overrode |
 
 | To | Do |
 |---|---|
 | Put another commit, tag or branch on staging | `make stg-deploy-ci REF=<ref>`; it starts the run and watches it to the end |
-| Keep it there through later merges | Set the repository variable `STAGING_HOLD` to the reason; merges are still checked but not deployed |
+| Keep it there through later merges | Set the repository variable `STAGING_HOLD` to `X.Y.Z: reason` (the release it waits for; ignored once tag `vX.Y.Z` exists); merges are still checked but not deployed |
 | Test a release on staging | After telling the owner, `make stg-deploy-ci REF=release/current`; a push to the train deploys nothing, so set `STAGING_HOLD` for as long as the owner tries it. A numbered `release/X.Y.Z` or any `hotfix/*` branch on origin still freezes merges to `develop` (`docs/deploy/release.md`) |
 | Go back to `develop` | Delete the hotfix branch after its merge and clear `STAGING_HOLD`; the next merge to `develop` deploys, or `make stg-deploy-ci` now |
 
