@@ -61,6 +61,7 @@ jobs:
       repo_pool: ${{ steps.plan.outputs.repo_pool }}
       code: ${{ steps.plan.outputs.code }}
       mssql: ${{ steps.plan.outputs.mssql }}
+      store: ${{ steps.plan.outputs.store }}
       heavy: ${{ steps.plan.outputs.heavy }}
       repo_jobs: ${{ steps.plan.outputs.repo_jobs }}
     steps:
@@ -267,9 +268,10 @@ jobs:
     # The store, kit and identity suites on SQL Server beside PostgreSQL: the tests that run on both databases skip
     # SQL Server unless OPS_MSSQL_SERVER and MSSQL_SA_PASSWORD are set (packages/ops_store/CLAUDE.md), so a run that
     # skips any of them fails here. The image is the pinned one deploy/fly/mssql/Dockerfile builds on.
-    # Not on a pull request: the merge queue and develop pushes run it (heavy).
+    # A pull request runs it only when the diff touches a store, a migration, ops_store or the database scripts (store);
+    # any other change waits for the merge queue and develop pushes (heavy).
     needs: plan
-    if: needs.plan.outputs.mssql == 'true' && needs.plan.outputs.heavy == 'true'
+    if: needs.plan.outputs.mssql == 'true' && (needs.plan.outputs.heavy == 'true' || needs.plan.outputs.store == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:

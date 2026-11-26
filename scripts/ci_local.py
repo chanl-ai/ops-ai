@@ -49,9 +49,7 @@ SHARED_PORTS = re.compile(r"^OPS_(PG|OPA|GREENMAIL_.*|MAILPIT_.*)_?PORT$|^OPS_PO
 # Long suites first, so the run does not end waiting on one of them alone (as VERIFY_POOL does in make/python.mk).
 HEAVY = ("repo", "agents-service", "tools-service", "platform-service")
 # A change to a store or a migration is where SQL Server breaks and PostgreSQL does not (the merge queue found them).
-MSSQL_PATHS = re.compile(
-    r"^(services|packages)/[^/]+/(?:.+/)?(store|migrations)/|^packages/ops_store/|^deploy/database/"
-)
+MSSQL_PATHS = re.compile(r"^services/[^/]+/(.+/)?store/|(^|/)migrations/|^packages/ops_store/|^deploy/database/")
 # What ci.yml's store-mssql job runs on the shared packages (the both-database suites), and `ops_store` itself and the
 # database scripts move every service's store, so those changes run them all.
 MSSQL_PACKAGES = ("packages/ops_store", "packages/ops_service_kit", "packages/ops_identity")
