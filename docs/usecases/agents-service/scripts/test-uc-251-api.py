@@ -71,7 +71,8 @@ DISPUTE: dict[str, Any] = {
     "customerName": "Marcus Bell",
     "cardAccount": "CARD-4471",
     "feeId": "FEE-3901",
-    "amount": "35",
+    # waive_fee's schema takes the amount as a number.
+    "amount": 35,
     "complaint": "Charged a late fee after paying on time",
     "letter": {"fileId": LETTER, "name": "dispute-letter.pdf"},
 }
@@ -85,7 +86,9 @@ def case_of(api: httpx.Client, run_id: str) -> dict[str, Any]:
 
 
 with ExitStack() as stack:
-    stack.enter_context(tools({"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}))
+    # The gateway decides each write by the team's approval rules, which platform-service holds; without it a write is
+    # refused (503 approval_rules_unavailable).
+    stack.enter_context(tools({"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}, approval_rules=True))
     api = stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}"))
     created = api.post("/v1/workflows/definitions", json={"yaml": DEFINITION}, headers=TEAM)
     live = api.post("/v1/workflows/definitions/uc251_fee_dispute/publish-requests", json={}, headers=TEAM)
@@ -140,6 +143,19 @@ with ExitStack() as stack:
     done = [a for a in after.get("actions") or [] if a["taskId"] == review_id]
     # The case tells its story as a feed of lines; the full list of one kind is the activity route below.
     lines = [line["text"] for line in (after.get("feed") or {}).get("lines") or []]
+    waived = until(
+        lambda: (r := data(api.get(f"/v1/runs/{run_id}", headers=TEAM)) or {}).get("status") in ("succeeded", "failed")
+        and r
+    ) or {}
+    check(
+        "4a Lee's approval waives the fee: the run ends waived",
+        waived.get("status") == "succeeded" and waived.get("outcome") == "waived",
+        {
+            "status": waived.get("status"),
+            "outcome": waived.get("outcome"),
+            "waive": [x.get("output") for x in waived.get("steps") or [] if x.get("nodeId") == "waive"],
+        },
+    )
     check(
         "4 approved on its task page, the case reads the action decided and nothing waiting",
         decided.status_code == 200
@@ -160,14 +176,14 @@ with ExitStack() as stack:
 OWN = DEFINITION.replace("uc251_fee_dispute", "uc251_own_fee")
 LOOSE = {"OPS_DEV_POLICIES": "{}"}
 with ExitStack() as stack:
-    stack.enter_context(tools({"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}", **LOOSE}))
+    stack.enter_context(tools({"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}", **LOOSE}, approval_rules=True))
     api = stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}", env=LOOSE))
     api.post("/v1/workflows/definitions", json={"yaml": OWN}, headers=TEAM)
     api.post("/v1/workflows/definitions/uc251_own_fee/publish-requests", json={}, headers=TEAM)
     stack.enter_context(engine_worker("uc251-own", {"OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}", **LOOSE}))
-    # waive_fee's schema takes the amount as a number.
-    own_input = {**DISPUTE, "amount": 35}
-    started = api.post("/v1/runs", json={"workflowId": "uc251_own_fee", "input": own_input, "runKey": "uc251-b"}, headers=TEAM)
+    started = api.post(
+        "/v1/runs", json={"workflowId": "uc251_own_fee", "input": DISPUTE, "runKey": "uc251-b"}, headers=TEAM
+    )
     own_run = str((data(started) or {}).get("runId"))
 
     def settled() -> dict[str, Any]:
@@ -186,13 +202,11 @@ with ExitStack() as stack:
         lambda: (r := data(api.get(f"/v1/runs/{own_run}", headers=TEAM)) or {}).get("status") in ("succeeded", "failed")
         and r
     ) or {}
-    # The write goes to the gateway once his click is recorded. In this stack the gateway cannot read the team's
-    # approval rules (503 RULES_UNAVAILABLE), so the write itself does not run; the call reaching it is the point.
     sent = [s for s in ended.get("steps") or [] if s.get("nodeId") == "waive"]
     check(
-        "7 James approves it himself (200), and only then the waive goes to the gateway, once",
-        mine.status_code == 200 and len(sent) == 1,
-        {"decision": mine.status_code, "status": ended.get("status"), "waive": [x.get("output") for x in sent]},
+        "7 James approves it himself (200), and only then the fee is waived",
+        mine.status_code == 200 and len(sent) == 1 and ended.get("outcome") == "waived",
+        {"decision": mine.status_code, "outcome": ended.get("outcome"), "waive": [x.get("output") for x in sent]},
     )
 
 finish()

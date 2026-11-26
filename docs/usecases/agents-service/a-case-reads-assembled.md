@@ -25,7 +25,8 @@ action decided and the decision in its activity. A real worker runs it; no model
 | PostgreSQL | `make db-up` |
 | The run | `make usecase-test UC=uc-251 LAYER=api` |
 
-The stack is agents-service and tools-service (the tool gateway) with a workflow worker, on the scripted model.
+The stack is agents-service, tools-service (the tool gateway) and platform-service (the team's approval rules the
+gateway reads for every write) with a workflow worker, on the scripted model.
 
 ## Steps and expected results
 
@@ -36,9 +37,10 @@ The stack is agents-service and tools-service (the tool gateway) with a workflow
 | 2 | The same read | One waiting task, the next action pointing at it, one drafted action `pending` linking the same task |
 | 3 | The same read | `links.runs` holds the run, `workflow` names Fee dispute (uc-251), `links.files` holds dispute-letter.pdf |
 | 4 | Approve the task on its page (`POST /reviews/{id}/decision`), read the case again | Nothing waiting, no next action, the action `approved` |
+| 4a | The run after Lee's approval | It ends `waived`: the gateway ran the waive |
 | 5 | `GET /v1/activity?case={id}&kind=decision` | One decision; the case's feed tells its story |
 | 6 | With the default rule (an asker who may decide does), James, a Builder, starts a second run | It holds at its review; the fee is not waived |
-| 7 | James approves that review himself | 200; only then the waive step sends its call to the gateway, once |
+| 7 | James approves that review himself | 200; only then the fee is waived and the run ends `waived` |
 
 ## Acceptance layers
 
