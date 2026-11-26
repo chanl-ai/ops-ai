@@ -56,6 +56,12 @@ Each page opens with the problem it solves and says what is built. Images sit be
 | `design/agents-v2/sandbox-backend-sprites.md` | Agents version 2: running sandboxes on Fly Sprites for hosted tenants |
 | `design/agents-v2/sandbox-backend-docker.md` | Agents version 2: running sandboxes as sealed Docker containers for a small install |
 | `design/agents-v2/sandbox-backend-kubernetes.md` | Agents version 2: running sandboxes as pods with gVisor or small virtual machines in an enterprise's cluster |
+| `design/agents-v2/workflow-teams-and-human-tasks.md` | Agents version 2: teams drawn on the workflow canvas as connected agents and roles, shared notes, human tasks and undo steps |
+| `design/agents-v2/workflow-durability.md` | Agents version 2: rebuilding a run from its journal, run budgets, an agent step that pauses, and the SQL Server statements left to port |
+| `design/agents-v2/evals.md` | Agents version 2: eval checks for the new agent behaviour, the publish gate and team tests |
+| `design/agents-v2/api.md` | Agents version 2: every route the three releases add, change or remove |
+| `design/agents-v2/sdk.md` | Agents version 2: the Python and TypeScript SDK methods and typed errors |
+| `design/agents-v2/cli.md` | Agents version 2: the command line's new commands and exit codes |
 
 ## How the docs site shows a page
 

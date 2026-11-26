@@ -281,6 +281,7 @@ properties:
         additionalProperties: false
         properties:
           passRate: { type: number, minimum: 0, maximum: 1 }
+      repeat: { type: integer, minimum: 1, maximum: 5, default: 1 }
       cases:
         type: array
         maxItems: 200
@@ -407,4 +408,21 @@ $defs:
             items: { enum: [direct, plan, helpers, sandbox] }
           handoff: { type: string, description: "The agent the conversation must be handed to." }
           pausesFor: { enum: [approval, question, plan_review] }
+          pausesOn:
+            description: Tools whose call the reply must pause on, with nothing sent.
+            type: array
+            items: { type: string }
+          files:
+            description: Files the sandbox workspace must hold after the reply.
+            type: array
+            maxItems: 10
+            items:
+              type: object
+              additionalProperties: false
+              required: [path]
+              properties:
+                path: { type: string, minLength: 1, maxLength: 400 }
+                contains: { type: string, maxLength: 400 }
+          maxCostUsd: { type: number, exclusiveMinimum: 0 }
+          maxSeconds: { type: number, exclusiveMinimum: 0 }
           rubric: { type: string, description: "Scored by the judge model." }

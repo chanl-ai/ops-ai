@@ -1,0 +1,1031 @@
+# OpenAPI draft for agents version 2.
+# Status: proposed design, written 2026-11-26. A design input, not a contract: each service's committed openapi.json is
+# generated from code and stays the contract. This file is deleted when the last route in it ships.
+# Every success body is wrapped in the envelope {success: true, data}; `data` is what each operation's schema describes.
+# Every error is {success: false, error: Error}.
+openapi: 3.1.0
+info:
+  title: Ops AI agents version 2 (draft)
+  version: 0.1.0-draft
+  description: New and changed public routes of releases 1.4.0, 1.5.0 and 1.6.0. Each operation's x-release names its release.
+servers:
+  - url: https://ops.example.com
+tags:
+  - { name: agent-spec, description: The agent spec file }
+  - { name: builder, description: Drafting and trying a spec }
+  - { name: chat, description: "Conversations, turns and pauses" }
+  - { name: evals, description: Agent evals and team tests }
+  - { name: sandbox, description: A conversation's sandbox }
+  - { name: workflows, description: "Teams on the canvas, runs and turns" }
+  - { name: tasks, description: Human tasks }
+  - { name: budgets, description: Model gateway budgets }
+  - { name: web-tools, description: Web search and page fetch }
+paths:
+  /v1/agents:
+    post:
+      tags: [agent-spec]
+      operationId: createAgentFromSpec
+      x-release: "1.4.0"
+      summary: Create an agent from a spec
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SpecSave" } } } }
+      responses:
+        "201": { description: The first draft version, content: { application/json: { schema: { $ref: "#/components/schemas/SpecView" } } } }
+        "422": { $ref: "#/components/responses/SpecInvalid" }
+  /v1/agents/{agentId}/spec:
+    parameters: [{ $ref: "#/components/parameters/AgentId" }]
+    get:
+      tags: [agent-spec]
+      operationId: getAgentSpec
+      x-release: "1.4.0"
+      summary: Read an agent's spec
+      parameters:
+        - { name: version, in: query, schema: { type: integer, minimum: 1 }, description: "Default is the draft if one exists, else the live version" }
+        - { name: format, in: query, schema: { enum: [json, yaml], default: json } }
+      responses:
+        "200": { description: The spec, content: { application/json: { schema: { $ref: "#/components/schemas/SpecView" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [agent-spec]
+      operationId: saveAgentSpec
+      x-release: "1.4.0"
+      summary: Save a draft version from a spec
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SpecSave" } } } }
+      responses:
+        "200": { description: The saved draft, content: { application/json: { schema: { $ref: "#/components/schemas/SpecView" } } } }
+        "409": { $ref: "#/components/responses/Error", description: stale_base }
+        "422": { $ref: "#/components/responses/SpecInvalid" }
+  /v1/agents/spec/validate:
+    post:
+      tags: [agent-spec]
+      operationId: validateAgentSpec
+      x-release: "1.4.0"
+      summary: Check a spec without saving it
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: false, required: [spec], properties: { spec: { $ref: "#/components/schemas/AgentSpec" } } } } }
+      responses:
+        "200": { description: The check, content: { application/json: { schema: { $ref: "#/components/schemas/SpecCheck" } } } }
+  /v1/agents/{agentId}/spec/diff:
+    parameters: [{ $ref: "#/components/parameters/AgentId" }]
+    post:
+      tags: [agent-spec]
+      operationId: diffAgentSpec
+      x-release: "1.4.0"
+      summary: Compare a spec with the agent's draft or live version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [spec]
+              properties:
+                spec: { $ref: "#/components/schemas/AgentSpec" }
+                against: { enum: [draft, live], default: live }
+      responses:
+        "200": { description: The differences, content: { application/json: { schema: { $ref: "#/components/schemas/SpecDiff" } } } }
+  /v1/agents/spec/draft:
+    post:
+      tags: [builder]
+      operationId: draftAgentSpec
+      x-release: "1.4.0"
+      summary: Draft or revise a spec from a description
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SpecDraftIn" } } } }
+      responses:
+        "200": { description: The draft in sections, content: { application/json: { schema: { $ref: "#/components/schemas/SpecDraft" } } } }
+        "429": { $ref: "#/components/responses/Error", description: drafts_limit }
+  /v1/agents/spec/try:
+    post:
+      tags: [builder]
+      operationId: tryAgentSpec
+      x-release: "1.4.0"
+      summary: Run one test turn of an unsaved spec
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SpecTryIn" } } } }
+      responses:
+        "200": { description: The reply and its events, content: { application/json: { schema: { $ref: "#/components/schemas/SpecTryOut" } } } }
+        "422": { $ref: "#/components/responses/SpecInvalid" }
+  /v1/agents/loops:
+    get:
+      tags: [agent-spec]
+      operationId: listLoopKinds
+      x-release: "1.4.0"
+      summary: The loop kinds a spec can name
+      responses:
+        "200": { description: Kinds, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/LoopKind" } } } } }
+  /v1/threads/{threadId}/runs/{runId}/cancel:
+    parameters: [{ $ref: "#/components/parameters/ThreadId" }, { $ref: "#/components/parameters/RunId" }]
+    post:
+      tags: [chat]
+      operationId: cancelThreadRun
+      x-release: "1.4.0"
+      summary: Stop a running turn at its next step
+      responses:
+        "202": { description: Accepted }
+        "409": { $ref: "#/components/responses/Error", description: run_not_running }
+  /v1/threads/{threadId}/runs/{runId}/trace:
+    parameters: [{ $ref: "#/components/parameters/ThreadId" }, { $ref: "#/components/parameters/RunId" }]
+    get:
+      tags: [chat]
+      operationId: getThreadRunTrace
+      x-release: "1.4.0"
+      summary: The steps of one turn
+      responses:
+        "200": { description: The trace, content: { application/json: { schema: { $ref: "#/components/schemas/RunTrace" } } } }
+  /v1/threads/{threadId}/approvals:
+    parameters: [{ $ref: "#/components/parameters/ThreadId" }]
+    post:
+      tags: [chat]
+      operationId: answerInterrupt
+      x-release: "1.4.0"
+      summary: Answer a paused turn (an approval, a question or a plan review)
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/InterruptAnswer" } } } }
+      responses:
+        "200": { description: Recorded; the turn continues on the stream, content: { application/json: { schema: { $ref: "#/components/schemas/InterruptAnswered" } } } }
+        "403": { $ref: "#/components/responses/Error", description: requester_cannot_approve }
+        "409": { $ref: "#/components/responses/Error", description: interrupt_closed }
+  /v1/agents/{agentId}/eval-runs:
+    parameters: [{ $ref: "#/components/parameters/AgentId" }]
+    post:
+      tags: [evals]
+      operationId: startEvalRun
+      x-release: "1.4.0"
+      summary: Run an agent's eval cases in the background
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/EvalRunStart" } } } }
+      responses:
+        "202": { description: Started, content: { application/json: { schema: { $ref: "#/components/schemas/RunRef" } } } }
+  /v1/eval-runs/{runId}:
+    parameters: [{ $ref: "#/components/parameters/RunId" }]
+    get:
+      tags: [evals]
+      operationId: getEvalRun
+      x-release: "1.4.0"
+      summary: One eval run with its case results
+      responses:
+        "200": { description: The run, content: { application/json: { schema: { $ref: "#/components/schemas/EvalRun" } } } }
+  /v1/eval-runs/{runId}/events:
+    parameters: [{ $ref: "#/components/parameters/RunId" }]
+    get:
+      tags: [evals]
+      operationId: streamEvalRun
+      x-release: "1.4.0"
+      summary: Case results as they finish
+      responses:
+        "200": { description: Server-sent events of EvalRunEvent, content: { text/event-stream: { schema: { $ref: "#/components/schemas/EvalRunEvent" } } } }
+  /v1/threads/{threadId}/sandbox:
+    parameters: [{ $ref: "#/components/parameters/ThreadId" }]
+    get:
+      tags: [sandbox]
+      operationId: getThreadSandbox
+      x-release: "1.5.0"
+      summary: The conversation's sandbox
+      responses:
+        "200": { description: State and usage, content: { application/json: { schema: { $ref: "#/components/schemas/ThreadSandbox" } } } }
+        "404": { $ref: "#/components/responses/Error", description: no_sandbox }
+  /v1/threads/{threadId}/sandbox/files:
+    parameters: [{ $ref: "#/components/parameters/ThreadId" }]
+    get:
+      tags: [sandbox]
+      operationId: listSandboxFiles
+      x-release: "1.5.0"
+      summary: Files in the workspace
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - { name: origin, in: query, schema: { enum: [person, agent, builder] } }
+        - { name: q, in: query, schema: { type: string } }
+      responses:
+        "200": { description: A page of files, content: { application/json: { schema: { $ref: "#/components/schemas/SandboxFileList" } } } }
+  /v1/threads/{threadId}/sandbox/files/{path}:
+    parameters:
+      - { $ref: "#/components/parameters/ThreadId" }
+      - { name: path, in: path, required: true, schema: { type: string }, description: "Path under the workspace folder, URL encoded" }
+    get:
+      tags: [sandbox]
+      operationId: readSandboxFile
+      x-release: "1.5.0"
+      summary: Download one file
+      responses:
+        "200": { description: The bytes, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+    put:
+      tags: [sandbox]
+      operationId: uploadSandboxFile
+      x-release: "1.5.0"
+      summary: Upload a file into the inbox
+      requestBody: { required: true, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+      responses:
+        "200": { description: The stored file, content: { application/json: { schema: { $ref: "#/components/schemas/SandboxFile" } } } }
+        "413": { $ref: "#/components/responses/Error", description: file_too_large or workspace_full }
+    delete:
+      tags: [sandbox]
+      operationId: deleteSandboxFile
+      x-release: "1.5.0"
+      summary: Delete one file
+      responses:
+        "204": { description: Deleted }
+  /v1/threads/{threadId}/sandbox/files/{path}/save:
+    parameters:
+      - { $ref: "#/components/parameters/ThreadId" }
+      - { name: path, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [sandbox]
+      operationId: saveSandboxFile
+      x-release: "1.5.0"
+      summary: Copy a file to the team's Files or a knowledge base
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SaveFileIn" } } } }
+      responses:
+        "201": { description: Where it was saved, content: { application/json: { schema: { $ref: "#/components/schemas/SavedFile" } } } }
+  /v1/threads/{threadId}/sandbox/commands:
+    parameters: [{ $ref: "#/components/parameters/ThreadId" }]
+    get:
+      tags: [sandbox]
+      operationId: listSandboxActivity
+      x-release: "1.5.0"
+      summary: Commands and network requests, oldest first
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - { name: kind, in: query, schema: { enum: [command, request] } }
+        - { name: refused, in: query, schema: { type: boolean } }
+      responses:
+        "200": { description: A page of activity, content: { application/json: { schema: { $ref: "#/components/schemas/SandboxActivityList" } } } }
+  /v1/sandbox/options:
+    get:
+      tags: [sandbox]
+      operationId: getSandboxOptions
+      x-release: "1.5.0"
+      summary: Images, sizes and caps this install offers
+      responses:
+        "200": { description: Options, content: { application/json: { schema: { $ref: "#/components/schemas/SandboxOptions" } } } }
+  /v1/web-tools:
+    get:
+      tags: [web-tools]
+      operationId: getWebTools
+      x-release: "1.5.0"
+      summary: Whether web search and page fetch are on
+      responses:
+        "200": { description: Settings, content: { application/json: { schema: { $ref: "#/components/schemas/WebTools" } } } }
+    put:
+      tags: [web-tools]
+      operationId: putWebTools
+      x-release: "1.5.0"
+      summary: Turn web tools on or off
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/WebToolsIn" } } } }
+      responses:
+        "200": { description: Settings, content: { application/json: { schema: { $ref: "#/components/schemas/WebTools" } } } }
+  /v1/models/budgets/{budgetId}:
+    parameters:
+      - { name: budgetId, in: path, required: true, schema: { type: string, maxLength: 120 } }
+    put:
+      tags: [budgets]
+      operationId: putBudget
+      x-release: "1.4.0"
+      summary: Create a budget or change its caps (service callers only)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BudgetIn" } } } }
+      responses:
+        "200": { description: The budget, content: { application/json: { schema: { $ref: "#/components/schemas/Budget" } } } }
+    get:
+      tags: [budgets]
+      operationId: getBudget
+      x-release: "1.4.0"
+      summary: Read a budget's caps and spend
+      responses:
+        "200": { description: The budget, content: { application/json: { schema: { $ref: "#/components/schemas/Budget" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/workflows/team-layouts:
+    get:
+      tags: [workflows]
+      operationId: listTeamLayouts
+      x-release: "1.6.0"
+      summary: Starter layouts for a team on the canvas
+      responses:
+        "200": { description: Layouts, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/TeamLayout" } } } } }
+  /v1/runs/{runId}/turns:
+    parameters: [{ $ref: "#/components/parameters/RunId" }]
+    get:
+      tags: [workflows]
+      operationId: listRunTurns
+      x-release: "1.6.0"
+      summary: Each member's turn in a run, in order
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - { name: group, in: query, schema: { type: string } }
+        - { name: step, in: query, schema: { type: string } }
+      responses:
+        "200": { description: A page of turns, content: { application/json: { schema: { $ref: "#/components/schemas/TurnList" } } } }
+  /v1/runs/{runId}/notes:
+    parameters: [{ $ref: "#/components/parameters/RunId" }]
+    get:
+      tags: [workflows]
+      operationId: listRunNotes
+      x-release: "1.6.0"
+      summary: The shared notes of a run
+      parameters: [{ $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/PageSize" }]
+      responses:
+        "200": { description: A page of notes, content: { application/json: { schema: { $ref: "#/components/schemas/NoteList" } } } }
+  /v1/runs/{runId}/cancel:
+    parameters: [{ $ref: "#/components/parameters/RunId" }]
+    post:
+      tags: [workflows]
+      operationId: cancelRun
+      x-release: "1.6.0"
+      summary: Cancel a run, optionally undoing its changes
+      requestBody: { content: { application/json: { schema: { $ref: "#/components/schemas/RunCancel" } } } }
+      responses:
+        "202": { description: Accepted }
+  /v1/tasks:
+    get:
+      tags: [tasks]
+      operationId: listTasks
+      x-release: "1.6.0"
+      summary: The human tasks inbox
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - { name: view, in: query, schema: { enum: [mine, team, all], default: mine } }
+        - { name: kind, in: query, schema: { $ref: "#/components/schemas/TaskKind" } }
+        - { name: role, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { enum: [open, done, expired, withdrawn], default: open } }
+        - { name: sort, in: query, schema: { enum: [dueAt, -dueAt, createdAt, -createdAt], default: dueAt } }
+      responses:
+        "200": { description: A page of tasks, content: { application/json: { schema: { $ref: "#/components/schemas/TaskList" } } } }
+  /v1/tasks/{taskId}/decision:
+    parameters: [{ $ref: "#/components/parameters/TaskId" }]
+    post:
+      tags: [tasks]
+      operationId: decideTask
+      x-release: "1.6.0"
+      summary: Approve or reject
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TaskDecision" } } } }
+      responses:
+        "200": { description: The task, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } }
+        "403": { $ref: "#/components/responses/Error", description: not_assignee or requester_cannot_approve }
+        "409": { $ref: "#/components/responses/Error", description: task_closed }
+  /v1/tasks/{taskId}/answer:
+    parameters: [{ $ref: "#/components/parameters/TaskId" }]
+    post:
+      tags: [tasks]
+      operationId: answerTask
+      x-release: "1.6.0"
+      summary: Answer a question from an agent or a workflow
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TaskAnswer" } } } }
+      responses:
+        "200": { description: The task, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } }
+        "403": { $ref: "#/components/responses/Error", description: not_assignee }
+        "409": { $ref: "#/components/responses/Error", description: task_closed }
+  /v1/tasks/{taskId}/take-over:
+    parameters: [{ $ref: "#/components/parameters/TaskId" }]
+    post:
+      tags: [tasks]
+      operationId: takeOverTask
+      x-release: "1.6.0"
+      summary: Take the job from the team
+      responses:
+        "200": { description: The task now assigned to the caller, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } }
+  /v1/tasks/{taskId}/return:
+    parameters: [{ $ref: "#/components/parameters/TaskId" }]
+    post:
+      tags: [tasks]
+      operationId: returnTask
+      x-release: "1.6.0"
+      summary: Hand a taken-over job back, finished or not
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TaskReturn" } } } }
+      responses:
+        "200": { description: The task, content: { application/json: { schema: { $ref: "#/components/schemas/Task" } } } }
+  /v1/workflows/{workflowId}/tests:
+    parameters: [{ $ref: "#/components/parameters/WorkflowId" }]
+    get:
+      tags: [evals]
+      operationId: getTeamTests
+      x-release: "1.6.0"
+      summary: A workflow's team tests
+      responses:
+        "200": { description: Tests, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/TeamTest" } } } } }
+    put:
+      tags: [evals]
+      operationId: putTeamTests
+      x-release: "1.6.0"
+      summary: Replace a workflow's team tests
+      requestBody: { required: true, content: { application/json: { schema: { type: array, maxItems: 100, items: { $ref: "#/components/schemas/TeamTest" } } } } }
+      responses:
+        "200": { description: Tests, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/TeamTest" } } } } }
+  /v1/workflows/{workflowId}/test-runs:
+    parameters: [{ $ref: "#/components/parameters/WorkflowId" }]
+    post:
+      tags: [evals]
+      operationId: startTeamTestRun
+      x-release: "1.6.0"
+      summary: Run a workflow's team tests in the background
+      requestBody:
+        content: { application/json: { schema: { type: object, additionalProperties: false, properties: { names: { type: array, items: { type: string } } } } } }
+      responses:
+        "202": { description: Started, content: { application/json: { schema: { $ref: "#/components/schemas/RunRef" } } } }
+  /v1/workflow-test-runs/{runId}:
+    parameters: [{ $ref: "#/components/parameters/RunId" }]
+    get:
+      tags: [evals]
+      operationId: getTeamTestRun
+      x-release: "1.6.0"
+      summary: One team test run
+      responses:
+        "200": { description: The run, content: { application/json: { schema: { $ref: "#/components/schemas/TeamTestRun" } } } }
+components:
+  parameters:
+    AgentId: { name: agentId, in: path, required: true, schema: { type: string } }
+    ThreadId: { name: threadId, in: path, required: true, schema: { type: string } }
+    RunId: { name: runId, in: path, required: true, schema: { type: string } }
+    TaskId: { name: taskId, in: path, required: true, schema: { type: string } }
+    WorkflowId: { name: workflowId, in: path, required: true, schema: { type: string } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, schema: { type: string, maxLength: 200 } }
+  responses:
+    Error:
+      description: An error envelope
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [success, error]
+            properties:
+              success: { const: false }
+              error: { $ref: "#/components/schemas/Error" }
+    SpecInvalid:
+      description: spec_invalid, with every problem and its path in error.details.problems
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [success, error]
+            properties:
+              success: { const: false }
+              error: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      required: [code, message, status, requestId, kind, retryable]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        status: { type: integer }
+        requestId: { type: string }
+        kind: { type: string }
+        retryable: { type: boolean }
+        details: { type: object }
+    Pagination:
+      type: object
+      required: [page, pageSize, total]
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    AgentSpec:
+      description: The agent spec document. Its schema is agent-spec-schema.yaml in this folder.
+      type: object
+      required: [apiVersion, name]
+      properties:
+        apiVersion: { const: ops.ai/v2 }
+        name: { type: string }
+    SpecSave:
+      type: object
+      additionalProperties: false
+      required: [spec]
+      properties:
+        spec: { $ref: "#/components/schemas/AgentSpec" }
+        baseVersion: { type: [integer, "null"] }
+        baseDigest: { type: [string, "null"] }
+        note: { type: [string, "null"], maxLength: 400 }
+    SpecView:
+      type: object
+      required: [agentId, version, digest, status, spec, canEdit]
+      properties:
+        agentId: { type: string }
+        version: { type: integer }
+        digest: { type: string, description: SHA-256 over the canonical JSON of the spec }
+        status: { enum: [draft, published] }
+        spec: { $ref: "#/components/schemas/AgentSpec" }
+        canEdit: { type: boolean }
+    SpecProblem:
+      type: object
+      required: [path, code, message]
+      properties:
+        path: { type: string, description: JSON pointer into the spec }
+        code: { type: string }
+        message: { type: string }
+    SpecCheck:
+      type: object
+      required: [ok, problems, summary]
+      properties:
+        ok: { type: boolean }
+        problems: { type: array, items: { $ref: "#/components/schemas/SpecProblem" } }
+        summary:
+          type: object
+          properties:
+            loop: { type: string }
+            tools: { type: integer }
+            helpers: { type: integer }
+            evalCases: { type: integer }
+            sandbox: { type: boolean }
+    SpecDiff:
+      type: object
+      required: [against, changes]
+      properties:
+        against: { enum: [draft, live] }
+        changes:
+          type: array
+          items:
+            type: object
+            required: [op, path]
+            properties:
+              op: { enum: [add, remove, replace] }
+              path: { type: string }
+              before: {}
+              after: {}
+    SectionName:
+      enum: [basics, instructions, tools, knowledge, skills, helpers, guardrails, output, limits, tests, loop, sandbox, hooks]
+    SpecDraftIn:
+      type: object
+      additionalProperties: false
+      required: [description]
+      properties:
+        description: { type: string, minLength: 1, maxLength: 8000 }
+        draft: { oneOf: [{ $ref: "#/components/schemas/AgentSpec" }, { type: "null" }] }
+        accepted: { type: array, items: { $ref: "#/components/schemas/SectionName" } }
+        message: { type: [string, "null"], maxLength: 4000 }
+        agentId: { type: [string, "null"] }
+    DraftSection:
+      type: object
+      required: [name, title, status, why, patch, items, problems]
+      properties:
+        name: { $ref: "#/components/schemas/SectionName" }
+        title: { type: string }
+        status: { enum: [proposed, unchanged, empty, needs_change] }
+        why: { type: string }
+        patch: { type: object }
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, name, kind]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              description: { type: string }
+              kind: { type: string }
+              access: { enum: [read, write] }
+        problems: { type: array, items: { $ref: "#/components/schemas/SpecProblem" } }
+    SpecDraft:
+      type: object
+      required: [spec, sections, reply, usage]
+      properties:
+        spec: { $ref: "#/components/schemas/AgentSpec" }
+        sections: { type: array, minItems: 13, maxItems: 13, items: { $ref: "#/components/schemas/DraftSection" } }
+        reply: { type: string, maxLength: 600 }
+        usage:
+          type: object
+          properties:
+            modelCalls: { type: integer }
+            costUsd: { type: number }
+    SpecTryIn:
+      type: object
+      additionalProperties: false
+      required: [spec, say]
+      properties:
+        spec: { $ref: "#/components/schemas/AgentSpec" }
+        say: { type: string, minLength: 1, maxLength: 8000 }
+        threadId: { type: [string, "null"] }
+    ModeStep:
+      type: object
+      required: [mode, reason, atStep, fixed]
+      properties:
+        mode: { enum: [direct, plan, helpers, sandbox] }
+        reason: { type: string, maxLength: 200 }
+        atStep: { type: integer }
+        fixed: { type: boolean, description: True when the builder set the loop kind }
+    SpecTryOut:
+      type: object
+      required: [threadId, events, reply, modes]
+      properties:
+        threadId: { type: string }
+        events: { type: array, items: { type: object } }
+        reply: { type: string }
+        modes: { type: array, items: { $ref: "#/components/schemas/ModeStep" } }
+    LoopKind:
+      type: object
+      required: [kind, name, description, whenToUse, settingsSchema, requires, available]
+      properties:
+        kind: { type: string }
+        name: { type: string }
+        description: { type: string }
+        whenToUse: { type: string }
+        settingsSchema: { type: object }
+        requires: { type: array, items: { enum: [agents, sandbox, workflow, rubric] } }
+        available: { type: boolean }
+        unavailableReason: { type: [string, "null"] }
+    TraceStep:
+      type: object
+      required: [index, kind, startedAt]
+      properties:
+        index: { type: integer }
+        kind: { enum: [model, tool, mode, plan, agent_asked, handoff, interrupt, guardrail, sandbox_command, sandbox_request] }
+        title: { type: string }
+        startedAt: { type: string, format: date-time }
+        durationMs: { type: integer }
+        status: { enum: [ok, error, refused, paused, replayed] }
+        model: { type: string }
+        tokens:
+          type: object
+          properties: { input: { type: integer }, output: { type: integer }, cached: { type: integer } }
+        costUsd: { type: number }
+        tool: { type: string }
+        callId: { type: string }
+        detail: { type: object, description: Masked like run data }
+    RunTrace:
+      type: object
+      required: [runId, threadId, agentId, agentVersion, loop, modes, steps, stopReason]
+      properties:
+        runId: { type: string }
+        threadId: { type: string }
+        agentId: { type: string }
+        agentVersion: { type: integer }
+        loop: { type: string }
+        modes: { type: array, items: { $ref: "#/components/schemas/ModeStep" } }
+        steps: { type: array, items: { $ref: "#/components/schemas/TraceStep" } }
+        stopReason: { type: string }
+        costUsd: { type: number }
+        budget:
+          type: object
+          properties: { limitUsd: { type: number }, spentUsd: { type: number } }
+    InterruptAnswer:
+      type: object
+      additionalProperties: false
+      required: [interruptId, kind]
+      properties:
+        interruptId: { type: string }
+        kind: { enum: [approval, question, plan_review] }
+        decision: { enum: [approved, rejected], description: Required for approval and plan_review }
+        edited: { type: object, description: Corrected tool input, when the approval allows edits }
+        answer: { type: object, description: Required for question; matches the interrupt's schema }
+        note: { type: string, maxLength: 2000 }
+    InterruptAnswered:
+      type: object
+      required: [interruptId, status, runId]
+      properties:
+        interruptId: { type: string }
+        status: { enum: [recorded, already_recorded] }
+        runId: { type: string, description: The run that continues the turn }
+    EvalRunStart:
+      type: object
+      additionalProperties: false
+      properties:
+        caseNames: { type: array, items: { type: string } }
+        repeat: { type: integer, minimum: 1, maximum: 5 }
+        version: { type: integer, minimum: 1 }
+    RunRef:
+      type: object
+      required: [runId]
+      properties:
+        runId: { type: string }
+    CheckResult:
+      type: object
+      required: [label, status]
+      properties:
+        label: { type: string }
+        status: { enum: [passed, failed, skipped] }
+        reason: { type: [string, "null"] }
+    EvalCaseResult:
+      type: object
+      required: [name, status, checks, reply, modes, tools, costUsd, seconds]
+      properties:
+        name: { type: string }
+        status: { enum: [passed, failed, error] }
+        checks: { type: array, items: { $ref: "#/components/schemas/CheckResult" } }
+        reply: { type: string }
+        modes: { type: array, items: { type: string } }
+        tools: { type: array, items: { type: string } }
+        costUsd: { type: number }
+        seconds: { type: number }
+        traceId: { type: [string, "null"] }
+        baseline: { enum: [passed, failed, error, null] }
+    EvalRun:
+      type: object
+      required: [id, agentId, version, specDigest, status, cases]
+      properties:
+        id: { type: string }
+        agentId: { type: string }
+        version: { type: integer }
+        specDigest: { type: string }
+        status: { enum: [running, done, failed] }
+        passRate: { type: [number, "null"] }
+        required: { type: number }
+        costUsd: { type: number }
+        cases: { type: array, items: { $ref: "#/components/schemas/EvalCaseResult" } }
+    EvalRunEvent:
+      oneOf:
+        - type: object
+          required: [type, case]
+          properties: { type: { const: case }, case: { $ref: "#/components/schemas/EvalCaseResult" } }
+        - type: object
+          required: [type, passRate]
+          properties: { type: { const: done }, passRate: { type: number }, required: { type: number } }
+    ThreadSandbox:
+      type: object
+      required: [state, image, size, fileCount, diskBytes, limits]
+      properties:
+        state: { enum: [starting, running, saving, asleep, failed] }
+        image: { type: string }
+        size: { enum: [small, standard, large] }
+        fileCount: { type: integer }
+        diskBytes: { type: integer }
+        diskLimitBytes: { type: integer }
+        lastActiveAt: { type: string, format: date-time }
+        limits:
+          type: object
+          properties: { commandSeconds: { type: integer }, idleSeconds: { type: integer }, memoryBytes: { type: integer }, cpu: { type: number } }
+        network:
+          type: object
+          properties: { allow: { type: array, items: { type: string } } }
+    SandboxFile:
+      type: object
+      required: [path, size, origin, at]
+      properties:
+        path: { type: string }
+        size: { type: integer }
+        sha256: { type: string }
+        origin: { enum: [person, agent, builder] }
+        by: { type: string }
+        at: { type: string, format: date-time }
+        readOnly: { type: boolean }
+    SandboxFileList:
+      type: object
+      required: [data, pagination, facets]
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/SandboxFile" } }
+        pagination: { $ref: "#/components/schemas/Pagination" }
+        facets: { type: object }
+    SaveFileIn:
+      type: object
+      additionalProperties: false
+      required: [to]
+      properties:
+        to: { enum: [files, knowledge] }
+        folderId: { type: string }
+        collectionId: { type: string }
+        name: { type: string, maxLength: 255 }
+    SavedFile:
+      type: object
+      required: [to, id, name]
+      properties:
+        to: { enum: [files, knowledge] }
+        id: { type: string }
+        name: { type: string }
+    SandboxActivity:
+      type: object
+      required: [id, kind, at, status]
+      properties:
+        id: { type: string }
+        kind: { enum: [command, request] }
+        at: { type: string, format: date-time }
+        status: { enum: [ok, error, refused, stopped] }
+        runId: { type: string }
+        command: { type: string }
+        exitCode: { type: integer }
+        durationMs: { type: integer }
+        stoppedBy: { enum: [time, memory, disk, cancel, null] }
+        filesChanged: { type: array, items: { type: string } }
+        host: { type: string }
+        method: { type: string }
+        pathPrefix: { type: string }
+        httpStatus: { type: integer }
+        decidedBy: { type: string, description: Which rule allowed or refused the request }
+        allowedBy: { type: string, description: Who can allow a refused host }
+    SandboxActivityList:
+      type: object
+      required: [data, pagination, facets]
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/SandboxActivity" } }
+        pagination: { $ref: "#/components/schemas/Pagination" }
+        facets: { type: object }
+    SandboxOptions:
+      type: object
+      required: [available, images, sizes]
+      properties:
+        available: { type: boolean }
+        unavailableReason: { type: [string, "null"] }
+        backend: { enum: [sprites, docker, kubernetes] }
+        isolation: { enum: [microvm, gvisor, container] }
+        images:
+          type: array
+          items: { type: object, required: [id, name], properties: { id: { type: string }, name: { type: string }, packages: { type: array, items: { type: string } } } }
+        sizes:
+          type: array
+          items:
+            type: object
+            required: [id, cpu, memoryBytes, diskBytes, commandSeconds]
+            properties: { id: { type: string }, cpu: { type: number }, memoryBytes: { type: integer }, diskBytes: { type: integer }, commandSeconds: { type: integer } }
+        tenantHosts: { type: array, items: { type: string }, description: "Hosts the tenant's list allows, for the agent's narrower list" }
+    WebTools:
+      type: object
+      required: [searchOn, fetchOn]
+      properties:
+        searchOn: { type: boolean }
+        fetchOn: { type: boolean }
+        searchConnectionId: { type: [string, "null"] }
+        callsToday: { type: integer }
+    WebToolsIn:
+      type: object
+      additionalProperties: false
+      properties:
+        searchOn: { type: boolean }
+        fetchOn: { type: boolean }
+        searchConnectionId: { type: [string, "null"] }
+    BudgetIn:
+      type: object
+      additionalProperties: false
+      properties:
+        maxCostUsd: { type: [number, "null"], exclusiveMinimum: 0 }
+        maxCalls: { type: [integer, "null"], minimum: 1 }
+        maxTokens: { type: [integer, "null"], minimum: 1 }
+        parentId: { type: [string, "null"] }
+        expiresAt: { type: [string, "null"], format: date-time }
+    Budget:
+      type: object
+      required: [id, spentUsd, calls, tokens]
+      properties:
+        id: { type: string }
+        maxCostUsd: { type: [number, "null"] }
+        maxCalls: { type: [integer, "null"] }
+        maxTokens: { type: [integer, "null"] }
+        spentUsd: { type: number }
+        reservedUsd: { type: number }
+        calls: { type: integer }
+        tokens: { type: integer }
+        exhausted: { type: boolean }
+    TeamLayout:
+      type: object
+      required: [id, name, description, fragment]
+      properties:
+        id: { enum: [lead, pass_on, draft_check] }
+        name: { type: string }
+        description: { type: string }
+        fragment: { type: object, description: "Steps, connections and one group, ready to insert into a definition" }
+    TurnRow:
+      type: object
+      required: [step, iteration, member, memberKind, kind, startedAt]
+      properties:
+        step: { type: string }
+        iteration: { type: integer }
+        group: { type: [string, "null"] }
+        member: { type: string }
+        memberName: { type: string }
+        memberKind: { enum: [agent, person] }
+        kind: { enum: [work, asked, answered, handoff, check] }
+        summary: { type: string, maxLength: 400 }
+        to: { type: [string, "null"], description: The member asked or handed to }
+        costUsd: { type: number }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: [string, "null"], format: date-time }
+        waitedSeconds: { type: integer }
+        traceId: { type: [string, "null"] }
+    TurnList:
+      type: object
+      required: [data, pagination, facets]
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/TurnRow" } }
+        pagination: { $ref: "#/components/schemas/Pagination" }
+        facets: { type: object }
+    NoteRow:
+      type: object
+      required: [id, by, byKind, byName, at, text]
+      properties:
+        id: { type: string }
+        group: { type: [string, "null"] }
+        by: { type: string }
+        byKind: { enum: [agent, person] }
+        byName: { type: string }
+        at: { type: string, format: date-time }
+        text: { type: string, maxLength: 2000 }
+        sources: { type: array, items: { type: object } }
+    NoteList:
+      type: object
+      required: [data, pagination, facets]
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/NoteRow" } }
+        pagination: { $ref: "#/components/schemas/Pagination" }
+        facets: { type: object }
+    RunCancel:
+      type: object
+      additionalProperties: false
+      properties:
+        undo: { type: boolean, default: false }
+        reason: { type: string, maxLength: 400 }
+    TaskKind:
+      enum: [approve, answer, take_over]
+    Task:
+      type: object
+      required: [id, kind, title, status, createdAt, assignedTo]
+      properties:
+        id: { type: string }
+        kind: { $ref: "#/components/schemas/TaskKind" }
+        title: { type: string }
+        body: { type: string }
+        status: { enum: [open, done, expired, withdrawn] }
+        runId: { type: [string, "null"] }
+        threadId: { type: [string, "null"] }
+        step: { type: [string, "null"] }
+        askedBy: { type: string, description: The member or step that opened the task }
+        assignedTo:
+          type: object
+          properties: { role: { type: [string, "null"] }, people: { type: array, items: { type: string } }, takenBy: { type: [string, "null"] } }
+        thenAsk: { type: array, items: { type: string } }
+        roleStep: { type: integer, description: The place in the thenAsk list }
+        dueAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        schema: { type: [object, "null"], description: The fields an answer must carry }
+        change: { type: [object, "null"], description: "For approve: the tool, its input and whether it may be corrected" }
+        notes: { type: array, items: { $ref: "#/components/schemas/NoteRow" } }
+        canAct: { type: boolean }
+        cannotActReason: { type: [string, "null"] }
+    TaskList:
+      type: object
+      required: [data, pagination, facets]
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/Task" } }
+        pagination: { $ref: "#/components/schemas/Pagination" }
+        facets: { type: object }
+    TaskDecision:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision: { enum: [approved, rejected] }
+        edited: { type: object }
+        note: { type: string, maxLength: 2000 }
+    TaskAnswer:
+      type: object
+      additionalProperties: false
+      properties:
+        text: { type: string, maxLength: 8000 }
+        fields: { type: object }
+    TaskReturn:
+      type: object
+      additionalProperties: false
+      required: [note]
+      properties:
+        finished: { type: boolean, default: true }
+        output: { type: object }
+        note: { type: string, minLength: 1, maxLength: 2000 }
+    TeamTest:
+      type: object
+      additionalProperties: false
+      required: [name, start, expect]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        start: { type: object }
+        members: { type: object, additionalProperties: { type: object, required: [reply], properties: { reply: {} } } }
+        people:
+          type: object
+          additionalProperties:
+            type: object
+            properties: { answer: { type: string }, decision: { enum: [approved, rejected] } }
+        advance:
+          type: object
+          properties: { minutes: { type: integer, minimum: 1 } }
+        expect:
+          type: object
+          additionalProperties: false
+          minProperties: 1
+          properties:
+            turns: { type: array, items: { type: string } }
+            turnsInclude: { type: array, items: { type: string } }
+            handoffs: { type: array, items: { type: array, minItems: 2, maxItems: 2, items: { type: string } } }
+            asks: { type: array, items: { type: array, minItems: 2, maxItems: 2, items: { type: string } } }
+            notes: { type: object, properties: { contains: { type: array, items: { type: string } } } }
+            leavesBy: { type: string }
+            output: { type: object }
+            tasks: { type: array, items: { type: object, properties: { role: { type: string }, kind: { $ref: "#/components/schemas/TaskKind" } } } }
+            maxTurns: { type: integer, minimum: 1 }
+            maxCostUsd: { type: number, exclusiveMinimum: 0 }
+    TeamTestRun:
+      type: object
+      required: [id, workflowId, status, results]
+      properties:
+        id: { type: string }
+        workflowId: { type: string }
+        status: { enum: [running, done, failed] }
+        results:
+          type: array
+          items:
+            type: object
+            required: [name, status, checks]
+            properties:
+              name: { type: string }
+              status: { enum: [passed, failed, error, waiting] }
+              checks: { type: array, items: { $ref: "#/components/schemas/CheckResult" } }
+              engineRunId: { type: [string, "null"] }
+              costUsd: { type: number }
