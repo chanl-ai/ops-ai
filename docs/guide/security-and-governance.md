@@ -2,9 +2,41 @@
 
 Status: current. Checked against the release's sign-in, gateway, policy and storage code.
 
+**Answer the risk review's questions from one place: who signed in, what they may do, what a write needs, where a call
+may go and what is kept as evidence.**
+
+## The pilot works, then the risk review asks
+
+A card team's agent drafts dispute credits well. Then the reviewer asks who approved the credit, what the agent could
+reach, which hosts it called and where the record is. A claims team and a lender get the same questions. If the answers
+live in each agent's code, each new use case waits on a new review, and one unreviewed write to a customer's account can
+end the programme.
+
 Ops AI is built so that software can draft any change and only a person can let one through. The controls below are
 layered: who you are (sign-in), what you may do in a team (roles), what a single write needs (approvals), where a call
 may go (the gateways and the allow-list), and what is kept as evidence (audit).
+
+## The plan
+
+<!-- site: steps -->
+1. **Sign people in** with your identity provider, or a password where there is none.
+2. **Give each person a role per team.** The grid says what each role may do.
+3. **Choose which writes wait** for a person, and how many approvers they need.
+4. **Allow only the hosts your agents need.** The outbound list starts empty.
+5. **Hand the reviewer the evidence.** The audit log, the tool call log and the run journal answer who, what and when.
+
+## Try it
+
+See who you are and what your role may do, then find what a write needs.
+
+```bash
+opsai people me
+opsai people roles
+opsai tasks list --view open
+```
+
+In the console the same views are under **Govern › Access** (roles and tool access), **Govern › Policies** (approvals
+and the allow-list) and **Settings › Approvals**.
 
 ## Sign-in and SSO
 
@@ -123,6 +155,16 @@ Keep `OPS_SECRETS_KEY` with your backups: stored credentials cannot be read with
 Every security-relevant change and every call to the outside is recorded: the audit log, the tool call log, the
 credential, allow-list, connection and storage audits, the run journal, each review decision and the model call log.
 Details and status are in [Data and database](data-and-database.md#the-audit-trail).
+
+## What success looks like
+
+A reviewer asks who approved a change and which hosts the agent reached, and the answer is a log row, not a search. A
+write waits for a named person on the exact input they saw. Nothing is reachable until a Security admin adds the host.
+
+## What skipping it costs
+
+Without these controls, each agent is reviewed on its own, the first unreviewed write to a customer's account ends the
+pilot, and an auditor's question takes days of reading code.
 
 ## Platform hardening
 

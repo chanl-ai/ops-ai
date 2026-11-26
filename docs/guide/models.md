@@ -2,10 +2,34 @@
 
 Status: current. Checked against the release's models service and agents service.
 
+**Point every agent at your own model endpoint, and cap what each one may spend and which data it may receive.**
+
+## A model key in every agent is a bill nobody owns
+
+A team that gives each agent its own provider key cannot say what one chat cost, which agent ran away with the budget, or
+whether a confidential document went to a model that was never cleared for it. A lending team wants a private model for
+borrower files, and a marketing team is happy with a cheaper public one. Rotating a leaked key means finding every agent
+that held it.
+
 Every model call in Ops AI, from an agent's turn, a workflow's AI step or a document read, goes through one internal
 service: the AI gateway (models-service). It knows which key is calling, what that key may still spend, which model a
 name points at, and how sensitive the data is that the model may receive. Services hold a model key; none holds your
 provider's credential.
+
+## The plan
+
+<!-- site: steps -->
+1. **Connect your endpoint.** The operator binds an alias such as `default` to a model on any OpenAI-compatible
+   endpoint, with its price and the highest data level it may receive.
+2. **Save the provider's key once.** An account admin saves it under **Settings › Model providers**. No team sees it.
+3. **Issue a capped key per caller.** Agents, documents and each workflow hold a model key with its own budget and rate.
+4. **Read the call log.** Every call records tokens, cost, latency and outcome, with no prompt or answer text.
+
+## Try it
+
+Try the platform with no provider and no key: the release package includes a [test model](#the-test-model) that answers
+from fixed rules. When you are ready for a real endpoint, bind the alias with the connect-model command
+([Connect a model](../deploy/compose.md#connect-a-model)); it prints a model key once.
 
 ```mermaid
 flowchart TB
@@ -67,6 +91,17 @@ refused by an alias not cleared for them, and every call records how many it car
 | The gateway's check of a call's level against the alias's clearance | Built |
 | Callers marking each call with the level of its data | Planned: today every call is treated as internal, so an alias must be cleared for internal to serve |
 | Page images for document reads only where the document type, the team's policy and the alias all allow them | Built |
+
+## What success looks like
+
+An agent answers through the alias `default`. Moving that alias to another model is one new version, and no agent
+changes. A key that reaches its cap is refused with `key_budget_exhausted` and the call is logged. A reviewer who asks
+what a chat cost reads the call log, and the provider's key is held in one place.
+
+## What skipping it costs
+
+Without the gateway, each agent holds a provider key. One leak exposes the provider account, spend cannot be capped per
+caller, and nothing stops confidential data reaching a model that was never cleared for it.
 
 ## The test model
 
