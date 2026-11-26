@@ -16,11 +16,10 @@ Then the pilot goes well, and the risk review asks three questions: who approved
 account, which version of the agent ran, and what data it could reach. Most agent tools can't answer them, so the
 team either stops at the pilot or builds approvals, versions and an audit trail by hand for every new use case.
 
-## What waiting costs
+## What a stalled pilot costs you
 
-For every week the pilot stays a pilot, your team still works the queue by hand. Each use case that needs its own
-hand-built approvals and audit trail slows down the next one. And a single unreviewed change to a customer's account
-can be enough to end the programme.
+While the pilot waits, your team keeps working the queue by hand. Each use case that needs its own
+hand-built approvals and audit trail slows down the next one. And a single unreviewed change to a customer's account could end the programme.
 
 ## How Ops AI answers the risk review
 
@@ -81,5 +80,5 @@ the approval is already on the case.
 
 ## Read next
 
-- [Build an agent](guide/use-cases/build-an-agent.md): go from a first draft to a published agent your team can chat with.
-- [How work flows](guide/how-work-flows.md): how a request becomes a run, a task for a person, and a record.
+- [Build an agent](guide/use-cases/build-an-agent.md): take an agent from a first draft to a published version your team can chat with.
+- [How work flows](guide/how-work-flows.md): see how a request becomes a run, a task for a person and a record.

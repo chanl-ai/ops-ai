@@ -1,8 +1,6 @@
 # Agents
 
-Status: current. Rows marked planned are designed and not built.
-
-**Give your team an assistant that answers from your own procedures and calls your systems, inside limits you set.**
+Status: current.
 
 ## Some work never follows the same steps twice
 
@@ -10,12 +8,11 @@ A staff member asks a question, or a request needs a few lookups before anyone k
 cover that, and a loose chatbot with no limits cannot be trusted near a customer's account. Without something in
 between, the team keeps answering the same questions by hand.
 
-An agent is a model with instructions, tools, knowledge, skills, guardrails and a budget. Inside those limits it
-chooses its own next step. People reach it through chat, other systems through the API, and a workflow through an Agent
-step. Skipping the limits is the costly part: an agent with no budget, no approval on its writes and no knowledge of
-your documents guesses, and a guess that writes to an account is the one a risk review stops.
+An agent is a model with instructions, tools, knowledge, skills, guardrails and a budget, and inside those limits it
+chooses its own next step. You can reach it through chat or the API, and a workflow can call it with an agent step. If you give an agent no budget, no approval on its writes and no access to your documents, it has to guess. A risk
+review will stop a guess that changes a customer's account.
 
-## Try it
+## Write and test your first agent
 
 Save this as `agent.yaml`:
 
@@ -27,7 +24,7 @@ memory:
   enabled: false
 ```
 
-Then save it as a draft and try it, before anyone publishes it:
+Then save it as a draft and test it before anyone publishes it:
 
 ```bash
 opsai agents validate agent.yaml
@@ -39,6 +36,8 @@ The same agent opens under **Build › Agents** in the console, where its **Test
 
 ## What an agent is made of
 
+Rows marked planned are designed and not yet built.
+
 | Part | What it does | Status |
 |---|---|---|
 | Instructions | What the agent is for and how it answers | built |
@@ -49,7 +48,7 @@ The same agent opens under **Build › Agents** in the console, where its **Test
 | Guardrails | Topics it must refuse, checked on the question and on the answer; the reply names the guardrail | built for blocked topics. Other kinds planned |
 | Budget | The most model calls and tool calls in one turn; the reply says when it stopped | built |
 
-## Lifecycle
+## From draft to published agent
 
 | Step | Command | What it does |
 |---|---|---|
@@ -78,15 +77,15 @@ ops.agents.chat(draft["id"], "What documents open a business account?")
 and the run and eval methods in the TypeScript SDK, are planned.
 
 A background run lives in the program that started it and is lost if that program exits before the reply is on the
-thread. `opsai agents run --mode background` exits as soon as it prints the ids, so its run is lost; use it from a
+thread. `opsai agents run --mode background` exits as soon as it prints the ids, so its run is lost. Use background mode from a
 program that keeps running. Runs that carry on without the caller are planned.
 
-`ops.agents.schedule(id, message, due_at=...)` arms one run at a due time; the same key runs once. Repeating schedules
+`ops.agents.schedule(id, message, due_at=...)` arms one run for a due time, and the same key runs only once. Repeating schedules
 are planned.
 
 [Agent examples](examples/agents.md) shows each of these in Python, TypeScript and the command line.
 
-## Agent or workflow
+## Choosing between an agent and a workflow
 
 <!-- site: decision caption="Whether a piece of work is an agent in chat or a workflow" -->
 - **Are the steps the same every time?**
@@ -102,13 +101,13 @@ password again ([Human tasks and approvals](human-tasks.md)).
 
 ## What success looks like
 
-The agent answers from your instructions and cites the page and section of your documents. A write waits for a person
-before it reaches your system. A published version stays as it was while you edit the next one.
+Your agent answers from its instructions and cites the page and section of your documents. A change that needs approval
+waits for a person before it reaches your system. Your published version stays as it was while you edit the next one.
 
 ## Next
 
 <!-- site: cards -->
-- **[Build with Ops AI](build-with-ops-ai.md)**: example agents from one question to one that starts a workflow.
+- **[Build with Ops AI](build-with-ops-ai.md)**: work through example agents, from one question to one that starts a workflow.
 - **[Knowledge](knowledge.md)**: give the agent your team's documents.
-- **[Tools and apps](apps.md)**: let the agent read and write your systems.
-- **[Chat and channels](ops-assistant.md)**: where people talk to it.
+- **[Tools and apps](apps.md)**: let the agent read and change your systems.
+- **[Chat and channels](ops-assistant.md)**: see where people talk to it.

@@ -1,27 +1,25 @@
 # Overview
 
-Status: current. Checked against the code of this release.
+Status: current.
 
-**See the whole platform on one page: what it does for your team, who touches it, and where each piece sits.**
+## Routine work fills your team's day
 
-## Routine work eats the team
+An operations team spends its day on work that follows a pattern. A court notice arrives and someone opens a case, a
+complaint email needs triage, an account needs a hold, or a colleague asks what the procedure says. Software could do
+the reading and drafting. In a regulated business, though, software cannot change a customer's account unless a person
+decides, and every step has to leave a record that an auditor can read.
 
-An operations team spends its day on work that follows a pattern: a court notice arrives and someone opens a case, a
-complaint email needs triage, an account needs a hold, a colleague asks what the procedure says. Software could do the
-reading and drafting. In a regulated business it cannot be allowed to change a customer's account without a person
-deciding, and every step has to leave a record an auditor can read.
+## Why one-off automations fall short
 
-## What skipping it costs
-
-Without a platform that carries those controls, each automation is a one-off script or a pilot that the risk function
-has to review from scratch. The team keeps retyping the same request across systems, and the audit answer is rebuilt by
-hand each time someone asks.
+Without a platform that carries those controls, each automation is a one-off script, or a pilot that your risk function
+has to review from scratch. Your team keeps retyping the same request across systems, and someone rebuilds the audit
+answer by hand each time it is asked for.
 
 ## What Ops AI does
 
-Ops AI is an operational AI platform that hands routine back-office work to software while the team decides which
-writes to its other systems wait for a person, such as anything that moves money. Every step leaves a record. It runs
-on your own infrastructure, against a database your DBA controls and a model endpoint you choose. Nothing calls home.
+Ops AI is an operational AI platform that hands routine back-office work to software. Your team decides which changes to
+its other systems wait for a person, such as anything that moves money, and every step leaves a record. It runs on your
+own infrastructure, against a database your DBA controls and a model endpoint you choose. Nothing calls home.
 
 ## In three parts
 
@@ -66,7 +64,7 @@ Read it from the top: where work comes in, what runs it, and the one way out to 
   - **Your systems**: Over REST, MCP and mail
   - **Your model endpoint**: The provider you choose
 
-## Ideas the design rests on
+## Principles behind the design
 
 | Idea | What it means for you |
 |---|---|
@@ -94,13 +92,13 @@ Read it from the top: where work comes in, what runs it, and the one way out to 
 
 ## What success looks like
 
-A new process is configured, not coded: a builder writes the agents and workflows, publishes them through a second
-person's review, and the team starts using them the same day. When the risk team asks about a change, the answer is on
-the record: who approved it, which version ran, and what it could reach.
+A builder configures a new process by writing its agents and workflows and publishing them through a second person's
+review, and the team can start using them the same day. When the risk team asks about a change, the answer is already on
+the record: who approved it, which version ran and what it could reach.
 
 ## Next
 
 <!-- site: cards -->
 - **[Quickstart](quickstart.md)**: run Ops AI on one machine.
-- **[How work flows](how-work-flows.md)**: a chat turn, a workflow run and an email to case, step by step.
-- **[Agents](agents.md)** and **[Workflows](workflows.md)**: the two ways to run work.
+- **[How work flows](how-work-flows.md)**: follow a chat turn, a workflow run and an email that becomes a case, step by step.
+- **[Agents](agents.md)** and **[Workflows](workflows.md)**: learn the two ways to run work.

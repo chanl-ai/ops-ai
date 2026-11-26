@@ -1,27 +1,26 @@
 # Workflows
 
-Status: current. Rows marked planned are designed and not built.
-
-**Run a process the same way every time, with a person approving the steps that matter and a record of every run.**
+Status: current.
 
 ## A process that depends on who is at the desk
 
-Open a case for each court order, place a hold only after a person approves, reply on the channel the request came in
-on. Done by hand, each of these changes with the person doing it, and the record of what happened lives in an email
-thread. Done by a script, a crash halfway can repeat a write to a customer's account.
+Suppose you must open a case for each court order, place a hold only after a person approves it, and reply on the
+channel the request arrived on. If people do these steps by hand, each step varies with who does it, and the record ends
+up in an email thread. If a script does them, a crash halfway can repeat a change to a customer's account.
 
 ## What it costs to leave it manual
 
-Every request is retyped across systems, approvals are lost between inboxes, and the audit answer is rebuilt by hand.
-A workflow is a versioned graph of typed steps that removes that. Each step's input and output is saved as it runs, so
-a crash or a restart loses nothing and a write is never made twice. Some steps are AI (an agent, a classification, an
-extraction); the rest are rules, tool calls and people deciding.
+Without a workflow, every request is retyped across systems, approvals get lost between inboxes, and someone rebuilds
+the audit answer by hand. A workflow is a versioned graph of typed steps that removes that work. Each step's input and
+output is saved as it runs, so a crash or a restart loses nothing and a write is never made twice. Some steps run an AI task,
+such as an agent, a classification or an extraction. The other steps apply rules, call tools or wait for a person to decide. Rows marked
+planned on this page are designed and not yet built.
 
-## Try it
+## Route a support message with an AI step
 
 The [Quickstart](quickstart.md#run-your-first-workflow) writes a three-step workflow and runs it. This one adds an AI
-step: it puts a support message into billing or technical, and leaves by `otherwise` below a confidence of 0.6. Save it
-as `route.yaml`:
+step. It sorts a support message into billing or technical, and sends it out by `otherwise` when its confidence is below
+0.6. Save it as `route.yaml`:
 
 ```yaml
 schemaVersion: 2
@@ -71,7 +70,7 @@ The sample message ends with the outcome `billing`. A model answer outside the c
 
 You do not need the console to build a workflow, but it shows and edits the same graph under **Build › Workflows**.
 
-## Lifecycle
+## From draft to live run
 
 Every command reads its address and sign-in from your profile ([Install the command line](install-cli.md#sign-in)).
 
@@ -90,7 +89,7 @@ Every command reads its address and sign-in from your profile ([Install the comm
 | Redrive | `opsai runs redrive <run-id>`, `opsai runs bulk redrive --code tool_failed` | Runs a Failed or Stuck run again from the step that failed, on the version it started on, once you have fixed the cause. Steps that finished return what they recorded and run nothing. A failed write is sent again, on its earlier approval, only when its answer proves it did nothing; any other is settled by the gateway's record first ([recovery and redrive](../security/recovery-and-redrive.md)). `bulk` redrives or cancels every run of your team that a filter matches (workflow, kind, code, time) |
 | Replay, fork, evaluate | `opsai workflows replay`, `fork`, `eval` | Planned |
 
-From Python; TypeScript has the same method names on `ops.workflows`, taking a parsed object or JSON:
+From Python, it looks like this. TypeScript has the same method names on `ops.workflows`, and they take a parsed object or JSON:
 
 ```python
 from ops_ai import OpsAI
@@ -148,7 +147,7 @@ person pauses the run at no cost until they decide. A new version changes only t
 ## Next
 
 <!-- site: cards -->
-- **[Build with Ops AI](build-with-ops-ai.md)**: nineteen example workflows, from mapping one field to a child workflow per record.
+- **[Build with Ops AI](build-with-ops-ai.md)**: work through nineteen example workflows, from mapping one field to a child workflow per record.
 - **[Workflow examples](examples/workflows.md)**: check, publish, run, decide and fix a workflow in Python, TypeScript and the command line.
 - **[Human tasks and approvals](human-tasks.md)**: pause a run for a person.
 - **[Cases](cases.md)**: open a case from a run.

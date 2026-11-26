@@ -1,32 +1,31 @@
 # How work flows
 
-Status: current. Each flow below is exercised end to end by the release's automated use cases.
-
-**Know what happens between a request and a record, so you can trust a run and answer a reviewer who asks.**
+Status: current.
 
 ## A reviewer will ask what the AI did
 
 An agent that can change a customer's account is only useful if you can say exactly what it did, who approved it and
-what happens when something fails halfway. Most agent tools cannot say, so teams either keep a person in every step or
-hold the pilot back. This page follows three real flows end to end: a person chats with an agent that wants to change
-something, a workflow pauses for a person and resumes days later, and an email becomes cases that people decide.
+what happens when something fails halfway. Most agent tools cannot answer that, so teams put a person in every step or
+hold the pilot back. This page follows three real flows from start to finish: a person chats with an agent that wants
+to change something, a workflow pauses for a person and resumes days later, and an email becomes cases that people
+decide. The release's automated use cases run each of these flows end to end.
 
-## What not knowing costs
+## Why the answers matter
 
 Without this picture you cannot tell a reviewer where an approval is enforced, or what a crash does to a half-finished
-write. The answers below are the same in all three flows: a write that needs approval waits for a token bound to its
-exact input, every outside call leaves through a gateway, and a run's state is saved after every step so a crash or a
-restart loses nothing.
+write. The answers are the same in all three flows. A write that needs approval waits for a token tied to its exact input.
+Every outside call goes through a gateway, and Ops AI saves a run's state after each step, so a crash or a restart
+loses nothing.
 
-## The three flows
+## Run the flows yourself
 
 To run the flows yourself, start at [Build with Ops AI](build-with-ops-ai.md).
 
 ## A chat turn with a tool approval
 
-A member of the operations team asks the team's agent to place a hold on an account. Reading is free; the hold is a
-write, and this team has set holds to wait for a reviewer, so the agent drafts it and a person approves it before
-anything reaches the core system.
+A member of the operations team asks the team's agent to place a hold on an account. Reading data needs no
+approval. Placing the hold changes data, and this team has set holds to wait for a reviewer, so the agent drafts the
+hold and a person approves it before anything reaches the core system.
 
 <!-- site: sequence caption="A hold that waits for a person: the write is sent only with an approval bound to its exact input" -->
 1. **Person → Agent**: Sends a message, signed in
@@ -54,8 +53,8 @@ anything reaches the core system.
 ## A workflow run with a human task
 
 A workflow starts from an API call, an email or an event from another service. The worker runs its steps in order
-and saves each one. When a step needs a person, the run pauses and holds no worker; the person's decision puts it back
-on the queue.
+and saves each one. When a step needs a person, the run pauses and holds on to no worker. When the person decides, the run goes
+back on the queue.
 
 ```mermaid
 sequenceDiagram
@@ -90,9 +89,10 @@ sequenceDiagram
 
 ## Email to case: a court order notice
 
-This is one worked example. A team connects its mailbox, publishes three workflows through review, and from then on
-each notice a court or tax authority emails, ordering the bank to hold or pay a customer's funds, is read, checked,
-turned into cases and answered. Nothing in it is code written for court orders: the document type, the workflows, the tools and the task types are configuration.
+This is one worked example. A team connects its mailbox and publishes three workflows through review. From then on,
+every notice that a court or tax authority emails to the bank, ordering it to hold or pay a customer's funds, is read,
+checked, turned into cases and answered. None of this is code written for court orders, because the document type, the
+workflows, the tools and the task types are all configuration.
 
 ```mermaid
 sequenceDiagram
@@ -125,7 +125,7 @@ sequenceDiagram
   end
 ```
 
-*The checker corrects what was read; the correction is kept as an example for the next read of that document type.
+*The checker corrects what was read, and the correction is kept as an example for the next read of that document type.
 Each debtor gets a case whatever happens to the others, and an unmatched debtor gets a case of its own for a person.*
 
 | Configuration | What it holds |
@@ -147,6 +147,6 @@ what they saw when they did. A crash, a retry or a week-long wait changes none o
 ## Next
 
 <!-- site: cards -->
-- **[Human tasks and approvals](human-tasks.md)**: the settings behind each pause.
-- **[Cases](cases.md)**: the record each piece of work leaves.
-- **[Tools and apps](apps.md)**: the data gateway's side of every call.
+- **[Human tasks and approvals](human-tasks.md)**: see the settings behind each pause.
+- **[Cases](cases.md)**: see the record each piece of work leaves.
+- **[Tools and apps](apps.md)**: see the data gateway's side of every call.
