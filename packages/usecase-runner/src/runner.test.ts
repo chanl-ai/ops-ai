@@ -358,6 +358,8 @@ test('a Stories table that is proved by a step it does not have is refused befor
 
 test("a database URL follows make/env.mk: the devcontainer's postgres side container, else this machine's port", () => {
   assert.equal(pgUrl('ops_x', 'postgresql+asyncpg', { OPS_INFRA: 'external', OPS_PG_PORT: '5477' }), 'postgresql+asyncpg://ops:ops@postgres:5432/ops_x');
+  const hosted = { OPS_INFRA: 'external', OPS_DATABASE_URL: 'postgresql+asyncpg://ops:ops@localhost:5477/ops_runtime' };
+  assert.equal(pgUrl('ops_x', 'postgresql+asyncpg', hosted), 'postgresql+asyncpg://ops:ops@localhost:5477/ops_x');
   assert.equal(pgUrl('postgres', 'postgresql', { OPS_PG_PORT: '6477' }), 'postgresql://ops:ops@localhost:6477/postgres');
   assert.equal(pgUrl('ops_x', 'postgresql+asyncpg', {}), 'postgresql+asyncpg://ops:ops@localhost:5477/ops_x');
 });
