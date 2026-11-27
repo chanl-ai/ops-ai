@@ -208,3 +208,45 @@ def test_nested_inputs_past_three_levels_or_fifty_items_are_refused(tmp_path: Pa
     found = problems(tmp_path, deep)
     assert any("a nests past three levels" in p for p in found), found
     assert any("many may hold at most 50 items" in p for p in found), found
+
+
+@pytest.mark.parametrize(
+    ("fmt", "template", "attack", "sent"),
+    [
+        # JQL and CQL: a double-quoted string; a quote or backslash in the term is escaped with a backslash.
+        ("jql_string", 'text ~ "{{q}}"', 'x" OR project = HR', 'text ~ "x\\" OR project = HR"'),
+        ("cql_string", 'text ~ "{{q}}"', 'x\\" OR space = HR', 'text ~ "x\\\\\\" OR space = HR"'),
+        # KQL: a quoted phrase has no escape for its quote, so a quote in the term becomes a space.
+        ("kql_phrase", '"{{q}}"', 'x" OR author:"Ana', '"x  OR author: Ana"'),
+        # OData: a single-quoted string; a quote in it is doubled.
+        ("odata_string", "name eq '{{q}}'", "x' or 1 eq 1 or name eq '", "name eq 'x'' or 1 eq 1 or name eq '''"),
+    ],
+)
+def test_a_search_term_cannot_leave_its_string_in_each_query_language(
+    fmt: str, template: str, attack: str, sent: str
+) -> None:
+    term = field(type="string", format=fmt)
+    assert template.replace("{{q}}", render(term, check(term, attack, "q"))) == sent
+
+
+@pytest.mark.parametrize(
+    ("fmt", "bare", "said"),
+    [
+        ("jql_string", "text ~ {{q}}", "is a jql_string and goes between double quotes"),
+        ("cql_string", "text ~ {{q}}", "is a cql_string and goes between double quotes"),
+        ("kql_phrase", "{{q}}", "is a kql_phrase and goes between double quotes"),
+        ("odata_string", "name eq {{q}}", "is a odata_string and goes between single quotes"),
+    ],
+)
+def test_a_search_term_outside_its_quotes_is_refused(tmp_path: Path, fmt: str, bare: str, said: str) -> None:
+    tool = f"""
+  - name: search_items
+    access: read
+    input:
+      q: {{ type: string, format: {fmt} }}
+    request:
+      method: GET
+      path: /search
+      query: {{ q: "{bare}" }}
+"""
+    assert any(said in p for p in problems(tmp_path, tool)), problems(tmp_path, tool)

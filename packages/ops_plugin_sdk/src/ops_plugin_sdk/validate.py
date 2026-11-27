@@ -16,6 +16,7 @@ from typing import Any
 
 import yaml
 
+from .formats import QUOTED
 from .manifest import (
     MAX_ITEMS,
     OPERATION_NAME,
@@ -126,10 +127,12 @@ def _query(tool: Tool, request: Request, where: str) -> list[Problem]:
                     else f"{name} is used in a query and needs an enum or a format"
                 )
                 out.append(Problem(where, said))
-            if leaf.format == "soql_string" and not (
-                template[: m.start()].endswith("'") and template[m.end() :].startswith("'")
-            ):
-                out.append(Problem(where, f"{{{{{name}}}}} is a soql_string and goes between single quotes ({param})"))
+            if leaf.format in QUOTED:
+                quote = QUOTED[leaf.format][0]
+                if not (template[: m.start()].endswith(quote) and template[m.end() :].startswith(quote)):
+                    which = "single" if quote == "'" else "double"
+                    said = f"{{{{{name}}}}} is a {leaf.format} and goes between {which} quotes ({param})"
+                    out.append(Problem(where, said))
     return out
 
 
