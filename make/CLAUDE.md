@@ -34,7 +34,7 @@ no password. `make help` prints each target's arguments.
 
 | Area | Targets | Example |
 |---|---|---|
-| Any route | `api`, `sdk-call`, `sdk-typed-proof` | `make api GET /v1/me AS=viewer`; `make sdk-call CALL='ops.raw.platform.me_me()' AS=builder`; typed returns smoke: `make sdk-typed-proof AS=builder` (or `ENV=staging`) |
+| Any route | `api`, `sdk-call`, `sdk-typed-proof` | `make api GET /v1/me AS=viewer`; `make sdk-call CALL='ops.raw.platform.me_me()' AS=builder`; typed returns smoke: `make sdk-typed-proof` (defaults `AS=builder`; or `ENV=staging`) |
 | Chat | `chat`, `chat-script`, `assistant-evals` (REAL=1: the real subset, at most MAX_CALLS model calls), `chat-show`, `chat-calls`, `chat-agents`, `chat-threads`, `chat-accounts`, `chat-kbs`, `chat-connected`, `chat-approve`, `chat-reject`, `chat-submit`, `chat-transcript`, `chat-transcripts` (Markdown to paste) | `make chat AS=james AGENT='Ops Assistant' SAY='What cases are open?'` |
 | Knowledge | `kb-bases`, `kb-show`, `kb-documents`, `kb-sources`, `kb-source`, `kb-items`, `kb-add-file`, `kb-add-text`, `kb-sync`, `kb-search`, `kb-changes`, `kb-change` | `make kb-search KB=kb_retail_products TEXT='overdraft fee' AS=james` |
 | Apps and connections | `apps-list`, `apps-show`, `apps-add-tool`, `apps-accounts`, `apps-mine`, `apps-connect` (prints the sign-in link), `apps-test`, `apps-auth-configs` | `make apps-connect APP=plugin:opsai.salesforce AS=james` |
@@ -47,7 +47,7 @@ no password. `make help` prints each target's arguments.
 
 | Variable | Meaning |
 |---|---|
-| `AS` | A role from `services/platform-service/seed/dev-roles.json` (`admin`, `builder`, `approver`, `viewer`, `security`, `platform`), a seeded person's full name, first name or email name from `people.json` (`james`, `priya`, `maya`, `ravi`, `nadia`, `sam`, `wanjiru`), or an email. Default `admin` |
+| `AS` | A role from `services/platform-service/seed/dev-roles.json` (`admin`, `builder`, `approver`, `viewer`, `security`, `platform`), a seeded person's full name, first name or email name from `people.json` (`james`, `priya`, `maya`, `ravi`, `nadia`, `sam`, `wanjiru`), or an email. Default `admin` for `api` / `sdk-call`; `sdk-typed-proof` defaults to `builder` when `AS=` is unset |
 | `TEAM`, `JSON` | The team to act in (default: the person's own team); `JSON=1` prints the answer as JSON (`opsai` targets) |
 | `SVC`, `Q`, `BODY` (`api` only) | The service (default: the one whose `openapi.json` holds the path; name it for `/v1/chat/*`, which no document holds), the query string (`Q='pageSize=5'`, since make reads any word holding `=` as a variable) and a JSON body |
 | `AGENT`, `THREAD`, `TEST`, `KB`, `CONNECTED` (`chat`) | The agent by id, slug or name (default: the team's default agent); an existing thread; `TEST=1` uses the agent page's Test panel, whose thread nothing remembers and the chat list leaves out; a knowledge base; `CONNECTED=<app>` sends the follow-up a Connect card sends once the person has signed in |

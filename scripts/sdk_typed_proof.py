@@ -20,6 +20,7 @@ import sys
 from typing import Any, get_type_hints
 
 import httpx
+import ops_ai
 from api_as import Refused, addresses, token
 from ops_ai import OpsAI, RunFailed, WaitedRun
 from ops_ai._client import Runs
@@ -63,7 +64,9 @@ def main(argv: list[str]) -> int:
     except httpx.ConnectError as e:
         return _unreachable(e)
 
-    hints = get_type_hints(OpsAI)
+    # Type checks read the package class so a test can mock the constructor without
+    # losing the public annotation seam (ops_ai.OpsAI.runs → Runs, wait(check=)).
+    hints = get_type_hints(ops_ai.OpsAI)
     if hints.get("runs") is not Runs:
         print("sdk-typed-proof: OpsAI.runs is not the typed Runs noun", file=sys.stderr)
         return 1

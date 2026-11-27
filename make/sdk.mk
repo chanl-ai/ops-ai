@@ -18,5 +18,9 @@ sdk-verify: ## The generated layer matches the services' documents, and both SDK
 sdk-check: ## sdk-verify, the packages installed in an empty folder, and the examples on `make up` (SDK_LIVE=0 skips them)
 	bash sdk/check.sh
 
+# AS defaults to builder for this target. After `dev.mk` sets AS := admin, $(or $(AS),builder)
+# would always pick admin; only a command-line or environment AS= overrides the builder default.
 sdk-typed-proof: ## Typed SDK returns against a live env: make sdk-typed-proof AS=builder [ENV=local|staging] [TEAM=]
-	@uv run --quiet python scripts/sdk_typed_proof.py --as '$(or $(AS),builder)' --env $(or $(ENV),local) $(if $(TEAM),--team $(TEAM))
+	@uv run --quiet python scripts/sdk_typed_proof.py \
+		--as '$(if $(filter command line environment,$(origin AS)),$(AS),builder)' \
+		--env $(or $(ENV),local) $(if $(TEAM),--team $(TEAM))
