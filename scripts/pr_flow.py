@@ -1,0 +1,579 @@
+#!/usr/bin/env python3
+"""The pull request flow's steps that run on GitHub Actions, each through `gh`. Stdlib only.
+
+  verify --branch B     `make gha-verify`: start verify-full.yml on B, watch it, print each failed job's first error
+  failures --run ID     each failed job of a run with its first error line
+  ready                 ci.yml job `ready`: fails when the branch is behind develop, CodeQL is red or a job is red
+  sync-prs [--only N]   keep-current.yml: merge develop into every open pull request behind it (never a rebase);
+                        a conflict gets the label needs-merge and a comment naming the files
+  queue-failure         queue-retry.yml: a failed merge queue run reruns its failed jobs once; a second failure
+                        comments each failed job and its first error line; a green rerun queues the request again
+  --self-test           every decision below on planted input
+
+The decisions are pure functions (first_error, ready_reasons, to_sync, queue_step); the commands around them only read
+and write GitHub. `--dry-run` on sync-prs and queue-failure prints what would be done and changes nothing.
+"""
+
+from __future__ import annotations
+
+import argparse
+import contextlib
+import io
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+WORKFLOW = "verify-full.yml"
+LABEL = "needs-merge"
+RED = ("failure", "cancelled", "timed_out")
+STAMP = re.compile(r"^\S*\d{4}-\d\d-\d\dT[\d:.]+Z ?")
+# keep-current.yml has a 20 minute job timeout. Ten pushes at once started ten PR runs together and four of them lost
+# DNS on the runners, so pushes go out in small batches and the next batch waits for the last one's checks to start.
+SYNC_BATCH = 3
+SYNC_POLL_SECONDS = 10
+SYNC_WAIT_CAP_SECONDS = 15 * 60
+CI_STARTED = ("in_progress", "completed")
+QUEUE_BRANCH = re.compile(r"^gh-readonly-queue/[^/]+(?:/.+)?/pr-(\d+)-[0-9a-f]+$")
+
+
+def first_error(log: str) -> str:
+    """The line of a failed step's log that names the failure, without its timestamp. A real log holds many lines that
+    only look like errors (a self-test printing its planted failure, a command echoed with `grep FAILED` in it), so the
+    order is: a pytest FAILED or ERROR line, the entry under `make checks`' own "check(s) failed:" list, a workflow
+    annotation (a warning raised inside a passing test is annotated too, so it comes after), a pytest E line, make's own
+    error, then the last line. The runner's "Process completed with exit code" says nothing."""
+    lines = [STAMP.sub("", raw.split("\t")[-1]).rstrip() for raw in log.splitlines()]
+    lines = [ln for ln in lines if ln.strip() and "Process completed with exit code" not in ln]
+    listed = [lines[k + 1] for k, ln in enumerate(lines[:-1]) if "check(s) failed:" in ln]
+    picks = (
+        [ln for ln in lines if re.match(r"(FAILED|ERROR) \S+(::| - )", ln)],
+        listed,
+        [ln for ln in lines if "##[error]" in ln],
+        [ln for ln in lines if ln.startswith("E   ")],
+        [ln for ln in lines if ln.startswith("make: ***")],
+        lines[-1:],
+    )
+    line = next((found[0] for found in picks if found), "no log")
+    return line.replace("##[error]", "").strip(" -")[:300]
+
+
+def ready_reasons(needs: dict[str, dict[str, str]], behind: int, codeql: dict[str, str]) -> list[str]:
+    """Why a pull request is not ready for the queue; empty when it is."""
+    reasons = [f"job {name} is {job.get('result')}" for name, job in sorted(needs.items()) if job.get("result") in RED]
+    if behind > 0:
+        reasons.append(
+            f"the branch is {behind} commit(s) behind develop; keep-current.yml merges develop in, or update it"
+        )
+    reasons += [
+        f"CodeQL {name} is {result}"
+        for name, result in sorted(codeql.items())
+        if result not in ("success", "neutral", "skipped")
+    ]
+    return reasons
+
+
+def to_sync(prs: list[dict], behind: set[int]) -> list[int]:
+    """The pull requests develop is merged into: open, not a draft, from this repository, behind, and not in the queue
+    (a push to a queued pull request takes it out, and every queue merge moves develop). Dependabot keeps its own
+    branches current and stops once another author pushes to one."""
+    return [
+        p["number"]
+        for p in prs
+        if p["number"] in behind
+        and not p.get("isDraft")
+        and not p.get("isCrossRepository")
+        and not p.get("isInMergeQueue")
+        and not str(p.get("headRefName", "")).startswith("dependabot/")
+    ]
+
+
+def batches(numbers: list[int], size: int = SYNC_BATCH) -> list[list[int]]:
+    return [numbers[k : k + size] for k in range(0, len(numbers), size)]
+
+
+def ci_started(check_runs: list[dict]) -> bool:
+    """A push has started CI once any of its check runs is running or finished; queued runs hold no runner yet."""
+    return any(c.get("status") in CI_STARTED for c in check_runs)
+
+
+def queue_step(attempt: int, conclusion: str) -> str:
+    """What a finished merge queue run asks for: rerun (first failure), comment (it failed again), requeue (the rerun
+    passed, and the queue had already dropped the pull request), or nothing."""
+    # A cancelled run is the queue rebuilding its group, not a failure of this pull request.
+    if conclusion in ("failure", "timed_out"):
+        return "rerun" if attempt <= 1 else "comment"
+    return "requeue" if conclusion == "success" and attempt > 1 else "nothing"
+
+
+def queue_pr(branch: str) -> int | None:
+    m = QUEUE_BRANCH.match(branch)
+    return int(m.group(1)) if m else None
+
+
+def failure_comment(failed: list[tuple[str, str]], url: str) -> str:
+    rows = "\n".join(f"- `{name}`: {line}" for name, line in failed) or "- no failed job could be read"
+    head = f"The merge queue run failed twice ({url}), so this pull request is out of the queue."
+    return f"{head}\n\n{rows}\n\nFix it, then `make requeue PR=<n>`."
+
+
+def gh(*args: str, check: bool = True, stdin: str | None = None) -> str:
+    r = subprocess.run(["gh", *args], capture_output=True, text=True, input=stdin, check=False)
+    if check and r.returncode != 0:
+        sys.exit(f"gh {' '.join(args[:4])}: {r.stderr.strip() or r.stdout.strip()}")
+    return r.stdout
+
+
+def git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", *args], capture_output=True, text=True, check=check)
+
+
+def repo() -> str:
+    return (
+        os.environ.get("GITHUB_REPOSITORY")
+        or gh("repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").strip()
+    )
+
+
+def failures(run: str) -> list[tuple[str, str]]:
+    """Each failed job with the first error of its failed steps (`gh run view --log-failed`: job, step, line)."""
+    jobs = json.loads(gh("run", "view", run, "--json", "jobs"))["jobs"]
+    # ci-ok and ready only repeat that another job failed.
+    red = [job["name"] for job in jobs if job.get("conclusion") in RED and job["name"] not in ("ci-ok", "ready")]
+    logs: dict[str, list[str]] = {}
+    for raw in gh("run", "view", run, "--log-failed", check=False).splitlines():
+        logs.setdefault(raw.split("\t", 1)[0], []).append(raw)
+    return [(name, first_error("\n".join(logs[name])) if name in logs else "no log of a failed step") for name in red]
+
+
+def print_failures(run: str) -> int:
+    failed = failures(run)
+    for name, line in failed:
+        print(f"{name}: {line}")
+    return len(failed)
+
+
+def cmd_verify(branch: str) -> int:
+    before = {
+        r["databaseId"]
+        for r in json.loads(
+            gh(
+                "run",
+                "list",
+                "--workflow",
+                WORKFLOW,
+                "--branch",
+                branch,
+                "--event",
+                "workflow_dispatch",
+                "--json",
+                "databaseId",
+                "-L",
+                "20",
+            )
+        )
+    }
+    gh("workflow", "run", WORKFLOW, "--ref", branch)
+    run = ""
+    for _ in range(30):
+        time.sleep(4)
+        runs = json.loads(
+            gh(
+                "run",
+                "list",
+                "--workflow",
+                WORKFLOW,
+                "--branch",
+                branch,
+                "--event",
+                "workflow_dispatch",
+                "--json",
+                "databaseId,url",
+                "-L",
+                "20",
+            )
+        )
+        new = [r for r in runs if r["databaseId"] not in before]
+        if new:
+            run = str(new[0]["databaseId"])
+            print(f"gha-verify: {branch} runs at {new[0]['url']}", flush=True)
+            break
+    if not run:
+        sys.exit(f"gha-verify: {WORKFLOW} was started on {branch} but no run appeared")
+    green = (
+        subprocess.run(
+            ["gh", "run", "watch", run, "--exit-status", "--interval", "30"], stdout=subprocess.DEVNULL, check=False
+        ).returncode
+        == 0
+    )
+    if green:
+        print(f"gha-verify: {branch} is green")
+        return 0
+    print(f"gha-verify: {branch} is red; the first error of each failed job:")
+    print_failures(run)
+    return 1
+
+
+def cmd_ready() -> int:
+    needs = json.loads(os.environ.get("NEEDS") or "{}")
+    sha, base, event = (
+        os.environ.get("HEAD_SHA", ""),
+        os.environ.get("BASE_REF", ""),
+        os.environ.get("GITHUB_EVENT_NAME", ""),
+    )
+    behind, codeql = 0, {}
+    # A queue group and a push are built on develop already, and CodeQL reports on pull requests (codeql.yml).
+    if event == "pull_request" and sha:
+        if base == "develop":
+            behind = int(gh("api", f"repos/{repo()}/compare/develop...{sha}", "--jq", ".behind_by").strip() or 0)
+        deadline = time.time() + int(os.environ.get("CODEQL_WAIT", "2400"))
+        while True:
+            runs = json.loads(
+                gh(
+                    "api",
+                    f"repos/{repo()}/commits/{sha}/check-runs?per_page=100",
+                    "--jq",
+                    '[.check_runs[] | select(.name | startswith("analyze "))]',
+                )
+            )
+            codeql = {r["name"]: (r["conclusion"] or r["status"]) for r in runs}
+            if (runs and all(r["status"] == "completed" for r in runs)) or time.time() > deadline:
+                break
+            time.sleep(20)
+        if not codeql:
+            codeql = {"analysis": "missing"}
+    reasons = ready_reasons(needs, behind, codeql)
+    for r in reasons:
+        print(f"::error title=Not ready::{r}")
+    print("ready: " + ("no, see above" if reasons else "every job passed, CodeQL is green, the branch holds develop"))
+    return 1 if reasons else 0
+
+
+def open_prs() -> list[dict]:
+    owner, name = repo().split("/")
+    q = (
+        "query($o:String!,$n:String!){repository(owner:$o,name:$n){"
+        'pullRequests(states:OPEN,baseRefName:"develop",first:100){nodes{'
+        "number isDraft headRefName isCrossRepository isInMergeQueue labels(first:30){nodes{name}}}}}}"
+    )
+    return json.loads(gh("api", "graphql", "-f", f"query={q}", "-f", f"o={owner}", "-f", f"n={name}"))["data"][
+        "repository"
+    ]["pullRequests"]["nodes"]
+
+
+def cmd_sync(only: int | None, dry: bool) -> int:
+    prs = [p for p in open_prs() if only in (None, p["number"])]
+    git("fetch", "-q", "origin", "+refs/heads/*:refs/remotes/origin/*")
+    behind = {
+        p["number"]
+        for p in prs
+        if git("merge-base", "--is-ancestor", "origin/develop", f"origin/{p['headRefName']}", check=False).returncode
+        != 0
+    }
+    push_url = os.environ.get("PUSH_URL") or "origin"
+    todo = to_sync(prs, behind)
+    heads = {p["number"]: p for p in prs}
+    deadline = time.monotonic() + SYNC_WAIT_CAP_SECONDS
+    groups = batches(todo)
+    for k, group in enumerate(groups):
+        if dry:
+            print(f"batch {k + 1}: {' '.join(f'#{n}' for n in group)}")
+        pushed: dict[int, str] = {}
+        for n in group:
+            p = heads[n]
+            if dry:
+                print(f"#{n} {p['headRefName']}: would merge develop in")
+                continue
+            sha = sync_one(p, push_url)
+            if sha:
+                pushed[n] = sha
+        if dry or k == len(groups) - 1:
+            continue
+        if not wait_started(pushed, deadline):
+            left = [n for g in groups[k + 1 :] for n in g]
+            names = " ".join(f"#{n}" for n in left)
+            print(f"CI of the last batch had not started in time; left for the next run: {names}")
+            return 0
+    return 0
+
+
+def sync_one(p: dict, push_url: str) -> str | None:
+    """Merge develop into one pull request's branch and push it; the pushed commit, or None (conflict or refused)."""
+    n, head = p["number"], p["headRefName"]
+    labelled = LABEL in [x["name"] for x in p["labels"]["nodes"]]
+    git("checkout", "-q", "--detach", f"origin/{head}")
+    merge = git("merge", "--no-edit", "-m", f"Merge branch 'develop' into {head}", "origin/develop", check=False)
+    if merge.returncode != 0:
+        files = git("diff", "--name-only", "--diff-filter=U").stdout.split()
+        git("merge", "--abort", check=False)
+        print(f"#{n} {head}: conflicts in {' '.join(files)}")
+        if not labelled:
+            gh(
+                "label",
+                "create",
+                LABEL,
+                "--force",
+                "--color",
+                "B60205",
+                "--description",
+                "develop no longer merges cleanly into this branch",
+                check=False,
+            )
+            gh("pr", "edit", str(n), "--add-label", LABEL)
+            gh(
+                "pr",
+                "comment",
+                str(n),
+                "--body",
+                "develop no longer merges into this branch. Conflicting files:\n\n"
+                + "\n".join(f"- `{f}`" for f in files)
+                + "\n\nMerge develop in by hand (`git merge origin/develop`, never a rebase) and push.",
+            )
+        return None
+    pushed = git("push", "-q", push_url, f"HEAD:refs/heads/{head}", check=False)
+    if pushed.returncode != 0:
+        print(f"#{n} {head}: push refused: {pushed.stderr.strip()}")
+        return None
+    print(f"#{n} {head}: develop merged in")
+    if labelled:
+        gh("pr", "edit", str(n), "--remove-label", LABEL, check=False)
+    return git("rev-parse", "HEAD").stdout.strip()
+
+
+def wait_started(pushed: dict[int, str], deadline: float) -> bool:
+    """Poll each pushed commit's check runs until every one shows a started check; False when the deadline passes."""
+    waiting = dict(pushed)
+    while waiting:
+        for n, sha in list(waiting.items()):
+            out = gh("api", f"repos/{repo()}/commits/{sha}/check-runs", check=False)
+            try:
+                runs = json.loads(out)["check_runs"]
+            except (ValueError, KeyError):
+                runs = []
+            if ci_started(runs):
+                del waiting[n]
+        if not waiting:
+            return True
+        if time.monotonic() + SYNC_POLL_SECONDS > deadline:
+            return False
+        time.sleep(SYNC_POLL_SECONDS)
+    return True
+
+
+def cmd_queue_failure(run: str, attempt: int, conclusion: str, *, branch: str, url: str, dry: bool) -> int:
+    pr, step = queue_pr(branch), queue_step(attempt, conclusion)
+    print(f"queue run {run} attempt {attempt} on {branch}: {conclusion}, so {step}" + (f" (#{pr})" if pr else ""))
+    if dry or step == "nothing" or pr is None:
+        return 0
+    state = json.loads(gh("pr", "view", str(pr), "--json", "state,isDraft"))
+    if state["state"] != "OPEN":
+        print(f"#{pr} is {state['state']}; nothing to do")
+        return 0
+    if step == "rerun":
+        gh("run", "rerun", run, "--failed")
+    elif step == "comment":
+        gh("pr", "comment", str(pr), "--body", failure_comment(failures(run), url))
+    elif step == "requeue":
+        gh("pr", "merge", str(pr), "--auto", "--merge")
+    return 0
+
+
+def sync_trace(starts: bool) -> tuple[list[tuple[int, int]], int, list[str]]:
+    """Run cmd_sync on 7 behind pull requests with gh, git and the clock replaced. Returns, for each push, how many
+    pushes and how many started-CI answers came before it; the exit code; and what was printed."""
+    prs = [
+        {
+            "number": 10 + k,
+            "isDraft": False,
+            "headRefName": f"b{k}",
+            "isCrossRepository": False,
+            "isInMergeQueue": False,
+            "labels": {"nodes": []},
+        }
+        for k in range(7)
+    ]
+    seen: dict[str, int] = {}
+    trace: list[tuple[int, int]] = []
+    state = {"pushes": 0, "started": 0, "now": 0.0, "head": ""}
+
+    def fake_git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        out = ""
+        rc = 1 if args[0] == "merge-base" else 0
+        if args[0] == "checkout":
+            state["head"] = args[-1].removeprefix("origin/")
+        if args[0] == "push":
+            trace.append((state["pushes"], state["started"]))
+            state["pushes"] += 1
+        if args[0] == "rev-parse":
+            out = f"sha-{state['head']}"
+        return subprocess.CompletedProcess(args, rc, out, "")
+
+    def fake_gh(*args: str, check: bool = True, stdin: str | None = None) -> str:
+        sha = args[1].split("/")[4]
+        seen[sha] = seen.get(sha, 0) + 1
+        if starts and seen[sha] == 2:
+            state["started"] += 1
+            return json.dumps({"check_runs": [{"status": "in_progress"}]})
+        return json.dumps({"check_runs": [{"status": "queued"}]})
+
+    def fake_sleep(seconds: float) -> None:
+        state["now"] += seconds
+
+    real = (globals()["git"], globals()["gh"], globals()["open_prs"], globals()["repo"], time.sleep, time.monotonic)
+    globals().update(git=fake_git, gh=fake_gh, open_prs=lambda: prs, repo=lambda: "o/r")
+    time.sleep, time.monotonic = fake_sleep, lambda: state["now"]
+    printed: list[str] = []
+    try:
+        with contextlib.redirect_stdout(io.StringIO()) as buf:
+            code = cmd_sync(None, False)
+        printed = buf.getvalue().splitlines()
+    finally:
+        globals().update(git=real[0], gh=real[1], open_prs=real[2], repo=real[3])
+        time.sleep, time.monotonic = real[4], real[5]
+    return trace, code, printed
+
+
+def self_test() -> int:
+    trace, _, _ = sync_trace(starts=True)
+    stuck, stuck_code, stuck_out = sync_trace(starts=False)
+    log = (
+        "checks\tmake\t2026-11-26T10:00:00.1Z == ci-local-self-test\n"
+        "checks\tmake\t2026-11-26T10:00:00.2Z ci-local: 2 jobs run, 1 failed, 0 skipped {'x: red': 'failed'}\n"
+        "checks\tmake\t2026-11-26T10:00:01.1Z verify: 1 check(s) failed:\n"
+        "checks\tmake\t2026-11-26T10:00:01.2Z   - node scripts/changelog-check.mjs --entries (exit 1)\n"
+        "checks\tmake\t2026-11-26T10:00:01.3Z make: *** [make/checks.mk:167: checks] Error 1\n"
+        "checks\tmake\t2026-11-26T10:00:02.1Z ##[error]Process completed with exit code 2.\n"
+    )
+    pytest_log = (
+        "j\ts\t2026-11-26T10:00:00Z grep -E ' (FAILED|ERROR)' log\n"
+        "j\ts\t2026-11-26T10:00:01Z FAILED tests/test_x.py::test_y - boom"
+    )
+    noisy = (
+        "j\ts\t2026-11-26T10:00:00Z ##[error]  raise RuntimeError('x')\nj\ts\t2026-11-26T10:00:01Z FAILED a.py::t - no"
+    )
+    green = {"checks": {"result": "success"}, "docs": {"result": "skipped"}}
+    prs = [
+        {"number": 1, "isDraft": False, "isCrossRepository": False, "isInMergeQueue": False},
+        {"number": 2, "isDraft": True, "isCrossRepository": False, "isInMergeQueue": False},
+        {"number": 3, "isDraft": False, "isCrossRepository": True, "isInMergeQueue": False},
+        {"number": 4, "isDraft": False, "isCrossRepository": False, "isInMergeQueue": True},
+        {"number": 5, "isDraft": False, "isCrossRepository": False, "isInMergeQueue": False},
+        {
+            "number": 6,
+            "isDraft": False,
+            "isCrossRepository": False,
+            "isInMergeQueue": False,
+            "headRefName": "dependabot/npm/x",
+        },
+    ]
+    cases = [
+        (
+            "the failed check is named, not a self-test's planted failure or the runner's exit line",
+            first_error(log),
+            "node scripts/changelog-check.mjs --entries (exit 1)",
+        ),
+        (
+            "a pytest failure is named, not the command that greps for one",
+            first_error(pytest_log),
+            "FAILED tests/test_x.py::test_y - boom",
+        ),
+        (
+            "a failed test wins over an annotation raised inside a passing one",
+            first_error(noisy),
+            "FAILED a.py::t - no",
+        ),
+        ("a cancelled queue run is the queue regrouping, not a failure", queue_step(1, "cancelled"), "nothing"),
+        (
+            "a log with no error line gives its last line",
+            first_error("a\tb\t2026-11-26T10:00:00Z one\na\tb\t2026-11-26T10:00:01Z two"),
+            "two",
+        ),
+        (
+            "an annotation loses its marker",
+            first_error("j\ts\t2026-11-26T10:00:00Z ##[error]Staging not deployed"),
+            "Staging not deployed",
+        ),
+        ("a green, current pull request is ready", ready_reasons(green, 0, {"analyze python": "success"}), []),
+        ("a branch behind develop is not ready", len(ready_reasons(green, 2, {"analyze python": "success"})), 1),
+        (
+            "a red CodeQL analysis is not ready",
+            ready_reasons(green, 0, {"analyze python": "failure"}),
+            ["CodeQL analyze python is failure"],
+        ),
+        (
+            "a CodeQL analysis that never reported is not ready",
+            len(ready_reasons(green, 0, {"analysis": "missing"})),
+            1,
+        ),
+        (
+            "a red or cancelled job is not ready",
+            ready_reasons({"checks": {"result": "failure"}, "docs": {"result": "cancelled"}}, 0, {}),
+            ["job checks is failure", "job docs is cancelled"],
+        ),
+        (
+            "drafts, forks, queued, dependabot and current pull requests are left alone",
+            to_sync(prs, {1, 2, 3, 4, 6}),
+            [1],
+        ),
+        (
+            "7 behind pull requests go in batches of 3, 3 and 1, each after the last batch's CI started",
+            trace,
+            [(0, 0), (1, 0), (2, 0), (3, 3), (4, 3), (5, 3), (6, 6)],
+        ),
+        (
+            "when CI never starts, pushing stops after one batch and the run still exits 0, naming what was left",
+            (len(stuck), stuck_code, any("#13 #14 #15 #16" in ln for ln in stuck_out)),
+            (3, 0, True),
+        ),
+        ("a first queue failure reruns the failed jobs", queue_step(1, "failure"), "rerun"),
+        ("a second queue failure comments", queue_step(2, "failure"), "comment"),
+        ("a green rerun queues the pull request again", queue_step(2, "success"), "requeue"),
+        ("a green first run does nothing", queue_step(1, "success"), "nothing"),
+        ("the queue branch names its pull request", queue_pr("gh-readonly-queue/develop/pr-266-0a1b2c3d"), 266),
+        ("any other branch names none", queue_pr("fix/console-chat-card-links"), None),
+        (
+            "the comment lists each failed job with its line",
+            "- `checks`: boom" in failure_comment([("checks", "boom")], "u"),
+            True,
+        ),
+    ]
+    bad = [f"{name}: got {got!r}, expected {want!r}" for name, got, want in cases if got != want]
+    for b in bad:
+        print(f"pr_flow self-test FAILED: {b}")
+    if not bad:
+        print(f"pr_flow self-test: {len(cases)} cases passed")
+    return 1 if bad else 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("command", nargs="?", choices=["verify", "failures", "ready", "sync-prs", "queue-failure"])
+    ap.add_argument("--self-test", action="store_true")
+    ap.add_argument("--branch", default="")
+    ap.add_argument("--run", default="")
+    ap.add_argument("--attempt", type=int, default=1)
+    ap.add_argument("--conclusion", default="failure")
+    ap.add_argument("--url", default="")
+    ap.add_argument("--only", type=int)
+    ap.add_argument("--dry-run", action="store_true")
+    a = ap.parse_args()
+    if a.self_test:
+        return self_test()
+    if a.command == "verify":
+        return cmd_verify(a.branch or sys.exit("usage: pr_flow.py verify --branch <branch>"))
+    if a.command == "failures":
+        return 1 if print_failures(a.run or sys.exit("usage: pr_flow.py failures --run <id>")) else 0
+    if a.command == "ready":
+        return cmd_ready()
+    if a.command == "sync-prs":
+        return cmd_sync(a.only, a.dry_run)
+    if a.command == "queue-failure":
+        return cmd_queue_failure(a.run, a.attempt, a.conclusion, branch=a.branch, url=a.url, dry=a.dry_run)
+    ap.print_help()
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

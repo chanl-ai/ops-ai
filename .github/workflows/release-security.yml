@@ -1,0 +1,68 @@
+# The security scans a release or hotfix branch gets on top of the full ci.yml run, on every push to it:
+#   dependencies  known vulnerabilities and copyleft licences in both lockfiles (scripts/deps_audit.py)
+#   sbom          the committed SBOM matches the lockfiles (scripts/sbom.py --check)
+#   images        every image built, scanned for critical vulnerabilities, given an SBOM and signed, in a registry inside
+#                 the runner (release-images.yml in proof mode; nothing reaches ghcr.io before the tag)
+# The web scan of staging is ci.yml's job staging-scan, because it has to follow that branch's staging deploy. CodeQL with the security-extended queries runs on the same pushes from codeql.yml.
+# A pull request that changes this file runs the two quick jobs, so the workflow is seen working before a release needs it.
+name: release-security
+
+on:
+  push:
+    branches: ["release/[0-9]*", "hotfix/**"]
+  pull_request:
+    paths:
+      - .github/workflows/release-security.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Known vulnerabilities
+        env:
+          OSSINDEX_USER: ${{ secrets.OSSINDEX_USER }}
+          OSSINDEX_TOKEN: ${{ secrets.OSSINDEX_TOKEN }}
+          # The same scanner image, by digest, as dependency-check.yml.
+          OPS_OSV_IMAGE: ghcr.io/google/osv-scanner:v2.7.0@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0
+        run: python3 scripts/deps_audit.py vulns
+      # The licence audit reads the installed packages (pnpm licenses, the workspace's Python), so it needs the install.
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
+      - name: Licences
+        run: uv run python scripts/deps_audit.py licenses
+
+  sbom:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: uv run python scripts/sbom.py --check
+
+  images:
+    # Not on a pull request: the build of every image takes over an hour.
+    if: github.event_name != 'pull_request'
+    permissions:
+      # The called workflow's jobs ask for these, and a caller must grant them even to a job that is skipped (its
+      # release job, tag only, needs contents: write).
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/release-images.yml
+    with:
+      proof: true
