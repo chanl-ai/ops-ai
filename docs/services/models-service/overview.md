@@ -76,7 +76,9 @@ another shape is `models_answer_unreadable`. A reply this service billed but tha
 its tokens are counted, each by its own code: `reply_cut_off` (`finish_reason` `length`), `reply_declined` (the model's
 `refusal`, kept on `ModelCallError.refusal`, at most 300 characters), `reply_filtered` (`content_filter`) and
 `reply_empty`. A call that gets no answer in time is `models_timeout`; the provider timing out behind this service is
-its own `provider_timeout`. `structured` takes `max_tokens`, sent as `max_completion_tokens`; documents-service sends
+its own `provider_timeout`. `structured` takes `max_tokens`, sent as `max_completion_tokens`, and this service
+forwards it in the field each provider honours (`catalog/knobs.json`: `max_completion_tokens` for OpenAI and Azure,
+`max_tokens` for Anthropic, Gemini, Bedrock and an uncatalogued server); documents-service sends
 `OPS_EXTRACT_OUTPUT_TOKENS` (default 8,000). The chat route passes the provider's `length` and `content_filter` endings
 and its `refusal` through. No other module names this service's model routes:
 `ops_service_kit.standards` fails on one (rule SC1, `make test PKG=packages/ops_service_kit T=tests/test_standards.py`).

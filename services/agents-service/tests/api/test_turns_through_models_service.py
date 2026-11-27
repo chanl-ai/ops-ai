@@ -55,6 +55,9 @@ class FakeModelsService:
         self.broken: str | None = None
         # The text a streamed reply writes and the finish reason it ends on, for a reply cut off or filtered.
         self.ending: tuple[str, str] | None = None
+        # Tool calls a streamed reply makes, (name, raw JSON arguments), ending on the length limit: the last one's
+        # arguments cut off mid-way, as a provider sends a call that ran out of tokens.
+        self.cut_calls: list[tuple[str, str]] | None = None
 
     def handle(self, request: httpx2.Request) -> httpx2.Response:
         self.requests.append(request)
@@ -78,8 +81,20 @@ class FakeModelsService:
             choice = {"index": 0, "message": message, "finish_reason": "stop"}
             return httpx2.Response(200, json={**head, "object": "chat.completion", "choices": [choice], "usage": usage})
         text, finish = self.ending or (text, "stop")
+        delta: dict[str, Any] = {"role": "assistant", "content": text}
+        if self.cut_calls is not None:
+            calls = [
+                {
+                    "index": i,
+                    "id": f"call_{len(self.requests)}_{i}",
+                    "type": "function",
+                    "function": {"name": name, "arguments": args},
+                }
+                for i, (name, args) in enumerate(self.cut_calls)
+            ]
+            delta, finish = {"role": "assistant", "content": None, "tool_calls": calls}, "length"
         chunks: list[dict[str, Any]] = [
-            {"choices": [{"index": 0, "delta": {"role": "assistant", "content": text}, "finish_reason": None}]},
+            {"choices": [{"index": 0, "delta": delta, "finish_reason": None}]},
             {"choices": [{"index": 0, "delta": {}, "finish_reason": finish}]},
             {"choices": [], "usage": usage},
         ]
@@ -238,6 +253,21 @@ async def test_a_reply_cut_off_or_filtered_ends_the_turn_with_its_code_and_a_pla
     assert "max_tokens" not in last["message"] and "Content filter triggered" not in last["message"], last["message"]
     reloaded = (await client.get(f"/chat/threads/{thread['id']}")).json()["data"]["messages"][-1]
     assert reloaded["errorCode"] == code and reloaded["content"].startswith(text), reloaded
+
+
+async def test_a_tool_call_cut_off_at_the_length_limit_ends_the_turn_with_no_card_left_running(
+    stack: tuple[AsyncClient, Runtime, FakeModelsService],
+) -> None:
+    client, _, models = stack
+    models.cut_calls = [("lookup_account", '{"account": "AC-1"}'), ("lookup_account", '{"account": "AC')]
+    thread = await new_thread(client)
+    _, events = await send(client, thread["id"], {"content": "Look up accounts AC-1 and AC-2."})
+    last = events[-1]
+    assert (last["type"], last.get("code")) == ("error", "reply_cut_off"), last
+    reloaded: dict[str, Any] = (await client.get(f"/chat/threads/{thread['id']}")).json()["data"]["messages"][-1]
+    calls: list[dict[str, Any]] = reloaded["toolCalls"]
+    assert reloaded["errorCode"] == "reply_cut_off", reloaded
+    assert [c["status"] for c in calls if c["status"] == "running"] == [], calls
 
 
 BROKEN = "pool exhausted on db-7.internal"

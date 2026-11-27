@@ -184,7 +184,9 @@ class Catalog:
         held: Mapping[str, KnobRange] = (
             self.ranges_for(catalog_id, found) if found else {n: KnobRange() for n in self.knobs}
         )
-        overrides = self.providers[catalog_id].ranges if found and catalog_id in self.providers else {}
+        # The field a knob goes out under is the connection kind's, found or not: an Azure deployment name or a
+        # fine-tuned OpenAI id is uncatalogued and still refuses max_tokens.
+        overrides = self.providers[catalog_id].ranges if catalog_id in self.providers else {}
         out: Json = dict(body)
         for name, knob in self.knobs.items():
             for path in dict.fromkeys([name, knob.wire, *knob.also_wire]):
@@ -196,8 +198,9 @@ class Catalog:
                 kept = None if rng is None else _fitted(knob, value, rng, clamp=found is not None)
                 if kept is None:
                     continue
-                own = path if path != name else knob.wire
-                target = (overrides[name].wire if name in overrides else None) or own
+                # Sent under any of its names, a knob goes out under the field this provider honours: OpenAI's
+                # reasoning models refuse `max_tokens`, and most others read only `max_tokens`.
+                target = (overrides[name].wire if name in overrides else None) or knob.wire
                 _write(out, target, kept)
                 if target == knob.wire:
                     for field, set_to in knob.with_.items():

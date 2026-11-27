@@ -83,7 +83,8 @@
         },
         "max_tokens": {
           "minimum": 1,
-          "default": 16384
+          "default": 16384,
+          "wire": "max_completion_tokens"
         },
         "reasoning_effort": {
           "default": "medium"
@@ -110,7 +111,8 @@
         },
         "max_tokens": {
           "minimum": 1,
-          "default": 16384
+          "default": 16384,
+          "wire": "max_completion_tokens"
         },
         "reasoning_effort": {
           "default": "medium"

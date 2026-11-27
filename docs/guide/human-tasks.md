@@ -2,40 +2,44 @@
 
 Status: current. Rows marked planned are designed and not built.
 
-**Pause the agent or workflow at the steps that matter, show a person exactly what will happen, and carry on only with
-their decision.**
+When an agent or workflow reaches a step that matters, you can pause it there, show a person exactly what is about to
+happen, and let it carry on only once that person has decided.
 
 ## Some steps need a named person on the record
 
-A payment, a hold on an account, a reply to a customer, a field read from a blurry scan: none of these should happen
-until a person has looked. If the agent simply runs, the first wrong write reaches a customer's account. If a person is
-asked by email, nobody can later show what they were looking at when they said yes. A reviewer who signs off on a
-summary cannot say what the agent was about to send.
+Some actions should wait until a person has looked at them: a payment, a hold on an account, a reply to a customer, or a
+field read from a blurry scan. If the agent runs straight through, a mistake in any of these lands in a customer's
+account before anyone has checked it. Asking for approval by email does not close the gap, because nobody can later show
+what the approver was looking at when they agreed. The same is true when a reviewer signs off on a summary, since the
+summary does not show what the agent was about to send.
 
 A human task pauses the agent or workflow at that step, shows a person exactly what will happen, and carries on only
-with their decision. Use it wherever your process needs a named person on the record: a claims team approving a
-settlement, a lender confirming a payoff quote, a support team checking a refund.
+with their decision. Use one wherever your process needs a named person on the record. A claims team might approve a
+settlement this way, a lender might confirm a payoff quote, and a support team might check a refund.
 
-## The plan
+## How an approval works
 
 <!-- site: steps -->
-1. **Choose which writes wait.** A team admin picks the whole team, some apps or one tool, and who answers.
-2. **The agent asks.** When it reaches a write, the run pauses and a task shows the exact input.
-3. **A person decides.** They approve or reject with a reason, in the console, in the chat or with the command line.
-4. **The run carries on.** An approved write runs once. A rejected one makes no change. Either way the record keeps who
-   decided, when and why.
+1. **Choose which actions wait.** Your team admin decides whether approvals cover the whole team, some apps or a single
+   tool, and who answers them.
+2. **The agent asks.** When the agent reaches an action that changes data, the run pauses and a task shows the exact
+   input it wants to use.
+3. **A person decides.** The reviewer approves or rejects the task with a reason, from the console, the chat or the
+   command line.
+4. **The run carries on.** An approved action runs once, and a rejected one makes no change. Either way, the record
+   keeps who decided, when and why.
 
 ## Try it
 
-Make every write in your team wait for a person, then approve one.
+In this walkthrough you make every action that changes data in your team wait for a person, and then you approve one.
 
 <!-- site: steps -->
-1. **Turn on approvals.** In the console open **Settings › Approvals**, turn on **Ask before an agent changes anything in
-   an app**, set **Who answers** to **Ask a reviewer**, and pick the role that reviews.
-2. **Ask for a write.** You need an agent that holds a write tool from an app your team has turned on
-   ([Tools and apps](apps.md)). In a chat, ask it to do something, for example "Add a note to case 1042
-   saying the customer called." The chat shows an approval card with the exact input and no write is made.
-3. **Decide it.** A reviewer opens **Work › Human Tasks**, or uses the command line:
+1. **Turn on approvals.** As a team admin, open **Settings › Approvals**, turn on **Ask before an agent changes anything in
+   an app** in the console, set **Who answers** to **Ask a reviewer**, and pick the role that reviews.
+2. **Ask the agent to change something.** You need an agent that holds a write tool from an app your team has turned
+   on ([Tools and apps](apps.md)). In a chat, ask it to do something, for example "Add a note to case 1042
+   saying the customer called." Instead of making the change, the chat shows an approval card with the exact input.
+3. **Approve it.** A reviewer opens **Work › Human Tasks**, or uses the command line:
 
    ```bash
    opsai tasks list --view open
@@ -43,12 +47,12 @@ Make every write in your team wait for a person, then approve one.
    opsai tasks approve <task-id> --reason "Checked with the customer"
    ```
 
-   The write runs once, and the chat carries on with its result. `opsai tasks decide <task-id> reject --reason "..."`
-   rejects it, and no write is made.
+   Once the task is approved, the write runs once and the chat carries on with its result. To reject the task instead,
+   run `opsai tasks decide <task-id> reject --reason "..."`, and nothing is written.
 
-## What the person is protected by
+## How a decision is protected
 
-A decision is tied to what the reviewer saw, and it counts once.
+Each decision is tied to exactly what the reviewer saw, and it counts only once.
 
 <!-- site: annotated caption="A claims settlement waiting for a person, with each protection numbered where it applies on the task" -->
 - **Human task · Approve a write: pay a claim settlement**: The claims agent wants to pay a repair shop. Nothing is paid until a reviewer decides.
@@ -65,16 +69,17 @@ A decision is tied to what the reviewer saw, and it counts once.
 - **Actions**: Approve, Reject
   - Approve runs the write once, even if it is decided twice. Reject makes no change. Both keep who decided, when and why.
 
-When a task is opened, and who can open one:
+Here is when a task is opened, and who can open one:
 
-- **Reads never wait.** Writes run at once until a team turns approvals on.
-- **Workflows and other systems can ask too.** A workflow asks a person with a **Human review** step, or an **Ask** step
-  for a free-text answer. Another system can open a task through the API and read the decision back.
+- **Reads never wait.** An agent that only reads data is never paused. Until a team turns approvals on, writes run at
+  once as well.
+- **Workflows and other systems can ask too.** A workflow asks a person with a **Human review** step, or with an **Ask**
+  step when it needs a free-text answer. Another system can open a task through the API and read the decision back.
 
 ## What a task looks like
 
-Each task is drawn from a task type: the question, the evidence, any fields to check, and the actions a person can take.
-Five types come with Ops AI; a builder copies one to make a specialised type, and no type needs code.
+Each task is drawn from a task type, which sets the question, the evidence, any fields to check and the actions a person
+can take. Ops AI comes with five types. A builder can copy one to make a more specialised type, and no type needs code.
 
 | Task type | Used for |
 |---|---|
@@ -84,7 +89,7 @@ Five types come with Ops AI; a builder copies one to make a specialised type, an
 | Acknowledgement | A person confirms they have seen something |
 | Data entry | A form a person fills in before the run goes on |
 
-## Options
+## Settings that control approvals
 
 | Setting | Where | What it does | Default |
 |---|---|---|---|
@@ -98,27 +103,28 @@ Five types come with Ops AI; a builder copies one to make a specialised type, an
 | Two approvers | A tool's approval policy | Two different people must approve; the same person twice is refused. Use it for anything that moves money | Off |
 | Task assist | Govern › Policies | A model summarises the task and suggests an action, marked as AI | Off |
 
-Every write an AI assistant makes over MCP waits for a person, whatever these settings say. Who may decide at all is the role's decide
-permission ([Teams and access](teams-and-access.md)).
+Whatever these settings say, every write an AI assistant makes over MCP waits for a person. Whether someone may decide
+at all depends on their role's decide permission ([Teams and access](teams-and-access.md)).
 
-## Limits
+## Current limits
 
-- Ops AI does not call another system when a task is decided. A caller polls the task for its decision. Webhooks are
-  planned.
-- Deciding from email or Microsoft Teams buttons is planned. Decisions are made in the console, in chat, with the
-  command line or through the API.
-- Several pauses in one run resumed as one decision is planned.
+- When a task is decided, Ops AI does not call the other system back, so a caller polls the task for its decision.
+  Webhooks are planned.
+- Deciding from buttons in email or Microsoft Teams is planned. Today, decisions are made in the console, in chat, with
+  the command line or through the API.
+- Resuming several pauses in one run with a single decision is planned.
 
-## What success looks like
+## When approvals are working
 
-A write waits as a task showing the exact input. A reviewer approves or rejects it, with a reason, and the record keeps
-who decided and when. On approval the write runs once and the chat or workflow carries on. On rejection no write is
-made. When the risk team asks who approved a change, the answer is on the task.
+An action that changes data waits as a task that shows the exact input. A reviewer approves or rejects it with a reason,
+and the record keeps who decided and when. If they approve, the write runs once and the chat or workflow carries on. If
+they reject it, nothing is written. So when your risk team asks who approved a change, you can point them to the task.
 
-## What skipping it costs
+## Without a task
 
-Without a task, the approval lives in an email thread or a chat message. It does not say which input was approved, and
-the write can run again with a different one. The audit answer is rebuilt by hand each time someone asks.
+Without a task, the approval lives in an email thread or a chat message. That message does not say which input was
+approved, so the write can run again with a different one. Each time someone asks for the audit trail, your team has
+to rebuild the answer by hand.
 
 ## Next
 

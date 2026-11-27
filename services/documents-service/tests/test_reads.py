@@ -165,6 +165,19 @@ async def test_a_reply_cut_off_at_its_limit_fails_the_read_with_its_reason_and_s
     assert await s.extractor.store.tokens_per_call(None) == (50.0, 9.0), "the failed read records what it was billed"
 
 
+async def test_a_read_whose_floor_cannot_be_read_still_records_the_reply_it_was_billed(make: Make) -> None:
+    said = json.dumps({"invoice": GOOD["invoice"]})
+    call = {"id": "c1", "type": "function", "function": {"name": "final_result", "arguments": said}}
+    choice = {"message": {"role": "assistant", "content": None, "tool_calls": [call]}, "finish_reason": "tool_calls"}
+    billed = {"choices": [choice], "usage": {"prompt_tokens": 70, "completion_tokens": 12}}
+    answer = httpx.MockTransport(lambda _: httpx.Response(200, json=billed))
+    s = make(ModelsService(httpx.AsyncClient(base_url="http://models", transport=answer), "key"), Floor(None))
+    async with s.client as c:
+        body = (await read(c, await s.stored(NOTICE), fields=[{"key": "invoice", "type": "text"}])).json()["data"]
+    assert (body["status"], body["error"]["code"]) == ("failed", "floor_unread"), body
+    assert await s.extractor.store.tokens_per_call(None) == (70.0, 12.0), "the failed read records what it was billed"
+
+
 async def test_a_declined_read_says_what_the_model_said_cut_to_300_characters(make: Make) -> None:
     said = "I can't read identity documents. " + "x" * 400
     declined = {"message": {"role": "assistant", "content": None, "refusal": said}, "finish_reason": "stop"}

@@ -78,6 +78,10 @@ class Endpoint(BaseModel):
         return str(self.url).rstrip("/")
 
 
+# How long models-service waits for a provider's whole answer before it refuses the call as provider_timeout.
+PROVIDER_WAIT_S = 60.0
+
+
 class ModelsEndpoint(Endpoint):
     """models-service: one call waits for a model's whole answer (an extraction reads a document), so its default
     timeout is a model's, not a quick read's."""
@@ -175,9 +179,10 @@ class Settings(BaseSettings):
     # With the flag tool_search on, an agent with more granted tools than this searches for its tools instead
     # of being sent every schema; 0 means always, None the agent kernel's default (TOOL_SEARCH_ABOVE, 20).
     tool_search_above: int | None = Field(default=None, ge=0)
-    # The most tokens a document read may ask the model to write (OPS_EXTRACT_OUTPUT_TOKENS), sent on every read so a
-    # long reply ends at the limit as reply_cut_off rather than as a timeout. 8,000 is about 50 line items of five
-    # fields, and what a fast model writes inside models-service's 60-second wait; the sample reads need under 1,500.
+    # The most tokens a document read may ask the model to write (OPS_EXTRACT_OUTPUT_TOKENS), sent on every read.
+    # 8,000 is about 50 line items of five fields; the sample reads need under 1,500. Writing 8,000 inside
+    # models-service's wait for a provider (PROVIDER_WAIT_S, 60 seconds) needs about 133 tokens a second, so on a
+    # slower model a long read ends as model_late, not reply_cut_off; lower this for such a model.
     extract_output_tokens: int = Field(default=8000, ge=256)
     anthropic_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("ANTHROPIC_API_KEY"))
     openai_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("OPENAI_API_KEY"))

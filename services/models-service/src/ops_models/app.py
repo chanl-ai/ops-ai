@@ -67,7 +67,7 @@ from ops_service_kit.listing import ListParams, ListQuery
 from ops_service_kit.logging import get_logger
 from ops_service_kit.narrow import an_object, json_object
 from ops_service_kit.public_address import PublicFetch
-from ops_service_kit.settings import Settings
+from ops_service_kit.settings import PROVIDER_WAIT_S, Settings
 from ops_store import isolation
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
@@ -509,7 +509,7 @@ def create_models_app(
     default); `provider_secrets` are the dev stack's keys from settings, behind them. `background` are the processes
     the lifespan runs beside the server, by default the sweep of idle key spend. `alias_users` says how many agents
     name each alias; by default agents-service on `OPS_AGENTS_URL`, and no counts when that is unset."""
-    http = upstream or httpx.AsyncClient(timeout=60)
+    http = upstream or httpx.AsyncClient(timeout=PROVIDER_WAIT_S)
     # Testing a key sends it out: only to a public address, never following a redirect with it.
     key_fetch = key_fetch or PublicFetch(max_redirects=0, timeout_s=20)
 
