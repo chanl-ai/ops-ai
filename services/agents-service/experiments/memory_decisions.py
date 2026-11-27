@@ -1,5 +1,3 @@
-# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
-# Parts of Pydantic AI are untyped.
 """Memory decisions: does the memory extraction prompt make the right call on a real model?
 
   uv run python experiments/memory_decisions.py                       # the scripted model, no tokens
@@ -9,7 +7,7 @@ Each conversation is what learning sends the model (api/memory.py extract_memori
 person's words marked and the saved memories it may refer to. What its answer would save (api/memory.py keepable: a
 kind one turn may teach, nothing restricted, a quote from the person's own words in their latest message, an id it was
 shown, one decision per memory) is judged against the expected kind and decision.
-Project rule: at most 10 real model calls per experiment; the model wrapper raises on the eleventh.
+Project rule: at most 10 real model calls per experiment; the capped endpoint raises on the eleventh.
 """
 
 from __future__ import annotations
@@ -17,20 +15,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from pydantic_ai import Agent, StructuredDict
-from pydantic_ai.messages import ModelMessage, ModelResponse
-from pydantic_ai.models import Model, ModelRequestParameters, StreamedResponse
-from pydantic_ai.models.wrapper import WrapperModel
-from pydantic_ai.settings import ModelSettings
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from ops_agent_kernel import structured
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.models import build_model
 from ops_agents.activities.catalog import AgentDefinition
 from ops_agents.api.memory import NEVER_KEPT, Extraction, extract_memories, keepable
@@ -39,48 +31,32 @@ from ops_service_kit.settings import Settings
 CALL_CAP = 10  # per-experiment cap on real model calls
 
 
-class Capped(WrapperModel):
-    """A real model that refuses an eleventh request."""
+class Capped:
+    """Counts real model calls and refuses an eleventh, before it is sent."""
 
     calls = 0
 
-    async def request(
-        self,
-        messages: list[ModelMessage],
-        model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters,
-    ) -> ModelResponse:
-        self._count()
-        return await self.wrapped.request(messages, model_settings, model_request_parameters)
+    @staticmethod
+    def on(endpoint: ModelEndpoint) -> ModelEndpoint:
+        async def headers(purpose: str) -> dict[str, str]:
+            Capped.calls += 1
+            if Capped.calls > CALL_CAP:
+                raise RuntimeError(f"real model call cap of {CALL_CAP} reached; stopping")
+            return {}
 
-    @asynccontextmanager
-    async def request_stream(
-        self,
-        messages: list[ModelMessage],
-        model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters,
-        run_context: Any = None,
-    ) -> AsyncGenerator[StreamedResponse]:
-        self._count()
-        async with self.wrapped.request_stream(messages, model_settings, model_request_parameters, run_context) as rs:
-            yield rs
-
-    def _count(self) -> None:
-        Capped.calls += 1
-        if Capped.calls > CALL_CAP:
-            raise RuntimeError(f"real model call cap of {CALL_CAP} reached; stopping")
+        return replace(endpoint, headers=headers)
 
 
 @dataclass
 class Extractor:
-    """api/memory.py's Extractor on a Pydantic AI model: one structured call, the answer as a dict."""
+    """api/memory.py's Extractor on a model endpoint: one structured call, the answer as a dict."""
 
-    model: Model | str
+    model: ModelEndpoint
 
     async def structured(self, system: str, user: str, schema: dict[str, Any], *, key: str) -> Any:
         del key  # the service's ledger key; nothing is recorded here
-        agent = Agent(self.model, instructions=system, output_type=StructuredDict(schema), retries=1)
-        return (await agent.run(user)).output
+        answered = await structured.ask(self.model, system=system, prompt=user, purpose="memory", schema=schema)
+        return answered.value
 
 
 @dataclass(frozen=True)
@@ -194,7 +170,7 @@ async def main() -> None:
     ap.add_argument("--real", metavar="MODEL", help="a provider model name, e.g. gpt-5-mini (needs OPENAI_API_KEY)")
     a = ap.parse_args()
     if a.real:
-        model: Model | str = Capped(build_model(Settings(model_alias=a.real)))
+        model = Capped.on(build_model(Settings(model_alias=a.real)))
     else:
         from tests.conftest import scripted_model  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 

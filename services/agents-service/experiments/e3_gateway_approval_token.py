@@ -45,7 +45,7 @@ def out(line: str = "") -> None:
 
 def spawn(module: str, port: int, extra: dict[str, str]) -> subprocess.Popen[bytes]:
     LOGS.mkdir(exist_ok=True)
-    env = {**os.environ, "PYDANTIC_AI_NO_BANNER": "1", **extra}
+    env = {**os.environ, **extra}
     log = (LOGS / f"e3-{module}.log").open("ab")
     proc = subprocess.Popen([sys.executable, "-m", module], cwd=ROOT, env=env, stdout=log, stderr=log)
     for _ in range(80):

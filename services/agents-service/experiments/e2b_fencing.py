@@ -66,7 +66,7 @@ async def scratch() -> None:
 def spawn(name: str, module: str, port: int, extra: dict[str, str]) -> tuple[subprocess.Popen[bytes], Path]:
     log = LOGS / f"e2b-{name}.log"
     log.write_text("")
-    env = {**os.environ, "OPS_DATABASE_URL": URL, "PYDANTIC_AI_NO_BANNER": "1", **extra}
+    env = {**os.environ, "OPS_DATABASE_URL": URL, **extra}
     fh = log.open("ab")
     proc = subprocess.Popen([sys.executable, "-m", module], cwd=ROOT, env=env, stdout=fh, stderr=fh)
     deadline = time.monotonic() + 60

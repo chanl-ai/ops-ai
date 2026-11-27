@@ -19,8 +19,6 @@ from alembic.config import Config
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
-from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
-from pydantic_ai.models.function import AgentInfo
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agent_kernel import judge
@@ -146,14 +144,6 @@ DRAFTED_BRIEF: dict[str, Any] = {
     "examples": "Q: Where is LN-20418? A: In underwriting; a decision is due Friday.",
     "never": ["Promise an approval."],
 }
-
-
-def structured(info: AgentInfo, args: dict[str, Any]) -> ModelResponse:
-    """For a test's own FunctionModel: a structured answer in the form the request asks for, the JSON a native
-    response format wants, else a call of the output tool."""
-    if info.model_request_parameters.output_mode == "native":
-        return ModelResponse(parts=[TextPart(json.dumps(args))])
-    return ModelResponse(parts=[ToolCallPart("final_result", args)])
 
 
 # A tool result that says a workflow finished, as the wire carries it (JSON) or a repr would.

@@ -9,18 +9,19 @@ import json
 from collections.abc import AsyncIterator, Callable
 from typing import Any, cast
 
+import httpx2
 import pytest
-from pydantic_ai.exceptions import ModelHTTPError
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
-from pydantic_ai.models import Model as WireModel
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from ops_agent_kernel import aliases, guard
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.events import KernelEvent, StatusChanged, TextDelta, TextReplaced, TurnFinished
 from ops_agent_kernel.kernel import run_turn
+from ops_agent_kernel.models import ModelsServiceModels
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
+from ops_agent_kernel.testing import Answer, Reply, ScriptedModel, Structured, ToolCall, last_user_text
 from ops_agent_kernel.types import AgentSettings, Guardrail, PromptFragment, Skill, ToolGrant, TurnRequest, TurnResult
-from tests.wire_model import on_wire
+from ops_service_kit.http import Json
+from tests.conftest import SCRIPTED_URL, model_on
 
 NO_ADVICE = Guardrail("gr_1", 2, "No investment advice", ("investment advice",), "I can't give investment advice.")
 # The same rule held until checked: the answer is never on screen before its check passes.
@@ -52,15 +53,6 @@ class NoKnowledge:
         return []
 
 
-def _prompt(messages: list[ModelMessage]) -> str:
-    for m in reversed(messages):
-        if isinstance(m, ModelRequest):
-            for p in m.parts:
-                if isinstance(p, UserPromptPart) and isinstance(p.content, str):
-                    return p.content
-    return ""
-
-
 class Model:
     """Answers classification calls with `classify(message)` and answering calls with `answers` in order."""
 
@@ -73,8 +65,8 @@ class Model:
         # The tools each answering request offered, in order.
         self.offered: list[list[str]] = []
 
-    def respond(self, messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        prompt = _prompt(messages)
+    def respond(self, messages: list[Json], tools: list[Json]) -> Answer:
+        prompt = last_user_text(messages)
         if prompt.startswith("Blocked topics:"):
             message = prompt.split("Message:\n", 1)[1]
             self.check_prompts.append(prompt)
@@ -82,27 +74,18 @@ class Model:
             out = self.classify(message)
             if isinstance(out, Exception):
                 raise out
-            return ModelResponse(parts=[ToolCallPart("final_result", out)])
+            return Structured(out)
         self.answered += 1
-        self.offered.append([t.name for t in info.function_tools])
+        self.offered.append([str(t["function"]["name"]) for t in tools])  # type: ignore[index]
         answer = self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
         if isinstance(answer, Exception):
             raise answer
-        return ModelResponse(parts=[TextPart(answer)])
+        return answer
 
-    def build(self) -> WireModel:
-        async def stream(
-            messages: list[ModelMessage], info: AgentInfo
-        ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-            for i, part in enumerate(self.respond(messages, info).parts):
-                if isinstance(part, TextPart):
-                    # Word by word, as a provider streams, so a test can tell a streamed answer from a whole one.
-                    for n, word in enumerate(part.content.split(" ")):
-                        yield word if n == 0 else f" {word}"
-                elif isinstance(part, ToolCallPart):
-                    yield {i: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
-
-        return on_wire(FunctionModel(self.respond, stream_function=stream))
+    def build(self) -> ModelEndpoint:
+        # Text streams a few characters at a time, as a provider streams, so a test can tell a streamed answer from
+        # a whole one.
+        return model_on(self.respond, chunk=4)
 
 
 def topic_when(words: str) -> Callable[[str], dict[str, str]]:
@@ -254,25 +237,33 @@ class Lookups:
         return ToolOutcome(True, {"found": True})
 
 
-def cut_short_model(raise_mid_answer: bool) -> WireModel:
+class CutShort(ScriptedModel):
     """Classifies everything as none; answers on a blocked topic, then either calls a tool (so the step limit cuts
-    the reply) or fails part-way through the answer."""
+    the reply) or drops the stream part-way through the answer."""
 
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        if _prompt(messages).startswith("Blocked topics:"):
-            return ModelResponse(parts=[ToolCallPart("final_result", {"topic": "none"})])
-        return ModelResponse(parts=[TextPart("You should invest in our fund."), ToolCallPart("lookup", {})])
+    def __init__(self, raise_mid_answer: bool) -> None:
+        super().__init__(self.answer)
+        self.raise_mid_answer = raise_mid_answer
 
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        if _prompt(messages).startswith("Blocked topics:"):
-            yield {0: DeltaToolCall(name="final_result", json_args='{"topic": "none"}')}
-            return
-        yield "You should invest in our fund."
-        if raise_mid_answer:
+    def answer(self, messages: list[Json], tools: list[Json]) -> Answer:
+        if last_user_text(messages).startswith("Blocked topics:"):
+            return Structured({"topic": "none"})
+        return Reply("You should invest in our fund.", [ToolCall("lookup", {})])
+
+    def _stream(self, reply: Reply, calls: list[Json]) -> httpx2.Response:
+        if not self.raise_mid_answer:
+            return super()._stream(reply, calls)
+
+        async def dropped() -> AsyncIterator[bytes]:
+            yield f"data: {json.dumps(self._chunk({'role': 'assistant', 'content': reply.text}))}\n\n".encode()
             raise RuntimeError("provider dropped the stream")
-        yield {1: DeltaToolCall(name="lookup", json_args="{}")}
 
-    return on_wire(FunctionModel(respond, stream_function=stream))
+        return httpx2.Response(200, headers={"content-type": "text/event-stream"}, content=dropped())
+
+
+def cut_short_model(raise_mid_answer: bool) -> ModelEndpoint:
+    http = httpx2.AsyncClient(transport=CutShort(raise_mid_answer))
+    return ModelsServiceModels(SCRIPTED_URL, "mk_scripted", http_client=http).model_for("scripted")
 
 
 async def _cut_turn(raise_mid_answer: bool) -> tuple[TurnResult, str]:
@@ -336,23 +327,19 @@ async def test_a_topic_scope_pinned_on_the_agent_reaches_the_classifier_prompt()
 
 
 class Source:
-    """models-service by alias: the agent's alias answers with `turn`, `guardrail-check` with `check` (a Model, or an
-    exception every call raises)."""
+    """models-service by alias: the agent's alias answers with `turn`, `guardrail-check` with `check` (a Model, or a
+    refusal every call gets)."""
 
-    def __init__(self, turn: Model, check: Model | Exception) -> None:
+    def __init__(self, turn: Model, check: Model | Reply) -> None:
         self.turn, self.check = turn.build(), check
 
-    def model_for(self, alias: str) -> WireModel:
+    def model_for(self, alias: str) -> ModelEndpoint:
         if alias != guard.GUARD_ALIAS:
             return self.turn
         if isinstance(self.check, Model):
             return self.check.build()
-        error = self.check
-
-        def fail(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-            raise error
-
-        return on_wire(FunctionModel(fail))
+        refused = self.check
+        return model_on(lambda messages, tools: refused)
 
 
 @pytest.fixture(autouse=True)
@@ -381,14 +368,14 @@ async def test_the_check_runs_on_its_own_alias_when_models_service_binds_it() ->
 
 
 async def test_an_unbound_check_alias_uses_the_agents_model() -> None:
-    unbound = ModelHTTPError(404, "guardrail-check", {"error": {"code": "alias_not_found"}})
+    unbound = Reply(status=404, error={"error": {"code": "alias_not_found"}})
     answering = Model(topic_when("shares"), ["Savings Plus pays 3.1 percent."])
     result = await through(Source(answering, unbound), SAVINGS)
     assert result.stop_reason == "final" and answering.checks, result
 
 
 async def test_a_failing_check_alias_fails_closed() -> None:
-    down = ModelHTTPError(503, "guardrail-check", {"error": {"code": "provider_unavailable"}})
+    down = Reply(status=503, error={"error": {"code": "provider_unavailable"}})
     answering = Model(topic_when("shares"), ["Savings Plus pays 3.1 percent."])
     result = await through(Source(answering, down), SAVINGS)
     assert (result.status, result.stop_reason) == ("failed", "guardrail_unavailable"), result
@@ -443,29 +430,18 @@ async def test_no_tool_call_cap_lets_a_long_turn_run() -> None:
             calls["n"] += 1
             return ToolOutcome(True, {"done": calls["n"]})
 
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        made = sum(1 for m in messages if isinstance(m, ModelRequest) for p in m.parts if p.part_kind == "tool-return")
+    def respond(messages: list[Json], tools: list[Json]) -> Answer:
+        made = sum(1 for m in messages if m.get("role") == "tool")
         if made < 9:
             # A new lookup each time: the kernel answers a repeated identical call from its first result instead.
-            return ModelResponse(parts=[ToolCallPart("lookup", {"n": made}, tool_call_id=f"c{made}")])
-        return ModelResponse(parts=[TextPart("Done after nine lookups.")])
-
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        part = respond(messages, info).parts[0]
-        if isinstance(part, TextPart):
-            yield part.content
-        elif isinstance(part, ToolCallPart):
-            yield {
-                0: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args), tool_call_id=part.tool_call_id)
-            }
+            return Reply(tool_calls=[ToolCall("lookup", {"n": made}, id=f"c{made}")])
+        return "Done after nine lookups."
 
     for cap, expected in ((None, "final"), (6, "max_tool_calls")):
         calls["n"] = 0
         settings = AgentSettings("ag_x", 1, [PromptFragment("x")], "m", max_tool_calls=cap, max_steps=50)
         req = TurnRequest("t1", "r1", settings, [LOOKUP], user_turn="Look it all up")
-        ports = KernelPorts(
-            model=on_wire(FunctionModel(respond, stream_function=stream)), tools=Counting(), knowledge=NoKnowledge()
-        )
+        ports = KernelPorts(model=model_on(respond), tools=Counting(), knowledge=NoKnowledge())
         events = [e async for e in run_turn(req, ports)]
         result = cast(TurnResult, events[-1].result)  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
         assert result.stop_reason == expected, (cap, result.error)

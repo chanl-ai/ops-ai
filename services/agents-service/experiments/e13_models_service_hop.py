@@ -27,21 +27,20 @@ import statistics
 import subprocess
 import sys
 import time
-from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
 import asyncpg
 import httpx
-from pydantic_ai.models import Model
-from pydantic_ai.models.function import AgentInfo, FunctionModel
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openai import OpenAIProvider
+import httpx2
+from openai import AsyncOpenAI
 
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.models import ModelsServiceModels
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
+from ops_agent_kernel.testing import ScriptedModel
 from ops_agent_kernel.types import AgentSettings, Passage, PromptFragment, TurnRequest
 from ops_identity import dev_service_signer, mint_service_token
 
@@ -82,14 +81,16 @@ class NoKnowledge:
         return []
 
 
-def scripted() -> FunctionModel:
-    async def stream(messages: list[Any], info: AgentInfo) -> AsyncIterator[str]:
-        yield "The daily limit is $25,000."
+def scripted() -> ModelEndpoint:
+    """An instant model in process: the scripted transport answers before any network is touched."""
+    wire = ScriptedModel(lambda messages, tools: "The daily limit is $25,000.")
+    client = AsyncOpenAI(
+        base_url="http://scripted/v1", api_key="scripted", http_client=httpx2.AsyncClient(transport=wire)
+    )
+    return ModelEndpoint(client, "scripted")
 
-    return FunctionModel(stream_function=stream)
 
-
-async def turn(model: Model, alias: str) -> float:
+async def turn(model: ModelEndpoint, alias: str) -> float:
     settings = AgentSettings("e13", 1, [PromptFragment("You answer briefly.")], alias)
     ports = KernelPorts(model, NoTools(), NoKnowledge())
     started = time.perf_counter()
@@ -100,7 +101,7 @@ async def turn(model: Model, alias: str) -> float:
     return elapsed
 
 
-async def group(model: Model, alias: str, n: int, concurrency: int) -> list[float]:
+async def group(model: ModelEndpoint, alias: str, n: int, concurrency: int) -> list[float]:
     gate = asyncio.Semaphore(concurrency)
 
     async def one() -> float:
@@ -190,7 +191,7 @@ async def part_real() -> None:
         alias = {"name": "bank-live-e13", "providerId": pid, "modelId": REAL_MODEL, "clearedSensitivity": "internal"}
         httpx.post(f"http://127.0.0.1:{PORT}/v1/models/aliases", json=alias, headers=SERVICE).raise_for_status()
         through = ModelsServiceModels(f"http://127.0.0.1:{PORT}", issue_key("purpose:e13-real"))
-        direct_model = OpenAIChatModel(REAL_MODEL, provider=OpenAIProvider(api_key=key))
+        direct_model = ModelEndpoint(AsyncOpenAI(api_key=key), REAL_MODEL)
         direct: list[float] = []
         hop: list[float] = []
         for _ in range(5):

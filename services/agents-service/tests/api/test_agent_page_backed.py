@@ -136,7 +136,7 @@ def test_a_version_saved_before_the_model_call_cap_keeps_eight() -> None:
 
 
 def test_no_saved_model_call_cap_reaches_the_kernel_as_unlimited() -> None:
-    """None would become pydantic-ai's request_limit=None: a looping agent spending real calls until the deadline."""
+    """None would leave the loop without a model-call limit: a looping agent spending real calls until the deadline."""
     shapes: list[Json] = [{"maxModelCallsPerTurn": None}, {}, {"maxModelCallsPerTurn": 400}]
     for caps in shapes:
         defn = definition_of("ag_x", 1, {"name": "x", "role": "y", "guardrails": caps})

@@ -14,14 +14,13 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 import pytest
-from pydantic_ai.messages import ModelMessage, ModelResponse
-from pydantic_ai.models import Model
-from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from ops_agent_kernel.ports import ToolOutcome
+from ops_agent_kernel.testing import Answer
 from ops_agent_kernel.types import Resume, Skill, SkillInput, ToolGrant, TurnRequest
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.api.agent_registry import definition_of
+from ops_service_kit.http import Json
 from tests.conftest import SEED
 from tests.unit.test_skill_steps_kernel import (
     HARDSHIP,
@@ -44,7 +43,6 @@ from tests.unit.test_skill_steps_kernel import (
     stepped,
     tool,
 )
-from tests.wire_model import on_wire
 
 
 def _amount(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -816,12 +814,9 @@ class ThinkingScript(Script):
         super().__init__(*actions)
         self.thinking: list[Any] = []
 
-    def respond(self, messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        self.thinking.append(info.model_request_parameters.thinking)
-        return super().respond(messages, info)
-
-    def build(self) -> Model:
-        return on_wire(FunctionModel(self.respond))
+    def respond(self, messages: list[Json], tools: list[Json], body: Json | None = None) -> Answer:
+        self.thinking.append((body or {}).get("reasoning_effort"))
+        return super().respond(messages, tools, body)
 
 
 async def test_a_saved_agent_sends_no_thinking_setting_and_a_set_one_reaches_the_model() -> None:

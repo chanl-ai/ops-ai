@@ -68,7 +68,6 @@ def spawn(poll: float, db: str = "ops_runtime") -> subprocess.Popen[bytes]:
     LOGS.mkdir(exist_ok=True)
     env = {
         **os.environ,
-        "PYDANTIC_AI_NO_BANNER": "1",
         "OPS_PORT": str(PORT),
         "OPS_TIMER_POLL_SECONDS": str(poll),
         "OPS_DATABASE_URL": f"postgresql+asyncpg://ops:ops@localhost:5477/{db}",

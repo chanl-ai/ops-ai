@@ -14,28 +14,19 @@ from __future__ import annotations
 
 import importlib
 import json
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
 import pytest
-from pydantic_ai.messages import (
-    ModelMessage,
-    ModelRequest,
-    ModelResponse,
-    TextPart,
-    ToolCallPart,
-    ToolReturnPart,
-    UserPromptPart,
-)
-from pydantic_ai.models import Model
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from ops_agent_kernel import judge
 from ops_agent_kernel.context import PLATFORM_RULES
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
+from ops_agent_kernel.testing import Answer, Reply, Structured, ToolCall, last_user_text, system_text, tool_names
 from ops_agent_kernel.tool_cache import ToolCache
 from ops_agent_kernel.types import (
     AgentSettings,
@@ -49,20 +40,15 @@ from ops_agent_kernel.types import (
 )
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.api.agent_registry import definition_of
-from tests.conftest import SEED
-from tests.wire_model import on_wire
+from ops_service_kit.http import Json
+from tests.conftest import SEED, model_on, returned, wired
 
 Call = tuple[str, dict[str, Any]]
 Action = str | Call | list[Call]
 
 
-def _last_user(messages: list[ModelMessage]) -> str:
-    for m in reversed(messages):
-        if isinstance(m, ModelRequest):
-            for p in m.parts:
-                if isinstance(p, UserPromptPart) and isinstance(p.content, str):
-                    return p.content
-    return ""
+# Request fields every call carries; anything else in a request is a model setting the kernel chose to send.
+BASE_FIELDS = frozenset({"messages", "model", "stream", "stream_options", "tools", "tool_choice"})
 
 
 class Script:
@@ -79,48 +65,30 @@ class Script:
         self.returned: list[Any] = []
         self.judged: list[str] = []
 
-    def respond(self, messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        prompt = _last_user(messages)
+    def respond(self, messages: list[Json], tools: list[Json], body: Json | None = None) -> Answer:
+        prompt = last_user_text(messages)
         if prompt.startswith(judge.PROMPT_HEAD):
-            self.judged.append(f"{info.instructions}\n{prompt}")
+            self.judged.append(f"{system_text(messages)}\n{prompt}")
             if self.judge == "raise":
                 raise RuntimeError("judge provider down")
-            said = {"passed": self.judge == "yes", "reason": f"The judge says {self.judge}."}
-            return ModelResponse(parts=[ToolCallPart("final_result", said)])
+            return Structured({"passed": self.judge == "yes", "reason": f"The judge says {self.judge}."})
         if prompt.startswith("Blocked topics:"):
-            return ModelResponse(
-                parts=[ToolCallPart("final_result", {"topic": self.classify(prompt.split("Message:\n", 1)[1])})]
-            )
-        self.instructions.append(str(info.instructions or ""))
-        self.offered.append([t.name for t in info.function_tools])
-        self.settings.append(info.model_settings)
-        last = messages[-1]
-        if isinstance(last, ModelRequest):
-            self.returned += [p.content for p in last.parts if isinstance(p, ToolReturnPart)]
+            return Structured({"topic": self.classify(prompt.split("Message:\n", 1)[1])})
+        self.instructions.append(system_text(messages))
+        self.offered.append(sorted(tool_names(tools)))
+        knobs = {k: v for k, v in (body or {}).items() if k not in BASE_FIELDS}
+        self.settings.append(knobs or None)
+        self.returned += returned(messages)
         action: Action = self.actions.pop(0) if self.actions else "Done."
         if isinstance(action, str):
-            return ModelResponse(parts=[TextPart(action)])
+            return action
         calls = action if isinstance(action, list) else [action]
         step = len(self.instructions)
-        return ModelResponse(
-            parts=[ToolCallPart(name, args, tool_call_id=f"c{step}_{i}") for i, (name, args) in enumerate(calls)]
-        )
+        return Reply(tool_calls=[ToolCall(name, args, id=f"c{step}_{i}") for i, (name, args) in enumerate(calls)])
 
-    def build(self) -> Model:
-        async def stream(
-            messages: list[ModelMessage], info: AgentInfo
-        ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-            for i, part in enumerate(self.respond(messages, info).parts):
-                if isinstance(part, TextPart):
-                    yield part.content
-                elif isinstance(part, ToolCallPart):
-                    yield {
-                        i: DeltaToolCall(
-                            name=part.tool_name, json_args=part.args_as_json_str(), tool_call_id=part.tool_call_id
-                        )
-                    }
-
-        return on_wire(FunctionModel(self.respond, stream_function=stream))
+    def build(self) -> ModelEndpoint:
+        endpoint, wire = wired(lambda messages, tools: self.respond(messages, tools, wire.requests[-1]))
+        return endpoint
 
 
 class Systems:
@@ -796,13 +764,13 @@ class Aliases:
         self.turn, self.ran = turn, list[str]()
 
     def model_for(self, alias: str) -> Any:
-        def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        def respond(messages: list[Json], tools: list[Json]) -> Answer:
             self.ran.append(alias)
-            return self.turn.respond(messages, info)
+            return self.turn.respond(messages, tools)
 
         if alias == "m":
             return self.turn.build()
-        return on_wire(FunctionModel(respond))
+        return model_on(respond)
 
 
 async def test_a_judged_steps_tokens_are_in_the_turns_usage_under_the_judge_alias() -> None:

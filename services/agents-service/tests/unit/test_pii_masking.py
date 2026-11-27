@@ -9,22 +9,21 @@ own cards) is masked by mistake."""
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
 from dataclasses import replace
 from typing import Any
 
 import pytest
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
-from pydantic_ai.models import Model
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.events import CitationsReady, KernelEvent, TextDelta, TextReplaced, ToolOutput, TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.pii import StreamMasker, mask
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
+from ops_agent_kernel.testing import Answer, Reply, ToolCall
 from ops_agent_kernel.types import AgentSettings, Passage, PromptFragment, ToolGrant, TurnRequest
 from ops_pii import masked
-from tests.wire_model import on_wire
+from ops_service_kit.http import Json
+from tests.conftest import model_on, returned
 
 READ = ToolGrant(
     "get_customer",
@@ -242,26 +241,18 @@ class Tools:
         return ToolOutcome(True, RECORD)
 
 
-def turn_model(seen: list[str]) -> Model:
+def turn_model(seen: list[str]) -> ModelEndpoint:
     """Reads the customer, then answers with what it read; `seen` keeps every tool result the model was given."""
 
-    def reply(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        returns = [p for m in messages if isinstance(m, ModelRequest) for p in m.parts if isinstance(p, ToolReturnPart)]
-        if not returns:
-            return ModelResponse(parts=[ToolCallPart("get_customer", {"id": "C-1001"})])
-        seen.extend(json.dumps(p.content) for p in returns)
-        return ModelResponse(parts=[TextPart(REPLY)])
+    def reply(messages: list[Json], tools: list[Json]) -> Answer:
+        results = returned(messages, every=True)
+        if not results:
+            return Reply(tool_calls=[ToolCall("get_customer", {"id": "C-1001"})])
+        seen.extend(json.dumps(r) for r in results)
+        return REPLY
 
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        for part in reply(messages, info).parts:
-            if isinstance(part, ToolCallPart):
-                yield {0: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
-            elif isinstance(part, TextPart):
-                # Small chunks, so numbers and the email arrive split.
-                for i in range(0, len(part.content), 5):
-                    yield part.content[i : i + 5]
-
-    return on_wire(FunctionModel(reply, stream_function=stream))
+    # Small chunks, so numbers and the email arrive split.
+    return model_on(reply, chunk=5)
 
 
 async def turn(redact: bool) -> tuple[list[KernelEvent], list[str]]:
@@ -309,17 +300,10 @@ class Knowledge:
 async def test_a_cited_passage_is_masked_where_people_see_it() -> None:
     """Citations carried the passage text unmasked, in the stream and in the stored answer."""
 
-    def reply(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        return ModelResponse(parts=[TextPart("Ann's details are on file [1].")])
-
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str]:
-        yield "Ann's details are on file [1]."
-
     settings = replace(AgentSettings("ag_x", 1, [PromptFragment("You help.")], "test-model"), redact_pii=True)
     req = TurnRequest("t2", "th2", settings, [], user_turn="Who is Ann?", kb_ids=["kb_1"])
-    ports = KernelPorts(
-        model=on_wire(FunctionModel(reply, stream_function=stream)), tools=Tools(), knowledge=Knowledge()
-    )  # type: ignore[arg-type]
+    cited = model_on(lambda messages, tools: "Ann's details are on file [1].", chunk=100)
+    ports = KernelPorts(model=cited, tools=Tools(), knowledge=Knowledge())  # type: ignore[arg-type]
     events = [e async for e in run_turn(req, ports)]
     [ready] = [e for e in events if isinstance(e, CitationsReady)]
     finished = events[-1]
