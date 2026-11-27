@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from decimal import Decimal
 from uuid import uuid4
 
 import httpx
@@ -15,6 +16,8 @@ import pytest
 
 from ops_identity.fastapi import current_principal
 from ops_models.app import create_models_app
+from ops_models.catalog import Catalog
+from ops_models.store.aliases import Aliases, AliasFields
 from ops_service_kit.contract import response_checker
 
 from .conftest import SERVICE, Models
@@ -140,4 +143,49 @@ async def test_a_fresh_chat_alias_is_priced_and_an_unpriced_model_is_refused(rig
     assert (await rig.client.put("/v1/models/chat-model", json=known)).status_code == 200
     for alias in rig.aliases:
         now = (await rig.client.get(f"/v1/models/aliases/{alias}/versions", headers=SERVICE)).json()["data"]["data"][-1]
-        assert (float(now["inputPerMillion"]), float(now["outputPerMillion"])) == (0.75, 4.5), now
+        listed = Catalog.load().model("openai", "gpt-5.4-mini")
+        assert listed is not None
+        assert (float(now["inputPerMillion"]), float(now["outputPerMillion"])) == (
+            listed.input_per_million,
+            listed.output_per_million,
+        ), now
+
+
+async def test_a_lone_or_zero_chat_price_is_refused_before_anything_is_written(rig: Rig) -> None:
+    body = {"provider": "openai", "model": "house-model-7", "keyName": "MAIN"}
+    for price, code in [
+        ({"inputPerMillion": "2"}, "price_incomplete"),
+        ({"inputPerMillion": "0", "outputPerMillion": "0"}, "price_required"),
+    ]:
+        refused = await rig.client.put("/v1/models/chat-model", json={**body, **price})
+        assert refused.status_code == 422 and refused.json()["error"]["code"] == code, refused.text
+    assert (await rig.client.get(f"/v1/models/aliases/{rig.aliases[0]}/versions", headers=SERVICE)).status_code == 404
+    connections = await rig.client.get(
+        "/v1/models/providers", params={"search": f"{rig.aliases[0]}-openai"}, headers=SERVICE
+    )
+    assert connections.status_code == 200 and connections.json()["data"]["data"] == [], connections.text
+
+
+async def test_a_zero_priced_chat_alias_takes_the_given_price_or_is_refused(rig: Rig) -> None:
+    # A version written at zero before prices were required: the next choice prices it or is refused.
+    for alias in rig.aliases:
+        zero = Decimal(0)
+        fields: AliasFields = {
+            "provider_id": "prov_scripted", "model_id": "old", "cleared_sensitivity": "confidential",
+            "input_per_million": zero, "output_per_million": zero, "reasoning_effort": None, "images": False,
+        }  # fmt: skip
+        assert await Aliases(rig.models.engine).create(alias, "chat", fields)
+    body = {"provider": "openai", "model": "house-model-7", "keyName": "MAIN"}
+    refused = await rig.client.put("/v1/models/chat-model", json=body)
+    assert refused.status_code == 422 and refused.json()["error"]["code"] == "price_required", refused.text
+    saved = await rig.client.put(
+        "/v1/models/chat-model", json={**body, "inputPerMillion": "2", "outputPerMillion": "8"}
+    )
+    assert saved.status_code == 200, saved.text
+    for alias in rig.aliases:
+        now = (await rig.client.get(f"/v1/models/aliases/{alias}/versions", headers=SERVICE)).json()["data"]["data"][-1]
+        assert (now["modelId"], float(now["inputPerMillion"]), float(now["outputPerMillion"])) == (
+            "house-model-7",
+            2,
+            8,
+        )

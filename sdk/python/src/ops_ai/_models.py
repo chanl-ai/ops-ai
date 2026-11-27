@@ -126,7 +126,10 @@ class Models:
         return self._raw.agents.agents_model_alias_knobs(name)
 
     def set_chat_model(self, body: dict[str, Any]) -> dict[str, Any]:
-        """Points chat at {provider, keyName, model, endpoint?, apiVersion?}."""
+        """Points chat at {provider, keyName, model, endpoint?, apiVersion?, inputPerMillion?, outputPerMillion?}.
+
+        Give both prices or neither: with neither, the model catalog prices the model, and a model it does not
+        price (an Azure deployment name) is refused with `price_required`."""
         return cast(dict[str, Any], self._call("set_chat_model", body=body))
 
 

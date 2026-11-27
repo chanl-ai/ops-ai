@@ -14,7 +14,7 @@ from ops_identity.fastapi import current_principal, current_tenant_caller
 from ops_models.app import create_models_app
 from ops_service_kit.contract import response_checker
 
-from .conftest import Models
+from .conftest import PRICE, Models
 from .test_provider_keys import people
 
 
@@ -33,7 +33,7 @@ async def client(models: Models) -> AsyncIterator[httpx.AsyncClient]:
 
 async def test_only_the_install_admin_creates_or_versions_an_alias(client: httpx.AsyncClient) -> None:
     name = f"fast-{uuid4().hex[:6]}"
-    version = {"providerId": "prov_scripted", "modelId": "m-1", "clearedSensitivity": "internal"}
+    version = {"providerId": "prov_scripted", "modelId": "m-1", "clearedSensitivity": "internal", **PRICE}
 
     # The account admin (Admin of the Security team) is refused; the same person as Owner is not.
     refused = await client.post("/v1/models/aliases", json={"name": name, **version})
@@ -46,5 +46,26 @@ async def test_only_the_install_admin_creates_or_versions_an_alias(client: httpx
     assert edit.status_code == 403, edit.text
     assert edit.json()["error"]["code"] == "install_admin_only"
     # Reading stays with whoever read before: the account admin still lists the alias at its first version.
+    listed = await client.get(f"/v1/models/aliases/{name}/versions")
+    assert [v["version"] for v in listed.json()["data"]["data"]] == [1], listed.text
+
+
+async def test_an_alias_version_without_a_known_price_is_refused(client: httpx.AsyncClient) -> None:
+    # A version priced at zero lets every budget pass, so a model the catalog does not price needs both prices given.
+    owner = {"X-Owner": "yes"}
+    name = f"priced-{uuid4().hex[:6]}"
+    version = {"providerId": "prov_scripted", "modelId": "house-model-7", "clearedSensitivity": "internal"}
+    for body, code in [
+        (version, "price_required"),
+        ({**version, "inputPerMillion": "2"}, "price_incomplete"),
+        ({**version, "inputPerMillion": "0", "outputPerMillion": "0"}, "price_required"),
+    ]:
+        refused = await client.post("/v1/models/aliases", json={"name": name, **body}, headers=owner)
+        assert refused.status_code == 422 and refused.json()["error"]["code"] == code, refused.text
+    assert (await client.get(f"/v1/models/aliases/{name}/versions")).status_code == 404
+    priced = {**version, "inputPerMillion": "2", "outputPerMillion": "8"}
+    assert (await client.post("/v1/models/aliases", json={"name": name, **priced}, headers=owner)).status_code == 201
+    again = await client.post(f"/v1/models/aliases/{name}/versions", json=version, headers=owner)
+    assert again.status_code == 422 and again.json()["error"]["code"] == "price_required", again.text
     listed = await client.get(f"/v1/models/aliases/{name}/versions")
     assert [v["version"] for v in listed.json()["data"]["data"]] == [1], listed.text

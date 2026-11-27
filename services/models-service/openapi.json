@@ -73,14 +73,17 @@
           "inputPerMillion": {
             "anyOf": [
               {
+                "minimum": 0.0,
                 "type": "number"
               },
               {
                 "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
+              },
+              {
+                "type": "null"
               }
             ],
-            "default": "0",
             "title": "Inputpermillion"
           },
           "kind": {
@@ -101,14 +104,17 @@
           "outputPerMillion": {
             "anyOf": [
               {
+                "minimum": 0.0,
                 "type": "number"
               },
               {
                 "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
+              },
+              {
+                "type": "null"
               }
             ],
-            "default": "0",
             "title": "Outputpermillion"
           },
           "providerId": {
@@ -264,14 +270,17 @@
           "inputPerMillion": {
             "anyOf": [
               {
+                "minimum": 0.0,
                 "type": "number"
               },
               {
                 "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
+              },
+              {
+                "type": "null"
               }
             ],
-            "default": "0",
             "title": "Inputpermillion"
           },
           "modelId": {
@@ -281,14 +290,17 @@
           "outputPerMillion": {
             "anyOf": [
               {
+                "minimum": 0.0,
                 "type": "number"
               },
               {
                 "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
                 "type": "string"
+              },
+              {
+                "type": "null"
               }
             ],
-            "default": "0",
             "title": "Outputpermillion"
           },
           "providerId": {
@@ -4273,7 +4285,7 @@
                 }
               }
             },
-            "description": "The endpoint is refused, or a fresh chat alias has no price"
+            "description": "The endpoint is refused, or the chat model has no known price"
           },
           "429": {
             "content": {

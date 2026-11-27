@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ops_models.store import model_aliases, model_keys
 
-from .conftest import LOCAL, SERVICE, Models
+from .conftest import LOCAL, PRICE, SERVICE, Models
 
 
 async def admit(m: Models, key_id: str, **extra: object) -> tuple[int, str | None]:
@@ -93,7 +93,13 @@ async def test_an_image_reaches_only_an_alias_cleared_for_images_and_every_call_
     )
     assert (refused.status_code, refused.json()["error"]["code"]) == (403, "images_not_cleared"), refused.text
     name = f"pages-{uuid4().hex[:8]}"
-    alias = {"name": name, "providerId": "prov_scripted", "modelId": "scripted-pages", "clearedSensitivity": "internal"}
+    alias = {
+        "name": name,
+        "providerId": "prov_scripted",
+        "modelId": "scripted-pages",
+        "clearedSensitivity": "internal",
+        **PRICE,
+    }
     made = await models.client.post("/v1/models/aliases", json={**alias, "images": True}, headers=SERVICE)
     assert made.status_code == 201, made.text
     versions = (await models.client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]["data"]
@@ -155,6 +161,7 @@ async def test_an_alias_name_may_contain_a_dot(models: Models) -> None:
         "providerId": "prov_scripted",
         "modelId": "scripted-standard",
         "clearedSensitivity": "internal",
+        **PRICE,
     }
     r = await models.client.post("/v1/models/aliases", json=body, headers=SERVICE)
     assert r.status_code == 201, r.text
@@ -164,9 +171,15 @@ async def test_an_alias_name_may_contain_a_dot(models: Models) -> None:
 
 async def test_alias_versions_are_immutable_and_the_newest_serves(models: Models) -> None:
     name = f"bank-test-{datetime.now(UTC).strftime('%H%M%S%f')}"
-    body = {"name": name, "providerId": "prov_scripted", "modelId": "scripted-a", "clearedSensitivity": "internal"}
+    body = {
+        "name": name,
+        "providerId": "prov_scripted",
+        "modelId": "scripted-a",
+        "clearedSensitivity": "internal",
+        **PRICE,
+    }
     assert (await models.client.post("/v1/models/aliases", json=body, headers=SERVICE)).status_code == 201
-    v2 = {"providerId": "prov_scripted", "modelId": "scripted-b", "clearedSensitivity": "internal"}
+    v2 = {"providerId": "prov_scripted", "modelId": "scripted-b", "clearedSensitivity": "internal", **PRICE}
     r = await models.client.post(f"/v1/models/aliases/{name}/versions", json=v2, headers=SERVICE)
     assert r.json()["data"]["version"] == 2
     versions = (await models.client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]["data"]
@@ -204,10 +217,16 @@ async def test_one_tenant_spending_its_share_of_a_shared_key_leaves_other_tenant
 async def test_a_new_version_retires_the_one_serving_and_only_one_is_current(models: Models) -> None:
     # Shared's chat alias had seven current versions (2026-10-18): which served was the query's order, not a rule.
     name = f"bank-cur-{datetime.now(UTC).strftime('%H%M%S%f')}"
-    body = {"name": name, "providerId": "prov_scripted", "modelId": "scripted-a", "clearedSensitivity": "internal"}
+    body = {
+        "name": name,
+        "providerId": "prov_scripted",
+        "modelId": "scripted-a",
+        "clearedSensitivity": "internal",
+        **PRICE,
+    }
     assert (await models.client.post("/v1/models/aliases", json=body, headers=SERVICE)).status_code == 201
     for model in ("scripted-b", "scripted-c"):
-        v = {"providerId": "prov_scripted", "modelId": model, "clearedSensitivity": "internal"}
+        v = {"providerId": "prov_scripted", "modelId": model, "clearedSensitivity": "internal", **PRICE}
         assert (await models.client.post(f"/v1/models/aliases/{name}/versions", json=v, headers=SERVICE)).is_success
     versions = (await models.client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]["data"]
     assert [(v["modelId"], v["status"]) for v in versions] == [
