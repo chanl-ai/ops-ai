@@ -70,7 +70,7 @@ def template_name(chains: tuple[str, ...]) -> str:
 
 async def create(url: str) -> None:
     parsed = make_url(url)
-    if parsed.database in (None, "ops_runtime"):
+    if parsed.database is None or parsed.database.startswith("ops_runtime"):
         raise SystemExit(f"test_db: refusing {parsed.database}; tests get their own database")
     have = await recorded(url)
     stale = [
@@ -127,7 +127,7 @@ async def clone(url: str, service: str | None) -> bool:
     """Make the test database from the service's template, building the template first when it is missing. False
     when the database already exists, which the caller then checks and migrates in place."""
     parsed = make_url(url)
-    if parsed.database in (None, "ops_runtime"):
+    if parsed.database is None or parsed.database.startswith("ops_runtime"):
         raise SystemExit(f"test_db: refusing {parsed.database}; tests get their own database")
     chains = chains_for(service)
     tpl = template_name(chains)

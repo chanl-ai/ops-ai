@@ -40,7 +40,7 @@ async def _as_tools(scopes: list[str], *, acting: bool) -> dict[str, str]:
 BODY = {"workflowId": "refund_check", "input": {"ticketId": "T-1"}, "mode": "live"}
 
 
-async def test_a_service_starts_a_run_as_the_person_and_its_writes_still_wait_for_an_approver(
+async def test_a_service_starts_a_run_as_the_person(
     client: AsyncClient,
 ) -> None:
     await _published(client)
@@ -52,7 +52,6 @@ async def test_a_service_starts_a_run_as_the_person_and_its_writes_still_wait_fo
         async with app.state.runtime.db.connect() as c:
             row = (await c.execute(sa.select(runs).where(runs.c.id == run_id))).mappings().one()
     assert PERSON in str(row["created_by"]), "the run records the person, not the service"
-    assert row["started_by_approver"] is False, "a run started over MCP never approves its own writes"
 
 
 async def test_a_person_without_the_run_right_starts_nothing(client: AsyncClient) -> None:

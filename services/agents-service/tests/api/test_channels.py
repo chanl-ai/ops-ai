@@ -27,7 +27,7 @@ from ops_store.outbox import ApiKeyChanged
 from ops_store.schedule import Rule
 from ops_store.schedule.wall_time import DAYS
 from tests.api.test_action_roles import REVIEWER
-from tests.api.test_activity import email
+from tests.api.test_activity import email, two_teams
 from tests.api.test_case_routes import started_run
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from tests.engine.test_lifecycle_rights import BUILDER, TENANT, VIEWER, person
@@ -248,6 +248,10 @@ async def test_an_agents_live_places_are_its_channels_and_the_steps_that_run_it(
     both = (await c.get("/v1/agents/ag_branch/live", headers=BUILDER)).json()["data"]["rows"]
     steps = {p["where"]["workflowId"]: p["schedule"] for p in both if p["where"]["kind"] == "workflow_step"}
     assert steps["customer_summary"] is not None and "fraud_summary" not in steps, steps
+    # A builder of both teams, acting in team_ops, sees team_fraud's step and its schedule beside team_ops' own.
+    mine = (await c.get("/v1/agents/ag_branch/live", headers=two_teams())).json()["data"]["rows"]
+    steps = {p["where"]["workflowId"]: p["schedule"] for p in mine if p["where"]["kind"] == "workflow_step"}
+    assert steps["customer_summary"] is not None and steps["fraud_summary"] is not None, steps
     assert (await c.get("/v1/workflows/fraud_summary/live", headers=BUILDER)).status_code == 404
     assert (await c.get("/v1/agents/ag_nobody/live", headers=BUILDER)).status_code == 404
 

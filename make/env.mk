@@ -65,7 +65,7 @@ else
 endif
 
 # A test never stops, migrates or resets the stack: it runs on its own database (OPS_TEST_DATABASE_URL below).
-STACK_GOALS := up down restart migrate reset-db db-down db-reset review sample-team sample-teams demo demo-walk demo-model
+STACK_GOALS := up down restart migrate reset-db db-down db-reset review sample-install sample-team sample-teams demo demo-walk demo-model
 ifneq ($(filter $(STACK_GOALS),$(MAKECMDGOALS)),)
   ifdef PYTEST_CURRENT_TEST
     $(error refused: a test may not run $(filter $(STACK_GOALS),$(MAKECMDGOALS)) on the stack; tests run on their own database)
@@ -94,11 +94,28 @@ OPS_FAKE_OPENAI_PORT ?= $(call port,8746)
 OPS_FAKE_BANK_PORT ?= $(call port,8745)
 OPS_PLATFORM_PORT ?= $(call port,8710)
 OPS_PLATFORM_INTERNAL_PORT ?= $(call port,8711)
-OPS_OPA_PORT ?= $(call port,8181)
-OPS_PG_PORT ?= $(call port,5477)
+# OPS_INFRA=shared: an offset stack reuses the default stack's postgres, OPA and mail containers, so their ports stay
+# at the base values and the database is its own, ops_runtime_<offset>. The default stack (offset 0) owns the containers.
+# The preview targets (make wt) run at offset 0 and start each stack at its own offset with OPS_INFRA passed on.
+ifeq ($(OPS_INFRA),shared)
+  ifneq ($(if $(MAKECMDGOALS),$(filter-out wt wt-list wt-stop,$(MAKECMDGOALS)),x),)
+    # Only digits, no leading zero, not 0, one word: the offset names a database and lands in URLs.
+    ifneq ($(strip $(subst 9,,$(subst 8,,$(subst 7,,$(subst 6,,$(subst 5,,$(subst 4,,$(subst 3,,$(subst 2,,$(subst 1,,$(subst 0,,$(OPS_PORT_OFFSET)))))))))))$(filter 0%,$(OPS_PORT_OFFSET))$(filter-out 1,$(words $(OPS_PORT_OFFSET)))),)
+      $(error OPS_INFRA=shared needs OPS_PORT_OFFSET=N, digits only with no leading zero, got '$(OPS_PORT_OFFSET)')
+    endif
+    ifeq ($(OPS_PORT_OFFSET),0)
+      $(error OPS_INFRA=shared is for an offset stack (OPS_PORT_OFFSET=N); the default stack starts the containers)
+    endif
+  endif
+  infra_port = $(1)
+else
+  infra_port = $(call port,$(1))
+endif
+OPS_OPA_PORT ?= $(call infra_port,8181)
+OPS_PG_PORT ?= $(call infra_port,5477)
 # The test mail servers in compose: GreenMail takes mail in (SMTP) and serves it (IMAP); Mailpit catches sent mail.
 # Their bases differ by multiples of 1000, so they move by a tenth of the offset; the whole offset would land on another's.
-mail_port = $(shell echo $$(( $(1) + $(OPS_PORT_OFFSET) / 10 )))
+mail_port = $(if $(filter shared,$(OPS_INFRA)),$(1),$(shell echo $$(( $(1) + $(OPS_PORT_OFFSET) / 10 ))))
 OPS_GREENMAIL_SMTP_PORT ?= $(call mail_port,3025)
 OPS_GREENMAIL_IMAP_PORT ?= $(call mail_port,3143)
 OPS_MAILPIT_SMTP_PORT ?= $(call mail_port,1025)
@@ -145,8 +162,16 @@ ifeq ($(OPS_INFRA),external)
   export OPS_MAILPIT_HOST ?= mailpit
 else
   export OPS_OPA_URL ?= http://127.0.0.1:$(OPS_OPA_PORT)
-  export OPS_TEST_DATABASE_URL ?= $(if $(filter environment command line,$(origin OPS_DATABASE_URL)),$(OPS_DATABASE_URL),postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_test_$(TEST_RUN))
-  export OPS_DATABASE_URL ?= postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_runtime
+  ifeq ($(OPS_INFRA),shared)
+    # The database is this stack's by its offset, whatever OPS_DATABASE_URL the environment holds (the default stack's
+    # make exports its own), so a reset or a run never lands on the default stack's ops_runtime.
+    override OPS_DATABASE_URL := postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_runtime_$(OPS_PORT_OFFSET)
+    export OPS_DATABASE_URL
+    export OPS_TEST_DATABASE_URL ?= postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_test_$(TEST_RUN)
+  else
+    export OPS_TEST_DATABASE_URL ?= $(if $(filter environment command line,$(origin OPS_DATABASE_URL)),$(OPS_DATABASE_URL),postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_test_$(TEST_RUN))
+    export OPS_DATABASE_URL ?= postgresql+asyncpg://ops:ops@localhost:$(OPS_PG_PORT)/ops_runtime
+  endif
   export OPS_SMTP_HOST ?= 127.0.0.1
   export OPS_GREENMAIL_HOST ?= 127.0.0.1
   export OPS_MAILPIT_HOST ?= 127.0.0.1
@@ -171,6 +196,10 @@ export OPS_STACK_AUTH := $(if $(filter platform,$(AUTH)),platform,dev)
 export OPS_CORS_ORIGINS ?= ["http://localhost:$(OPS_CONSOLE_PORT)","http://localhost:$(OPS_CONSOLE_RUNTIME_PORT)"]
 
 COMPOSE := docker compose -p $(OPS_COMPOSE_PROJECT) -f $(ROOT)/deploy/compose/compose.yaml
+# The containers postgres runs in: this stack's compose project, or under OPS_INFRA=shared the default stack's. DB_NAME
+# is the stack's own database in it.
+DB_COMPOSE := $(if $(filter shared,$(OPS_INFRA)),docker compose -p ops-runtime -f $(ROOT)/deploy/compose/compose.yaml,$(COMPOSE))
+DB_NAME := ops_runtime$(if $(filter shared,$(OPS_INFRA)),_$(OPS_PORT_OFFSET))
 STACK := $(ROOT)/scripts/stack.sh
 # A service's `make run` in the foreground, on the command `make up` starts it with (`stack.sh cmd`): the other
 # services' addresses and the sign-in mode, without which the service refuses to start. `$(call STACK_RUN,kb)`.

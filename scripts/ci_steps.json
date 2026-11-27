@@ -43,6 +43,19 @@
       {"step": "The base revision's copies of the gate", "no_local_twin": "Reads the pull request's base revision on GitHub."},
       {"step": "A rise needs a maintainer's approval", "no_local_twin": "The approving review is the owner's, read from GitHub; `make checks-history` shows a rise locally."}
     ],
+    "generated": [
+      {"step": "Did a route, a model or the SDK generator change", "no_local_twin": "Decides whether the next step runs; locally `make openapi` is run after any route or model change."},
+      {"step": "Regenerate the OpenAPI documents and the SDKs", "twin": "make -s openapi && git diff --exit-code -- 'services/*/openapi.json' sdk"}
+    ],
+    "generated-commit": [
+      {"step": "Commit the generated files to the branch", "no_local_twin": "Pushes the regenerated files to the pull request's branch; locally `make openapi` and a commit do the same."}
+    ],
+    "ready": [
+      {"step": "Ready for the queue", "no_local_twin": "Reads the other jobs' results, CodeQL's check runs and the distance from develop on GitHub; `python3 scripts/pr_flow.py --self-test` proves the decisions."}
+    ],
+    "staging-scan": [
+      {"step": "ZAP baseline scan of staging", "no_local_twin": "Scans the staging app after a release or hotfix branch's deploy; the same docker command runs against any origin."}
+    ],
     "ci-ok": [
       {"step": "if grep -qE '\"result\": \"(failure|cancelled)\"' <<<\"$NEEDS\"; then echo \"$NEEDS\"; exit 1; fi", "no_local_twin": "Reads the other jobs' results on GitHub."}
     ]
