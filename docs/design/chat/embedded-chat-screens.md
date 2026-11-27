@@ -42,32 +42,32 @@ dispute assistant and the person is a seed persona; all data is synthetic.
 
 ### Closed
 
-![The intranet page with only the launcher](images/embed-closed.png)
+![The intranet page with only the launcher](https://opsai.chanl.ai/docs/design/chat/images/embed-closed.png)
 
 ### Open
 
-![The chat open with a greeting and three starters](images/embed-open.png)
+![The chat open with a greeting and three starters](https://opsai.chanl.ai/docs/design/chat/images/embed-open.png)
 
 ### Phone
 
-![The chat full screen at 400 px](images/embed-phone.png)
+![The chat full screen at 400 px](https://opsai.chanl.ai/docs/design/chat/images/embed-phone.png)
 
 ### Approval
 
-![A drafted provisional credit waiting for approval, with Reject and Approve](images/embed-approval.png)
+![A drafted provisional credit waiting for approval, with Reject and Approve](https://opsai.chanl.ai/docs/design/chat/images/embed-approval.png)
 
 ### Answer widget
 
-![Open cases by queue as a table and a chart](images/embed-answer-widget.png)
+![Open cases by queue as a table and a chart](https://opsai.chanl.ai/docs/design/chat/images/embed-answer-widget.png)
 
 ### Streaming
 
-![A question sent and the agent thinking, with Stop in the composer](images/embed-streaming.png)
+![A question sent and the agent thinking, with Stop in the composer](https://opsai.chanl.ai/docs/design/chat/images/embed-streaming.png)
 
 ### Signed out
 
-![Sign in to use the assistant, with a Sign in button](images/embed-signed-out.png)
+![Sign in to use the assistant, with a Sign in button](https://opsai.chanl.ai/docs/design/chat/images/embed-signed-out.png)
 
 ### Session ended
 
-![Your session ended, with Sign in again and the conversation kept](images/embed-session-ended.png)
+![Your session ended, with Sign in again and the conversation kept](https://opsai.chanl.ai/docs/design/chat/images/embed-session-ended.png)

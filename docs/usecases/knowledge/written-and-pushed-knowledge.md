@@ -207,11 +207,11 @@ The console steps run in their own script, since a browser cannot run the code a
 | 3 | Sources tab | The typed source is listed with one item |
 | 4 | Search the base for the typed text | The passage holds it |
 
-![The Add source dialog on a typed page, 1440 wide](media/uc-676-add-typed-text-1440.png)
-![The same dialog, 390 wide](media/uc-676-add-typed-text-390.png)
-![The Sources tab after the sync, 1440 wide](media/uc-676-base-after-sync-1440.png)
-![The same tab, 390 wide](media/uc-676-base-after-sync-390.png)
-![Adding a typed page and syncing it](media/uc-676-typed-text.gif)
+![The Add source dialog on a typed page, 1440 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-676-add-typed-text-1440.png)
+![The same dialog, 390 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-676-add-typed-text-390.png)
+![The Sources tab after the sync, 1440 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-676-base-after-sync-1440.png)
+![The same tab, 390 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-676-base-after-sync-390.png)
+![Adding a typed page and syncing it](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-676-typed-text.gif)
 
 The pictures and the clip are made by the console script: `OPS_USECASE_MEDIA=1 make usecase-test UC=uc-676 LAYER=ui`
 writes them here, and a normal run keeps them in the evidence folder. The script checks that the clip is under 15 s

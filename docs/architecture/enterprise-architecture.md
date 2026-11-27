@@ -11,7 +11,7 @@ Ops AI is pre-release. Each part carries a status label for what is in code toda
 - **planned**: designed, build scheduled
 - **dependency**: outside the platform: the enterprise runs it, the platform connects to it
 
-![Ops AI architecture: identity, observability and secrets across the top; people and systems on the left; agents and workflows side by side above the shared services; every tool call through the data gateway and every model call through the AI gateway; the database and object storage below; the build-to-deploy lane along the bottom](../diagrams/enterprise-architecture.svg)
+![Ops AI architecture: identity, observability and secrets across the top; people and systems on the left; agents and workflows side by side above the shared services; every tool call through the data gateway and every model call through the AI gateway; the database and object storage below; the build-to-deploy lane along the bottom](https://opsai.chanl.ai/docs/diagrams/enterprise-architecture.svg)
 
 *Each numbered dot matches the numbered section below that explains that part. Every tool call and every model call leaves the platform through the two gateways on the right.*
 
