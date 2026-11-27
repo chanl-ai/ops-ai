@@ -21,9 +21,9 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from pydantic import SecretStr
-from pydantic_ai.messages import ModelMessage, ModelResponse
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+from pydantic_ai.models import Model
 
+from ops_agent_kernel.testing import Answer
 from ops_agents.activities import gateway as gw
 from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
@@ -37,9 +37,10 @@ from ops_agents.store.leases import Leases
 from ops_checkpointer import LeaseSupersededError
 from ops_policy import input_hash
 from ops_service_kit import narrow
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
 from ops_service_kit.settings import Settings
-from tests.conftest import FakeGraphModels, fixture_knowledge, scripted, scripted_stream, sse_events
+from tests.conftest import FakeGraphModels, fixture_knowledge, model_on, scripted, sse_events
 from tests.gateway.conftest import REVIEW_KEY, SEED, Gateway, engine, gateway, gateway_db_url
 
 __all__ = ["engine", "gateway", "gateway_db_url"]  # pytest fixtures, used by name
@@ -54,19 +55,12 @@ class Counter:
 
     calls: int = 0
 
-    def model(self) -> FunctionModel:
-        def turn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    def model(self) -> Model:
+        def turn(messages: list[Json], tools: list[Json]) -> Answer:
             self.calls += 1
-            return scripted(messages, info)
+            return scripted(messages, tools)
 
-        async def stream(
-            messages: list[ModelMessage], info: AgentInfo
-        ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-            self.calls += 1
-            async for chunk in scripted_stream(messages, info):
-                yield chunk
-
-        return FunctionModel(turn, stream_function=stream)
+        return model_on(turn)
 
 
 @dataclass

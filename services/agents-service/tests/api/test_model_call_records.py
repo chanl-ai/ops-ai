@@ -33,7 +33,7 @@ async def test_a_kernel_model_call_is_one_record_with_every_field(stack: tuple[A
     cost = (await client.get(f"/v1/threads/{thread['id']}/state")).json()["data"]["cost"]
     assert (cost["calls"], cost["inputTokens"], cost["outputTokens"]) == (1, r.input_tokens, r.output_tokens)
     state = cast(dict[str, Any], (await client.get(f"/chat/threads/{thread['id']}")).json()["data"])
-    assert state["messages"][-1]["model"].startswith("function:scripted")
+    assert state["messages"][-1]["model"].startswith("scripted")
 
 
 async def test_a_regenerate_calls_the_model_again(stack: tuple[AsyncClient, Runtime]) -> None:  # noqa: F811

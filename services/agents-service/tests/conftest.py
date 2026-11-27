@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import httpx2
 import pytest
 import sqlalchemy as sa
 from alembic import command
@@ -18,21 +19,25 @@ from alembic.config import Config
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
-from pydantic_ai.messages import (
-    ModelMessage,
-    ModelRequest,
-    ModelResponse,
-    RetryPromptPart,
-    SystemPromptPart,
-    TextPart,
-    ToolCallPart,
-    ToolReturnPart,
-    UserPromptPart,
-)
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.models import Model
+from pydantic_ai.models.function import AgentInfo
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agent_kernel import judge
+from ops_agent_kernel.models import ModelsServiceModels
+from ops_agent_kernel.testing import (
+    Answer,
+    Reply,
+    Script,
+    ScriptedModel,
+    Structured,
+    ToolCall,
+    last_user_text,
+    system_text,
+    tool_names,
+    trailing_tool_results,
+)
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.api.app import create_app
 from ops_agents.api.apps_line import HEAD as APPS_HEAD
@@ -40,6 +45,7 @@ from ops_agents.graphs.models import Facts, Grade
 from ops_agents.store.base import metadata
 from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 from ops_engine.store import metadata as engine_metadata
+from ops_service_kit.http import Json
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack, refusal, use_worker_database
@@ -132,15 +138,6 @@ def pytest_configure(config: pytest.Config) -> None:
         pytest.exit(why, returncode=4)
 
 
-def _last_user_text(messages: list[ModelMessage]) -> str:
-    for m in reversed(messages):
-        if isinstance(m, ModelRequest):
-            for p in m.parts:
-                if isinstance(p, UserPromptPart) and isinstance(p.content, str):
-                    return p.content
-    return ""
-
-
 # What the scripted model proposes for a brief draft (POST /v1/agents/{id}/brief-draft), one text per heading.
 DRAFTED_BRIEF: dict[str, Any] = {
     "job": "Tells branch staff where a loan application stands.",
@@ -152,141 +149,116 @@ DRAFTED_BRIEF: dict[str, Any] = {
 
 
 def structured(info: AgentInfo, args: dict[str, Any]) -> ModelResponse:
-    """A structured answer in the form the request asks for: the JSON a native response format wants (the kernel's
-    schema turns), else a call of the output tool (the guardrail check's classifier)."""
+    """For a test's own FunctionModel: a structured answer in the form the request asks for, the JSON a native
+    response format wants, else a call of the output tool."""
     if info.model_request_parameters.output_mode == "native":
         return ModelResponse(parts=[TextPart(json.dumps(args))])
     return ModelResponse(parts=[ToolCallPart("final_result", args)])
 
 
-def _prompt_text(messages: list[ModelMessage]) -> str:
-    """The instructions and system prompt the model was given, where recalled memories go."""
-    parts = [str(m.instructions or "") for m in messages if isinstance(m, ModelRequest)]
-    parts += [
-        p.content for m in messages if isinstance(m, ModelRequest) for p in m.parts if isinstance(p, SystemPromptPart)
-    ]
-    return " ".join(parts)
+# A tool result that says a workflow finished, as the wire carries it (JSON) or a repr would.
+_FINISHED = re.compile(r"""['"]finished['"]""")
 
 
-def scripted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+def scripted(messages: list[Json], tools: list[Json]) -> Answer:
     """Replies by keyword so each test can drive one path: tool results first, then citations, then tool calls."""
-    last = messages[-1]
-    returns = (
-        [p for p in last.parts if isinstance(p, ToolReturnPart | RetryPromptPart)]
-        if isinstance(last, ModelRequest)
-        else []
-    )
-    if returns:
-        body = " ".join(str(p.content) for p in returns)
+    if returns := trailing_tool_results(messages):
+        body = " ".join(returns)
         if "rejected" in body:
-            return ModelResponse(parts=[TextPart("Understood. The hold was rejected, so the wire continues.")])
+            return "Understood. The hold was rejected, so the wire continues."
         if "waiting_review" in body:
             # Said in words: the run's card names it, and a reply never shows a thread id (answer_check).
-            return ModelResponse(parts=[TextPart("The workflow is waiting for a review.")])
-        if "'finished'" in body:
-            return ModelResponse(parts=[TextPart("The workflow finished.")])
+            return "The workflow is waiting for a review."
+        if _FINISHED.search(body):
+            return "The workflow finished."
         if "reference" in body:
-            return ModelResponse(parts=[TextPart("The hold is in place.")])
-        return ModelResponse(parts=[TextPart("Here is what I found.")])
-    text = _last_user_text(messages)
-    tools = {t.name for t in info.function_tools}
+            return "The hold is in place."
+        return "Here is what I found."
+    text = last_user_text(messages)
+    offered = tool_names(tools)
     # First: the evidence a judge is shown is a reply, which can hold any keyword below.
     if text.startswith(judge.PROMPT_HEAD):
-        return structured(info, judged(text))
+        return Structured(judged(text))
     # Repeats the apps line the turn was given, so a use case reads what the model is told about each app (uc-704).
-    if "which apps can you reach" in text.lower() and APPS_HEAD in (prompt := _prompt_text(messages)):
-        told = prompt.split(APPS_HEAD, 1)[1].split("\n\n", 1)[0].strip()
-        return ModelResponse(parts=[TextPart(told)])
-    if text.startswith("<draft-brief>") and info.model_request_parameters.output_mode in ("native", "tool"):
-        return structured(info, DRAFTED_BRIEF)
-    if text.startswith("<remember>") and info.model_request_parameters.output_mode in ("native", "tool"):
-        return structured(info, remembered(text))
+    if "which apps can you reach" in text.lower() and APPS_HEAD in (prompt := system_text(messages)):
+        return prompt.split(APPS_HEAD, 1)[1].split("\n\n", 1)[0].strip()
+    if text.startswith("<draft-brief>"):
+        return Structured(DRAFTED_BRIEF)
+    if text.startswith("<remember>"):
+        return Structured(remembered(text))
     if "<knowledge>" in text and "limit" in text.lower():
-        return ModelResponse(parts=[TextPart("The daily wire limit for a personal account is $25,000 online [1].")])
-    if (wire := _WIRE.search(text)) and "place_wire_hold" in tools:
+        return "The daily wire limit for a personal account is $25,000 online [1]."
+    if (wire := _WIRE.search(text)) and "place_wire_hold" in offered:
         args = {"wireId": wire.group(0), "hours": 24, "reason": "First wire to a payee added this morning."}
-        return ModelResponse(parts=[ToolCallPart("place_wire_hold", args)])
-    if (start := _START_WORKFLOW.search(text)) and f"workflow__{start.group(1)}" in tools:
+        return Reply(tool_calls=[ToolCall("place_wire_hold", args)])
+    if (start := _START_WORKFLOW.search(text)) and f"workflow__{start.group(1)}" in offered:
         args = {"sender": "maria.lopez@example.com", "subject": "Disputed charge", "body": start.group(2).strip()}
-        return ModelResponse(parts=[ToolCallPart(f"workflow__{start.group(1)}", args)])
-    if (action := _ACTION.search(text)) and action.group(1) in tools:
+        return Reply(tool_calls=[ToolCall(f"workflow__{start.group(1)}", args)])
+    if (action := _ACTION.search(text)) and action.group(1) in offered:
         pairs = [p.split(": ", 1) for p in action.group(2).split(", ") if ": " in p]
-        return ModelResponse(parts=[ToolCallPart(action.group(1), {k.strip(): v.strip() for k, v in pairs})])
+        return Reply(tool_calls=[ToolCall(action.group(1), {k.strip(): v.strip() for k, v in pairs})])
     # A summary in the format the person's recalled preference names, so a use case sees which memory the
     # reply was given. An explicit "call <tool> <json>" below wins, though its arguments say summary (a case-summary).
     if "summary" in text.lower() and "<remember>" not in text and not _CALL.search(text):
-        prompt = _prompt_text(messages).lower()
+        prompt = system_text(messages).lower()
         if "bullet" in prompt:
-            return ModelResponse(parts=[TextPart("- Two cases are open.\n- One review is waiting.")])
+            return "- Two cases are open.\n- One review is waiting."
         if "numbered" in prompt:
-            return ModelResponse(parts=[TextPart("1. Two cases are open.\n2. One review is waiting.")])
-        return ModelResponse(parts=[TextPart("Two cases are open and one review is waiting.")])
+            return "1. Two cases are open.\n2. One review is waiting."
+        return "Two cases are open and one review is waiting."
     # The chat home's first start: the team's default agent lists the person's Human Tasks.
-    if "what needs me" in text.lower() and "my_human_tasks" in tools:
-        return ModelResponse(parts=[ToolCallPart("my_human_tasks", {"which": "mine"})])
+    if "what needs me" in text.lower() and "my_human_tasks" in offered:
+        return Reply(tool_calls=[ToolCall("my_human_tasks", {"which": "mine"})])
     # "call <tool> <json>" calls any tool the turn was granted with those arguments: how a use case drives a registry
     # operation by name without a provider.
-    if (call := _CALL.search(text)) and call.group(1) in tools:
-        return ModelResponse(parts=[ToolCallPart(call.group(1), json.loads(call.group(2)))])
+    if (call := _CALL.search(text)) and call.group(1) in offered:
+        return Reply(tool_calls=[ToolCall(call.group(1), json.loads(call.group(2)))])
     # A reply carrying a remote image, as text the model read could: the console must not load it (uc-074).
     if image := _IMAGE.search(text):
-        return ModelResponse(parts=[TextPart(f"Here is the chart. ![balance chart]({image.group(1)})")])
-    if "CHQ-" in text and "lookup_account" in tools:
-        return ModelResponse(parts=[ToolCallPart("lookup_account", {"query": "CHQ-2219"})])
+        return f"Here is the chart. ![balance chart]({image.group(1)})"
+    if "CHQ-" in text and "lookup_account" in offered:
+        return Reply(tool_calls=[ToolCall("lookup_account", {"query": "CHQ-2219"})])
     if "<attachments>" in text and "what did i attach" in text.lower():
         # Lists the files the turn named, as they were named to it.
         block = text.split("<attachments>", 1)[1].split("</attachments>", 1)[0]
-        return ModelResponse(parts=[TextPart(" ".join(r[2:] for r in block.splitlines() if r.startswith("- ")))])
+        return " ".join(r[2:] for r in block.splitlines() if r.startswith("- "))
     if "<attachments>" in text and "how many pages did you get" in text.lower():
         # Counts the attached pages the turn gave it, and the characters on them.
         rows = re.findall(r"^\[\d+\] [^:\n]*: (.*)$", text, re.MULTILINE)
-        return ModelResponse(parts=[TextPart(f"{len(rows)} pages, {sum(len(r) for r in rows)} characters.")])
+        return f"{len(rows)} pages, {sum(len(r) for r in rows)} characters."
     if "<attachments>" in text and (pages := re.findall(r"^\[(\d+)\] [^:\n]*: (.*)$", text, re.MULTILINE)):
         # Answers from the attached page sharing the most words with the question, and cites it by its number.
         asked = {w for w in text.rsplit("</attachments>", 1)[-1].lower().split() if len(w) > 3}
         n, _ = max(pages, key=lambda p: sum(w in p[1].lower() for w in asked))
-        return ModelResponse(parts=[TextPart(f"Here is what the file says [{n}].")])
+        return f"Here is what the file says [{n}]."
     if "<knowledge>" in text:
         # Any other turn with passages answers from the first one and cites it, as a model told to cite would.
-        return ModelResponse(parts=[TextPart("Here is what the policy says [1].")])
-    return ModelResponse(parts=[TextPart("I could not find that.")])
+        return "Here is what the policy says [1]."
+    return "I could not find that."
 
 
-async def scripted_stream(
-    messages: list[ModelMessage], info: AgentInfo
-) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-    response = scripted(messages, info)
-    for i, part in enumerate(response.parts):
-        if isinstance(part, TextPart):
-            for k in range(0, len(part.content), 7):
-                yield part.content[k : k + 7]
-        elif isinstance(part, ToolCallPart):
-            yield {
-                i: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args), tool_call_id=part.tool_call_id)
-            }
+# The scripted endpoint: the model gateway's route, answered in process. Its alias is whatever the turn names.
+SCRIPTED_URL = "http://models.scripted"
 
 
-def scripted_model() -> FunctionModel:
-    return FunctionModel(scripted, stream_function=scripted_stream)
+def model_on(script: Script) -> Model:
+    """The kernel's model with `script` answering at the HTTP edge (ops_agent_kernel.testing.ScriptedModel)."""
+    http = httpx2.AsyncClient(transport=ScriptedModel(script))
+    return ModelsServiceModels(SCRIPTED_URL, "mk_scripted", http_client=http).model_for("scripted")
+
+
+def scripted_model() -> Model:
+    # Looked up at each call, so a test that replaces conftest.scripted (to count or hold its calls) is answered by it.
+    return model_on(lambda messages, tools: scripted(messages, tools))  # noqa: PLW0108
 
 
 LOOP_ROWS = [{"limit": "ATM withdrawal, per day", "amount": "1,000"}]
 
 
-def looping_model(*, text: str = "") -> FunctionModel:
+def looping_model(*, text: str = "") -> Model:
     """A model that never finishes: every step writes `text` (when given) and calls the built-in present tool, which
     no tool budget charges, so only the agent's step limit can stop the turn."""
-
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        parts: list[Any] = [TextPart(text)] if text else []
-        return ModelResponse(parts=[*parts, ToolCallPart("present", {"shape": "rows", "data": LOOP_ROWS})])
-
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        if text:
-            yield text
-        yield {1: DeltaToolCall(name="present", json_args=json.dumps({"shape": "rows", "data": LOOP_ROWS}))}
-
-    return FunctionModel(respond, stream_function=stream)
+    return model_on(lambda messages, tools: Reply(text, [ToolCall("present", {"shape": "rows", "data": LOOP_ROWS})]))
 
 
 class FakeGraphModels:

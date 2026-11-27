@@ -92,7 +92,7 @@ async def test_a_cited_answer_logs_text_citations_and_the_model(client: AsyncCli
     citation = next(e["data"] for e in log if e["type"] == "citation")
     assert citation[0]["documentId"] == "doc_wire_limits" and citation[0]["n"] == 1
     turn = next(e["data"] for e in log if e["type"] == "turn")
-    assert turn["model"].startswith("function:scripted")
+    assert turn["model"].startswith("scripted")
 
 
 async def test_a_gated_call_logs_the_whole_call_and_who_asked(client: AsyncClient) -> None:

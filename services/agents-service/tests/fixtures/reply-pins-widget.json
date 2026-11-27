@@ -488,7 +488,7 @@
           ],
           "content": "The daily wire limit for a personal account is $25,000 online [1].",
           "id": "<m>",
-          "model": "function:scripted:scripted_stream",
+          "model": "scripted",
           "role": "assistant",
           "settings": {
             "addedInstructions": [],

@@ -47,7 +47,7 @@ with agents() as api:
     reply = cited["stored"]
     check(
         "4 the stored reply keeps the citation and the model that answered",
-        bool(reply.get("citations")) and reply["model"].startswith("function:scripted") != REAL,
+        bool(reply.get("citations")) and reply["model"].startswith("scripted") != REAL,
         (reply.get("citations", [])[:1], reply["model"]),
     )
 finish()

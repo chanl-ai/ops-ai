@@ -5,20 +5,20 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
 from fastapi import FastAPI
 from langgraph.checkpoint.memory import InMemorySaver
-from pydantic_ai.messages import ModelMessage
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+from pydantic_ai.models import Model
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.types import Message
 
+from ops_agent_kernel.testing import Answer
 from ops_agents.api.app import create_app
+from ops_service_kit.http import Json
 from ops_service_kit.settings import Settings
-from tests.conftest import SEED, empty_engine, fixture_knowledge, scripted, scripted_stream, sse_events
+from tests.conftest import SEED, empty_engine, fixture_knowledge, model_on, scripted, sse_events
 
 from .test_reply_pins import FIXTURES, answer, compare
 
@@ -68,19 +68,16 @@ class HeldModel:
         self.engine, self.asked, self.held = engine, asyncio.Event(), asyncio.Event()
         self.go = asyncio.Event()
 
-    async def stream(
-        self, messages: list[ModelMessage], info: AgentInfo
-    ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+    async def answer(self, messages: list[Json], tools: list[Json]) -> Answer:
         self.asked.set()
         await self.go.wait()
-        async for piece in scripted_stream(messages, info):
-            yield piece
+        return scripted(messages, tools)
 
-    def model(self) -> FunctionModel:
-        return FunctionModel(scripted, stream_function=self.stream)
+    def model(self) -> Model:
+        return model_on(self.answer)
 
 
-def _app(engine: AsyncEngine, database_url: str, model: FunctionModel, graph_models: Any) -> FastAPI:
+def _app(engine: AsyncEngine, database_url: str, model: Model, graph_models: Any) -> FastAPI:
     return create_app(
         Settings(database_url=database_url, seed_dir=SEED),
         model=model,

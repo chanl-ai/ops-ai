@@ -47,6 +47,6 @@ with agents() as api:
     check(
         "stored reply keeps the citation", bool(reply.get("citations")) and _wire_limits(reply["citations"][0]), reply
     )
-    check("stored reply came from the scripted model", reply["model"].startswith("function:scripted"), reply["model"])
+    check("stored reply came from the scripted model", reply["model"].startswith("scripted"), reply["model"])
 
 finish()
