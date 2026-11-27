@@ -100,6 +100,7 @@ images crash under Docker Desktop's emulation; the pinned 2025 image runs on the
 ## Known traps
 
 - A lease test that waits on real time against a short ttl => build the lease on the suite's `LeaseClock` (`make(clock)`) and lapse it with `clock.advance`; a loaded CI runner can take longer than the ttl between two acquires, so a live lease reads as lapsed
+- Two services' migrations create the same cluster-wide role at once and one dies on `pg_authid_rolname_index`, which `EXCEPTION WHEN duplicate_object` does not catch => every service's `migrations/env.py` calls `serialize_migrations(connection)` first in its transaction; a new service's env.py does the same
 
 ## Known traps
 
