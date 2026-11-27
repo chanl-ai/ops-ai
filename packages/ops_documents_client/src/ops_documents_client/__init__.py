@@ -12,7 +12,7 @@ from typing import TypedDict
 
 import httpx
 
-from ops_identity import ServiceCallError, ServiceClient, segment
+from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable, segment
 from ops_service_kit.http import Json, JsonValue, PageJSON
 from ops_service_kit.narrow import a_list, an_object
 from ops_service_kit.settings import Settings
@@ -63,8 +63,12 @@ def _id(value: str) -> str:
         raise DocumentNotFound(404, "not_found", f"No {value!r}") from None
 
 
-def _refused(e: ServiceCallError) -> DocumentsRefused:
+def _refused(e: ServiceCallError) -> DocumentsRefused | ServiceUnreachable:
+    """The refusal as callers handle it. A 503 (documents-service could not read a policy it depends on) is
+    unreachable, so a caller waits and asks again instead of failing the file for good."""
     code, message = e.code or "error", str(e)
+    if e.status == 503:
+        return ServiceUnreachable(message)
     return DocumentNotFound(404, code, message) if e.status == 404 else DocumentsRefused(e.status, code, message)
 
 
