@@ -41,7 +41,7 @@ from ..graphs.metering import step_calls
 from ..store.agent_registry import AgentRegistry
 from ..store.engine import AsyncEngine
 from .agent_registry import definition_of
-from .budgets import BudgetedModel, BudgetedSource, GatewayBudgets, gateway_budgets, spending_from, step_budget
+from .budgets import BudgetedSource, GatewayBudgets, budgeted, gateway_budgets, spending_from, step_budget
 from .error_words import WordedTools
 
 
@@ -305,10 +305,9 @@ def kernel_agents(
     executor = WordedTools(inner)
     knowledge: Knowledge = KbService(kb) if kb is not None else NoKnowledgeService()
     ports = KernelPorts(
-        model=BudgetedModel(model, budgets, settings.model_alias, headers=through is not None),
+        model=budgeted(model, budgets, settings.model_alias, headers=through is not None),
         tools=executor,
         knowledge=knowledge,
         models=BudgetedSource(through, budgets) if through is not None else None,
-        loop=settings.agents_loop,
     )
     return KernelAgents(db, catalog, ports, directory, settings.model_alias, budgets=budgets)

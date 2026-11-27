@@ -16,9 +16,9 @@ import httpx
 import httpx2
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic_ai.models import Model
 
 from ops_access.platform_events import platform_events_router
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.models import ModelsServiceModels, NoModelKeyError, build_model
 from ops_agent_kernel.ports import KernelPorts
 from ops_agents.activities.catalog import load_catalog
@@ -32,7 +32,7 @@ from ops_agents.graphs.checkpointer import open_checkpointer
 from ops_agents.graphs.common import GraphDeps
 from ops_agents.graphs.definition import CompiledCache, WorkflowDefinition
 from ops_agents.graphs.metering import MeteredModels
-from ops_agents.graphs.models import GraphModels, PydanticAiModels
+from ops_agents.graphs.models import GatewayModels, GraphModels
 from ops_agents.graphs.registry import build_graphs
 from ops_documents_client import DocumentsClient
 from ops_files_client import FilesClient
@@ -57,7 +57,7 @@ from .agent_calls import AgentCalls
 from .api_key_copy import key_changed_handler
 from .approval_renewal import ApprovalRenewal
 from .apps_line import AppsLine
-from .budgets import BudgetedModel, BudgetedSource, gateway_budgets
+from .budgets import BudgetedSource, budgeted, gateway_budgets
 from .chat_attachments import ChatAttachmentReader
 from .child_runs import ChildRuns
 from .deps import Runtime
@@ -257,7 +257,7 @@ def _no_team() -> str | None:
 async def open_runtime(
     settings: Settings,
     *,
-    model: Model | None = None,
+    model: ModelEndpoint | None = None,
     engine: Database | None = None,
     checkpointer: Any = None,
     graph_models: GraphModels | None = None,
@@ -318,7 +318,7 @@ async def open_runtime(
     # (api/budgets.py). Without it no budget holds.
     budgets = gateway_budgets(settings, models_http, db) if through_models is not None and models_http else None
     kernel_model = (
-        BudgetedModel(model, budgets, settings.model_alias, headers=through_models is not None)
+        budgeted(model, budgets, settings.model_alias, headers=through_models is not None)
         if model is not None
         else None
     )
@@ -333,7 +333,6 @@ async def open_runtime(
             knowledge=knowledge,
             models=per_alias,
             tool_caches=ChatReads(),
-            loop=settings.agents_loop,
         )
         if kernel_model
         else None
@@ -396,7 +395,7 @@ async def open_runtime(
             saver = checkpointer or await stack.enter_async_context(open_checkpointer(settings.database_url))
             rt.usage = budgets
             models = MeteredModels(
-                CountingModels(graph_models or PydanticAiModels(kernel_model or model)), rt.usage, settings.model_alias
+                CountingModels(graph_models or GatewayModels(kernel_model or model)), rt.usage, settings.model_alias
             )
             channels = ChannelStore(db)
             rt.channels = channels
@@ -448,7 +447,7 @@ async def open_runtime(
 def create_app(
     settings: Settings,
     *,
-    model: Model | None = None,
+    model: ModelEndpoint | None = None,
     engine: Database | None = None,
     checkpointer: Any = None,
     graph_models: GraphModels | None = None,

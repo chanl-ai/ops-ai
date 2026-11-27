@@ -1,9 +1,8 @@
 """Finding tools by words. Below the agent's tool-search threshold, the built-in `search_tools`
 looks up the tools this turn already offers (the agent's granted registry operations and granted, published workflows)
-and returns each match's name, description and input schema. Above it, every granted tool is deferred and a
-search finds them with the same word scoring (Pydantic AI's tool search with `strategy`, or the kernel's own on the
-Strands loop): a found tool is revealed and then called by its own name, through the same call path as any other.
-Either way it finds nothing the agent is not granted and reaches no system.
+and returns each match's name, description and input schema. Above it, every granted tool is deferred and a search
+finds them with the same word scoring: a found tool is revealed and then called by its own name, through the same call
+path as any other. Either way it finds nothing the agent is not granted and reaches no system.
 """
 
 from __future__ import annotations
@@ -12,8 +11,7 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-from pydantic_ai import RunContext
-from pydantic_ai.tools import ToolDefinition
+from ops_service_kit.http import Json
 
 from .types import ToolGrant
 
@@ -47,8 +45,8 @@ DEFERRED = (
 )
 
 
-# The deferred search's input and its words when nothing matched, as Pydantic AI's tool search has them.
-QUERIES_SCHEMA = {
+# The deferred search's input, and its words when nothing matched.
+QUERIES_SCHEMA: Json = {
     "type": "object",
     "properties": {
         "queries": {
@@ -74,8 +72,3 @@ def search(tools: list[ToolGrant], query: str) -> list[dict[str, Any]]:
     by_name = {t.name: t for t in tools}
     hits = [by_name[n] for n in ranked([(t.name, t.description) for t in tools], query)]
     return [{"name": t.name, "description": t.description, "inputSchema": t.input_schema} for t in hits]
-
-
-def strategy(_ctx: RunContext[Any], queries: Sequence[str], tools: Sequence[ToolDefinition]) -> list[str]:
-    """pydantic-ai's tool search strategy over the deferred tools, with the same scoring as `search`."""
-    return ranked([(t.name, t.description or "") for t in tools], " ".join(queries))

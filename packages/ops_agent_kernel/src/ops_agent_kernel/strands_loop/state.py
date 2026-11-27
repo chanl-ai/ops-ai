@@ -6,9 +6,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from ..contract import LoopName
-
-LOOP: LoopName = "strands"
+LOOP = "strands"
 # Raised when the snapshot's shape changes; a pause written under another version is refused, never half-read.
 VERSION = 1
 

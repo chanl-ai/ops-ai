@@ -20,11 +20,11 @@ from typing import Annotated, Any, TypeAlias, cast
 from fastapi import APIRouter, Body, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import TypeAdapter
-from pydantic_ai import Agent
 from sse_starlette import EventSourceResponse
 
 from ops_access import can
 from ops_access.check import DEFAULT as ACCESS
+from ops_agent_kernel import structured
 from ops_agents.activities.catalog import AgentDefinition
 from ops_agents.activities.overrides import limits_for, parse
 from ops_agents.activities.overrides import resolve as resolve_settings
@@ -682,8 +682,7 @@ async def _compacted(rt: Runtime, thread_id: str, meta: Json, history: list[Json
         return history
 
     async def summarize(text: str) -> str:
-        agent = Agent[None, str](model, deps_type=type(None), output_type=str, instructions=SUMMARY_PROMPT)
-        return (await agent.run(text)).output
+        return (await structured.ask(model, system=SUMMARY_PROMPT, prompt=text, purpose="summary")).text
 
     try:
         shorter, made = await compacted(history, cast(Json | None, meta.get("historySummary")), summarize)

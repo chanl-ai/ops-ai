@@ -9,22 +9,9 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any
 
 from ops_service_kit.http import Json
-
-LoopName = Literal["pydantic_ai", "strands"]
-LOOPS: tuple[LoopName, ...] = ("pydantic_ai", "strands")
-
-
-@dataclass
-class LoopChoice:
-    """The loop a new turn runs on when its ports name none. A paused turn resumes on the loop that paused it."""
-
-    default: LoopName = "strands"
-
-
-LOOP = LoopChoice()
 
 
 @dataclass(frozen=True)

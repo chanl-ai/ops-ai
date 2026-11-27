@@ -8,8 +8,7 @@ import json
 from dataclasses import replace
 from typing import Any
 
-from pydantic_ai.models import Model
-
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.events import CitationsReady, KernelEvent, TextDelta, ToolOutput, TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
@@ -215,7 +214,7 @@ async def test_an_agent_capped_at_one_model_call_a_reply_is_offered_no_tool_and_
     assert result.text and "step limit" not in result.text, result.text
 
 
-def at_once_model(tool: str, args: dict[str, Any], count: int) -> Model:
+def at_once_model(tool: str, args: dict[str, Any], count: int) -> ModelEndpoint:
     """A model whose first response calls `tool` `count` times at once and whose next answers in text: an agent asked
     to do five things together that reaches for one kernel tool five times."""
 
@@ -258,7 +257,7 @@ async def test_a_reply_cut_short_after_some_text_says_so() -> None:
     assert isinstance(events[-2], TextDelta) or any(isinstance(e, TextDelta) and "cut short" in e.delta for e in events)
 
 
-def repeating_model(tool: str, args: dict[str, Any]) -> Model:
+def repeating_model(tool: str, args: dict[str, Any]) -> ModelEndpoint:
     """A model that calls `tool` with the same `args` for as long as it is offered, then answers from what it has: the
     staging summary turn that called "Get human task" five times and never wrote the summary."""
 
@@ -347,7 +346,7 @@ async def test_the_same_call_twice_in_one_step_reaches_the_system_once() -> None
     assert second.output == {"repeatOf": first.tool_call_id}, result.tool_calls
 
 
-def reading_model(reads: int) -> Model:
+def reading_model(reads: int) -> ModelEndpoint:
     """A model that makes `reads` reads in one step, then answers from the results it got."""
 
     def script(messages: list[Json], tools: list[Json]) -> Answer:
@@ -380,7 +379,7 @@ SEARCH = ToolGrant(
 )
 
 
-def searching_model(collections: list[str]) -> Model:
+def searching_model(collections: list[str]) -> ModelEndpoint:
     """A model that searches knowledge once, naming `collections`, then answers."""
     args = {"query": "wire limits", "collections": collections}
 
@@ -415,7 +414,7 @@ async def test_an_agent_searches_only_its_own_knowledge_bases_unless_it_may_sear
     assert [a.get("allTeamKnowledgeBases") for _, a, _, _ in team.calls] == [True]
 
 
-def counted(said: list[list[Json]]) -> Model:
+def counted(said: list[list[Json]]) -> ModelEndpoint:
     """The conftest script, with each request's messages kept in `said`."""
 
     def script(messages: list[Json], tools: list[Json]) -> Answer:
@@ -425,15 +424,15 @@ def counted(said: list[list[Json]]) -> Model:
     return model_on(script)
 
 
-def on_strands(model: Model, tools: RecordingTools) -> KernelPorts:
-    return KernelPorts(model=model, tools=tools, knowledge=FixedKnowledge([]), loop="strands")
+def ports_on(model: ModelEndpoint, tools: RecordingTools) -> KernelPorts:
+    return KernelPorts(model=model, tools=tools, knowledge=FixedKnowledge([]))
 
 
-async def test_on_strands_a_resume_in_a_fresh_kernel_repeats_no_model_call() -> None:
+async def test_a_resume_in_a_fresh_kernel_repeats_no_model_call() -> None:
     before: list[list[Json]] = []
     paused_tools = RecordingTools()
     req = TurnRequest("t1", "th1", SETTINGS, [HOLD], user_turn="Hold wire W-88213")
-    _, first = await run(req, on_strands(counted(before), paused_tools))
+    _, first = await run(req, ports_on(counted(before), paused_tools))
     assert first.interrupt is not None and len(before) == 1, first
     assert paused_tools.calls == [], "the write ran before a person approved it"
     # What another server reads: the checkpoint's JSON, with new ports, a new transport and new tools.
@@ -441,7 +440,7 @@ async def test_on_strands_a_resume_in_a_fresh_kernel_repeats_no_model_call() -> 
     after: list[list[Json]] = []
     tools = RecordingTools()
     resume = Resume(stored, "approved", approval_token="tok")
-    _, result = await run(TurnRequest("t2", "th1", SETTINGS, [HOLD], resume=resume), on_strands(counted(after), tools))
+    _, result = await run(TurnRequest("t2", "th1", SETTINGS, [HOLD], resume=resume), ports_on(counted(after), tools))
     assert result.status == "completed", result
     assert [(tool, token) for tool, _, _, token in tools.calls] == [("place_wire_hold", "tok")]
     assert len(after) == 1, f"the resume asked the model {len(after)} times"

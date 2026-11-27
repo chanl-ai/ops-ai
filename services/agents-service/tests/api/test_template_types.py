@@ -14,7 +14,8 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient
-from pydantic_ai.models.test import TestModel
+
+from tests.conftest import scripted_model
 
 from .role_app import ok, role_app
 from .test_template_install import wire
@@ -23,7 +24,7 @@ from .test_template_update import OPS
 
 @pytest.fixture
 async def client() -> AsyncGenerator[AsyncClient]:
-    async with role_app(TestModel()) as c:
+    async with role_app(scripted_model()) as c:
         yield c
 
 

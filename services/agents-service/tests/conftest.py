@@ -9,7 +9,7 @@ import re
 from collections.abc import AsyncGenerator, AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx2
 import pytest
@@ -20,12 +20,11 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
-from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agent_kernel import judge
-from ops_agent_kernel.contract import LOOP
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.models import ModelsServiceModels
 from ops_agent_kernel.testing import (
     Answer,
@@ -55,8 +54,6 @@ from tests.knowledge_fixture import FixtureKnowledge
 from .contract import response_checker
 
 SEED = Path(__file__).parent / "fixtures" / "seed"
-# The agent loop these tests run the kernel on: OPS_AGENTS_LOOP=pydantic_ai runs the same tests on Pydantic AI.
-LOOP.default = "pydantic_ai" if os.environ.get("OPS_AGENTS_LOOP") == "pydantic_ai" else "strands"
 ROOT = Path(__file__).parents[1]
 # The running stack's, exported by `make` from the root .env. Cleared in pytest_configure, before test modules are
 # collected: they build Settings at their own import (before any fixture runs) and would otherwise call the live
@@ -240,17 +237,52 @@ def scripted(messages: list[Json], tools: list[Json]) -> Answer:
     return "I could not find that."
 
 
+def asked(messages: list[Json]) -> str:
+    """The person's message when the request ends with one (a new turn or a one-off call's prompt), else empty."""
+    return last_user_text(messages[-1:]) if messages and messages[-1].get("role") == "user" else ""
+
+
+def calls_in(messages: list[Json]) -> list[tuple[str, dict[str, Any]]]:
+    """Every tool call the model made earlier in the request, as (name, arguments), oldest first."""
+    out: list[tuple[str, dict[str, Any]]] = []
+    for m in messages:
+        for c in cast(list[Json], m.get("tool_calls") or []):
+            fn = cast(Json, c["function"])
+            out.append((str(fn["name"]), json.loads(str(fn.get("arguments") or "{}"))))
+    return out
+
+
+def _parsed(text: str) -> Any:
+    try:
+        return json.loads(text)
+    except ValueError:
+        return text
+
+
+def returned(messages: list[Json], *, every: bool = False) -> list[Any]:
+    """What the tool calls returned, parsed from JSON where it is JSON: those after the model's last message, or with
+    `every` all of them in the request."""
+    if not every:
+        return [_parsed(t) for t in trailing_tool_results(messages)]
+    return [_parsed(str(m.get("content") or "")) for m in messages if m.get("role") == "tool"]
+
+
+def model_steps(messages: list[Json]) -> int:
+    """How many answers the model has given earlier in the request."""
+    return sum(m.get("role") == "assistant" for m in messages)
+
+
 # The scripted endpoint: the model gateway's route, answered in process. Its alias is whatever the turn names.
 SCRIPTED_URL = "http://models.scripted"
 
 
-def model_on(script: Script) -> Model:
+def model_on(script: Script) -> ModelEndpoint:
     """The kernel's model with `script` answering at the HTTP edge (ops_agent_kernel.testing.ScriptedModel)."""
     http = httpx2.AsyncClient(transport=ScriptedModel(script))
     return ModelsServiceModels(SCRIPTED_URL, "mk_scripted", http_client=http).model_for("scripted")
 
 
-def scripted_model() -> Model:
+def scripted_model() -> ModelEndpoint:
     # Looked up at each call, so a test that replaces conftest.scripted (to count or hold its calls) is answered by it.
     return model_on(lambda messages, tools: scripted(messages, tools))  # noqa: PLW0108
 
@@ -258,7 +290,7 @@ def scripted_model() -> Model:
 LOOP_ROWS = [{"limit": "ATM withdrawal, per day", "amount": "1,000"}]
 
 
-def looping_model(*, text: str = "") -> Model:
+def looping_model(*, text: str = "") -> ModelEndpoint:
     """A model that never finishes: every step writes `text` (when given) and calls the built-in present tool, which
     no tool budget charges, so only the agent's step limit can stop the turn."""
     return model_on(lambda messages, tools: Reply(text, [ToolCall("present", {"shape": "rows", "data": LOOP_ROWS})]))

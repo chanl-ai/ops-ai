@@ -6,11 +6,6 @@ from __future__ import annotations
 
 import dataclasses
 import time
-from collections.abc import Callable
-
-from pydantic_ai.exceptions import ModelHTTPError
-from pydantic_ai.models import Model
-from pydantic_ai.models.fallback import FallbackModel
 
 from .contract import ModelEndpoint
 from .ports import ModelSource
@@ -21,7 +16,7 @@ UNBOUND_SECONDS = 60.0
 _unbound_until: dict[tuple[int, str], float] = {}
 
 
-def preferred(source: ModelSource | None, alias: str, fallback: Model) -> Model:
+def preferred(source: ModelSource | None, alias: str, fallback: ModelEndpoint) -> ModelEndpoint:
     """`alias` through models-service, or `fallback` while models-service has no such alias."""
     key = (id(source), alias)
     if source is None or time.monotonic() < _unbound_until.get(key, 0.0):
@@ -33,24 +28,7 @@ def preferred(source: ModelSource | None, alias: str, fallback: Model) -> Model:
             return True
         return False
 
-    return _Preferred(source.model_for(alias), fallback, unbound)
-
-
-class _Preferred(FallbackModel):
-    """The alias's model, or the fallback while models-service has no such alias: on either loop."""
-
-    def __init__(self, first: Model, fallback: Model, unbound: Callable[[int, object], bool]) -> None:
-        def on(e: Exception) -> bool:
-            return isinstance(e, ModelHTTPError) and unbound(e.status_code, e.body)
-
-        super().__init__(first, fallback, fallback_on=on)
-        self.first, self.spare, self.unbound = first, fallback, unbound
-
-    def loop_endpoint(self) -> ModelEndpoint:
-        from .kernel import model_endpoint  # noqa: PLC0415 - kernel imports this module
-
-        main = model_endpoint(self.first)
-        return dataclasses.replace(main, fallback=model_endpoint(self.spare), falls_back=self.unbound)
+    return dataclasses.replace(source.model_for(alias), fallback=fallback, falls_back=unbound)
 
 
 class PreferredAlias:
@@ -59,5 +37,5 @@ class PreferredAlias:
     def __init__(self, source: ModelSource, alias: str) -> None:
         self.source, self.alias = source, alias
 
-    def model_for(self, alias: str) -> Model:
+    def model_for(self, alias: str) -> ModelEndpoint:
         return preferred(self.source, self.alias, self.source.model_for(alias))

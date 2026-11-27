@@ -4,7 +4,7 @@ headers every model call names them with (docs/design/agents-v2/model-gateway.md
 The gateway reserves each call against the budgets it names before the provider is called, records the answer under
 the call's replay key, and answers a repeat of the same request under that key from the record without charging it
 again. This module creates and updates a budget (`PUT /v1/models/budgets/{id}`), reads its spend back for the budget
-card, and wraps the kernel's model so each request carries:
+card, and gives the kernel's endpoint the headers each call carries:
 
 | Header | Chat turn | Workflow step |
 |---|---|---|
@@ -20,24 +20,18 @@ because the gateway would admit one closing call under the specialist's own repl
 from __future__ import annotations
 
 import contextlib
-import time
-from collections.abc import AsyncGenerator, Generator
-from contextlib import asynccontextmanager, contextmanager
+from collections.abc import Generator
+from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Any, cast
 
 import httpx
 from langgraph.config import get_config
-from pydantic_ai.exceptions import ModelHTTPError
-from pydantic_ai.messages import ModelMessage, ModelResponse
-from pydantic_ai.models import Model, ModelRequestParameters, StreamedResponse
-from pydantic_ai.models.wrapper import WrapperModel
-from pydantic_ai.settings import ModelSettings
 
 from ops_agent_kernel.contract import ModelEndpoint
-from ops_agent_kernel.ports import PURPOSE_HEADER, BudgetReachedError, ModelSource
+from ops_agent_kernel.ports import BudgetReachedError, ModelSource
 from ops_agents.graphs.common import emit
 from ops_agents.graphs.metering import STEP_KEY, call_site
 from ops_identity import ServiceCallError, ServiceClient
@@ -52,8 +46,6 @@ from ..store.tenancy import current_tenant
 
 BUDGET_HEADER = "X-Budget-Id"
 REPLAY_HEADER = "X-Replay-Key"
-# The gateway's refusals that end a reply; any other error is the call's own failure.
-REFUSED = frozenset({"budget_reached", "check_cap_reached"})
 CREATED_BY = "agents:api/budgets.py"
 # Pages of the call log read for one thread's spend per run; a thread past this many pages reports what it read.
 MAX_CALL_PAGES = 50
@@ -231,20 +223,6 @@ def _site() -> _Site | None:
     return _Site(call.thread_id, call.run_id, call.node, f"turn:{call.thread_id}:{task}")
 
 
-def _purpose(settings: ModelSettings | None) -> str:
-    return str(((settings or {}).get("extra_headers") or {}).get(PURPOSE_HEADER) or "turn")
-
-
-def _refused(e: ModelHTTPError) -> bool:
-    raw: object = e.body
-    if e.status_code != 429 or not isinstance(raw, dict):
-        return False
-    body = cast(Json, raw)
-    error = body.get("error")
-    code = cast(Json, error).get("code") if isinstance(error, dict) else body.get("code")
-    return code in REFUSED
-
-
 def gateway_budgets(settings: Settings, http: httpx.AsyncClient, db: Any) -> GatewayBudgets | None:
     """The tenant's budgets on models-service, or None when this process has no service signing key to ask with."""
     try:
@@ -261,40 +239,25 @@ def _no_team() -> str | None:
     return None
 
 
-class BudgetedModel(WrapperModel):
-    """The kernel's model with each request naming its tenant, its budget and its replay key. `headers` is False for
-    a model that calls a provider directly, which is never sent them; its calls are then reported only, and no budget
-    holds. With no `budgets` a request names no budget."""
+class BudgetedModel:
+    """The kernel's endpoint with each call naming its tenant, its budget and its replay key, and each answered call
+    recorded on its step. `headers` is False for an endpoint that calls a provider directly, which is never sent
+    them; its calls are then reported only, and no budget holds. With no `budgets` a call names no budget."""
 
-    def __init__(self, wrapped: Model, budgets: GatewayBudgets | None, alias: str, *, headers: bool = True) -> None:
-        super().__init__(wrapped)
+    def __init__(
+        self, wrapped: ModelEndpoint, budgets: GatewayBudgets | None, alias: str, *, headers: bool = True
+    ) -> None:
+        self.wrapped = wrapped
         self.budgets = budgets
         self.alias = alias
         self.headers = headers
 
-    async def _headed(self, settings: ModelSettings | None, site: _Site | None) -> ModelSettings | None:
-        if not self.headers:
-            return settings
-        headers = await self._named(_purpose(settings), site)
-        if not headers:
-            return settings
-        merged: ModelSettings = {**(settings or {})}
-        merged["extra_headers"] = {**(merged.get("extra_headers") or {}), **headers}
-        return merged
+    def endpoint(self) -> ModelEndpoint:
+        return replace(self.wrapped, headers=self.call_headers if self.headers else None, answered=self.answered)
 
     async def call_headers(self, purpose: str) -> dict[str, str]:
-        """The headers one call on the Strands loop names, computed in the task that makes it."""
+        """The headers one call names, computed in the task that makes it."""
         return await self._named(purpose, _site())
-
-    def loop_endpoint(self) -> ModelEndpoint:
-        """Where the Strands loop sends this model's calls: the wrapped gateway client, with each call's headers, and
-        each answered call recorded on its step as a call through `request` is."""
-        inner = self.wrapped
-        while isinstance(inner, WrapperModel):
-            inner = inner.wrapped
-        model_id = str(getattr(inner, "model_name", self.alias))
-        client = getattr(inner, "client", None)
-        return ModelEndpoint(client, model_id, self.call_headers if self.headers else None, self.answered)
 
     def answered(self, input_tokens: int, output_tokens: int, seconds: float) -> None:
         self._record(_site(), input_tokens, output_tokens, seconds)
@@ -323,10 +286,6 @@ class BudgetedModel(WrapperModel):
             headers[BUDGET_HEADER] = budget_id
         return headers
 
-    def _emit(self, site: _Site | None, response: ModelResponse, started: float) -> None:
-        u = response.usage
-        self._record(site, u.input_tokens, u.output_tokens, time.perf_counter() - started)
-
     def _record(self, site: _Site | None, input_tokens: int, output_tokens: int, seconds: float) -> None:
         if site is None or site.thread_id is None:
             return
@@ -341,57 +300,23 @@ class BudgetedModel(WrapperModel):
             },
         )
 
-    async def request(
-        self,
-        messages: list[ModelMessage],
-        model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters,
-    ) -> ModelResponse:
-        site = _site()
-        settings = await self._headed(model_settings, site)
-        started = time.perf_counter()
-        try:
-            response = await super().request(messages, settings, model_request_parameters)
-        except ModelHTTPError as e:
-            if _refused(e):
-                raise BudgetReachedError() from e
-            raise
-        self._emit(site, response, started)
-        return response
 
-    @asynccontextmanager
-    async def request_stream(
-        self,
-        messages: list[ModelMessage],
-        model_settings: ModelSettings | None,
-        model_request_parameters: ModelRequestParameters,
-        run_context: Any = None,
-    ) -> AsyncGenerator[StreamedResponse]:
-        site = _site()
-        settings = await self._headed(model_settings, site)
-        started = time.perf_counter()
-        try:
-            async with self.wrapped.request_stream(messages, settings, model_request_parameters, run_context) as s:
-                yield s
-        except ModelHTTPError as e:
-            if _refused(e):
-                raise BudgetReachedError() from e
-            raise
-        self._emit(site, s.get(), started)
+def budgeted(
+    endpoint: ModelEndpoint, budgets: GatewayBudgets | None, alias: str, *, headers: bool = True
+) -> ModelEndpoint:
+    """`endpoint` with each call's headers and its answer recorded (BudgetedModel)."""
+    return BudgetedModel(endpoint, budgets, alias, headers=headers).endpoint()
 
 
 class BudgetedSource:
-    """Each alias's model wrapped once in `BudgetedModel`."""
+    """Each alias's endpoint with each call's headers and its answer recorded (BudgetedModel)."""
 
     def __init__(self, models: ModelSource, budgets: GatewayBudgets | None) -> None:
         self.source = models
         self.budgets = budgets
-        self.models: dict[str, Model] = {}
 
-    def model_for(self, alias: str) -> Model:
-        if alias not in self.models:
-            self.models[alias] = BudgetedModel(self.source.model_for(alias), self.budgets, alias)
-        return self.models[alias]
+    def model_for(self, alias: str) -> ModelEndpoint:
+        return budgeted(self.source.model_for(alias), self.budgets, alias)
 
 
 __all__ = [
@@ -401,6 +326,7 @@ __all__ = [
     "BudgetedModel",
     "BudgetedSource",
     "GatewayBudgets",
+    "budgeted",
     "gateway_budgets",
     "spending_from",
     "step_budget",

@@ -7,21 +7,20 @@ field the model must fix; `retryable` disagrees with the error model's CODES."""
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from ops_agent_kernel.answer_check import error_code
 from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
+from ops_agent_kernel.testing import Answer, Reply, ToolCall
 from ops_agent_kernel.types import AgentSettings, Passage, PromptFragment, ToolGrant, TurnRequest
 from ops_agents.api.error_words import WORDS, WordedTools
 from ops_contracts import errors
-from tests.wire_model import on_wire
+from ops_service_kit.http import Json
+from tests.conftest import model_on, returned
 
 QUERY = ToolGrant("salesforce_query", "Salesforce", "Query", "read", {"type": "object", "properties": {}})
 
@@ -92,21 +91,13 @@ class NoKnowledge:
 async def test_through_the_kernel_the_model_reads_words_and_the_record_keeps_the_code() -> None:
     seen: list[Any] = []
 
-    def reply(messages: list[ModelMessage]) -> ModelResponse:
-        back = [p for m in messages for p in getattr(m, "parts", []) if isinstance(p, ToolReturnPart)]
-        if back:
-            seen.append(back[-1].content)
-            return ModelResponse(parts=[TextPart("Salesforce needs your sign-in.")])
-        return ModelResponse(parts=[ToolCallPart("salesforce_query", {})])
+    def script(messages: list[Json], tools: list[Json]) -> Answer:
+        if back := returned(messages, every=True):
+            seen.append(back[-1])
+            return "Salesforce needs your sign-in."
+        return Reply(tool_calls=[ToolCall("salesforce_query", {})])
 
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        part = reply(messages).parts[0]
-        if isinstance(part, TextPart):
-            yield part.content
-        else:
-            yield {0: DeltaToolCall(name="salesforce_query", json_args="{}")}
-
-    model = on_wire(FunctionModel(lambda m, _i: reply(m), stream_function=stream))
+    model = model_on(script)
     port = WordedTools(Failing(ToolOutcome(False, refusal("NOT_SIGNED_IN", app="Salesforce"))))
     settings = AgentSettings("ag", 1, [PromptFragment("You are Ops Assistant.")], "m")
     req = TurnRequest("t1", "th1", settings, [QUERY], user_turn="List accounts")

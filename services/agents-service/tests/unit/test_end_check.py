@@ -7,21 +7,18 @@ is "corrected"; knowledge used without a citation stays, or a tool answer is for
 
 from __future__ import annotations
 
-import json
-from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from typing import Any, cast
 
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
-from pydantic_ai.models import Model
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-
 from ops_agent_kernel import answer_check
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.events import KernelEvent, TextReplaced, TurnFinished
 from ops_agent_kernel.kernel import _replace, run_turn  # pyright: ignore[reportPrivateUsage]
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
+from ops_agent_kernel.testing import Answer, Reply, ToolCall
 from ops_agent_kernel.types import AgentSettings, Passage, PromptFragment, ToolGrant, TurnRequest, TurnResult
-from tests.wire_model import on_wire
+from ops_service_kit.http import Json
+from tests.conftest import asked, calls_in, model_on
 
 CASES = ToolGrant(
     "find_cases", "ops", "Find cases", "read", {"type": "object", "properties": {"search": {"type": "string"}}}
@@ -55,37 +52,25 @@ class Writer:
         self.calls = 0
         self.corrections: list[str] = []
 
-    def _reply(self, messages: list[ModelMessage]) -> str | tuple[str, dict[str, Any]]:
+    def _reply(self, messages: list[Json]) -> str | tuple[str, dict[str, Any]]:
         self.calls += 1
-        last = messages[-1]
-        asked = (
-            [p.content for p in last.parts if isinstance(p, UserPromptPart)] if isinstance(last, ModelRequest) else []
-        )
-        if asked and str(asked[0]).startswith("Your reply "):
-            self.corrections.append(str(asked[0]))
+        prompt = asked(messages)
+        if prompt.startswith("Your reply "):
+            self.corrections.append(prompt)
             return self.fixed
-        called = any(isinstance(p, ToolCallPart) for m in messages for p in getattr(m, "parts", []))
+        called = bool(calls_in(messages))
         return (
             (self.read_tool, {"search": "open"} if self.read_tool == "find_cases" else {"query": "overdue"})
             if self.read and not called
             else self.first
         )
 
-    def model(self) -> Model:
-        def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    def model(self) -> ModelEndpoint:
+        def script(messages: list[Json], tools: list[Json]) -> Answer:
             out = self._reply(messages)
-            return ModelResponse(parts=[TextPart(out) if isinstance(out, str) else ToolCallPart(*out)])
+            return out if isinstance(out, str) else Reply(tool_calls=[ToolCall(*out)])
 
-        async def stream(
-            messages: list[ModelMessage], info: AgentInfo
-        ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-            out = self._reply(messages)
-            if isinstance(out, str):
-                yield out
-            else:
-                yield {0: DeltaToolCall(name=out[0], json_args=json.dumps(out[1]))}
-
-        return on_wire(FunctionModel(respond, stream_function=stream))
+        return model_on(script)
 
 
 async def run(
@@ -279,13 +264,9 @@ async def test_an_interview_question_with_its_quick_replies_is_left_alone() -> N
     # Logging a meeting must ask "update the open opportunity or open a new one?" after reading it; the check took
     # that for an offer to read more and rewrote it into a statement.
     class Interviewer(Writer):
-        def _reply(self, messages: list[ModelMessage]) -> str | tuple[str, dict[str, Any]]:
+        def _reply(self, messages: list[Json]) -> str | tuple[str, dict[str, Any]]:
             out = super()._reply(messages)
-            presented = any(
-                isinstance(p, ToolCallPart) and p.tool_name == "present"
-                for m in messages
-                for p in getattr(m, "parts", [])
-            )
+            presented = any(name == "present" for name, _ in calls_in(messages))
             if isinstance(out, str) and out == self.first and not presented:
                 return ("present", {"followUps": ["Update Education savings", "Open a new opportunity"]})
             return out

@@ -5,13 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from pydantic_ai.models import Model
-from pydantic_ai.settings import ModelSettings
-
 from ops_contracts.chat import SignedIn
 from ops_service_kit.http import Json
 
-from .contract import LoopName
+from .contract import ModelEndpoint
 from .tool_cache import ToolCaches
 from .types import Passage
 
@@ -52,15 +49,10 @@ class BudgetReachedError(Exception):
 PURPOSE_HEADER = "X-Call-Purpose"
 
 
-def purpose(name: str) -> ModelSettings:
-    """Settings that mark one model call's purpose, passed as `model_settings` to the run that makes it."""
-    return {"extra_headers": {PURPOSE_HEADER: name}}
-
-
 class ModelSource(Protocol):
-    """The model a turn runs on, by the alias its agent was published with."""
+    """Where a turn's model calls go, by the alias its agent was published with."""
 
-    def model_for(self, alias: str) -> Model: ...
+    def model_for(self, alias: str) -> ModelEndpoint: ...
 
 
 class KnowledgeUnavailableError(Exception):
@@ -76,13 +68,10 @@ class KnowledgePort(Protocol):
 
 @dataclass(frozen=True)
 class KernelPorts:
-    model: Model
+    model: ModelEndpoint
     tools: ToolExecutor
     knowledge: KnowledgePort
     # When set, each turn runs on `models.model_for(settings.model_alias)`; otherwise every turn runs on `model`.
     models: ModelSource | None = None
     # The reads of the conversation and person a call is made for (tool_cache.py); None reads every time.
     tool_caches: ToolCaches | None = None
-    # The agent loop a new turn runs on (contract.py); None takes contract.LOOP.default. A paused turn resumes on the
-    # loop that paused it, whatever this says.
-    loop: LoopName | None = None

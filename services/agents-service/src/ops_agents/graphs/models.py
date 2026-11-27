@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from pydantic import BaseModel, Field
-from pydantic_ai import Agent
-from pydantic_ai.models import Model
+from pydantic import BaseModel, Field, ValidationError
 
+from ops_agent_kernel import structured
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_metering import Usage
 from ops_service_kit.http import Json
 
@@ -53,84 +53,77 @@ class GraphModels(Protocol):
     async def extract_records(self, schema: str, text: str) -> list[Json]: ...
 
 
-class PydanticAiModels:
-    """The workflow model calls on Pydantic AI, each a one-shot agent with a typed output."""
+class GatewayModels:
+    """The workflow model calls, each one structured call through the model gateway (ops_agent_kernel.structured),
+    its answer validated against the output type."""
 
-    def __init__(self, model: Model) -> None:
+    def __init__(self, model: ModelEndpoint) -> None:
         self._model = model
 
     async def classify(self, text: str, labels: list[str]) -> str:
-        agent = Agent[None, str](
-            self._model,
-            deps_type=type(None),
-            output_type=str,
-            instructions=f"Classify the message into exactly one of these labels; reply with the label only: {labels}.",
-        )
-        out = (await _run(agent, text)).strip().lower()
+        system = f"Classify the message into exactly one of these labels; reply with the label only: {labels}."
+        out = (await self._text(system, text)).strip().lower()
         return next((label for label in labels if label in out), labels[-1])
 
     async def extract(self, category: str, name: str, text: str) -> Facts:
-        agent = Agent[None, Facts](
-            self._model,
-            deps_type=type(None),
-            output_type=Facts,
-            instructions=(
-                f"Extract the facts a {category} case needs from one attachment."
-                " Leave a field empty when the attachment does not state it."
-            ),
+        system = (
+            f"Extract the facts a {category} case needs from one attachment."
+            " Leave a field empty when the attachment does not state it."
         )
-        return await _run(agent, f"Attachment {name}:\n{text}")
+        return await self._typed(Facts, system, f"Attachment {name}:\n{text}")
 
     async def draft(self, email: str, evidence: str, feedback: str | None) -> str:
-        agent = Agent[None, str](
-            self._model,
-            deps_type=type(None),
-            output_type=str,
-            instructions=(
-                "You draft replies for Harbor & Pine Bank's Card Services team. Write a short, plain reply to the"
-                " customer that acknowledges the dispute, states what the evidence shows and the next step."
-                " Do not promise an outcome."
-            ),
+        system = (
+            "You draft replies for Harbor & Pine Bank's Card Services team. Write a short, plain reply to the"
+            " customer that acknowledges the dispute, states what the evidence shows and the next step."
+            " Do not promise an outcome."
         )
         prompt = f"Customer email:\n{email}\n\nEvidence from the attachments:\n{evidence}"
         if feedback:
             prompt += f"\n\nA reviewer graded the previous draft and said: {feedback}\nWrite an improved draft."
-        return await _run(agent, prompt)
+        return await self._text(system, prompt)
 
     async def grade(self, email: str, draft: str) -> Grade:
-        agent = Agent[None, Grade](
-            self._model,
-            deps_type=type(None),
-            output_type=Grade,
-            instructions=(
-                "You grade a bank's draft reply. Score 0 to 1: does it answer the customer's email, state the evidence"
-                " correctly, give the next step and avoid promising an outcome? Give one sentence of feedback."
-            ),
+        system = (
+            "You grade a bank's draft reply. Score 0 to 1: does it answer the customer's email, state the evidence"
+            " correctly, give the next step and avoid promising an outcome? Give one sentence of feedback."
         )
-        return await _run(agent, f"Email:\n{email}\n\nDraft:\n{draft}")
+        return await self._typed(Grade, system, f"Email:\n{email}\n\nDraft:\n{draft}")
 
     async def extract_records(self, schema: str, text: str) -> list[Json]:
         """Every record of `schema` (RECORD_SCHEMAS) the text states, one dict per record, in the text's order."""
         output = RECORD_SCHEMAS.get(schema)
         if output is None:
             raise ValueError(f"Unknown record schema {schema}; one of {sorted(RECORD_SCHEMAS)}.")
-        agent = Agent[None, BaseModel](
-            self._model,
-            deps_type=type(None),
-            output_type=output,
-            instructions=(
-                f"Extract every {schema} record the text states, one record per entry, in the order they appear."
-                " Copy values as written. Leave a field empty when the text does not state it. Never invent a record."
-            ),
+        system = (
+            f"Extract every {schema} record the text states, one record per entry, in the order they appear."
+            " Copy values as written. Leave a field empty when the text does not state it. Never invent a record."
         )
-        found = await _run(agent, text)
+        found = await self._typed(output, system, text)
         records: list[Any] = list(found.model_dump(mode="json")["records"])
         return [dict(r) for r in records]
 
+    async def _text(self, system: str, prompt: str) -> str:
+        said = await structured.ask(self._model, system=system, prompt=prompt, purpose="turn")
+        _report(said)
+        return said.text
 
-async def _run[T](agent: Agent[None, T], prompt: str) -> T:
-    """Runs one workflow call and reports its usage to the metering wrapper around it (`metering.py`)."""
-    result = await agent.run(prompt)
-    u = result.usage
+    async def _typed[T: BaseModel](self, output: type[T], system: str, prompt: str) -> T:
+        said = await structured.ask(
+            self._model, system=system, prompt=prompt, purpose="turn", schema=output.model_json_schema()
+        )
+        _report(said)
+        try:
+            return output.model_validate(said.value)
+        except ValidationError as e:
+            raise ModelAnswerInvalid(f"The model's answer did not match {output.__name__}: {e}") from e
+
+
+class ModelAnswerInvalid(Exception):
+    """A workflow call answered outside its output type."""
+
+
+def _report(said: structured.Answered) -> None:
+    """Reports one workflow call's usage to the metering wrapper around it (`metering.py`)."""
+    u = said.usage
     report_usage(Usage(u.input_tokens, u.output_tokens, max(u.requests, 1)))
-    return result.output

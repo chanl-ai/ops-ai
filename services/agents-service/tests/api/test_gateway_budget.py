@@ -8,16 +8,16 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from pydantic_ai import Agent
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from ops_agent_kernel import structured
 from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.models import ModelsServiceModels
 from ops_agent_kernel.ports import BudgetReachedError, KernelPorts, ToolOutcome
 from ops_agent_kernel.testing import Answer, Reply, ToolCall, tool_names, trailing_tool_results
 from ops_agent_kernel.types import AgentSettings, Passage, PromptFragment, ToolGrant, TurnRequest
-from ops_agents.api.budgets import BudgetedModel, gateway_budgets, spending_from, step_budget
+from ops_agents.api.budgets import budgeted, gateway_budgets, spending_from, step_budget
 from ops_agents.graphs.metering import step_calls
 from ops_agents.store.tenancy import tenant_scope
 from ops_metering import Budget
@@ -60,7 +60,7 @@ async def test_the_fourth_call_on_a_three_call_budget_is_refused_and_a_retry_mak
     m, engine = gateway
     budgets = gateway_budgets(Settings(database_url=str(engine.url), seed_dir=SEED), m.client, engine)
     assert budgets is not None
-    model = BudgetedModel(
+    model = budgeted(
         ModelsServiceModels("http://models", m.secret, http_client=m.completions).model_for(ALIAS), budgets, ALIAS
     )
     run = f"wfrun_{uuid4().hex[:10]}"
@@ -70,7 +70,7 @@ async def test_the_fourth_call_on_a_three_call_budget_is_refused_and_a_retry_mak
         said: list[str] = []
         with step_calls(f"{run}:ai:0"), spending_from(budget_id):
             for i in range(4):
-                said.append((await Agent(model, output_type=str).run(f"Question {i}?")).output)
+                said.append((await structured.ask(model, system="", prompt=f"Question {i}?", purpose="turn")).text)
         return said
 
     with tenant_scope("local"):
@@ -85,7 +85,7 @@ async def test_the_fourth_call_on_a_three_call_budget_is_refused_and_a_retry_mak
     assert len(m.provider.requests) == 4, "the retry did not make the refused call, or paid again for the others"
 
 
-async def test_on_strands_a_turn_past_its_budget_stops_calling_the_provider(
+async def test_a_turn_past_its_budget_stops_calling_the_provider(
     database_url: str,
 ) -> None:
     def script(messages: list[Json], tools: list[Json]) -> Answer:
@@ -98,14 +98,14 @@ async def test_on_strands_a_turn_past_its_budget_stops_calling_the_provider(
         async with models_gateway(engine, script) as m:
             budgets = gateway_budgets(Settings(database_url=str(engine.url), seed_dir=SEED), m.client, engine)
             assert budgets is not None
-            model = BudgetedModel(
+            model = budgeted(
                 ModelsServiceModels("http://models", m.secret, http_client=m.completions).model_for(ALIAS),
                 budgets,
                 ALIAS,
             )
             run = f"wfrun_{uuid4().hex[:10]}"
             budget_id = step_budget(run, "ai")
-            ports = KernelPorts(model=model, tools=Cases(), knowledge=NoKnowledge(), loop="strands")
+            ports = KernelPorts(model=model, tools=Cases(), knowledge=NoKnowledge())
             req = TurnRequest("t1", "th1", SETTINGS, [CASES], user_turn="Which cases are open?")
             with tenant_scope("local"), step_calls(f"{run}:ai:0"), spending_from(budget_id):
                 await budgets.put(budget_id, "step", "team_ops", Budget(max_calls=1))

@@ -400,16 +400,10 @@ async def _turns(
         asked = f"{problem}. Answer again, matching the schema."
 
 
-async def close(
-    *, endpoint: ModelEndpoint, system_prompt: str, messages: list[Json], prompt: str, purpose: str, params: Json
-) -> str:
-    """One tool-less request over a run's messages (the closing answer at the budget): its text."""
-    loop = _Run([], lambda: 1)
-    loop.purpose = purpose
-    agent = _agent(_GatewayModel(endpoint, loop, lambda: system_prompt, params, None), loop, copy.deepcopy(messages))
-    said = await agent.invoke_async(prompt)
-    loop.raise_held()
-    return str(said).strip()
+def chat_messages(messages: list[Json]) -> list[Json]:
+    """A run's messages as OpenAI chat messages, for a call made outside the loop over what the run exchanged (a
+    correction, the closing answer at the budget: structured.py)."""
+    return cast(list[Json], OpenAIModel.format_request_messages(cast(Any, messages)))
 
 
 def _messages(agent: Agent) -> list[Json]:

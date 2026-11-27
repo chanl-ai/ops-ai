@@ -4,17 +4,14 @@ in place of the masked one it saw first, and a reused read the call log shows as
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from dataclasses import replace
 from typing import Any
 
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
-from pydantic_ai.models import Model
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
+from ops_agent_kernel.testing import Answer, Reply, ToolCall
 from ops_agent_kernel.tool_cache import EARLIER, ToolCache
 from ops_agent_kernel.types import AgentSettings, PromptFragment, ToolGrant, TurnRequest, TurnResult
 from ops_agents.activities.catalog import load_catalog
@@ -22,8 +19,8 @@ from ops_agents.api.chat_threads import AssistantBuilder
 from ops_agents.api.read_caches import ChatReads
 from ops_agents.api.run_person import RUN_PERSON, RunPerson
 from ops_contracts.chat import ChatMessage
-from tests.conftest import SEED
-from tests.wire_model import on_wire
+from ops_service_kit.http import Json
+from tests.conftest import SEED, model_on, model_steps, returned
 
 SETTINGS = replace(
     AgentSettings("ag_ops", 1, [PromptFragment("You help the sales team.")], "test-model"), max_tool_calls=5
@@ -58,34 +55,21 @@ class OneChat:
         return self.cache
 
 
-def calling(*calls: tuple[str, dict[str, Any]], told: list[Any] | None = None) -> Model:
+def calling(*calls: tuple[str, dict[str, Any]], told: list[Any] | None = None) -> ModelEndpoint:
     """A model that makes `calls` one per step, then answers; what each call returned is added to `told`."""
 
-    def step(messages: list[ModelMessage]) -> int:
-        return sum(isinstance(m, ModelResponse) for m in messages)
-
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        last = messages[-1]
-        if told is not None and isinstance(last, ModelRequest):
-            told.extend(p.content for p in last.parts if isinstance(p, ToolReturnPart))
-        n = step(messages)
+    def script(messages: list[Json], tools: list[Json]) -> Answer:
+        if told is not None:
+            told.extend(returned(messages))
+        n = model_steps(messages)
         if n < len(calls):
-            return ModelResponse(parts=[ToolCallPart(calls[n][0], calls[n][1], tool_call_id=f"c{n}")])
-        return ModelResponse(parts=[TextPart("Acme's phone is 555-0100.")])
+            return Reply(tool_calls=[ToolCall(calls[n][0], calls[n][1], id=f"c{n}")])
+        return "Acme's phone is 555-0100."
 
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        part = respond(messages, info).parts[0]
-        if isinstance(part, ToolCallPart):
-            yield {
-                1: DeltaToolCall(name=part.tool_name, json_args=part.args_as_json_str(), tool_call_id=part.tool_call_id)
-            }
-        elif isinstance(part, TextPart):
-            yield part.content
-
-    return on_wire(FunctionModel(respond, stream_function=stream))
+    return model_on(script)
 
 
-async def turn(model: Model, tools: Tools, chat: OneChat, ask: str = "What is Acme's phone?") -> TurnResult:
+async def turn(model: ModelEndpoint, tools: Tools, chat: OneChat, ask: str = "What is Acme's phone?") -> TurnResult:
     req = TurnRequest("t", "r", SETTINGS, [READ, SAVE], user_turn=ask)
     ports = KernelPorts(model=model, tools=tools, knowledge=Empty(), tool_caches=chat)
     events = [e async for e in run_turn(req, ports)]

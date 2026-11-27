@@ -10,9 +10,9 @@ from typing import Any, cast
 
 import pytest
 from httpx import AsyncClient
-from pydantic_ai.models.test import TestModel
 
 from ops_agents.api.agent_registry import registry
+from tests.conftest import scripted_model
 
 from .role_app import ok, role_app
 from .test_template_guardrails import PACK, advice
@@ -22,7 +22,7 @@ from .test_template_update import OPS
 
 @pytest.fixture
 async def client() -> AsyncGenerator[AsyncClient]:
-    async with role_app(TestModel()) as c:
+    async with role_app(scripted_model()) as c:
         yield c
 
 

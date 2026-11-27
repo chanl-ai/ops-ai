@@ -8,9 +8,9 @@ from collections.abc import AsyncGenerator
 
 import pytest
 from httpx import AsyncClient
-from pydantic_ai.models.test import TestModel
 
 from ops_service_kit.names import LINE_BREAK
+from tests.conftest import scripted_model
 
 from ..engine.test_lifecycle_rights import person
 from .role_app import ok, role_app
@@ -22,7 +22,7 @@ GUARDRAIL = {"topics": ["investment advice"], "message": "I can't give investmen
 
 @pytest.fixture
 async def client() -> AsyncGenerator[AsyncClient]:
-    async with role_app(TestModel()) as c:
+    async with role_app(scripted_model()) as c:
         yield c
 
 
