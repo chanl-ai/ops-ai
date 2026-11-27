@@ -17,7 +17,7 @@ Status: draft. Id: `uc-620`. Service: `agents-service`. Layers: api, ui.
 |---|---|
 | PostgreSQL :5477 | `make db-up` |
 | The demo's fake OpenAI, with the levy notice's extraction and the uc620 chat rule | `services/models-service/seed/demo-fake-openai/script.json`, through models-service |
-| files-service and documents-service delivering events to this run's agents-service, and a workflow worker | started by the script |
+| files-service and documents-service delivering events to this run's agents-service, tools-service as the tool gateway, and a workflow worker | started by the script; without the gateway the form workflow's reply step is refused at publish |
 
 ## Steps and expected results
 
