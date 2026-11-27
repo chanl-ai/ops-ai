@@ -69,6 +69,13 @@ REFUSALS = {
     "key_budget_exhausted": ("budget_exhausted", SPENT),
     "tenant_budget_exhausted": ("budget_exhausted", SPENT),
     "rate_limited": ("model_rate_limited", "The model is busy; try again in a minute."),
+    # A reply billed but holding no answer: the read fails with why, and no field is saved from it.
+    "reply_cut_off": ("reply_cut_off", "The model's reply was cut off at its length limit."),
+    "reply_declined": ("reply_declined", "The model declined to read this file."),
+    "reply_filtered": ("reply_filtered", "The provider's content filter stopped the model's reply."),
+    "reply_empty": ("reply_empty", "The model's reply held no answer."),
+    "models_timeout": ("model_late", "The model did not answer in time."),
+    "provider_timeout": ("model_late", "The model did not answer in time."),
 }
 READS = ("fields", "propose")
 PROPOSE_PAGES = 5
@@ -163,6 +170,9 @@ class ModelsService:
     http: httpx.AsyncClient
     key: str
     alias: str = ALIAS
+    # The most tokens the model may write in one reply (Settings.extract_output_tokens), so a long reply ends at the
+    # limit inside models-service's wait rather than timing out.
+    output_tokens: int = 4000
 
     async def structured(
         self,
@@ -179,7 +189,10 @@ class ModelsService:
         calls = ModelCalls(self.http, self.key, self.alias)
         spent = usage if usage is not None else Usage()
         # The tenant spends from its own share of this key, so one tenant cannot drain the others.
-        ask = partial(calls.structured, system, user, cast(dict[str, Any], schema), tenant=tenant, step=step, run=run)
+        ask = partial(
+            calls.structured, system, user, cast(dict[str, Any], schema), tenant=tenant, step=step, run=run,
+            max_tokens=self.output_tokens,
+        )  # fmt: skip
         try:
             answer = await ask(parts=[i.part() for i in images], usage=spent)
         except ModelCallError as e:
@@ -1146,6 +1159,8 @@ class Extractor:
 
     async def _refused(self, row: ExtractionRow, e: ModelCallError) -> ExtractionRow:
         code, message = REFUSALS.get(e.code or "", ("model_unavailable", str(e)))
+        if e.refusal:
+            message = f"{message} It said: {e.refusal}"
         return await self._fail(row, code, message)
 
     async def _fail(self, row: ExtractionRow, code: str, message: str, extra: Json | None = None) -> ExtractionRow:
@@ -1184,7 +1199,9 @@ def default_extractor(files: Files, engine: Any, settings: Settings, *, readings
     if settings.models is not None and settings.models_key is not None:
         # Called with this service's model key, not a service token, so it is not a ServiceClient.
         http = httpx.AsyncClient(base_url=settings.models.base, timeout=settings.models.timeout_s)
-        models = ModelsService(http, settings.models_key.get_secret_value())
+        models = ModelsService(
+            http, settings.models_key.get_secret_value(), output_tokens=settings.extract_output_tokens
+        )
     floors: Floors | None = None
     pictures: PageImagePolicy | None = None
     masking: MaskingPolicy | None = None
