@@ -126,13 +126,16 @@ jobs:
           # key the push goes over the token and is refused, which prints the owner's command (docs/deploy/release.md).
           DEPLOY_KEY: ${{ secrets.RELEASE_MAIN_DEPLOY_KEY }}
           REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ -n "$DEPLOY_KEY" ]; then
             ssh_dir=$RUNNER_TEMP/release-main-ssh
             mkdir -p "$ssh_dir" && chmod 700 "$ssh_dir"
             printf '%s\n' "$DEPLOY_KEY" > "$ssh_dir/key" && chmod 600 "$ssh_dir/key"
             # GitHub's published host keys, so the first connection trusts nothing it was not told.
-            curl -fsS https://api.github.com/meta | jq -r '.ssh_keys[] | "github.com " + .' > "$ssh_dir/known_hosts"
+            curl -fsS --retry 3 --retry-all-errors --retry-delay 5 -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/meta \
+              | jq -r '.ssh_keys[] | "github.com " + .' > "$ssh_dir/known_hosts"
+            [ -s "$ssh_dir/known_hosts" ] || { echo "::error::GitHub host keys came back empty"; exit 1; }
             export GIT_SSH_COMMAND="ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o StrictHostKeyChecking=yes"
             export PUSH_URL="git@github.com:$REPO.git"
           fi
