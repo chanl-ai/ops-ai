@@ -39,6 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import atomic_json
 import ci_steps
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -409,9 +410,7 @@ def main(argv: list[str]) -> int:
     if args.out:
         everything = results + [carried(e) for e in earlier if e["label"] not in {r.job.label for r in results}]
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True)
-        Path(args.out).write_text(
-            json.dumps(report(everything, base, head.stdout.strip(), wall, plan), indent=2) + "\n"
-        )
+        atomic_json.write_json(args.out, report(everything, base, head.stdout.strip(), wall, plan))
     for r in results:
         if r.status == "failed":
             print(f"\n--- {r.job.label}: last lines of {r.log}\n{tail(r.log)}")

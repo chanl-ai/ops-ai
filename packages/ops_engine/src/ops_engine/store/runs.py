@@ -52,6 +52,7 @@ class RunRow(Out):
     waiting: Json | None = None
     created_by: str
     started_via: str | None = None
+    # Unused; kept while engine_runs holds the column, since a row refuses a column its model lacks (Out).
     started_by_approver: bool = False
     created_at: str
     updated_at: str

@@ -339,15 +339,6 @@ def started_by(me: Principal) -> str:
     return f"key:{key}" if key else me.email
 
 
-def approves_own_writes(me: Principal) -> bool:
-    """Whether `me` is their own approver in the team they act in: reviews.decide there, while the
-    requesterMayDecide policy lets an asker decide or they are an Admin of the team (`can`). An API key never is: a key
-    acts for nobody who could approve."""
-    if me.is_key:
-        return False
-    return ACCESS.may(caller_of(me), "reviews", "decide", team=me.team_id, requested_by=(me.email,))
-
-
 def require_key_reaches(me: Principal, kind: Literal["agent", "workflow"], target_id: str) -> int | None:
     """An API key scoped to one agent or workflow starts that one only, whatever the request names; the target
     comes from introspection, never the request. Returns the workflow version the key pins, None to run the live one

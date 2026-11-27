@@ -35,6 +35,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "agents"))
 
 import affected_usecases  # noqa: E402
+import atomic_json  # noqa: E402
 import quarantine  # noqa: E402
 import usecase_batch  # noqa: E402
 
@@ -113,7 +114,7 @@ def git_changed(base: str, head: str) -> list[str]:
 
 def write_results(path: str | None, results: list[dict[str, Any]]) -> None:
     if path:
-        Path(path).write_text(json.dumps({"results": results}, indent=2) + "\n", encoding="utf-8")
+        atomic_json.write_json(path, {"results": results})
 
 
 def run_ids(

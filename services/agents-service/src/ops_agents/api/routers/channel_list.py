@@ -492,6 +492,7 @@ async def _steps(
     target: str,
     version: int | None,
     now: datetime,
+    teams: tuple[str, ...],
 ) -> list[PlaceReply]:
     """Each live workflow step that names `target`: it runs the published version, so it is never pinned. A step of a
     scheduled workflow carries the schedule and its next run, read for the matched workflows only and only where the
@@ -502,7 +503,7 @@ async def _steps(
         for n in cast(list[Json], cast(Json, d.definition or {}).get("nodes") or [])
         if n.get("type") == node_type and cast(Json, n.get("parameters") or {}).get(param) == target
     ]
-    schedules = await _saved(rt, sorted({d.workflow_id for d, _ in found}))
+    schedules = await _saved(rt, sorted({d.workflow_id for d, _ in found}), teams)
     return [
         {
             "where": {
@@ -524,9 +525,9 @@ async def _steps(
     ]
 
 
-async def _saved(rt: Runtime, workflow_ids: list[str]) -> dict[str, list[ScheduleRow]]:
+async def _saved(rt: Runtime, workflow_ids: list[str], teams: tuple[str, ...]) -> dict[str, list[ScheduleRow]]:
     out: dict[str, list[ScheduleRow]] = {}
-    for row in await WorkflowSchedules(rt.db).for_workflows(workflow_ids):
+    for row in await WorkflowSchedules(rt.db).for_workflows(workflow_ids, teams=teams):
         out.setdefault(row.workflow_id, []).append(row)
     return out
 
@@ -553,7 +554,9 @@ async def agent_live(rt: Rt, me: Me, agent_id: str) -> JSONResponse:
         serving = await ChannelList(rt.db).rows(teams, now=now, agent_id=agent_id, types=["chat"])
         live = await ChannelList(rt.db).live_definitions(teams)
     rows = [_place(r) for r in await replies(rt, me, serving, now)]
-    rows += await _steps(rt, live, "ops.ai.agent", "agent", target=agent_id, version=cast(int | None, latest), now=now)
+    rows += await _steps(
+        rt, live, "ops.ai.agent", "agent", target=agent_id, version=cast(int | None, latest), now=now, teams=teams
+    )
     return ok({"latestVersion": latest, "versions": _versions(rows, cast(int | None, latest)), "rows": rows})
 
 
@@ -573,7 +576,9 @@ async def workflow_live(
     now = datetime.now(UTC)
     watching = await ChannelList(rt.db).rows(teams, now=now, mailbox=(str(mine.team_id), address)) if address else []
     rows = [_place(r) for r in await replies(rt, me, watching, now)]
-    rows += await _steps(rt, live, "ops.action.workflow", "workflow", target=workflow_id, version=latest, now=now)
+    rows += await _steps(
+        rt, live, "ops.action.workflow", "workflow", target=workflow_id, version=latest, now=now, teams=teams
+    )
     return ok({"latestVersion": latest, "versions": _versions(rows, latest), "rows": rows})
 
 

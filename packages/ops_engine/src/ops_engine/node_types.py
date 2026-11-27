@@ -1213,7 +1213,9 @@ BASIC_TYPES: tuple[NodeType, ...] = (
         how=(
             "By default it answers the original sender and keeps the original subject. It sends once and is not "
             "retried, so a person never gets the same message twice. If sending fails, the workflow goes on to the "
-            "Error path."
+            "Error path. It sends with no approval: where the team's approval rules hold replies, sending is refused "
+            "and the workflow takes the Error path, so a reply that needs a person's yes is a send_reply tool step "
+            "after a review step."
         ),
         description="Replies on the channel that started the run, through the existing send_reply path. One attempt.",
         executor="action.send",

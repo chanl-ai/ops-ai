@@ -53,7 +53,6 @@ from .ports import (
     DocumentsPort,
     EnginePorts,
     OutsideAnswerError,
-    ReviewPort,
     RunPort,
     RunRefusedError,
     StartedRun,
@@ -684,16 +683,10 @@ async def review_open(call: NodeCall) -> Outcome:
                 declared["inputs"] = list(cast(list[Any], o.get("inputs") or []))
             listed.append(declared)
         payload["options"] = listed
-    # A plain approval of one write needs no one when the run's starter may approve it themselves; a step with
-    # options or a task type is a person's choice, so it always pauses.
-    plain = bool(payload.get("call")) and "options" not in payload and "taskType" not in payload
-    own = await call.ports.reviews.own_decision(call.run_id, call.node.id, payload) if plain else None
-    decision: Any
-    if own is not None:
-        decision = own
-    else:
-        payload["review_id"] = await call.ports.reviews.open(call.run_id, call.node.id, call.iteration, payload)
-        decision = interrupt(payload)
+    # Every review pauses for a person's click, the run's starter included: who may click is the decision route's
+    # check (engine_reviews._check_decider), never decided here.
+    payload["review_id"] = await call.ports.reviews.open(call.run_id, call.node.id, call.iteration, payload)
+    decision: Any = interrupt(payload)
     chosen = dict(cast(Json, decision)) if isinstance(decision, dict) else {"decision": decision}
     port = str(chosen.get("option") or DEFAULT_OPTIONS.get(str(chosen.get("decision")), chosen.get("decision")))
     if port not in options:
@@ -1310,28 +1303,11 @@ async def action_send(call: NodeCall) -> Outcome:
     if not to:
         return Outcome("error", {"error": "Send read no recipient.", "code": "no_recipient"})
     arguments: Json = {"to": to, "subject": subject, "body": body}
-    token = None
-    # A run without a review port (a unit run) sends without an own approval.
-    reviews = cast("ReviewPort | None", call.ports.reviews)
-    own = (
-        await reviews.own_decision(
-            call.run_id,
-            call.node.id,
-            {"call": {"tool": "send_reply", "input": arguments, "step": call.key}},
-        )
-        if reviews is not None
-        else None
-    )
-    approval = (own or {}).get("approval")
-    if isinstance(approval, Mapping):
-        token = await call.ports.tools.mint(
-            call.run_id,
-            {"tool": "send_reply", "input": arguments, "step": call.key},
-            dict(cast(Mapping[str, JsonValue], approval)),
-        )
-    result = await call.ports.tools.call(
-        "send_reply", arguments, call.key, call.generation, str(token) if token else None
-    )
+    # Sent without an approval, whoever started the run: the gateway applies the team's approval rules (send_reply's
+    # declared wait holds while the workspace keeps makers' asks on) and its send check. A reply they hold is refused,
+    # so the step leaves by its error way out; a reply that needs a person's yes is a send_reply tool step after a
+    # review step.
+    result = await call.ports.tools.call("send_reply", arguments, call.key, call.generation, None)
     if result.ok:
         out: Json = {}
         raw_output: object = result.output
