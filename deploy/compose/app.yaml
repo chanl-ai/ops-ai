@@ -181,6 +181,23 @@ services:
       OPS_SERVICE_SIGNING_KEY: ${OPS_SVC_KEY_DOCUMENTS:?}
       OPS_SERVICE_SIGNING_KID: svc-documents-1
       OPS_MODELS_KEY: ${OPS_MODELS_KEY_DOCUMENTS:-}
+      # Empty means off: Word files and decks show text only. docs/deploy/converter.md turns it on.
+      OPS_DOCUMENTS_CONVERTER_URL: ${OPS_DOCUMENTS_CONVERTER_URL:-}
+    networks: [default, converter]
+
+  # Draws Word files and decks as PDF for documents-service. Off unless the converter profile is on
+  # (docs/deploy/converter.md). Its network is internal: no route out, no published port, and documents is the only
+  # other member.
+  converter:
+    image: ${OPS_IMAGE_PREFIX:-ops-ai}/converter:${OPS_IMAGE_TAG:-dev}
+    profiles: [converter]
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs: [/tmp, /home/ops]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [converter]
 
   # tools-service's policy engine, with services/tools-service/policy built in.
   opa:
@@ -223,6 +240,11 @@ services:
       platform: { condition: service_healthy }
       agents: { condition: service_started }
       console: { condition: service_started }
+
+networks:
+  default: {}
+  converter:
+    internal: true
 
 volumes:
   files-data:

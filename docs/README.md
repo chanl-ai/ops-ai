@@ -187,6 +187,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `deploy/demo-mailbox.md` | A demo mailbox on Fly: the Stalwart mail server, its DNS records, secrets, sending a test, rotating the password and the cost |
 | `deploy/docs-site.md` | The docs site (`apps/docs`) on Vercel: project settings, the static build under `/docs`, and serving it at a path of another host |
 | `deploy/release.md` | Releasing with gitflow: `release/X.Y.Z` cut from develop, tested on staging, merged into main with a merge commit, tagged and merged back; hotfixes; what each push or tag starts; the checks after; the branch protection to set |
+| `deploy/converter.md` | The converter worker that draws Word files and decks as PDF pages: what it is, why it has no network access, turning it on in Compose and in the dev stack, the limits and the licence |
 | `deploy/release-package.md` | The release package a client team installs from: `make release-package`, what it holds, the proof from the tarball alone, the facts that shape it and what pushing the images would need |
 | `deploy/security-scanning.md` | Every security scan (CodeQL, Scorecard, the dependency check, the release image scan), the SBOM, signatures and build provenance on each release, the settings the owner switches on, and how to verify a release |
 | `deploy/upgrade.md` | Upgrade an install to a new release with the script or by hand, how the schema check behaves, and roll back |

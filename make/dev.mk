@@ -1,6 +1,6 @@
 # The local stack: compose (PostgreSQL, OPA), migrations, then the agents service, tools service and console in the
 # background. scripts/stack.sh is the process manager: logs in .logs/<svc>.log, pids in .run/<svc>.pid.
-.PHONY: offset-guard port-list up sample-install down restart reset-db health logs ports demo-model sample-team sample-library sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
+.PHONY: offset-guard port-list converter-up converter-down upsample-install down restart reset-db health logs ports demo-model sample-team sample-library sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
 
 ##@ Stack (one per machine)
 
@@ -13,6 +13,22 @@ DEMO_MODEL ?= $(if $(OPENAI_API_KEY),gpt-5-mini,fake)
 # provider connection, so DEMO_MODEL=fake puts all of them on the fake.
 DEMO_FAST_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-4.1-mini)
 DEMO_CHAT_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-5-nano)
+
+# The converter worker (deploy/images/converter): one container per stack, named by the offset, image built once. The
+# host port is 8780 + offset (8770 is the runner's). make up CONVERTER=1 points documents-service at it.
+CONVERTER_IMAGE ?= ops-ai-converter:dev
+CONVERTER_NAME := ops-converter-$(OPS_PORT_OFFSET)
+
+converter-up: ## Build the converter image once and run it on 127.0.0.1:OPS_CONVERTER_PORT (8780 + offset); make up CONVERTER=1 then gives documents-service pages for Word files and decks
+	@docker image inspect $(CONVERTER_IMAGE) >/dev/null 2>&1 || python3 $(ROOT)/scripts/at-most.py 1 heavy -- docker build -t $(CONVERTER_IMAGE) $(ROOT)/deploy/images/converter
+	@docker stop $(CONVERTER_NAME) >/dev/null 2>&1 || true
+	@docker run -d --rm --name $(CONVERTER_NAME) --read-only --tmpfs /tmp --tmpfs /home/ops --cap-drop ALL --security-opt no-new-privileges \
+		-p 127.0.0.1:$(OPS_CONVERTER_PORT):8770 $(CONVERTER_IMAGE) >/dev/null
+	@for i in $$(seq 1 30); do curl -sf -m 1 http://127.0.0.1:$(OPS_CONVERTER_PORT)/health >/dev/null && echo "converter up: http://127.0.0.1:$(OPS_CONVERTER_PORT)" && exit 0; sleep 1; done; echo "converter did not answer: docker logs $(CONVERTER_NAME)"; exit 1
+
+converter-down: ## Stop the converter container of this stack
+	@docker stop $(CONVERTER_NAME) >/dev/null 2>&1 || true
+	@echo "converter down"
 
 up: offset-guard db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); a new database gets the sample team (SAMPLE=0 skips); OPS_INFRA=external uses side containers and skips db-up/db-down; OPS_INFRA=shared (offset stacks) reuses the default stack's containers with its own database
 	@# Services started before their code last changed run old code: stopped here, started again after the schema step.
