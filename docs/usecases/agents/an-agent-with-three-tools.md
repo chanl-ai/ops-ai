@@ -335,9 +335,9 @@ No gaps are open.
 `OPS_USECASE_MEDIA=1 make usecase-test UC=uc-086 LAYER=ui` writes the pictures and the clip beside this page (`media/`); the
 script checks that the clip is under 15 s and 2 MB.
 
-![The agents list, 1440 wide](media/uc-086-agents-1440.png)
-![The agents list, 390 wide](media/uc-086-agents-390.png)
-![The agent list, the agent holding its three tools and the module's call log](media/uc-086-agent-with-three-tools.gif)
+![The agents list, 1440 wide](https://opsai.chanl.ai/docs/usecases/agents/media/uc-086-agents-1440.png)
+![The agents list, 390 wide](https://opsai.chanl.ai/docs/usecases/agents/media/uc-086-agents-390.png)
+![The agent list, the agent holding its three tools and the module's call log](https://opsai.chanl.ai/docs/usecases/agents/media/uc-086-agent-with-three-tools.gif)
 
 
 ### Steps and results in the console

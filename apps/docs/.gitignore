@@ -4,3 +4,5 @@ next-env.d.ts
 *.tsbuildinfo
 out/
 .vercel
+# Images copied from docs/ by scripts/copy-images.mjs
+/public/
