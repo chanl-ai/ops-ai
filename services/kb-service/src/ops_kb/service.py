@@ -32,6 +32,7 @@ from ops_ingest.rules import ItemFacts, evaluate_rules
 from ops_ingest.split import ai_step_allowed, document_digest
 from ops_ingest.strategies.faq import piece_digest
 from ops_ingest.text import approx_tokens
+from ops_kb.item_text import dropped_by, item_text
 from ops_service_kit import narrow
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Json, JsonValue, OptionsJSON, PageJSON, options_page, options_window
@@ -2860,15 +2861,9 @@ class KnowledgeService:
             return None
         if answer.get("status") != "done":
             return None
-        cleaning = settings.cleaning
         pages = [json_object(p) for p in json_list(answer.get("pages"))]
         blocks_of = [[json_object(b) for b in json_list(p.get("blocks"))] for p in pages]
-        has_main = cleaning.main_content and any(b.get("main") for blocks in blocks_of for b in blocks)
-
-        def dropped(b: Json) -> bool:
-            if cleaning.furniture and b.get("furniture"):
-                return True
-            return has_main and not b.get("main") and b.get("kind") != "title"
+        dropped = dropped_by(settings.cleaning, pages)
 
         out: list[ReadingPage] = []
         for page, blocks in zip(pages, blocks_of, strict=True):
@@ -2892,6 +2887,24 @@ class KnowledgeService:
                 )
             )
         return ItemReading(reader_version=narrow.field(answer, "readerVersion", str), ocr=ocr, pages=out)
+
+    async def item_text(self, who: Who, item_id: str) -> Json:
+        """What was read from the item's file, section by section with each block's place on its page: the text half
+        of the document view. The item is read in one transaction, then documents-service's reading with none open."""
+        async with isolation.request_transaction():
+            found = await self.store.items(who.tenant_id, item_id=item_id)
+            if not found:
+                raise NotFound("No item with that id.")
+            i = found[0]
+            s = await self._source_row(who, i.source_id)
+        settings = self.settings_of(s)
+        answer: Json | None = None
+        if i.file_id and self.readings is not None:
+            try:
+                answer = await self.readings.reading(who.tenant_id, source_team(s), i.file_id, ocr=settings.parsing.ocr)
+            except (DocumentsRefused, ServiceUnreachable):
+                answer = None
+        return item_text(item_id, i.file_id or None, i.mime or None, answer, settings.cleaning)
 
     async def item_chunks(self, who: Who, item_id: str, params: ListParams) -> ListPage:
         """A page of the item's pieces, searched by text in SQL, each with what search matches it as: the pieces tab of

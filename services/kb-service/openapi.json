@@ -880,6 +880,25 @@
         "title": "Envelope[EventOut]",
         "type": "object"
       },
+      "Envelope_ItemText_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ItemText"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ItemText]",
+        "type": "object"
+      },
       "Envelope_ItemWithDetail_": {
         "additionalProperties": false,
         "properties": {
@@ -2426,6 +2445,96 @@
           "current"
         ],
         "title": "ItemSettingsUsed",
+        "type": "object"
+      },
+      "ItemText": {
+        "additionalProperties": false,
+        "description": "What was read from an item's file, section by section after the source's cleaning, with each block's place on\nits page, for the document view beside the original. `status` is done, reading (documents-service has not\nfinished), or none (the item has no file, or no reading can be had now); `notes` say in plain words what was not\nread or could not be shown.",
+        "properties": {
+          "fileId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fileid"
+          },
+          "itemId": {
+            "title": "Itemid",
+            "type": "string"
+          },
+          "mimeType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mimetype"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "paged": {
+            "title": "Paged",
+            "type": "boolean"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/TextPage"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "readerVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readerversion"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/TextSection"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "done",
+              "reading",
+              "none"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "itemId",
+          "fileId",
+          "mimeType",
+          "status",
+          "paged",
+          "readerVersion",
+          "pages",
+          "sections",
+          "notes"
+        ],
+        "title": "ItemText",
         "type": "object"
       },
       "ItemUnit": {
@@ -7875,6 +7984,174 @@
         "title": "SyncSettings",
         "type": "object"
       },
+      "TextBlock": {
+        "additionalProperties": false,
+        "properties": {
+          "boxes": {
+            "items": {
+              "$ref": "#/components/schemas/TextBox"
+            },
+            "title": "Boxes",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "paragraph",
+              "table"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "readBy": {
+            "title": "Readby",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "text",
+          "page",
+          "readBy",
+          "boxes"
+        ],
+        "title": "TextBlock",
+        "type": "object"
+      },
+      "TextBox": {
+        "additionalProperties": false,
+        "description": "Where a block sits on its page, as fractions of the page from its top left (documents-service's boxes).",
+        "properties": {
+          "h": {
+            "title": "H",
+            "type": "number"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "w": {
+            "title": "W",
+            "type": "number"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "page",
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "title": "TextBox",
+        "type": "object"
+      },
+      "TextPage": {
+        "additionalProperties": false,
+        "properties": {
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "readBy": {
+            "title": "Readby",
+            "type": "string"
+          },
+          "unreadReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unreadreason"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "number",
+          "readBy",
+          "warnings"
+        ],
+        "title": "TextPage",
+        "type": "object"
+      },
+      "TextSection": {
+        "additionalProperties": false,
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/TextBlock"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "headingPath": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Headingpath",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          }
+        },
+        "required": [
+          "id",
+          "headingPath",
+          "page",
+          "blocks"
+        ],
+        "title": "TextSection",
+        "type": "object"
+      },
       "TokenRange": {
         "additionalProperties": false,
         "properties": {
@@ -9039,6 +9316,194 @@
           }
         },
         "summary": "Set Item Owner",
+        "tags": [
+          "items"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/items/{item_id}/text": {
+      "get": {
+        "description": "What was read from the document's file, section by section, each paragraph with its lines' places on the\npage, and why any page was not read: the text beside the original in the document view.",
+        "operationId": "items_get_item_text",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ItemText_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Get Item Text",
         "tags": [
           "items"
         ],

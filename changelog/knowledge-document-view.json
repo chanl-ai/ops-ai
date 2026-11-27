@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-26",
+  "title": "Open a knowledge document beside the text read from it",
+  "description": "A knowledge document now opens on its own page with the original on the left and what was read from it on the right, section by section. Clicking a paragraph of a PDF highlights its lines on the page, and clicking the lines selects the paragraph.",
+  "tag": "new"
+}
