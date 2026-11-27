@@ -52,17 +52,12 @@ class HybridRetriever:
             return "no_embedding_model", [], 0
         if not await self.vectors.ready():
             return "no_vector_store", [], 0
-        try:
-            async with asyncio.timeout_at(deadline):
-                await embedder.learn(tenant=tenant)
-        except EmbedFailed as e:
-            return f"embedding_unavailable: {e.code}", [], 0
-        except TimeoutError:
-            return "embedding_unavailable: timeout", [], 0
-        embedded, _ = await self.vectors.coverage(tenant, kb_ids, model=embedder.model, width=embedder.width)
+        # No call before the question's own: a process that has not heard from the model yet compares with the model
+        # of the newest stored vectors, so the reason a search gives does not depend on how long the process has run.
+        before = embedder.model or await self.vectors.latest_model(tenant, width=embedder.width)
+        embedded, _ = await self.vectors.coverage(tenant, kb_ids, model=before, width=embedder.width)
         if embedded == 0:
             return "no_vectors", [], 0
-        before = embedder.model
         try:
             async with asyncio.timeout_at(deadline):
                 [vector], tokens = await embedder.embed([question], tenant=tenant)
@@ -71,7 +66,7 @@ class HybridRetriever:
         except TimeoutError:
             return "embedding_unavailable: timeout", [], 0
         if embedder.model != before:
-            # The alias now serves another model: the stored vectors are of the old one and are never compared.
+            # The alias now serves another model: vectors of the old one are never compared with the question.
             embedded, _ = await self.vectors.coverage(tenant, kb_ids, model=embedder.model, width=embedder.width)
             if embedded == 0:
                 return "no_vectors", [], tokens

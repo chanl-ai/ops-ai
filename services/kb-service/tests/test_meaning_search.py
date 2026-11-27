@@ -286,25 +286,39 @@ async def test_a_slow_embedding_model_skips_the_meaning_lane_at_the_search_wait(
     assert sections(found)[:1] == ["Early repayment"]
 
 
-async def test_a_new_version_of_the_embedding_alias_embeds_every_unit_again(
-    engine: AsyncEngine, tenant: str, tmp_path: Path
-) -> None:
-    """An admin points the environment's embedding alias at another model (Settings, Models): the alias name is
-    unchanged, so vectors are keyed by the model that served them, not by the alias."""
+class Models:
+    """models-service's embeddings route as kb-service calls it: the reply names the model serving the alias, and a
+    down model answers 503. `calls` counts every request."""
 
-    served = {"model": "scripted/concept-embed"}
+    def __init__(self) -> None:
+        self.model, self.down, self.calls = "scripted/concept-embed", False, 0
 
-    def answer(request: httpx.Request) -> httpx.Response:
+    def answer(self, request: httpx.Request) -> httpx.Response:
+        self.calls += 1
+        if self.down:
+            error = {"code": "provider_unavailable", "message": "the provider did not answer"}
+            return httpx.Response(503, json={"success": False, "error": error})
         body = json.loads(request.content)
         texts = [body["input"]] if isinstance(body["input"], str) else body["input"]
         rows = [{"object": "embedding", "index": i, "embedding": concept_vector(t, 64)} for i, t in enumerate(texts)]
         usage = {"prompt_tokens": sum(len(t.split()) for t in texts)}
-        return httpx.Response(200, json={"object": "list", "model": served["model"], "data": rows, "usage": usage})
+        return httpx.Response(200, json={"object": "list", "model": self.model, "data": rows, "usage": usage})
 
+
+async def _with_vectors(engine: AsyncEngine, tenant: str) -> None:
     with isolation.tenant_wide("test: whether the database has pgvector", tenant_id=tenant):
         if not await PgVectorStore(engine).ready():
             pytest.skip("This PostgreSQL has no pgvector; make db-move-image moves the local stack onto it.")
-    async with httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://models") as http:
+
+
+async def test_a_new_version_of_the_embedding_alias_embeds_every_unit_again(
+    engine: AsyncEngine, tenant: str, tmp_path: Path
+) -> None:
+    """An admin points the environment's embedding alias at another model (Settings, Model aliases): the alias name is
+    unchanged, so vectors are keyed by the model that served them, and the background beat notices on its own."""
+    await _with_vectors(engine, tenant)
+    models = Models()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(models.answer), base_url="http://models") as http:
         embedder = ModelsEmbedder(ModelCalls(http, "kb-key"), "bank-embed", 64)
         files = KnowledgeFiles(tmp_path)
         readings = LocalReadings(files)
@@ -314,11 +328,9 @@ async def test_a_new_version_of_the_embedding_alias_embeds_every_unit_again(
             _, kb = await stack.base()
             await embed_all(store, vectors, embedder, Backlog())
             assert sections(await stack.search(kb["id"], PARAPHRASE))[:1] == ["Early repayment"]
-            served["model"] = "scripted/concept-embed-2"
-            stale = await stack.search(kb["id"], PARAPHRASE)
-            assert stale["lanes"]["skipped"] == [{"lane": "meaning", "reason": "no_vectors"}], stale["lanes"]
+            models.model = "scripted/concept-embed-2"
             reads = len(readings.reads)
-            assert await embed_all(store, vectors, embedder, Backlog()) > 0
+            assert await embed_all(store, vectors, embedder, Backlog()) > 0, "the beat did not notice the alias moved"
             assert len(readings.reads) == reads
             again = await stack.search(kb["id"], PARAPHRASE)
             assert again["lanes"]["ran"] == ["keyword", "meaning"] and sections(again)[:1] == ["Early repayment"]
@@ -326,3 +338,41 @@ async def test_a_new_version_of_the_embedding_alias_embeds_every_unit_again(
             assert embedding["model"] == "scripted/concept-embed-2" and embedding["embedded"] == embedding["units"], (
                 embedding
             )
+
+
+async def test_a_down_model_gives_one_reason_and_one_call_per_search_however_long_the_process_has_run(
+    engine: AsyncEngine, tenant: str, tmp_path: Path
+) -> None:
+    """A process that has not yet heard from the model must answer as one that has: the same skip reason, one call
+    per search (the question's), and a base's detail read with no call and the stored vectors' model."""
+    await _with_vectors(engine, tenant)
+    models = Models()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(models.answer), base_url="http://models") as http:
+        warm = ModelsEmbedder(ModelCalls(http, "kb-key"), "bank-embed", 64)
+        files = KnowledgeFiles(tmp_path)
+        readings = LocalReadings(files)
+        async with kb_client(engine, tenant, files=files, readings=readings, embedder=warm) as client:
+            stack = Stack(client, warm, readings)  # pyright: ignore[reportArgumentType]
+            _, kb = await stack.base()
+            await embed_all(KnowledgeStore(engine), PgVectorStore(engine), warm, Backlog())
+            models.down = True
+            calls = models.calls
+            found = await stack.search(kb["id"], PARAPHRASE)
+            assert models.calls == calls + 1
+            reason = found["lanes"]["skipped"]
+        assert reason == [{"lane": "meaning", "reason": "embedding_unavailable: provider_unavailable"}], reason
+        cold = ModelsEmbedder(ModelCalls(http, "kb-key"), "bank-embed", 64)
+        async with kb_client(engine, tenant, files=files, readings=readings, embedder=cold) as client:
+            stack = Stack(client, cold, readings)  # pyright: ignore[reportArgumentType]
+            stack.made = 1
+            for _ in range(2):
+                calls = models.calls
+                found = await stack.search(kb["id"], PARAPHRASE)
+                assert (found["lanes"]["skipped"], models.calls) == (reason, calls + 1)
+            calls = models.calls
+            embedding = data(await client.get(f"/v1/knowledge-bases/{kb['id']}"))["embedding"]
+            assert (embedding["model"], models.calls) == ("scripted/concept-embed", calls), embedding
+            _, unembedded = await stack.base()
+            calls = models.calls
+            found = await stack.search(unembedded["id"], PARAPHRASE)
+            assert (found["lanes"]["skipped"], models.calls) == ([{"lane": "meaning", "reason": "no_vectors"}], calls)

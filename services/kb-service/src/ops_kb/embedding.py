@@ -3,13 +3,13 @@ through models-service with kb-service's own key (`kb:index` spends there), so t
 with each unit.
 
 Each vector records the model that served it, as models-service names it in each reply, not the alias: an admin can
-point the alias at another model (Settings, Models), and vectors of two models are not comparable. The embedder learns
-the serving model from every reply (and with one short call when it has made none yet), so the next pass or search
-sees the old vectors as stale.
+point the alias at another model (Settings, Model aliases), and vectors of two models are not comparable. The embedder
+learns the serving model from every reply, and each background beat asks once (a few tokens), so a moved alias is
+noticed by the beat itself and every unit is embedded again under the new model, with no file read again.
 
 After a sync or rebuild settles, its tenant's units without a vector of the current model are embedded at once; a
-background beat embeds whatever is left (a model that was down, a model or width changed, which embeds every unit
-again and reads nothing again). Each batch is one request; a refusal stops the pass and the beat tries again."""
+background beat embeds whatever is left (a model that was down, a model or width changed). Each batch is one request;
+a refusal stops the pass and the beat tries again."""
 
 from __future__ import annotations
 
@@ -44,8 +44,8 @@ class Embedder(Protocol):
         """One vector per text and the input tokens charged; raises EmbedFailed when the model cannot answer."""
         ...
 
-    async def learn(self, *, tenant: str) -> None:
-        """Makes `model` the one serving now when no call has said yet; raises EmbedFailed when it cannot answer."""
+    async def refresh(self, *, tenant: str) -> None:
+        """Sets `model` to the one serving the alias now, in one short call; raises EmbedFailed when it cannot."""
         ...
 
 
@@ -57,7 +57,7 @@ class EmbedFailed(Exception):
         self.code = code
 
 
-# What the one call that learns the serving model embeds: a few tokens.
+# What the call that asks which model serves the alias embeds: a few tokens.
 PROBE = "embedding model check"
 
 
@@ -79,9 +79,8 @@ class ModelsEmbedder:
         self.model = done.model
         return done.vectors, done.input_tokens
 
-    async def learn(self, *, tenant: str) -> None:
-        if not self.model:
-            await self.embed([PROBE], tenant=tenant)
+    async def refresh(self, *, tenant: str) -> None:
+        await self.embed([PROBE], tenant=tenant)
 
 
 def unit_text(heading: str | None, text: str) -> str:
@@ -94,7 +93,9 @@ async def embed_pending(vectors: PgVectorStore, embedder: Embedder, tenant: str,
     EmbedFailed when the model refuses, keeping what earlier batches stored."""
     if not await vectors.ready():
         return 0
-    await embedder.learn(tenant=tenant)
+    if not embedder.model:
+        # Listing under no model would embed again units another process already embedded under the current one.
+        await embedder.refresh(tenant=tenant)
     done = 0
     while done < limit:
         units = await vectors.pending(tenant, model=embedder.model, width=embedder.width, limit=BATCH)
@@ -121,13 +122,23 @@ class Backlog:
 
 
 async def embed_all(store: KnowledgeStore, vectors: PgVectorStore, embedder: Embedder, backlog: Backlog) -> int:
-    """One beat: every tenant's pending units, tenant by tenant; the number embedded."""
+    """One beat: which model serves the alias now, then every tenant's pending units, tenant by tenant; the number
+    embedded. A model that does not answer leaves the beat to the next one."""
     total, left = 0, 0
     backlog.last_error = None
+    asked, down = False, False
     for tenant in await store.tenants():
         with isolation.tenant_wide(FIND_PENDING, tenant_id=tenant):
+            if not await vectors.ready():
+                continue
             try:
-                total += await embed_pending(vectors, embedder, tenant)
+                if not asked:
+                    asked = True
+                    down = True
+                    await embedder.refresh(tenant=tenant)
+                    down = False
+                if not down:
+                    total += await embed_pending(vectors, embedder, tenant)
             except EmbedFailed as e:
                 backlog.last_error = e.code
                 log.warning("kb_embed_failed", tenant=tenant, code=e.code)

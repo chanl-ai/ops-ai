@@ -172,6 +172,19 @@ class PgVectorStore(Store):
                 ],
             )
 
+    async def latest_model(self, tenant: str, *, width: int) -> str:
+        """The model of the tenant's newest vector at `width`, "" with none: what a process that has not yet heard
+        from the embedding model compares a question with."""
+        v = kb_unit_vectors
+        q = (
+            sa.select(v.c.model)
+            .where(v.c.tenant_id == tenant, v.c.width == width, team_visible(v))
+            .order_by(v.c.embedded_at.desc())
+            .limit(1)
+        )
+        async with self.tx() as conn:
+            return str(await conn.scalar(q) or "")
+
     async def coverage(self, tenant: str, kb_ids: list[str], *, model: str, width: int) -> tuple[int, int]:
         """(units with a current vector, units of live pieces) in the bases."""
         q = sa.text(
