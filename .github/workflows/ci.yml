@@ -5,7 +5,8 @@ name: ci
 on:
   pull_request:
     # labeled: adding ci:full starts a run of every job without a new push.
-    types: [opened, synchronize, reopened, labeled]
+    # ready_for_review: a draft is not held to develop's tip (job `ready`), so leaving draft checks it again.
+    types: [opened, synchronize, reopened, labeled, ready_for_review]
     # A pull request into a release branch runs nothing: the release's own pull request to develop runs CI once
     # (docs/deploy/release.md).
     branches: [develop, main]
@@ -16,7 +17,7 @@ on:
   # develop and main run the same checks after a merge; the staging job at the end deploys develop, and a release or
   # hotfix branch (docs/deploy/release.md) so the release is tested on staging.
   push:
-    branches: [develop, main, "hotfix/**"]
+    branches: [develop, main, "release/**", "hotfix/**"]
 
 permissions:
   contents: read
@@ -489,12 +490,115 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  generated:
+    # The committed OpenAPI documents and the SDKs' generated layer are rebuilt from the pull request's code with the
+    # target a person would run (`make openapi`). A difference is handed to generated-commit as a patch, so nobody
+    # commits generated files by hand and two pull requests do not conflict in them. This job holds no secret and no
+    # write access, because it runs the pull request's code. Not for a fork (its branch cannot be pushed to) and never
+    # in the merge queue, where the repo job's sdk-verify fails a document that drifted.
+    needs: plan
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      changed: ${{ steps.regen.outputs.changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - id: touched
+        name: Did a route, a model or the SDK generator change
+        run: |
+          base=$(git merge-base "$BASE_SHA" HEAD)
+          if git diff --name-only "$base" HEAD | grep -qE '^(services|packages|sdk)/'; then echo "run=true" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.touched.outputs.run == 'true'
+        uses: ./.github/actions/setup
+        with:
+          node: "true"
+      - id: regen
+        if: steps.touched.outputs.run == 'true'
+        name: Regenerate the OpenAPI documents and the SDKs
+        run: |
+          make -s openapi
+          git add -A -- 'services/*/openapi.json' sdk
+          git diff --cached --binary > "$RUNNER_TEMP/generated.patch"
+          if [ -s "$RUNNER_TEMP/generated.patch" ]; then
+            git diff --cached --stat
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "the committed documents and SDKs match the code"
+          fi
+      - if: steps.regen.outputs.changed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: generated-patch
+          path: ${{ runner.temp }}/generated.patch
+          retention-days: 1
+
+  generated-commit:
+    # Commits the patch to the pull request's branch. It runs none of the pull request's code: it applies the patch and
+    # pushes over the deploy key, so the commit starts its own checks (.github/actions/push-key).
+    needs: generated
+    if: github.event_name == 'pull_request' && needs.generated.outputs.changed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: generated-patch
+          path: ${{ runner.temp }}/patch
+      - uses: ./.github/actions/push-key
+        with:
+          key: ${{ secrets.RELEASE_MAIN_DEPLOY_KEY }}
+      - name: Commit the generated files to the branch
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$HEAD_SHA" ]; then echo "the branch moved on; its newer run regenerates"; exit 0; fi
+          git apply --index "$RUNNER_TEMP/patch/generated.patch"
+          git commit -q -m "chore(sdk): regenerate the OpenAPI documents and the SDKs"
+          git push -q "$PUSH_URL" "HEAD:refs/heads/$HEAD_REF"
+
+  ready:
+    # Whether the merge queue may take this: every other job passed, CodeQL is green on the pull request's head, and
+    # the branch holds develop's tip (keep-current.yml merges develop in when it moves). A draft is not held to
+    # develop's tip. A queue group and a push are built on develop, and CodeQL reports on pull requests, so there
+    # only the jobs are judged. scripts/pr_flow.py ready; its --self-test is in make checks.
+    name: ready
+    if: always()
+    needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, usecases, maintainer-review]
+    runs-on: ubuntu-24.04
+    # CodeQL may still be running when the last job ends; this waits for it (codeql.yml allows it 45 minutes).
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Ready for the queue
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Empty for a draft, so its distance from develop is not judged.
+          BASE_REF: ${{ !github.event.pull_request.draft && github.base_ref || '' }}
+        run: python3 scripts/pr_flow.py ready
+
   ci-ok:
     # The one required check: it always runs, waits for every other job, and fails when any of them failed or was
     # cancelled. A job the plan skipped counts as passed, so a narrow change is not held up by suites it did not touch.
+    # `ready` is one of them, so the queue requires it without a second required check.
     name: ci-ok
     if: always()
-    needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, usecases, maintainer-review]
+    needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, usecases, maintainer-review, ready]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -517,3 +621,14 @@ jobs:
     with:
       ref: ${{ github.sha }}
     secrets: inherit
+
+  staging-scan:
+    # A release or hotfix branch's web scan, after its own deploy so it reads the release under test
+    # (release-security.yml holds the branch's other scans, which need no deploy).
+    needs: [plan, staging]
+    if: ${{ !cancelled() && needs.plan.outputs.release == 'true' && needs.staging.result == 'success' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-security.yml
+    with:
+      web: true

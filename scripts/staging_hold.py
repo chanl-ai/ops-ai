@@ -2,7 +2,7 @@
 """Reads the STAGING_HOLD repository variable (env HOLD) for .github/workflows/deploy-staging.yml.
 
 A hold names the release under test: `X.Y.Z: reason`. BRANCHES is the release and hotfix branches on origin, space
-separated; SHA is the commit being deployed (default HEAD). A branch whose head is an ancestor of SHA
+separated; SHA is the commit being deployed (default HEAD). A branch whose head is an ancestor of SHA or of origin/main
 is already merged, protects nothing and is ignored (one `notice=` line each); a head that cannot be read or compared
 keeps the freeze. Prints the lines `state=`, `text=`, `pin=` and any `notice=`; `pin=` is the one reason a develop
 merge is not deployed (a branch freeze, a live hold, or both;
@@ -50,14 +50,21 @@ def head_of(branch: str) -> str:
     return rev("FETCH_HEAD") if fetched.returncode == 0 else ""
 
 
-def merged(branch: str, sha: str) -> bool:
+def merged(branch: str, sha: str) -> str:
+    """Where the branch is merged: `develop` (the deployed commit holds its head), `main` (a release or hotfix goes
+    into main first, and develop gets it later through the merge-back pull request), or empty (still open)."""
     head = head_of(branch)
     if not head:
-        return False
-    return (
-        subprocess.run(["git", "merge-base", "--is-ancestor", head, sha], capture_output=True, check=False).returncode
-        == 0
-    )
+        return ""
+
+    def within(target: str) -> bool:
+        r = subprocess.run(["git", "merge-base", "--is-ancestor", head, target], capture_output=True, check=False)
+        return r.returncode == 0
+
+    if within(sha):
+        return "develop"
+    main = head_of("main")
+    return "main" if main and within(main) else ""
 
 
 def main() -> int:
@@ -65,9 +72,9 @@ def main() -> int:
     state, text = judge(os.environ.get("HOLD", ""), set(tags.split()))
     sha = os.environ.get("SHA", "").strip() or "HEAD"
     listed = os.environ.get("BRANCHES", "").split()
-    ignored = [b for b in listed if merged(b, sha)]
+    ignored = {b: where for b in listed if (where := merged(b, sha))}
     branches = " ".join(b for b in listed if b not in ignored)
-    notices = "".join(f"notice={b} is merged into develop, freeze ignored\n" for b in ignored)
+    notices = "".join(f"notice={b} is merged into {where}, freeze ignored\n" for b, where in ignored.items())
     parts = ([f"staging is frozen for {branches}"] if branches else []) + (
         [f"STAGING_HOLD is set: {text}"] if state == "active" else []
     )

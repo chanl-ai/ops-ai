@@ -1,0 +1,99 @@
+# The security scans a release or hotfix branch gets on top of the full ci.yml run, on every push to it:
+#   dependencies  known vulnerabilities and copyleft licences in both lockfiles (scripts/deps_audit.py)
+#   sbom          the committed SBOM matches the lockfiles (scripts/sbom.py --check)
+#   images        every image built, scanned for critical vulnerabilities, given an SBOM and signed, in a registry inside
+#                 the runner (release-images.yml in proof mode; nothing reaches ghcr.io before the tag)
+#   web           an OWASP ZAP baseline scan of staging, called by ci.yml after that branch's staging deploy (web: true)
+# CodeQL with the security-extended queries runs on the same pushes from codeql.yml.
+# A pull request that changes this file runs the two quick jobs, so the workflow is seen working before a release needs it.
+name: release-security
+
+on:
+  push:
+    branches: ["release/**", "hotfix/**"]
+  pull_request:
+    paths:
+      - .github/workflows/release-security.yml
+  workflow_call:
+    inputs:
+      web:
+        description: Run only the web scan of staging (ci.yml, after the staging deploy)
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      web:
+        description: Run only the web scan of staging
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    if: ${{ !inputs.web }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Known vulnerabilities
+        env:
+          OSSINDEX_USER: ${{ secrets.OSSINDEX_USER }}
+          OSSINDEX_TOKEN: ${{ secrets.OSSINDEX_TOKEN }}
+          # The same scanner image, by digest, as dependency-check.yml.
+          OPS_OSV_IMAGE: ghcr.io/google/osv-scanner:v2.7.0@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0
+        run: python3 scripts/deps_audit.py vulns
+      - name: Licences
+        run: python3 scripts/deps_audit.py licenses
+
+  sbom:
+    if: ${{ !inputs.web }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: uv run python scripts/sbom.py --check
+
+  images:
+    # Not on a pull request: the build of every image takes over an hour.
+    if: ${{ !inputs.web && github.event_name != 'pull_request' }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/release-images.yml
+    with:
+      proof: true
+
+  web:
+    if: ${{ inputs.web }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ORIGIN: https://${{ vars.STG_APP }}.fly.dev
+      # OWASP ZAP by digest, so a moved tag cannot change what runs here.
+      ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:2.16.1@sha256:7840969c7c9fead565bf9734b12f49f6886db90b1d35b1f74d79710bbd081dab
+    steps:
+      - name: ZAP baseline scan of staging
+        run: |
+          mkdir -p zap && chmod 777 zap
+          # Passive rules only: the baseline spiders for a minute and sends no attack. -I keeps warnings from failing
+          # the job; a FAIL rule does.
+          docker run --rm -v "$PWD/zap:/zap/wrk:rw" "$ZAP_IMAGE" zap-baseline.py -t "$ORIGIN" -m 1 -I -r zap.html -J zap.json
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: zap-baseline
+          path: zap/
+          if-no-files-found: ignore
+          retention-days: 14

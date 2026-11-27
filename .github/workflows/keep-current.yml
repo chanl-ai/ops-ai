@@ -1,0 +1,53 @@
+# Keeps open pull requests current with develop. When develop moves, develop is merged (never rebased) into every open
+# pull request that is behind it: not a draft, not from a fork, not Dependabot's, and not in the merge queue (a push to a
+# queued pull request takes it out). A pull request that conflicts gets the label needs-merge and one comment naming the
+# conflicting files. A pull request leaving draft is brought current the same way. The decisions are
+# scripts/pr_flow.py sync-prs (`--dry-run` prints them; its --self-test is in make checks).
+# The push goes over the deploy key so the merge commit gets its own CI run (.github/actions/push-key).
+name: keep-current
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    types: [ready_for_review]
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Print what would be merged and change nothing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keep-current
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          fetch-depth: 0
+      - uses: ./.github/actions/push-key
+        with:
+          key: ${{ secrets.RELEASE_MAIN_DEPLOY_KEY }}
+      - name: Merge develop into the pull requests behind it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ONLY: ${{ github.event.pull_request.number }}
+          DRY: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: |
+          # shellcheck disable=SC2086
+          python3 scripts/pr_flow.py sync-prs ${ONLY:+--only "$ONLY"} $DRY
