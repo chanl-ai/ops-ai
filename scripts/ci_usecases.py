@@ -41,8 +41,9 @@ import usecase_batch  # noqa: E402
 
 REGISTRY = ROOT / "docs/usecases/README.md"
 ROW = re.compile(r"^\|\s*(uc-[a-z0-9]+(?:-[a-z0-9]+)*)\s*\|[^|]*\|[^|]*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|")
-# Rows the runner has nothing to run for: a page is documentation, draft has no script yet.
-NOT_RUN = ("retired", "superseded", "draft", "page")
+# Rows the runner has nothing to run for: a page is documentation, draft has no script yet, and manual needs the
+# standing stack (`make up`, `make sample-team`) a hosted runner never starts, so it runs by hand.
+NOT_RUN = ("retired", "superseded", "draft", "page", "manual")
 
 
 def runnable(registry: str) -> list[str]:

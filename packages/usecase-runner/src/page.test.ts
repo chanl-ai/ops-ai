@@ -121,6 +121,13 @@ test('a page parses into its setup, numbered steps with page lines, profiles and
   assert.equal(page.gaps.length, 1);
 });
 
+test('a titled block with no tab is a file the run writes, and a gap whose step is All names the tab to skip', () => {
+  const text = ['## Gaps', '', '| Product fix | Step | Tab | What is missing | Where | Open since |', '|---|---|---|---|---|---|', '| X | All | TypeScript | y | z | 2026-11-12 |', '', '```yaml title="workflow.yaml"', 'id: a', '```', ''].join('\n');
+  const parsed = parsePage(text, 'p.md');
+  assert.deepEqual(parsed.files, { 'workflow.yaml': 'id: a\n' });
+  assert.equal(parsed.gaps[0]?.allOf, 'TypeScript');
+});
+
 // Each tab's program: step 1 passes, step 2 fails at its assert's page line, step 3 never runs.
 for (const [tab, make] of [
   ['Python', () => ['python3', program('program.py', pythonProgram(page, '/nowhere'))]],

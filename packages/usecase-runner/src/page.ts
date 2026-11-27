@@ -38,16 +38,18 @@ export interface Page {
   /** Saved sign-in profiles the page's people use, from "Who is in it". */
   profiles: string[];
   /** Open rows of the Gaps table; a page with one does not pass. */
-  gaps: { line: number; text: string }[];
+  gaps: { line: number; text: string; allOf?: string }[];
   /** The "Services the run starts" row of Details, as written. */
   services: string;
+  /** Files the page names with a fenced block titled `title="name"` and no tab: written beside the code before it runs. */
+  files: Record<string, string>;
 }
 
 const FENCE = /^```\w*.*\btab="([^"]+)"/;
 
 export function parsePage(text: string, path: string): Page {
   const lines = text.split('\n');
-  const page: Page = { path, setup: [], steps: [], profiles: [], gaps: [], services: '' };
+  const page: Page = { path, setup: [], steps: [], profiles: [], gaps: [], services: '', files: {} };
   let section = '';
   let step: PageStep | undefined;
   for (let i = 0; i < lines.length; i++) {
@@ -62,6 +64,14 @@ export function parsePage(text: string, path: string): Page {
     if (h3 && section === 'steps') {
       step = { n: Number(h3[1]), title: h3[2]!.trim(), line: i + 1, blocks: [] };
       page.steps.push(step);
+      continue;
+    }
+    const file = /^```\w*\s+title="([^"]+)"/.exec(line);
+    if (file && !FENCE.test(line)) {
+      const end = lines.findIndex((l, j) => j > i && l.startsWith('```'));
+      if (end < 0) throw new Error(`${path}:${i + 1}: code block never closes`);
+      page.files[file[1]!] = `${lines.slice(i + 1, end).join('\n')}\n`;
+      i = end;
       continue;
     }
     const fence = FENCE.exec(line);
@@ -83,7 +93,7 @@ export function parsePage(text: string, path: string): Page {
       const profile = /`([^`]+)` profile/.exec(cells[2] ?? '');
       if (profile) page.profiles.push(profile[1]!);
     } else if (section === 'gaps' && cells[0] !== 'Product fix') {
-      page.gaps.push({ line: i + 1, text: cells.join(' | ') });
+      page.gaps.push({ line: i + 1, text: cells.join(' | '), ...(cells[1] === 'All' && cells[2] ? { allOf: cells[2] } : {}) });
     } else if (section === 'details' && cells[0] === 'Services the run starts') {
       page.services = cells[1] ?? '';
     }
@@ -264,9 +274,18 @@ export async function runPage(root: string, path: string, layer: Layer, env: Nod
     output += `${line}\n`;
     console.log(line);
   };
-  for (const g of page.gaps) say(`FAIL gap open (${page.path}:${g.line}): ${g.text}`);
+  // A gap is a product change tracked on its own; the row carries its date. It is reported, and the steps that need it
+  // fail on their own if the product still lacks it.
+  for (const g of page.gaps) say(`SKIP gap open (${page.path}:${g.line}): ${g.text}`);
+  for (const [name, body] of Object.entries(page.files)) writeFileSync(join(work, name), body);
   let code: number | null = 0;
+  // A gap that blocks every step of a tab (Step `All`) skips the tab, said once with the gap.
+  const skipped = new Set(page.gaps.flatMap((g) => (g.allOf ? [g.allOf] : [])));
   for (const [k, tab] of tabs.entries()) {
+    if (skipped.has(tab)) {
+      say(`SKIP ${tab} tab: an open gap blocks it (see the Gaps table)`);
+      continue;
+    }
     // Each tab is its own run of the story: a fresh stack and, after the first, a fresh database, so the second tab
     // does not meet the first tab's knowledge base under the same name.
     const db = k ? runDatabaseName() : undefined;

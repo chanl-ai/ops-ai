@@ -325,10 +325,10 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-618 | tools-service | Turning an app off names its users, a leaver loses their accounts, and Replace rotates a key | api | draft |
 | uc-619 | agents-service | A new team's assistant answers from its knowledge and files | api | passing |
 | uc-620 | agents-service | Any file a workflow or chat reads ends read or with a reason | api, ui | draft |
-| uc-621 | agents-service | A builder runs the three foundation Examples | sdk | current |
-| uc-622 | agents-service | A builder asks the first three published agents | sdk | current |
+| uc-621 | agents-service | A builder runs the three foundation Examples | sdk | manual |
+| uc-622 | agents-service | A builder asks the first three published agents | sdk | manual |
 | uc-623 | agents-service | Test-run a workflow from a file | sdk, cli | current |
-| uc-624 | agents-service | A builder runs the two composition Examples | sdk | current |
+| uc-624 | agents-service | A builder runs the two composition Examples | sdk | manual |
 | uc-625 | tools-service | Connect comes back Connected in any window, for every sign-in app | ui | draft |
 | uc-626 | tools-service | Apps screens offer only what you may do, in plain words | api, ui | draft |
 | uc-627 | tools-service | A team connects Salesforce at its company address and its agents query that org | api, ui | draft |
