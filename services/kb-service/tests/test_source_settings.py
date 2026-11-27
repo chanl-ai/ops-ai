@@ -9,9 +9,11 @@ from tempfile import mkdtemp
 from typing import Any
 
 import httpx
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.files import KnowledgeFiles
+from ops_kb.source_settings import EFFECTS, SourceSettings, defaults, merged, rebuild_for
 
 from .conftest import kb_client
 from .pdfs import HARDSHIP, RATES, policy_pdf
@@ -129,3 +131,53 @@ async def test_a_settings_save_never_approves_an_ai_step(client: httpx.AsyncClie
     }
     saved = data(await client.patch(f"/v1/sources/{src['id']}", json=patch))
     assert saved["ingest"]["approval"]["status"] == "pending" and saved["ingest"]["approval"]["approvedSteps"] == []
+
+
+# One saved change per setting, as the console's Settings tab sends it; None: it cannot be changed by a save.
+CHANGES: dict[str, dict[str, Any] | None] = {
+    "parsing.ocr": {"parsing": {"ocr": "always"}},
+    "parsing.tables": {"parsing": {"tables": False}},
+    "parsing.vision": None,
+    "cleaning.furniture": {"cleaning": {"furniture": True}},
+    "cleaning.main_content": {"cleaning": {"mainContent": True}},
+    "cleaning.site_repeats": {"cleaning": {"siteRepeats": True}},
+    "cleaning.duplicates": {"cleaning": {"duplicates": "skip"}},
+    "ingest.preset": {"ingest": {"preset": "custom"}},
+    "ingest.strategies": {"ingest": {"strategies": ["fixed"]}},
+    "ingest.size": {"ingest": {"size": 600}},
+    "ingest.overlap": {"ingest": {"overlap": 20}},
+    "ingest.child_size": {"ingest": {"childSize": 100}},
+    "ingest.questions_per_section": {"ingest": {"questionsPerSection": 5}},
+    "ingest.columns": {"ingest": {"columns": [{"name": "Rate", "role": "searchable"}]}},
+    "ingest.model": {"ingest": {"model": "bank-other"}},
+    # Decided on its own route (test_a_settings_save_never_approves_an_ai_step); a save never changes it.
+    "ingest.approval": None,
+    "rules": {"rules": [{"id": "r1", "kind": "exclude", "field": "path", "value": "drafts/"}]},
+    "metadata_mapping": {"metadataMapping": [{"key": "product", "from": "static:mortgage"}]},
+    "schedule": {"schedule": {"kind": "daily", "time": "03:00", "tz": "UTC"}},
+    "ai_ceiling": {"aiCeiling": 9.0},
+}
+
+
+def _leaves(model: type[BaseModel], prefix: str = "") -> list[str]:
+    out: list[str] = []
+    for name, field in model.model_fields.items():
+        kind = field.annotation
+        if isinstance(kind, type) and issubclass(kind, BaseModel) and name != "approval":
+            out += _leaves(kind, f"{prefix}{name}.")
+        else:
+            out.append(f"{prefix}{name}")
+    return out
+
+
+def test_every_source_setting_is_applied_where_its_effect_says_or_kept_unshown() -> None:
+    """A setting the console saves and nothing reads is the failure: each field has an effect, and a saved change to
+    it rebuilds what that effect says (a split or a reading again, in the background) or nothing."""
+    assert sorted(_leaves(SourceSettings)) == sorted(EFFECTS) == sorted(CHANGES)
+    base = defaults("files")
+    for path, patch in CHANGES.items():
+        if patch is None:
+            continue
+        after = merged(base, patch)
+        expected = {"read": "read", "split": "split"}.get(EFFECTS[path], "none")
+        assert rebuild_for(base, after) == expected, path

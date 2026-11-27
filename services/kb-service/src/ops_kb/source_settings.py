@@ -183,6 +183,34 @@ def index_key(s: SourceSettings, repeats: list[str] | None = None) -> str:
 
 
 Rebuild = Literal["none", "split", "read"]
+Effect = Literal["read", "split", "sync", "kept"]
+
+# What each setting a source keeps does once saved: `read` reads every file again, `split` splits the stored readings
+# again (a rebuild in the background), `sync` applies at the next sync, and `kept` is stored with nothing reading it
+# yet, so the console offers no control for it. Every field of SourceSettings is listed (test_source_settings checks),
+# so a new one is either applied or shown as not applied.
+EFFECTS: dict[str, Effect] = {
+    "parsing.ocr": "read",
+    "parsing.tables": "kept",
+    "parsing.vision": "kept",
+    "cleaning.furniture": "split",
+    "cleaning.main_content": "split",
+    "cleaning.site_repeats": "split",
+    "cleaning.duplicates": "split",
+    "ingest.preset": "kept",
+    "ingest.strategies": "split",
+    "ingest.size": "split",
+    "ingest.overlap": "split",
+    "ingest.child_size": "split",
+    "ingest.questions_per_section": "split",
+    "ingest.columns": "split",
+    "ingest.model": "split",
+    "ingest.approval": "split",
+    "rules": "sync",
+    "metadata_mapping": "split",
+    "schedule": "sync",
+    "ai_ceiling": "sync",
+}
 
 
 def rebuild_for(before: SourceSettings, after: SourceSettings) -> Rebuild:
