@@ -1631,7 +1631,10 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     except UnexpectedModelBehavior as e:
         if (cleared := _withhold(state, guarded)) is not None:
             yield cleared
-        if (ended := _ended(events.all_messages() if events is not None else [], e)) is not None:
+        # This run's replies only: a resumed turn's history holds the paused reply, whose ending is not this one's.
+        if (ended := _ended(events.new_messages() if events is not None else [], e)) is not None:
+            for closed in _close_open(state, ended[1]):
+                yield closed
             yield finish("failed", "error", error=ended[1], error_code=ended[0])
             return
         if req.output_schema is None and state.last_step(state.step):
