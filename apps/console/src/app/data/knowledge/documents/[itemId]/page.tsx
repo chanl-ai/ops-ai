@@ -24,7 +24,8 @@ import { useCan } from '@/hooks/me-queries';
 import { mimeLabel, plural, shortDate } from '@/lib/format';
 import type { ItemText, ItemTextBlock } from '@/lib/types/knowledge';
 
-/** The original's pages one at a time, with the text's highlights on the page shown. */
+/** The original's pages one at a time, with the text's highlights on the page shown. A Word file or deck shows the PDF it
+ * was drawn into, when it was; else the viewer says it shows PDFs and images and the text stays on the right. */
 function Original({ fileId, text, page, onPage, selected, onSelect }: { fileId: string; text: ItemText | undefined; page: number; onPage: (n: number) => void; selected: string | null; onSelect: (key: string) => void }) {
   const file = useFile(fileId);
   const pages = text?.paged ? text.pages.length : 0;
@@ -144,7 +145,7 @@ export default function KnowledgeDocumentPage() {
         defaultLeft={45}
         leftMin="30"
         rightMin="35"
-        left={it.fileId ? <Original fileId={it.fileId} text={t} page={page} onPage={setPage} selected={selected} onSelect={fromBox} /> : <p className="rounded-lg border p-6 text-sm text-muted-foreground">This document has no original file; its text is on the right.</p>}
+        left={it.fileId ? <Original fileId={t?.renditionId ?? it.fileId} text={t} page={page} onPage={setPage} selected={selected} onSelect={fromBox} /> : <p className="rounded-lg border p-6 text-sm text-muted-foreground">This document has no original file; its text is on the right.</p>}
         right={
           text.isError ? (
             <QueryError what="the text read from this document" onRetry={() => text.refetch()} retrying={text.isFetching} error={text.error} />
