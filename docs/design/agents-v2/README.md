@@ -163,6 +163,7 @@ led to the changes below. Each is specified on the page named.
 | 9 | Search provider | A setting, with one adapter shipped: Brave Search | Default |
 | 10 | Review finding: cut hook policies from these releases | Rejected. Hook policies stay, defined once in the runtime contract with a record shape, table, routes, permission and console tab. They are the only way a security admin adds an approval or a refusal for one agent without a code change, and the review's objection was that they were undefined, which the definition answers | Rejected finding |
 | 11 | Review finding: ship four loop kinds and leave the rest | Rejected in part. Row 5 keeps the seven kinds. `long_running` moves to 1.5.0 with its job table, because it needs the sandbox | Rejected finding |
+| 12 | Approval routes in the tool gateway (lane M) | In 1.4.0, built before the loop swap, because the pause at `before_tool` asks the tool gateway to decide and mint the approval. PM, 2026-11-26 | Decided |
 
 A row marked "Default" was not ruled on and can be changed without reopening the rest. A row marked "Rejected finding"
 is a point from the review of 2026-11-26 that these specs do not adopt, with the reason.
