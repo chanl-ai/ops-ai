@@ -5,10 +5,10 @@ Status: current.
 Your team uses a system that has no app in the catalog, such as a ticket desk, and every agent that needs it would otherwise
 carry its own copy of the request details and its own key. A plugin brings the system in once. It is one package that says
 how a team signs in, which tools agents may call, and what knowledge a knowledge base can take from it. Most plugins are a
-single manifest file with no code, because each tool is a request template that the gateway runs. If you skip the plugin
-and build a tool on a custom app instead, only your team can use it. A plugin can be installed for every team.
+single manifest file with no code, because each tool is a request template that the gateway runs. You could build a tool on a custom app instead, but only your team could use it. A plugin is installed once for the whole
+install, so every team can turn it on.
 
-## The plan
+## From manifest to a working app
 
 <!-- site: steps -->
 1. **Write the manifest.** It names the sign-in, the settings, the hosts the plugin may reach and the tools.
@@ -29,7 +29,7 @@ ticketdesk/
   tests/test_tools.py
 ```
 
-The manifest is the plugin. It lives in `src/ops_plugin_ticketdesk/plugin.yaml`:
+The manifest describes everything the plugin does, and it lives in `src/ops_plugin_ticketdesk/plugin.yaml`:
 
 ```yaml
 schema: ops-ai/plugin@2
@@ -88,18 +88,18 @@ from ops_plugin_sdk import Plugin
 plugin = Plugin.beside(__file__)
 ```
 
-`tests/test_tools.py` calls each tool against a fake of the system. [The plugin manifest reference](../plugins.md) has a
-worked test for this plugin.
+`tests/test_tools.py` calls each tool against a fake of the system. Copy the worked test for this plugin from [Building a
+plugin](../plugins.md), because `test` has nothing to run without it.
 
 ## Check, test and install it
 
-The plugin commands come from the plugin kit, which is a separate package installed beside the command line (`ops-ai[plugin]`).
-From a checkout of Ops AI, run them with `uv run`.
+The plugin commands come from the plugin kit, a separate package installed beside the command line with `ops-ai[plugin]`.
+From a checkout of Ops AI, run them with `uv run`, as below. Without the kit, `opsai plugin` stops with an install hint.
 
 ```bash
 uv run opsai plugin validate ./ticketdesk
 uv run opsai plugin test ./ticketdesk
-uv run opsai plugin install ./ticketdesk
+uv run opsai plugin install ./ticketdesk --into <your plugins folder>
 ```
 
 Expected output from `validate` and `test`:
@@ -110,7 +110,7 @@ OK acme.ticketdesk 0.1.0: 1 tools, 0 knowledge sources, 0 templates
 ```
 
 `install` validates the plugin again and copies it into the install's plugins folder, and a plugin that fails validation
-is not copied. Restart the tools and knowledge services after installing. The app then shows in **Data Gateway › Apps** for
+is not copied. Restart tools-service and kb-service after installing, `install` copies into `./plugins` unless you pass `--into`, and `opsai plugin remove <id>` takes a plugin out again. The app then shows in **Data Gateway › Apps** for
 every team, and a team admin turns it on as any other app. [Install and turn on a plugin](../plugins-install.md) shows how
 an operator installs and pins plugins on Compose and Kubernetes.
 
@@ -120,7 +120,7 @@ an operator installs and pins plugins on Compose and Kubernetes.
 |---|---|
 | Connection | The sign-in kinds it accepts, whose account calls use (team, person or both), and a health check path. See [Sign in with a key or password](sign-in-keys.md), [OAuth](sign-in-oauth.md) and [a certificate](sign-in-certificates.md) |
 | Settings | Values that a team fills in, such as an API address. An install can fix a setting for every team |
-| Egress | The hosts the plugin's calls may reach. No other host is reachable, and private and metadata addresses stay refused |
+| Egress | The hosts the plugin's calls may reach, declared here or listed by a Security admin. No other host is reachable, and private and metadata addresses stay refused |
 | Tools | Each tool's inputs, whether it reads or writes, and its request. Paging and shaping the answer are data too |
 | Knowledge sources | Listing and reading tools that a knowledge base syncs from, with a schedule |
 | Templates | Agents, skills and workflows that a team can add as its own copies |
@@ -128,11 +128,11 @@ an operator installs and pins plugins on Compose and Kubernetes.
 Python is needed only where a manifest cannot say what a tool does, such as several requests in a row or a binary answer.
 The [full manifest reference](../plugins.md) lists every field.
 
-## Limits
+## What a plugin cannot do yet
 
 - Python tools run inside the tools service, not in a separate process.
 - A plugin cannot yet declare inbound webhooks. This is planned.
-- An install's plugins and locked settings have no console page. They are install config.
+- The console has no page for an install's plugins or its locked settings, because they are set in the install config.
 
 ## Next
 

@@ -10,10 +10,11 @@ spaces you pick, on Confluence Cloud or Data Center, so an agent answers from th
 
 <!-- site: steps -->
 1. **Turn on the app.** A team admin opens **Data Gateway › Apps**, finds Confluence and presses **Turn on**. Enter the
-   site address, such as `https://yourcompany.atlassian.net/wiki`.
-2. **Give the team's sign-in.** For Confluence Cloud, enter an account email and an API token. For Data Center, enter a
+   site address, such as `https://yourcompany.atlassian.net/wiki`, or your Data Center's own address.
+2. **Give the team's sign-in.** Use an account that can read the spaces you want. For Confluence Cloud, enter its email as the username and an API token as the password, which you create at
+   id.atlassian.com under Security. For Data Center, enter a
    personal access token. Press **Run test**.
-3. **Add a source.** In **Knowledge**, open a knowledge base, press **Add source**, pick Confluence and search for the
+3. **Add a source.** In **Knowledge bases**, open a knowledge base, press **Add data source**, choose **From your apps**, pick Confluence and search for the
    spaces to take in. Tick **Attachments** to take in each page's attachments too.
 4. **Sync.** Press **Create and sync**.
 
@@ -25,15 +26,15 @@ opsai kb add-source "Runbooks" --kb kb_... --plugin opsai.confluence --source sp
 opsai kb sync kb_...
 ```
 
-## What success looks like
+## Check that the pages are indexed
 
-The **Documents** tab lists the space's pages as indexed, and the knowledge base's Playground answers a question from
+The **Documents** tab lists the space's pages as indexed, and the knowledge base's **Test** panel answers a question from
 them with the page cited. A later sync fetches only the pages edited since the last one, so the base follows the space
 without anyone exporting it.
 
-If you skip the app, each edit to a runbook reaches the agent only after someone exports and uploads it again.
+Without the app, the agent sees an edit to a runbook only after someone exports and uploads it again.
 
-## What the app brings
+## Pages and tools
 
 | Kind | What |
 |---|---|
@@ -52,13 +53,13 @@ If you skip the app, each edit to a runbook reaches the agent only after someone
 
 | Confluence | Kind | You give |
 |---|---|---|
-| Cloud | Key or password (basic) | The account's email and an Atlassian API token |
+| Cloud | Username and password (basic) | The account's email and an Atlassian API token |
 | Data Center | Bearer token | A personal access token |
 
 Both are kept sealed, are never shown again, and serve only your team. See [Sign in with a key or
 password](sign-in-keys.md).
 
-## Limits
+## What the app does not cover
 
 - The app is read-only. Ops AI never edits a page.
 - The app has one team login. Pages are read with that login's access, so pick spaces that the whole team may read.

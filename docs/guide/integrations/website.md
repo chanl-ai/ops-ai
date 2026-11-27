@@ -3,27 +3,27 @@
 Status: current.
 
 Your public help pages, rate sheets and product terms change on your website first. An agent that answers from a copy
-pasted months ago quotes the old rate. The Website source keeps a knowledge base current with the pages you pick, so
-agents quote today's page and cite it. It follows a site's sitemaps and links within rules you set, and it obeys the
-site's robots.txt. The app needs no sign-in.
+pasted months ago quotes the old rate. A website source keeps a knowledge base current with the pages you pick, so agents
+quote today's page and cite it. The source follows the site's sitemaps, and its links if you ask it to, within the rules
+you set. It never requests a page that the site's robots.txt refuses. You don't need to sign in to anything.
 
 ## Add a website source
 
 <!-- site: steps -->
-1. **Add the source.** In **Knowledge**, open a knowledge base, press **Add source** and pick Website. Enter the start
+1. **Add the source.** In **Knowledge bases**, open a knowledge base, press **Add data source** and choose **Website or sitemap**. Enter the start
    pages or sitemap addresses of one site.
 2. **Set the rules.** Add include and exclude paths such as `/lending/**` and `/archive/**`, how many links deep to
    follow, and the most pages to take in.
-3. **Preview.** The preview lists the first pages the source would take in, each with its outcome: fetched, excluded by a
-   rule, refused by robots.txt, or needing JavaScript. Nothing is stored yet.
-4. **Get the host approved.** If the site's host is not on the egress list, the source reads **Waiting for an admin to
+3. **Get the host approved.** If the site's host is not on the egress list, the source reads **Waiting for an admin to
    approve** the host. A Security admin adds it in **Settings › Security › Egress**.
+4. **Preview.** The preview lists the first pages the source would take in, each with its outcome: fetched, excluded by a
+   rule, refused by robots.txt, or needing JavaScript. Nothing is stored yet.
 5. **Create and sync.** The **Documents** tab lists each page as it is indexed.
 
-## What success looks like
+## Check what the source took in
 
 Pages that match your rules are indexed. Pages you excluded, and pages that robots.txt refuses, are never requested. Ask
-the knowledge base's Playground about a page and the answer cites it. Each later sync reads only what changed, so a
+the knowledge base's **Test** panel about a page and the answer cites it. Each later sync reads only what changed, so a
 rate change on your site reaches the agent at the next sync.
 
 If you skip the preview, a rule that is too wide or too narrow shows up only after the whole sync has run.
@@ -48,7 +48,7 @@ If you skip the preview, a rule that is too wide or too narrow shows up only aft
 | A page leaves the sitemap | It leaves the knowledge base and search |
 | A page answers 404 or 410 | It stays after the first miss and is removed after the second |
 
-## Limits
+## Pages the source cannot read
 
 - Each source covers one site. Add a source for each site.
 - Pages behind a sign-in cannot be read.

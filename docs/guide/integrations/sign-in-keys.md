@@ -13,7 +13,7 @@ to each call, so a tool, an agent or a model never holds it.
 1. **Turn the app on** in **Data Gateway › Apps**, or press **Add custom app** for an API that the catalog does not list.
 2. **Enter the key** in the app's Connect window. The window asks only for the fields that the kind of sign-in needs, and
    offers a choice under **How it signs in** when the app accepts more than one kind.
-3. **Press Run test.** A wrong key fails here, naming the app's own refusal (401), before any agent uses it.
+3. **Press Run test.** A wrong key fails here, showing the system's own error, such as 401 Unauthorized, before any agent uses it.
 
 The app reads **Connected** once the test passes. The key is never shown again, and a later change sends only the part you
 are replacing.
@@ -29,7 +29,7 @@ If you skip the test, the first agent that calls the app is the one to find out 
 | Username and password (basic) | A username and a password | An `Authorization: Basic` header |
 | Bearer token | A token | An `Authorization: Bearer` header |
 
-Saving a tool is refused if you typed a key into the tool's own header. Keys belong on the app's account, so one key
+Saving a tool is refused if you typed a key into its `Authorization`, `X-Api-Key` or `Cookie` header. Keys belong on the app's account, so one key
 serves every tool that calls the app, and you change it in one place.
 
 ## Each person's own key
@@ -49,11 +49,11 @@ key. A person adds it from the chat card that asks for it, or from **My apps**.
 | Client certificate | Adds a TLS client certificate to every call, for APIs that also require mutual TLS | None. See [Sign in with a certificate](sign-in-certificates.md) |
 | Sandbox account | A second account with a test key. Test runs use it, and live runs never do | None |
 
-## Limits
+## What Ops AI does not do
 
 - Ops AI does not rotate a vendor's key. Rotate it at the vendor, then enter the new one.
-- An app lists which of these kinds it accepts, and an account's kind cannot change once the account exists. To move to
-  another kind, add a new account.
+- An app lists which of these kinds it accepts. A custom app can switch kind with **Change sign-in** on its **Settings** tab,
+  which clears its keys and tokens. A plugin's kind is fixed, so add a new account to use another.
 
 ## Next
 

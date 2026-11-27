@@ -24,6 +24,8 @@ Two more packs ship with every install and need no sign-in. One holds the case a
 complaints, account holds, document checks and write approvals. The other holds starter skills for drafting, reviewing,
 planning and research.
 
+To try it now, open **Data Gateway › Apps** and turn on Website, which needs no sign-in.
+
 Any other REST API can be an app too. Press **Add custom app** on **Data Gateway › Apps** and [build a
 tool](../build-your-first-tool.md) on it, or [build a plugin](build-a-plugin.md) to share it across teams.
 
@@ -42,9 +44,9 @@ Each app accepts one or more kinds of sign-in. Pick the page that matches what t
 - A team admin turns an app on for each team. Installing an app offers it to every team, but it works for a team only
   after that team's admin turns it on.
 - Agents and workflows hold no credentials. The gateway adds the account's sign-in to each call, checks that the host is
-  on the egress list, and logs the call with who it ran as.
-- Writes run straight away by default. A team admin can make them wait for a person, for the whole team, for one app or
-  for one tool. See [Hold a write for approval](../use-cases/approve-a-write.md).
+  allowed, and logs the call with who it ran as.
+- By default, a tool that changes data runs as soon as an agent calls it. A team admin can make those changes wait for a
+  person to approve them, for the whole team, for one app or for one tool. See [Hold a write for approval](../use-cases/approve-a-write.md).
 - A sandbox account answers test runs, and live runs never use it, so a test cannot change real records.
 
 ## Next

@@ -8,11 +8,11 @@ asking in a chat why nothing happened. This page is for the team admin. It shows
 in, how to bring your own OAuth app, and how to turn the app off again. For what apps, tools and accounts are, see [Tools
 and apps](apps.md).
 
-## The plan
+## Get an app working for your team
 
 <!-- site: steps -->
 1. **Turn the app on.** Press **Turn on** on its card and answer the questions the window asks.
-2. **Sign in.** Connect the team's login, or leave each person to sign in from **My apps**.
+2. **Sign in.** Press **Sign in the team login**, or leave each person to sign in from **My apps**.
 3. **Check the state.** The card reads **Connected** once an account has signed in and its test has passed.
 4. **Fix what the card names.** Every other state has one next action, listed below.
 
@@ -32,10 +32,11 @@ reads the same state, and each state has one next action.
 | Not installed (`not_installed`) | The system does not hold this app's plugin, and the team never had it on | Nothing. The person who runs Ops AI at your company installs apps | The same |
 | No longer installed (`removed`) | The team had it on, and the system no longer holds its plugin | **Delete app** removes what it left | The same |
 
-The API also answers `appGroup`, which says who acts next: `on` (it works), `needs_you` (the caller's own sign-in),
-`needs_admin` (someone who manages the team's apps) or `gone`. The app's page, the **Apps** page, **My apps** and the chat
-picker all group and act on it, and none of them works it out again. On an app where each person signs in, a person's
-state is their own sign-in. An auth config's name and id are shown only to builders and admins.
+The API also returns `appGroup`, which says who has to act next. `on` means the app works. `needs_you` means you have to
+sign in yourself, and `needs_admin` means someone who manages the team's apps has to act. `gone` means the app's plugin is
+no longer installed. The app's page, the **Apps** page, **My apps** and the chat picker all read this one value, so they
+always agree. On an app where each person signs in, the state you see is your own sign-in. Only people who may manage the team's
+apps, which means admins by default, see an auth config's name and id.
 
 > [!NOTE]
 > `off` means the app is installed and not on for the team, and `not_installed` means the plugin itself is missing.
@@ -53,24 +54,24 @@ and opens no sign-in. Connecting is its own button, and the admin who turned the
 | 2. For an app that asks where you sign in, such as Salesforce, pick the place: login.salesforce.com, test.salesforce.com, or your company's address (My Domain) typed as its host | The choice is saved on the app's auth config |
 | 3. Pick who signs in: **Everyone uses the team's login** or **Each person signs in** | Asked once, when the app is first turned on |
 | 4. Keep **Give the team's assistant this app's read tools** ticked, or untick it | The assistant gets the app's read tools when the app is saved |
-| 5. Press **Turn on** | The team's setting is saved and no sign-in window opens. A message reads, for example, **Saved. Salesforce is on for the team**, with how many read tools were added and where members connect their own accounts |
+| 5. Press **Turn on** | The team's setting is saved and no sign-in window opens. A message reads, for example, **Saved. Salesforce is on for** and your team's name, with how many read tools were added and where members connect their own accounts |
 | 6. Optional: press **Sign in with my login**, or **Sign in the team login** when everyone uses the team's login | The app's own sign-in page opens. Allow access there, and the window names the account that signed in |
 
 A template pack, such as Core or Starter skills, is not listed on **Apps**, because nobody connects an account to it. Open
 its page to turn it on or off. The empty template list on a page such as **Skills** links to it, and **Turn off** there
 opens the same window as for any app.
 
-An app is **Connected** only once an account has signed in or a test has passed. Saving settings alone does not count. The
-same rule holds wherever an app's settings are saved: an app's **Settings** tab, a new auth config and the Turn on window each
-save and stop, and none of them starts a sign-in. A sign-in starts only from a button that says Connect or Sign in:
-**Connect** on the app's page once it is on, **Sign in** on an account's row, or **Connect** on **My apps**.
+An app reads Connected only after an account has signed in or a test has passed. Saving settings is not enough. That holds
+wherever you save an app's settings: its **Settings** tab, a new auth config, or the Turn on window. Each one saves your
+changes and starts no sign-in. A sign-in starts only from a button labelled Connect or Sign in. Those are **Connect** on
+the app's page once the app is on, **Sign in** on an account's row, and **Connect** on **My apps**.
 
 A member who opens an app that the team has not turned on, from **My apps**, reads **Not set up for your team yet** with
 the admins to ask, and stays on **My apps**. Only someone who may turn the app on is offered **Turn on**, which opens the
 app's page.
 
-**Add account** works on an app with no account yet, and the first account becomes the default. A team admin turns an app
-on and connects the team's accounts.
+A team admin turns the app on and then connects the team's accounts. You can press **Add account** even before the app has
+any account, and the first account you add becomes the default.
 
 ### The first time a team turns on a plugin's app
 
@@ -80,15 +81,15 @@ Connect window also asks for more than the steps above.
 | Who | What | Where |
 |---|---|---|
 | Platform admin | Installs the plugin, either as its folder in the plugins folder or pinned in the image. It is then offered to every team. Settings that are fixed for every team come from the install config | The install's plugin settings ([plugins guide](plugins.md)) |
-| Security admin | Lists the app's hosts, so its sign-in and calls may leave | **Settings › Security › Egress**, **Add host**, and **Add range** for a host on a private network |
+| Security admin | Lists hosts that the app's own manifest does not name, such as a website a person adds as a source, and adds a range for a host on a private network | **Settings › Security › Egress**, **Add host** and **Add range** |
 | Team admin | Presses **Turn on** | The window shows the app's settings, such as its API address, who signs in, the OAuth app (Ops AI's, or your own with its client ID, secret and the return address to register) and its sign-in address. **Turn on** saves them and opens no sign-in. **Sign in with my login** or **Sign in the team login** afterwards opens the app's sign-in page |
 
-The app's page is under **Data Gateway › Apps**: open the app's card. One Connect
-is enough to use the app everywhere, because test runs and live runs both sign in with the account you connected.
+To find the app's page, open its card on **Data Gateway › Apps**. You only need to connect once, because test runs and live
+runs both sign in with the account you connected, unless the app has a sandbox account, which test runs use.
 
 ## Auth configs and secrets
 
-An app's **Auth configs** tab lists the OAuth app that each app signs in with. It is either **Ops AI**, kept by Ops AI, or
+An auth config is the saved OAuth app, with its client ID and secret, that an app signs in through. An app's **Auth configs** tab lists them. It is either **Ops AI**, kept by Ops AI, or
 your team's own app. To bring your own app, such as a Salesforce connected app or a GitHub OAuth app, follow these steps.
 
 | Step | Where |
@@ -100,11 +101,11 @@ your team's own app. To bring your own app, such as a Salesforce connected app o
 A Salesforce app needs the **Manage user data via APIs (api)** and **Perform requests at any time (refresh_token,
 offline_access)** scopes. Without the second, people are signed out when the first token ends.
 
-Ops AI builds the callback URL from its console address (`OPS_CONSOLE_URL`), so that address must match the one people
-open. Changing the client ID or the permissions makes the accounts on it sign in again.
+The callback URL is built from the address people open Ops AI at. If your OAuth app rejects it, ask whoever runs Ops AI to
+check that address. Changing the client ID or the permissions makes the accounts on it sign in again.
 
 **Data Gateway › Secrets** lists the values that tools send, such as an API key in a header. A value is encrypted, never
-shown again, and removed from whatever an app answers. A Security admin adds, rotates and deletes secrets.
+shown again, and removed from whatever an app answers. A team admin adds, rotates and deletes secrets, or the Security team when your policy says so.
 
 ## A run waiting for a person
 

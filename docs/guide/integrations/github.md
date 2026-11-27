@@ -13,19 +13,22 @@ your own GitHub Enterprise Server, so a comment appears under a real name instea
 1. **Turn on the app.** A team admin opens **Data Gateway › Apps**, finds GitHub and presses **Turn on**.
 2. **Pick who signs in.** Choose **Each person signs in**, so comments appear under the person's own name, or **Everyone
    uses the team's login**.
-3. **Set your server's addresses** if you use GitHub Enterprise Server. Enter its sign-in address and its API address.
+3. **Set your server's addresses** if you use GitHub Enterprise Server. Under **More options**, enter its sign-in address, such as `https://github.example.com`, and its API address, such as
+   `https://github.example.com/api/v3`.
 4. **Sign in.** Press **Sign in with my login** or **Sign in the team login**, and authorize on GitHub's page.
 
-You can do the same from the command line:
+You can do most of this from the command line. It cannot set a GitHub Enterprise Server's addresses, so use the console for
+that. The commands need the command line and a signed-in profile; see the [Quickstart](../quickstart.md).
 
 ```bash
-opsai apps on plugin:opsai.github --whose person   # prints the sign-in link
-opsai apps test plugin:opsai.github
+opsai apps on plugin:opsai.github --whose person   # turns the app on and prints the team account's sign-in link
+opsai apps connect plugin:opsai.github              # your own sign-in link
+opsai apps test plugin:opsai.github --team-account   # tests the team account that the link above signed in
 ```
 
 After you authorize, the test passes. It reads the signed-in GitHub user, so a pass shows that the sign-in works.
 
-## What success looks like
+## Check an issue and a comment
 
 The app reads **Connected**. An agent that you grant its tools can list a repository's open issues and read one in full.
 When it adds a comment, the comment shows under the name of the person whose login the call used. If you chose **Each
@@ -34,13 +37,13 @@ person signs in**, the audit trail records that person's own login on the call.
 Without the app, triage means someone copying issue text into a chat, and a comment posted by hand has no record of which
 agent drafted it.
 
-## What the app brings
+## What an agent can do in GitHub
 
 | Kind | What |
 |---|---|
 | Read tools | List a repository's issues and pull requests, newest first and up to 50, and read one issue with its body |
 | Write tool | Add a comment to an issue or pull request |
-| Template | An issue helper agent. **Add to team** on the app's **Resources** tab makes your own copy |
+| Template | An issue helper agent. **Add to team** on the app's **Agents** tab makes your own copy |
 
 ## Settings
 
@@ -60,7 +63,7 @@ agent drafted it.
 To use your own OAuth app, see [Bring your own OAuth app](sign-in-oauth.md#bring-your-own-oauth-app). Its authorization
 callback URL is the Callback URL that Ops AI shows on the app's **Auth configs** tab.
 
-## If sign-in fails
+## When GitHub refuses the sign-in
 
 | Message | What to do |
 |---|---|
@@ -70,7 +73,7 @@ callback URL is the Callback URL that Ops AI shows on the app's **Auth configs**
 | The client secret is wrong | Replace it on the app's **Auth configs** tab |
 | The GitHub sign-in expired before it finished | Press **Connect** again |
 
-## Limits
+## What the app does not cover
 
 - The app covers issues and comments only. Pull request reviews, code and repository settings are not covered.
 - A person with two GitHub accounts, such as a work one and a personal one, can connect both. When neither is picked as

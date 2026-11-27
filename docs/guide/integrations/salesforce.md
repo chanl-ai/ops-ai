@@ -9,6 +9,10 @@ Salesforce user's own permissions, so an agent never sees a record that user cou
 
 ## Turn it on
 
+Before you start, a Salesforce admin installs Ops AI's connected app in your org and allows your users to use it under Manage
+Connected Apps. The
+commands below need the command line and a signed-in profile; see the [Quickstart](../quickstart.md).
+
 <!-- site: steps -->
 1. **Turn on the app.** A team admin opens **Data Gateway › Apps**, finds Salesforce and presses **Turn on**.
 2. **Pick where the team signs in.** Choose login.salesforce.com, test.salesforce.com for a sandbox, or your company's My
@@ -22,43 +26,44 @@ Salesforce user's own permissions, so an agent never sees a record that user cou
 You can do the same from the command line:
 
 ```bash
-opsai apps on plugin:opsai.salesforce --whose each   # prints the team login's sign-in link
+opsai apps on plugin:opsai.salesforce --whose each   # turns the app on and prints the team account's sign-in link
+opsai apps connect plugin:opsai.salesforce            # each person runs this for their own sign-in link
 opsai apps test plugin:opsai.salesforce --team-account
 ```
 
 `apps on` prints how many read tools were added and a link to open in a browser. After you sign in there, the test
 passes. The test reads your org's API limits, so a pass shows that the sign-in reached your org.
 
-## What success looks like
+## Check that an agent can read a case
 
 The app reads **Connected**, and an agent that you grant its tools can answer from a case. To check it, open an agent's
 Test panel and ask for the latest cases on an account. The reply lists them, and the call appears on the app's **Logs** tab
 with the login it ran as.
 
-Without the app, a case summary waits for someone to paste it into a chat, and any write to Salesforce is outside the
-approvals and the audit trail.
+Without the app, nobody gets a case summary until someone pastes the case into a chat. Any change made in Salesforce by hand
+also happens outside your approvals and audit trail.
 
-## What the app brings
+## Tools, articles and templates
 
 | Kind | What | Notes |
 |---|---|---|
 | Read tools | Run a query, find cases by status or change time, search accounts, contacts and cases, list an account's cases, list a list view's records, read one record, and read an object's fields and picklist values | Results are paged. A query an agent writes cannot change what it reads |
 | Write tools | Create, update, upsert and delete a record, and save several records in one all-or-nothing save | A deleted record goes to Salesforce's recycle bin |
 | Knowledge source | Published Knowledge articles and their attachments | Syncs daily at 02:00 by default, and fetches only the articles that changed |
-| Templates | A Salesforce skill, a case helper agent and a case triage workflow | **Add to team** on the app's **Resources** tab makes your own copy |
+| Templates | A Salesforce skill, a case helper agent and a case triage workflow | **Add to team** on the app's **Agents**, **Skills** or **Workflows** tab makes your own copy |
 
-Writes run straight away unless your team makes them wait. [Hold a write for approval](../use-cases/approve-a-write.md)
+A tool that changes a record runs straight away unless your team admin makes such changes wait for approval. [Hold a write for approval](../use-cases/approve-a-write.md)
 shows how.
 
 ## Settings
 
 | Setting | What it does | Default |
 |---|---|---|
-| Sign-in address | Where people sign in to Salesforce | login.salesforce.com |
-| Instance address | Your org's address | Read from the sign-in, never typed |
+| Where do you sign in to Salesforce? | Where people sign in to Salesforce | login.salesforce.com |
+| Org address | Your org's address | Read from the sign-in, never typed |
 | API version | The Salesforce API version that calls use | 61.0. The person who runs Ops AI can fix it for every team |
 | Article body field | The field that holds an article's text | `Body__c` |
-| Query batch size | Records per page of a query | 2000 |
+| Records per query page | Records per page when finding cases with deleted ones | 2000 |
 
 ## What Ops AI asks Salesforce for
 
@@ -70,7 +75,7 @@ shows how.
 
 To use your own connected app instead of Ops AI's, see [Bring your own OAuth app](sign-in-oauth.md#bring-your-own-oauth-app).
 
-## If sign-in fails
+## When Salesforce refuses the sign-in
 
 | Message | What to do |
 |---|---|
@@ -80,7 +85,7 @@ To use your own connected app instead of Ops AI's, see [Bring your own OAuth app
 | This Salesforce user cannot use the API | The user needs the API Enabled permission, which Professional edition does not include |
 | Access was not given in Salesforce | Press **Connect** again and allow access |
 
-## Limits
+## What the app does not cover
 
 - Accounts sign in through OAuth only. A username and password or a security token is not accepted.
 - A package installed inside your org, such as a lending package, runs as its own app on the org's account, and each one

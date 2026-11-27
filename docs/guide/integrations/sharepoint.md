@@ -11,14 +11,16 @@ version and cite it.
 
 <!-- site: steps -->
 1. **Turn on the app.** A team admin opens **Data Gateway › Apps**, finds SharePoint and OneDrive, and presses **Turn
-   on**. Enter your Microsoft 365 tenant ID, or leave the default to let any work account sign in.
+   on**. Enter your Microsoft 365 tenant ID, which the Entra admin center shows on its Overview page, or leave the default to let any
+   work account sign in. The app signs in through Ops AI's own Microsoft app unless you [bring your own](sign-in-oauth.md#bring-your-own-oauth-app).
 2. **Sign in the team login.** Use a Microsoft 365 account that can read the libraries. The first sign-in in a tenant may
    need a Microsoft 365 admin's approval.
-3. **Add a source.** In **Knowledge**, open a knowledge base, press **Add source** and pick SharePoint and OneDrive. Search
+3. **Add a source.** In **Knowledge bases**, open a knowledge base, press **Add data source**, choose **From your apps** and pick SharePoint and OneDrive. Search
    for sites, then pick whole sites or single document libraries.
 4. **Sync.** Press **Create and sync**. The **Documents** tab lists each file as it is indexed.
 
-You can add the same source from the command line:
+You can add the same source from the command line, once you have signed in with `opsai login` (see the
+[Quickstart](../quickstart.md)):
 
 ```bash
 opsai kb scopes --plugin opsai.sharepoint --source files --query "Lending"   # find the site
@@ -26,15 +28,15 @@ opsai kb add-source "Lending policies" --kb kb_... --plugin opsai.sharepoint --s
 opsai kb sync kb_...
 ```
 
-## What success looks like
+## Check that the files are indexed
 
-The **Documents** tab lists the source's files as indexed, and the knowledge base's Playground answers a question from
+The **Documents** tab lists the source's files as indexed, and the knowledge base's **Test** panel answers a question from
 them with the file cited. After that, a later sync fetches only what was added, changed or deleted, so the base follows
 the library without anyone touching it.
 
-If you skip this and copy files in by hand, each policy change waits for a person to remember it.
+If your team copies files in by hand instead, each policy change waits for a person to remember it.
 
-## What the app brings
+## Files and tools
 
 | Kind | What |
 |---|---|
@@ -42,6 +44,9 @@ If you skip this and copy files in by hand, each policy change waits for a perso
 | Read tools | List files, read one file, list the changes since the last sync, and find sites and their libraries |
 
 ## Source options
+
+Files in a OneDrive stay unreachable until an admin enters your tenant's `-my.sharepoint.com` address in the app's **Settings** tab.
+
 
 | Option | What it does | Default |
 |---|---|---|
@@ -61,7 +66,7 @@ If you skip this and copy files in by hand, each policy change waits for a perso
 
 Ops AI only reads. It never writes to SharePoint or OneDrive.
 
-## If sign-in fails
+## When Microsoft 365 refuses the sign-in
 
 | Message | What to do |
 |---|---|
@@ -72,7 +77,7 @@ Ops AI only reads. It never writes to SharePoint or OneDrive.
 A bank that signs in with a certificate instead of a client secret follows [Sign in with a
 certificate](sign-in-certificates.md).
 
-## Limits
+## What the app does not cover
 
 - Each connection has one team login. Signing in with each person's own Microsoft account is not offered.
 - Files are read with the team login's access, not with each reader's. Put only what the whole team may read in the

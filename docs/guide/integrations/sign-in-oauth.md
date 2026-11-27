@@ -6,7 +6,7 @@ Most cloud apps, such as Salesforce, GitHub and Microsoft 365, let a person sign
 a token. Nobody types a password into Ops AI, and nobody pastes a long-lived secret into a chat where it could be read
 later. This page covers the two kinds of OAuth sign-in, whose login a call uses, and how to use your own OAuth app
 instead of Ops AI's. If you skip the choice of whose login to use, a scheduled run that needs a person's login is refused
-when it first runs, so it is worth settling before you build the workflow.
+when it first runs, so settle it before you build the workflow.
 
 ## Connect an account
 
@@ -54,7 +54,8 @@ One team's login never serves another team, and one person's token never serves 
 
 ## Bring your own OAuth app
 
-By default an app signs in through Ops AI's own OAuth app, which whoever runs your Ops AI sets up. A bank that must own the
+By default an app signs in through Ops AI's own OAuth app. If the card reads **Needs an auth config**, that OAuth app is not
+set up for this system, so ask whoever runs your Ops AI or bring your own. A bank that must own the
 app registration uses its own.
 
 <!-- site: steps -->
