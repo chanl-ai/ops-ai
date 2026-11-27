@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO_MJS = ROOT / "apps/docs/src/lib/repo.mjs"
@@ -76,7 +77,7 @@ def image_urls(text: str) -> list[tuple[int, int, str]]:
 
 
 def problem(md: str, url: str, allowed: list[str]) -> str | None:
-    if "raw.githubusercontent.com" in url:
+    if urlsplit(url).hostname == "raw.githubusercontent.com":
         return "raw.githubusercontent.com image; name it by its docs site URL"
     m = re.match(r"https://([^/]+)/docs/([^?#]+)$", url)
     if m and m.group(1) in allowed:
