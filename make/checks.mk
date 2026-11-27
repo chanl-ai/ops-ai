@@ -2,7 +2,7 @@
 # check in verify-changed.sh and pre-commit (`make checks STAGED=1`) all run `make checks`, so a check added here runs
 # in every one of them and none can run a shorter list. A check is a name in CHECKS, the command that runs it and, for
 # pre-commit, the staged paths that can change its result. Each is proven red by its own test or `--self-test`.
-.PHONY: checks checks-list checks-history ci-local merge-ready
+.PHONY: checks checks-list checks-history ci-local gha-verify requeue
 
 ##@ Checks
 
@@ -31,7 +31,7 @@ CHECKS = \
   ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards \
   downgrades migration-heads token-lifetime cross-service standards service-standards service-standards-self-test list-routes gateway-routes \
   ci-steps ci-steps-self-test ci-local-self-test new-migration-self-test builder-watch-self-test usecase-outputs \
-  staging-hold-tests quarantine quarantine-self-test ci-usecases-self-test
+  staging-hold-tests quarantine quarantine-self-test ci-usecases-self-test pr-flow-self-test lane-self-test
 
 # Access decided outside can(), the exceptions each lane may still hold, and the trailer a new line needs.
 CHECK_ACCESS_PATHS = ^(services|packages)/[^/]+/src/.*\.py$$|^apps/(console|embed)/src/|^access-exceptions-allowlist\.txt$$|^docs/architecture/roles-and-permissions\.md$$|^scripts/(check_access_exceptions\.py|access-baselines/)
@@ -198,6 +198,10 @@ check-paths.ci-local-self-test = ^scripts/ci_local\.py$$|^\.github/workflows/ci\
 
 check-run.new-migration-self-test = $(PY) scripts/new_migration.py --self-test
 check-paths.new-migration-self-test = ^scripts/new_migration\.py$$
+check-run.pr-flow-self-test = $(PY) scripts/pr_flow.py --self-test
+check-paths.pr-flow-self-test = ^scripts/pr_flow\.py$$
+check-run.lane-self-test = bash scripts/lane.sh --self-test
+check-paths.lane-self-test = ^scripts/lane\.sh$$
 check-run.builder-watch-self-test = bash scripts/builder-watch.sh --self-test
 check-paths.builder-watch-self-test = ^scripts/builder-watch\.sh$$
 
@@ -207,6 +211,10 @@ ci-local: db-up ## CI's planned jobs run here in parallel (BASE=origin/develop, 
 checks-list: ## Print each check on the list with the command it runs
 	@$(foreach c,$(CHECKS),printf '%s\t%s\n' '$(c)' '$(check-run.$(c))';)
 
-merge-ready: ## Pull request PR=N: ci-local on its head against origin/develop, then into the merge queue when green (not merged while develop has no queue rule)
-	@test -n "$(PR)" || { echo "usage: make merge-ready PR=<number>"; exit 2; }
-	@BASE=$(or $(BASE),origin/develop) bash $(ROOT)/scripts/merge_ready.sh "$(PR)"
+gha-verify: ## The full `make verify` on GitHub for BRANCH (verify-full.yml): start it, watch it, print the first error line of each failed job; exit 1 when red
+	@test -n "$(BRANCH)" || { echo "usage: make gha-verify BRANCH=<branch>"; exit 2; }
+	@python3 $(ROOT)/scripts/pr_flow.py verify --branch "$(BRANCH)"
+
+requeue: ## Pull request PR=N: out of the merge queue, then back in at the end once its checks pass (after a fix pushed to a queued branch)
+	@test -n "$(PR)" || { echo "usage: make requeue PR=<number>"; exit 2; }
+	@bash $(ROOT)/scripts/requeue.sh "$(PR)"
