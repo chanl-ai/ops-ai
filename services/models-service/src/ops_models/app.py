@@ -868,7 +868,10 @@ def create_models_app(
         for the model. A version at zero lets every budget pass, so one price alone (422 `price_incomplete`), zero
         for a model the catalog does not list at zero, or no price at all (422 `price_required`) is refused."""
         if (given_in is None) != (given_out is None):
-            raise Unprocessable("Give both inputPerMillion and outputPerMillion, or neither.", code="price_incomplete")
+            raise Unprocessable(
+                "Give both the input and the output price per million tokens, or neither for the catalog's.",
+                code="price_incomplete",
+            )
         found = catalog.model(catalog_id, model_id)
         listed = (
             None
@@ -878,19 +881,22 @@ def create_models_app(
         if given_in is not None and given_out is not None:
             if given_in or given_out or listed == (0, 0):
                 return given_in, given_out
-        elif listed is not None:
+            raise Unprocessable(
+                f"A price of zero lets every budget pass, and the model catalog does not list {model_id} as free; give "
+                "its input and output price per million tokens.",
+                code="price_required",
+            )
+        if listed is not None:
             return listed
         raise Unprocessable(
-            f"{model_id} has no price in the model catalog; give inputPerMillion and outputPerMillion.",
+            f"{model_id} has no price in the model catalog; give its input and output price per million tokens.",
             code="price_required",
         )
 
     async def version_price(body: AliasVersionIn) -> tuple[Decimal, Decimal]:
         connection = await providers.get(body.provider_id)
-        entry = registry.get(connection.type) if connection else None
-        return known_price(
-            entry.catalog if entry else None, body.model_id, body.input_per_million, body.output_per_million
-        )
+        catalog_id = registry.catalog_for(connection.type, connection.base_url) if connection else None
+        return known_price(catalog_id, body.model_id, body.input_per_million, body.output_per_million)
 
     @app.put(
         "/v1/models/chat-model",
@@ -919,9 +925,9 @@ def create_models_app(
             kind, base_url, api_version = "azure-openai", base, body.api_version or "v1"
         else:
             kind, base_url, api_version = "openai-compatible", CHAT_BASES[body.provider], None
-        # Every price is settled before anything is written. A new model keeps a chat alias's prices, which an admin
-        # may have set on the Models page, unless the body gives one or the alias holds none.
-        entry = registry.get(body.provider)
+        # Every price is settled before anything is written. An alias kept on the same model keeps its nonzero prices,
+        # which an admin may have set on the Models page; a body price, or a new model, sets them.
+        catalog_id = registry.catalog_for(kind, base_url)
         given = body.input_per_million is not None or body.output_per_million is not None
         prices: dict[str, tuple[Decimal, Decimal]] = {}
         fresh: set[str] = set()
@@ -929,12 +935,11 @@ def create_models_app(
             serving = await aliases.current(alias)
             if serving is None:
                 fresh.add(alias)
-            if not given and serving is not None and (serving.input_per_million or serving.output_per_million):
+            kept = serving is not None and serving.model_id == body.model and not given
+            if kept and serving is not None and (serving.input_per_million or serving.output_per_million):
                 prices[alias] = (serving.input_per_million, serving.output_per_million)
             else:
-                prices[alias] = known_price(
-                    entry.catalog if entry else None, body.model, body.input_per_million, body.output_per_million
-                )
+                prices[alias] = known_price(catalog_id, body.model, body.input_per_million, body.output_per_million)
         name = f"{chat_aliases[0]}-{body.provider}"
         held = next(iter((await providers.page(ListParams(), name=name)).data), None)
         pid = new_id("prov") if held is None else held.id

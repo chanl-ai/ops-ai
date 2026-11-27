@@ -120,18 +120,29 @@ async def test_an_azure_endpoint_outside_openai_azure_com_is_refused(rig: Rig) -
     assert refused.status_code == 422 and refused.json()["error"]["code"] == "endpoint_refused", refused.text
 
 
-async def test_a_new_chat_model_keeps_the_prices_the_alias_had(rig: Rig) -> None:
-    first = {"provider": "openai", "model": "gpt-5.4-mini", "keyName": "MAIN"}
+async def test_the_same_model_keeps_the_admins_price_and_a_new_model_takes_its_catalog_price(rig: Rig) -> None:
+    first = {"provider": "openai", "model": "gpt-4.1-mini", "keyName": "MAIN"}
     assert (await rig.client.put("/v1/models/chat-model", json=first)).status_code == 200
     url = f"/v1/models/aliases/{rig.aliases[0]}/versions"
     held = (await rig.client.get(url, headers=SERVICE)).json()["data"]["data"][-1]
-    price = {"inputPerMillion": "2.5", "outputPerMillion": "10"}
-    body = {"providerId": held["providerId"], "modelId": held["modelId"], "clearedSensitivity": "confidential", **price}
-    assert (await rig.client.post(url, json=body, headers=SERVICE)).status_code in (200, 201)
-    again = await rig.client.put("/v1/models/chat-model", json={**first, "model": "gpt-5.4"})
-    assert again.status_code == 200, again.text
-    now = (await rig.client.get(url, headers=SERVICE)).json()["data"]["data"][-1]
-    assert (now["modelId"], float(now["inputPerMillion"]), float(now["outputPerMillion"])) == ("gpt-5.4", 2.5, 10.0)
+    # A negotiated rate the admin set on the Models page, on the connection chat-model made: no price is needed there
+    # for a catalogued model, as that connection calls OpenAI's own endpoint.
+    body = {"providerId": held["providerId"], "modelId": "gpt-4.1-mini", "clearedSensitivity": "confidential"}
+    assert (await rig.client.post(url, json=body, headers=SERVICE)).status_code == 201
+    rate = {"inputPerMillion": "2.5", "outputPerMillion": "10"}
+    assert (await rig.client.post(url, json={**body, **rate}, headers=SERVICE)).status_code == 201
+
+    async def now() -> tuple[str, float, float]:
+        v = (await rig.client.get(url, headers=SERVICE)).json()["data"]["data"][-1]
+        return v["modelId"], float(v["inputPerMillion"]), float(v["outputPerMillion"])
+
+    assert (await rig.client.put("/v1/models/chat-model", json=first)).status_code == 200
+    assert await now() == ("gpt-4.1-mini", 2.5, 10.0)
+    moved = await rig.client.put("/v1/models/chat-model", json={**first, "model": "gpt-5.4"})
+    assert moved.status_code == 200, moved.text
+    listed = Catalog.load().model("openai", "gpt-5.4")
+    assert listed is not None
+    assert await now() == ("gpt-5.4", listed.input_per_million, listed.output_per_million)
 
 
 async def test_a_fresh_chat_alias_is_priced_and_an_unpriced_model_is_refused(rig: Rig) -> None:
@@ -160,6 +171,10 @@ async def test_a_lone_or_zero_chat_price_is_refused_before_anything_is_written(r
     ]:
         refused = await rig.client.put("/v1/models/chat-model", json={**body, **price})
         assert refused.status_code == 422 and refused.json()["error"]["code"] == code, refused.text
+    # Zero for a model the catalog prices is refused for being zero, not for a missing catalog price.
+    zero = {**body, "model": "gpt-5.4", "inputPerMillion": "0", "outputPerMillion": "0"}
+    said = (await rig.client.put("/v1/models/chat-model", json=zero)).json()["error"]["message"]
+    assert "zero" in said and "no price in the model catalog" not in said, said
     assert (await rig.client.get(f"/v1/models/aliases/{rig.aliases[0]}/versions", headers=SERVICE)).status_code == 404
     connections = await rig.client.get(
         "/v1/models/providers", params={"search": f"{rig.aliases[0]}-openai"}, headers=SERVICE
