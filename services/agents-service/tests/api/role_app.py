@@ -27,6 +27,13 @@ async def _no_keys(key: str) -> dict[str, Any] | None:
     return None
 
 
+def role_auth(settings: Settings) -> Auth:
+    return Auth(
+        Identity(audience="agents", jwks=jwks, introspect=_no_keys, key_cache_s=0),
+        ServiceAuth(audience="agents", verifiers=service_verifiers(settings, "agents")),
+    )
+
+
 @asynccontextmanager
 async def role_app(model: ModelEndpoint) -> AsyncGenerator[AsyncClient]:
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
@@ -34,10 +41,7 @@ async def role_app(model: ModelEndpoint) -> AsyncGenerator[AsyncClient]:
         await c.run_sync(metadata.create_all)
         await c.run_sync(engine_metadata.create_all)
     settings = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED)
-    auth = Auth(
-        Identity(audience="agents", jwks=jwks, introspect=_no_keys, key_cache_s=0),
-        ServiceAuth(audience="agents", verifiers=service_verifiers(settings, "agents")),
-    )
+    auth = role_auth(settings)
     app = create_app(
         settings,
         model=model,

@@ -26,7 +26,7 @@ from ops_identity import Auth, Identity, ServiceAuth, dev_service_signer, mint_s
 from ops_models.app import create_models_app
 from ops_service_kit.settings import Settings
 from tests.api.test_write_approval_policy import _Names, introspect, jwks  # pyright: ignore[reportPrivateUsage]
-from tests.conftest import SEED, FakeGraphModels, empty_engine, fixture_knowledge, scripted
+from tests.conftest import SEED, FakeGraphModels, empty_engine, fixture_knowledge, response_checker, scripted
 
 ALIAS = "bank-standard"
 
@@ -110,9 +110,10 @@ async def models_gateway(engine: AsyncEngine, script: Script = scripted) -> Asyn
 
 @asynccontextmanager
 async def through_gateway(
-    engine: AsyncEngine, graph_models: Any, script: Script = scripted, **wiring: Any
+    engine: AsyncEngine, graph_models: Any, script: Script = scripted, *, checked: bool = False, **wiring: Any
 ) -> AsyncGenerator[Gateway]:
-    """The agents app whose model calls go through models-service (`models_gateway`)."""
+    """The agents app whose model calls go through models-service (`models_gateway`). `checked` holds every reply to
+    its documented schema, as `tests.conftest.started` does."""
     async with models_gateway(engine, script) as m:
         settings = Settings(
             database_url=str(engine.url.render_as_string(hide_password=False)),
@@ -131,9 +132,10 @@ async def through_gateway(
             completions_client=m.completions,
             **wiring,
         )
+        hooks = {"response": [response_checker(app)]} if checked else {}
         async with (
             app.router.lifespan_context(app),
-            AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+            AsyncClient(transport=ASGITransport(app=app), base_url="http://test", event_hooks=hooks) as client,
         ):
             yield Gateway(app, client, m.client, m.provider)
 

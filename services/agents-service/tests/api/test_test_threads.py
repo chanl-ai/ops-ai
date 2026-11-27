@@ -6,30 +6,22 @@ carry real roles: a builder may test the agent (agents.edit), a viewer may only 
 
 from __future__ import annotations
 
-import json
 from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
 from httpx import AsyncClient
-from pydantic_ai.messages import (
-    ModelMessage,
-    ModelRequest,
-    ModelResponse,
-    SystemPromptPart,
-    TextPart,
-    ToolCallPart,
-    UserPromptPart,
-)
-from pydantic_ai.models import Model
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
-from tests.conftest import sse_events, structured
+from ops_agent_kernel.contract import ModelEndpoint
+from ops_agent_kernel.testing import Answer, Structured, system_text
+from ops_service_kit.http import Json
+from ops_service_kit.settings import Settings
+from tests.conftest import SEED, FakeGraphModels, asked, empty_engine, model_on, sse_events
 from tests.engine.test_lifecycle_rights import BUILDER, VIEWER
-from tests.wire_model import on_wire
+from tests.model_gateway import through_gateway
 
 from ..saves import save_agent
-from .role_app import ok, role_app
+from .role_app import ok, role_app, role_auth
 
 ADVISOR = "ag_branch"
 
@@ -41,34 +33,15 @@ class Recorder:
     def __init__(self) -> None:
         self.extractions = 0
 
-    def model(self) -> Model:
-        def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-            first, last = messages[0], messages[-1]
-            prompt = (
-                " ".join(str(p.content) for p in last.parts if isinstance(p, UserPromptPart))
-                if isinstance(last, ModelRequest)
-                else ""
-            )
-            if prompt.startswith("<remember>"):
-                self.extractions += 1
-                return structured(info, {"memories": []})
-            system = " ".join(
-                [str(p.content) for p in first.parts if isinstance(p, SystemPromptPart)]
-                + [str(getattr(m, "instructions", "") or "") for m in messages]
-            )
-            marks = [w for w in system.split() if w.startswith("MARK-")]
-            return ModelResponse(parts=[TextPart(f"ran {marks[-1] if marks else 'published'}")])
+    def script(self, messages: list[Json], tools: list[Json]) -> Answer:
+        if asked(messages).startswith("<remember>"):
+            self.extractions += 1
+            return Structured({"memories": []})
+        marks = [w for w in system_text(messages).split() if w.startswith("MARK-")]
+        return f"ran {marks[-1] if marks else 'published'}"
 
-        async def stream(
-            messages: list[ModelMessage], info: AgentInfo
-        ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-            for part in respond(messages, info).parts:
-                if isinstance(part, TextPart):
-                    yield part.content
-                elif isinstance(part, ToolCallPart):
-                    yield {0: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
-
-        return on_wire(FunctionModel(respond, stream_function=stream))
+    def model(self) -> ModelEndpoint:
+        return model_on(self.script)
 
 
 @pytest.fixture
@@ -170,13 +143,20 @@ async def test_the_test_mark_cannot_be_patched(stack: tuple[AsyncClient, Recorde
     assert ok(await c.get(f"/chat/threads/{chat}", headers=VIEWER))["test"] is False
 
 
-async def test_a_test_reply_says_what_it_spent(stack: tuple[AsyncClient, Recorder]) -> None:
-    """Each reply carries its model calls, tokens, cost and seconds, read with the thread (no second request)."""
-    c, _ = stack
-    await _draft(c, "MARK-COST")
-    tid = ok(await _thread(c, BUILDER, test=True), 201)["id"]
-    await _say(c, BUILDER, tid)
-    thread = ok(await c.get(f"/chat/threads/{tid}", headers=BUILDER))
+async def test_a_test_reply_says_what_it_spent(database_url: str) -> None:
+    """Each reply carries its model calls, tokens, cost and seconds, read with the thread (no second request). They
+    come from the model gateway's call log, so this app sends its calls through the gateway in process."""
+    recorder = Recorder()
+    settings = Settings(database_url=database_url, seed_dir=SEED)
+    async with (
+        empty_engine(database_url) as engine,
+        through_gateway(engine, FakeGraphModels(), recorder.script, auth=role_auth(settings)) as g,
+    ):
+        c = g.client
+        await _draft(c, "MARK-COST")
+        tid = ok(await _thread(c, BUILDER, test=True), 201)["id"]
+        await _say(c, BUILDER, tid)
+        thread = ok(await c.get(f"/chat/threads/{tid}", headers=BUILDER))
     [reply] = [m for m in thread["messages"] if m["role"] == "assistant"]
     usage = reply["usage"]
     assert usage["calls"] >= 1 and usage["inputTokens"] > 0 and usage["outputTokens"] > 0, usage

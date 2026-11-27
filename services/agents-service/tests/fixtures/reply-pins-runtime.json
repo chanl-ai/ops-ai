@@ -18,7 +18,7 @@
               "name": "Compliance"
             }
           ],
-          "model": "default",
+          "model": "bank-standard",
           "name": "Wire Fraud Sentinel",
           "role": "Scores outbound wires and places holds",
           "suggestions": [
@@ -39,7 +39,7 @@
               "name": "Cards & disputes"
             }
           ],
-          "model": "default",
+          "model": "bank-standard",
           "name": "Card Dispute Resolver",
           "role": "Investigates and drafts card dispute outcomes",
           "suggestions": [
@@ -60,7 +60,7 @@
               "name": "Retail banking"
             }
           ],
-          "model": "default",
+          "model": "bank-standard",
           "name": "Branch Concierge",
           "role": "Books appointments and answers product questions",
           "suggestions": [
@@ -205,7 +205,7 @@
           ],
           "content": "The daily wire limit for a personal account is $25,000 online [1].",
           "id": "<m>",
-          "model": "scripted",
+          "model": "bank-standard",
           "role": "assistant",
           "settings": {
             "addedInstructions": [],
@@ -213,7 +213,7 @@
             "knowledgeBaseIds": [
               "kb_people"
             ],
-            "model": "default",
+            "model": "bank-standard",
             "sources": {
               "knowledgeBaseIds": "started",
               "model": "agent"
@@ -267,7 +267,7 @@
             ],
             "content": "The daily wire limit for a personal account is $25,000 online [1].",
             "id": "<m>",
-            "model": "scripted",
+            "model": "bank-standard",
             "role": "assistant",
             "settings": {
               "addedInstructions": [],
@@ -275,7 +275,7 @@
               "knowledgeBaseIds": [
                 "kb_people"
               ],
-              "model": "default",
+              "model": "bank-standard",
               "sources": {
                 "knowledgeBaseIds": "started",
                 "model": "agent"
@@ -285,7 +285,7 @@
             },
             "usage": {
               "calls": 1,
-              "cost": "0.00",
+              "cost": "0.02",
               "inputTokens": 10,
               "outputTokens": 5,
               "seconds": "<seconds>"
