@@ -54,4 +54,4 @@ lint it; the index is the "Folder guides" section of `CLAUDE.md`. Read the guide
 
 Each runs the make targets it names and is a Claude Code skill of the same name; its file in `.github/prompts/` says when to use it.
 
-`/ops-commit`, `/ops-database`, `/ops-debug`, `/ops-docs-edit`, `/ops-docs-review`, `/ops-docs-write`, `/ops-fix-the-class`, `/ops-mirror`, `/ops-run`, `/ops-sample-team`, `/ops-tool-module`, `/ops-workflow-step`, `/usecase`, `/wf-builder`.
+`/ops-commit`, `/ops-database`, `/ops-debug`, `/ops-docs-edit`, `/ops-docs-review`, `/ops-docs-write`, `/ops-fix-the-class`, `/ops-handback`, `/ops-mirror`, `/ops-run`, `/ops-sample-team`, `/ops-tool-module`, `/ops-workflow-step`, `/usecase`, `/wf-builder`.

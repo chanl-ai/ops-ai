@@ -7,6 +7,8 @@
 db-up: ## PostgreSQL, OPA and the test mail servers (GreenMail, Mailpit) in compose, waiting until up
 ifeq ($(OPS_INFRA),external)
 	@echo "OPS_INFRA=external: postgres, opa, greenmail and mailpit are side containers"
+else ifeq ($(OPS_INFRA),shared)
+	@echo "OPS_INFRA=shared: using the default stack's postgres, opa and mail containers on localhost"
 else
 	@# --no-recreate: every checkout, worktree and verify export shares this compose project, and its OPA mounts the
 	@# policy folder by path; recreating from another checkout re-mounts OPA there and drops the review key the running
@@ -17,6 +19,8 @@ endif
 db-down: ## Stop compose; the data volume stays
 ifeq ($(OPS_INFRA),external)
 	@echo "OPS_INFRA=external: leaving side containers running"
+else ifeq ($(OPS_INFRA),shared)
+	@echo "OPS_INFRA=shared: leaving the default stack's containers running"
 else
 	$(COMPOSE) down
 endif
@@ -28,7 +32,7 @@ test-db-prune: ## Drop idle ops_test_/ops_usecase_ databases older than HOURS (d
 	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/scratch_db_sweep.py --prune --hours $(or $(HOURS),3) $(if $(DRY),--dry-run)
 
 db-shell: ## psql into the stack's database
-	$(COMPOSE) exec postgres psql -U ops -d ops_runtime
+	$(DB_COMPOSE) exec postgres psql -U ops -d $(DB_NAME)
 
 db-reset: ## The same as make reset-db (kept so old commands work)
 	@$(MAKE) -s reset-db
@@ -54,6 +58,7 @@ db-move-image: ## Move the stack's database onto the compose file's PostgreSQL i
 	@# old data folder is never reused (its text indexes would be wrong). The old volume (ops-runtime-pg) is left as it
 	@# was: rolling back is pointing the compose file's volume and image at it again. scripts/db-move-image.sh counts
 	@# every table's rows before and after, refuses a dump short of them, and stops the restore at its first error.
+	@[ "$(OPS_INFRA)" != shared ] || { echo "db-move-image: the default stack owns the postgres container; run it there"; exit 1; }
 	@if [ "$(CONFIRM)" != yes ]; then \
 		printf 'Dump every database on the stack PostgreSQL, recreate it on the compose image and restore? Type yes: '; read answer; \
 		[ "$$answer" = yes ] || { echo "db-move-image: nothing changed"; exit 1; }; \
