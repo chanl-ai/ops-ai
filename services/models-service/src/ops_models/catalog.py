@@ -196,8 +196,9 @@ class Catalog:
                 kept = None if rng is None else _fitted(knob, value, rng, clamp=found is not None)
                 if kept is None:
                     continue
-                own = path if path != name else knob.wire
-                target = (overrides[name].wire if name in overrides else None) or own
+                # Sent under any of its names, a knob goes out under the field this provider honours: OpenAI's
+                # reasoning models refuse `max_tokens`, and most others read only `max_tokens`.
+                target = (overrides[name].wire if name in overrides else None) or knob.wire
                 _write(out, target, kept)
                 if target == knob.wire:
                     for field, set_to in knob.with_.items():
