@@ -65,6 +65,7 @@ ALIAS = "extract"
 # models-service's refusals a person can act on, as the read's error: a spent budget waits for its reset, a busy model
 # for a minute. Anything else reads as the model being out of reach.
 SPENT = "The team's model budget is spent; reads that call a model wait until it resets."
+LATE = "The model did not answer in time. Try again, read fewer fields, or lower OPS_EXTRACT_OUTPUT_TOKENS."
 REFUSALS = {
     "key_budget_exhausted": ("budget_exhausted", SPENT),
     "tenant_budget_exhausted": ("budget_exhausted", SPENT),
@@ -75,11 +76,18 @@ REFUSALS = {
         "reply_cut_off",
         "The model's reply was cut off at its length limit. Read fewer fields, or raise OPS_EXTRACT_OUTPUT_TOKENS.",
     ),
-    "reply_declined": ("reply_declined", "The model declined to read this file."),
-    "reply_filtered": ("reply_filtered", "The provider's content filter stopped the model's reply."),
+    "reply_declined": (
+        "reply_declined",
+        "The model declined to read this file. Read it on another model alias, or have a person read it.",
+    ),
+    "reply_filtered": (
+        "reply_filtered",
+        "The provider's content filter stopped the model's reply. Read it on another model alias, or have a person "
+        "read it.",
+    ),
     "reply_empty": ("reply_empty", "The model's reply held no answer. Try again, or read fewer fields."),
-    "models_timeout": ("model_late", "The model did not answer in time."),
-    "provider_timeout": ("model_late", "The model did not answer in time."),
+    "models_timeout": ("model_late", LATE),
+    "provider_timeout": ("model_late", LATE),
 }
 READS = ("fields", "propose")
 PROPOSE_PAGES = 5
@@ -946,7 +954,7 @@ class Extractor:
             # read fails the extraction (FloorUnreadError), so a failed read never lowers the bar.
             floor = await self.floors.floor(tenant, row.team) if self.floors is not None else DEFAULT_FLOOR
         except FloorUnreadError as e:
-            return await self._fail(row, "floor_unread", str(e))
+            return await self._fail(row, "floor_unread", str(e), usage=usage)
         except ModelCallError as e:
             return await self._refused(row, e, usage)
         outcome, out = result.scored(
