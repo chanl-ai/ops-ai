@@ -125,6 +125,10 @@ def test_an_edit_to_the_knob_table_changes_the_model_knobs(tmp_path: Path) -> No
     [
         ("openai", "gpt-5.2", "max_completion_tokens"),
         ("azure", "claude-fable-5", "max_completion_tokens"),
+        # Uncatalogued on an OpenAI or Azure connection (a dated or fine-tuned id, an Azure deployment name): the
+        # connection's kind still decides the field, as o-series and gpt-5 refuse max_tokens.
+        ("openai", "ft:gpt-5.2:harbor-pine::run7", "max_completion_tokens"),
+        ("azure", "claims-reader-prod", "max_completion_tokens"),
         ("anthropic", HAIKU, "max_tokens"),
         ("google", "gemini-2.5-flash-lite", "max_tokens"),
         ("amazon-bedrock", "amazon.nova-lite-v1:0", "max_tokens"),
