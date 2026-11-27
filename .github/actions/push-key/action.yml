@@ -9,6 +9,10 @@ inputs:
     description: The deploy key's private half (secrets.RELEASE_MAIN_DEPLOY_KEY); empty falls back to the token
     required: false
     default: ""
+  token:
+    description: Token for api.github.com/meta; unauthenticated calls share a rate limit with every job on the runner IP
+    required: false
+    default: ${{ github.token }}
 runs:
   using: composite
   steps:
@@ -16,6 +20,7 @@ runs:
       env:
         DEPLOY_KEY: ${{ inputs.key }}
         REPO: ${{ github.repository }}
+        GH_TOKEN: ${{ inputs.token }}
       run: |
         set -euo pipefail
         git config --global user.name "github-actions[bot]"
@@ -27,6 +32,8 @@ runs:
         ssh_dir=$RUNNER_TEMP/push-key-ssh
         mkdir -p "$ssh_dir" && chmod 700 "$ssh_dir"
         printf '%s\n' "$DEPLOY_KEY" > "$ssh_dir/key" && chmod 600 "$ssh_dir/key"
-        curl -fsS https://api.github.com/meta | jq -r '.ssh_keys[] | "github.com " + .' > "$ssh_dir/known_hosts"
+        curl -fsS --retry 3 --retry-all-errors --retry-delay 5 -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/meta \
+          | jq -r '.ssh_keys[] | "github.com " + .' > "$ssh_dir/known_hosts"
+        [ -s "$ssh_dir/known_hosts" ] || { echo "::error::GitHub host keys came back empty"; exit 1; }
         echo "GIT_SSH_COMMAND=ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o StrictHostKeyChecking=yes" >> "$GITHUB_ENV"
         echo "PUSH_URL=git@github.com:$REPO.git" >> "$GITHUB_ENV"
