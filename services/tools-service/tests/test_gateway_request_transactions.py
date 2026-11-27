@@ -51,7 +51,9 @@ async def gateway(seed: dict[str, Any], tenant: str, catalog_tools: list[dict[st
 
     def platform(request: httpx.Request) -> httpx.Response:
         held.append(pool.checkedout())
-        return httpx.Response(200, json={"success": True, "data": {"key": "appChanges", "value": {}}})
+        return httpx.Response(
+            200, json={"success": True, "data": {"key": "appChanges", "value": {"*": {"makersAsk": True}}}}
+        )
 
     await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
     async with opa_client() as opa:

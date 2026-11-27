@@ -214,6 +214,37 @@ async def write_new_workspace_policies(c: AsyncConnection, tenant_id: str, *, at
         await c.execute(insert_ignore(c, policies, row, keys=["tenant_id", "key"]))
 
 
+async def store_makers_ask(c: AsyncConnection, tenant_id: str, *, at: str) -> None:
+    """appChanges makersAsk under the workspace's own part (`*`), stored off where it is missing, on every seed run:
+    tools-service refuses a write whose workspace stores none (approval_rules_unavailable) rather than guessing it. A
+    value someone saved stays. A workspace made before new workspaces stored it is fixed by its next seed run."""
+    row = (
+        await c.execute(
+            sa.select(policies.c.value).where(policies.c.tenant_id == tenant_id, policies.c.key == "appChanges")
+        )
+    ).first()
+    held = json_object(row.value) if row else {}
+    own = json_object(held.get("*"))
+    if isinstance(own.get("makersAsk"), bool):
+        return
+    value = {**held, "*": check_value("appChanges", {**own, "makersAsk": False})}
+    if row:
+        await c.execute(
+            policies.update()
+            .where(policies.c.tenant_id == tenant_id, policies.c.key == "appChanges")
+            .values(value=value, updated_by="workspace", updated_at=at)
+        )
+    else:
+        row_in = {
+            "tenant_id": tenant_id,
+            "key": "appChanges",
+            "value": value,
+            "updated_by": "workspace",
+            "updated_at": at,
+        }
+        await c.execute(insert_ignore(c, policies, row_in, keys=["tenant_id", "key"]))
+
+
 async def values_in(c: AsyncConnection) -> PolicyValues:
     """`PolicyStore.values` on the caller's transaction."""
     held = {r.key: r.value for r in await rows(c, sa.select(policies.c.key, policies.c.value), PolicyRow)}

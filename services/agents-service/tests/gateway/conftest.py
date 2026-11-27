@@ -56,9 +56,11 @@ class ServiceAuthHeader(httpx.Auth):
 
 def no_saved_rules(request: httpx.Request) -> httpx.Response:
     """platform-service's answer for a team that saved no approval settings (appChanges, appChangesByApp): every write
-    without its own answer runs. Without a reader the gateway refuses every write (approval_rules_unavailable)."""
+    without its own answer runs, and makers' asks stay on (stored, as every workspace stores it). Without a reader the
+    gateway refuses every write (approval_rules_unavailable)."""
     key = request.url.path.rsplit("/", 1)[-1]
-    return httpx.Response(200, json={"success": True, "data": {"key": key, "value": {}}})
+    value = {"*": {"makersAsk": True}} if key == "appChanges" else {}
+    return httpx.Response(200, json={"success": True, "data": {"key": key, "value": value}})
 
 
 def write_approvals() -> WriteApprovals:

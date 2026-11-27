@@ -20,6 +20,7 @@ from ops_service_kit.settings import Settings
 from ops_signin import PasswordHasher
 
 from .store.identity import IdentityStore
+from .store.policies import store_makers_ask
 from .store.seeding import write_seed
 from .store.signin import SignInStore
 from .store.tenancy import TenantDb
@@ -79,6 +80,9 @@ async def bootstrap(database_url: str, admin: FirstAdmin, *, iterations: int) ->
         user_id = known[0].id if known else new_id("usr")
         # Keyed on the admin's password, the last write: a run stopped between the two writes finishes on the next.
         if known and await signin.password_hash(admin.tenant_id, user_id) is not None:
+            # A workspace made before makers' asks were stored gets the value here, on its next boot.
+            async with db.tenant_tx(admin.tenant_id) as c:
+                await store_makers_ask(c, admin.tenant_id, at=now_iso())
             return "unchanged"
         empty: list[str] = []
         seed: dict[str, Any] = {

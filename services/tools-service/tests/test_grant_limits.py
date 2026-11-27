@@ -46,7 +46,7 @@ def workspace_asks_a_reviewer() -> WriteApprovals:
 
     def handler(request: httpx.Request) -> httpx.Response:
         key = request.url.path.rsplit("/", 1)[-1]
-        value = {"*": {"ask": True, "answer": "reviewer"}} if key == "appChanges" else {}
+        value = {"*": {"ask": True, "answer": "reviewer", "makersAsk": True}} if key == "appChanges" else {}
         return httpx.Response(200, json={"success": True, "data": {"key": key, "value": value}})
 
     return WriteApprovals(fake_service(handler, "platform", ["settings:view"]))

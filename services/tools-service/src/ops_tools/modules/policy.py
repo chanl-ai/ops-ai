@@ -13,6 +13,7 @@ from ops_access import BY_KEY, Access, EffectiveAnswer, effective_answer, publis
 from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable, principal_of
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import Json
+from ops_service_kit.logging import get_logger
 from ops_service_kit.narrow import json_object
 
 from ..store.modules import Module, ModuleColumns, Operation
@@ -52,6 +53,8 @@ class PublishPolicy:
 
 
 # Where `levels` keeps the Security team's floor (approvalsFloor) in the team level; no appChanges field has this name.
+log = get_logger("ops_tools.approvals")
+
 FLOOR = "_approvalsFloor"
 # appChanges switches whose off value lets a write run that would otherwise wait.
 LOOSENING = frozenset({"makersAsk", "testRunsAsk"})
@@ -75,8 +78,14 @@ class WriteApprovals:
             held = dict(team.get("value") or {})
             # `*` is the workspace's own value (a new workspace's makersAsk off); a team's saved part wins over it.
             workspace = dict(held.get("*") or {})
+            part = dict(held.get(team_id) or {}) if team_id else {}
+            if not isinstance(part.get("makersAsk", workspace.get("makersAsk")), bool):
+                # Every workspace stores makersAsk (a new one at creation, an older one on its next seed run): a
+                # missing value is an unread rule, so the write is refused rather than reading it as on or off.
+                log.warning("approvals.rules_incomplete", tenant_id=tenant_id, missing="appChanges.makersAsk")
+                return None, {}
             if team_id:
-                of_team = {**workspace, **dict(held.get(team_id) or {})}
+                of_team = {**workspace, **part}
             else:
                 # A caller naming no team waits where the workspace asks, and keeps every wait it had: the switches
                 # that only let writes through (makers' asks off, test runs not asking) are not taken from `*`.

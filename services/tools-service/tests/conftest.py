@@ -368,11 +368,13 @@ async def grant(engine: AsyncEngine, tenant: str, module_id: str, approval_id: s
 
 def nothing_saved() -> WriteApprovals:
     """The approval settings of a team that saved none, as platform-service answers them: every write without its own
-    answer runs. Without a reader the rules cannot be read and the gateway refuses every write."""
+    answer runs, and the workspace keeps makers' asks on (stored, as every workspace stores it). Without a reader the
+    rules cannot be read and the gateway refuses every write."""
 
     def empty(request: httpx.Request) -> httpx.Response:
         key = request.url.path.rsplit("/", 1)[-1]
-        return httpx.Response(200, json={"success": True, "data": {"key": key, "value": {}}})
+        value = {"*": {"makersAsk": True}} if key == "appChanges" else {}
+        return httpx.Response(200, json={"success": True, "data": {"key": key, "value": value}})
 
     return WriteApprovals(fake_service(empty, "platform", ["settings:view"]))
 

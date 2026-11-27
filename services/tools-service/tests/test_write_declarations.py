@@ -85,12 +85,13 @@ def _platform(team_level: dict[str, Any], by_app: dict[str, Any]) -> WriteApprov
 
 async def test_the_policy_is_read_for_the_calling_team_and_a_failed_read_has_every_write_wait() -> None:
     policy = _platform(
-        {"team_ops": {"ask": True, "answer": "reviewer"}}, {"team_ops": {"module:m1": {"answer": "none"}}}
+        {"*": {"makersAsk": True}, "team_ops": {"ask": True, "answer": "reviewer"}},
+        {"team_ops": {"module:m1": {"answer": "none"}}},
     )
     ops = await policy.levels("t_a", "team_ops")
-    assert ops == ({"ask": True, "answer": "reviewer"}, {"module:m1": {"answer": "none"}}), ops
+    assert ops == ({"makersAsk": True, "ask": True, "answer": "reviewer"}, {"module:m1": {"answer": "none"}}), ops
     fraud = await policy.levels("t_a", "team_fraud")
-    assert fraud == ({}, {}), "a team that set nothing follows each write's own flag"
+    assert fraud == ({"makersAsk": True}, {}), "a team that set nothing follows each write's own flag"
     unread = await policy.levels("t_b", "team_fraud")
     assert unread[0] is None, "a policy that cannot be read is None, which the resolver counts as every write waits"
 
