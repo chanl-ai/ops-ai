@@ -10,10 +10,20 @@ export const DB_VAR = 'OPS_USECASE_DB';
 /** A deployed host's origin: the api scripts call it instead of starting a stack of their own. */
 export const BASE_URL_VAR = 'OPS_USECASE_BASE_URL';
 
+function externalHostPort(env: NodeJS.ProcessEnv): string {
+  try {
+    return new URL((env.OPS_DATABASE_URL ?? '').replace(/^[^:]+/, 'http')).host || 'postgres:5432';
+  } catch {
+    return 'postgres:5432';
+  }
+}
+
 /** The URL of database `db` by make/env.mk's rule: the devcontainer's side container (OPS_INFRA=external,
  * `postgres:5432`), or this machine's compose PostgreSQL on OPS_PG_PORT. */
 export function pgUrl(db: string, driver = 'postgresql+asyncpg', env: NodeJS.ProcessEnv = process.env): string {
-  if (env.OPS_INFRA === 'external') return `${driver}://ops:ops@postgres:5432/${db}`;
+  // The side container's address is whatever OPS_DATABASE_URL names: `postgres:5432` in the devcontainer, `localhost:5477`
+  // on a hosted runner, where no `postgres` name resolves.
+  if (env.OPS_INFRA === 'external') return `${driver}://ops:ops@${externalHostPort(env)}/${db}`;
   return `${driver}://ops:ops@localhost:${env.OPS_PG_PORT ?? 5477}/${db}`;
 }
 // The local stack's default ports (make/env.mk). A run never takes one, even when the OS offers it.

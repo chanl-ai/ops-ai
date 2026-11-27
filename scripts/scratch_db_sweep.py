@@ -33,6 +33,7 @@ import os
 import re
 import time
 from typing import Any
+from urllib.parse import urlsplit
 
 import asyncpg  # pyright: ignore[reportMissingTypeStubs]
 
@@ -142,7 +143,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     # make/env.mk's rule: the devcontainer's side container (OPS_INFRA=external), else compose on OPS_PG_PORT.
     if os.environ.get("OPS_INFRA") == "external":
-        default = "postgresql://ops:ops@postgres:5432/postgres"
+        # The host and port OPS_DATABASE_URL names: `postgres:5432` in the devcontainer, `localhost:5477` hosted.
+        netloc = urlsplit(os.environ.get("OPS_DATABASE_URL", "")).netloc.rpartition("@")[2] or "postgres:5432"
+        default = f"postgresql://ops:ops@{netloc}/postgres"
     else:
         default = f"postgresql://ops:ops@localhost:{os.environ.get('OPS_PG_PORT', '5477')}/postgres"
     ap.add_argument("--url", default=default)
