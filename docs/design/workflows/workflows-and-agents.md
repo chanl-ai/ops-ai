@@ -26,7 +26,7 @@ runner options are in [workflow nodes](workflow-nodes.md).
 | Workflows | A graph of typed nodes that runs the same steps every time and records each step in a journal. It survives crashes by replaying the journal and never repeats a payment | n8n, LangGraph |
 | Shared services and gateways | Owned by neither: the data gateway (tools) with approvals, the AI gateway (models), Reviews and Cases, triggers and timers, identity and teams, knowledge, files and a work-item feed | |
 
-![Agents and workflows each stand alone on the shared services; the two dashed arrows are the only places they meet, both through public APIs](../../diagrams/platform-map.svg)
+![Agents and workflows each stand alone on the shared services; the two dashed arrows are the only places they meet, both through public APIs](https://opsai.chanl.ai/docs/diagrams/platform-map.svg)
 
 Agents and workflows meet in two places only, both through public APIs: a workflow step can start an agent run, and an
 agent can call a published workflow as a tool through the data gateway.
@@ -159,11 +159,11 @@ diagrams below show the design: solid boxes exist, dashed green boxes are new, d
 another service, and grey boxes retire with the first workflow engine. Every agent and workflow table also carries
 `tenant_id`.
 
-![Entity diagram, agents: registry, the planned agent_runs, agent_run_queue and agent_jobs, threads, events and the durability tables](images/erd-agents.png)
+![Entity diagram, agents: registry, the planned agent_runs, agent_run_queue and agent_jobs, threads, events and the durability tables](https://opsai.chanl.ai/docs/design/workflows/images/erd-agents.png)
 
-![Entity diagram, workflows: definitions, the planned installed_packs and node_types, runs, steps, work and timers, and the first engine's tables that retire](images/erd-workflows.png)
+![Entity diagram, workflows: definitions, the planned installed_packs and node_types, runs, steps, work and timers, and the first engine's tables that retire](https://opsai.chanl.ai/docs/design/workflows/images/erd-workflows.png)
 
-![Entity diagram, shared services: the planned Reviews tables and work items, the planned trigger bindings and events, and the tool registry](images/erd-shared-services.png)
+![Entity diagram, shared services: the planned Reviews tables and work items, the planned trigger bindings and events, and the tool registry](https://opsai.chanl.ai/docs/design/workflows/images/erd-shared-services.png)
 
 `reviews.resume_key` and `work_items.subject_id` point at an agent run or a workflow run by key. Neither is a database
 foreign key, because the rows live in another service.
@@ -471,7 +471,7 @@ One node type holds every fact about a kind of step. The editor, the validator a
 nothing outside itself. A pack reaches the outside only through ports the engine hands it, narrowed to what its type
 declares. Triggers sit outside the engine and call its one start API.
 
-![The layered workflow engine: node packs on the Node SDK contract on the core engine, with trigger adapters calling the start-run API](images/engine-layers.png)
+![The layered workflow engine: node packs on the Node SDK contract on the core engine, with trigger adapters calling the start-run API](https://opsai.chanl.ai/docs/design/workflows/images/engine-layers.png)
 
 ### The node contract
 
@@ -545,7 +545,7 @@ seen within the window (24 hours by default).
 The type's schema is the only source. A custom form can change how editing looks and can never store a value the
 generated form could not, because the server validates every save.
 
-![Forms in layers: the node type in the registry feeds a generated form or an optional custom form; both write the same parameter object, which the server validates](images/node-forms.png)
+![Forms in layers: the node type in the registry feeds a generated form or an optional custom form; both write the same parameter object, which the server validates](https://opsai.chanl.ai/docs/design/workflows/images/node-forms.png)
 
 - Mappings are path lookups such as `{"path": "$.nodes.parse.out.pages"}`, and code-free templates such as
   `{"template": "Dear {{$.input.name}}"}`. No field ever evaluates code.
@@ -564,7 +564,7 @@ The kernel is the code that runs one agent turn: it builds the prompt, calls the
 answer. It gets the same layering as the workflow engine: a core that knows no capability by name, and capabilities that
 plug in through one contract (prompt parts, tools, checkpoint checks, events and a fake for tests).
 
-![The kernel core with tools, knowledge, skills, guardrail kinds and, later, memory as capabilities on one contract](images/kernel-capabilities.png)
+![The kernel core with tools, knowledge, skills, guardrail kinds and, later, memory as capabilities on one contract](https://opsai.chanl.ai/docs/design/workflows/images/kernel-capabilities.png)
 
 | Capability | Today | On the contract | Status |
 |---|---|---|---|
@@ -735,7 +735,7 @@ Ops AI must run on one virtual machine with no container runtime; Compose and Ku
 `--services`, `--no-loops` and `--loops-only` flags change. The same use cases passing in layouts A and C in CI is the
 proof that the layouts are equivalent.
 
-![Three host layouts: all-in-one for development, four processes on one VM for production, and a split by service](images/host-layouts.png)
+![Three host layouts: all-in-one for development, four processes on one VM for production, and a split by service](https://opsai.chanl.ai/docs/design/workflows/images/host-layouts.png)
 
 ### Layout B: which process runs what
 

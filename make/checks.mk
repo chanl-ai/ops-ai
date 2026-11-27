@@ -31,7 +31,7 @@ CHECKS = \
   ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards known-traps usecase-needs \
   downgrades migration-heads token-lifetime cross-service standards service-standards service-standards-self-test list-routes gateway-routes \
   ci-steps ci-steps-self-test ci-local-self-test new-migration-self-test builder-watch-self-test usecase-outputs \
-  staging-hold-tests quarantine quarantine-self-test ci-usecases-self-test pr-flow-self-test lane-self-test
+  staging-hold-tests quarantine quarantine-self-test ci-usecases-self-test pr-flow-self-test lane-self-test md-images md-images-self-test
 
 # Access decided outside can(), the exceptions each lane may still hold, and the trailer a new line needs.
 CHECK_ACCESS_PATHS = ^(services|packages)/[^/]+/src/.*\.py$$|^apps/(console|embed)/src/|^access-exceptions-allowlist\.txt$$|^docs/architecture/roles-and-permissions\.md$$|^scripts/(check_access_exceptions\.py|access-baselines/)
@@ -99,6 +99,13 @@ check-run.api-changelog = $(PY) sdk/changelog_from_api_changes.py --check
 check-paths.api-changelog = ^docs/architecture/migration/api-changes\.md$$|^docs/sdk/changelog-next-major\.md$$|^sdk/changelog_from_api_changes\.py$$
 check-run.api-changes-gap = $(PY) sdk/api_changes_gap.py
 check-paths.api-changes-gap = ^services/[^/]+/openapi\.json$$|^docs/architecture/migration/api-changes\.md$$|^sdk/api_changes_gap\.py$$
+
+# A markdown image that does not load from the docs site: a relative path, raw.githubusercontent.com, or a site URL
+# with no file under docs/ (apps/docs/scripts/copy-images.mjs publishes them).
+check-run.md-images = $(PY) scripts/check_md_images.py
+check-paths.md-images = \.md$$|^docs/.*\.(png|jpe?g|gif|svg|webp)$$|^scripts/check_md_images\.py$$|^apps/docs/src/lib/repo\.mjs$$
+check-run.md-images-self-test = $(PY) scripts/check_md_images.py --self-test
+check-paths.md-images-self-test = ^scripts/check_md_images\.py$$
 
 # Layer directions and database drivers only in stores (.importlinter).
 check-run.lint-imports = $(LINT_IMPORTS)
