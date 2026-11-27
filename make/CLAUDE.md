@@ -86,12 +86,10 @@ run records and knowledge pages have no delete route, so they stay. Code: `sdk/p
 
 ## Known traps
 
-| Trap | What happens |
-|---|---|
-| `OPS_INFRA=shared` with the default stack down | The postgres and OPA ports are the default stack's; an offset stack finds nothing there. Run `make up` on the default stack first. Offset 0 with `shared` is refused |
-| `next dev` started from a Claude session | Next 16.4 exits on a security-upgrade nudge when `AI_AGENT`, `CLAUDECODE` or `CLAUDE_CODE_ENTRYPOINT` is set; `scripts/stack.sh` unsets all three for the console and embed |
-| `make -n` on a recipe line holding `$(MAKE)` | Make runs the whole line even on a dry run, so its other commands run too; so a marker written after a sub-make goes on a recipe line of its own with no `$(MAKE)`, which `-n` skips (`sample-install` in `make/dev.mk`) |
-| A fresh worktree's console | `pnpm install` (with scripts) must run once, or `@chanl-ai/ops-ai` is unbuilt and the console answers 500 |
+- `OPS_INFRA=shared` with the default stack down => The postgres and OPA ports are the default stack's; an offset stack finds nothing there. Run `make up` on the default stack first. Offset 0 with `shared` is refused
+- `next dev` started from a Claude session => Next 16.4 exits on a security-upgrade nudge when `AI_AGENT`, `CLAUDECODE` or `CLAUDE_CODE_ENTRYPOINT` is set; `scripts/stack.sh` unsets all three for the console and embed
+- `make -n` on a recipe line holding `$(MAKE)` => Make runs the whole line even on a dry run, so its other commands run too; so a marker written after a sub-make goes on a recipe line of its own with no `$(MAKE)`, which `-n` skips (`sample-install` in `make/dev.mk`)
+- A fresh worktree's console => `pnpm install` (with scripts) must run once, or `@chanl-ai/ops-ai` is unbuilt and the console answers 500
 
 ## Engineering standards
 
