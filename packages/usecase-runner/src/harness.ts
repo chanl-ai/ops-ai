@@ -1156,6 +1156,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
     const dev = process.env.OPS_USECASE_CONSOLE === 'dev';
     let consoleArgv = ['pnpm', 'exec', 'next', 'dev', '-p', String(CONSOLE_PORT)];
     const consoleEnv: NodeJS.ProcessEnv = { ...env, ...publicEnv };
+    // Next 16.4 exits on a security-upgrade nudge when it sees a coding agent's variables.
+    for (const name of ['AI_AGENT', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT']) delete consoleEnv[name];
     if (dev) {
       writeRunTsconfig();
     } else {

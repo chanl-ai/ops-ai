@@ -8,9 +8,9 @@ exactly what will change, and the change runs once, only after they approve it.
 ## Some actions need a person's approval
 
 An agent can look up an account's balance straight away, because reading data changes nothing. Freezing the account
-or escalating a case is different: someone should see exactly what will change before it happens. If the agent makes
-the change on its own, a mistake goes straight to the customer. If you ask for approval by email instead, nobody can
-later show which input the approver actually saw.
+or escalating a case is different, and you want someone to see exactly what will change before it happens. If the
+agent makes the change on its own, any mistake goes straight to the customer. If you collect the approval by email
+instead, nobody can show later which input the approver actually saw.
 
 When you turn on approvals, any action that changes data waits. The person in the chat, or a reviewer you choose,
 sees the tool and every field it will change. The action runs once, and only after they approve it.
@@ -52,15 +52,16 @@ refused.
 
 ## What happens without approvals
 
-With approvals turned off, an agent's changes go straight to the app, so the first mistaken one lands
-before anyone sees it. An approval kept in an email thread doesn't record which input was approved, so each time
-someone asks for the audit trail, it has to be pieced together by hand.
+With approvals turned off, an agent's changes go straight to the app. If the agent gets one wrong, it reaches the
+app before anyone has had a chance to check it. Approvals kept in an email thread don't record which input was
+approved either, so each time someone asks you for the audit trail, your team has to piece it together by hand.
 
 ![The Human Tasks queue: open, overdue and decided counts, then each request with its time left, status and risk](../../media/human-tasks-light.png)
 
 ## Decide from code
 
-A reviewer can also decide from a script, signed in as themselves. An API key can never decide a task.
+A reviewer can also decide tasks from a script. The script has to sign in as the reviewer, because an API key can't
+decide a task.
 
 ```python tab="Python"
 from ops_ai import OpsAI
@@ -106,8 +107,8 @@ Three questions decide whether an action waits, and who is asked.
           - **Yes**: It waits. A workflow has no person in a chat, so Ask the person becomes Ask a reviewer.
           - **No**: It runs straight away and is logged with who asked.
 
-If Ops AI can't read your team's approval settings, it refuses every change and runs none of them. Reading data still
-works.
+If Ops AI can't read your team's approval settings, it refuses every change, so nothing in your apps changes.
+Reading data still works.
 
 ## Next
 
