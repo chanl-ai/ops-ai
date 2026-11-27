@@ -76,7 +76,7 @@ from ops_store.database import Database
 
 from .alias_users import AgentsAliasUsers, AliasUsers, NoAliasUsers
 from .catalog import Catalog, CatalogModel
-from .connection_settings import OPENAI_LOCAL, azure_openai_problem
+from .connection_settings import azure_openai_problem
 from .key_check import EndpointRefused, KeyRefused, azure_host, listed_models
 from .provider_keys import ProviderKeys
 from .providers import ADAPTERS, AzureOpenAIProvider, ProviderError, StreamUsage, provider_for, region_mismatch
@@ -796,18 +796,20 @@ def create_models_app(
         keys.forget(p.tenant_id, name)
         return typed(_provider_key_view(saved))
 
-    async def connection_base(provider: str) -> str | None:
-        """The base URL the connection serving `provider` is saved with, the one place a key check, a model list and
-        the chat choice learn where calls go: the connection the chat choice keeps for it, else for OpenAI the
-        install's own. None when neither names one, so the provider's own address applies."""
+    async def connection_base(provider: str, key_name: str) -> str | None:
+        """The base URL of the connection that signs in with the key `key_name`, the one place a key check, a model
+        list and the chat choice learn where a key goes: only a connection whose keyRef names the key receives it.
+        None when no OpenAI-compatible connection does, so the provider's own address applies."""
         if provider not in CHAT_BASES:
             return None
-        names = [f"{chat_aliases[0]}-{provider}", *([OPENAI_LOCAL] if provider == "openai" else [])]
-        for name in names:
-            row = next(iter((await providers.page(ListParams(), name=name)).data), None)
-            if row is not None and row.type == "openai-compatible" and row.base_url:
-                return row.base_url
-        return None
+        # A key name can serve two providers' connections; one pointing at another provider's own address is not this
+        # provider's.
+        others = {b for p, b in CHAT_BASES.items() if p != provider}
+        named = (await providers.page(ListParams(), key_ref=key_name)).data
+        return next(
+            (r.base_url for r in named if r.type == "openai-compatible" and r.base_url and r.base_url not in others),
+            None,
+        )
 
     async def saved_key(p: Principal, name: str) -> str:
         """The key's value, read in a transaction of its own that is closed before the key goes to the provider; inside
@@ -841,7 +843,7 @@ def create_models_app(
                 endpoint=body.endpoint,
                 api_version=body.api_version,
                 region=body.region,
-                connection_base=await connection_base(body.provider),
+                connection_base=await connection_base(body.provider, name),
             )
         except KeyRefused as e:
             return typed(KeyCheckOut(ok=False, reason=str(e)))
@@ -877,7 +879,7 @@ def create_models_app(
                 endpoint=endpoint,
                 api_version=api_version,
                 region=region,
-                connection_base=await connection_base(provider),
+                connection_base=await connection_base(provider, name),
             )
         except KeyRefused as e:
             raise Unprocessable(str(e), code="key_refused") from e
@@ -949,7 +951,7 @@ def create_models_app(
             kind, base_url, api_version = "azure-openai", base, body.api_version or "v1"
         else:
             kind, api_version = "openai-compatible", None
-            base_url = await connection_base(body.provider) or CHAT_BASES[body.provider]
+            base_url = await connection_base(body.provider, body.key_name) or CHAT_BASES[body.provider]
         # Every price is settled before anything is written. An alias kept on the same model keeps its nonzero prices,
         # which an admin may have set on the Models page; a body price, or a new model, sets them.
         # Priced by the provider's catalogue, whatever address its connection calls: a gateway in front of OpenAI

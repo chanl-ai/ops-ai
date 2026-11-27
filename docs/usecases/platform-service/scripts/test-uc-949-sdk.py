@@ -53,6 +53,17 @@ def choice(model: str) -> dict[str, Any]:
     return {"provider": "openai", "keyName": "OPENAI", "model": model, **({} if model in CATALOGUED else PRICE)}
 
 
+def bind_install_connection(models_url: str, token: str) -> None:
+    """The stack's install connection (openai-local, at the fake OpenAI) signs in with the saved key, so the key check
+    and the chat choice send that key there and not to api.openai.com: a key goes only to a connection naming it."""
+    auth = {"Authorization": f"Bearer {token}", "X-Team-Id": SECURITY}
+    with httpx.Client(timeout=60, headers=auth) as http:
+        rows = http.get(f"{models_url}/v1/models/providers", params={"ids": "openai-local"}).json()["data"]["data"]
+        assert rows, "the stack has no openai-local connection: start it with OPS_MODELS_FAKE_OPENAI_URL"
+        moved = http.put(f"{models_url}/v1/models/providers/openai-local", json={"baseUrl": rows[0]["baseUrl"], "keyRef": "OPENAI"})
+        assert moved.status_code == 200, moved.text
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--layer", choices=("sdk", "api"), default="sdk")
@@ -79,6 +90,7 @@ def main() -> int:
         if layer == "sdk":
             with OpsAI(base_url=urls["platform"], services=urls, access_token=owner["token"], team=SECURITY) as sec:
                 sec.models.save_key("OPENAI", key)
+                bind_install_connection(urls["models"], owner["token"])
                 tested = sec.models.check_key("OPENAI", "openai")
                 listed = sec.models.key_models("OPENAI", "openai")
                 model = pick(listed)
@@ -88,6 +100,7 @@ def main() -> int:
             m = urls["models"]
             with httpx.Client(timeout=60, headers=auth) as http:
                 assert http.put(f"{m}/v1/provider-keys/OPENAI", json={"value": key}).status_code == 200
+                bind_install_connection(m, owner["token"])
                 tested = http.post(f"{m}/v1/provider-keys/OPENAI/check", json={"provider": "openai"}).json()["data"]
                 listed = http.get(f"{m}/v1/provider-keys/OPENAI/models", params={"provider": "openai"}).json()["data"]
                 model = pick(listed)
