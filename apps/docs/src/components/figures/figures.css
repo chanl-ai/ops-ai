@@ -1,28 +1,37 @@
 /*
+ * Visual language (set 2026-11-26 from the Strands Agents docs' diagram style, redrawn here): flat paper, hairline
+ * 1px strokes, 6-8px corners, no shadows or gradients. Zones are a barely tinted field with a hairline edge; nodes are
+ * paper with a line stroke; the one focal node takes an accent tint and accent stroke; edges are muted 1.25px with
+ * small solid heads; small mono uppercase eyebrows name groups; the caption sits under the frame in muted small text.
+ * The tokens below are the single place this look is set, so every figure type follows it.
+ *
  * The figure library (this folder). A stage with one quiet accent wash, product fragments lifted off it, numbered pins
  * that match the notes beside them. Colours come only from the theme variables in app/global.css; sizes inside a
  * figure follow its own width through container queries, so a figure behaves the same in the page and the gallery.
  */
 .ops-fig {
-  margin: 16px 0; padding: 0; overflow: hidden;
-  border: 1px solid var(--ops-line); border-radius: 10px; background: var(--ops-card);
+  --ops-lift: none;
+  --ops-zone: color-mix(in oklab, var(--ops-fg) 3%, var(--ops-card));
+  --ops-zone-line: color-mix(in oklab, var(--ops-fg) 16%, transparent);
+  --ops-edge: var(--ops-muted);
+  --ops-eyebrow-font: var(--ops-mono);
+  margin: 32px 0; padding: 0; overflow: hidden; border: 0; border-radius: 0; background: none;
 }
 .ops-fig figcaption {
-  margin: 0; padding: 10px 16px 12px; border-top: 1px solid var(--ops-hair);
-  color: var(--ops-muted); font-size: 0.85rem; line-height: 1.5;
+  margin: 12px 0 0; padding: 0; border: 0;
+  color: var(--ops-muted); font-size: 0.8rem; line-height: 1.5;
 }
 .ops-fig-stage {
   container-type: inline-size;
-  padding: 22px 18px;
-  background:
-    radial-gradient(120% 70% at 0% 0%, var(--ops-accent-soft), transparent 60%),
-    var(--ops-soft);
+  padding: 20px 16px;
+  border: 1px solid var(--ops-zone-line); border-radius: 8px;
+  background: var(--ops-zone);
 }
 
 /* A fragment of a product screen. */
 .ops-ui {
-  border: 1px solid var(--ops-hair);
-  border-radius: 10px;
+  border: 1px solid var(--ops-line);
+  border-radius: 6px;
   background: var(--ops-card);
   box-shadow: var(--ops-lift);
   font-size: 0.84rem;
@@ -81,15 +90,15 @@
 .ops-node {
   position: relative; z-index: 1;
   display: grid; place-items: center; width: 26px; height: 26px; border-radius: 999px;
-  background: var(--ops-card); color: var(--ops-accent);
-  border: 1px solid var(--ops-accent);
+  background: var(--ops-card); color: var(--ops-fg);
+  border: 1px solid var(--ops-line);
   font-size: 0.78rem; font-weight: 700; font-variant-numeric: tabular-nums;
 }
 .ops-journey-step > .ops-node { grid-row: 1 / span 2; }
 /* The path: a hairline from each node to the next. */
 .ops-journey-step:not(:last-child)::before {
   content: ''; position: absolute; left: 12.5px; top: 26px; bottom: -14px; width: 1px;
-  background: color-mix(in oklab, var(--ops-accent) 45%, transparent);
+  background: var(--ops-zone-line);
 }
 .ops-journey-ui, .ops-journey-callout { grid-column: 2; min-width: 0; }
 .ops-journey-callout { font-size: 0.88rem; line-height: 1.5; color: var(--ops-muted); }
@@ -125,21 +134,21 @@
 .ops-layers { display: flex; flex-direction: column; align-items: stretch; }
 .ops-layers-frame {
   position: relative; display: flex; flex-direction: column;
-  padding: 26px 12px 12px; border-radius: 14px;
-  border: 1px solid var(--ops-hair); background: color-mix(in oklab, var(--ops-card) 55%, transparent);
+  padding: 28px 12px 12px; border-radius: 8px;
+  border: 1px dashed var(--ops-edge); background: none;
 }
 .ops-layers-frame-label {
   position: absolute; top: 7px; left: 14px; margin: 0;
-  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ops-accent);
+  font-family: var(--ops-eyebrow-font); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ops-muted);
 }
 .ops-layers-row { display: flex; flex-direction: column; }
-.ops-band-arrow { align-self: center; width: 16px; height: 16px; margin: 6px 0; color: var(--ops-muted); }
+.ops-band-arrow { align-self: center; width: 14px; height: 14px; margin: 6px 0; color: var(--ops-edge); }
 .ops-band {
-  display: grid; gap: 10px; padding: 12px 14px; border-radius: 10px;
-  background: var(--ops-card); border: 1px solid var(--ops-hair); box-shadow: var(--ops-lift);
+  display: grid; gap: 10px; padding: 12px 14px; border-radius: 6px;
+  background: var(--ops-card); border: 1px solid var(--ops-line);
 }
 .ops-band-outside { background: transparent; box-shadow: none; border-style: dashed; border-color: var(--ops-line); }
-.ops-band-exit { border-color: color-mix(in oklab, var(--ops-accent) 55%, var(--ops-hair)); }
+.ops-band-exit { border-color: var(--ops-accent); background: color-mix(in oklab, var(--ops-accent) 9%, var(--ops-card)); }
 .ops-band-exit .ops-band-title { color: var(--ops-accent); }
 .ops-band-head p { margin: 0; }
 .ops-band-title { font-weight: 600; font-size: 0.92rem; }
@@ -147,7 +156,7 @@
 .ops-band-parts { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); }
 .ops-band-parts li {
   display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 8px;
-  background: var(--ops-soft); font-size: 0.82rem; line-height: 1.4;
+  background: var(--ops-zone); border: 1px solid var(--ops-hair); font-size: 0.82rem; line-height: 1.4;
 }
 .ops-band-outside .ops-band-parts li { background: var(--ops-card); }
 .ops-band-part-title { font-weight: 600; }
@@ -188,10 +197,10 @@
 
 /* Before and after: the first side muted and dashed, the second lifted with the accent. */
 .ops-pair { display: grid; gap: 12px; }
-.ops-pair-side { display: grid; gap: 8px; align-content: start; padding: 14px 16px; border-radius: 10px; font-size: 0.88rem; line-height: 1.5; }
+.ops-pair-side { display: grid; gap: 8px; align-content: start; padding: 14px 16px; border-radius: 6px; font-size: 0.88rem; line-height: 1.5; }
 .ops-pair-before { border: 1px dashed var(--ops-line); color: var(--ops-muted); }
-.ops-pair-after { background: var(--ops-card); border: 1px solid color-mix(in oklab, var(--ops-accent) 45%, var(--ops-hair)); box-shadow: var(--ops-lift); }
-.ops-pair-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.ops-pair-after { background: color-mix(in oklab, var(--ops-accent) 9%, var(--ops-card)); border: 1px solid var(--ops-accent); }
+.ops-pair-label { font-family: var(--ops-eyebrow-font); font-size: 0.68rem; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; }
 .ops-pair-after .ops-pair-label { color: var(--ops-accent); }
 .ops-pair-points { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
 .ops-pair-points li { position: relative; padding-left: 14px; }
@@ -210,7 +219,7 @@
 .ops-seq-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .ops-seq-msg { display: grid; gap: 2px; padding: 8px 10px; border-radius: 8px; background: var(--ops-card); border: 1px solid var(--ops-hair); font-size: 0.86rem; line-height: 1.45; }
 .ops-seq-ends { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.76rem; font-weight: 600; color: var(--ops-muted); }
-.ops-seq-to { width: 13px; height: 13px; color: var(--ops-accent); }
+.ops-seq-to { width: 13px; height: 13px; color: var(--ops-edge); }
 .ops-seq-num { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 999px; background: var(--ops-accent-soft); color: var(--ops-accent); font-size: 0.68rem; font-weight: 700; font-variant-numeric: tabular-nums; flex: none; }
 .ops-seq-num-wide, .ops-seq-line { display: none; }
 .ops-seq-note { color: var(--ops-muted); font-size: 0.8rem; }
@@ -218,7 +227,7 @@
   .ops-seq { gap: 0; }
   .ops-seq-actors { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 10px; margin-bottom: 6px; position: relative; z-index: 1; }
   .ops-seq-lifelines { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 10px; position: absolute; inset: 0; pointer-events: none; }
-  .ops-seq-lifelines span { justify-self: center; width: 0; border-left: 1px dashed color-mix(in oklab, var(--ops-muted) 45%, transparent); }
+  .ops-seq-lifelines span { justify-self: center; width: 0; border-left: 1px dashed var(--ops-zone-line); }
   .ops-seq-steps { grid-template-columns: repeat(var(--n), minmax(0, 1fr)); column-gap: 10px; row-gap: 4px; position: relative; }
   .ops-seq-step { display: contents; }
   .ops-seq-msg {
@@ -230,11 +239,11 @@
   .ops-seq-num-wide { display: inline-grid; transform: translateY(2px); }
   .ops-seq-line {
     display: block; position: relative; height: 0; margin-top: 4px;
-    border-top: 1.5px solid var(--ops-accent);
+    border-top: 1.25px solid var(--ops-edge);
   }
   .ops-seq-line::after {
     content: ''; position: absolute; top: -5px; width: 8px; height: 8px;
-    border-top: 1.5px solid var(--ops-accent); border-right: 1.5px solid var(--ops-accent);
+    border-top: 1.25px solid var(--ops-edge); border-right: 1.25px solid var(--ops-edge);
   }
   .ops-seq-right .ops-seq-line::after { right: 0; transform: rotate(45deg); }
   .ops-seq-left .ops-seq-line::after { left: 0; transform: rotate(-135deg); }
@@ -249,15 +258,15 @@
 /* State: the states that move on, in order, then the ends set apart. */
 .ops-states { display: grid; gap: 14px; }
 .ops-states-flow { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.ops-state { padding: 10px 12px; border-radius: 10px; background: var(--ops-card); border: 1px solid var(--ops-hair); box-shadow: var(--ops-lift); font-size: 0.86rem; line-height: 1.45; display: grid; gap: 4px; }
+.ops-state { padding: 10px 12px; border-radius: 6px; background: var(--ops-card); border: 1px solid var(--ops-line); font-size: 0.86rem; line-height: 1.45; display: grid; gap: 4px; }
 .ops-state-name { font-weight: 600; }
 .ops-state-text { color: var(--ops-muted); }
 .ops-state-next { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; }
 .ops-state-next li { display: grid; grid-template-columns: 14px 1fr; gap: 6px; align-items: start; font-size: 0.82rem; color: var(--ops-muted); }
-.ops-state-arrow { width: 14px; height: 14px; margin-top: 2px; color: var(--ops-accent); }
+.ops-state-arrow { width: 14px; height: 14px; margin-top: 2px; color: var(--ops-edge); }
 .ops-state-when { margin-right: 2px; }
 .ops-states-ends { display: grid; gap: 8px; }
-.ops-states-ends-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ops-muted); }
+.ops-states-ends-label { font-family: var(--ops-eyebrow-font); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ops-muted); }
 .ops-states-ends ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
 .ops-state-end { box-shadow: none; }
 .ops-state-done { border-color: color-mix(in oklab, var(--ops-new) 40%, var(--ops-hair)); }
@@ -270,13 +279,13 @@
 
 /* Decision: a question, its answers, each an outcome or one more question. */
 .ops-ask { display: grid; gap: 10px; }
-.ops-ask-q { padding: 10px 12px; border-radius: 10px; background: var(--ops-card); border: 1px solid color-mix(in oklab, var(--ops-accent) 40%, var(--ops-hair)); box-shadow: var(--ops-lift); font-size: 0.88rem; line-height: 1.45; }
+.ops-ask-q { padding: 10px 12px; border-radius: 6px; background: var(--ops-card); border: 1px solid var(--ops-accent); background: color-mix(in oklab, var(--ops-accent) 9%, var(--ops-card)); font-size: 0.88rem; line-height: 1.45; }
 .ops-ask-title { font-weight: 600; }
 .ops-ask-text { color: var(--ops-muted); font-size: 0.84rem; }
-.ops-ask-branches { list-style: none; margin: 0; padding: 0 0 0 14px; display: grid; gap: 10px; border-left: 1px solid color-mix(in oklab, var(--ops-accent) 45%, transparent); margin-left: 12px; }
+.ops-ask-branches { list-style: none; margin: 0; padding: 0 0 0 14px; display: grid; gap: 10px; border-left: 1px solid var(--ops-zone-line); margin-left: 12px; }
 .ops-ask-branch { display: grid; gap: 6px; align-content: start; }
 .ops-ask-branch > .ops-chip { justify-self: start; }
-.ops-ask-outcome { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--ops-hair); background: var(--ops-card); font-size: 0.86rem; line-height: 1.45; }
+.ops-ask-outcome { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--ops-line); background: var(--ops-card); font-size: 0.86rem; line-height: 1.45; }
 .ops-ask-outcome-lead { border: 0; background: none; padding: 0 2px; color: var(--ops-muted); font-size: 0.82rem; }
 @container (min-width: 640px) {
   .ops-fig-stage > .ops-ask > .ops-ask-branches { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
@@ -284,8 +293,8 @@
 
 /* Compare: options side by side, rows aligned across them with subgrid; stacked on a phone. */
 .ops-compare { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
-.ops-compare-option { display: grid; gap: 8px; align-content: start; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--ops-hair); background: var(--ops-card); font-size: 0.86rem; line-height: 1.45; }
-.ops-compare-pick { border-color: color-mix(in oklab, var(--ops-accent) 55%, var(--ops-hair)); box-shadow: var(--ops-lift); }
+.ops-compare-option { display: grid; gap: 8px; align-content: start; padding: 12px 14px; border-radius: 6px; border: 1px solid var(--ops-hair); background: var(--ops-card); font-size: 0.86rem; line-height: 1.45; }
+.ops-compare-pick { border-color: var(--ops-accent); background: color-mix(in oklab, var(--ops-accent) 9%, var(--ops-card)); }
 .ops-compare-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
 .ops-compare-name { font-weight: 600; font-size: 0.94rem; }
 .ops-compare-text { color: var(--ops-muted); }
@@ -300,7 +309,7 @@
 /* Timeline: moments on one track, down on a phone and across on a wide page. */
 .ops-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
 .ops-moment { position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; align-content: start; font-size: 0.86rem; line-height: 1.45; }
-.ops-moment:not(:last-child)::before { content: ''; position: absolute; left: 12.5px; top: 26px; bottom: -14px; width: 1px; background: color-mix(in oklab, var(--ops-accent) 45%, transparent); }
+.ops-moment:not(:last-child)::before { content: ''; position: absolute; left: 12.5px; top: 26px; bottom: -14px; width: 1px; background: var(--ops-zone-line); }
 .ops-moment-body { display: grid; gap: 2px; padding-top: 3px; align-content: start; }
 .ops-moment-when { font-weight: 700; color: var(--ops-accent); font-variant-numeric: tabular-nums; }
 .ops-moment-note { color: var(--ops-muted); font-size: 0.8rem; }
@@ -343,8 +352,8 @@
   --u: calc(100cqw / 62);
   font-size: min(13px, var(--u));
   display: grid; grid-template-columns: 11.5em minmax(0, 1fr);
-  border: 1px solid var(--ops-hair); border-radius: 0.9em; overflow: hidden;
-  background: var(--ops-card); box-shadow: var(--ops-lift); color: var(--ops-fg); line-height: 1.4;
+  border: 1px solid var(--ops-line); border-radius: 0.6em; overflow: hidden;
+  background: var(--ops-card); color: var(--ops-fg); line-height: 1.4;
 }
 .ops-preview-side { padding: 1em 0.7em; border-right: 1px solid var(--ops-hair); background: var(--ops-soft); display: grid; gap: 0.9em; align-content: start; }
 .ops-preview-group { display: grid; gap: 0.15em; }
