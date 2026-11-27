@@ -32,9 +32,9 @@ carries on from the one before it.
 | Grant a tool | built | built | built |
 | Test a draft | built | built | built |
 | Run and stream every event | built | upcoming | built |
-| Run in the background | partial | upcoming | upcoming |
+| Run in the background | partial | upcoming | partial |
 | Score with cases | built | built | built |
-| Write the agent as a brief, check what blocks a publish, add what the brief mentions | upcoming | upcoming | upcoming |
+| Write the agent as a brief, check what blocks a publish, add what the brief mentions | built | built | built |
 
 ## Put an agent your team can chat with into a file
 
@@ -45,7 +45,7 @@ Because the definition lives in a file or a few lines of code, a change to it ca
 - **Draft**: Your edits, which nobody chats with
   - **Publish requested**: You send a publish request
 - **Publish requested**: Your team's publish policy decides whether a reviewer is needed
-  - **Published**: A reviewer approves. A first publish needs one, and the person who asked cannot approve it
+  - **Published**: A reviewer approves. A first publish needs one, and a team that has turned on the two-person rule does not let the person who asked approve it
 - **Published**: People chat with this version
 
 In Python, `apply` creates the agent, or updates the draft of the agent that already has this name.
@@ -106,7 +106,8 @@ opsai agents publish "$AGENT" --note "First version"
 | `memory` | Whether it remembers facts between conversations |
 
 `validate` checks that a file has a name and a role before anything is sent. The publish request comes back with its
-status, which is `approved` when no reviewer is needed.
+status, which is `approved` when no reviewer is needed. When one is needed, the examples approve the request as the
+`reviewer` profile from [Connect once, then copy any example](README.md#connect-once-then-copy-any-example).
 
 ## Ask a question and follow up in the same conversation
 
@@ -291,7 +292,7 @@ opsai agents trace "$AGENT"
 
 A background run is carried by the program that started it, so keep that program running until the reply is on the
 thread. A script that exits straight after the call loses the run. The command line loses it too, because it exits as
-soon as it has printed the ids. Runs that carry on without the caller are upcoming.
+soon as it has printed the ids. A background run that carries on without the caller is upcoming.
 
 ## Check that a change keeps your answers right
 
@@ -332,11 +333,7 @@ If you publish an agent without a test turn or a scored case, your team gets wha
 answer about a payoff period or a return window is then often found by a customer first, and nothing records which
 change caused it.
 
-## Upcoming: write what the agent is for, and what it must never do
-
-> [!NOTE]
-> **Upcoming.** This section is merged and is not in the current release (v1.0.0). Its examples were run against
-> the merged code.
+## Write what the agent is for, and what it must never do
 
 One long block of instructions mixes what the agent is for, how it should answer and what it must never do, and a
 reviewer cannot tell which line is a hard rule. A brief keeps these apart, and it is the way to start a new agent.
@@ -451,8 +448,11 @@ In TypeScript these are `ops.agents.eval(id)`, `evalCases`, `addEvalCases`, `eva
 | `brief.purpose` | What the agent is for. Required |
 | `brief.goal` | What a finished conversation looks like |
 | `brief.howToAnswer` | Tone, wording and method. Name a tool, knowledge base, skill, agent or workflow with `@` |
+| `brief.handOff` | Up to 10 moments when the agent passes the conversation to a person |
+| `brief.examples` | Examples of good answers, up to 4,000 characters |
 | `brief.never` | Up to 20 hard rules. They are sent to the model last, before every reply |
 | `brief.success` | Up to 8 lines kept for grading. They are not sent to the model |
+| `brief.sections` | Headed sections such as Tone or Context, each `{kind, name, text}`, from the workspace's section list, plus up to five of your own with `kind: custom`. Each is placed in the prompt where it belongs, and the never rules stay last |
 | `patterns.thinking` | How hard the model thinks: `default`, `low`, `medium` or `high` |
 | `patterns.parallelReads` | Whether read tools may run side by side. On by default |
 
@@ -461,7 +461,7 @@ In TypeScript these are `ops.agents.eval(id)`, `evalCases`, `addEvalCases`, `eva
 | `promptMode` is `brief` | The instructions are written from the brief. Saving `instructions` on their own is refused with `brief_owns_prompt` |
 | `publish_check` lists `missing_reference` | The brief mentions something the agent does not hold, and the field it is in. The agent cannot be published until you add it or remove the mention |
 | `add_reference` returns an empty `added` | The agent already held it, and no new draft was saved |
-| The publish request is `pending` | A brief with never rules is approved by a second person before it goes live, except on a development stack that approves at once |
+| The publish request is `pending` | A brief with never rules is approved by a reviewer before it goes live, except on a development stack that approves at once |
 
 ## What to do next
 

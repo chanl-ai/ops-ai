@@ -1,10 +1,6 @@
 # Step-by-step skills
 
-Status: upcoming.
-
-> [!NOTE]
-> **Upcoming.** Everything on this page is merged to develop and runs on staging, but it is not in the current release
-> (v1.0.0). The examples were run against the merged code. For what works today, see [Skill examples](skills.md).
+Status: current.
 
 Some procedures must happen in order, every time. An agent looks up the charge, confirms the amount with the person,
 and only then refunds. If you write that order as free text in a skill, the agent reads it as guidance and may skip a
@@ -126,84 +122,8 @@ opsai skills publish "$SKILL" --note "First version"
 saves a new draft of the skill the file names by id, slug or name. The stored steps say who judges each check, either
 `rule` or `model`.
 
-## Write the skill as text
-
-The console's skill page and the `source` field of a draft save take the same skill as plain text, written like a
-prompt. Every line is an instruction to the agent, and the lines in this table are also enforced:
-
-| You write | It becomes |
-|---|---|
-| A line that mentions a tool, an agent, a workflow or a skill (`@tool:find_customer`) | A step that may use it. Plain lines above it are part of that step's instruction |
-| A numbered or bulleted line (`1.`, `-`, `•`) at the top level, with or without a mention | A step of its own. Plain lines above it are part of that step's instruction; a list indented under a plain line stays part of that line |
-| Plain paragraphs with no list marker and no mention | Instructions the agent reads as it sees fit; no steps are made |
-| The same line ending in `(locked)` | The step's tool is offered only on this line, even when it only reads |
-| `if <condition>:` with an indented block, then `else:` at the same indent | A path: the nearest tool line above it in its block decides it, so plain lines between the two stay part of that step, and the other block is skipped |
-| `stop "reason"` (or `stop <exit> "reason"`), under an `if` or `else` | An exit that ends the skill with that reason. A bare `stop <exit>` needs an ending the skill declares (or `done`, `failed`); any other bare `stop …` line is an instruction |
-| `if not <condition>:` with only `try again` (`try again 2 times`) or `go back to step 3` under it | The condition becomes the step's own check: a failure asks again up to that many times, or goes back to that step |
-
-```text title="customer-lookup.txt"
-Greet them and ask for the email or order number they used.
-Look them up with @tool:find_customer
-if found:
-    Confirm their name and read the last order from @tool:order_history
-    if they want a refund:
-        Follow @knowledge:refund_policy, then use @tool:issue_refund
-    else:
-        Answer from @knowledge:help_center
-else:
-    Ask for the email they used at checkout.
-    if not verified:
-        stop "Could not verify the caller"
-Thank them.
-```
-
-A procedure pasted from a document reads the way it looks. `If …:`, `Otherwise:` and `Stop "…"` work like `if …:`,
-`else:` and `stop "…"`. A list marker (`•`, `-`, `1.`) is not read. Non-breaking or full-width spaces and Windows
-line endings count as ordinary ones. The rules below keep a flat list reading as a list:
-
-| Line | Reads as |
-|---|---|
-| `If …:` or `Otherwise:`, with or without a list marker, with indented lines under it | A path |
-| The same line with nothing indented under it, as in a flat numbered list (`2. If active:` / `3. Open the claim` / `4. Otherwise:`) | A plain line (a step of its own when it has a list marker), with a hint to indent the path |
-| `Stop` or `- Stop` with no reason, under an `if` or `else` | An exit |
-| `stop`, `Stop "Reason"` or `- Stop` at the top level, outside any path, with or without a reason | A plain line, with a hint to indent it under an `if` |
-| `stop "Reason"` under an `if` or `else` | An exit |
-
-So `2. If active:` followed by an indented `Open the claim` is a path, while the same lines written flat stay five
-steps that the agent reads in order.
-
-In the console editor, you can click a mention to replace or remove it, and tap a line with a wavy underline to read
-its hint. Every hint is also listed under the text. To leave the editor with the keyboard, press Esc then Tab. A new
-skill opens with a short example of one mention line and one path.
-
-| Condition | How it is decided |
-|---|---|
-| Made of words the tool above returns (`found`, `not found`, `status is VIP`, `amount is more than 500`), or written as a rule (`result.balance > 0`) | Checked: a rule runs in code on the tool's result, labelled "checked" in the editor |
-| Anything else (`they want a refund`) | The agent decides from the conversation and says which way it went: `step_done` with `holds` true or false. The kernel refuses `step_done` on that step without it. Labelled "agent decides" |
-
-A path that is not taken does not count as a failure. It takes no hold and counts no attempt.
-
-A `stop` that a checked condition leads to is a guard, whichever side of its `if` it sits on (`if not verified: stop …`
-and `if flagged: stop …` alike). A guard takes the hold, and a value that is missing takes the guarded path, as a
-failed check does. A `stop` that an "agent decides" condition leads to ends the skill without a hold. A path that
-reaches the end before the last line still asks for the skill's results before it ends as done.
-
-Nothing in the text stops a save. A line the reader cannot use gets a hint on that line. So does a tool that changes
-something on a path the agent decides, on either side of the `if` and at any depth under it. Hints never stop a save
-or a publish, and the publish check lists them as warnings of kind `hint`. A team that turns on **Strict skill
-publishing** (the `skillPublishStrict` setting on Governance › Policies) refuses that one hint at publish instead, as a
-`bad_check` problem on its line.
-
-These also block a publish:
-
-- A mention of something that no longer exists. The problem names the line it is on (`position.field` `source`,
-  `position.index` the line).
-- A text that makes more than 30 steps. None of its tools or paths could be enforced, so it is a `bad_step` problem on
-  the 31st step's line.
-
-Each step's prompt carries only that step's lines. `POST /v1/skills/{id}/text` reads a text without saving it, by the
-same reader a save runs. A skill saved as a list of steps is shown as text by that reader, and it keeps its stored
-steps until its text is saved.
+A skill can also be written as plain text, without the file fields. [Write the skill as text](#write-the-skill-as-text)
+at the end of this page lists what each kind of line becomes.
 
 ## Give the skill to an agent and follow the steps
 
@@ -403,6 +323,85 @@ which steps ran and why the skill ended.
 
 ## What to do next
 
-- [Skill examples](skills.md): what skills do today.
-- [Workflow examples](workflows.md): fixed steps with a person's approval, built today.
+- [Skill examples](skills.md): write, publish and attach a skill that has no steps.
+- [Workflow examples](workflows.md): fixed steps with a person's approval.
 - [Coming from another framework](coming-from-other-frameworks.md): how this compares with procedures in other agent frameworks.
+
+## Write the skill as text
+
+The console's skill page and the `source` field of a draft save take the same skill as plain text, written like a
+prompt. Every line is an instruction to the agent, and the lines in this table are also enforced:
+
+| You write | It becomes |
+|---|---|
+| A line that mentions a tool, an agent, a workflow or a skill (`@tool:find_customer`) | A step that may use it. Plain lines above it are part of that step's instruction |
+| A numbered or bulleted line (`1.`, `-`, `•`) at the top level, with or without a mention | A step of its own. Plain lines above it are part of that step's instruction; a list indented under a plain line stays part of that line |
+| Plain paragraphs with no list marker and no mention | Instructions the agent reads as it sees fit; no steps are made |
+| The same line ending in `(locked)` | The step's tool is offered only on this line, even when it only reads |
+| `if <condition>:` with an indented block, then `else:` at the same indent | A path: the nearest tool line above it in its block decides it, so plain lines between the two stay part of that step, and the other block is skipped |
+| `stop "reason"` (or `stop <exit> "reason"`), under an `if` or `else` | An exit that ends the skill with that reason. A bare `stop <exit>` needs an ending the skill declares (or `done`, `failed`); any other bare `stop …` line is an instruction |
+| `if not <condition>:` with only `try again` (`try again 2 times`) or `go back to step 3` under it | The condition becomes the step's own check: a failure asks again up to that many times, or goes back to that step |
+
+```text title="customer-lookup.txt"
+Greet them and ask for the email or order number they used.
+Look them up with @tool:find_customer
+if found:
+    Confirm their name and read the last order from @tool:order_history
+    if they want a refund:
+        Follow @knowledge:refund_policy, then use @tool:issue_refund
+    else:
+        Answer from @knowledge:help_center
+else:
+    Ask for the email they used at checkout.
+    if not verified:
+        stop "Could not verify the caller"
+Thank them.
+```
+
+A procedure pasted from a document reads the way it looks. `If …:`, `Otherwise:` and `Stop "…"` work like `if …:`,
+`else:` and `stop "…"`. A list marker (`•`, `-`, `1.`) is not read. Non-breaking or full-width spaces and Windows
+line endings count as ordinary ones. The rules below keep a flat list reading as a list:
+
+| Line | Reads as |
+|---|---|
+| `If …:` or `Otherwise:`, with or without a list marker, with indented lines under it | A path |
+| The same line with nothing indented under it, as in a flat numbered list (`2. If active:` / `3. Open the claim` / `4. Otherwise:`) | A plain line (a step of its own when it has a list marker), with a hint to indent the path |
+| `Stop` or `- Stop` with no reason, under an `if` or `else` | An exit |
+| `stop`, `Stop "Reason"` or `- Stop` at the top level, outside any path, with or without a reason | A plain line, with a hint to indent it under an `if` |
+| `stop "Reason"` under an `if` or `else` | An exit |
+
+So `2. If active:` followed by an indented `Open the claim` is a path, while the same lines written flat stay five
+steps that the agent reads in order.
+
+In the console editor, you can click a mention to replace or remove it, and tap a line with a wavy underline to read
+its hint. Every hint is also listed under the text. To leave the editor with the keyboard, press Esc then Tab. A new
+skill opens with a short example of one mention line and one path.
+
+| Condition | How it is decided |
+|---|---|
+| Made of words the tool above returns (`found`, `not found`, `status is VIP`, `amount is more than 500`), or written as a rule (`result.balance > 0`) | Checked: a rule runs in code on the tool's result, labelled "checked" in the editor |
+| Anything else (`they want a refund`) | The agent decides from the conversation and says which way it went: `step_done` with `holds` true or false. The kernel refuses `step_done` on that step without it. Labelled "agent decides" |
+
+A path that is not taken does not count as a failure. It takes no hold and counts no attempt.
+
+A `stop` that a checked condition leads to is a guard, whichever side of its `if` it sits on (`if not verified: stop …`
+and `if flagged: stop …` alike). A guard takes the hold, and a value that is missing takes the guarded path, as a
+failed check does. A `stop` that an "agent decides" condition leads to ends the skill without a hold. A path that
+reaches the end before the last line still asks for the skill's results before it ends as done.
+
+Nothing in the text stops a save. A line the reader cannot use gets a hint on that line. So does a tool that changes
+something on a path the agent decides, on either side of the `if` and at any depth under it. Hints never stop a save
+or a publish, and the publish check lists them as warnings of kind `hint`. A team that turns on **Strict skill
+publishing** (the `skillPublishStrict` setting on Governance › Policies) refuses that one hint at publish instead, as a
+`bad_check` problem on its line.
+
+These also block a publish:
+
+- A mention of something that no longer exists. The problem names the line it is on (`position.field` `source`,
+  `position.index` the line).
+- A text that makes more than 30 steps. None of its tools or paths could be enforced, so it is a `bad_step` problem on
+  the 31st step's line.
+
+Each step's prompt carries only that step's lines. `POST /v1/skills/{id}/text` reads a text without saving it, by the
+same reader a save runs. A skill saved as a list of steps is shown as text by that reader, and it keeps its stored
+steps until its text is saved.

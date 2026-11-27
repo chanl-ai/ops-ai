@@ -11,7 +11,7 @@ INSTALL.md are built; edit them there. -->
 
 Install Ops AI for a team on your own infrastructure. On one machine, the install script does every step and checks the
 result; on a cluster, or when you run each step yourself, the same images start from Compose or Kubernetes files.
-Version 1.0.0 is the current release, and its images are published at `ghcr.io/chanl-ai/ops-ai`.
+Version 1.2.0 is the current release, and its images are published at `ghcr.io/chanl-ai/ops-ai`.
 
 > [!NOTE]
 > To try Ops AI on a laptop rather than install it for a team, use the [Quickstart](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/quickstart.md): it runs from a
@@ -31,7 +31,7 @@ Version 1.0.0 is the current release, and its images are published at `ghcr.io/c
 ### Install
 
 ```bash
-git clone --branch v1.0.0 https://github.com/chanl-ai/ops-ai.git
+git clone --branch v1.2.0 https://github.com/chanl-ai/ops-ai.git
 cd ops-ai
 ./install.sh
 ```
@@ -254,7 +254,10 @@ needs `--admin-url-file <file>` to take the backup.
 - Each step of `upgrade.sql` checks the version it starts from and stops before any change when the database is
   somewhere else, so running it twice is refused.
 - Some steps move rows that the running release still writes. Stop the services before the database step, and start
-  only the new release after it.
+  only the new release after it. Agents 0120 (stored skill step tools) does not need the stop: it rewrites skill and
+  agent versions one batch per transaction, each batch setting its table's policy aside and putting it back, so the
+  services keep serving. A version the earlier release saves after its last pass is refused by the publish check and
+  the attach until its builder marks the step's tool.
 
 ### Roll back
 

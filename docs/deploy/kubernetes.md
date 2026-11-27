@@ -11,7 +11,7 @@ are the ones Compose runs, and PostgreSQL stays outside the cluster.
 | Item | What you need |
 |---|---|
 | A cluster | `kubectl` with Kustomize, a namespace you may create, and a network plugin that enforces NetworkPolicy (Calico, Cilium or similar) |
-| The manifests | A clone at the release tag: `git clone --branch v1.0.0 https://github.com/chanl-ai/ops-ai.git` |
+| The manifests | A clone at the release tag: `git clone --branch v1.2.0 https://github.com/chanl-ai/ops-ai.git` |
 | PostgreSQL | 15 or newer, installed by your DBA with one login per service ([Database](database.md)) |
 | A model endpoint | Any OpenAI-compatible endpoint and its key |
 | Python with uv | On the machine you install from, to write the Secrets |

@@ -10,7 +10,7 @@ process does not allow an install script. The [install script](install.md) runs 
 | Item | What you need |
 |---|---|
 | A host | Linux with Docker Engine 24 or newer and Compose 2.22 or newer ([Sizing](../guide/deployment-options.md#sizing)) |
-| The files | A clone at the release tag: `git clone --branch v1.0.0 https://github.com/chanl-ai/ops-ai.git`. The commands below run from its root. An unpacked [release package](release-package.md) holds the same files under `compose/`, with the template as `ops-ai.env.example` |
+| The files | A clone at the release tag: `git clone --branch v1.2.0 https://github.com/chanl-ai/ops-ai.git`. The commands below run from its root. An unpacked [release package](release-package.md) holds the same files under `compose/`, with the template as `ops-ai.env.example` |
 | PostgreSQL | 15 or newer, with the schema applied by your DBA ([Database](database.md)), or a superuser login the schema job applies it with |
 | A model endpoint | Any OpenAI-compatible endpoint and its key |
 
@@ -21,12 +21,12 @@ process does not allow an install script. The [install script](install.md) runs 
 
    ```bash
    cp deploy/compose/app.env.example ~/ops-ai.env
-   docker run --rm --entrypoint python ghcr.io/chanl-ai/ops-ai/platform:1.0.0 \
+   docker run --rm --entrypoint python ghcr.io/chanl-ai/ops-ai/platform:1.2.0 \
      /app/deploy/fly/generate_keys.py >> ~/ops-ai.env
    ```
 
    Every setting is listed in the file with a comment. Delete the empty key lines the generated ones replace, then set
-   at least `OPS_PUBLIC_ORIGIN`, `OPS_PUBLIC_PORT`, `OPS_IMAGE_PREFIX=ghcr.io/chanl-ai/ops-ai`, `OPS_IMAGE_TAG=1.0.0`, the database settings and the six
+   at least `OPS_PUBLIC_ORIGIN`, `OPS_PUBLIC_PORT`, `OPS_IMAGE_PREFIX=ghcr.io/chanl-ai/ops-ai`, `OPS_IMAGE_TAG=1.2.0`, the database settings and the six
    `OPS_BOOTSTRAP_*` values that name the organisation and the first admin.
 
 2. **Start it.**

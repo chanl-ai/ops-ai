@@ -9,7 +9,7 @@ and reports on the same install. Use it when Ops AI runs on one machine. For a c
 ## Install
 
 ```bash
-git clone --branch v1.0.0 https://github.com/chanl-ai/ops-ai.git
+git clone --branch v1.2.0 https://github.com/chanl-ai/ops-ai.git
 cd ops-ai
 ./install.sh
 ```

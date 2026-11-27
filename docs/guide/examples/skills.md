@@ -24,14 +24,14 @@ use the agent from [Agent examples](agents.md#put-an-agent-your-team-can-chat-wi
 | Task | Python | TypeScript | Command line |
 |---|---|---|---|
 | List and read skills | built | built | built |
-| Write and publish a skill | built, by API operation name | built, by API operation name | upcoming |
-| Attach a skill to an agent | built, by API operation name | built, by API operation name | upcoming |
+| Write and publish a skill | built | built | built |
+| Attach a skill to an agent | built, by API operation name | built, by API operation name | built |
 | Pick a skill for one reply | built | built | built |
-| Write and publish with `ops.skills` and `opsai skills apply` | upcoming | upcoming | upcoming |
-| Skills that run step by step | upcoming | upcoming | upcoming |
+| Skills that run step by step | built | built | built |
 
-"By API operation name" means the SDK has no short verb for the task yet, so you call the operation under `ops.raw`
-with the name the API reference gives it.
+"By API operation name" means the SDKs have no short verb for attaching a skill with a version pin, so you call the
+operation under `ops.raw` with the name the API reference gives it. The first example below also writes the skill that
+way; [Manage skills with their own verbs](#manage-skills-with-their-own-verbs) shows the shorter calls.
 
 ## Write the return procedure once
 
@@ -82,7 +82,7 @@ const published = await ops.raw.agents.agents_request_skill_publish({ path: { sk
 console.log(skill.id, published.status, published.publishedVersion);
 ```
 
-The command line cannot create a skill yet. Use Python or TypeScript for this step; the command line lists and reads skills.
+On the command line, `opsai skills apply` creates a skill from a file, as shown under [Manage skills with their own verbs](#manage-skills-with-their-own-verbs). The commands below list and read skills.
 
 ```bash
 opsai skills list --search "Return checklist"
@@ -162,13 +162,10 @@ opsai chat say --agent "Returns helper" --skill "$SKILL" --input order_number=11
 Each reply records the skills it used. `how` is `picked` when a person chose the skill, and the record keeps the
 skill's version and the inputs it was given.
 
-## Upcoming: manage skills with their own verbs
+## Manage skills with their own verbs
 
-> [!NOTE]
-> **Upcoming.** This section is merged and is not in the current release (v1.0.0). The verbs were run against
-> the merged code on [Step-by-step skills](step-by-step-skills.md).
-
-Skills will get their own verbs, so you can keep a skill in a file and apply and publish it the way you do an agent.
+Skills have their own verbs in both SDKs and on the command line, so you can keep a skill in a file and apply and
+publish it the way you do an agent.
 
 ```python
 skill = ops.skills.create({"name": "Return checklist", "instructions": "..."})
@@ -191,7 +188,7 @@ opsai skills export <id> --format yaml
 opsai skills references <id> --search refund
 ```
 
-| Verb | What it will do |
+| Verb | What it does |
 |---|---|
 | `create`, `save_draft` / `apply` | Create a skill, or save a new draft of the skill a file names by id, slug or name |
 | `publish` | Ask to publish the newest draft. A skill that cannot be published is refused, and the error names each problem |
@@ -204,12 +201,13 @@ The skill is published at version 1, and the agent holds it at that version. Whe
 reply records which skill and version ran and the inputs it was given, so a reviewer can see which procedure produced
 an answer.
 
-On a team that requires a review, `publishedVersion` stays empty until a second person approves the publish, so wait for that before you attach the skill.
+On a team that requires a review, `publishedVersion` stays empty until the publish is approved, so wait for that before you attach the skill. A reviewer approves it, as the `reviewer` profile from
+[Connect once, then copy any example](README.md#connect-once-then-copy-any-example).
 
 If you skip the version pin, the agent keeps whatever version it was last attached to, and a reviewer cannot tell which one that is.
 
 ## What to do next
 
-- [Step-by-step skills](step-by-step-skills.md): numbered steps with checks, exits and sub-skills. Upcoming.
+- [Step-by-step skills](step-by-step-skills.md): numbered steps with checks, exits and sub-skills.
 - [Agent examples](agents.md): the agent these skills attach to.
 - [Workflow examples](workflows.md): fixed steps with a person's approval.

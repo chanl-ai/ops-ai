@@ -1,6 +1,6 @@
 # Deploy and operate
 
-Status: current. Version 1.0.0 is the current release.
+Status: current. Version 1.2.0 is the current release.
 
 Run Ops AI on your own infrastructure and keep it healthy. These pages are for the operator who installs and runs Ops
 AI for a team, and the DBA who looks after its database; each one is a task with the commands you type.

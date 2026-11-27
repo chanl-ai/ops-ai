@@ -7,7 +7,7 @@ INSTALL.md are built; edit them there. -->
 
 Install Ops AI for a team on your own infrastructure. On one machine, the install script does every step and checks the
 result; on a cluster, or when you run each step yourself, the same images start from Compose or Kubernetes files.
-Version 1.0.0 is the current release, and its images are published at `ghcr.io/chanl-ai/ops-ai`.
+Version 1.2.0 is the current release, and its images are published at `ghcr.io/chanl-ai/ops-ai`.
 
 > [!NOTE]
 > To try Ops AI on a laptop rather than install it for a team, use the [Quickstart](quickstart.md): it runs from a

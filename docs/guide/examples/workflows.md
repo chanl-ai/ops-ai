@@ -29,6 +29,7 @@ Connect first: see [Connect once, then copy any example](README.md#connect-once-
 | Start a run and wait for it | built | built | built |
 | Decide a waiting task | built | built | built |
 | Read what a run did | built | built | built |
+| Run a workflow on a repeating schedule | built | built | built |
 | Replay or fork a past run | upcoming | upcoming | upcoming |
 
 ## Write the refund rule and run it
@@ -164,8 +165,9 @@ with its ports and parameters, run `opsai workflows types`.
 A large refund needs a person's approval. The run should stop, show that person the facts, and carry on down the path
 they choose.
 
-Put a review step before anything a person must answer for. The person who started a run cannot decide its review, so
-the examples decide as a second person.
+Put a review step before anything a person must answer for. When your team has turned on the two-person rule, the person
+who started a run cannot decide its review, so the examples decide as a second person. They use the `reviewer` profile
+from [Connect once, then copy any example](README.md#connect-once-then-copy-any-example).
 
 ```python
 run = ops.workflows.run(
@@ -364,4 +366,5 @@ The $20 refund ends as `auto_approved`. The $120 refund stops with the status `w
 - [Workflows](../workflows.md): the lifecycle, start surfaces and the full list of example folders.
 - [Workflow example coverage](../workflow-example-coverage.md): every step type and the example that teaches it.
 - [Agent examples](agents.md): build the agent a workflow step asks.
-- [Step-by-step skills](step-by-step-skills.md): numbered steps inside a chat. Upcoming.
+- [Schedule a workflow or an agent](../schedule-a-workflow.md): set the repeating schedule from the console.
+- [Step-by-step skills](step-by-step-skills.md): numbered steps inside a chat.

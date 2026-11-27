@@ -4,7 +4,7 @@ Status: current.
 
 You have built agents with LangChain and LangGraph, the OpenAI Agents SDK or Strands Agents, and you are weighing
 Ops AI. This page maps each pattern you already use onto Ops AI. For every pattern it says what you wrote there, how you
-do it here, and which example to run. Anything that is not in the current release is marked upcoming.
+do it here, and which example to run. Anything that is not in the current release, v1.2.0, is marked upcoming.
 
 The main difference is where the agent lives. In those frameworks an agent is an object in your program. In Ops AI an
 agent is a reviewed, versioned record on the platform, and your code creates it, publishes it and talks to it. Approvals,
@@ -19,7 +19,7 @@ approvals and audit trail sitting unused beside it.
 1. **Find your pattern** in the table below and read its short entry.
 2. **Run the example it points to**, to see the Ops AI way on one small agent.
 3. **Move the agent's instructions, tools and knowledge** into the file the example applies, then publish it.
-4. **Check the Upcoming rows** for anything your agent needs that the current release does not have yet.
+4. **Check the upcoming rows** for anything your agent needs that the current release does not have yet.
 
 Framework names on this page were read from each project's public documentation on 19 November 2026.
 
@@ -41,14 +41,14 @@ Framework names on this page were read from each project's public documentation 
 | 12 | [Long-term memory](#12-long-term-memory) | built | |
 | 13 | [Guardrails](#13-guardrails) | partial | |
 | 14 | [Tracing](#14-tracing) | partial | [See which path a run took](workflows.md#see-which-path-a-run-took) |
-| 15 | [Evals](#15-evals) | partial | [Check that a change keeps your answers right](agents.md#check-that-a-change-keeps-your-answers-right) |
+| 15 | [Evals](#15-evals) | built | [Check that a change keeps your answers right](agents.md#check-that-a-change-keeps-your-answers-right) |
 | 16 | [Streaming](#16-streaming) | built | [Start a long reply and read it later](agents.md#start-a-long-reply-and-read-it-later) |
 | 17 | [MCP tools](#17-mcp-tools) | built | |
 | 18 | [Runs that survive a restart](#18-runs-that-survive-a-restart) | partial | [Workflow examples](workflows.md) |
-| 19 | [Scheduled agents](#19-scheduled-agents) | partial | |
+| 19 | [Scheduled agents](#19-scheduled-agents) | built | |
 | 20 | [Deployment](#20-deployment) | built | |
 | 21 | [Skills loaded when needed](#21-skills-loaded-when-needed) | built | [Skill examples](skills.md) |
-| 22 | [Procedures that run step by step](#22-procedures-that-run-step-by-step) | upcoming | [Step-by-step skills](step-by-step-skills.md) |
+| 22 | [Procedures that run step by step](#22-procedures-that-run-step-by-step) | built | [Step-by-step skills](step-by-step-skills.md) |
 
 ## 1. One agent that calls tools
 
@@ -180,7 +180,7 @@ steps, human review, tool calls and child workflows. Run [Workflow examples](wor
 You do not write the pause. A workflow's review step stops the run until a person decides, as you can see
 by running [Hold a large refund for a person's decision](workflows.md#hold-a-large-refund-for-a-persons-decision). In
 chat, when your team's policy says that changes must wait for approval, a tool that changes something pauses the reply
-until a person approves it. The person who asked cannot approve their own request.
+until a person approves it. A team can turn on a two-person rule so that someone other than the person who asked decides.
 
 ## 11. Conversation memory and sessions
 
@@ -244,11 +244,11 @@ Still upcoming are a trace of one agent reply as a tree, export over OpenTelemet
 | `strands-agents-evals` | Strands |
 
 Give an agent a list of cases, each with checks on the reply, as in
-[Check that a change keeps your answers right](agents.md#check-that-a-change-keeps-your-answers-right). Three checks
-are built: the reply holds a text, the agent called a tool, and the agent refused. Today this runs from Python.
-
-Upcoming work adds checks judged by a model, stored suites with a history of runs, a command line verb and a
-TypeScript method.
+[Check that a change keeps your answers right](agents.md#check-that-a-change-keeps-your-answers-right). Four checks
+are built: the reply holds a text, the agent called a tool, the agent refused, and a model judges the reply against a
+rubric you write. The cases are saved on the agent and each run is kept with its pass rate and cost. `ops.agents.eval`
+runs them in Python and in TypeScript, and `opsai agents eval` runs them from a terminal and exits by the publish gate,
+so a CI job can stop a change that fails. A team can also require passing evals before an agent publishes.
 
 ## 16. Streaming
 
@@ -289,10 +289,13 @@ read tools as test runs.
 
 Workflows are durable without extra setup. Every step is recorded, a write is made once, and a run that waits for a
 person holds no worker. An agent's reply is saved when it pauses for an approval, and it continues after the decision.
+A reply sent through chat, in the console or with `ops.chat`, is picked up by a worker if the platform restarts
+partway. A failed workflow run can be sent again from the step that failed with `ops.runs.redrive` or
+`opsai runs redrive`, and the steps that finished are not run again.
 
-Agent replies that run on workers and survive a restart are upcoming. Today a reply runs inside the request, and a
-background run from Python is lost if the calling program exits first. Replaying a workflow run, or starting again
-from one step, is upcoming too.
+A reply started with `ops.agents.run` still runs inside the request, and a background run from Python is lost if the
+calling program exits first. Replaying a workflow run, or starting again from a step you choose, is upcoming:
+`opsai workflows replay` and `fork` are listed and do nothing yet.
 
 ## 19. Scheduled agents
 
@@ -302,10 +305,11 @@ from one step, is upcoming too.
 | Your own scheduler calling `Runner.run` | OpenAI Agents SDK |
 | A timer on your host, such as Lambda | Strands |
 
-An agent or a workflow can be armed to run once at a due time, and the same key runs once. Use
-`ops.agents.schedule(id, message, due_at=...)` in Python, or a schedule trigger in a workflow.
-
-Repeating schedules are upcoming.
+A workflow's schedule trigger starts it again and again: every 15 minutes, or at 07:30 on weekdays. You set it with
+`ops.workflows.schedules.save` in Python or TypeScript, or with `opsai workflows schedule save`, as
+[Schedule a workflow or an agent](../schedule-a-workflow.md) shows. An agent runs on a schedule through a workflow that
+has the agent as a step. To run an agent once at a due time, use `ops.agents.schedule(id, message, due_at=...)` in
+Python. The same key runs once.
 
 ## 20. Deployment
 
@@ -332,8 +336,9 @@ Releases of the SDKs on PyPI and npm and a Helm chart are upcoming. Today you in
 A skill is a published, versioned procedure that agents hold. It loads when a request matches
 its use-when line, or in every reply. Run [Skill examples](skills.md).
 
-Skill verbs on the SDKs and the command line are upcoming, as described in
-[Upcoming: manage skills with their own verbs](skills.md#upcoming-manage-skills-with-their-own-verbs).
+Both SDKs and the command line have verbs for skills: create, save a draft, publish, search what a skill may mention,
+and, on the command line, apply a skill from a file and export one. See
+[Manage skills with their own verbs](skills.md#manage-skills-with-their-own-verbs).
 
 ## 22. Procedures that run step by step
 
@@ -343,14 +348,16 @@ Skill verbs on the SDKs and the command line are upcoming, as described in
 | Steps written in code around the runner | OpenAI Agents SDK |
 | Agent SOPs, steering | Strands |
 
-A skill with numbered steps is upcoming. In such a skill, the agent sees one step at a time, a rule worked out by
-code can check a step's result, and the skill ends with a named exit. Read
-[Step-by-step skills](step-by-step-skills.md) for the details. Until it ships, use a skill with written instructions
-where guidance is enough, and a workflow where the order must hold.
+A skill can have numbered steps. The agent sees one step at a time, a rule worked out by code can check a step's
+result, and the skill ends with a named exit. An agent can also be written as a brief that keeps what it is for apart
+from what it must never do. Read [Step-by-step skills](step-by-step-skills.md) and
+[Write what the agent is for, and what it must never do](agents.md#write-what-the-agent-is-for-and-what-it-must-never-do)
+for the details. Use a skill with written instructions where guidance is enough, and a workflow where the order must
+hold and no person is in the conversation.
 
 ## Upcoming features
 
-Each row is something one of the three frameworks offers that Ops AI does not have in the current release.
+Each row is something one of the three frameworks offers that Ops AI does not have in the current release, v1.2.0.
 
 | Status | Feature | Pattern |
 |---|---|---|
@@ -360,14 +367,11 @@ Each row is something one of the three frameworks offers that Ops AI does not ha
 | Upcoming | An output shape set on the agent, returned as a typed object | 3 |
 | Upcoming | More guardrail kinds, and a mode that records without blocking | 13 |
 | Upcoming | A trace tree for one reply, OpenTelemetry export and metrics | 14 |
-| Upcoming | Evals with model judges, stored suites and a command line verb | 15 |
-| Upcoming | Agent runs that survive a restart, and run modes in TypeScript | 16, 18 |
+| Upcoming | Agent runs started from the SDKs that survive the caller exiting, and run modes in TypeScript | 16, 18 |
 | Upcoming | Replay a workflow run, or start again from one step | 18 |
-| Upcoming | Repeating schedules for agents and workflows | 19 |
 | Upcoming | A tool written as one function | 1 |
 | Upcoming | Outside assistants calling a team's write tools over MCP in production | 17 |
 | Upcoming | SDKs on PyPI and npm, and a Helm chart | 20 |
-| Upcoming | Skills that run step by step, and a brief on the agent | 22 |
 
 ## What success looks like
 
