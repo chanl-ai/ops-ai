@@ -106,7 +106,9 @@ def staged_names(tmp_path: Path, *paths: str) -> list[str]:
 
 
 def test_staged_runs_a_check_only_when_a_staged_path_can_change_it(tmp_path: Path) -> None:
-    assert staged_names(tmp_path, "docs/usecases/README.md") == []
+    # A markdown file can hold an image the docs site must load, so only the image check starts for it.
+    assert staged_names(tmp_path, "docs/usecases/README.md") == ["md-images"]
+    assert staged_names(tmp_path, "docs/usecases/notes.txt") == []
     names = staged_names(tmp_path, "services/kb-service/src/ops_kb/app.py")
     assert {"typed-boundaries", "config-literals", "access-exceptions", "lint-imports"} <= set(names), names
     assert "sdk-drift" not in names and "changelog-entries" not in names, names
