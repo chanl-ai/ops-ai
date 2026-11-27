@@ -22,8 +22,8 @@ was edited on the Tools page, and its editor assumed every operation was an HTTP
 
 | | |
 |---|---|
-| ![An MCP operation shown as an HTTP GET with a false dropped-inputs warning](images/before-mcp-operation.png) | ![One secret written into ten operations as a header](images/before-secrets.png) |
-| ![The operation workbench mixing placeholder syntaxes](images/before-operation-workbench.png) | ![A module's connection tab with an empty picker](images/before-module-connection.png) |
+| ![An MCP operation shown as an HTTP GET with a false dropped-inputs warning](https://opsai.chanl.ai/docs/design/tools/images/before-mcp-operation.png) | ![One secret written into ten operations as a header](https://opsai.chanl.ai/docs/design/tools/images/before-secrets.png) |
+| ![The operation workbench mixing placeholder syntaxes](https://opsai.chanl.ai/docs/design/tools/images/before-operation-workbench.png) | ![A module's connection tab with an empty picker](https://opsai.chanl.ai/docs/design/tools/images/before-module-connection.png) |
 
 The design gives one tool model for everything an agent or a workflow can call: an outside HTTP API, an MCP server,
 a workflow, an agent, the platform's own services, and code. Connections hold how a call signs in and are reused
@@ -230,7 +230,7 @@ the connection. Reasons: none of the products built for agent tools organises a 
 input once, where who fills it is set, removes the rename that breaks a second copy; and the description is the field
 the agent chooses by, so it comes first.
 
-![Tool page for any kind: inputs, Try it, and an MCP tool's arguments](images/tool-page.png)
+![Tool page for any kind: inputs, Try it, and an MCP tool's arguments](https://opsai.chanl.ai/docs/design/tools/images/tool-page.png)
 
 | Where | Copy |
 |---|---|
@@ -259,7 +259,7 @@ teams, so a system three teams use is one credential, not three. The module's Co
 inline to people who may create one. Knowledge sync switches, a SaaS catalogue and guided connect are not on this page:
 they belong elsewhere or promise connectors that do not exist.
 
-![Connections list, create dialog and the connection record](images/connections.png)
+![Connections list, create dialog and the connection record](https://opsai.chanl.ai/docs/design/tools/images/connections.png)
 
 | Where | Copy |
 |---|---|
@@ -287,7 +287,7 @@ Secrets) and inserts a chip. "Will send" sits under the request and updates as t
 nothing is sent. This slice follows connections because, once the connection carries the key, most requests read no
 secret and the picker has less to explain.
 
-![Request tab with the value picker and the Will send preview](images/value-picker.png)
+![Request tab with the value picker and the Will send preview](https://opsai.chanl.ai/docs/design/tools/images/value-picker.png)
 
 | Where | Copy |
 |---|---|
@@ -314,7 +314,7 @@ the output from one sample; many named examples serve teams designing APIs. This
 slice, which needs a tool's output fields. The built mock answers go further than one sample: several answers, each
 optionally matched on input values, plus timeouts and delays ([mock answers](../../usecases/tools-service/mock-answers.md)).
 
-![Answer tab with the sample answer, its fields and shaping](images/sample-answer.png)
+![Answer tab with the sample answer, its fields and shaping](https://opsai.chanl.ai/docs/design/tools/images/sample-answer.png)
 
 | Where | Copy |
 |---|---|
@@ -331,7 +331,7 @@ Decision: step settings in the workflow editor use the same chips, grouped Start
 step's output fields), Case and Variables. The conversion rewrites drafts and leaves published versions running as
 published, because a published version is immutable and identified by its digest.
 
-![Workflow step settings using the same value picker](images/workflow-syntax.png)
+![Workflow step settings using the same value picker](https://opsai.chanl.ai/docs/design/tools/images/workflow-syntax.png)
 
 ### 6. Test and production
 
@@ -350,7 +350,7 @@ Keep secret; Try it's single Answer from control. Three environment names and tw
 rejected because a builder could not predict which credential a call would use, and that decides whether a test can
 touch real money.
 
-![Connection settings per environment, Try it's Answer from, and the Variables page](images/test-and-production.png)
+![Connection settings per environment, Try it's Answer from, and the Variables page](https://opsai.chanl.ai/docs/design/tools/images/test-and-production.png)
 
 | Where | Copy |
 |---|---|
@@ -369,7 +369,7 @@ ID, Client secret and Permissions to ask for, with audience and how the client i
 stays off the operation page; the connection shows Working or Needs attention, says what the system refused and when,
 and notifies the owning team.
 
-![Connection settings for a client ID and secret](images/client-id-and-secret.png)
+![Connection settings for a client ID and secret](https://opsai.chanl.ai/docs/design/tools/images/client-id-and-secret.png)
 
 | Where | Copy |
 |---|---|
@@ -386,7 +386,7 @@ address an admin must register with the bank's identity provider, with Copy, and
 as &lt;account&gt; since &lt;date&gt;". Per-person sign-in is a separate setting (slice 14), because it has different
 failure rules.
 
-![Signing a connection in once with the team's account](images/team-sign-in.png)
+![Signing a connection in once with the team's account](https://opsai.chanl.ai/docs/design/tools/images/team-sign-in.png)
 
 | Where | Copy |
 |---|---|
@@ -406,7 +406,7 @@ What it calls and, for an MCP server, the address. On save the platform asks the
 says so and offers Sign in. A registered client ID and secret go under "Use the bank's registered client". This slice
 reuses the sign-in flow of slice 8.
 
-![Adding an MCP server by address, with sign-in detected](images/mcp-sign-in.png)
+![Adding an MCP server by address, with sign-in detected](https://opsai.chanl.ai/docs/design/tools/images/mcp-sign-in.png)
 
 ### 10. Add tools from a source
 
@@ -419,7 +419,7 @@ operations is a second button, one dialog with a tab per source. A credential fo
 the builder is told so. A re-import updates only what the source defines and keeps descriptions, added inputs and the
 connection.
 
-![Import operations: one dialog with a tab per source](images/import-operations.png)
+![Import operations: one dialog with a tab per source](https://opsai.chanl.ai/docs/design/tools/images/import-operations.png)
 
 | Where | Copy |
 |---|---|
@@ -434,7 +434,7 @@ under a Built in view, read-only except a per-team description, with Try it, and
 reads and starting a workflow only, because services never call each other to act; a change across subsystems stays a
 workflow.
 
-![Built-in tools listed in Tools](images/built-in-tools.png)
+![Built-in tools listed in Tools](https://opsai.chanl.ai/docs/design/tools/images/built-in-tools.png)
 
 ### 12. Workflows as tools
 
@@ -446,7 +446,7 @@ switch, a description for agents, and what the agent gets back. "The result, wit
 step waits on a person; otherwise the agent gets the case link at once, because a workflow with a Human Task would
 always time out. Tools keeps a Workflows view whose rows open the workflow; there is no separate module or pin.
 
-![Use as a tool, set on the workflow page](images/workflow-as-tool.png)
+![Use as a tool, set on the workflow page](https://opsai.chanl.ai/docs/design/tools/images/workflow-as-tool.png)
 
 ### 13. Client certificate
 
@@ -455,7 +455,7 @@ Workato treat it as an add-on to any sign-in, not a sign-in kind. Decision: a Cl
 connection, per environment, and a Needs attention status 30 days before the certificate expires, because an expired
 certificate stops every call.
 
-![Client certificate as a section of any connection](images/client-certificate.png)
+![Client certificate as a section of any connection](https://opsai.chanl.ai/docs/design/tools/images/client-certificate.png)
 
 ### 14. Each person signs in
 
@@ -465,7 +465,7 @@ a sign-in card in chat the first time a tool needs it, and Account › Connected
 run with no person fails with a message that says why. It comes late because most bank operations runs are started by
 a schedule or a mailbox, which this cannot serve.
 
-![Per-person sign-in in chat and the Connected accounts page](images/personal-sign-in.png)
+![Per-person sign-in in chat and the Connected accounts page](https://opsai.chanl.ai/docs/design/tools/images/personal-sign-in.png)
 
 ### 15. Agents as tools
 
@@ -473,7 +473,7 @@ Job: one agent asks a specialist agent and uses its answer. The OpenAI Agents SD
 add another agent from the parent agent's tool picker. Decision: granted on the agent page from one picker with Tools,
 Workflows and Agents; one level deep, as in Copilot Studio.
 
-![Granting a specialist agent on the agent page](images/agent-as-tool.png)
+![Granting a specialist agent on the agent page](https://opsai.chanl.ai/docs/design/tools/images/agent-as-tool.png)
 
 ### 16. Code tools
 
@@ -482,14 +482,14 @@ pure function with typed inputs and outputs, no network, no files and no calls t
 workflow's job, where each call, approval and result is visible on the canvas. Until a sandbox runtime is approved, the
 kind shows disabled with its reason.
 
-![A code tool as a pure function](images/code-tool.png)
+![A code tool as a pure function](https://opsai.chanl.ai/docs/design/tools/images/code-tool.png)
 
 ### Dropped: a GraphQL slice
 
 No bank system in the worked examples speaks GraphQL. When one does, GraphQL becomes a body type on the HTTP request
 (None, JSON, Form, GraphQL) with a Variables field that takes chips, as Insomnia does.
 
-![GraphQL as a body type of the HTTP request](images/graphql-body.png)
+![GraphQL as a body type of the HTTP request](https://opsai.chanl.ai/docs/design/tools/images/graphql-body.png)
 
 ## API and data
 
