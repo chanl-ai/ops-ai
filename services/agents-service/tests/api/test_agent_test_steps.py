@@ -52,3 +52,15 @@ async def test_a_test_naming_someone_to_run_as_is_refused_not_ignored(stack: tup
     client, _ = stack
     res = await client.post("/v1/agents/ag_advisor/test", json={"message": "Hello", "runAsId": "per_teller"})
     assert (res.status_code, res.json()["error"]["code"]) == (400, "validation_failed"), res.text
+
+
+async def test_an_eval_case_naming_a_base_the_agent_was_not_given_does_not_search_it(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+) -> None:
+    """A case's context named any base id and the test turn searched it, so an eval read a base the agent cannot."""
+    client, _ = stack
+    case = {"name": "wire limit", "input": "What is the daily wire limit?", "context": {"collections": ["kb_people"]}}
+    res = await client.post("/v1/agents/ag_dispute/eval-runs", json={"cases": [case]})
+    assert res.status_code == 200, res.text
+    reply = str(res.json()["data"]["results"][0]["draft"])
+    assert "$25,000" not in reply, reply
