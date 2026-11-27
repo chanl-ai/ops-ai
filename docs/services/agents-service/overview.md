@@ -383,6 +383,25 @@ reads. A thread that named one keeps its name, and a later turn tells the agent 
 | Who may decide | A review step's `requestedBy` names who asked for a decision when the run's starter did not (an event a service reported); they decide unless the team's two-person rule is on and they are not an Admin of the team, as the starter does. |
 | Task assist | A typed task's assist is recorded pending at the pause and written beside it by its own prompt port, gated by `taskAssist` alone; a stopping worker waits for it. |
 
+## An agent as a spec file
+
+The spec routes read and save an agent as one document ([agent spec file](../../design/agents-v2/agent-spec-file.md)),
+mapped onto the stored agent version, so the console's editor and a spec save read and refuse the same copy.
+
+| Route | Answers |
+|---|---|
+| `GET /v1/agents/{id}/spec` | The newest version (or `?version=`) as a document, with `version` and the stored version's `digest` |
+| `PUT /v1/agents/{id}/spec` | Saves a draft from `spec`, `baseVersion` and `baseDigest`; 422 `spec_invalid` with a JSON pointer per problem, 409 `stale_base`, 503 `dependency_unavailable` when a lookup cannot answer |
+| `POST /v1/agents/spec/validate` | `ok`, the problems and a summary, nothing saved |
+| `POST /v1/agents/{id}/spec/diff` | The changes against the newest draft or, with `against: live`, the published version |
+
+| Part | Detail |
+|---|---|
+| Mapping | `domain/agent_spec.py`: fields today's version holds (tools, knowledge, skills, guardrails, privacy, limits, memory, widgets) are written to its keys; `loop`, `agents`, `sandbox`, `hooks`, `output`, `evals`, `brief`, `promptMode` and `modelSettings.fallback` live only in the version's `specDocument` |
+| Read back as written | Each field is exported as written while the stored keys still match the digest taken at the save; a console edit of that field makes the export rebuild it from the stored keys |
+| Publish | Runs the spec's checks again, so a draft whose helper, skill or tool went after its save is refused (`cannot_publish`) |
+| Not checked | Hook policies, the sandbox's image, sizes, egress and secrets, and the team's budget policy cap: nothing records them yet |
+
 ## Microsoft 365 mailboxes
 
 A mailbox with `provider: graph` holds the team's own app registration: `graphTenantId`, `graphClientId`, and
