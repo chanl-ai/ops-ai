@@ -2,7 +2,7 @@
 
 Status: current design. The assembled case read is built and proven by
 [uc-251](../../usecases/agents-service/a-case-reads-assembled.md); the console walk is
-[uc-139](../../usecases/console/cases-console.md). A built screen is in [console/proposed/cases](../../console/proposed/cases/case-fields-1280.png).
+[uc-139](../../usecases/console/cases-console.md). A built screen is in [console/proposed/cases](https://opsai.chanl.ai/docs/console/proposed/cases/case-fields-1280.png).
 
 ## The problem
 

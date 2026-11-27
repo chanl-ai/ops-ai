@@ -211,6 +211,14 @@ export function remarkOpsAi(options = {}) {
     // Links
     visit(tree, 'link', (node) => {
       const url = node.url;
+      // A link that opens an image this site publishes stays on this deployment, as a plain file link.
+      const imagePath = siteImagePath(url);
+      if (imagePath) {
+        if (!idx.files.has(imagePath)) errors.push(`${at(url)}: no such image under docs/`);
+        else node.url = `/${imagePath.slice('docs/'.length)}`;
+        (node.data ??= {}).siteFile = true;
+        return;
+      }
       if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('//')) return;
       if (url.startsWith('#')) {
         if (!ownAnchors.includes(decodeURIComponent(url.slice(1)))) errors.push(`${at(url)}: no such heading`);
@@ -379,7 +387,7 @@ export function remarkOpsAi(options = {}) {
 
     // A standalone HTML page is a plain file, not a route: a native link, so the router never prefetches it.
     visit(tree, 'link', (node, i, parent) => {
-      if (!node.url.startsWith('/files/') || !parent || i === undefined) return;
+      if (!(node.url.startsWith('/files/') || node.data?.siteFile) || !parent || i === undefined) return;
       parent.children[i] = jsx('FileLink', { href: node.url }, node.children, false);
       return SKIP;
     });

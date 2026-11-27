@@ -4,8 +4,8 @@ Every image under docs/ is published by the docs site at https://opsai.chanl.ai/
 (apps/docs/scripts/copy-images.mjs). A relative path only works where the reader has the repository, and a
 raw.githubusercontent.com link breaks when a branch or file moves, so every image in a tracked markdown file names the
 site URL. This check fails on a relative image, a raw.githubusercontent.com image, and a site URL whose file is not
-under docs/. It reads markdown images, reference definitions used by images, and HTML src and srcset attributes;
-code spans and fenced code are skipped, since they show the syntax rather than use it.
+under docs/. It reads markdown images, plain links to image files, reference definitions of either, and HTML src
+and srcset attributes. Code spans and fenced code are skipped, since they show the syntax rather than use it.
 
   python3 scripts/check_md_images.py              check every tracked .md file
   python3 scripts/check_md_images.py --fix        rewrite relative images under docs/ to the site URL
@@ -33,6 +33,8 @@ COMMENT = re.compile(r"<!--.*?-->", re.S)
 MD_IMAGE = re.compile(r"!\[(?:[^\[\]]|\[[^\]]*\])*\]\(\s*<?([^)\s>]+)")
 REF_IMAGE = re.compile(r"!\[[^\]]*\]\[([^\]]*)\]")
 REF_DEF = re.compile(r"^ {0,3}\[([^\]]+)\]:\s*<?(\S+?)>?(?:\s|$)", re.M)
+LINK = re.compile(r"(?<!!)\[(?:[^\[\]]|\[[^\]]*\])*\]\(\s*<?([^)\s>]+)")
+IMG_FILE = re.compile(r"\.(png|jpe?g|gif|svg|webp)(?:[?#].*)?$", re.I)
 HTML_SRC = re.compile(r"<(?:img|source)\b[^>]*?\s(?:src|srcset)\s*=\s*[\"']([^\"']+)[\"']", re.I)
 
 
@@ -64,9 +66,11 @@ def image_urls(text: str) -> list[tuple[int, int, str]]:
                     found.append((m.start(1) + c.start(1), m.start(1) + c.end(1), c.group(1)))
             else:
                 found.append((m.start(1), m.end(1), m.group(1)))
+    # A plain link to an image file opens the image, so it is held to the same rule.
+    found += [(m.start(1), m.end(1), m.group(1)) for m in LINK.finditer(clean) if IMG_FILE.search(m.group(1))]
     refs = {r.lower() for r in REF_IMAGE.findall(clean)}
     for m in REF_DEF.finditer(clean):
-        if m.group(1).lower() in refs:
+        if m.group(1).lower() in refs or IMG_FILE.search(m.group(2)):
             found.append((m.start(2), m.end(2), m.group(2)))
     return sorted(found)
 
@@ -131,6 +135,7 @@ def self_test(allowed: list[str]) -> int:
         "raw": "![a](https://raw.githubusercontent.com/chanl-ai/ops-ai/main/docs/media/hero.gif)\n",
         "missing": f"![a](https://{host}/docs/media/no-such-image.png)\n",
         "reference": "![a][pic]\n\n[pic]: media/hero.gif\n",
+        "link": "[the clip](media/hero.gif)\n",
     }
     passing = f"![a](https://{host}/docs/media/hero.gif)\n\n`![shown](media/hero.gif)`\n\n```\n![shown](x.png)\n```\n"
     ok = True
