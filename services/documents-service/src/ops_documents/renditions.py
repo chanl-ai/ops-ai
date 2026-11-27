@@ -124,6 +124,17 @@ def on_pages(mime: str, pages: list[Page], texts: list[str]) -> list[Page]:
     return out
 
 
+NOT_DRAWN = "A slide of pictures only; its pictures are not described, as decks are not drawn as pages here."
+
+
+def undrawn(mime: str, page: Page) -> Page:
+    """A deck's slide read without its drawing: one with no text says its pictures were not described, where it
+    would otherwise read as an empty slide."""
+    if mime != PPTX or page.text.strip() or page.source == "none":
+        return page
+    return page.model_copy(update={"source": "none", "blocks": [], "unread_reason": NOT_DRAWN})
+
+
 def _boxed(page: Page) -> Page:
     """The page with whole-page boxes; a page with no text (a picture slide) reads as unread, so a model may describe
     it from its drawn picture."""

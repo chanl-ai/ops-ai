@@ -31,7 +31,7 @@ from ops_documents.picture_reading import (
     stricter,
     wants_picture,
 )
-from ops_documents.renditions import DRAWN, Renditions, on_pages, page_texts
+from ops_documents.renditions import DRAWN, Renditions, on_pages, page_texts, undrawn
 from ops_documents.store.readings import PENDING, ReadingRow, ReadingsStore
 from ops_files_client import FileInfo
 from ops_ingest.reading import (
@@ -194,7 +194,7 @@ def _read_now(
         if count > SYNC_PAGES or any(reader.needs_ocr(n) for n in range(1, count + 1)):
             return None
         started = time.perf_counter()
-        pages = [reader.page(n) for n in range(1, count + 1)]
+        pages = [undrawn(reader.facts.mime_type, reader.page(n)) for n in range(1, count + 1)]
         if pictures and any(wants_picture(p, reader.facts.mime_type) for p in pages):
             return None
         took = round((time.perf_counter() - started) * 1000)
@@ -502,6 +502,8 @@ class Readings:
                         if drawn is not None
                         else await asyncio.wait_for(asyncio.to_thread(reader.page, number), self.page_timeout_s)
                     )
+                    if drawn is None:
+                        page = undrawn(mime, page)
                 except TimeoutError:
                     page = Page(
                         number=number,

@@ -111,6 +111,8 @@ def item_text(
     for p in pages:
         number = narrow.field(p, "number", int, 0)
         at = number if paged else None
+        headings: list[tuple[Json, list[str]]] = []
+        body = False
         for b in (json_object(x) for x in json_list(p.get("blocks"))):
             if dropped(b):
                 continue
@@ -119,9 +121,11 @@ def item_text(
                 level = narrow.field(b, "level", int, 1)
                 while stack and stack[-1][0] >= level:
                     stack.pop()
+                headings.append((b, [t for _, t in stack]))
                 stack.append((level, " ".join(text.split())))
                 current = None
                 continue
+            body = True
             if current is None:
                 current = {
                     "id": f"s{len(sections) + 1}",
@@ -140,6 +144,22 @@ def item_text(
                     "boxes": _boxes(at, b),
                 }
             )
+        if paged and headings and not body:
+            # A page of headings only (a slide with just its title) shows them as its text, else it shows nothing.
+            shown_blocks: JsonList = []
+            for i, (h, _) in enumerate(headings):
+                block: Json = {
+                    "id": str(h.get("id") or f"p{number}.b{i}"),
+                    "kind": "paragraph",
+                    "text": " ".join(str(h.get("text") or "").split()),
+                    "page": at,
+                    "readBy": str(h.get("readBy") or "text"),
+                    "boxes": _boxes(at, h),
+                }
+                shown_blocks.append(block)
+            path: JsonList = [*headings[0][1]]
+            titled: Json = {"id": f"s{len(sections) + 1}", "headingPath": path, "page": at, "blocks": shown_blocks}
+            sections.append(titled)
     out_pages: JsonList = [
         {
             "number": narrow.field(p, "number", int, 0),

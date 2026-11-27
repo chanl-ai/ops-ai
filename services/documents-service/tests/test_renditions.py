@@ -123,6 +123,8 @@ async def test_without_a_drawing_the_file_still_shows_its_text(make: Make, conve
         got = await read_all(s, c, fid)
     assert got["status"] == "done" and got["renditionId"] is None, got
     assert got["pages"][0]["text"].startswith(DECK_SLIDES[0]), got["pages"]
+    slide = got["pages"][1]
+    assert slide["source"] == "none" and "not described" in (slide["unreadReason"] or ""), slide
 
 
 async def test_turning_the_converter_on_draws_a_file_read_without_it(make: Make) -> None:

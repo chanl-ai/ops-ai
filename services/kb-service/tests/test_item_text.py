@@ -18,6 +18,10 @@ from ops_contracts import readings as readings_contract
 from ops_identity.fastapi import DEV_TEAM
 from ops_ingest.reading import READER_VERSION
 from ops_kb.files import KnowledgeFiles
+from ops_kb.item_text import item_text
+from ops_kb.source_settings import Cleaning
+from ops_service_kit.http import Json
+from ops_service_kit.narrow import json_list, json_object
 
 from .conftest import kb_client
 from .readings_fake import LocalReadings
@@ -25,6 +29,7 @@ from .test_bases_and_sources import data
 from .test_readings import base_with, documents
 from .test_retrieval import ask
 
+PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 DIAGRAM = "Three boxes, Mobile app, Intake service and Event queue, joined left to right by arrows."
 
 
@@ -126,3 +131,23 @@ async def test_a_page_described_on_a_retry_reaches_search(engine: AsyncEngine, t
     # Another reading of the file settles nothing; the item's own once; the same event again nothing more.
     assert item["status"] == "indexed" and settled == [0, 1, 0], settled
     assert any(c.get("page") == 2 for c in answer["citations"]), answer
+
+
+def test_a_slide_with_only_a_title_shows_its_title() -> None:
+    title: Json = {"id": "p1.b0", "kind": "heading", "level": 1, "text": "Claims intake review", "box": [0, 0, 1, 1]}
+    body: Json = {"id": "p2.b1", "kind": "paragraph", "text": "Refunds move in March.", "box": [0, 0, 1, 1]}
+    answer: Json = {
+        "status": "done", "facts": {"paged": True},
+        "pages": [
+            {"number": 1, "source": "text", "blocks": [title]},
+            {"number": 2, "source": "text", "blocks": [{**title, "id": "p2.b0", "text": "Next steps"}, body]},
+        ],
+    }  # fmt: skip
+
+    def shown(page: int) -> list[str]:
+        got = item_text("it1", "f1", PPTX, answer, Cleaning(), page=page)
+        blocks = (json_object(b) for s in json_list(got["sections"]) for b in json_list(json_object(s)["blocks"]))
+        return [str(b["text"]) for b in blocks]
+
+    assert shown(1) == ["Claims intake review"]
+    assert shown(2) == ["Refunds move in March."]
