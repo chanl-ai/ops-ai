@@ -88,8 +88,9 @@ function pushVersion(list: Version[], version: number, note: string, changes: st
 
 /** In-memory implementation of OpsApi for demos and UI review. Transport behaviour lives in ./runtime. */
 export function createMockApi(): OpsApi {
-  const mockAliases = createMockModelAliases();
   const mockKeys = createMockProviderKeys();
+  const mockConnections = createMockProviderConnections(mockKeys);
+  const mockAliases = createMockModelAliases(mockConnections.catalogModels);
   // The workspace's saved agent instruction list; none means the default.
   let savedSections: InstructionSectionList | null = null;
   const policies: GatePolicy[] = F.POLICIES.map((p) => ({ ...p, workflowName: '' }));
@@ -1296,7 +1297,7 @@ export function createMockApi(): OpsApi {
     workspaceTeams: createMockWorkspaceTeams(),
     signInProviders: createMockSignInProviders(),
     providerKeys: mockKeys,
-    providerConnections: createMockProviderConnections(mockKeys),
+    providerConnections: mockConnections,
     modelAliases: mockAliases,
     toolModules: toolModules.api,
     egress: createEgressMock({ me: F.CURRENT_USER.name, inUse: toolModules.hostsInUse }),
