@@ -176,8 +176,9 @@ class Settings(BaseSettings):
     # of being sent every schema; 0 means always, None the agent kernel's default (TOOL_SEARCH_ABOVE, 20).
     tool_search_above: int | None = Field(default=None, ge=0)
     # The most tokens a document read may ask the model to write (OPS_EXTRACT_OUTPUT_TOKENS), sent on every read so a
-    # long reply ends at the limit, inside models-service's wait for a provider, rather than timing out.
-    extract_output_tokens: int = Field(default=4000, ge=256)
+    # long reply ends at the limit as reply_cut_off rather than as a timeout. 8,000 is about 50 line items of five
+    # fields, and what a fast model writes inside models-service's 60-second wait; the sample reads need under 1,500.
+    extract_output_tokens: int = Field(default=8000, ge=256)
     anthropic_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("ANTHROPIC_API_KEY"))
     openai_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("OPENAI_API_KEY"))
     # Read here only so the agents kernel's direct path can refuse an Azure key; models-service reads and checks

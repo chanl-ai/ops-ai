@@ -71,10 +71,13 @@ REFUSALS = {
     "rate_limited": ("model_rate_limited", "The model is busy; try again in a minute."),
     "models_answer_unreadable": ("model_answer_unreadable", "The model's answer could not be read; try again."),
     # A reply billed but holding no answer: the read fails with why, and no field is saved from it.
-    "reply_cut_off": ("reply_cut_off", "The model's reply was cut off at its length limit."),
+    "reply_cut_off": (
+        "reply_cut_off",
+        "The model's reply was cut off at its length limit. Read fewer fields, or raise OPS_EXTRACT_OUTPUT_TOKENS.",
+    ),
     "reply_declined": ("reply_declined", "The model declined to read this file."),
     "reply_filtered": ("reply_filtered", "The provider's content filter stopped the model's reply."),
-    "reply_empty": ("reply_empty", "The model's reply held no answer."),
+    "reply_empty": ("reply_empty", "The model's reply held no answer. Try again, or read fewer fields."),
     "models_timeout": ("model_late", "The model did not answer in time."),
     "provider_timeout": ("model_late", "The model did not answer in time."),
 }
@@ -171,9 +174,8 @@ class ModelsService:
     http: httpx.AsyncClient
     key: str
     alias: str = ALIAS
-    # The most tokens the model may write in one reply (Settings.extract_output_tokens), so a long reply ends at the
-    # limit inside models-service's wait rather than timing out.
-    output_tokens: int = 4000
+    # The most tokens the model may write in one reply; the default is Settings.extract_output_tokens's.
+    output_tokens: int = Settings.model_fields["extract_output_tokens"].default
 
     async def structured(
         self,
@@ -908,7 +910,7 @@ class Extractor:
             try:
                 proposal = await self._propose(row, pages, usage)
             except ModelCallError as e:
-                return await self._refused(row, e)
+                return await self._refused(row, e, usage)
             fields = [FIELD(f) for f in entries(proposal["fields"])]
             if not fields:
                 out: Json = {
@@ -937,15 +939,16 @@ class Extractor:
                 )  # fmt: skip
                 if errors := prompt.schema_errors(answer, schema):
                     return await self._fail(
-                        row, "schema_error", "The answer did not match the fields asked for.", {"details": [*errors]}
-                    )
+                        row, "schema_error", "The answer did not match the fields asked for.", {"details": [*errors]},
+                        usage=usage,
+                    )  # fmt: skip
             # With no platform-service configured the catalogue's default applies; a configured one that cannot be
             # read fails the extraction (FloorUnreadError), so a failed read never lowers the bar.
             floor = await self.floors.floor(tenant, row.team) if self.floors is not None else DEFAULT_FLOOR
         except FloorUnreadError as e:
             return await self._fail(row, "floor_unread", str(e))
         except ModelCallError as e:
-            return await self._refused(row, e)
+            return await self._refused(row, e, usage)
         outcome, out = result.scored(
             fields,
             answer,
@@ -1168,17 +1171,21 @@ class Extractor:
             kept.append(named | {"type": kind})
         return {"name": str(raw.get("name") or ""), "fields": [*kept]}
 
-    async def _refused(self, row: ExtractionRow, e: ModelCallError) -> ExtractionRow:
+    async def _refused(self, row: ExtractionRow, e: ModelCallError, usage: Usage | None = None) -> ExtractionRow:
         code, message = REFUSALS.get(e.code or "", ("model_unavailable", str(e)))
         if e.refusal:
             message = f"{message} It said: {e.refusal}"
-        return await self._fail(row, code, message)
+        return await self._fail(row, code, message, usage=usage)
 
-    async def _fail(self, row: ExtractionRow, code: str, message: str, extra: Json | None = None) -> ExtractionRow:
-        """Settle as failed: the error saved and the row read back in one transaction."""
+    async def _fail(
+        self, row: ExtractionRow, code: str, message: str, extra: Json | None = None, *, usage: Usage | None = None
+    ) -> ExtractionRow:
+        """Settle as failed: the error, and the tokens billed before it when there were any, saved and the row read
+        back in one transaction."""
+        tokens = (usage.input_tokens, usage.output_tokens) if usage is not None and usage.calls else None
         async with isolation.request_transaction():
             await self.store.finish(
-                row.id, status="failed", at=self.clock(), error_code=code, error=message, result=extra
+                row.id, status="failed", at=self.clock(), error_code=code, error=message, result=extra, tokens=tokens
             )
             return await self._row(row.tenant_id, row.id)
 
