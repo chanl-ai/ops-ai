@@ -12,6 +12,11 @@ queries = 0
 ["GET /v1/items/{item_id}"]
 queries = 6
 
+# The item, its source, its reading reference, and its index units with their line boxes, in one transaction;
+# documents-service is asked for the reading with none open.
+["GET /v1/items/{item_id}/text"]
+queries = 4
+
 # The item, the page's count, the page, and the page's index units.
 ["GET /v1/items/{item_id}/chunks"]
 queries = 4

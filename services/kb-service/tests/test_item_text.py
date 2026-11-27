@@ -42,11 +42,19 @@ def review_pdf() -> bytes:
     return out.getvalue()
 
 
+class _NoWords:
+    """OCR that finds no words, so the diagram page is left for the model without Tesseract installed."""
+
+    def image_to_words(self, image: object) -> list[Any]:
+        del image
+        return []
+
+
 async def test_item_text_has_sections_line_boxes_and_the_model_page_marked(
     engine: AsyncEngine, tenant: str, tmp_path: Path
 ) -> None:
     intake = KnowledgeFiles(tmp_path)
-    readings = LocalReadings(intake)
+    readings = LocalReadings(intake, engine=_NoWords())
     readings.described = {2: DIAGRAM}
     async with kb_client(engine, tenant, files=intake, readings=readings) as client:
         src, kb = await base_with(client, ("review.pdf", review_pdf()))
