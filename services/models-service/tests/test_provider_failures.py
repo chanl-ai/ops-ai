@@ -164,6 +164,21 @@ async def test_a_provider_body_that_echoes_the_key_never_reaches_the_answer_or_t
         assert LEAKED_KEY not in str(rows)
 
 
+@pytest.mark.parametrize("stream", [False, True])
+async def test_a_refused_request_says_why_on_the_log_line(
+    models: Models, stream: bool, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The caller gets only the code; the log names the provider's error code and the field it refused."""
+    refused = {
+        "error": {"message": "Unsupported value: 'temperature'", "code": "unsupported_value", "param": "temperature"}
+    }
+    answers: list[httpx.Response] = []
+    async for rig in _rig(models, _answers(400, refused)):
+        answers.append(await rig.complete(stream=stream))
+    assert answers[0].status_code == 502 and "temperature" not in answers[0].text, answers[0].text
+    assert "code=unsupported_value param=temperature" in caplog.text
+
+
 async def test_a_reply_whose_content_is_not_text_fails_the_call_unbilled(models: Models) -> None:
     # Content as a list of parts (some reasoning models send one) is not read here; the call fails, it is not a 200.
     parts = [{"type": "thinking", "thinking": "..."}, {"type": "text", "text": "Yes"}]

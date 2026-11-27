@@ -1465,6 +1465,8 @@ def create_models_app(
         async def failed(self, e: Exception) -> JSONResponse:
             """The provider's failure as the caller gets it, its code also the call-log row's reason."""
             failure = e if isinstance(e, ProviderError) else ProviderError(why="the provider answered an empty stream")
+            # The caller gets only the code; the reason (never a 401 or 403 body) is for whoever reads the log.
+            log.warning("models.provider_refused", code=failure.code, why=str(failure)[:400])
             await self.broke(failure.code)
             return provider_refused(failure)
 

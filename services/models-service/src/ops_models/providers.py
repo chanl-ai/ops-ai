@@ -16,7 +16,7 @@ import json
 import re
 from collections.abc import AsyncIterator, Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 from urllib.parse import quote
 
 import httpx
@@ -101,6 +101,20 @@ def answered(status: int) -> str:
     if status == 429:
         return "provider_rate_limited"
     return "provider_error" if status >= 500 else "provider_bad_request"
+
+
+def refusal_reason(r: httpx.Response) -> str:
+    """A refusal body's OpenAI-style `error.code`, `error.param` and the first 160 characters of `error.message`, for
+    the log; a body in any other shape gives its first 160 characters."""
+    try:
+        body = r.json()
+    except ValueError:
+        return r.text[:160]
+    error = cast(dict[str, object], body).get("error") if isinstance(body, dict) else None
+    if not isinstance(error, dict):
+        return json.dumps(body)[:160]
+    fields = cast(dict[str, object], error)
+    return f"code={fields.get('code')} param={fields.get('param')} message={str(fields.get('message') or '')[:160]}"
 
 
 def unreached(e: httpx.HTTPError) -> ProviderError:
@@ -278,13 +292,16 @@ class OpenAICompatibleProvider:
     def _embeddings_url(self, model_id: str) -> str:
         return f"{self.base_url}/embeddings"
 
-    def _answered(self, r: httpx.Response) -> None:
-        """Raises when the answer is refused. Never quotes the body: a provider's 401 can echo part of the key."""
+    async def _answered(self, r: httpx.Response) -> None:
+        """Raises when the answer is refused. A 401 or 403 body is never read, since it can echo part of the key; any
+        other refusal's error code, parameter and the start of its message go on the service's log line."""
         if r.status_code >= 400:
             code = answered(r.status_code)
-            raise ProviderError(
-                code, why=f"provider answered {r.status_code}", retry_after=r.headers.get("retry-after")
-            )
+            why = f"provider answered {r.status_code}"
+            if code != "provider_auth_failed":
+                await r.aread()
+                why = f"{why}: {refusal_reason(r)}"
+            raise ProviderError(code, why=why, retry_after=r.headers.get("retry-after"))
 
     def _keep(self, chunk: Json) -> Json | None:
         """The chunk as callers get it, or None to drop it."""
@@ -297,7 +314,7 @@ class OpenAICompatibleProvider:
         except httpx.HTTPError as e:
             # An unreachable endpoint is the provider's failure (502), not this service's (500).
             raise unreached(e) from e
-        self._answered(r)
+        await self._answered(r)
         try:
             return _completion(r.json())
         except ValueError as e:
@@ -312,7 +329,7 @@ class OpenAICompatibleProvider:
             r = await self.client.post(url, content=payload, headers=self._signed("POST", url, payload))
         except httpx.HTTPError as e:
             raise unreached(e) from e
-        self._answered(r)
+        await self._answered(r)
         try:
             data = an_object(r.json(), "answer")
             listed = data.get("data")
@@ -336,7 +353,7 @@ class OpenAICompatibleProvider:
         try:
             headers = self._signed("POST", url, payload)
             async with self.client.stream("POST", url, content=payload, headers=headers) as r:
-                self._answered(r)
+                await self._answered(r)
                 async for line in r.aiter_lines():
                     if not line.startswith("data:"):
                         continue
@@ -412,9 +429,9 @@ class AzureOpenAIProvider(OpenAICompatibleProvider):
         deployment = quote(model_id, safe="")
         return f"{self.base_url}/openai/deployments/{deployment}/embeddings?api-version={self.api_version}"
 
-    def _answered(self, r: httpx.Response) -> None:
+    async def _answered(self, r: httpx.Response) -> None:
         self.observed_region = r.headers.get("x-ms-region") or self.observed_region
-        super()._answered(r)
+        await super()._answered(r)
 
     @property
     def region_mismatch(self) -> str | None:
