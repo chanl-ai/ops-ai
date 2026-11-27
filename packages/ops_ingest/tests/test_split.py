@@ -266,6 +266,17 @@ def test_topic_reply_cannot_drop_sections(reply: str) -> None:
     assert any("split by structure" in n for n in result.notes)
 
 
+def test_a_topic_reply_the_model_did_not_finish_falls_back_to_structure() -> None:
+    def cut(_: str) -> str:
+        raise ModelUnavailable("reply_cut_off")
+
+    doc = md("# A\n\nAlpha text.\n\n# B\n\nBravo text.")
+    topic = settings(strategies=["topic"], model="ingest-small", approval=approved("topic"))
+    result = split(doc, topic, model=FakeModelClient(respond=cut))
+    assert [c.text for c in result.chunks] == ["Alpha text.", "Bravo text."]
+    assert any("reply_cut_off" in n and "split by structure" in n for n in result.notes), result.notes
+
+
 PAGE = """<html><body><nav class="nav">{nav}</nav><main><h1>Card limits</h1><p>{body}</p></main>
 <footer>{footer}</footer></body></html>"""
 
