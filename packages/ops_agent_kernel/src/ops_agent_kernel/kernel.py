@@ -964,14 +964,24 @@ def _names(req: TurnRequest) -> dict[str, str]:
 
 
 def _model_settings(req: TurnRequest) -> ModelSettings | None:
-    """The settings sent with each model request; None when the agent sets none, so the model's defaults hold."""
+    """The settings sent with each model request; None when the agent sets none, so the model's defaults hold.
+
+    The agent version's saved knobs go in the request body under their knob names; models-service turns each into
+    the field its provider reads and fits it to the alias's model (`ops_models.catalog`), so no knob is named here.
+    A caller's temperature within the agent's limits wins over the saved one. The older `thinking` pattern applies
+    only when the version saved neither a thinking budget nor an effort."""
     sent = ModelSettings()
+    knobs: dict[str, float | int | str] = dict(req.settings.model_settings)
     if req.settings.temperature is not None:
         sent["temperature"] = req.settings.temperature
-    if req.settings.thinking in ("low", "medium", "high"):
+        if knobs:
+            knobs["temperature"] = req.settings.temperature
+    if req.settings.thinking in ("low", "medium", "high") and not {"thinking_budget", "reasoning_effort"} & set(knobs):
         sent["thinking"] = req.settings.thinking
     if not req.settings.parallel_reads:
         sent["parallel_tool_calls"] = False
+    if knobs:
+        sent["extra_body"] = knobs
     return sent or None
 
 
@@ -1436,7 +1446,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         )
         if state.unstarted and state.run.running is None:
             written = f"{written}\n\n# A skill the person picked did not start\n{state.unstarted}"
-        last = prompt_writer.tail(steps.now(state.run, names), req.settings.never)
+        last = prompt_writer.tail(steps.now(state.run, names), req.settings.never, req.settings.never_heading)
         return f"{written}\n\n{last}" if last else written
 
     # With a schema the answer is the provider's native structured output (a json_schema response format): the model

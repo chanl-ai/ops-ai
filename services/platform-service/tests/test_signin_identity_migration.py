@@ -20,8 +20,17 @@ from ops_service_kit.ids import new_id
 from .conftest import alembic_config
 
 BEFORE = "20261122_2022_list_sort_indexes"
-# The tables the chain from BEFORE to head writes: this migration and the next (members).
-OWNED = ("signin_identities", "sessions", "audit_entries", "signin_flows", "members")
+# The tables the chain from BEFORE to head writes: this migration, the next (members) and the watches and install cells.
+OWNED = (
+    "signin_identities",
+    "sessions",
+    "audit_entries",
+    "signin_flows",
+    "members",
+    "roles",
+    "role_permissions",
+    "tenants",
+)
 T0 = "2026-01-01T00:00:00.000Z"
 
 
@@ -42,6 +51,12 @@ def _seed(tenant: str, ana: str, bo: str) -> list[tuple[str, dict[str, Any]]]:
         (
             "INSERT INTO signin_providers (id, tenant_id, kind, label, enabled, config, created_at, updated_at)"
             " VALUES ('sip_m', :t, 'oidc', 'Bank', true, '{}', :at, :at)",
+            {"t": tenant, "at": T0},
+        ),
+        # A built-in role the later cell migrations give their cells to, read back as the migrator could see it.
+        (
+            "INSERT INTO roles (tenant_id, id, name, builtin, description, created_at)"
+            " VALUES (:t, 'builder', 'Builder', true, '', :at)",
             {"t": tenant, "at": T0},
         ),
     ]
@@ -74,6 +89,18 @@ def _seed(tenant: str, ana: str, bo: str) -> list[tuple[str, dict[str, Any]]]:
             )
         )
     return out
+
+
+async def _cells(url: str, tenant: str) -> tuple[int, int]:
+    """The tenant's watches cells and permission version after the chain ran under a role bound by the policies."""
+    engine = create_async_engine(url)
+    async with engine.connect() as c:
+        q = "SELECT count(*) FROM role_permissions WHERE tenant_id = :t AND area = 'watches'"
+        cells = (await c.execute(sa.text(q), {"t": tenant})).scalar_one()
+        v = "SELECT permission_version FROM tenants WHERE id = :t"
+        version = (await c.execute(sa.text(v), {"t": tenant})).scalar_one()
+    await engine.dispose()
+    return int(cells), int(version)
 
 
 async def _state(url: str, tenant: str) -> tuple[list[tuple[str, str]], list[tuple[str, str]], set[str]]:
@@ -119,6 +146,8 @@ def test_a_person_with_two_subjects_keeps_the_one_they_use(database_url: str, mo
         links, unlinked, revoked = asyncio.run(_state(database_url, tenant))
         assert links == sorted([(ana, "own-account"), (bo, "bo-account")])
         assert unlinked == [(ana, 'second-"account')] and revoked == {ana}
+        cells, version = asyncio.run(_cells(database_url, tenant))
+        assert cells >= 8 and version > 1, (cells, version)
     finally:
         monkeypatch.undo()
         back: list[tuple[str, dict[str, Any]]] = [(f"ALTER TABLE {t} OWNER TO {url.username}", {}) for t in OWNED]

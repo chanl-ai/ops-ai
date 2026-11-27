@@ -90,6 +90,7 @@ custom app's connection id); an account is a connection id.
 | `tools` (modules) | `discover(spec_url)`, `import_openapi(module, spec_url, operations=)`, `request_review(module)`, `review_of(detail)` and `decide_review(review, decision)` (Security's answer; `approved` publishes), `create_module(name, display_name)`, `publish_version(module)`, `run_module(module, tool, input, real=)` |
 | `secrets` | `list()`, `create(name, value)`, `rotate(name, value)`, `rename(name, new_name)`, `delete(name)`; no answer carries a value |
 | `policies` | `get(key)`, `set(key, value)`: the team's policies a Security admin changes, such as `toolWritesNeedApproval` (use `with_team` to act in another team) |
+| `files.watches` | `list()`, `get(id)`, `add(name, plugin=, source=, values=, connection_id=)`, `change(id, name=, values=)`, `delete(id)`, `check(id, wait=seconds)`, `events(id, after=)`: the team's watched folders, which copy an app's folders into Files; adding, changing, checking and deleting need watches.manage (Admin, Builder). `opsai files watch list | show | add | check | events | delete` calls the same methods |
 | `egress` | `list()`, `allow_host(host)`, `allow_range(cidr)`, `remove_host`, `remove_range`; Security admins only |
 | `agents` | `update(id, fields, base=)` (saves fields on the draft, naming the copy last read; refused with `stale_base` when it has been saved since), `tool_options(search)` (what may be granted), `grant_tools(id, tool_ids)` (kept beside the ones it holds), `references(search, for_agent=)` (what a brief can mention with `@`), `add_reference(id, kind, ref_id)` (grants it as a new draft; a skill brings its tools and knowledge bases), `publish_check(id)` (what stops the draft from publishing, each with its field). `apply` carries `brief`, `promptMode` and `patterns`: a file with a `brief` has its role and instructions written from it |
 | `resources` | `list(app)`, `add(resource)` (a copy in the team) |
@@ -113,6 +114,21 @@ made = ops.templates.install("plugin:opsai.starters:doc-coauthoring")  # made["c
 start = ops.me.connectors.connect("Person desk")  # open start["authorizeUrl"] in a browser
 ops.me.connectors.finish(state, code)             # the state and code in the address the browser returned to
 ```
+
+## Schedule a workflow
+
+```python
+step = "start"                                           # the Schedule trigger step's id
+ops.workflows.schedules.kinds()                          # each rule kind, its label and the JSON Schema of its fields
+ops.workflows.schedules.preview(kind="every", every=15, unit="minutes", tz="Europe/London")  # words and next runs
+ops.workflows.schedules.save("held_wires", step, kind="every", every=15, unit="minutes", start="07:00", tz="Europe/London")
+ops.workflows.schedules.show("held_wires", step)         # the rule, its words, next runs, last outcome and its reason, the saver's name, last run id and idle code (changedByName, lastOutcomeReason, lastRunId, idleCode)
+ops.workflows.schedules.clear("held_wires", step)
+```
+
+A kind's own fields go in as keywords. A save applies at once to the live version and is refused (422, naming the
+field) for a rule under the install's shortest interval or a trigger whose input schema needs more than `dueAt`.
+`ops.workflows.schedule(id, due_at=...)` is separate: it starts one run at one time.
 
 ## The command line
 

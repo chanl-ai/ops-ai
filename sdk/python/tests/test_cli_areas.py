@@ -818,3 +818,23 @@ def test_a_script_whose_person_lacks_two_accounts_skips_without_a_chat(
     assert main(["chat", "script", str(script)]) == 0
     assert "SKIP s.json: needs two different GitHub logins" in capsys.readouterr().out
     assert not any(r.url.path.endswith("/chat/threads") for r in seen), "no chat is started"
+
+
+def test_models_catalog_and_knobs_call_the_routes_the_console_reads(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[httpx.Request] = []
+    _use(monkeypatch, "people", _client(seen, lambda _r: _ok([{"id": "gpt-x"}])))
+    assert main(["models", "catalog", "prov_1", "--json"]) == 0
+    assert seen[-1].url.path == "/api/models/v1/models/providers/prov_1/catalog"
+    assert main(["models", "provider-types", "--json"]) == 0
+    assert seen[-1].url.path == "/api/models/v1/models/provider-types"
+    assert main(["models", "knobs", "chat-fast", "--json"]) == 0
+    assert seen[-1].url.path == "/api/agents/v1/model-aliases/chat-fast/knobs"
+
+
+def test_key_check_carries_the_region_a_bedrock_connection_needs() -> None:
+    seen: list[httpx.Request] = []
+    ops = _client(seen, lambda _r: _ok({"ok": True}))
+    ops.models.check_key("aws", "bedrock", region="eu-west-1")
+    ops.models.key_models("aws", "bedrock", region="eu-west-1")
+    assert json.loads(seen[0].content)["region"] == "eu-west-1"
+    assert seen[1].url.params["region"] == "eu-west-1"

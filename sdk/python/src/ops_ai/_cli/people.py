@@ -62,6 +62,11 @@ def models_main(argv: list[str]) -> int:
     common = [verb_options()]
     sub.add_parser("aliases", parents=common, help="the chat aliases an agent may name, with their prices")
     sub.add_parser("providers", parents=common, help="the provider connections (account admins)")
+    sub.add_parser("provider-types", parents=common, help="the provider types a connection can be made of")
+    catalog = sub.add_parser("catalog", parents=common, help="the catalogued models of one provider connection")
+    catalog.add_argument("provider", help="the connection's id")
+    knobs = sub.add_parser("knobs", parents=common, help="the settings an agent on one alias may set")
+    knobs.add_argument("alias")
     sub.add_parser("keys", parents=common, help="the provider keys by name (account admins); no value is shown")
     test = sub.add_parser("test", parents=common, help="one test turn on an agent's model, as its Test panel")
     test.add_argument("agent", help="the agent's id, slug or name")
@@ -82,6 +87,12 @@ def _models(ns: argparse.Namespace, ops: OpsAI) -> int:
         return table(ns, ops.models.aliases(), "name", "clearedSensitivity", "inputPerMillion", "outputPerMillion")
     if ns.verb == "providers":
         return table(ns, ops.models.providers(), "id", "type", "baseUrl", "keyRef", "region")
+    if ns.verb == "provider-types":
+        return table(ns, ops.models.provider_types(), "id", "label", "listsModels", "catalogued")
+    if ns.verb == "catalog":
+        return table(ns, ops.models.catalog(ns.provider), "id", "context", "inputPerMillion", "outputPerMillion")
+    if ns.verb == "knobs":
+        return emit(ns, ops.models.alias_knobs(ns.alias))
     if ns.verb == "keys":
         return table(ns, ops.models.keys(), "name", "updatedAt", "updatedBy")
     ns.kb, ns.test, ns.thread = None, True, None

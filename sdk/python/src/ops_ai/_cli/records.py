@@ -5,6 +5,7 @@ what was read from a file."""
 from __future__ import annotations
 
 import argparse
+import json
 import mimetypes
 from pathlib import Path
 from typing import Any
@@ -57,10 +58,31 @@ def files_main(argv: list[str]) -> int:
     upload.add_argument("path")
     upload.add_argument("--purpose", required=True, help="what it is for, e.g. case_attachment or knowledge_source")
     sub.add_parser("limits", parents=common, help="each purpose's allowed types and size")
+    watch = sub.add_parser("watch", help="watched folders: list, show, add, check, events, delete")
+    wsub = watch.add_subparsers(dest="watch_verb", required=True)
+    wsub.add_parser("list", parents=common, help="the team's watched folders with their last check")
+    wsub.add_parser("show", parents=common, help="one watched folder").add_argument("watch")
+    add = wsub.add_parser("add", parents=common, help="watch an app's folders; needs watches.manage")
+    add.add_argument("name")
+    add.add_argument("--plugin", required=True, help="the app's plugin, e.g. sharepoint")
+    add.add_argument("--source", default="files", help="the plugin's file source (default files)")
+    add.add_argument("--connection", help="the account to read with; the team account when left out")
+    add.add_argument(
+        "--values", required=True, help='the folders as JSON, e.g. {"site": "Finance", "libraries": ["Invoices"]}'
+    )
+    check = wsub.add_parser("check", parents=common, help="Check now; --wait waits for it to end")
+    check.add_argument("watch")
+    check.add_argument("--wait", type=float, default=0, help="seconds to wait for the check to end")
+    events = wsub.add_parser("events", parents=common, help="what the checks found, oldest first")
+    events.add_argument("watch")
+    events.add_argument("--after", type=int, default=0)
+    wsub.add_parser("delete", parents=common, help="stop watching; the files stay in Files").add_argument("watch")
     ns = ap.parse_args(argv)
     try:
         ops = client(ns)
         files = ops.raw.files
+        if ns.verb == "watch":
+            return _watch(ns, ops)
         if ns.verb == "list":
             rows = every_page(files.files_list_files, search=ns.search, purpose=ns.purpose)
             return table(ns, rows, "id", "name", "purpose", "size", "uploadedBy", "scan.status")
@@ -71,6 +93,26 @@ def files_main(argv: list[str]) -> int:
         return emit(ns, upload_file(ops, Path(ns.path), ns.purpose, marked(ns, Path(ns.path).name)))
     except Exception as exc:
         return refuse(exc)
+
+
+def _watch(ns: Any, ops: OpsAI) -> int:
+    watches = ops.files.watches
+    if ns.watch_verb == "list":
+        return table(ns, watches.list(), "id", "name", "plugin", "checking", "lastCheckAt", "lastCheck.status",
+                     "lastCheck.brought", "lastCheck.failed")  # fmt: skip
+    if ns.watch_verb == "show":
+        return emit(ns, watches.get(ns.watch))
+    if ns.watch_verb == "add":
+        values = json.loads(ns.values)
+        return emit(ns, watches.add(ns.name, plugin=ns.plugin, source=ns.source, values=values,
+                                    connection_id=ns.connection))  # fmt: skip
+    if ns.watch_verb == "check":
+        return emit(ns, watches.check(ns.watch, wait=ns.wait))
+    if ns.watch_verb == "events":
+        return table(ns, watches.events(ns.watch, after=ns.after)["data"], "number", "kind", "path", "version",
+                     "size", "reason")  # fmt: skip
+    watches.delete(ns.watch)
+    return emit(ns, {"deleted": ns.watch})
 
 
 def upload_file(ops: OpsAI, path: Path, purpose: str, name: str | None = None) -> Any:

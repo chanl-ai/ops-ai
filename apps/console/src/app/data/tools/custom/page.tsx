@@ -13,6 +13,7 @@ import { DataTableRowActions } from '@/components/data-table-row-actions';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { PageLayout } from '@/components/page-layout';
 import { SelectedList, toastBulk } from '@/components/shared/bulk';
+import { ListCell } from '@/components/shared/table-cells';
 import { DeleteDialog } from '@/components/shared/delete-dialog';
 import { StopRowClick } from '@/components/shared/form-field';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
@@ -136,9 +137,8 @@ function columns(onDelete: (m: ToolModule) => void, canBuild: boolean): ColumnDe
         const w = row.original.workflows;
         if (!w.length) return <span className="text-xs text-muted-foreground">None</span>;
         return (
-          <span className="block max-w-40 truncate text-sm" title={w.map((x) => x.name).join(', ')}>
-            {w[0].name}
-            {w.length > 1 && <span className="text-muted-foreground"> +{w.length - 1}</span>}
+          <span className="text-sm">
+            <ListCell values={w.map((x) => x.name)} shown={1} label="Workflows" className="max-w-40" />
           </span>
         );
       },

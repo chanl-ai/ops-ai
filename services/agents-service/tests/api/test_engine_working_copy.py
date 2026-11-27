@@ -50,7 +50,7 @@ async def test_a_save_keeps_a_failing_copy_and_makes_no_version(client: AsyncCli
     assert ("ghost", "unknown_type") in {(c["node"], c["code"]) for c in checks}
     # A setting's error reads as the step's form names it, not as the schema validator words it.
     assert {(c["node"], c["message"]) for c in checks if c["code"] == "invalid_parameter"} == {
-        ("fields", "Fields must be a group of named values.")
+        ("fields", "Set fields: Fields must be a group of named values.")
     }, checks
     again = (await client.get(WF)).json()["data"]
     assert [v["version"] for v in again["versions"]] == [1]
@@ -221,6 +221,18 @@ async def test_a_publish_while_a_review_is_open_is_listed_and_refused_before_a_v
     opened = (await client.get(WF)).json()["data"]["saveBase"]
     base = (await _save(client, basic() | {"name": "Refund check, while waiting"}, opened)).json()["data"]["saveBase"]
     await _refused_and_kept(client, base, "review_open", [1])
+
+
+async def test_an_unparseable_copy_still_lists_the_review_that_is_open(reviewed: AsyncClient) -> None:
+    client = reviewed
+    made = await client.post("/v1/workflows/definitions", json={"yaml": BASIC.read_text()})
+    assert made.status_code == 201, made.text
+    assert (await client.post(f"{WF}/publish-requests", json={"note": "first"})).status_code == 201
+    opened = (await client.get(WF)).json()["data"]["saveBase"]
+    saved = await _save(client, basic() | {"connections": "not a list"}, opened)
+    assert saved.status_code == 200, saved.text
+    preview = (await client.get(f"{WF}/publish-preview")).json()["data"]
+    assert {b["code"] for b in preview["blockers"]} >= {"review_open", "invalid_definition"}, preview
 
 
 async def test_a_copy_equal_to_the_live_version_is_listed_and_refused_with_the_copy_kept(client: AsyncClient) -> None:

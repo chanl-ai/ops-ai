@@ -28,6 +28,7 @@ from langgraph.config import get_config
 from ops_access import can
 from ops_agent_kernel.ports import ToolOutcome
 from ops_agent_kernel.types import ToolGrant
+from ops_agents.graphs.common import Asker
 from ops_contracts.chain import ChainRecord, ChainRefusedError
 from ops_contracts.skill_run import called_as
 from ops_service_kit import narrow
@@ -35,7 +36,6 @@ from ops_service_kit.errors import Forbidden, NotFound
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import new_id, now_iso
 
-from ..graphs.common import Asker
 from ..store.events import EventLog
 from ..store.graphs import StoredThread
 from ..store.team_defaults import TeamDefaults

@@ -23,12 +23,19 @@ from ops_files.settings import StorageSettings, build_store
 from ops_files.store import FilesStore, ReadRequestsStore, SettingsStore, engine_for
 from ops_files.store.files import SYSTEM_ROLE, service_outbox
 from ops_files.tenant_files import TenantFiles
+from ops_files.watches import WatchChecks, keep_checking
 from ops_identity import Auth, ServiceClient
 from ops_service_kit.logging import configure_logging
 from ops_service_kit.settings import Settings, require_keys
+from ops_sources import ToolReader
 from ops_storage.local import LocalObjectStore
-from ops_store.outbox import relay, run_relay
+from ops_store.audit import AUDIT_EVENT, AUDIT_ROUTE, AUDIT_SCOPE
+from ops_store.outbox import Poster, relay, run_relay
 from ops_store.schema_version import require_current_schema
+
+# Where files_outbox's events go: an audit entry to platform-service's account audit log, every other event (a deleted
+# file, a read request, a finished check) to agents-service's /v1/events.
+RELAY_ROUTES = {AUDIT_EVENT: ("platform",), "*": ("agents",)}
 
 # The classes files.md 4.4 names for the purposes this slice serves; a retention settings page replaces this list.
 RETENTION_CLASSES = (
@@ -95,7 +102,7 @@ def build(settings: Settings) -> TenantFiles:
 def main() -> None:
     settings = Settings()
     # agents-service reads every file event (file.deleted starts the purge workflow), so files cannot run without it.
-    settings.require(*settings.identity_endpoints, "agents")
+    settings.require(*settings.identity_endpoints, "agents", "tools")
     require_keys(settings, "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
     configure_logging(service="files-service")
@@ -105,12 +112,30 @@ def main() -> None:
     # records the run it started on the request, which the console follows.
     agents = ServiceClient.for_settings(settings, service="files", audience="agents", scopes=["events:emit"])
     enrich = ReadRequestsStore(files.engine).record_run
-    targets = {"agents": agents}
+    targets: dict[str, Poster] = {"agents": agents}
+    # A change to a watched folder writes its audit entry to the outbox; platform-service's internal port keeps the
+    # account's one audit log. On a stack without platform-service the entries wait in the outbox.
+    if settings.platform is not None:
+        targets["platform"] = ServiceClient.for_settings(
+            settings, service="files", audience="platform", scopes=[AUDIT_SCOPE], endpoint="platform_internal"
+        )
     events = relay(
-        files.engine, service_outbox, routes={"*": ("agents",)}, targets=targets, role=SYSTEM_ROLE, enrich=enrich
+        files.engine,
+        service_outbox,
+        routes=RELAY_ROUTES,
+        targets=targets,
+        role=SYSTEM_ROLE,
+        enrich=enrich,
+        team_in_token=frozenset({"platform"}),
+        path_by_target={"platform": AUDIT_ROUTE},
     )
+    # A watched folder's check reads the source through tools-service with the team's sign-in, as knowledge does.
+    tools = ServiceClient.for_settings(settings, service="files", audience="tools", scopes=["tools:view", "tools:run"])
+    reader = ToolReader(tools, key_prefix="files")
+    checks = WatchChecks(files, reader)
     background: list[Callable[[], Coroutine[Any, Any, None]]] = [
         lambda: keep_purging(files),
+        lambda: keep_checking(checks),
         lambda: run_relay(events, key="files_relay", stop=asyncio.Event()),
     ]
     app = create_files_app(
@@ -119,6 +144,7 @@ def main() -> None:
         auth=Auth.from_settings(settings, audience="files"),
         settings=files.settings,
         background=background,
+        reader=reader,
     )
     uvicorn.run(app, host=settings.bind_host, port=settings.files_port, log_config=None, access_log=False)
 

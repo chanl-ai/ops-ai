@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "Schedule changes appear in the audit log",
+  "description": "Saving or clearing a workflow's schedule now adds an audit entry that shows the old and new schedule in words and who made the change.",
+  "tag": "new"
+}

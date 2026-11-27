@@ -206,6 +206,10 @@ class Settings(BaseSettings):
     mailboxes_seed_file: Path | None = None
     # How often the workflow worker reads each bound mailbox.
     email_poll_seconds: float = 30.0
+    # The shortest gap between two runs a saved schedule may ask for, every rule kind alike. Only a save checks it (a
+    # save applies at once, outside versions), so raising it leaves saved schedules running and refuses each at its
+    # next save (docs/architecture/roles-and-permissions.md).
+    schedule_floor_minutes: int = 5
     # Mail out (packages/ops_email): "none" fails every send with that reason; "smtp", "resend" and "graph" send from
     # `mail_from`; "fake" is dev only and writes each message to `mail_fake_out_dir`.
     mail_provider: Literal["none", "fake", "smtp", "resend", "graph"] = "none"
@@ -398,6 +402,9 @@ class Settings(BaseSettings):
     # it seeds connection openai-local at that URL and binds alias default to it. The row is the switch afterwards:
     # PUT the connection's baseUrl to https://api.openai.com/v1 to make the same alias real.
     models_fake_openai_url: str | None = None
+    # models-service: a folder of extra provider type entries (one JSON file each) loaded after the built-in registry,
+    # so an install or a test adds a provider type with no code change. An entry that fails validation stops start-up.
+    models_provider_registry_extra: Path | None = None
     # How long a rotated model key's previous secret keeps working, so callers can pick up the new one.
     model_key_overlap_seconds: int = 900
     # platform-service: the identity issuer. The public port serves sign-in and the key set; the internal port serves
@@ -532,6 +539,8 @@ class Settings(BaseSettings):
                 # secrets_egress:manage: an approved held host joins the tenant's allow-list in tools-service;
                 # claimed only on that call (GatewayClient.egress_host_decision).
                 "secrets_egress:manage",
+                # audit:create: its relay writes a schedule's save and clear to the account's audit log.
+                "audit:create",
             ],
             # deployments:view: it reads a mailbox's reply sender when a send_reply names the mailbox.
             # settings:view: a tool module publish reads the team's publishReview live.
@@ -547,6 +556,8 @@ class Settings(BaseSettings):
             # offers the team's skills as prompts and lists and installs templates, each token holding only the
             # cells the person it calls for holds (mcp_tools.py). workflows:run: an MCP link starts a workflow's live
             # version for the signed-in person, held only when that person holds it, with their acting-for token.
+            # agents:view: the alias list says how many agents name each alias (GET /v1/model-alias-uses).
+            "models": ["agents:view"],
             "tools": [
                 "agents:view",
                 "knowledge:view",
@@ -567,8 +578,11 @@ class Settings(BaseSettings):
                 "guardrails:create",
                 "workflows:run",
             ],
-            # events:emit: it reports a deleted file as a service event, which purges what was derived from it.
-            "files": ["events:emit"],
+            # events:emit: it reports a deleted file as a service event, which purges what was derived from it, and a
+            # watched folder's finished check. tools:view, tools:run: a watched folder's check reads the source
+            # through tools-service with the team's sign-in, as kb-service does. audit:create: its relay writes
+            # changes to watched folders to the account's audit log.
+            "files": ["events:emit", "tools:view", "tools:run", "audit:create"],
             # files:view, files:edit: documents-service reads the bytes it reads from as the caller's team and keeps a
             # sample's file with a reference; settings:view: the extractionFloor policy.
             # events:emit: it reports a person's correction as a service event, which saves it on the file.

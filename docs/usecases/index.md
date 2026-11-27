@@ -33,7 +33,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-040 | tools-service | Security decides a tool module review | api, ui | `tools-service/security-decides-a-module-review.md` |
 | uc-041 | tools-service | Workflow approvals use agents-service workflows | api | `tools-service/workflow-approvals-use-agents-service-workflows.md` |
 | uc-042 | tools-service | A module's call counts and activity come from real calls | api | `tools-service/module-traffic-from-real-calls.md` |
-| uc-047 | console | Sub-pages show as rows in the sidebar, in the area they belong to (retired) | ui | `console/sub-pages-in-the-sidebar.md` |
+| uc-047 | console | Sub-pages show as rows in the sidebar, in the area they belong to | none | `console/sub-pages-in-the-sidebar.md` |
 | uc-048 | agents-service | An agent is granted and calls a published tools-service operation | api | `agents-service/agent-calls-registry-operations.md` |
 | uc-049 | agents-service | A write runs only after as many people as its policy names approve it | api, ui | `agents-service/write-approval-policy.md` |
 | uc-052 | console | Access is Read or Write in the console | ui | `console/access-is-read-or-write.md` |
@@ -181,6 +181,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-252 | agents-service | A builder archives a workflow: it starts no run and leaves both lists, its run kept; restored, it serves its live version again | api, ui | `agents-service/archive-a-workflow.md` |
 | uc-400 | agents-service | A workflow forks into two checks and a Join: the step after it runs once with both by the step they came from; a skipped branch is null; a fork meeting at a plain step is warned | api, ui | `agents-service/branches-join.md` |
 | uc-401 | agents-service | A never-run workflow's steps list their output fields by port, from type, settings, answer or operation; a misspelt mapping is warned on save | api | `agents-service/step-output-shapes.md` |
+| uc-512 | agents-service | A builder reads a workflow step in plain words, sees what it receives with the last run values, and picks a field by name that the next run reads | api, sdk, ui | `agents-service/step-sheet-plain-words.md` |
 | uc-402 | agents-service | A parent reads three attachments in children two at a time, one fails, and goes on once with every result in item order | api, ui | `agents-service/wait-for-children.md` |
 | uc-403 | agents-service | A workflow waits two seconds, waits until a date or goes on when it is past or not a date, and a waiting review is reminded in Activity until decided | api, ui | `agents-service/wait-and-reminders.md` |
 | uc-331 | files-service | A file is read with Detect from the Files page | api, ui | `files-service/a-file-is-read-with-detect.md` |
@@ -292,7 +293,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-750 | agents-service | An admin limits what the menu offers | api | `(no doc)` |
 | uc-723 | console | The console lists every area as an open sidebar section, offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams; with the area_tabs flag on, the area tabs come back | ui | `console/console-areas.md` |
 | uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | `console/console-areas-server-facts.md` |
-| uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due, the same tick key starts no second run, and a tick due later stays queued | api, sdk | `(no doc)` |
+| uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due and once per key, and a saved schedule starts one run at each slot from the worker's clock | api, sdk, cli | `(no doc)` |
 | uc-workflows-2 | agents-service | A builder reads why a test run failed: its kind, code, the failed step, a sentence for an end user and the End it stopped at | api, sdk, cli | `(no doc)` |
 | uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | `(no doc)` |
 | uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, cli, ui | `agents-service/evals-keep-saved-cases-and-runs.md` |
@@ -302,7 +303,8 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-755 | tools-service | A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it | api, ui | `tools-service/a-team-holding-only-a-workflow.md` |
 | uc-756 | agents-service | A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record | api, ui | `agents-service/a-shared-form-filled-in-signed.md` |
 | uc-757 | agents-service | A builder writes a skill with steps and an agent brief, and a chat follows the steps | api, sdk, cli, ui | `agents-service/a-builder-writes-a-skill-with.md` |
-| uc-761 | console | A builder edits a workflow that saves itself, publishes it past its problems and compares its versions | ui | `console/workflow-drafts-and-versions.md` |
+| uc-948 | agents-service | A builder edits an agent's brief and what it uses on one page | api, sdk, cli, ui | `agents-service/agent-page-in-one-editor.md` |
+| uc-761 | console | A builder edits a workflow that saves itself, publishes it past its problems and compares its versions | sdk, cli, ui | `console/workflow-drafts-and-versions.md` |
 | uc-762 | agents-service | A builder tries one path of a skill: reads run, a write is planned and sent once only when confirmed, and nothing is stored | api, ui | `agents-service/a-builder-tries-one-skill-path.md` |
 | uc-763 | agents-service | A run outlives a killed worker and redrives from its failed step | api | `agents-service/a-run-outlives-a-killed-worker.md` |
 | uc-764 | console | An agent page shows its save state, its model, knowledge, tools and skills on the main page, and a channels tab | ui | `console/agent-page-settings-and-channels.md` |
@@ -314,4 +316,10 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-770 | tools-service | Admins see people's app sign-ins and end one | ui | `tools-service/admins-see-people-s-app-sign.md` |
 | uc-771 | agents-service | A builder takes a new skill to its first publish in under ten minutes | ui | `agents-service/a-builder-takes-a-new-skill.md` |
 | uc-781 | console | Record editors and list pages share one header, one tab strip and one section style | ui | `console/editor-page-layout.md` |
+| uc-772 | kb-service | Search a long document's pieces on the server | api | `kb-service/search-a-long-document-s-pieces.md` |
+| uc-782 | agents-service | Only a person who may decide a review decides, resumes or replays it | api | `agents-service/only-a-person-who-may-decide.md` |
 | uc-790 | tools-service | A chat user never chooses between their own login and the team's | api, ui | `tools-service/chat-never-asks-whose-login.md` |
+| uc-780 | console | A long list or text in a table cell stays inside its column | ui | `console/long-values-in-tables.md` |
+| uc-791 | models-service | A provider type added as a file shows in the add list | api, ui | `models-service/a-provider-type-added-as-a.md` |
+| uc-792 | models-service | An admin connects Anthropic and an agent's model settings reach its chat | api, ui | `models-service/an-admin-connects-anthropic-and-an.md` |
+| uc-agents-1 | agents-service | An agent's tools are chosen by app: searched, opened, all of an app's tools added in one save, and listed by app with counts | api, ui | `(no doc)` |

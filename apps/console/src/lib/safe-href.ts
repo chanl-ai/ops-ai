@@ -4,8 +4,11 @@
  */
 export function safeHref(href: string | undefined, { web = false }: { web?: boolean } = {}): string | undefined {
   if (!href) return undefined;
-  const allowed = web ? /^https?:\/\//i : /^(\/(?!\/)|https?:\/\/|mailto:)/i;
-  return allowed.test(href.trim()) ? href : undefined;
+  const trimmed = href.trim();
+  if (/^https?:\/\//i.test(trimmed)) return href;
+  if (web) return undefined;
+  if (/^mailto:/i.test(trimmed)) return href;
+  return consolePath(trimmed) ? href : undefined;
 }
 
 /**

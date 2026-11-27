@@ -33,6 +33,8 @@ router = APIRouter(prefix="/v1/tool-uses")
 # Which of a team's workflows read each document type, for documents-service's delete of one.
 document_type_router = APIRouter(prefix="/v1/document-type-uses")
 account_router = APIRouter(prefix="/v1/account-uses")
+# How many agents name each model alias, for models-service's alias list.
+model_alias_router = APIRouter(prefix="/v1/model-alias-uses")
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 MAX_TOOLS = 200
 
@@ -158,3 +160,28 @@ async def list_account_uses(
     can(caller, "agents", "view", team=team, what="who names an account")
     found = await account_uses_in(rt, str(caller.team_id), app, name)
     return ok(AccountUsers(**found).model_dump(by_alias=True))
+
+
+async def model_alias_uses(rt: Runtime, team_id: str | None, aliases: list[str]) -> dict[str, int]:
+    """For each alias, how many agents name it on their newest or published version: the tenant's agents for a
+    service that names no team, else `team_id`'s. An agent naming no alias runs on the runtime's, which is not
+    counted here."""
+    wanted = set(aliases)
+    holders: dict[str, set[str]] = {a: set() for a in aliases}
+    for v in await PinUsers(rt.db).held_versions(team_id):
+        model = v.spec.get("model")
+        if isinstance(model, str) and model in wanted:
+            holders[model].add(v.agent_id)
+    return {a: len(ids) for a, ids in holders.items()}
+
+
+@model_alias_router.get("", response_model=Envelope[dict[str, int]])
+async def list_model_alias_uses(
+    rt: Rt, caller: CurrentTenantCaller, _: Tx, aliases: Annotated[str, Query(min_length=1, max_length=8000)]
+) -> JSONResponse:
+    """`aliases` is a comma-separated list of alias names; each comes back with how many agents name it. A person
+    with agents.view counts their team's agents; a service holding `agents:view` with no team counts the tenant's."""
+    team = None if caller.kind == "service" else caller.team_id
+    can(caller, "agents", "view", team=team, what="how many agents name a model alias")
+    names = [n for n in dict.fromkeys(a.strip() for a in aliases.split(",")) if n][:MAX_TOOLS]
+    return ok(await model_alias_uses(rt, team, names))

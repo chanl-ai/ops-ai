@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Archive, Download, ExternalLink, FilePlus2, Inbox, Pin, Sparkles, Trash2, Upload, Users } from 'lucide-react';
+import { Archive, Download, ExternalLink, FilePlus2, Inbox, Pin, Sparkles, Trash2, Users } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -21,12 +21,12 @@ import { idColumn } from '@/components/shared/id-column';
 import { selectColumn } from '@/components/shared/select-column';
 import { announcePublish } from '@/components/shared/publish-result';
 import { GenerateSkillDialog } from '@/components/skills/generate-skill-dialog';
-import { DeprecateSkillDialog, ImportSkillDialog, NewSkillDialog } from '@/components/skills/skill-dialogs';
+import { DeprecateSkillDialog, NewSkillDialog } from '@/components/skills/skill-dialogs';
 import { ORIGIN, SkillStatusBadge, STATUS_LABEL } from '@/components/skills/skill-meta';
 import { SKILL_LOADING_LABEL, SKILL_LOADING_OPTIONS } from '@/components/skills/skill-loading';
 import { Button } from '@/components/ui/button';
 import { useDownloadFile } from '@/hooks/file-queries';
-import { useBulkDeleteSkills, useBulkDeprecateSkills, useCreateSkill, useExportSkills, useImportSkill, useSkillGeneratorBackend, useSkillImportPreview, useSkillOptions, useSkills, type SkillRow } from '@/hooks/skill-queries';
+import { useBulkDeleteSkills, useBulkDeprecateSkills, useCreateSkill, useExportSkills, useSkillGeneratorBackend, useSkillOptions, useSkills, type SkillRow } from '@/hooks/skill-queries';
 import { useCreateParam } from '@/hooks/use-create-param';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { useSticky } from '@/hooks/use-sticky';
@@ -192,10 +192,6 @@ export default function SkillsPage() {
   const blankOpen = createOpen && canBuild && createKind !== 'generate';
   const backend = useSkillGeneratorBackend(generateOpen);
   const create = useCreateSkill();
-  const [importOpen, setImportOpen] = React.useState(false);
-  const [importFileId, setImportFileId] = React.useState<string | undefined>();
-  const preview = useSkillImportPreview(importOpen ? importFileId : undefined);
-  const importSkill = useImportSkill();
   const exportSkills = useExportSkills();
   const download = useDownloadFile();
   const bulkDeprecate = useBulkDeprecateSkills();
@@ -250,9 +246,7 @@ export default function SkillsPage() {
         canBuild && (
         <>
           <TemplatesGallery kind="skill" href="/build/skills" />
-          <Button variant="outline" onClick={() => setImportOpen(true)} data-testid="import-skill-button">
-            <Upload className="size-4" /> Import
-          </Button>
+          {/* Import stays out until agents-service serves /v1/skills/import and files takes skill uploads. */}
           <Button variant="outline" onClick={() => openCreate('1')} data-testid="new-skill-button">
             <FilePlus2 className="size-4" /> New skill
           </Button>
@@ -359,22 +353,6 @@ export default function SkillsPage() {
           leaving.current = true;
           toast.success(`Created ${s.name}`, { description: 'Write the instructions and add tests, then request review.' });
           router.push(`/build/skills/${s.id}?tab=instructions`);
-        }}
-      />
-      <ImportSkillDialog
-        open={importOpen}
-        onOpenChange={setImportOpen}
-        teams={teams}
-        defaultTeam={defaultTeam}
-        onFile={setImportFileId}
-        preview={preview.data}
-        previewLoading={preview.isPending && !!importFileId}
-        previewError={preview.isError ? preview.error.message : undefined}
-        isPending={importSkill.isPending}
-        onImport={async (fileId, ownerTeam) => {
-          const s = await importSkill.mutateAsync({ fileId, ownerTeam });
-          toast.success(`Imported ${s.name} as a draft`, { description: 'Check the tools it asked for, add tests, then request review.' });
-          router.push(`/build/skills/${s.id}`);
         }}
       />
       <DeprecateSkillDialog

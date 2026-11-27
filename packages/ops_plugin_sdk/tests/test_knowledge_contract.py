@@ -1,5 +1,5 @@
 """The knowledge-source contract, by failure mode: a plugin that fetches an item again though its version tag still
-matches, one whose changes miss an edit, a source's call reaching a host its settings never named, and a manifest
+matches, one whose picker finds no places, a source's call reaching a host its settings never named, and a manifest
 whose source tools cannot be sent the source's settings."""
 
 from __future__ import annotations
@@ -133,6 +133,22 @@ def test_a_fetch_that_ignores_a_matching_tag_is_named(tmp_path: Path) -> None:
         plugin, "site", fake(site), settings={}, values=VALUES, change=site.change, delete=site.delete
     )
     assert any("fetched claims again though its tag" in p for p in found), found
+
+
+def test_a_picker_that_finds_no_places_is_named(tmp_path: Path) -> None:
+    site = Site()
+    manifest = MANIFEST.replace(
+        "knowledge_sources:",
+        "  - { name: find_sections, access: read, knowledge: list_scopes, function: demo_pages.kb:find_sections,\n"
+        "      input: { source: { type: object, required: false }, query: { type: string, required: false } } }\n"
+        "knowledge_sources:",
+    ).replace("    changes: changed_pages\n", "    changes: changed_pages\n    scopes: find_sections\n")
+    kb = KB + "\n@tool(access='read')\ndef find_sections(ctx, source=None, query=None):\n    return {'scopes': []}\n"
+    found = knowledge_contract(
+        pages_plugin(tmp_path, manifest, kb), "site", fake(site), settings={}, values=VALUES, change=site.change,
+        delete=site.delete,
+    )  # fmt: skip
+    assert found == ["find_sections found no places to pick"], found
 
 
 def test_a_source_reaches_only_the_hosts_its_settings_name(tmp_path: Path) -> None:

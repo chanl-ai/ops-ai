@@ -19,9 +19,14 @@ def git(repo: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True).stdout.strip()
 
 
+# The script reads GITHUB_ACTIONS and WALK_PASSED; CI sets the first, so a test builds its own environment.
+CI_ONLY = ("GITHUB_ACTIONS", "WALK_PASSED")
+
+
 def tag(repo: Path, **env: str) -> subprocess.CompletedProcess[str]:
+    base = {k: v for k, v in os.environ.items() if k not in CI_ONLY}
     return subprocess.run(
-        ["sh", str(SCRIPT)], cwd=repo, capture_output=True, text=True, env={**os.environ, **env}, check=False
+        ["sh", str(SCRIPT)], cwd=repo, capture_output=True, text=True, env={**base, **env}, check=False
     )
 
 
@@ -85,3 +90,54 @@ def test_a_queue_merge_commit_is_tagged_from_the_pull_request_title_in_its_body(
     assert tag(work, REF=merge).returncode == 0 and tag(work, REF=squash).returncode == 0
     assert git(remote, "rev-list", "-n", "1", "v1.2.0") == merge
     assert git(remote, "rev-list", "-n", "1", "v1.2.1") == squash
+
+
+def test_auto_bump_tags_a_feature_as_the_next_minor_a_fix_as_the_next_patch_and_nothing_else(tmp_path: Path) -> None:
+    remote, work = clone_pair(tmp_path)
+    commit(work, "b", RELEASE)
+    tag(work)
+    git(work, "tag", "v2026-11-24.1")  # an old date tag never counts as the highest version
+    feat = commit(work, "c", "feat(console): saved views (#40)")
+    assert tag(work, BUMP="auto").returncode == 0
+    fix = commit(work, "d", "fix(api): paging (#41)")
+    assert tag(work, BUMP="auto").returncode == 0
+    commit(work, "e", "chore(ci): tidy (#42)")
+    assert "gets no tag" in tag(work, BUMP="auto").stdout
+    assert git(remote, "rev-list", "-n", "1", "v1.3.0") == feat
+    assert git(remote, "rev-list", "-n", "1", "v1.3.1") == fix
+
+
+def test_auto_bump_reads_the_pull_request_title_from_a_merge_commit_body(tmp_path: Path) -> None:
+    remote, work = clone_pair(tmp_path)
+    commit(work, "b", RELEASE)
+    tag(work)
+    queue = "Merge pull request #50 from chanl-ai/gh-readonly-queue/develop/pr-50-abc"
+    feat = commit(work, "c", queue, body="feat(console): saved views")
+    assert tag(work, BUMP="auto").returncode == 0
+    fix = commit(work, "d", queue, body="fix(api): paging (#51)")
+    assert tag(work, BUMP="auto").returncode == 0
+    commit(work, "e", queue, body="chore(ci): tidy")
+    assert "gets no tag" in tag(work, BUMP="auto").stdout
+    assert git(remote, "rev-list", "-n", "1", "v1.3.0") == feat
+    assert git(remote, "rev-list", "-n", "1", "v1.3.1") == fix
+
+
+def test_a_commit_that_already_has_a_version_tag_gets_no_second_one(tmp_path: Path) -> None:
+    remote, work = clone_pair(tmp_path)
+    commit(work, "b", RELEASE)
+    tag(work)
+    feat = commit(work, "c", "feat(console): saved views (#40)")
+    assert tag(work, BUMP="auto").returncode == 0
+    again = tag(work, BUMP="auto")
+    assert again.returncode == 0 and "already v1.3.0" in again.stdout
+    assert git(remote, "tag", "--points-at", feat) == "v1.3.0"
+
+
+def test_a_tag_made_on_github_needs_a_recorded_walk_and_a_local_run_does_not(tmp_path: Path) -> None:
+    remote, work = clone_pair(tmp_path)
+    commit(work, "b", RELEASE)
+    refused = tag(work, GITHUB_ACTIONS="true")
+    assert refused.returncode == 1 and "no passed staging walk" in refused.stderr
+    assert git(remote, "tag", "--list") == ""
+    assert tag(work, GITHUB_ACTIONS="true", WALK_PASSED="1").returncode == 0
+    assert git(remote, "tag", "--list") == "v1.2.0"

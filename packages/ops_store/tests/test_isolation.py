@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_service_kit.settings import Settings
 from ops_store.backends import backends
 from ops_store.conformance import engine_for, isolation_suite
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, isolation_ddl, team_owned
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, backfill_ddl, isolation_ddl, team_owned
 
 ROLE = "ops_isolation_test"
 meta = sa.MetaData()
@@ -104,3 +104,9 @@ def test_the_generator_refuses_a_team_owned_table_without_its_team_column() -> N
     )
     with pytest.raises(ValueError, match="team column"):
         isolation_ddl(broken, "postgresql")
+
+
+def test_a_backfill_refuses_a_tenants_stand_in_keyed_by_tenant_id() -> None:
+    stand_in = sa.Table("tenants", sa.MetaData(), sa.Column("tenant_id", sa.String(64)), info=TENANT_SCOPED)
+    with pytest.raises(ValueError, match="its own key"):
+        backfill_ddl([stand_in], "postgresql", chain="platform", kind="tenant")

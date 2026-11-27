@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { consolePath, safeHref } from './safe-href.ts';
 
 test('a script or data address is never kept as a link', () => {
-  for (const bad of ['javascript:void(0)', ' JavaScript:void(0)', 'data:text/html,x', '//evil.example/x', 'vbscript:x']) {
+  for (const bad of ['javascript:void(0)', ' JavaScript:void(0)', 'data:text/html,x', '//evil.example/x', '/\\evil.example/x', ' /\\evil.example', 'vbscript:x']) {
     assert.equal(safeHref(bad), undefined, bad);
   }
   assert.equal(safeHref('/data/files?file=f1'), '/data/files?file=f1');

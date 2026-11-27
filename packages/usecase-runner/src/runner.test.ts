@@ -15,6 +15,7 @@ import { EXIT, exitFor, parseChecks, verdict } from './report.ts';
 import { resolveScript } from './resolve.ts';
 import { childEnv, pluginsRepoRefusal } from './run.ts';
 import { nextId, scaffold } from './scaffold.ts';
+import { StoryError } from './stories.ts';
 
 const TABLE = `# Use cases
 
@@ -338,6 +339,21 @@ test('each use case in a run gets its own database, dropped before the next one 
   const names = used();
   assert.equal(new Set(names).size, 2, names.join());
   assert.deepEqual(dropped, [{ name: names[0], scriptsRun: 1 }, { name: names[1], scriptsRun: 2 }]);
+});
+
+test('a Stories table that is proved by a step it does not have is refused before any script runs', async () => {
+  const root = repo();
+  writeFileSync(
+    join(root, 'docs/usecases/agents-service/chat.md'),
+    '# Chat\n\nStatus: current. Id: `uc-001`. Service: `agents-service`. Layers: api.\n\n## Stories\n\n| # | Story | Layer | Steps | Proved by |\n|---|---|---|---|---|\n| S1 | A person chats | api | 1-2 | 9-22 |\n\n## Steps and expected results\n',
+  );
+  const ran = join(root, 'ran');
+  writeFileSync(join(root, 'docs/usecases/agents-service/scripts/test-uc-001-api.mjs'), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(ran)}, '1'); console.log('PASS ran');\n`);
+  const parent = { ...process.env };
+  for (const k of [...PORT_VARS, DB_VAR]) delete parent[k];
+  const drop = async () => true;
+  await assert.rejects(runUseCases(root, parseRegistry(TABLE), 'uc-001', 'api', { parent, drop }), StoryError);
+  assert.equal(existsSync(ran), false, 'the script ran before the table was checked');
 });
 
 test("a database URL follows make/env.mk: the devcontainer's postgres side container, else this machine's port", () => {

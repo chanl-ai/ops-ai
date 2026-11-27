@@ -108,11 +108,13 @@ def _code(r: Any) -> str:
     return str(r.json()["error"]["code"])
 
 
-def test_admin_holds_no_workspace_cell_and_owner_holds_only_it() -> None:
-    assert not [g for g in ADMIN.grants if g[0] == "workspace"]
+def test_admin_holds_no_workspace_or_install_cell_and_owner_holds_only_them() -> None:
+    # The install's model aliases apply to every team, so a workspace Admin holding install.manage could re-point them.
+    owner_areas = ("workspace", "install")
+    assert not [g for g in ADMIN.grants if g[0] in owner_areas]
     owner = next(r for r in BUILTIN_ROLES if r.id == "owner")
-    assert owner.grants == (("workspace", "manage", "all"),)
-    assert all(not [g for g in r.grants if g[0] == "workspace"] for r in BUILTIN_ROLES if r.id != "owner")
+    assert owner.grants == (("workspace", "manage", "all"), ("install", "manage", "all"))
+    assert all(not [g for g in r.grants if g[0] in owner_areas] for r in BUILTIN_ROLES if r.id != "owner")
 
 
 async def test_only_the_owner_transfers_and_only_to_an_account_admin(signin: SignInRig, usage: FakeUsage) -> None:

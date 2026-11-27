@@ -34,6 +34,7 @@ from ops_files.models import (
     FileRetention,
     FileScan,
     FileSensitivity,
+    FileSource,
     FileVersion,
     LegalHold,
     ReadRequest,
@@ -80,6 +81,7 @@ from ops_files.service import (
 from ops_files.sniffing import SNIFF_BYTES, prove
 from ops_files.store import (
     AsyncEngine,
+    FileChange,
     FileDeletedPayload,
     FileRow,
     FilesStore,
@@ -92,9 +94,12 @@ from ops_files.store import (
     ReadRequestedPayload,
     ReadRequestRow,
     ReadRequestsStore,
+    SourceFile,
+    SourceVersion,
     UploadClaim,
     UploadCompleted,
 )
+from ops_files.store.files import Written
 from ops_service_kit.http import OptionsPage, Pagination, options_page, options_window
 from ops_service_kit.listing import ListParams
 from ops_storage.base import ObjectExistsError, StreamingObjectStore
@@ -120,6 +125,8 @@ _SENSITIVITY: dict[str, str] = {
     "case_attachment": "confidential",
     "document_type_sample": "confidential",
     "email_body": "confidential",
+    # A watched folder is often a finance or claims library; a person lowers it once they look.
+    "source_file": "confidential",
     "chat_attachment": "confidential",
     "knowledge_source": "internal",
     "avatar": "public",
@@ -164,6 +171,10 @@ def _read_request(row: ReadRequestRow) -> ReadRequest:
         requested_by=row.requested_by,
         requested_at=row.requested_at,
     )
+
+
+# The purpose of a file a watched folder brought in.
+SOURCE_PURPOSE = "source_file"
 
 
 def _utcnow() -> datetime:
@@ -375,6 +386,7 @@ class TenantFiles:
                 )
                 for v in row.versions
             ],
+            source=_source(row),
             references=references,
         )
 
@@ -389,7 +401,7 @@ class TenantFiles:
         out = detail.model_dump(
             mode="json",
             by_alias=True,
-            exclude={"versions", "references", "delete_blocked_by", "can_edit", "can_delete", "can_publish"},
+            exclude={"versions", "references", "source", "delete_blocked_by", "can_edit", "can_delete", "can_publish"},
         )
         return FileListRow.model_validate({**out, "referenceCount": f.reference_count})
 
@@ -711,12 +723,26 @@ class TenantFiles:
             )
         return DownloadLink(url=url, expires_at=self._clock() + timedelta(seconds=ttl), ttl_seconds=ttl)
 
-    async def open_content(self, who: Who, file_id: str) -> tuple[FileDetail, AsyncIterator[bytes]]:
-        """A clean file's detail and its bytes as a stream, for the proxy download and service reads."""
+    async def open_content(
+        self, who: Who, file_id: str, *, version: int | None = None
+    ) -> tuple[FileDetail, AsyncIterator[bytes]]:
+        """A clean file's detail and its bytes as a stream, for the proxy download and service reads. `version` reads
+        an earlier version, which downloads once its own scan is clean whatever the newest version's state."""
         row = await self._owned(who, file_id)
-        self._readable(row)
+        key = row.file.storage_key
+        if version is None:
+            self._readable(row)
+        else:
+            held = next((v for v in row.versions if v.version == version), None)
+            if held is None:
+                raise FileMissingError(f"{file_id} version {version}")
+            if row.file.status != "available":
+                raise UploadStateError(f"{file_id} is {row.file.status}")
+            if held.scan_status != "clean":
+                raise NotScannedError(f"{file_id} version {version} scan is {held.scan_status}")
+            key = held.storage_key
         store, _ = await self._placement(row)
-        return self._detail(row, who), store.open_read(row.file.storage_key)
+        return self._detail(row, who), store.open_read(key)
 
     # ── delete ──
 
@@ -749,8 +775,9 @@ class TenantFiles:
         if (blocked := self.delete_blocked_by(row)) is not None:
             raise FileRetainedError(f"{file_id}: {blocked}")
         store, _ = await self._placement(row)
-        if await asyncio.to_thread(store.head, row.file.storage_key) is not None:
-            await asyncio.to_thread(store.delete, row.file.storage_key)
+        for key in _object_keys(row):
+            if await asyncio.to_thread(store.head, key) is not None:
+                await asyncio.to_thread(store.delete, key)
         payload: FileDeletedPayload = {
             "fileId": file_id,
             "digest": row.file.digest,
@@ -814,7 +841,8 @@ class TenantFiles:
                 skipped.append(Skipped(id=file_id, reason="already held" if hold else "not held"))
                 continue
             store, _ = await self._placement(row)
-            await asyncio.to_thread(store.set_legal_hold, row.file.storage_key, hold)
+            for key in _object_keys(row):
+                await asyncio.to_thread(store.set_legal_hold, key, hold)
             now = self._clock()
             if hold:
                 hold_id = f"hold_{uuid.uuid4().hex}"
@@ -824,6 +852,81 @@ class TenantFiles:
                 await self._files.release_hold(row.hold.id, by=who.actor, at=now, reason=reason)
             done.append(file_id)
         return BulkResult(updated=done, skipped=skipped)
+
+    # ── watched folders ──
+
+    async def put_source(
+        self, tenant: str, team: str, found: SourceFile, content: bytes, *, actor: str, then: Written | None = None
+    ) -> tuple[str, int | None]:
+        """What a check fetched for one source file, written as that file's next version: found by its source key
+        only, never by its bytes. The same bytes as the newest version write nothing and answer (file id, None). A new
+        version is scanned on its own and answers 423 until it is clean, while older versions still download. `then`
+        runs in the version's transaction (the watch's event); when it raises, nothing is written and the bytes are
+        deleted."""
+        file_id = self._new_id()
+        store, _ = await self._upload_placement(tenant, SOURCE_PURPOSE)
+        digest = hashlib.sha256(content).hexdigest()
+        key = f"{tenant}/{team}/{SOURCE_PURPOSE}/{file_id}-{digest[:12]}"
+        proven = prove(found["mime"], found["name"], content[:SNIFF_BYTES])
+        now = self._clock()
+
+        async def once() -> AsyncIterator[bytes]:
+            yield content
+
+        with contextlib.suppress(ObjectExistsError):
+            await store.put_stream(key, once(), content_type=proven.mime)
+        new_file: NewUpload = {
+            "id": file_id, "tenant_id": tenant, "team": team, "name": found["name"], "mime": proven.mime,
+            "size": len(content), "purpose": SOURCE_PURPOSE, "status": "available", "scan_status": "pending",
+            "sensitivity": _SENSITIVITY[SOURCE_PURPOSE], "sensitivity_suggested": True,
+            "retention_class_id": self._config.default_retention_class, "immutable": False,
+            "storage_backend": store.backend, "storage_container": store.container, "storage_key": key,
+            "declared_size": len(content), "uploaded_by": actor, "uploaded_at": now, "version_count": 0,
+        }  # fmt: skip
+        version: SourceVersion = {"digest": digest, "size": len(content), "storage_key": key,
+                                  "source_tag": found.get("marker"), "at": now}  # fmt: skip
+        try:
+            entry, number = await self._files.put_source_version(
+                team, new_file, {**found, "mime": proven.mime}, version, then=then
+            )
+        except BaseException:
+            await asyncio.to_thread(store.delete, key)
+            raise
+        if number is None:
+            # The newest version already holds these bytes: the object just written is nobody's.
+            await asyncio.to_thread(store.delete, key)
+            return entry, None
+        # Read after the version commits, so a hold placed while it was written is seen: under hold, every version's
+        # bytes are held, and a set_legal_hold that ran before this version existed did not reach its object.
+        if (written := await self._files.get(entry)) is not None and written.hold is not None:
+            await asyncio.to_thread(store.set_legal_hold, key, True)
+        if self._scanning == "off":
+            status, engine, detail = "clean", "off", "scanning is off"
+        elif self._scanning == "inline":
+            assert self._scanner is not None
+            result = await asyncio.to_thread(self._scanner.scan, store.iter_bytes(key))
+            status, engine, detail = result.status, result.engine, result.detail
+        else:
+            status, engine, detail = "pending", None, None
+        await self._scanned(entry, number, status, engine, detail, newest=True)
+        return entry, number
+
+    async def _scanned(
+        self, file_id: str, version: int | None, status: str, engine: str | None, detail: str | None, *, newest: bool
+    ) -> None:
+        """One version's verdict, the only writer of a scan: it sets that version, and the file's own status only when
+        it is the newest version, which is what a download gets."""
+        now = self._clock()
+        if version is not None:
+            await self._files.set_version_scan(file_id, version, status, now)
+        if not newest:
+            return
+        change: FileChange = {"scan_status": status, "scan_at": now}
+        if engine is not None:
+            change["scan_engine"] = engine
+            change["scan_detail"] = detail
+        await self._files.update(file_id, change)
+        await self._files.set_blocked(file_id, f"Quarantined: {detail}" if status == "infected" else None)
 
     # ── for other services ──
 
@@ -886,25 +989,63 @@ class TenantFiles:
             await self._files.update(file_id, {"delete_after": self._clock().date() + timedelta(days=retention.days)})
         return await self.get(who, file_id)
 
-    async def record_scan(self, tenant: str, file_id: str, result: ScanResult) -> FileDetail:
+    async def record_scan(
+        self, tenant: str, file_id: str, result: ScanResult, *, version: int | None = None, digest: str | None = None
+    ) -> FileDetail:
         """The scan-result hook for an asynchronous scanner (ClamAV loop, Defender, GuardDuty). The tenant comes from
-        the scanner's service token; the result is the only input."""
+        the scanner's service token; the result names the version it scanned, by number or digest, and sets only that
+        one. A file of one version may leave it out. Named by both, they must be one version's: a verdict on version 1
+        sent with version 2's digest would otherwise clear version 2, which was never scanned."""
         row = await self._files.get(file_id)
         if row is None:
             raise FileMissingError(file_id)
-        await self._files.update(
-            file_id,
-            {
-                "scan_status": result.status,
-                "scan_engine": result.engine,
-                "scan_at": self._clock(),
-                "scan_detail": result.detail,
-            },
-        )
-        await self._files.set_blocked(file_id, f"Quarantined: {result.detail}" if result.status == "infected" else None)
+        versions = row.versions
+        newest = max((v.version for v in versions), default=None)
+        if version is not None and digest is not None:
+            named = next((v for v in versions if v.version == version), None)
+            if named is None:
+                raise FileMissingError(f"{file_id} has no version {version}")
+            if named.digest != digest:
+                raise InvalidUploadError(f"{file_id} version {version} does not hold the bytes with digest {digest}")
+        if version is not None or digest is not None:
+            # Bytes that came back (version 3 the same as version 1) share a digest: the verdict holds for each.
+            numbers: list[int | None] = [
+                v.version for v in versions if v.version == version or (digest is not None and v.digest == digest)
+            ]
+            if not numbers:
+                raise FileMissingError(f"{file_id} has no version {version or digest}")
+        elif len(versions) > 1:
+            raise InvalidUploadError(f"{file_id} has {len(versions)} versions; name the version the verdict is for")
+        else:
+            numbers = [versions[0].version if versions else None]
+        for number in numbers:
+            await self._scanned(file_id, number, result.status, result.engine, result.detail, newest=number == newest)
         done = await self._files.get(file_id)
         assert done is not None
         return self._detail(done, None)
+
+
+def _object_keys(row: FileRow) -> list[str]:
+    """Every stored object of the file: its own and each version's (a watched file keeps one per version), so a delete
+    or a legal hold reaches every version's bytes."""
+    return list(dict.fromkeys([row.file.storage_key, *(v.storage_key for v in row.versions)]))
+
+
+def _source(row: FileRow) -> FileSource | None:
+    """Where a watched folder's file came from; None for an upload."""
+    f = row.file
+    if f.source_scope != "source":
+        return None
+    current = next((v for v in row.versions if v.current), None)
+    return FileSource(
+        watch_id=f.watch_id,
+        watch_name=row.watch_name,
+        path=f.source_path,
+        changed_at=current.source_changed_at if current else None,
+        removed_at=f.removed_at,
+        access_list=f.access_list,
+        access_read_at=f.access_read_at,
+    )
 
 
 __all__ = [

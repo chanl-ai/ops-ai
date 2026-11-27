@@ -1,12 +1,13 @@
 import type { GrantableTool, Tool } from '@/lib/types/domain';
 import type { ListParams } from '@/lib/types/query';
 
-import { optionsQs } from './options';
+import { optionsQs, toolAppsQs } from './options';
 import { ApiError, type OpsApi } from './contract';
 import type { CasesApi } from './cases-contract';
 import { createCasesHttp } from './cases-http';
 import { createChatHttp } from './chat-http';
 import { createChannelsHttp } from './channels-http';
+import { createSchedulesHttp } from './schedules-http';
 import { createEngineHttp } from './engine-http';
 import { createKnowledgeHttp } from './knowledge-http';
 import { createKnowledgeChangesHttp } from './knowledge-changes-http';
@@ -20,6 +21,7 @@ import { createInvitesHttp } from './invites-http';
 import { createOAuthHttp } from './oauth-http';
 import { createAccountHttp } from './account-http';
 import { createWorkspacePoliciesHttp } from './workspace-policies-http';
+import { createModelAliasesHttp } from './model-aliases-http';
 import { createProviderConnectionsHttp } from './provider-connections-http';
 import { createProviderKeysHttp } from './provider-keys-http';
 import { createSignInProvidersHttp } from './sign-in-providers-http';
@@ -95,7 +97,8 @@ function createReviewsHttp(get: Get, send: Send): OpsApi['reviews'] {
     place: (id, opts) => get(`/reviews/${encodeURIComponent(id)}/place${opts ? `?${new URLSearchParams(Object.entries(opts).filter(([, v]) => v) as [string, string][]).toString()}` : ''}`),
     decide: (id, i) => send('POST', `/reviews/${encodeURIComponent(id)}/decision`, i),
     assign: (ids, assignee) => send('POST', '/reviews/assign', { ids, assignee }),
-    withdraw: (id) => send('POST', `/publish-requests/${encodeURIComponent(id)}/withdraw`),
+    // Reviews are served unversioned (`/reviews`), but a publish request is a versioned route.
+    withdraw: (id) => send('POST', `/v1/publish-requests/${encodeURIComponent(id)}/withdraw`),
     bulkDecide: (ids, decision, reason, opts) => send('POST', '/reviews/bulk-decision', { ids, decision, reason, stepUpToken: opts?.stepUpToken }),
   };
 }
@@ -180,8 +183,8 @@ export function createRegistryToolsDirectory(baseUrl: string): Pick<OpsApi['tool
   };
 }
 
-export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'references' | 'widgets' | 'widgetDeployments' | 'batches' | 'caseRecords' | 'activity' | 'overview' | 'assurance' | 'evals'> {
-  const { agents, workflows, engine, channels, skills, references, widgets, widgetDeployments, batches, caseRecords, activity, overview, assurance, evals } = createHttpApi(`${baseUrl}/v1`);
+export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'schedules' | 'skills' | 'references' | 'widgets' | 'widgetDeployments' | 'batches' | 'caseRecords' | 'activity' | 'overview' | 'assurance' | 'evals'> {
+  const { agents, workflows, engine, channels, schedules, skills, references, widgets, widgetDeployments, batches, caseRecords, activity, overview, assurance, evals } = createHttpApi(`${baseUrl}/v1`);
   const { bulkUpdate: _au, bulkRemove: _ar, ...agentCalls } = agents;
   const { bulkUpdate: _wu, ...workflowCalls } = workflows;
   const notServed = (what: string) => () => Promise.reject(new ApiError(`${what} is not available on this backend yet.`, 501));
@@ -190,6 +193,7 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
     workflows: workflowCalls,
     engine,
     channels,
+    schedules,
     references,
     widgets,
     widgetDeployments,
@@ -264,12 +268,18 @@ export function createHttpApi(baseUrl: string): OpsApi {
       publishCheck: (id, version) => get(`/agents/${id}/publish-check?version=${version}`),
       promptView: (id, version) => get(`/agents/${id}/prompt${version === undefined ? '' : `?version=${version}`}`),
       draftBrief: (id, description) => send('POST', `/agents/${id}/brief-draft`, { description }),
+      instructionSections: () => get('/agent-instruction-sections'),
+      saveInstructionSections: (list) => send('PUT', '/agent-instruction-sections', list),
+      resetInstructionSections: () => send('DELETE', '/agent-instruction-sections'),
       setPaused: (id, paused) => send('POST', `/agents/${id}/paused`, { paused }),
       // GET /tools answers one page of the Tools page's rows (each a grantable tool with its app and users): the agent
       // page reads the largest page the route serves.
       grantableTools: () => get<{ data: GrantableTool[] }>('/tools?pageSize=200').then((r) => r.data),
       toolOptions: (p) => get(`/tools/options?${optionsQs(p)}${p.agents === false ? '&agents=false' : ''}`),
+      toolApps: (agentId, p) => get(`/agents/${agentId}/tool-apps?${toolAppsQs(p)}`),
+      toolAppTools: (agentId, appId, p) => get(`/agents/${agentId}/tool-apps/${encodeURIComponent(appId)}/tools?${toolAppsQs(p)}`),
       modelAliases: () => get('/model-aliases'),
+      modelAliasKnobs: (name) => get(`/model-aliases/${encodeURIComponent(name)}/knobs`),
       test: (id, message) => send('POST', `/agents/${id}/test`, { message }),
       bulkUpdate: (ids, patch) => send('POST', '/agents/bulk-update', { ids, patch }),
       bulkRemove: (ids) => send('POST', '/agents/bulk-delete', { ids }),
@@ -316,6 +326,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     signInProviders: createSignInProvidersHttp(get, send),
     providerKeys: createProviderKeysHttp(get, send, qs),
     providerConnections: createProviderConnectionsHttp(get, send, qs),
+    modelAliases: createModelAliasesHttp(get, send, qs),
     evals: createEvalsHttp(get, send, qs),
     modelRisk: createModelRiskHttp(get, send, qs),
     toolModules: createToolModulesHttp(get, send, qs),
@@ -325,6 +336,7 @@ export function createHttpApi(baseUrl: string): OpsApi {
     files: createFilesHttp(get, send, qs),
     engine: createEngineHttp(get, send),
     channels: createChannelsHttp(get, send),
+    schedules: createSchedulesHttp(get, send),
     templates: createTemplatesHttp(get, send, qs),
     prompts: createPromptsHttp(get),
     skills: createSkillsHttp(get, send, qs, baseUrl),

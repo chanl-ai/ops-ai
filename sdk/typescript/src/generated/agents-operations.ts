@@ -60,6 +60,23 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_app_tools": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/{agent_id}/tool-apps/{app_id}/tools",
+    "pathParams": [
+      "agent_id",
+      "app_id"
+    ],
+    "query": [
+      "search",
+      "cursor",
+      "limit",
+      "granted"
+    ],
+    "stream": false
+  },
   "agents_attach_skill": {
     "body": "json",
     "headers": [],
@@ -244,6 +261,15 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_get_instruction_sections": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agent-instruction-sections",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "agents_get_skill": {
     "body": null,
     "headers": [],
@@ -345,6 +371,17 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_list_model_alias_uses": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/model-alias-uses",
+    "pathParams": [],
+    "query": [
+      "aliases"
+    ],
+    "stream": false
+  },
   "agents_list_model_aliases": {
     "body": null,
     "headers": [],
@@ -438,6 +475,17 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_model_alias_knobs": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/model-aliases/{name}/knobs",
+    "pathParams": [
+      "name"
+    ],
+    "query": [],
+    "stream": false
+  },
   "agents_publish_check": {
     "body": null,
     "headers": [],
@@ -462,6 +510,15 @@ export const agentsOperations = {
     "query": [
       "version"
     ],
+    "stream": false
+  },
+  "agents_put_instruction_sections": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/agent-instruction-sections",
+    "pathParams": [],
+    "query": [],
     "stream": false
   },
   "agents_read_skill_text": {
@@ -560,6 +617,15 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_reset_instruction_sections": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/agent-instruction-sections",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "agents_restore_version": {
     "body": null,
     "headers": [],
@@ -645,6 +711,22 @@ export const agentsOperations = {
       "agent_id"
     ],
     "query": [],
+    "stream": false
+  },
+  "agents_tool_apps": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/{agent_id}/tool-apps",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [
+      "search",
+      "cursor",
+      "limit",
+      "granted"
+    ],
     "stream": false
   },
   "agents_tool_options": {
@@ -1792,6 +1874,37 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "schedules_preview_schedule": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/schedules/preview",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "schedules_schedule_kinds": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/schedules/kinds",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "schedules_schedule_zones": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/schedules/zones",
+    "pathParams": [],
+    "query": [
+      "search",
+      "cursor",
+      "limit"
+    ],
+    "stream": false
+  },
   "templates_list_templates": {
     "body": null,
     "headers": [],
@@ -2014,6 +2127,18 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "workflows_clear_schedule": {
+    "body": null,
+    "headers": [],
+    "method": "DELETE",
+    "path": "/v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule",
+    "pathParams": [
+      "workflow_id",
+      "step"
+    ],
+    "query": [],
+    "stream": false
+  },
   "workflows_create_definition": {
     "body": "json",
     "headers": [],
@@ -2030,6 +2155,19 @@ export const agentsOperations = {
     "path": "/v1/workflows",
     "pathParams": [],
     "query": [],
+    "stream": false
+  },
+  "workflows_definition_sample": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/workflows/definitions/{workflow_id}/sample",
+    "pathParams": [
+      "workflow_id"
+    ],
+    "query": [
+      "step"
+    ],
     "stream": false
   },
   "workflows_definition_shapes": {
@@ -2125,6 +2263,18 @@ export const agentsOperations = {
     "path": "/v1/runs/{run_id}",
     "pathParams": [
       "run_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "workflows_get_schedule": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule",
+    "pathParams": [
+      "workflow_id",
+      "step"
     ],
     "query": [],
     "stream": false
@@ -2436,6 +2586,18 @@ export const agentsOperations = {
     "path": "/v1/workflows/{workflow_id}/draft",
     "pathParams": [
       "workflow_id"
+    ],
+    "query": [],
+    "stream": false
+  },
+  "workflows_save_schedule": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule",
+    "pathParams": [
+      "workflow_id",
+      "step"
     ],
     "query": [],
     "stream": false

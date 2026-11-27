@@ -17,8 +17,7 @@ credentials of its own.
 | Code | `services/agents-service` (`ops_agents`), with `ops_agent_kernel` (chat turns), `ops_engine` (workflow runs), `ops_checkpointer` (LangGraph state), `ops_service_kit` and `contracts` |
 | Database | Own migration chain (`services/agents-service/migrations`, the default `alembic_version` table). Its store modules and the tables each defines are listed in the generated [inventory](../../architecture/data.md#inventory); it also creates the `ops_engine` tables (`engine_definitions`, `engine_runs`, `engine_steps`, `engine_work`, `engine_waits`) and the checkpointer's (`ops_checkpoints`, `ops_checkpoint_writes`, `ops_checkpoint_fences`) |
 | Isolation | Every transaction runs as `ops_runtime_tenant` (`services/agents-service/src/ops_agents/store/tenancy.py:35`), the role the checkpointer's row-level security uses too (`packages/ops_checkpointer/src/ops_checkpointer/saver.py:57`); the team policy on every team-owned table is checked by `scripts/tests/test_team_boundary.py` |
-| Secrets it holds | Its model key for models-service (`OPS_MODELS_KEY`), or a provider key on the direct path; the HMAC key that signs approval tokens (`OPS_REVIEW_KEY`, shared with tools-service, whose OPA verifies them); its service signing key. Widget mint keys, which a bank's server uses to start widget chats, are stored as a SHA-256 of
-the secret only (`services/agents-service/src/ops_agents/store/widget_keys.py`). No system's credentials: mailbox passwords and app accounts stay in tools-service |
+| Secrets it holds | Its model key for models-service (`OPS_MODELS_KEY`), or a provider key on the direct path; the HMAC key that signs approval tokens (`OPS_REVIEW_KEY`, shared with tools-service, whose OPA verifies them); its service signing key. Widget mint keys, which a bank's server uses to start widget chats, are stored as a SHA-256 of the secret only (`services/agents-service/src/ops_agents/store/widget_keys.py`). No system's credentials: mailbox passwords and app accounts stay in tools-service |
 | Calls out to | tools-service (`POST /v1/calls` for every tool call, grantable operations, mailbox reads); models-service (every turn and AI step); kb-service (grounding and the knowledge tools); files-service and documents-service (attachments and Extract from file); platform-service (people's names, API key summaries, policies, acting-for tokens) (`scripts/stack.sh:132`) |
 | Called by | The console, the embed app, the SDK and CLI; tools-service (`GET /v1/workflow-refs`, `POST /v1/publish-requests`); platform-service (`GET /v1/teams/usage`) |
 | Events it receives | `POST /v1/events` from tools-service, files-service, documents-service and kb-service, each limited to the names it owns (`EVENT_OWNERS`, `services/agents-service/src/ops_agents/api/service_events.py:145`), and `POST /v1/platform-events` from platform-service and tools-service (`team.created`, `policy.changed`, `api_key.changed`) |
@@ -68,6 +67,7 @@ in `services/agents-service/tests/conftest.py`. The seeded agents, granted seede
 | `services/agents-service/src/ops_agents/graphs` | LangGraph graphs `agent_wrapper`, `simple_workflow`, `complex_workflow`; JSON definitions, versions, SLA settings |
 | `services/agents-service/src/ops_agents/activities` | Tool, knowledge and gateway calls the graphs and the kernel make; seed catalogue loader |
 | `packages/ops_agent_kernel/src/ops_agent_kernel/present.py` | The built-in `present(shape, data, hint?)` tool every turn offers: the model returns a comparison table as `rows`, a figure as `metric`, a record or a series, and the turn emits it as a widget part with no tool result behind it. The chat shows only the part, never a tool card for it; a malformed part is refused as a tool error |
+| `services/agents-service/src/ops_agents/store/outbox.py` | `agents_outbox`: the audit entries of schedule saves and clears, written with the change and delivered to platform-service by the worker's `agents_relay` |
 | `migrations/` | Its own Alembic chain (the default `alembic_version` table), which also creates the `ops_engine` tables and the checkpointer's tables |
 | `tests/` | API, unit, checkpointer, gateway and timer tests; `tests/fixtures/` is the only place fixture data lives |
 | `experiments/` | Experiment scripts; their write-ups are in `experiments/` next to this page |
@@ -225,7 +225,7 @@ The approval token's `system` claim is true for a handler's runs, and tools-serv
 only from tool_access_request's. A service reports only the events it owns in the catalogue
 (`EVENT_OWNERS`, 403 `event_not_owned`), and the event's team is the one its token names (403 `team_mismatch`).
 Services write their events through `ops_store.outbox` in the same transaction as the change, and its relay delivers
-them at least once.
+them at least once. agents-service's own outbox, `agents_outbox`, holds the audit entries of schedule changes.
 
 ## Deciding and combining in a workflow
 
@@ -264,6 +264,15 @@ response). A closed shape (`additionalProperties: false`) lists every key; an op
 validate and save warn `unknown_output_field` where a mapping reads a field a step's closed shapes never output.
 `ops_engine/tests/test_output_shapes.py` runs every built type's executor on fake ports and holds what it writes to its
 declared shape; uc-401.
+
+`GET /v1/workflows/definitions/{id}/sample?step=<id>` is what the step sheet reads for "What it receives" and its field
+picker (`api/step_sample.py`): each step that can finish before `step`, from the working copy when one is open, with each
+field's label, the path a mapping stores and the value the acting team's newest succeeded run gave it, joined on the
+server. Only the acting team's runs feed it (the runs list's team rule, then `visible_run`), so a shared workflow never
+shows another team's values; values are masked when the team masks personal data for people and cut at
+`SAMPLE_VALUE_MAX_CHARS` (500). `saved: false` means the working copy does not hold the step yet. Rights: `workflows.view`,
+the same as the shapes route; there is no separate runs cell in the grid, and the runs list asks only team membership.
+Tests: `tests/api/test_engine_sample.py`.
 
 ## Run workflow waiting for its children
 
