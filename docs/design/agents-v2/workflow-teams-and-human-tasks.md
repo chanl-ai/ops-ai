@@ -24,7 +24,7 @@ a task nobody answers moves to the next role.
 | Earlier design | This page | Reason |
 |---|---|---|
 | One `ops.ai.team` step with a member list, a kind and a hand-over map in its settings | Members are steps; hand-overs, questions and checks are connections with a kind. A group frame holds the team's limits | Owner direction: the team step hid the detail one level down. Products that draw teams as connected agents, such as Relevance AI, show two connection kinds, one where the agent decides and one that always follows ([Relevance AI, workforces](https://relevanceai.com/docs/workforce/introduction), read 2026-11-26) |
-| A new engine port that runs a whole team | The existing agent step runs one member's turn; the engine follows the connection the member chose | The journal already records one row per step and iteration, so each turn is a step row with no new table |
+| A new engine port that runs a whole team | The existing agent step runs one member's turn; the engine follows the connection the member chose | The journal already keys a row by run, step, iteration and attempt, so each turn is a step row with no new table |
 | Three team kinds: supervisor, swarm, evaluator | Three starter layouts that place ordinary steps and connections, which the builder then edits | A kind was a second vocabulary for something the canvas can draw |
 | The Team step | Kept, as the folded view of a group. Unfolding shows the same steps in place | The owner keeps the idea of a team step, without the hidden level |
 
@@ -174,9 +174,12 @@ Settings every task has:
 | If nobody answers | `wait`, or `expire` by the Timeout way out, after the last role's deadline | Today |
 | Where it can be answered | The inbox; email; Teams | Inbox today; the others are new |
 
-A role is a reviewer group of the team, resolved to people when the task opens and again at each move, so a change of
-who is on duty takes effect. Who may decide is still `can()` with the rule that the person who started the run cannot
-approve its changes (`services/agents-service/src/ops_agents/api/engine_reviews.py:1215`).
+A role is a group in the platform service: a row of its `groups` table
+(`services/platform-service/src/ops_platform/store/tables.py:277`), which is the set of people a role is given to. The
+agents service reads a group's members through the identity client when a task opens and again at each move, so a
+change of who is on duty takes effect. `option-sources?source=roles` lists the team's groups from the same client. Who
+may decide is `can()` under the tenant's approval policy: with the two-person rule on (`requesterMayDecide` off) the
+person who started the run cannot approve its changes, and an admin of the team can (`services/agents-service/src/ops_agents/api/engine_reviews.py:1215`).
 
 Answering outside the console. Decided on 2026-11-26: a person can answer from email or Teams, and an approval opens a
 page where they sign in first.
@@ -218,7 +221,7 @@ Routes, with exact shapes in the [OpenAPI draft](openapi-draft.yaml):
 | POST | `/v1/tasks/{task_id}/answer` | New. `{text, fields?}` |
 | POST | `/v1/tasks/{task_id}/take-over` | New. Assigns the job to the caller |
 | POST | `/v1/tasks/{task_id}/return` | New. A person who took a job over hands back `{output?, note}`; the group leaves by `ok` or `needsPerson` |
-| POST | `/v1/channels/teams/actions` | New. The endpoint a Teams card posts to; verified by the Teams app's signature |
+| POST | `/v1/channels/teams/{connection_id}/actions` | New. The endpoint a Teams card posts to. The path names the tenant's Teams connection, which gives the tenant and the app whose signature the request must carry; a request that fails the signature answers 401 before anything is read |
 
 The engine's agent port gains fields; the engine still never imports the agent service
 (`packages/ops_engine/src/ops_engine/ports.py:172`).
@@ -243,6 +246,24 @@ class AgentResult:                     # ports.py:160, plus:
     cost_usd: Decimal = Decimal(0)
     summary: str = ""                         # one line for the turn row
 
+@dataclass(frozen=True)
+class TaskView:
+    id: str
+    kind: Literal["approve", "answer", "take_over"]
+    title: str
+    body: str
+    run_id: str | None
+    thread_id: str | None
+    due_at: datetime | None
+    link: str                          # the signed link to the task
+
+@dataclass(frozen=True)
+class Recipient:
+    user_id: str
+    email: str | None
+    teams_user_id: str | None
+    role: str | None                   # the group the person was reached through
+
 class TaskNotifier(Protocol):          # a port in the engine's host; adapters: inbox (none needed), email, teams
     async def opened(self, task: TaskView, to: list[Recipient]) -> None: ...
     async def moved(self, task: TaskView, to: list[Recipient]) -> None: ...
@@ -258,11 +279,14 @@ about workflows.
 | Engine side (`AgentRequest`) | Kernel side (`TurnRequest`, release 1.6.0 additions) | Who defines the tool the model sees | What comes back |
 |---|---|---|---|
 | `handoffs` | `handoff_targets: list[MemberOption]` | The kernel's `hand_over` tool, the same one the swarm loop kind uses in chat, with these targets as its options | `TurnResult.handoff: {to, message, why}`, mapped to `AgentResult.handoff`. The kernel ends the turn and switches nothing; the engine follows the line |
-| `asks` | `ask_targets: list[MemberOption]` | The kernel adds one tool per target, `ask_<id>(question, why)`. Calling one pauses the turn | An `Interrupt` of kind `question` with `question.to` set to the target. The adapter returns `AgentResult.asked`. The engine answers it by running an agent step or opening a task, then resumes with `TurnRequest.answers[interrupt_id]` |
-| `notes`, `may_write_notes` | `notes: NotesGrant` (the notes to read, and whether writing is allowed) | The kernel's `add_note(text)` tool, a local tool like the plan tool: it makes no gateway call | `TurnResult.notes_added`; the engine stores them after the secret scan |
-| `budget_ids` | `budget_ids: list[str]`, sent innermost first in `X-Budget-Id` after the turn's own budget | None | `TurnResult.usage` and cost, summed onto the step row |
+| `asks` | `ask_targets: list[MemberOption]` | The kernel adds one tool per target, `ask_<id>(question, why)`. Calling one pauses the turn at `before_tool`, the one seam where a turn pauses | An `Interrupt` of kind `question` with `question.to` set to the target. The adapter returns `AgentResult.asked`. The engine answers it by running an agent step or opening a task, then resumes with `TurnRequest.answers[interrupt_id]` |
+| `notes`, `may_write_notes` | `notes: NotesGrant`, which exists from 1.4.0 for chat hand-overs | The kernel's `add_note(text)` tool, a local tool like the plan tool: it makes no gateway call | `TurnResult.notes_added`; the engine stores them after the secret scan |
+| `budget_ids` | `budget_ids: list[str]`, sent innermost first in `X-Budget-Id`: the step's, the group's, the run's, and a team test's eval budget, four at most | None | `TurnResult.usage` and cost, summed onto the step row |
 | `resume` | `loop_state` and `answers` | None | The same turn continues |
 | `goal` | Added to the volatile tail of the prompt, after the stable part | None | |
+
+A member whose agent has a sandbox uses the run's sandbox, `sbx_run_<run id>`, shared by the run's steps
+([sandbox service](sandbox-service.md)).
 
 In chat, a helper named in an agent's spec is asked inline by the runtime, within the turn. In a team, an `ask` always
 pauses and returns to the engine, so that each member's turn is a journal row. The kernel decides which by whether the
@@ -349,7 +373,7 @@ sequenceDiagram
 | `OPS_ENGINE_NOTES_MAX` | `500` | Notes per run; past it the oldest are summarised into one |
 | `OPS_TASKS_EMAIL_REPLY_DOMAIN` | unset | The inbound mail domain for replies; unset, email carries the link only |
 | `OPS_TASKS_LINK_HOURS` | `72` | Life of a task link |
-| `OPS_TASKS_TEAMS_APP_ID`, `OPS_TASKS_TEAMS_APP_SECRET` | unset; from the secret store | The tenant's Teams app; unset, Teams is not offered |
+| Teams app | not an install setting | Each tenant adds its own Teams app as a connection of kind `teams` in the tool gateway's connections (app id, and the secret in the secret store). A tenant with none is not offered Teams |
 
 ## Security, cost and limits
 
@@ -357,7 +381,7 @@ sequenceDiagram
 |---|---|
 | Tenant and team | Every member must belong to the workflow's team; a hand-over cannot leave it (rule 3). Notes, turns and tasks are tenant scoped and team owned |
 | A person approves every change | Unchanged and not configurable per team: the tool gateway refuses a change with no approval, whichever member tried |
-| The requester cannot approve | Applies on every channel; the decision is made by the same app function |
+| Who may approve | The tenant's approval policy, on every channel: the decision is made by the same app function, and the token is minted by the tool gateway after it checks the approver |
 | An email or a Teams action from someone who is not an assignee | Ignored, with a notice to the sender and an audit entry. The channel never decides who a person is: the address or directory id must match a platform member with the permission |
 | Cost | A run budget and a group budget inside it, both reserved at the model gateway before each call. A turn row carries its cost, summed from the gateway's settle |
 | Runaway hand-overs | Bounded by the group's turns, cost and minutes; cycles are allowed only inside a group |
@@ -368,7 +392,7 @@ sequenceDiagram
 | # | Failure mode | Test proves |
 |---|---|---|
 | 1 | An agent hands work to a member no line leads to | The `hand_over` tool's options are exactly the drawn targets; a scripted call naming another step is refused and the step does not leave by a hand-over port |
-| 2 | A finished turn runs again after a crash | Kill the worker during turn 3 of 5: turns 1 and 2 have one journal row each, no model call is charged twice, no write is sent twice. On PostgreSQL and SQL Server |
+| 2 | A finished turn runs again after a crash | Kill the worker during turn 3 of 5: turns 1 and 2 have one succeeded journal row each (a failed attempt is its own row), no model call is charged twice, no write is sent twice. On PostgreSQL and SQL Server |
 | 3 | A question to a role fails the step | The run records waiting with a task of kind `answer`; the answer resumes the same turn and the member's next model request contains it |
 | 4 | A task nobody answers stays with the first role | At the deadline the task is assigned to the next role in `thenAsk`, both roles see it, and one reminder is sent per period |
 | 5 | A person who is not an assignee answers by email | The reply is ignored, the task is unchanged, an audit entry exists |
@@ -393,7 +417,7 @@ sequenceDiagram
 
 | Package | Add | Change | Delete |
 |---|---|---|---|
-| `packages/ops_agent_kernel` | `notes.py` (the `add_note` tool and the notes block) | `types.py` (`handoff_targets`, `ask_targets`, `notes`, `budget_ids` on the request; `handoff`, `notes_added` on the result; `question.to` on an interrupt), `kernel.py` (the `ask_<id>` tools; `hand_over` with targets from the request) | |
+| `packages/ops_agent_kernel` | | `types.py` (`handoff_targets` and `ask_targets` on the request; `Question.to`), `kernel.py` (the `ask_<id>` tools; `hand_over` with targets from the request). `notes.py`, `add_note`, `budget_ids`, `handoff` and `notes_added` exist from 1.4.0 | |
 | `packages/ops_engine` | `groups.py` (limits, the way out), `handoffs.py` (ports from lines, the cycle rule), `notes.py`, `undo.py`, `store/notes.py`, `store/group_usage.py` | `definition.py` (connection fields, groups, checks 1 to 8), `compiler.py` (hand-over ports, child steps for `ask`, the check loop, group limits, pause in place of failure at `:720`), `node_types.py` (member settings on three step types, `undo`), `ports.py`, `journal.py`, `store/tables.py`, `store/steps.py` | |
 | `services/agents-service` | `app/tasks.py` (answer, take over, return, move on), `app/task_notify.py` and adapters `adapters/task_email.py`, `adapters/task_teams.py`, `api/routers/task_actions.py`, `store/engine_notes.py`, `store/task_notifications.py`, a migration | `api/engine_agents.py` (the new request and result fields; a pause is returned, not raised, at `:204`), `api/engine_reviews.py`, `api/hitl_facade.py`, `api/routers/engine.py`, `api/routers/tasks.py`, `api/timers.py` (escalation), `openapi.json` | The first engine's escalation code in `graphs/sla.py`, once the inbox no longer reads it |
 | `packages/ops_email` | | `inbound.py` (match a reply to a task by message reference) | |

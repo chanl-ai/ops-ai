@@ -68,13 +68,13 @@ agent for another try, at most `output.maxRounds` times. Each round is a step in
 | Kind | The turn is given | Never given | Runs on | Settings (beside `maxSteps`, `maxToolCalls`, `parallelReads`) |
 |---|---|---|---|---|
 | `auto` (default) | Spec tools, `plan`, helper tools, workspace tools | Hand-over, workflow | One Strands agent | `replans` |
-| `single` | Spec tools | `plan`, helpers, workspace | One Strands agent | none |
+| `single` | Spec tools. A write pauses for approval at `before_tool` like any write; there is no plan to check it against | `plan`, helpers, workspace | One Strands agent | none |
 | `plan_execute` | Spec tools, `plan`; the first step must be the plan | Helpers unless listed | One Strands agent; the plan is ours (`plan.py`) | `replans`, `showPlan`, `reviewPlan` |
 | `supervisor` | Spec tools, `plan`, helper tools | Hand-over | One Strands agent; each helper is a tool that runs the helper's own turn on its own thread | none |
-| `swarm` | Spec tools, one `hand_over` tool whose options are the spec's `use: handoff` agents | Helper-as-tool | See [Hand-overs](#hand-overs) | `maxHandoffs` |
+| `swarm` | Spec tools, one `hand_over` tool whose options are the spec's `use: handoff` agents, `add_note`, and the workspace tools when the spec has a sandbox | Helper-as-tool, `plan` | See [Hand-overs](#hand-overs) | `maxHandoffs` |
 | `workflow` | Nothing: the message starts a run of the named workflow and the run's result is the reply | Everything | The workflow engine, with Strands running each agent step | `workflow`, `input` |
 | `evaluator` | As `auto`, with the quality bar required | | One Strands agent plus the judge | `rubric`, `judge`, `maxRounds` |
-| `long_running` | As `auto`, with the workspace required; the turn runs as a background run and the stream can be re-attached | | One Strands agent as a runtime background run | `maxMinutes`, `background` |
+| `long_running` (release 1.5.0) | As `auto`, with the workspace required; the turn runs as a background job and the stream can be re-attached | | One Strands agent, run by a worker from the `background_turns` table below | `maxMinutes`, `background` |
 
 `single` is not the same as the `direct` mode: `direct` is what an automatic agent happened to do for one request, and
 `single` means the agent can never do more.
@@ -92,8 +92,21 @@ Hand-over rules: at most `maxHandoffs` per turn of the person; an agent cannot h
 handed to it in the same turn unless the person spoke in between; the receiving agent gets the conversation's shared
 notes and the hand-over message, not the previous agent's full exchange; the hand-over is shown in chat as one line.
 
-This decision narrows the design input, which named a Strands swarm for this kind. It needs the owner's confirmation;
-see the open points.
+This narrows the design input, which named a Strands swarm for this kind. It was decided on 2026-11-26.
+
+Each agent in a conversation keeps its own loop state. Thread state holds `loop_states` keyed by agent id, so the agent
+handed to starts from its own history, or from none, and the first agent's history is intact if the conversation comes
+back to it. Shared notes are how facts cross a hand-over, so the `add_note` tool and `notes.py` are built in 1.4.0 with
+this kind; teams reuse them in 1.6.0.
+
+### Questions and plan reviews
+
+| Pause | Starts when | What the person sees | Resume |
+|---|---|---|---|
+| `question` | The agent calls the kernel tool `ask_person(question, options?)`, or a tool server asks for a value (1.5.0). `before_tool` returns `pause` | A card with the question and a text box or choices | `POST /v1/threads/{id}/approvals` with `kind: question` and `answer`; `before_tool` returns `answered` with the reply and the turn continues |
+| `plan_review` | `reviewPlan` is true and the `plan` tool is first called. `before_tool` returns `pause` with the plan | The plan with Accept and Change | Accept continues; Change sends the person's note to the model, which plans again, within `replans` |
+
+Both use the one seam described in the [runtime contract](runtime-contract-and-strands-loop.md#the-approval-pause-starts-at-one-seam).
 
 ## Interfaces
 
@@ -114,7 +127,7 @@ class LoopSettings:
     judge_alias: str = "judge"
     max_rounds: int = 2
     max_minutes: int = 60
-    background: bool = False
+    background: bool = False           # release 1.5.0
 
 @dataclass(frozen=True)
 class ModeStep:
@@ -134,25 +147,20 @@ class LoopKindOut(Out):                # GET /v1/agents/loops
     unavailable_reason: str | None
 ```
 
-Wire events on both streams (shapes in [API](api.md)):
-
-| `type` | Fields |
-|---|---|
-| `mode` | `mode`, `reason`, `fixed` |
-| `plan` | `plan: {title, steps: [{title, status, note?}]}` (`types.py:28`) |
-| `agent_asked` | `agentId`, `name`, `status: "running"\|"ok"\|"error"`, `callId` |
-| `handoff` | `from`, `to`, `message` |
-| `interrupt` | `interruptId`, `kind: "approval"\|"question"\|"plan_review"`, `needed`, `call?`, `question?`, `messageId`, `widgetId` |
+The wire frames for `mode`, `plan`, `agent_asked`, `handoff` and `interrupt`, with their fields, are listed once on the
+[API page](api.md#streams).
 
 ## Data model
 
-No new table. Modes and plans are part of the run's event log (`thread_events`, written by `emit` at
+No new table in 1.4.0. Modes and plans are part of the run's event log (`thread_events`, written by `emit` at
 `services/agents-service/src/ops_agents/graphs/common.py:325`) and are read back by the trace route.
 
 | Item | Where | Retention |
 |---|---|---|
 | `mode`, `plan`, `agent_asked`, `handoff` events | The thread's event log | With the conversation |
 | The conversation's active agent after a hand-over | Thread state in the checkpoint, key `active_agent` | With the conversation |
+| Each agent's loop state | Thread state, key `loop_states`, a map from agent id to `LoopState` | With the conversation |
+| `background_turns` (new table, release 1.5.0) | Agents service: `id`; `tenant_id`, `team_id`; `thread_id` unique while active; `run_id`; `status` (`queued`, `running`, `waiting`, `done`, `failed`, `cancelled`); `lease_owner`, `lease_until`; `deadline_at`; `created_at`, `updated_at`. Claimed with `ops_store.dialect.claim` | With the conversation; finished rows are swept after 30 days |
 | Shared notes of a chat swarm | Thread state, key `notes`, at most 200 entries of 2,000 characters | With the conversation |
 
 Both databases store these in existing JSON columns.
@@ -206,7 +214,7 @@ sequenceDiagram
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `OPS_AGENTS_LOOP_KINDS` | all eight | The kinds this install offers. An install without the sandbox service still lists `long_running`, marked unavailable |
+| `OPS_AGENTS_LOOP_KINDS` | all eight | The kinds this install offers. `long_running` is listed as unavailable in 1.4.0 and on an install without the sandbox service |
 | `OPS_AGENTS_HELPER_DEPTH` | `1` | How deep a chain of helpers may go; today's value (`packages/contracts/src/ops_contracts/chain.py:18`) |
 | `OPS_AGENTS_BACKGROUND_MAX_MINUTES` | `720` | Cap on `loop.maxMinutes` |
 
@@ -218,7 +226,7 @@ sequenceDiagram
 | A helper's cost | Counted on the asking conversation's budget; the trace shows cost per helper call |
 | Prompt injection asking for a mode | A mode is a consequence of a tool call, and each tool is still granted or refused by the spec and the gateways. A document that says "open the sandbox" can at most cause a call the spec already allows |
 | A plan that hides a write | The plan is shown to the person, but the approval is tied to the exact call, not to the plan text |
-| Long-running turns | Bounded by `maxMinutes`, the budget and the step limit; a background run holds the conversation's lease with a heartbeat |
+| Long-running turns (1.5.0) | Bounded by `maxMinutes`, the budget and the step limit. A worker claims the job's row with the dialect's claim and a lease, and renews it with a heartbeat; a lapsed lease lets another worker resume from the last saved loop state |
 
 ## Acceptance criteria
 
@@ -230,7 +238,7 @@ sequenceDiagram
 | 4 | `single` plans anyway | A `single` agent's tool list holds no `plan` tool and no helper tool |
 | 5 | A hand-over loses the thread | After a hand-over the receiving agent's first model request contains the notes and the message and none of the previous agent's tool results |
 | 6 | Hand-overs ping-pong forever | The fifth hand-over in one turn with `maxHandoffs: 4` is refused |
-| 7 | A helper's pause is lost | A helper that pauses for approval produces one interrupt on the asking conversation; approving it resumes both turns |
+| 7 | A helper's pause is lost | A helper asked as a tool tries a write. The helper's turn runs inside `before_tool`, so the asking turn returns one interrupt with `nested` set; approving it in a fresh process resumes the helper, then the asker. No tool body pauses |
 | 8 | The mode shown differs from what ran | The trace's mode steps equal the `ModeChanged` events of the stream for the same run |
 | 9 | The quality bar loops without end | A judge that always fails stops after `maxRounds` and the answer is returned marked as not meeting the bar |
 
@@ -238,7 +246,7 @@ sequenceDiagram
 
 | Use case | api | sdk | cli | ui |
 |---|---|---|---|---|
-| The trace names the mode and why | `GET /v1/threads/{id}/runs/{run}/trace` | `ops.agents.trace` | `opsai agents trace --follow` | Run trace, mode step |
+| The trace names the mode and why | `GET /v1/threads/{id}/runs/{run}/trace` | `ops.chat.trace` | `opsai agents trace THREAD RUN` | Run trace, mode step |
 | A builder fixes the loop kind | `PUT /v1/agents/{id}/spec` with `loop` | `ops.agents.apply` | `opsai agents loops`, `opsai agents apply` | Agent, Loop tab |
 | An eval case fails when a lookup starts planning | `POST /v1/agents/{id}/eval-runs` | `ops.agents.eval` | `opsai agents eval` | Evals tab |
 
@@ -247,7 +255,7 @@ sequenceDiagram
 | Package | Add | Change | Delete |
 |---|---|---|---|
 | `packages/ops_agent_kernel` | `modes.py` (naming, the plan-before-write rule), `loop_kinds.py` (the catalogue and each kind's tool set), `handover.py` (the `hand_over` tool and its result) | `kernel.py` (tool set per kind, the quality-bar rounds), `plan.py` (`why` argument), `types.py`, `events.py` | |
-| `services/agents-service` | `api/routers/agent_loops.py` (`GET /v1/agents/loops`), `app/handovers.py` (switch the active agent, start the next turn), `app/background_turns.py` | `graphs/agent_wrapper.py` (helper grants from `agents`, hand-over node), `api/agent_calls.py` (helpers for any agent, not only the team default), `graphs/common.py` | |
+| `services/agents-service` | `api/routers/agent_loops.py` (`GET /v1/agents/loops`), `app/handovers.py` (switch the active agent, start the next turn), `app/background_turns.py` and `store/background_turns.py` (release 1.5.0) | `graphs/agent_wrapper.py` (helper grants from `agents`, hand-over node), `api/agent_calls.py` (helpers for any agent, not only the team default), `graphs/common.py` | |
 | `packages/contracts` | `loops.py` (`LoopKind`, mode names: one source for the service, SDK and console) | `chat.py` (new stream events) | |
 
 ## Open points

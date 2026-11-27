@@ -20,7 +20,7 @@ workflow engine stays ours and stays on both databases; no outside workflow prod
 
 | Owns | Must not own |
 |---|---|
-| Rebuilding a run's position from its journal | The journal's meaning: one row per step and iteration, written once, stays as it is |
+| Rebuilding a run's position from its journal | The journal's meaning: one row per step, iteration and attempt, written once, stays as it is |
 | The run budget's id, its creation and what happens when it is spent | Budget arithmetic and reservations: the [model gateway](model-gateway.md) |
 | Storing a paused agent turn's state with the run | What the state contains: the [runtime contract](runtime-contract-and-strands-loop.md) |
 
@@ -29,7 +29,7 @@ workflow engine stays ours and stays on both databases; no outside workflow prod
 | Fact | Where |
 |---|---|
 | The engine compiles a definition to a graph and saves its position through a checkpoint saver after each step | `packages/ops_engine/src/ops_engine/worker.py:3` |
-| The journal has one row per run, step and iteration; a continued run returns recorded steps without running them again | `packages/ops_engine/src/ops_engine/store/tables.py:142`, `worker.py:6` |
+| The journal has one row per run, step, iteration and attempt (`store/tables.py:145`), so a step that succeeded has one succeeded row and may have failed attempts before it; a continued run returns recorded steps without running them again | `packages/ops_engine/src/ops_engine/store/tables.py:142`, `worker.py:6` |
 | Work queued under another engine build is never claimed by this build's workers and is reported stuck | `packages/ops_engine/src/ops_engine/store/tables.py:16`, `store/reconciler.py:12` |
 | A waiting run stores which step waits and why | `store/tables.py:118` |
 | An agent step whose turn stopped for a paused write is a failed attempt: it is retried, then leaves by the error port | `services/agents-service/src/ops_agents/api/engine_agents.py:204` |
@@ -43,7 +43,7 @@ The journal is the truth about what a run has done. The saved graph position is 
 | Rule | Detail |
 |---|---|
 | When a rebuild happens | A worker claims a run whose saved position is missing, unreadable, or written by another engine build |
-| How | Compile the run's pinned definition version. Replay the journal in order: each recorded step's output is fed to the graph without running the step. The graph stops where the journal stops; the run continues from there |
+| How | Compile the run's pinned definition version. Replay the journal in order, reading the last attempt of each step and iteration: each recorded step's output is fed to the graph without running the step. The graph stops where the journal stops; the run continues from there |
 | What a rebuild needs to be exact | Each journal row already stores the port a step left by and its output. A row gains `left_by` where it was implicit, and a waiting row keeps its interrupt id and payload |
 | The build rule | A work row for another build is claimed and rebuilt instead of being reported stuck. The reconciler's "another build" row is deleted |
 | What cannot be rebuilt | A journal row whose step type no longer exists in the registry at that version. The run is marked `stuck` with the step named, and the registry's check refuses to remove a step type version that a waiting run still uses |
@@ -62,6 +62,7 @@ class RunBudget(_Model):               # WorkflowDefinition.budget
 | Creation | When a run starts, the engine's host creates a budget `run:<run id>` at the model gateway with the definition's amount (`PUT /v1/models/budgets/{id}`) |
 | Use | Every model call of the run sends the run's budget id, after any narrower one (a group's, a turn's), in `X-Budget-Id` |
 | Spent | The gateway refuses the call with `budget_reached`. The step that made it ends by its error port with code `run_budget_reached`; with `onSpent: needs_person` the run opens a `take_over` task instead and waits |
+| The older per-run cap | The `X-Run-Spend-Cap` header is removed in this release; the run budget replaces it |
 | A run with no budget | Uses the team's default run budget, `OPS_ENGINE_RUN_BUDGET_USD`. A run never runs without one |
 | What a run shows | `spend` and `budget` on the run view, read from the gateway's budget row |
 | Tool calls | Not counted in dollars. The pass cap and each step's own limits bound them |
@@ -71,7 +72,7 @@ class RunBudget(_Model):               # WorkflowDefinition.budget
 | Rule | Detail |
 |---|---|
 | The result | The agent port returns `paused` with the interrupt and the loop state, in place of raising an error |
-| What the engine stores | `engine_runs.waiting` gains `loopState` (a reference to the stored state, not the bytes) and `kind` (`approval`, `question`, `plan_review`). The state itself is stored once by the agents service, keyed by run, step and iteration |
+| What the engine stores | `engine_runs.waiting` gains `turnState`, a reference to the stored state (never the bytes), and `kind` (`approval`, `question`, `plan_review`). The state itself is stored once by the agents service, keyed by run, step and iteration |
 | The task | An `approve` or `answer` task is opened for the step, titled with the agent's name and what it wants to do |
 | Resume | The decision resumes the same step and iteration with `AgentRequest.resume`. The turn continues from the saved state; model answers already recorded are replayed by the gateway, and tool calls already made repeat their keys |
 | Timeout | The step's own `timeoutSeconds` does not run while the step waits for a person. The task's deadline and `onTimeout` apply |
@@ -104,8 +105,8 @@ When all eleven are replaced, the engine's lines are removed from `portable-base
 | Table | Change | Notes |
 |---|---|---|
 | `engine_steps` | `left_by` (string 80) made explicit | Backfilled by reseeding; the product is not in production |
-| `engine_runs` | `waiting` JSON gains `loopState` and `kind`; new `budget_id` (string 120) | |
-| `engine_turn_states` (new) | Primary key `(run_id, node, iteration)`; `tenant_id`, `team_id`; `loop`, `schema`, `data` (binary, encrypted with the tenant's key); `created_at` | Deleted when the step finishes; a sweep removes rows of ended runs |
+| `engine_runs` | `waiting` JSON gains `kind` and `turnState: {node, iteration}`, a reference to the `engine_turn_states` row; the state's bytes are never in the JSON. New `budget_id` (string 200) | |
+| `engine_turn_states` (new) | Primary key `(run_id, node, iteration)`; `tenant_id`, `team_id`; `loop`, `schema`, `data` (binary; a tenant-scoped row under row-level security, with no encryption added by this design); `created_at` | Deleted when the step finishes; a sweep removes rows of ended runs |
 
 | Database | Note |
 |---|---|
@@ -159,15 +160,15 @@ sequenceDiagram
 
 | Concern | Rule |
 |---|---|
-| A paused turn's state holds a conversation | Encrypted with the tenant's key, tenant scoped, deleted when the step ends |
+| A paused turn's state holds a conversation | Tenant scoped under row-level security like the journal, deleted when the step ends. No encryption is added beyond the install's disk encryption, which matches how checkpoints are stored today |
 | A rebuild runs a step again | It cannot: replay feeds recorded outputs and runs nothing. The property test proves it |
-| Spend past the budget | Bounded by the gateway's reservation: at most one call's reservation over |
+| Spend past the budget | Bounded as the model gateway page states: a call's estimate against its actual cost, one closing call and a capped number of check calls per replay key |
 
 ## Acceptance criteria
 
 | # | Failure mode | Test proves |
 |---|---|---|
-| 1 | A waiting run is lost by an upgrade | Start a run to a wait, change the engine build, answer: the run finishes and no step has two journal rows |
+| 1 | A waiting run is lost by an upgrade | Start a run to a wait, change the engine build, answer: the run finishes and no step has two succeeded journal rows |
 | 2 | A rebuild runs a step again | The scripted tool sees no call during a rebuild |
 | 3 | A run spends past its budget | With a budget of 1 dollar and scripted calls of 40 cents, the third call is refused at the gateway and the step ends by its error port |
 | 4 | An agent step fails when a write needs approval | The run waits with an `approve` task; after approval the same turn continues and the write is sent once |

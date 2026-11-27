@@ -56,10 +56,13 @@ These restate the standards for routes; a new route that breaks one fails an exi
 | POST | `/v1/agents/{agent_id}/brief-draft` | 1.4.0 | Removed; the chat builder replaces it (`services/agents-service/src/ops_agents/api/routers/agents.py:803`) | | same |
 | GET | `/v1/agents/loops` | 1.4.0 | New. The loop kinds with their settings forms | `list[LoopKindOut]` | [Automatic mode and loop kinds](automatic-mode-and-loop-kinds.md) |
 | POST | `/v1/threads/{thread_id}/runs/stream` | 1.4.0 | Changed. New frames `mode`, `plan`, `agent_asked`, `handoff`, `interrupt`; 1.5.0 adds `sandbox_command` | `ChatStreamEvent` | [Runtime contract](runtime-contract-and-strands-loop.md) |
-| POST | `/v1/threads/{thread_id}/runs/{run_id}/cancel` | 1.4.0 | New. Stops a running turn at the next step | 202 | same |
+| POST | `/v1/threads/{thread_id}/runs/{run_id}/cancel` | 1.4.0 | New. Sets a flag on the run's row that the server running the turn reads at each step | 202 | same |
+| GET, POST | `/v1/hook-policies` | 1.4.0 | New. List and create hook policies | `HookPolicyIn` → `HookPolicy` | same |
+| GET, PUT | `/v1/hook-policies/{policy_id}` | 1.4.0 | New | `HookPolicy` | same |
+| POST | `/v1/hook-policies/{policy_id}/publish`, `/v1/hook-policies/check` | 1.4.0 | New. Publish a version; run a policy against a sample call | `HookCheckIn` → `HookCheckOut` | same |
 | GET | `/v1/threads/{thread_id}/runs/{run_id}/trace` | 1.4.0 | New. The turn's steps: model calls, tool calls, modes, pauses; 1.5.0 adds commands and network requests | `RunTrace` | same |
 | POST | `/v1/threads/{thread_id}/approvals` | 1.4.0 | Changed. Also answers `question` and `plan_review` interrupts (`services/agents-service/src/ops_agents/api/routers/reviews.py:63`) | `InterruptAnswer` | same |
-| GET, PUT, POST | `/v1/agents/{agent_id}/eval-cases` | 1.4.0 | Changed. New check types | `EvalCaseIn` | [Evals](evals.md) |
+| GET, PUT, POST | `/v1/agents/{agent_id}/eval-cases` | 1.4.0 | Removed. Cases are saved with the spec, in `evals.cases` | | [Evals](evals.md) |
 | POST | `/v1/agents/{agent_id}/eval-runs` | 1.4.0 | Changed. 202 with a background run; `caseNames`, `repeat`, `version` | `EvalRunStart` → `EvalRunRef` | same |
 | GET | `/v1/eval-runs/{run_id}` | 1.4.0 | Changed. Per-case modes, tools, cost, trace | `EvalRunRecord` | same |
 | GET | `/v1/eval-runs/{run_id}/events` | 1.4.0 | New. Stream | `EvalRunEvent` | same |
@@ -78,11 +81,11 @@ These restate the standards for routes; a new route that breaks one fails an exi
 | GET | `/v1/runs/{run_id}/turns` | 1.6.0 | New | `ListResult[TurnRow]` | Teams and human tasks |
 | GET | `/v1/runs/{run_id}/notes` | 1.6.0 | New | `ListResult[NoteRow]` | same |
 | POST | `/v1/runs/{run_id}/cancel` | 1.6.0 | Changed. `undo` | `RunCancel` | same |
-| GET | `/v1/tasks` | 1.6.0 | New on this prefix. The inbox list | `ListResult[TaskRow]` | same |
+| GET | `/v1/tasks` | 1.6.0 | New on this prefix. The inbox list. The console's reviews list route is removed in the same release, so one route serves the list | `ListResult[Task]` | same |
 | POST | `/v1/tasks/{task_id}/decision` | 1.6.0 | Unchanged shape; now also decides an agent step's approval | `TaskDecision` | same |
 | POST | `/v1/tasks/{task_id}/answer` | 1.6.0 | New | `TaskAnswer` | same |
 | POST | `/v1/tasks/{task_id}/take-over`, `/return` | 1.6.0 | New | `TaskReturn` | same |
-| POST | `/v1/channels/teams/actions` | 1.6.0 | New. Called by Teams, verified by signature; not in the SDK | | same |
+| POST | `/v1/channels/teams/{connection_id}/actions` | 1.6.0 | New. Called by Teams; the connection in the path gives the tenant and the app whose signature is checked; not in the SDK | | same |
 | GET, PUT | `/v1/workflows/{workflow_id}/tests` | 1.6.0 | New | `list[TeamTest]` | [Evals](evals.md) |
 | POST | `/v1/workflows/{workflow_id}/test-runs` | 1.6.0 | New. 202 | `TestRunRef` | same |
 | GET | `/v1/workflow-test-runs/{run_id}` | 1.6.0 | New | `TeamTestRun` | same |
@@ -91,7 +94,7 @@ These restate the standards for routes; a new route that breaks one fails an exi
 
 | Method | Path | Release | Change | Specified in |
 |---|---|---|---|---|
-| POST | `/v1/models/chat/completions` | 1.4.0 | Changed. Headers `X-Budget-Id`, `X-Replay-Key`, `X-Call-Purpose`; cached token counts in usage; new refusal codes | [Model gateway](model-gateway.md) |
+| POST | `/v1/models/chat/completions` | 1.4.0 | Changed. Headers `X-Budget-Id` (required for keys of kind agent, workflow and purpose), `X-Replay-Key` (required with a budget id), `X-Call-Purpose`; cached token counts in usage; new refusal codes. `X-Run-Spend-Cap` is removed in 1.6.0 | [Model gateway](model-gateway.md) |
 | PUT, GET | `/v1/models/budgets/{budget_id}` | 1.4.0 | New | same |
 | POST | `/v1/models/budgets/query` | 1.4.0 | New | same |
 | DELETE | `/v1/models/replays` | 1.4.0 | New | same |
@@ -101,6 +104,9 @@ These restate the standards for routes; a new route that breaks one fails an exi
 
 | Method | Path | Release | Change | Specified in |
 |---|---|---|---|---|
+| POST | `/v1/calls/decide` | 1.4.0 | New, service callers. The checks of a call with nothing sent | [Tool gateway](tool-gateway.md) |
+| POST | `/v1/approvals` | 1.4.0 | New, service callers. Mints the approval token after checking the approver | same |
+| POST | `/v1/approvals/answers` | 1.5.0 | New, service callers. Holds a person's answer for a tool server's question | same |
 | POST | `/v1/calls` | 1.5.0 | Changed. Outcome may carry `needsPerson` and `sources`; `sandbox.*` and `web.*` tools; new error codes | [Tool gateway](tool-gateway.md) |
 | GET, PUT | `/v1/web-tools` | 1.5.0 | New | same |
 | POST | `/v1/code-runs/calls` | 1.5.0 | Changed. Accepts a sandbox's token | [Sandbox service](sandbox-service.md) |
@@ -119,29 +125,37 @@ Internal only: service tokens, no public route, not in the SDK. Listed in full o
 
 ## Streams
 
-The chat stream's frames, after 1.5.0. Frames that exist today are in
+This table is the one list of the new stream frames and their fields. The runtime contract and the automatic mode page
+link here, and the [OpenAPI draft](openapi-draft.yaml) carries the same shapes as `ChatStreamEvent`. Both streams, the
+thread run stream and the chat stream, send these frames with the same fields. Frames that exist today are in
 `packages/contracts/src/ops_contracts/chat.py:703`.
 
 | Frame `type` | Fields | State |
 |---|---|---|
 | `start`, `status`, `text`, `replace`, `tool_start`, `tool_end`, `widget`, `part`, `citations`, `done`, `error` | As today | Today |
-| `mode` | `mode`, `reason`, `fixed` | 1.4.0 |
-| `plan` | `steps: [{id, text, status}]`, `revision` | 1.4.0 |
-| `agent_asked` | `agent`, `agentName`, `question`, `status: started\|finished`, `summary?` | 1.4.0 |
+| `mode` | `mode: direct\|plan\|helpers\|sandbox`, `reason: string`, `fixed: boolean` | 1.4.0 |
+| `plan` | `title: string`, `steps: [{id, text, status: pending\|doing\|done\|skipped, note?}]`, `revision: integer` | 1.4.0 |
+| `agent_asked` | `agentId`, `agentName`, `question`, `status: started\|finished`, `summary?`, `callId` | 1.4.0 |
 | `handoff` | `to`, `toName`, `message` | 1.4.0 |
-| `interrupt` | `id`, `kind: approval\|question\|plan_review`, `title`, `body`, `tool?`, `schema?` | 1.4.0 |
-| `sandbox_command` | `callId`, `command`, `status: started\|finished`, `exitCode?`, `stoppedBy?`, `filesChanged?` | 1.5.0 |
-| `done` | Gains `modes`, `costUsd`, `cachedTokens` | 1.4.0 |
+| `interrupt` | `interruptId`, `kind: approval\|question\|plan_review`, `title`, `body`, `call?: {tool, arguments, editable}`, `question?: {text, options, schema?}`, `plan?`, `nestedAgentId?`, `canAct: boolean`, `cannotActReason?` | 1.4.0 |
+| `sandbox_command` | `callId`, `command`, `status: started\|finished`, `exitCode?`, `stoppedBy?: time\|memory\|disk\|cancel`, `filesChanged?: [string]` | 1.5.0 |
+| `done` | Gains `modes: [ModeStep]`, `costUsd`, `cachedTokens` | 1.4.0 |
 
 ## Error codes added
 
+This table is the one list of codes and statuses. Other pages use these and do not restate them.
+
 | `code` | Status | Route | Meaning |
 |---|---|---|---|
-| `spec_invalid` | 422 | Spec routes | `details.problems` lists each problem with its path |
+| `spec_invalid` | 422 | Spec routes | `details.problems` lists each problem with its path and a code: `unknown_tool`, `record_unknown`, `record_not_published`, `helper_not_published`, `workflow_unknown`, `sandbox_required`, `loop_kind_unavailable`, `eval_names_unknown`, `eval_mode_unavailable`, `unknown_check`, `case_without_check` and the others on the spec page |
+| `validation_failed` | 422 | Every route | A malformed body, as today |
+| `drafts_limit` | 429 | Draft and try routes | More drafts than one person may make in an hour |
+| `run_not_running` | 409 | Turn cancel | The turn already ended |
+| `interrupt_closed`, `requester_cannot_approve` | 409, 403 | `POST …/approvals` | Already answered; the tenant's approval policy does not let this person decide |
 | `stale_base` | 409 | `PUT …/spec` | The draft changed since it was read |
 | `use_spec` | 422 | `PATCH /v1/agents/{id}` | A behaviour field was sent |
 | `eval_gate` | 409 | Publish | No run for this draft, or below the pass rate |
-| `budget_reached`, `check_cap_reached`, `budget_not_found`, `budget_header_invalid`, `budget_required` | 429, 429, 404, 422, 422 | Completions | See the model gateway page |
+| `budget_reached`, `check_cap_reached`, `budget_not_found`, `budget_header_invalid`, `budget_required`, `replay_key_required` | 429, 429, 404, 422, 422, 422 | Completions | See the model gateway page |
 | `no_sandbox` | 404 | Thread sandbox routes | The conversation has no sandbox |
 | `sandbox_unavailable` | 503 | Thread sandbox routes | The sandbox service or its backend is down; retryable |
 | `host_not_allowed`, `web_search_not_set_up`, `page_too_large`, `tool_result_invalid` | 403, 409, 413, 422 | `POST /v1/calls` | See the tool gateway page |

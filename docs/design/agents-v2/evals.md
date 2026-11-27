@@ -62,7 +62,7 @@ Rules:
 |---|---|
 | Unknown keys | Refused when the spec is saved, with the key named (`unknown_check`) |
 | A case with no check | Refused (`case_without_check`) |
-| `rubric` with no judge model | The run is refused with the existing message naming the missing setting (`domain/evals.py:159`) |
+| `rubric` with no rubric text | Refused when saved; today's check is `rubric_missing` (`domain/evals.py:159`). A judge alias that resolves to no model fails the run at its first judge call with the gateway's error |
 | Order | Checks that need no model are scored first; a judge is asked only when the others passed, to save cost |
 | Writes during a run | The turn runs with `test: true`: a write pauses for approval as usual and the run answers the pause with "rejected", so nothing is sent. `pausesOn` asserts the pause happened |
 | The sandbox in a run | A test sandbox, deleted when the run ends |
@@ -85,7 +85,7 @@ Rules:
 A team test belongs to a workflow that has a group.
 
 ```yaml
-# stored with the workflow definition, under `tests`
+# one row of the workflow_tests table per test
 - name: Exception over the income rule goes to a senior underwriter
   start: { applicationId: "A-7781", amount: 240000 }
   members:                       # optional: script a member instead of running it
@@ -127,7 +127,7 @@ Routes; exact shapes are in the [OpenAPI draft](openapi-draft.yaml).
 
 | Method | Path | Change |
 |---|---|---|
-| GET, PUT, POST | `/v1/agents/{agent_id}/eval-cases` | The case shape gains the new check types. A PUT of the spec's `evals` section and a PUT here write the same rows |
+| GET, PUT, POST | `/v1/agents/{agent_id}/eval-cases` | Removed. Cases have one form, the spec's `evals.cases`, saved with the spec. `EvalCaseIn` below is the stored row's shape, not a route body |
 | POST | `/v1/agents/{agent_id}/eval-runs` | Body gains `caseNames?` (run a subset), `repeat?`, `version?` (default the draft). Returns 202 with the run's id; the run is a background job |
 | GET | `/v1/eval-runs/{run_id}` | Adds per case: `modes`, `tools`, `costUsd`, `seconds`, `traceId`, and `baseline` |
 | GET | `/v1/eval-runs/{run_id}/events` | New. Server-sent events as cases finish: `case` and `done` |
@@ -238,7 +238,7 @@ sequenceDiagram
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `OPS_AGENTS_EVAL_BUDGET_USD` | `5` | Budget of one eval run, created at the model gateway |
+| `OPS_AGENTS_EVAL_BUDGET_USD` | `5` | Budget of one eval run or team test run, created at the model gateway as kind `eval` |
 | `OPS_AGENTS_EVAL_PARALLEL` | `4` | Cases run at once |
 | `OPS_AGENTS_MAX_EVAL_CASES` | `200` | Cases per agent |
 | `OPS_AGENTS_EVAL_MIN_CASES` | `0` | A tenant can require cases before publish |
@@ -250,7 +250,7 @@ sequenceDiagram
 |---|---|
 | An eval changes a real system | Writes pause and are rejected by the run. Read tools do run against real systems, as the acting builder, so the builder's own access applies |
 | Personal data in cases | Cases are tenant scoped and team owned, masked in views like run data |
-| Cost | One budget per run at the model gateway; the run's cost is shown before a repeat |
+| Cost | One budget of kind `eval` per run at the model gateway (`eval:<eval run id>`), sent on every call of the run through a model key of kind `purpose`; the run's cost is shown before a repeat |
 | A judge that is wrong | A judge's verdict carries its reason; a case can pin `contains` or `output` checks beside the rubric so the gate does not rest on a judge alone |
 
 ## Acceptance criteria
@@ -277,7 +277,7 @@ sequenceDiagram
 
 | Package | Add | Change |
 |---|---|---|
-| `services/agents-service` | `domain/team_tests.py`, `app/team_tests.py`, `api/routers/workflow_tests.py`, `store/workflow_tests.py`, a migration | `domain/evals.py` (new check types, `TurnView`), `app/evals.py` (background run, events, gate by digest), `api/routers/assurance.py`, `api/routers/agents.py`, `openapi.json` |
+| `services/agents-service` | `domain/team_tests.py`, `app/team_tests.py`, `api/routers/workflow_tests.py`, `store/workflow_tests.py`, a migration | `domain/evals.py` (new check types, `TurnView`), `app/evals.py` (background run, events, gate by digest), `api/routers/assurance.py` (the eval-case routes go), `api/routers/agents.py`, `openapi.json` |
 | `packages/ops_engine` | | `ports.py`: a test run's member and people stand-ins are passed as ports, so the engine has no test branch |
 | `sdk`, `apps/console` | See [SDK](sdk.md), [CLI](cli.md) and [console screens](console-screens.md) | |
 

@@ -234,7 +234,10 @@ properties:
       approve:
         type: array
         uniqueItems: true
-        items: { enum: [delete_files, install_packages, network_write, save_files] }
+        description: >-
+          Extra approvals. Network grants for any request that is not a read, and every save of a file out of the
+          workspace, always need approval and cannot be switched off here.
+        items: { enum: [delete_files, install_packages, network_read] }
       files:
         description: Files placed in every new workspace.
         type: array
@@ -357,7 +360,7 @@ $defs:
       kind: { const: evaluator }
       rubric: { type: string, minLength: 1, maxLength: 2000 }
       judge: { type: string }
-      maxRounds: { type: integer, minimum: 1, maximum: 5, default: 3 }
+      maxRounds: { type: integer, minimum: 1, maximum: 5, default: 2 }
   loopLongRunning:
     type: object
     unevaluatedProperties: false
@@ -366,7 +369,7 @@ $defs:
     properties:
       kind: { const: long_running }
       maxMinutes: { type: integer, minimum: 1, maximum: 720, default: 60 }
-      background: { type: boolean, default: true }
+      background: { type: boolean, default: false }
   evalCase:
     type: object
     additionalProperties: false

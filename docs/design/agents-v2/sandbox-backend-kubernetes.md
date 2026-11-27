@@ -43,7 +43,7 @@ The pod template, as the service fills it:
 | `securityContext` | Run as a fixed unprivileged user and group, `runAsNonRoot`, no privilege escalation, all capabilities dropped, read-only root filesystem, the default seccomp profile |
 | Volumes | `workspace`: an `emptyDir` with the size's `sizeLimit`; `inbox`: an `emptyDir` filled by an init container and mounted read-only in the main container; `tmp`: a small memory-backed `emptyDir` |
 | Resources | Requests and limits from the size, including `ephemeral-storage` |
-| Environment | The proxy variables for the exit gate and the gate token, from the ensure call. No secret of ours is mounted |
+| Environment | The proxy's address only. The gate token is not in the pod: it is set in each command's environment by the exec call, so a warm pod holds none. The gate also checks the pod's address. No secret of ours is mounted |
 | `enableServiceLinks`, host network, host paths | `false`, none, none |
 | Node placement | An optional node selector and toleration, so sandboxes can run on their own node pool |
 | `activeDeadlineSeconds` | A ceiling above the longest allowed life, so a forgotten pod ends |

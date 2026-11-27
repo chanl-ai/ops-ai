@@ -38,7 +38,7 @@ The specification is [runtime contract and Strands loop](runtime-contract-and-st
 | One import site | Only files under `strands_loop/` import `strands`. An import-linter contract named `strands-only-in-its-adapter` forbids it everywhere else, including tests outside that folder | `lint-imports` in the gate |
 | No library type crosses the contract | `TurnRequest`, `TurnResult`, `Interrupt`, `KernelEvent` and every port use our types. A Strands message, event or snapshot is converted inside the adapter | The typed-boundaries check, and a test that builds `TurnResult` with the library uninstalled from the import path of the caller |
 | The library never reaches the network | Its model client is given the `ModelEndpoint` of the model gateway and nothing else. Its own tool-server client, session managers, retry sleeps, telemetry exporters and hosted tools are off | A test with a transport that fails any request not addressed to the scripted gateway |
-| Pause state is opaque outside the adapter | `LoopState.data` is bytes plus a schema number. Only the adapter reads it. It is stored by our checkpointer, encrypted with the tenant's key | A resume test in which the state is passed through a second process |
+| Pause state is opaque outside the adapter | `LoopState.data` is bytes plus a schema number. Only the adapter reads it. It is stored by our checkpointer as every checkpoint is: a tenant-scoped row, with no added encryption | A resume test in which the state is passed through a second process |
 | A second loop is a second adapter | Another loop implements `LoopDriver` in its own folder with its own import contract. `KernelPorts.loop` selects it from a setting our engineers control; it is not in the spec file | The contract test suite runs against every registered driver |
 | Version pin | The library is pinned to a minor range in `packages/ops_agent_kernel/pyproject.toml`. An upgrade is its own pull request that runs the contract suite and trials 1 to 3's scripts | SC4 |
 | Scripted model | Tests use `ops_agent_kernel.testing.ScriptedModel`, which answers the gateway's completion route from a Python function. Tests never patch the library | TS6, TS8 |
@@ -58,9 +58,9 @@ Order of the switch, so the suite is never red for a reason nobody can read:
 |---|---|---|
 | A run can pause for days and survive a restart | The kernel returns an `Interrupt` with `LoopState`; the checkpointer stores it; the engine stores a waiting step with a reference. Nothing is held in memory | A turn pauses for approval; every process is stopped; a different process resumes it; the write is sent once and no model call is charged twice. Runs on both databases |
 | Each tenant's data is separate | Every new table has `tenant_id` and the isolation policy. A worker enters one tenant per item (EV6). Sandbox storage keys carry the tenant prefix. One sandbox serves one conversation | The isolation test per new table; the sandbox suite's row 1; a turn for tenant A given tenant B's thread id answers 404 |
-| A person approves any action that changes data | The tool gateway refuses a write without an approval token it issued. No kernel path, loop driver, sandbox command or team member can set the token | A scripted model calls a write tool under every loop kind and from inside a sandbox: each ends in an interrupt and the scripted system saw no request. The asker's own approval is refused |
+| A person approves any action that changes data | The kernel asks the tool gateway to decide before a tool runs and pauses there. The tool gateway refuses a write without an approval token, and from 1.4.0 it is the only process that mints one (`POST /v1/approvals`); the signing key leaves the agents service. Who may approve is the tenant's approval policy | A scripted model calls a write tool under every loop kind and from inside a sandbox: each ends in an interrupt and the scripted system saw no request. With the two-person rule on, the asker's own approval is refused by the tool gateway |
 | Secrets stay behind the two gateways | The agents service holds no provider key and no tool credential. The model gateway adds provider keys; the tool gateway and its exit gate add tool secrets | The network test above; a scan of every model request and sandbox environment in the suite for the planted secret values |
-| A cost budget | The model gateway reserves against every budget named in `X-Budget-Id` before a call and settles after. The kernel only reacts to `budget_reached` | With a budget of three calls, the fourth is refused at the gateway even when the caller is a helper, a team member or a retry; concurrent callers cannot overspend by more than one reservation |
+| A cost budget | The model gateway reserves cost, calls and tokens against every budget named in `X-Budget-Id` before a call and settles after. Keys of kind agent, workflow and purpose are refused without a budget id and a replay key. The kernel only reacts to `budget_reached` | With a budget of three calls, the fourth is refused at the gateway even when the caller is a helper, a team member or a retry; concurrent callers cannot overspend by more than one reservation |
 
 A change that touches a path in the "Enforced where" column re-runs that row's test before it is committed, and the
 commit body names the output.
@@ -146,7 +146,7 @@ Still required: DA9 (every migration downgrades), DL4 (every merge reaches stagi
 | One settings object per process (CF1) | New settings are fields on the service's settings class, with the names in each spec's "Settings" table |
 | No literal host, port, model or timeout in code (CF2) | The constants this work finds, such as the tool-server client's timeout, become settings |
 | Missing required settings stop the process (CF3) | A sandbox backend without its required settings does not start |
-| Secrets from the secret store (CF4) | The Sprites token, the Teams app secret, the exit gate's certificate key |
+| Secrets from the secret store (CF4) | The Sprites token, each tenant's Teams app secret (a connection), the exit gate's certificate key |
 | The default is the safe value (CF5) | Network deny, sandbox off, web tools off, the weak isolation level refused for a shared install |
 
 ## Generating the SDK
@@ -176,8 +176,8 @@ Still required: DA9 (every migration downgrades), DL4 (every merge reaches stagi
 | Import the agent library outside `strands_loop/` | The contract is the only thing that lets the loop be replaced |
 | Give the loop, a helper or a sandbox a provider key, a tool credential or a service token | Secrets stay behind the two gateways |
 | Call a model provider or any outside host from the agents service | SC1 |
-| Check or count a budget in the agents service | One owner: the model gateway |
-| Decide an approval anywhere but the tool gateway, or let a setting switch approvals off for a write | A person approves every change |
+| Check or count a budget in the agents service, or send a model call without a budget id and a replay key | One owner: the model gateway, which refuses such a call |
+| Mint an approval token anywhere but the tool gateway, pause a turn anywhere but `before_tool`, or let a setting switch approvals off for a write | A person approves every change |
 | Keep a paused turn in memory, a local file or a library's session store | It must resume on another server |
 | Reuse a sandbox computer for a second conversation | Tenant isolation |
 | Decide a command is safe by reading its text | The check can be bypassed; approvals sit at points the sandbox cannot avoid |

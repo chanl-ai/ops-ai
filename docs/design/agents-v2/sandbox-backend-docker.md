@@ -49,7 +49,7 @@ How every sandbox container is created:
 | `/workspace/inbox` | A second volume mounted read-only into the container; the service writes it through a short-lived helper container | A person's uploads cannot be deleted by a command |
 | Memory, processor, process count | The size's limits, and no swap | |
 | Network | The internal sandbox network only | |
-| Environment | The proxy variables pointing at the exit gate with the gate token; nothing else of ours | |
+| Environment | The proxy's address only. The gate token is set in each command's environment by the exec call, so a warm container holds none; the gate also checks the container's address on the internal network | |
 | Devices, host mounts, the engine socket | None | |
 
 ```python
@@ -183,6 +183,6 @@ The sandbox service's use cases run against this backend in CI and on a develope
 
 | # | Open point | Trial |
 |---|---|---|
-| 1 | Whether a rootless engine or a dedicated host is the default layout in the compose file | Trial 8, with the install guide's owner |
+| 1 | Whether a rootless engine or a dedicated host is the default layout in the compose file. Trial 8 gates the Docker default in lane A | Trial 8, with the install guide's owner |
 | 2 | Whether sandbox-runtime works inside the locked-down container and is worth its added moving parts | Trial 8 |
 | 3 | The slowdown of file-heavy work under gVisor | Trial 8: a slow file-heavy job must finish within twice its normal time |

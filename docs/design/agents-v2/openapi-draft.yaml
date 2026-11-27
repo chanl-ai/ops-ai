@@ -146,6 +146,41 @@ paths:
         "200": { description: Recorded; the turn continues on the stream, content: { application/json: { schema: { $ref: "#/components/schemas/InterruptAnswered" } } } }
         "403": { $ref: "#/components/responses/Error", description: requester_cannot_approve }
         "409": { $ref: "#/components/responses/Error", description: interrupt_closed }
+  /v1/hook-policies:
+    get:
+      tags: [agent-spec]
+      operationId: listHookPolicies
+      x-release: "1.4.0"
+      summary: Hook policies of the tenant
+      parameters: [{ $ref: "#/components/parameters/Page" }, { $ref: "#/components/parameters/PageSize" }]
+      responses:
+        "200": { description: A page of policies, content: { application/json: { schema: { $ref: "#/components/schemas/HookPolicyList" } } } }
+    post:
+      tags: [agent-spec]
+      operationId: createHookPolicy
+      x-release: "1.4.0"
+      summary: Create a draft hook policy
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/HookPolicyIn" } } } }
+      responses:
+        "201": { description: The policy, content: { application/json: { schema: { $ref: "#/components/schemas/HookPolicy" } } } }
+  /v1/hook-policies/check:
+    post:
+      tags: [agent-spec]
+      operationId: checkHookPolicy
+      x-release: "1.4.0"
+      summary: Run a policy against a sample call
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/HookCheckIn" } } } }
+      responses:
+        "200": { description: The verdict, content: { application/json: { schema: { $ref: "#/components/schemas/HookCheckOut" } } } }
+  /v1/threads/{threadId}/runs/stream:
+    parameters: [{ $ref: "#/components/parameters/ThreadId" }]
+    post:
+      tags: [chat]
+      operationId: streamThreadRun
+      x-release: "1.4.0"
+      summary: Run a turn and stream its frames (the route exists; the new frames are ChatStreamEvent)
+      responses:
+        "200": { description: Server-sent events, content: { text/event-stream: { schema: { $ref: "#/components/schemas/ChatStreamEvent" } } } }
   /v1/agents/{agentId}/eval-runs:
     parameters: [{ $ref: "#/components/parameters/AgentId" }]
     post:
@@ -487,10 +522,11 @@ components:
     AgentSpec:
       description: The agent spec document. Its schema is agent-spec-schema.yaml in this folder.
       type: object
-      required: [apiVersion, name]
+      required: [apiVersion, name, role]
       properties:
         apiVersion: { const: ops.ai/v2 }
         name: { type: string }
+        role: { type: string }
     SpecSave:
       type: object
       additionalProperties: false
@@ -844,28 +880,155 @@ components:
         searchOn: { type: boolean }
         fetchOn: { type: boolean }
         searchConnectionId: { type: [string, "null"] }
+    BudgetKind:
+      enum: [thread, run, step, group, eval, draft]
     BudgetIn:
       type: object
       additionalProperties: false
+      required: [kind, teamId, createdBy]
       properties:
+        kind: { $ref: "#/components/schemas/BudgetKind" }
+        parentId: { type: [string, "null"] }
+        teamId: { type: string }
+        createdBy: { type: string, description: The creating module }
         maxCostUsd: { type: [number, "null"], exclusiveMinimum: 0 }
         maxCalls: { type: [integer, "null"], minimum: 1 }
         maxTokens: { type: [integer, "null"], minimum: 1 }
-        parentId: { type: [string, "null"] }
         expiresAt: { type: [string, "null"], format: date-time }
     Budget:
       type: object
-      required: [id, spentUsd, calls, tokens]
+      required: [id, kind, teamId, createdBy, spentCostUsd, spentCalls, spentTokens, reservedCostUsd, reservedTokens, updatedAt]
       properties:
         id: { type: string }
+        kind: { $ref: "#/components/schemas/BudgetKind" }
+        parentId: { type: [string, "null"] }
+        teamId: { type: string }
+        createdBy: { type: string }
         maxCostUsd: { type: [number, "null"] }
         maxCalls: { type: [integer, "null"] }
         maxTokens: { type: [integer, "null"] }
-        spentUsd: { type: number }
-        reservedUsd: { type: number }
-        calls: { type: integer }
-        tokens: { type: integer }
-        exhausted: { type: boolean }
+        spentCostUsd: { type: number }
+        spentCalls: { type: integer }
+        spentTokens: { type: integer }
+        reservedCostUsd: { type: number }
+        reservedTokens: { type: integer }
+        exhausted: { enum: [cost, calls, tokens, null] }
+        updatedAt: { type: string, format: date-time }
+    HookPolicyIn:
+      type: object
+      additionalProperties: false
+      required: [id, name, moment, action]
+      properties:
+        id: { type: string, pattern: "^[a-z][a-z0-9_]{0,63}$" }
+        name: { type: string, maxLength: 120 }
+        teamId: { type: [string, "null"] }
+        moment: { enum: [before_model, after_model, before_tool, after_tool] }
+        when: { type: string, maxLength: 2000 }
+        action: { enum: [refuse_tool, require_approval, mask_result, guide, retry_answer] }
+        text: { type: string, maxLength: 2000 }
+        fields: { type: array, items: { type: string } }
+    HookPolicy:
+      allOf:
+        - { $ref: "#/components/schemas/HookPolicyIn" }
+        - type: object
+          required: [version, status]
+          properties:
+            version: { type: integer }
+            status: { enum: [draft, published] }
+            createdBy: { type: string }
+            createdAt: { type: string, format: date-time }
+    HookPolicyList:
+      type: object
+      required: [data, pagination, facets]
+      properties:
+        data: { type: array, items: { $ref: "#/components/schemas/HookPolicy" } }
+        pagination: { $ref: "#/components/schemas/Pagination" }
+        facets: { type: object }
+    HookCheckIn:
+      type: object
+      additionalProperties: false
+      required: [policy, sample]
+      properties:
+        policy: { $ref: "#/components/schemas/HookPolicyIn" }
+        sample: { type: object, description: "A sample call: tool and args, or text, or result" }
+    HookCheckOut:
+      type: object
+      required: [matched, verdict]
+      properties:
+        matched: { type: boolean }
+        verdict: { enum: [proceed, refuse, pause, mask, guide, retry] }
+        error: { type: [string, "null"] }
+    ChatStreamEvent:
+      description: The new frames of both streams. Frames that exist today are unchanged and not repeated here.
+      oneOf:
+        - type: object
+          required: [type, mode, reason, fixed]
+          properties:
+            type: { const: mode }
+            mode: { enum: [direct, plan, helpers, sandbox] }
+            reason: { type: string }
+            fixed: { type: boolean }
+        - type: object
+          required: [type, steps, revision]
+          properties:
+            type: { const: plan }
+            title: { type: string }
+            revision: { type: integer }
+            steps:
+              type: array
+              items:
+                type: object
+                required: [id, text, status]
+                properties:
+                  id: { type: string }
+                  text: { type: string }
+                  status: { enum: [pending, doing, done, skipped] }
+                  note: { type: string }
+        - type: object
+          required: [type, agentId, agentName, question, status, callId]
+          properties:
+            type: { const: agent_asked }
+            agentId: { type: string }
+            agentName: { type: string }
+            question: { type: string }
+            status: { enum: [started, finished] }
+            summary: { type: string }
+            callId: { type: string }
+        - type: object
+          required: [type, to, toName, message]
+          properties:
+            type: { const: handoff }
+            to: { type: string }
+            toName: { type: string }
+            message: { type: string }
+        - type: object
+          required: [type, interruptId, kind, title, body, canAct]
+          properties:
+            type: { const: interrupt }
+            interruptId: { type: string }
+            kind: { enum: [approval, question, plan_review] }
+            title: { type: string }
+            body: { type: string }
+            call:
+              type: object
+              properties: { tool: { type: string }, arguments: { type: object }, editable: { type: boolean } }
+            question:
+              type: object
+              properties: { text: { type: string }, options: { type: array, items: { type: string } }, schema: { type: object } }
+            plan: { type: object }
+            nestedAgentId: { type: string }
+            canAct: { type: boolean }
+            cannotActReason: { type: [string, "null"] }
+        - type: object
+          required: [type, callId, command, status]
+          properties:
+            type: { const: sandbox_command }
+            callId: { type: string }
+            command: { type: string }
+            status: { enum: [started, finished] }
+            exitCode: { type: integer }
+            stoppedBy: { enum: [time, memory, disk, cancel] }
+            filesChanged: { type: array, items: { type: string } }
     TeamLayout:
       type: object
       required: [id, name, description, fragment]

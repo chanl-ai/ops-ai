@@ -47,7 +47,7 @@ and channels).
 
 | Region | Component | Data |
 |---|---|---|
-| Tabs: Overview, Instructions, Tools and knowledge, Helpers, Loop, Sandbox (1.5.0), Guardrails, Output, Limits, Evals, Versions, Spec | `RouteTabs` (`components/shared/route-tabs.tsx`) | `GET /v1/agents/{id}/spec` |
+| Tabs: Overview, Instructions, Tools and knowledge, Helpers, Loop, Sandbox (1.5.0), Guardrails (with the hook policies attached to the agent), Output, Limits, Evals, Versions, Spec | `RouteTabs` (`components/shared/route-tabs.tsx`) | `GET /v1/agents/{id}/spec` |
 | Each tab's form | `SettingsSection`, `FormField`, `EntityPicker`, `TagInput` | The tab edits one part of the spec and saves the whole spec with the base digest |
 | Save bar | `PageSaveActions`, `SaveState`, `SaveProblem` | `PUT /v1/agents/{id}/spec`; a `spec_invalid` problem is shown on the field its path names |
 | A newer copy exists | `NewerCopyNotice` | `stale_base` |
@@ -60,6 +60,11 @@ and channels).
 | No permission to edit | Every field read-only with `LockedReason` |
 | Published version, no draft | Read-only with "Edit" that creates a draft |
 | Install without a sandbox service | The Sandbox tab shows `DisabledReason`: "This install has no sandbox service." |
+
+Hook policies themselves are managed on a "Policies" tab beside the guardrail records (1.4.0): a list
+(`DataTableWithViews`), a form (`SettingsSection`, `FormField`) and a "Check against a sample call" panel over
+`POST /v1/hook-policies/check`. The definition is in the
+[runtime contract](runtime-contract-and-strands-loop.md#hook-policies).
 
 ### 2. Loop tab (1.4.0)
 
@@ -111,7 +116,7 @@ Route: `apps/console/src/app/chat/` (exists).
 
 | State | What is drawn |
 |---|---|
-| The asker cannot approve | The card read-only with "Waiting for an approver. You asked for this change, so someone else decides." |
+| The viewer may not approve | The card read-only with the API's reason. Under the two-person rule the asker sees "Waiting for an approver. You asked for this change, so someone else decides." |
 | Reconnecting | The stream re-attaches and the blocks already drawn stay |
 | No sandbox yet | The Files button is hidden until the conversation has one |
 | Sandbox asleep | The panel lists files from the saved copy, with a line "The workspace is asleep; files are kept." |
@@ -140,7 +145,8 @@ States: loading; a run still in progress polls; no permission to see inputs show
 | Limits, with the install's caps shown beside each | `FormField` rows | Options |
 | Allowed hosts | `TagInput` that only accepts hosts from the tenant's list, searched; a host not on it shows who can add it | `SandboxOptions.tenantHosts` |
 | Secrets a host may use | `SecretPicker` per host | |
-| What needs approval | Checkboxes for the four kinds | |
+| What needs approval | Two lines that are always on and cannot be changed: "Any request that changes data" and "Saving a file out of the workspace". Three checkboxes a builder can add: deleting files, installing packages, every network request | |
+| Hosts that cannot be checked | A read-only list of the tenant's hosts marked not inspected, each with "needs approval for every connection" | Options |
 | Starting files | `FileRefsField` | |
 | The wall this install uses | A read-only line: the backend and isolation level | Options |
 
@@ -275,7 +281,7 @@ None.
 | Concern | Rule |
 |---|---|
 | What a person may see | Every screen relies on the API's permission and masking; the console hides nothing itself and shows nothing the API did not return |
-| Approving your own request | The card is read-only for the asker on every screen, from the API's `canAct` |
+| Who may approve | The card is read-only whenever the API's `canAct` is false, with `cannotActReason`; the console applies no rule of its own |
 | Untrusted content | Fetched pages, tool results and file names are rendered as text, never as HTML |
 
 ## Acceptance criteria

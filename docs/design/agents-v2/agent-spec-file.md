@@ -30,7 +30,7 @@ document's fields, how it is stored as versions, and how it is checked.
 
 | Field | Holds | State | Stored today as |
 |---|---|---|---|
-| `apiVersion` | `ops.ai/v2`. A file without it is read as today's format and converted | New | none |
+| `apiVersion` | `ops.ai/v2`. Required; a file without it is refused | New | none |
 | `id` | The agent's id; left out when creating | Today | `Agent.id` |
 | `name`, `role` | What the agent is called and what it is for | Today | same |
 | `instructions`, `brief`, `promptMode` | What the agent is told, as one text or as headed sections | Today | same; `patterns` stays a console-only field and is not in the file |
@@ -38,7 +38,7 @@ document's fields, how it is stored as versions, and how it is checked.
 | `channels` | Where it can be reached | Today | same |
 | `toolIds`, `collections`, `allTeamKnowledgeBases`, `accounts`, `skillMenu` | What it may use | Today | same |
 | `skills` | Attached skills, with an optional pinned version | Changed: in the file, where today a separate route attaches them | skill pins |
-| `guardrails` | Guardrail records by id | Changed | `guardrail_pins` (`agents.py:172`) |
+| `guardrails` | Guardrail records by id | Changed | `guardrail_pins` (`agents.py:177`) |
 | `privacy.maskPersonalData`, `whenUnsure` | Masking, and what to do when unsure | Changed: moved out of the old `guardrails` object | `Guardrails.redact_pii`, `when_unsure` (`agents.py:114`) |
 | `memory` | What it remembers about a person | Today | `MemorySettings` |
 | `widgets` | Pinned rich-result templates | Today, regrouped | `widget_pins`, `widgets` |
@@ -46,7 +46,7 @@ document's fields, how it is stored as versions, and how it is checked.
 | `loop` | How the agent works. Left out, it is automatic | New | none |
 | `agents` | Helper agents and how each is used | New | none; today a team's default agent asks specialists (`api/agent_calls.py:72`) |
 | `sandbox` | The workspace: image, size, hosts, secrets, approvals, files | New | none |
-| `hooks` | Named policies per moment | New | none |
+| `hooks` | Hook policy ids per moment. A policy is defined once, in the [runtime contract](runtime-contract-and-strands-loop.md#hook-policies) | New | none |
 | `output` | A schema the answer must match, and a quality bar | New for chat; a workflow agent step has `outputSchema` today | `AgentRequest.output_schema` (`packages/ops_engine/src/ops_engine/ports.py:153`) |
 | `evals` | Test cases and the pass rate the publish gate needs | Changed: in the file; the cases and gate exist | eval cases (`api/routers/assurance.py:172`) |
 
@@ -58,7 +58,7 @@ Fields removed from the old `guardrails` object, and where each goes:
 | `max_model_calls_per_conversation`, `max_cost_per_conversation` | `limits.budget` | One budget, enforced at the model gateway |
 | `blocked_topics` | A guardrail record listed under `guardrails` | An inline list had no version and no review |
 
-The two worked examples use every field: [a loan operations agent](agent-spec-loan-ops.yaml) with one agent in charge
+Two worked examples cover most fields (`brief`, `accounts`, `widgets` and `whenUnsure` are not used in either): [a loan operations agent](agent-spec-loan-ops.yaml) with one agent in charge
 and two helpers, and [an IT helpdesk agent](agent-spec-it-helpdesk.yaml) that hands the conversation to the right desk
 and has a workspace for log files. Both are validated against the schema by the check described under acceptance.
 
@@ -75,19 +75,19 @@ limits: { budget: { ceilingUsd: 1.00 } }
 
 ## Rules a spec must meet
 
-Each rule is a check of `POST /v1/agents/spec/validate` and of every save. A failure answers 400 `validation_failed`
+Each rule is a check of `POST /v1/agents/spec/validate` and of every save. A failure answers 422 `spec_invalid`
 with `details.problems: [{path, code, message}]`; `path` is a JSON pointer into the document.
 
 | # | Rule | `code` |
 |---|---|---|
 | 1 | The document matches the schema; unknown fields are refused | `schema` |
 | 2 | `instructions` and `brief` are not both set | `instructions_and_brief` |
-| 3 | Every `toolIds` entry is a tool the agent's team may use | `tool_unknown` |
+| 3 | Every `toolIds` entry is a tool the agent's team may use | `unknown_tool` |
 | 4 | Every `collections`, `skills`, `guardrails`, `hooks` entry exists in the tenant and, for skills, guardrails and hooks, has a published version | `record_unknown`, `record_not_published` |
 | 5 | Every `agents` entry is a published agent of the same team, is not this agent, and does not list this agent as its own helper | `helper_unknown`, `helper_not_published`, `helper_other_team`, `helper_cycle` |
 | 6 | `use: handoff` appears only when `loop.kind` is `swarm`; `use: tool` only when it is left out, `auto` or `supervisor` | `helper_use_mismatch` |
 | 7 | `loop.kind: workflow` names a published workflow of the same team | `workflow_unknown` |
-| 8 | `loop.kind: long_running` requires `sandbox` | `sandbox_required` |
+| 8 | `loop.kind: long_running` requires `sandbox`, and is accepted from release 1.5.0 | `sandbox_required`, `loop_kind_unavailable` |
 | 9 | Every `sandbox.network.allow` host is on the tenant's egress list | `host_not_listed` |
 | 10 | Every `sandbox.secrets` name is a secret of the team, and each of its hosts is in `network.allow` | `secret_unknown`, `secret_host_not_allowed` |
 | 11 | `sandbox.image` and `size` are offered by this install, and each limit is at or below the install's cap | `image_unknown`, `limit_over_cap` |
@@ -154,7 +154,7 @@ fields as one JSON document (`default_limits(spec: Json)` reads it at
 
 | Item | Change | Tenant scope | Retention |
 |---|---|---|---|
-| Agent version rows | The stored document becomes the v2 spec. Versions saved before are converted on read by one function, `spec_from_stored`, and written back as v2 on the next save | Tenant and team, as today | With the agent |
+| Agent version rows | The stored document is the v2 spec. A version row in the earlier shape is not read: installs are reseeded | Tenant and team, as today | With the agent |
 | Eval cases | Saving a spec replaces the agent's saved cases with `evals.cases` in the same transaction; reading a spec fills `evals.cases` from them | As today | As today |
 | Skill pins, guardrail pins, widget pins | Written from the spec in the same transaction as the version | As today | As today |
 | `sandbox.files[].from` | Never stored. The command line uploads the local file to the team's Files and sends `fileId` | | |
@@ -163,9 +163,10 @@ fields as one JSON document (`default_limits(spec: Json)` reads it at
 |---|---|
 | PostgreSQL and SQL Server | No new statement kind. The document is the existing JSON column. Digest comparison is a string equality in the `WHERE` of the save (DA12) |
 
-Because Ops AI is not in production, stored versions in the old shape are not migrated in place; seeded workspaces are
-reseeded with v2 specs. `spec_from_stored` exists so that an install which did save agents can still open them, and is
-deleted one release later.
+Because Ops AI is not in production, stored versions in the old shape are neither migrated nor converted on read.
+Seeded workspaces are reseeded with v2 specs, and the migration that changes the column's meaning deletes old rows.
+
+Error codes on this page are the ones listed on the [API page](api.md#error-codes-added), which is the one list.
 
 ## Flows
 
@@ -199,7 +200,7 @@ sequenceDiagram
     D-->>A: 0 rows
     A-->>B: 409 stale_base {currentVersion: 5}
     B->>A: PUT spec naming a helper that is not published
-    A-->>B: 400 validation_failed {problems: [{path: /agents/0/id, code: helper_not_published}]}
+    A-->>B: 422 spec_invalid {problems: [{path: /agents/0/id, code: helper_not_published}]}
     Note over A: nothing is saved when any rule fails
     B->>A: PUT spec while the tool gateway is down
     A-->>B: 503 dependency_unavailable (a spec is never saved unchecked)
@@ -227,7 +228,7 @@ sequenceDiagram
 
 | # | Failure mode | Test proves |
 |---|---|---|
-| 1 | A spec with an unknown field is saved and the field is silently dropped | 400 with the field's path; no version row is added |
+| 1 | A spec with an unknown field is saved and the field is silently dropped | 422 `spec_invalid` with the field's path; no version row is added |
 | 2 | A save made from an older copy overwrites a newer one | 409 `stale_base`; the newer version is unchanged |
 | 3 | Export then apply changes the agent | Export of a seeded agent applied to an empty team yields a spec with the same digest once ids are mapped |
 | 4 | A helper cycle is saved | Two agents naming each other: the second save answers `helper_cycle` |
@@ -242,13 +243,13 @@ sequenceDiagram
 |---|---|---|---|---|
 | Apply a file, read it back equal | `PUT` then `GET /v1/agents/{id}/spec` | `ops.agents.apply`, `ops.agents.spec` | `opsai agents apply`, `opsai agents export` | View as file on the agent page |
 | A bad spec is refused with the field's path | `POST /v1/agents/spec/validate` | `ops.agents.validate` | `opsai agents validate` | Field errors on the Loop, Sandbox and Agents tabs |
-| See what applying would change | `POST /v1/agents/{id}/spec/diff` | `ops.agents.plan` | `opsai agents plan` | Reviewer's compare view |
+| See what applying would change | `POST /v1/agents/{id}/spec/diff` | `ops.agents.spec_diff` | `opsai agents diff`, `opsai agents apply --dry-run` | Reviewer's compare view |
 
 ## Files to add, change and delete
 
 | Package | Add | Change | Delete |
 |---|---|---|---|
-| `services/agents-service` | `domain/agent_spec.py` (the pure rules 2, 6, 8, 12, 13), `app/agent_spec.py` (validate, save, diff, `spec_from_stored`), `api/routers/agent_spec.py`, `api/agent_spec_schemas.py` | `api/routers/agents.py` (`AgentPatch` accepts `loop`, `sandbox`, `agents`, `hooks`, `output`), `activities/catalog.py` (`AgentDefinition` reads the new fields), `store/agent_registry.py` (save in one transaction), `openapi.json` | The inline `Guardrails` model once the console no longer sends it |
+| `services/agents-service` | `domain/agent_spec.py` (the pure rules 2, 6, 8, 12, 13), `app/agent_spec.py` (validate, save, diff), `api/routers/agent_spec.py`, `api/agent_spec_schemas.py` | `api/routers/agents.py` (`AgentPatch` accepts `loop`, `sandbox`, `agents`, `hooks`, `output`), `activities/catalog.py` (`AgentDefinition` reads the new fields), `store/agent_registry.py` (save in one transaction), `openapi.json` | The inline `Guardrails` model once the console no longer sends it |
 | `docs/design/agents-v2` | | `agent-spec-schema.yaml` becomes generated | |
 | `scripts` | `check_agent_spec_schema.py` (rule 7 of the acceptance table) | `make/checks.mk` adds it to the check list | |
 

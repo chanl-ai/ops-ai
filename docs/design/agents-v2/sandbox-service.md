@@ -50,12 +50,17 @@ registered unless the spec has a sandbox.
 | Sandbox service | Finds or wakes the conversation's sandbox and runs the operation on its backend | This page |
 | Backend | Sprites, Docker or Kubernetes | The three backend pages |
 
-A held call pauses the turn in one of two places. `sandbox.request_access` and `sandbox.save_file` are ordinary kernel
-tools, so the kernel's before-tool seam pauses them as it pauses any write. `sandbox.remove_file` under `delete_files`
-is reached from inside a Strands tool's body: the gateway answers "needs approval", `GatewaySandbox` returns that as the
-tool's outcome, and the kernel's tool wrapper raises the interrupt. Whether a pause can start inside a tool's body is
-**unverified**; trial 6, part c settles it, and the fallback is to ask the gateway for its decision in the before-tool
-seam.
+A held call pauses the turn in one place: the kernel's `before_tool` seam, before the tool's body runs. Each Strands
+sandbox tool call maps to one `sandbox.<operation>` call, and the seam asks the tool gateway to decide it
+(`POST /v1/calls/decide`). `needs_review` pauses the turn there; the body, and so `GatewaySandbox`, runs only after
+the decision. Trial 6 checks that the mapping from a tool's input to one operation is exact for the file editor's
+commands.
+
+| Whose turn | Sandbox id | Notes |
+|---|---|---|
+| A conversation's agent | `sbx_<thread id>` | One per conversation |
+| A helper asked in that conversation, or an agent handed to | The same `sbx_<thread id>`, when its own spec has a sandbox | One workspace per conversation, shared, so a file one agent made is there for the next. The lease still allows one writer at a time |
+| A workflow agent step, team members included | `sbx_run_<run id>`, when the step's agent has a sandbox | One per run, shared by the run's steps, deleted with the run |
 
 The agent's process never talks to a sandbox directly. This keeps the five protections where they already are.
 
@@ -68,7 +73,8 @@ The agent's process never talks to a sandbox directly. This keeps the five prote
 | Strands Docker sandbox | Runs `docker exec` into a container someone else started (same page) | Not used directly; our Docker backend owns creation, limits and removal, which that class does not |
 | OpenHands agent server | The OpenHands repository states MIT and says the agent server lives in a separate SDK repository ([repository](https://github.com/OpenHands/OpenHands), read 2026-11-26). That second repository's licence is **unverified** | Not adopted in 1.5.0. It is a second agent-facing API inside the box; our six operations already cover what the Strands tools need. Re-evaluated if a coding agent is added later |
 | Anthropic sandbox-runtime | Apache-2.0, described by its authors as a beta research preview; restricts files and network per process with bubblewrap on Linux ([repository](https://github.com/anthropics/sandbox-runtime), read 2026-11-26) | Candidate second wall inside the plain Docker mode, where no gVisor exists. Trial 8 decides. Not relied on as the only wall |
-| A small tool-server process inside the box | Ours | Adopted as a thin client: the `ops` library in each image calls the tool gateway's code-run route with the box's token, as functions do today. A tool-server wrapper over it is added when an in-box agent needs one |
+| A small tool-server process inside the box | Ours | Adopted as a thin client: the `ops` library in each image. How its calls leave the box is specified under [Calling a tool from inside the box](#calling-a-tool-from-inside-the-box). A tool-server wrapper over it is added when an in-box agent needs one |
+| A ready-made inspecting proxy for the exit gate | mitmproxy and Envoy both do TLS inspection; licences and fit are **unverified** | Evaluated in trials 0 and 7 before any proxy of ours is written. Ours is written only if neither can apply the two lists, the per-sandbox token and the grant check |
 | Community forks under AGPL | One archived sandbox product has an AGPL-3.0 community fork | Ruled out: no AGPL code |
 
 Licences marked unverified are checked in trial 0 before a dependency is added (SC4).
@@ -137,31 +143,55 @@ the gate's address and nothing else.
 |---|---|
 | Two lists | A host must be on the tenant's egress list and in the agent's `sandbox.network.allow`. The agent's list can only narrow the tenant's |
 | Pinned address | The gate resolves the host once and connects to that address, as tool calls do today (`services/tools-service/src/ops_tools/egress.py:227`) |
-| Identity | Each sandbox gets a short-lived gate token, minted by the tool gateway's signer (`services/tools-service/src/ops_tools/code_runs.py:61`) and sent as proxy authorization. It names tenant, team, conversation, agent version and the allowed hosts and secrets |
-| Two ways a host is handled | `tunnel`: the gate allows or refuses the connection by host and sees no content. `inspect`: the gate ends the encrypted connection with a certificate the image trusts, so it can add secrets, read the method and scrub answers |
-| When `inspect` is used | For a host a secret is tied to, and for every host when `approve` lists `network_write` or `install_packages` |
-| Secrets | A script writes a placeholder such as `$claims_api_token`. On an `inspect` host the secret is tied to, the gate replaces the placeholder in headers and query values, and scrubs the value from the answer. Elsewhere the placeholder is sent as written |
+| Identity | The tool gateway mints a gate token for each command (`services/tools-service/src/ops_tools/code_runs.py:61` is the signer) and the sandbox service sets it in that command's environment as the proxy credential. It names tenant, team, sandbox, agent version, the allowed hosts and secrets, and expires when the command's time limit does. A warm computer holds no token. The gate also checks where the connection comes from: the container's or pod's address on Docker and Kubernetes, a per-sandbox client certificate on Sprites. A script can read its own token, which lets it do only what that sandbox may already do |
+| Every host is inspected | The gate ends the encrypted connection with a certificate the image trusts, so it can read the method, add secrets and scrub answers. This is the default for every host |
+| A host that cannot be inspected | A host whose client pins certificates fails under inspection. A security admin can mark a host "not inspected" on the tenant's list. The gate then cannot tell a read from a write, so every connection to it needs an approved grant, and the approval card says: "Requests to this host cannot be checked. Approving allows reads and writes until the grant ends." |
+| Secrets | A script writes a placeholder such as `$claims_api_token`. For a host the secret is tied to, the gate replaces the placeholder in headers and query values and scrubs the value from the answer. Secrets are never added on a host that is not inspected |
 | Every request is recorded | One call-log row per request: host, method, path, status, bytes, allowed or refused, and which rule decided |
 | A refusal | The request fails fast with a body naming the host and who can allow it; the tool result repeats it for the agent |
+
+### Calling a tool from inside the box
+
+A script can call a tool the agent holds with `ops.call("crm.get_account", {...})`. Today a function's call is relayed
+by the runner with the runner's own service token (`services/runner-service/src/ops_runner/app.py:3`), and the
+code-run route accepts only a service caller (`services/tools-service/src/ops_tools/app.py:613`). A sandbox holds no
+service token and reaches only the gate, so:
+
+| Step | Detail |
+|---|---|
+| Where the call goes | The `ops` library sends it to the fixed host `tools.ops.internal` through the proxy. The gate does not forward this host anywhere; it handles the request itself |
+| Who the caller is | The gate verifies the command's gate token and source, then makes the code-run call inside the tool gateway as the conversation's person and agent, with the tools the token names |
+| A read | Runs and returns its result to the script. It is a call-log row like any tool call |
+| A write | Is not held from inside a command, because a command cannot wait days. The script gets `{"ok": false, "code": "needs_review", "tool": ...}` at once. The command's tool result tells the agent: "The script asked for `crm.update_account`, which needs approval. Call that tool yourself." The agent's own call then pauses at `before_tool` as any write does |
+| Limits | The token's tool list is the agent's read tools; at most `OPS_TOOLS_SANDBOX_CALLS_PER_COMMAND` calls per command |
 
 ## Approvals for risky actions
 
 Decided on 2026-11-26: approvals are set at network grants and at writes to saved files, points the sandbox cannot
-avoid, and not by reading command text. A shell command can
-delete a file or install a package in more ways than a text rule can list, so a rule on text would look safe and not be.
-This departs from the design page, which tied an approval to the command's exact text.
+avoid, and not by reading command text. A shell command can delete a file or install a package in more ways than a
+text rule can list, so a rule on text would look safe and not be. This departs from the design page, which tied an
+approval to the command's exact text.
 
-| Kind in `sandbox.approve` | Enforced where | What the approver sees |
+Two approvals are always on. No spec, team or install setting switches them off; a spec can only add to them.
+
+| Always needs approval | Enforced where | What the approver sees |
 |---|---|---|
-| `delete_files` | The `sandbox.remove_file` tool and the Files panel's delete. Files a person uploaded sit in the read-only inbox, so no command can remove them | The file's name, who made it and its size |
-| `install_packages` | The exit gate: a host the tenant tagged as a package source is reachable only under an approved grant | The host and the package names the request carried |
-| `network_write` | The exit gate: a request that is not a read (`GET`, `HEAD`, `OPTIONS`) needs an approved grant | Host, method and path prefix |
-| `save_files` | The `sandbox.save_file` tool, a write at the tool gateway | The file and where it goes |
+| Any request that is not a read (`GET`, `HEAD`, `OPTIONS`) to any host | The exit gate: the request is refused unless an approved grant covers its host, method and path | Host, method and path prefix, and the secret that would be added, by name |
+| Any connection to a host that is not inspected | The exit gate | The host, and that reads and writes cannot be told apart |
+| Saving a file out of the workspace, to the team's Files or a knowledge base | The `sandbox.save_file` tool, a write at the tool gateway. A person saving the same file from the Files panel is that person's own action and needs none | The file and where it goes |
+
+| A spec may add (`sandbox.approve`) | Enforced where | What the approver sees |
+|---|---|---|
+| `delete_files` | The `sandbox.remove_file` tool. Files a person uploaded sit in the read-only inbox, so no command can remove them | The file's name, who made it and its size |
+| `install_packages` | The exit gate: a host the tenant tagged as a package source is reachable only under an approved grant, reads included | The host and the package names the request carried |
+| `network_read` | The exit gate: every request needs a grant, reads included | Host and path prefix |
 
 A grant is asked for with the tool `sandbox.request_access {kind, host, method?, pathPrefix?, why}`. It is a write, so it
-pauses the turn like any other approval; the person who asked cannot approve it. An approved grant is a row the gate
-honours for that sandbox until the turn ends plus `OPS_TOOLS_SANDBOX_GRANT_MINUTES`. Deleting an agent-made file with a
-shell command is not held: nothing outside the sandbox changes, and the last saved copy still has the file.
+pauses the turn at `before_tool` like any other approval. Who may approve is the tenant's approval policy: under the
+two-person rule the person who asked cannot, and an admin of the team can
+(`services/agents-service/src/ops_agents/api/auth.py:262`). An approved grant is a row the gate honours for that
+sandbox until the turn ends plus `OPS_TOOLS_SANDBOX_GRANT_MINUTES`. Deleting an agent-made file with a shell command is
+not held: nothing outside the sandbox changes, and the last saved copy still has the file.
 
 ## Limits
 
@@ -197,17 +227,19 @@ call them.
 | GET | `/v1/sandbox/images` | Agents service | The images and sizes this install offers |
 | GET | `/health`, `/ready`, `/health/background` | Platform | As every service |
 
-`sandbox_id` is `sbx_` followed by the conversation id, so every caller derives it and none needs a lookup.
+`sandbox_id` is `sbx_<thread id>` for a conversation and `sbx_run_<run id>` for a workflow run, so every caller derives
+it and none needs a lookup. `EnsureIn.thread_id` is null for a run and `run_id` is set.
 
 ```python
 class EnsureIn(In):                    # extra="forbid"
-    thread_id: str
+    thread_id: str | None = None       # exactly one of thread_id and run_id
+    run_id: str | None = None
     agent_id: str
     agent_version: int
     image: str
     size: Literal["small", "standard", "large"] = "standard"
     limits: SandboxLimits              # command_seconds, idle_seconds
-    network: NetworkIn                 # allow: list[str]; gate_url: str; gate_token: str
+    network: NetworkIn                 # allow: list[str]; gate_url: str. No token: one is passed with each command
     files: list[PlacedFile] = []       # {path, file_id}
     test: bool = False                 # a test conversation: its files are deleted by the test sweep
 
@@ -229,6 +261,7 @@ class ExecIn(In):
     cwd: str = "/workspace"
     env: dict[str, str] = {}           # at most 50 names; names starting OPS_ are refused
     timeout_seconds: float | None = None
+    gate_token: str                    # minted per command by the tool gateway; set in this command's environment only
     call_id: str                       # the tool gateway's call id, for the trace
     key: str                           # idempotency key
 
@@ -357,7 +390,7 @@ sequenceDiagram
     participant X as Exit gate
     K->>G: POST /v1/calls sandbox.shell {command} key k
     G->>G: policy, kind, approval, call row
-    G->>S: PUT /v1/sandboxes/sbx_th1 (ensure, gate token)
+    G->>S: PUT /v1/sandboxes/sbx_th1 (ensure)
     S->>B: create, set_network(gate only), place files
     S-->>G: running
     G->>S: POST exec {command, key k}
@@ -418,8 +451,9 @@ sequenceDiagram
 | `OPS_SANDBOX_MAX_RUNNING_PER_TENANT` | `10` | Running computers per tenant |
 | `OPS_SANDBOX_URL` | unset | Where the tool gateway and agents service reach the service. Unset, an agent with a sandbox is refused at publish with "This install has no sandbox service" |
 | `OPS_TOOLS_EXIT_GATE_LISTEN` | `0.0.0.0:8721` | The exit gate's listener in the tool gateway |
-| `OPS_TOOLS_EXIT_GATE_INSPECT_CA` | from the secret store | The certificate authority images trust for `inspect` hosts |
+| `OPS_TOOLS_EXIT_GATE_INSPECT_CA` | from the secret store | The certificate authority images trust, used to inspect every host |
 | `OPS_TOOLS_SANDBOX_GRANT_MINUTES` | `30` | Life of an approved network grant after its turn |
+| `OPS_TOOLS_SANDBOX_CALLS_PER_COMMAND` | `50` | Tool calls a script may make through `tools.ops.internal` in one command |
 
 ## Security, cost and limits
 
@@ -428,8 +462,8 @@ sequenceDiagram
 | Tenant isolation | One sandbox belongs to one conversation of one tenant. A computer is never reused: a warm one is assigned once and destroyed after. Storage keys carry the tenant and team prefix. Every table is tenant scoped |
 | The wall around a computer | Per backend: a hardware-isolated virtual machine on Sprites; gVisor or a small virtual machine on Kubernetes; gVisor, or a locked-down container for a single firm's own install, on Docker |
 | What the image must not contain | No credential, no service token, no route to any service of ours except the exit gate |
-| The gate token | Lives at most `idle + command` time, names its hosts and secrets, and is useless outside the gate |
-| Content inspection | Only on hosts where a secret or an approval requires it; a tenant sees per host which way it is handled |
+| The gate token | Minted per command, expires with the command's time limit, names its hosts and secrets, and is accepted only from that sandbox's address or client certificate |
+| Content inspection | Every host by default, because a write cannot be held on a connection the gate cannot read. A tenant sees per host whether it is inspected; a host that is not needs a grant for every connection |
 | Cost | Compute only while running. Storage for the workspace copy. The usage page shows running minutes and stored bytes per team, from `sandbox.state_changed` and the manifest sizes |
 | Abuse | Per-install and per-tenant caps on running computers; command time, output and file caps; no inbound network |
 
@@ -448,7 +482,10 @@ Run against each backend; a backend that cannot pass a row is not offered for a 
 | 7 | A command runs past its time or memory | The command is stopped at the limit, files written before are kept, and the result names the limit |
 | 8 | A warm computer carries a previous tenant's data | A warm computer assigned to tenant B has an empty workspace and no process from before |
 | 9 | A person's upload is deleted by a command | `rm -rf /workspace/inbox` fails; the file is still listed |
-| 10 | A package install or a write request passes without approval | With `approve` listing both, the gate refuses the request until a grant is approved, and the approver cannot be the asker |
+| 10 | A write request or a file save passes without approval | With an empty `approve` list, a `POST` to an allowed host and a `sandbox.save_file` call are both refused until approved. Under the two-person rule the asker's own approval is refused |
+| 13 | A host that cannot be inspected carries a write unseen | A request to a host marked not inspected is refused without a grant, reads included |
+| 14 | A script's tool call skips approval | `ops.call` of a write from inside a command returns `needs_review` and the scripted system saw no request |
+| 15 | A gate token is used from another sandbox | The same token presented from a second sandbox's address is refused |
 | 11 | A deleted conversation leaves files behind | After delete, the storage prefix is empty and the backend has no computer |
 | 12 | The functions that run today break | The function runner's own test suite passes against `POST /v1/function-runs` |
 
@@ -457,7 +494,7 @@ Run against each backend; a backend that cannot pass a row is not offered for a 
 | Use case | api | sdk | cli | ui |
 |---|---|---|---|---|
 | An agent analyses an uploaded file and returns a result file | Chat stream with `sandbox_command` events; `GET /v1/threads/{id}/sandbox/files` | `ops.sandbox.files`, `ops.sandbox.read` | `opsai sandbox ls`, `opsai sandbox download` | Chat Files panel |
-| Files survive an approval that takes days | Stream, stop every service, approve, stream | `ops.chat.act` | `opsai chat approve` | Approval card, then Files panel |
+| Files survive an approval that takes days | Stream, stop every service, approve, stream | `ops.chat.answer` | `opsai chat approve` | Approval card, then Files panel |
 | A refused host is shown with who can allow it | `GET /v1/threads/{id}/sandbox/commands` | `ops.sandbox.commands` | `opsai sandbox log` | Run trace, refused request row |
 | A builder turns the sandbox on | `PUT /v1/agents/{id}/spec` | `ops.agents.apply` | `opsai agents apply` | Agent, Sandbox tab |
 
@@ -466,7 +503,7 @@ Run against each backend; a backend that cannot pass a row is not offered for a 
 | Package | Add | Change | Delete |
 |---|---|---|---|
 | `services/sandbox-service` (new, `ops_sandbox`, port 8780) | `api/` (routes), `app/` (`lifecycle.py`, `files.py`, `function_runs.py`, `idle.py`), `domain/` (`paths.py`, `limits.py`, `manifest.py`), `store/`, `backends/` (`port.py`, `sprites.py`, `docker.py`, `kubernetes.py`, `wasm.py`), `migrations/`, `openapi.json`, `CLAUDE.md`, `README.md` | | |
-| `services/tools-service` | `src/ops_tools/sandbox_tools.py` (the `sandbox` module), `exit_gate/` (`proxy.py`, `inspect.py`, `grants.py`), `store/sandbox_grants.py`, a migration | `egress.py` (a host tag `packages`; a narrower list per call), `code_runs.py` (accept a sandbox token; point function runs at the sandbox service), `app.py` | |
+| `services/tools-service` | `src/ops_tools/sandbox_tools.py` (the `sandbox` module), `exit_gate/` (`proxy.py` and `inspect.py`, or the adapter around the proxy chosen in trial 7; `grants.py`; `inbox_calls.py` for `tools.ops.internal`), `store/sandbox_grants.py`, a migration | `egress.py` (a host tag `packages`; a narrower list per call), `code_runs.py` (accept a sandbox token; point function runs at the sandbox service), `app.py` | |
 | `packages/ops_agent_kernel` | `strands_loop/gateway_sandbox.py` | `strands_loop/driver.py` binds the three tools when the request has a sandbox grant | |
 | `services/agents-service` | `api/routers/thread_sandbox.py` (the public routes), `app/thread_sandbox.py` (save after a turn, delete with the thread, attachments into the inbox) | `graphs/agent_wrapper.py`, `api/chat_attachments.py` | |
 | `deploy` | `images/sandbox/python-data/`, `images/sandbox/python-ops/`, the in-box helper script, compose and Kubernetes entries for the service and the gate | `deploy/fly`, `deploy/compose`, `deploy/k8s` | Runner entries |
@@ -478,6 +515,6 @@ Run against each backend; a backend that cannot pass a row is not offered for a 
 | # | Open point | Trial that settles it |
 |---|---|---|
 | 1 | Whether the WebAssembly engine stays as the engine for one-shot functions. It starts in milliseconds; a fresh computer per function call takes one to two seconds on Sprites by its own figures | Trial 9: function start time on each backend; keep WebAssembly unless p95 is at most 300 ms |
-| 2 | Whether the gate can add a secret to an encrypted request for the systems customers use, given clients that pin certificates | Trial 7 |
-| 3 | Whether Strands' three tools can be bound to our sandbox object and wrapped as kernel tools without losing their streaming output | Trial 6, part b |
+| 2 | Whether the gate can inspect and add a secret for the systems customers use, how many pin certificates, and whether mitmproxy or Envoy can serve as the gate | Trials 0 and 7 |
+| 3 | Whether Strands' three tools can be bound to our sandbox object and wrapped as kernel tools without losing their streaming output, and whether each tool call maps to exactly one operation the seam can decide | Trial 6, parts b and c |
 | 5 | How large the warm pool must be for a 2-second first command | Trial 9 |

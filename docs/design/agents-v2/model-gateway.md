@@ -19,7 +19,7 @@ adds a count of cached tokens.
 
 | Owns | Must not own |
 |---|---|
-| Budgets: caps, spend, reservations, for a conversation, a workflow run and a step inside a run | The budget's amounts. The agents service sets them from the agent's spec and a person's answer to a budget card |
+| Budgets: caps, spend, reservations, for a conversation, a workflow run, a step, a team group, an eval run and a builder draft | The budget's amounts. The agents service sets them from the agent's spec and a person's answer to a budget card |
 | The replay record: the provider's answer for a request under a replay key | Conversation history. The record is a crash aid with a short life, not a transcript |
 | The call log, which stays metadata only (`services/models-service/CLAUDE.md`) | Prompt or completion text in the call log |
 | Retry-safe settlement of spend | Retries and fallback order. The loop asks again; the gateway serves each ask |
@@ -34,7 +34,7 @@ adds a count of cached tokens.
 | Checks of an answer already written are let through at the budget | `ports.py:52` (`_FINISHING`) | Purpose `check` and `judge` are admitted, capped per turn |
 | A replayed request is never refused | `api/model_ledger.py:10` | Same: the replay lookup runs before admission |
 | The record key is the chat turn's task or the workflow step's id, with a hash of the request that leaves out volatile fields | `api/model_ledger.py:47` to `:66` | The caller sends the key; the gateway computes the hash |
-| A per-run spend cap on a model key | `services/models-service/src/ops_models/app.py:1400` (`X-Run-Spend-Cap`), `:1332` | Kept. Budgets are a second, finer limit |
+| A per-run spend cap on a model key | `services/models-service/src/ops_models/app.py:1400` (`X-Run-Spend-Cap`), `:1332` | Kept in 1.4.0 and 1.5.0. Removed in 1.6.0, when every run has a run budget and two caps on one run would disagree |
 
 ## Interfaces
 
@@ -45,10 +45,11 @@ Existing headers are read at `services/models-service/src/ops_models/app.py:1394
 | Header | State | Meaning |
 |---|---|---|
 | `Authorization: Bearer <model key>` | Today | The caller's model key |
-| `X-Tenant-Id`, `X-Thread-Id`, `X-Run-Id`, `X-Step-Id`, `X-Data-Sensitivity`, `X-Run-Spend-Cap` | Today | As today |
+| `X-Tenant-Id`, `X-Thread-Id`, `X-Run-Id`, `X-Step-Id`, `X-Data-Sensitivity` | Today | As today |
+| `X-Run-Spend-Cap` | Today | Kept in 1.4.0 and 1.5.0; removed in 1.6.0 |
 | `X-Request-Hash` | Today, changed | Still logged. No longer used for replay: the gateway computes its own hash |
-| `X-Budget-Id` | New | Up to three budget ids, comma separated, innermost first, for example `step:wfrun_7c2:review,run:wfrun_7c2`. Every listed budget must cover the call |
-| `X-Replay-Key` | New | The key a re-run repeats: `turn:<thread>:<task>` for chat, `run:<run>:<node>:<iteration>[:<turn>]` for a workflow step. With it the answer is recorded and a repeat is replayed |
+| `X-Budget-Id` | New | One to four budget ids, comma separated, innermost first, for example `step:wfrun_7c2:review,group:wfrun_7c2:underwriting,run:wfrun_7c2`. Every listed budget must cover the call. Four covers the deepest case: a step in a group in a run started by a team test's eval budget. Required for model keys of kind `agent`, `workflow` and `purpose` |
+| `X-Replay-Key` | New | The key a re-run repeats: `turn:<thread>:<task>` for chat, `run:<run>:<node>:<iteration>[:<turn>]` for a workflow step. With it the answer is recorded and a repeat is replayed. Required whenever `X-Budget-Id` is sent, because the closing-call and check-call caps are counted per replay key |
 | `X-Call-Purpose` | New | `turn` (default), `closing`, `check`, `judge`, `summary` |
 
 Rules, in the order the gate applies them (extending the order at `app.py:1299`):
@@ -57,13 +58,20 @@ Rules, in the order the gate applies them (extending the order at `app.py:1299`)
 2. If `X-Replay-Key` is set, look up `(tenant, replay key, request hash)`. A hit returns the recorded answer with the
    header `X-Replayed: true`, writes a call-log row with outcome `replayed` and cost 0, and skips every later check.
 3. Key budget, tenant share, daily cap, run cap, rate limit, alias, sensitivity, images, provider key. Unchanged.
-4. For each id in `X-Budget-Id`: reserve an estimate in one statement that names the state it expects (DA12). If any
-   budget cannot cover it, release the ones taken and refuse.
-5. Call the provider. On success settle each reservation with the actual usage and write the replay row in the same
+4. Header rules: a key of kind `agent`, `workflow` or `purpose` with no `X-Budget-Id` is refused, and a request with
+   `X-Budget-Id` and no `X-Replay-Key` is refused. Only a `user` key, a developer calling the gateway directly, may
+   omit both; it stays under its own key budget.
+5. For each id in `X-Budget-Id`: reserve an estimate of cost, one call and the request's token ceiling in one statement
+   that names the state it expects (DA12). The reservation is made before the provider is called. If any budget cannot
+   cover it, release the ones taken and refuse.
+6. Call the provider. On success settle each reservation with the actual usage and write the replay row in the same
    transaction as the spend. On failure release the reservations.
 
 The request hash is SHA-256 over the canonical JSON of the request body with `stream`, `user` and `metadata` removed and
-keys sorted. Volatile ids inside messages are not sent by the kernel, so nothing else is dropped.
+keys sorted. A re-run must send the same bytes for the hash to match. Today's ledger strips five fields because the
+current library adds volatile ids (`services/agents-service/src/ops_agents/api/model_ledger.py:49`). Whether Strands
+adds any is checked in trial 1, which resumes a turn twice and compares hashes at the stub. If it does, the gateway
+keeps a strip list in `OPS_MODELS_REPLAY_STRIP_FIELDS` and the hash leaves those fields out.
 
 ### Refusals
 
@@ -73,7 +81,9 @@ keys sorted. Volatile ids inside messages are not sent by the kernel, so nothing
 | 429 | `budget_reached` | Purpose `closing` and this replay key already used its closing call, or the request carries tools | Ends the reply with the text it has |
 | 429 | `check_cap_reached` | More than `OPS_MODELS_CHECK_CALLS_PER_KEY` calls of purpose `check` or `judge` under one replay key | The check fails closed |
 | 404 | `budget_not_found` | An id in `X-Budget-Id` does not exist in the caller's tenant | The turn fails with `error`; the runtime creates budgets before a turn |
-| 400 | `budget_header_invalid` | More than three ids, or an id over 200 characters | The turn fails |
+| 422 | `budget_header_invalid` | More than four ids, or an id over 200 characters | The turn fails |
+| 422 | `budget_required` | A key of kind `agent`, `workflow` or `purpose` sent no `X-Budget-Id` | The turn fails; this is a bug in the caller |
+| 422 | `replay_key_required` | `X-Budget-Id` was sent without `X-Replay-Key` | Same |
 
 A refusal body adds `details: {budgetId, limit: "cost"|"calls"|"tokens", spent, cap}` so the chat's budget card can
 say which limit was reached.
@@ -88,18 +98,24 @@ say which limit was reached.
 | DELETE | `/v1/models/replays` | query `prefix=<replay key prefix>` | 204 | Deletes a finished run's replay rows |
 
 ```python
+BudgetKind = Literal["thread", "run", "step", "group", "eval", "draft"]
+
 class BudgetIn(In):                    # extra="forbid"
-    kind: Literal["thread", "run", "step"]
-    parent_id: str | None = None       # a step budget names its run budget
+    kind: BudgetKind
+    parent_id: str | None = None       # a step or group budget names its run budget
     team_id: str
+    created_by: str                    # the creating module, from the table below
     max_cost_usd: Decimal | None = None
     max_calls: int | None = Field(default=None, ge=1)
     max_tokens: int | None = Field(default=None, ge=1)
+    expires_at: datetime | None = None
 
 class BudgetOut(Out):
     id: str
-    kind: Literal["thread", "run", "step"]
+    kind: BudgetKind
     parent_id: str | None
+    team_id: str
+    created_by: str
     max_cost_usd: Decimal | None
     max_calls: int | None
     max_tokens: int | None
@@ -107,9 +123,22 @@ class BudgetOut(Out):
     spent_calls: int
     spent_tokens: int
     reserved_cost_usd: Decimal
+    reserved_tokens: int
     exhausted: Literal["cost", "calls", "tokens"] | None
     updated_at: datetime
 ```
+
+These two shapes are the ones in the [OpenAPI draft](openapi-draft.yaml). Every budget has a kind, an id in a fixed
+form and one creator:
+
+| Kind | Id | Created by | When | Sent by |
+|---|---|---|---|---|
+| `thread` | `thread:<thread id>` | Agents service, `api/budgets.py` | Before a conversation's first turn, from the spec's `limits.budget` | Every chat turn, and every helper in its chain |
+| `run` | `run:<run id>` | Agents service, `app/run_budgets.py` | When a workflow run starts (1.6.0); before that a run's agent steps use `step` budgets only | Every model call of the run |
+| `step` | `step:<run id>:<node id>` | Agents service, `api/engine_agents.py` | Before an agent step's turn | That step's calls |
+| `group` | `group:<run id>:<group id>` | Agents service, `app/run_budgets.py` | When a run with a group starts (1.6.0) | Calls of the group's members |
+| `eval` | `eval:<eval run id>` | Agents service, `app/evals.py` and `app/team_tests.py` | When an eval run or a team test run starts | Every call of the run, outermost |
+| `draft` | `draft:<draft id>` | Agents service, `app/spec_draft.py` | Per draft or try request of the chat builder | The drafter's calls |
 
 The three caps are the ones `ops_metering.Budget` has today (`packages/ops_metering/src/ops_metering/__init__.py:98`).
 
@@ -134,15 +163,18 @@ All three tables are in the model gateway's own migration chain.
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | string(200), primary key | `thread:<thread id>`, `run:<run id>`, `step:<run id>:<node id>` |
-| `tenant_id` | string(64), not null | Tenant scoped; row-level policy under the gateway's tenant role |
+| `tenant_id` | string(64), not null | Tenant scoped; row-level policy under the gateway's tenant role. Primary key `(tenant_id, id)`, so two tenants can never share or collide on an id |
+| `id` | string(200) | In the form the kinds table gives |
 | `team_id` | string(64), not null | For the usage pages; not an access filter here |
-| `kind` | string(8) | `thread`, `run`, `step` |
+| `kind` | string(8) | `thread`, `run`, `step`, `group`, `eval`, `draft` |
+| `created_by` | string(80), not null | The creating module |
+| `expires_at` | timestamp with time zone, null | Set for `eval` and `draft` budgets |
 | `parent_id` | string(200), null, indexed | A step's run budget. Spend is counted on each listed budget by the request, not rolled up by a trigger |
 | `max_cost`, `max_calls`, `max_tokens` | numeric(18,6), int, bigint, null | A null cap is no cap |
 | `spent_cost`, `spent_calls`, `spent_tokens` | numeric(18,6), int, bigint, default 0 | |
-| `reserved_cost`, `reserved_calls` | numeric(18,6), int, default 0 | Sum of live reservations |
+| `reserved_cost`, `reserved_calls`, `reserved_tokens` | numeric(18,6), int, bigint, default 0 | Sum of live reservations |
 | `closing_keys` | JSON, default `[]` | The last 20 replay keys that used their closing call |
+| `check_calls` | JSON, default `{}` | Count of `check` and `judge` calls per replay key, for the last 20 keys |
 | `created_at`, `updated_at` | timestamp with time zone | |
 
 ### `model_budget_reservations`
@@ -152,7 +184,7 @@ All three tables are in the model gateway's own migration chain.
 | `id` | string(64), primary key | |
 | `budget_id` | string(200), indexed | |
 | `tenant_id` | string(64) | Tenant scoped |
-| `cost`, `calls` | numeric(18,6), int | The estimate held |
+| `cost`, `calls`, `tokens` | numeric(18,6), int, bigint | The estimate held |
 | `expires_at` | timestamp with time zone, indexed | A sweep releases reservations whose call never settled, after `OPS_MODELS_RESERVATION_SECONDS` |
 
 ### `model_replays`
@@ -178,7 +210,7 @@ without it, and only until the run that made it finishes or the row expires.
 
 | Database | Note |
 |---|---|
-| PostgreSQL | The reserve statement is `UPDATE model_budgets SET reserved_cost = reserved_cost + :c, reserved_calls = reserved_calls + 1 WHERE id = :id AND tenant_id = :t AND (max_cost IS NULL OR spent_cost + reserved_cost + :c <= max_cost) AND (max_calls IS NULL OR spent_calls + reserved_calls + 1 <= max_calls)`, built with Core; `rowcount == 0` is the refusal |
+| PostgreSQL | The reserve statement is `UPDATE model_budgets SET reserved_cost = reserved_cost + :c, reserved_calls = reserved_calls + 1, reserved_tokens = reserved_tokens + :k WHERE tenant_id = :t AND id = :id AND (max_cost IS NULL OR spent_cost + reserved_cost + :c <= max_cost) AND (max_calls IS NULL OR spent_calls + reserved_calls + 1 <= max_calls) AND (max_tokens IS NULL OR spent_tokens + reserved_tokens + :k <= max_tokens)`, where `:k` is the prompt's token count plus the request's `max_tokens`, built with Core; `rowcount == 0` is the refusal |
 | SQL Server | The same statement runs unchanged. `response` is `nvarchar(max)`. The replay insert uses `ops_store.dialect.insert_ignore` (`packages/ops_store/src/ops_store/dialect.py:123`), so two servers finishing the same request write one row |
 | Both | Budgets in one request are reserved in id order, so two requests naming the same pair cannot deadlock |
 
@@ -234,6 +266,7 @@ sequenceDiagram
 | Setting | Default | Meaning |
 |---|---|---|
 | `OPS_MODELS_REPLAY_HOURS` | `168` | Life of a replay row (default, 2026-11-26). A retry after expiry pays for the call again; nothing is sent twice |
+| `OPS_MODELS_REPLAY_STRIP_FIELDS` | empty | Extra request fields left out of the replay hash, filled only if trial 1 shows the loop library's resumed request differs from the first |
 | `OPS_MODELS_RESERVATION_SECONDS` | `300` | Life of an unsettled reservation |
 | `OPS_MODELS_RESERVE_OUTPUT_TOKENS` | `1024` | Output tokens assumed when the request sets no `max_tokens` |
 | `OPS_MODELS_CHECK_CALLS_PER_KEY` | `6` | Calls of purpose `check` or `judge` admitted past a spent budget per replay key |
@@ -246,8 +279,8 @@ sequenceDiagram
 | Tenant isolation | All three tables are tenant scoped and read under the gateway's tenant role (`services/models-service/src/ops_models/store/provider_keys.py:25`). A budget id from another tenant answers 404 |
 | Who may set a budget | Only a service token with scope `models:budgets`. A person changes a budget through the agents service, which decides with `can()` |
 | Completion text at rest | Only in `model_replays`, tenant scoped, short lived, never returned by a list route and never logged |
-| A loop that omits the headers | A call with no `X-Budget-Id` is admitted only for model keys whose purpose is not `agent`; an agent's model key without a budget header answers 400 `budget_required`. This is what makes the budget hold whatever the loop does |
-| Estimate too low | A long answer can overshoot by one call's cost, as it can today. The next call is refused |
+| A caller that omits the headers | The key's `kind` column decides (`services/models-service/src/ops_models/store/tables.py:94`): `agent`, `workflow` and `purpose` keys, which cover agents, workflow steps, evals and builder drafts, are refused with 422 `budget_required` without a budget id and 422 `replay_key_required` without a replay key. Only a `user` key may omit them. This is what makes the budget hold whatever the loop does |
+| How far a budget can be passed | Each admitted call is reserved first, so concurrent calls cannot pass a cap together. What can pass it: the difference between a call's estimate and its actual cost; one `closing` call of at most `OPS_MODELS_CLOSING_MAX_TOKENS` per replay key; and at most `OPS_MODELS_CHECK_CALLS_PER_KEY` check calls per replay key. All three are bounded and recorded on the budget |
 | Cost of the feature | One indexed read and one conditional update per budget per call, and one insert per recorded call |
 
 ## Acceptance criteria
@@ -262,7 +295,9 @@ sequenceDiagram
 | 6 | The closing call is used to keep working | A second `closing` call under the same replay key, and a `closing` call that carries tools, both answer 429 |
 | 7 | One tenant reads or spends another's budget | A request naming another tenant's budget id answers 404 and reserves nothing |
 | 8 | Completion text leaks into the call log | No call-log column holds the scripted reply's text after a recorded call |
-| 9 | An agent's key is used with no budget header | 400 `budget_required` |
+| 9 | A key of kind agent, workflow or purpose is used with no budget header, or with a budget and no replay key | 422 `budget_required`; 422 `replay_key_required`. One case per key kind |
+| 11 | A token cap is passed by two concurrent calls | Two concurrent requests against a budget with tokens for one: one is served |
+| 12 | A group, eval or draft budget is not enforced | A fourth id in the header that is spent refuses the call, though the first three have room |
 | 10 | Cached tokens are billed at the full price | A call with cached tokens costs less than the same call without, by the configured difference |
 
 Proof for the move, taken from the design's build order: the crash test that exists today
@@ -272,8 +307,8 @@ Proof for the move, taken from the design's build order: the crash test that exi
 
 | Use case | api | sdk | cli | ui |
 |---|---|---|---|---|
-| A conversation reaches its spending limit and a manager raises it | Chat stream ends with the budget card; the budget answer route; the next turn is served | `ops.chat.stream`, `ops.chat.act` | `opsai chat say` prints the limit reached | The budget card that exists today |
-| The usage page shows cached tokens | `GET /v1/models/calls` (service token) through the agents service's usage route | `ops.raw.agents` usage operation | `opsai agents trace` | Usage table |
+| A conversation reaches its spending limit and a manager raises it | Chat stream ends with the budget card; the budget answer route; the next turn is served | `ops.chat.say`, `ops.chat.answer` | `opsai chat say` prints the limit reached | The budget card that exists today |
+| The usage page shows cached tokens | `GET /v1/models/calls` (service token) through the agents service's usage route | `ops.raw.agents` usage operation | `opsai agents trace THREAD RUN` | Usage table |
 
 ## Files to add, change and delete
 

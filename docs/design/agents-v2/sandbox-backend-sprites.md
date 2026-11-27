@@ -156,9 +156,9 @@ sequenceDiagram
 
 | Concern | Rule |
 |---|---|
-| The exit gate must be reachable from a Sprite | Private addresses are always blocked under a policy, so the gate listens on a public address. It answers only requests carrying a valid gate token, and the token is bound to one sandbox |
+| The exit gate must be reachable from a Sprite | Private addresses are always blocked under a policy, so the gate listens on a public address. A bearer token alone would be readable by a script and usable from anywhere, so the gate requires two things: a client certificate issued for that sandbox, written into the Sprite at creation and valid only while its row exists, and the per-command gate token. Whether a Sprite has a stable outbound address the gate could check instead is **unverified** (trial 5, part a) |
 | A tool that ignores the proxy settings | It cannot resolve any host but the gate's, so it fails. Nothing leaves |
-| The allow-list is by domain name | Whether a connection to the gate's host name can be turned toward another address is covered by the probe in trial 5; the gate's own token check is the second wall |
+| The allow-list is by domain name | Whether a connection to the gate's host name can be turned toward another address is covered by the probe in trial 5; the gate's client certificate and token checks are the second wall |
 | The organisation token | Held only by the sandbox service. It can create and delete Sprites, so the service's own access is limited to that token's organisation, which holds nothing else |
 | Data location | A Sprite's disk is in the provider's storage. Hosted tenants accept that; an enterprise install uses Docker or Kubernetes in its own cloud |
 | Cost | Compute while active; storage for bytes written. A paused conversation costs its bytes in the Sprite and in our copy. The reconcile deletes orphans |

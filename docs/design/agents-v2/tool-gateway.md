@@ -1,7 +1,7 @@
 # Tool gateway: tool server client additions, web search and fetch
 
-Status: proposed design, written 2026-11-26. Nothing on this page is built. Release 1.5.0, after the sandbox's exit gate,
-because web fetch and the exit gate share one host list.
+Status: proposed design, written 2026-11-26. Nothing on this page is built. The decide and approval routes are release
+1.4.0. The rest is release 1.5.0, after the sandbox's exit gate, because web fetch and the exit gate share one host list.
 
 Every action an agent takes on another system passes through one gateway of ours, which decides who may do what, holds
 changes for approval and logs the call. This page adds three things to it: the parts of the tool-server standard its
@@ -13,7 +13,7 @@ would hold credentials inside the loop.
 
 | Goal | Measure |
 |---|---|
-| Tool servers that use more of the standard work through the gateway | A server that pages its tools, returns structured results, asks a question mid-call and changes its tool list is used end to end in a use case |
+| Tool servers that use more of the standard work through the gateway | A server that declares an output schema, asks a question mid-call and changes its tool list is used end to end in a use case |
 | Agents can search the web and read a page | Two gateway tools, both bound by the tenant's host list and logged like any call |
 | No new way out | The import and network checks still show two gateways and nothing else (SC1) |
 
@@ -40,10 +40,9 @@ Today the client does three things over streamable HTTP: initialize, list tools 
 
 | Addition | Today | Change | Why it matters |
 |---|---|---|---|
-| Paged tool lists | One `tools/list` request | Follow `nextCursor` until the list ends, up to a cap of 2,000 tools | The specification pages `tools/list` with a cursor |
-| Structured results | `tool_output` reads text content (`mcp.py:155`) | When a result carries `structuredContent`, it is the tool's output, validated against the tool's `outputSchema` when one is given; text content stays the fallback. The specification says a client should validate | Typed answers from tool servers without parsing text |
+| Structured results | Paged tool lists and `structuredContent` are already read (`mcp.py:137`, `:155`) | Only one thing is added: a result is validated against the tool's `outputSchema` when the server declares one, which the specification says a client should do | A typed result that breaks its own schema does not reach the model |
 | Tool list changes | Discovery runs when a person presses Refresh | A `notifications/tools/list_changed` message, or a changed list at the next scheduled check, marks the module "changed" and opens the existing review of discovered operations. New tools are never usable until a person accepts them | A server cannot add a write tool to an agent silently |
-| A question mid-call (elicitation) | Not supported: the call fails | The client declares the `elicitation` capability. An `elicitation/create` request becomes a `needs_person` outcome with the question and its schema. The kernel turns it into a `question` interrupt, and the answer is sent back on resume with the same call key as `accept` with the content, or `decline` or `cancel`. The specification forbids a server from asking for sensitive information this way; a question whose schema names a field matching the secret patterns is refused | A tool server that needs one more value does not fail the turn |
+| A question mid-call (elicitation) | Not supported: the call fails | The client declares the `elicitation` capability. A tool call cannot stay open for the days a person may take, and a turn pauses only before a tool runs. So when a server sends `elicitation/create`, the gateway answers `cancel`, and the call returns `needs_person` with the question and its schema as an ordinary tool result. The agent asks the person with `ask_person`, which pauses at `before_tool`, then calls the tool again; the gateway holds the answer for that conversation and tool and replies `accept` with it when the server asks again. The specification forbids a server from asking for sensitive information this way; a question whose schema names a field matching the secret patterns is refused | A tool server that needs one more value does not fail the turn |
 | Progress (**unverified**) | Ignored | `notifications/progress` messages are passed to the kernel as tool stream events and shown as the tool's status line | Long tool calls no longer look stuck |
 | Resources (**unverified**) | Not supported | `resources/list` and `resources/read` are exposed as two read-only operations of the module, `list_resources` and `read_resource`, subject to the same policy and masking | Agents can read a server's documents |
 | Prompts (**unverified**) | Not supported | Not built. A server's prompt templates would be instructions from outside our review | Stated so nobody adds it by accident |
@@ -51,6 +50,11 @@ Today the client does three things over streamable HTTP: initialize, list tools 
 | Sign-in | Bearer and header keys through connections | The specification's authorization flow for HTTP transports, which is optional and built on OAuth 2.1: read the server's protected-resource metadata after a 401, discover the authorization server, use PKCE and the `resource` parameter, and send the token only to the server it was issued for. The token is held by the gateway's secret store | Hosted tool servers that require OAuth |
 | The older event-stream transport (**unverified**) | Not supported | Not built; streamable HTTP only | Believed deprecated by the standard |
 | The process transport (stdio) | Not supported | Not built in the gateway. A stdio server can run inside a sandbox, where its calls leave through the exit gate | The gateway starts no process |
+
+The client is built on the `mcp` package the gateway already depends on (`services/tools-service/pyproject.toml:8`):
+its session and message types are used over the gateway's own egress HTTP client, so the pinned-address rule holds.
+If the package's client cannot take an injected HTTP client, the hand-written client stays and only the message types
+are reused; the lane's first step checks this (**unverified**).
 
 Every request still goes through the egress policy's client, so a tool server is reached only on a listed host at an
 address resolved once and pinned (`services/tools-service/src/ops_tools/egress.py:227`).
@@ -73,7 +77,8 @@ Rules:
 | Size and time | At most `OPS_TOOLS_WEB_FETCH_MAX_BYTES` read and `OPS_TOOLS_WEB_FETCH_SECONDS` waited |
 | Untrusted content | Search snippets and page text reach the model inside labelled data blocks, as retrieved passages do. They are never instructions |
 | Citations | Each result and fetched page is numbered like a knowledge passage, so the answer can cite it and the chat shows the source |
-| robots | `web.fetch` sends a fixed user agent and honours a site's robots rules for that agent |
+| robots | `web.fetch` sends a fixed user agent and honours a site's robots rules for that agent, read with the standard library's `urllib.robotparser` |
+| Text extraction | An existing HTML-to-text library, chosen and licence-checked in trial 0; no extractor of ours is written |
 | Caching | A fetched page is cached per tenant for `OPS_TOOLS_WEB_CACHE_SECONDS`; a cached answer is marked `cached` on the call record, as reads are today |
 | Search provider | A connection of kind `search` with an adapter per provider, in the plugin form the gateway already uses. The provider is a setting, `OPS_TOOLS_WEB_SEARCH_PROVIDER`, and one adapter ships: Brave Search (default, 2026-11-26; its terms are checked in trial 0). Nothing is on until a tenant adds its own key. An install with none lists `web.search` as "not set up" |
 | Hosted provider tools | A model provider's own web search tool is never switched on: it runs on the provider's servers, outside the gateway |
@@ -106,7 +111,6 @@ class ToolOutcome:                     # moves to ops_contracts.tools; fields to
 class PersonQuestion(ServiceShape):
     message: str
     schema: dict[str, JsonValue]       # a flat object of string, number, boolean or enum fields, as the standard allows
-    call_key: str                      # the answer is sent with the same key
 
 class SourceRef(ServiceShape):
     title: str
@@ -114,6 +118,14 @@ class SourceRef(ServiceShape):
     snippet: str
     fetched_at: str | None = None
 ```
+
+Routes added in 1.4.0, both for service callers only:
+
+| Method | Path | Body | Returns | Purpose |
+|---|---|---|---|---|
+| POST | `/v1/calls/decide` | `CallRequest` | `{verdict: "allow"\|"needs_review"\|"refuse", reason, inputHash, approversNeeded, editable}` | Runs the policy, schema and approval checks of `POST /v1/calls` and sends nothing. The kernel calls it in `before_tool`, so a pause starts before a tool runs |
+| POST | `/v1/approvals` | `{binding: {threadId or runId, step, tool, inputHash}, approvers: [user id]}` | `{token, expiresAt}` | Mints the approval token. The gateway checks each approver against the approval policy (`can()`, the two-person rule, the team's `requesterMayDecide` setting) before it signs. The signing key lives only here; the agents service's review key is removed |
+| POST | `/v1/approvals/answers` | `{threadId, tool, schemaHash, answer}` | 204 | Holds a person's answer for a tool server's question until the tool is called again, at most `OPS_TOOLS_MCP_ELICITATION_HOURS` |
 
 New admin routes, all under the existing settings permission:
 
@@ -158,11 +170,16 @@ sequenceDiagram
     G->>G: policy, schema, approval, host check
     G->>S: tools/call
     S-->>G: elicitation/create {message, schema}
-    G-->>K: outcome needs_person {message, schema, call_key}
-    K-->>P: question interrupt
+    G-->>S: cancel
+    G-->>K: outcome needs_person {message, schema}
+    Note over K: the model reads the result and calls ask_person
+    K-->>P: question interrupt, raised at before_tool
     P-->>K: answer
-    K->>G: POST /v1/calls {same key, answer}
-    G->>S: elicitation result, call continues
+    K->>G: POST /v1/approvals/answers {thread, tool, answer}
+    K->>G: POST /v1/calls {tool, input, new key}
+    G->>S: tools/call
+    S-->>G: elicitation/create
+    G-->>S: accept {content}
     S-->>G: result with structuredContent
     G->>G: validate against the output schema, mask, log
     G-->>K: outcome ok
@@ -216,32 +233,36 @@ sequenceDiagram
 | 1 | `web.fetch` reaches a host the tenant did not list | 403 `host_not_allowed`, and the scripted web host saw no request |
 | 2 | A redirect leads the gateway to a private address | The fetch is refused at the hop; nothing is read |
 | 3 | A tool server adds a write tool and an agent can call it at once | The new tool answers 409 `tool_changed` until a person accepts it |
-| 4 | A tool server's question fails the turn | The call returns `needs_person`; after the answer the same key completes the call once |
+| 4 | A tool server's question fails the turn | The call returns `needs_person`; after the person answers, the second call completes and the server received `accept` with the answer once |
 | 5 | A structured result that breaks its schema reaches the model | 422 `tool_result_invalid`; the model is told the tool failed |
 | 6 | Page text is treated as instructions | The fetched text appears inside a labelled data block in the next model request |
 | 7 | One tenant reads another's cached page | A fetch by tenant B of a URL tenant A cached reaches the web host again |
 | 8 | Search runs with no connection | 409 `web_search_not_set_up` |
+| 9 | A token is minted for someone the policy does not allow | `POST /v1/approvals` naming the asker under the two-person rule answers 403 and signs nothing |
+| 10 | `decide` and `calls` disagree | For the same request, a `decide` verdict of `needs_review` and a call without a token being refused come from one function; a table-driven test runs both |
 
 ## Use cases per layer
 
 | Use case | api | sdk | cli | ui |
 |---|---|---|---|---|
-| An agent answers from a fetched page and cites it | Chat stream with a `web.fetch` call and a citation | `ops.chat.stream` | `opsai chat say` | Citation chip in chat |
-| An admin turns web tools on and picks a search connection | `PUT /v1/web-tools` | `ops.raw.tools` operation | `opsai tools web --on` | Settings, Web tools |
-| A tool server asks a question mid-call | Chat stream with an `interrupt` of kind `question` | `ops.chat.act` with a submit action | `opsai chat answer` | The approval card carrying a question |
+| An agent answers from a fetched page and cites it | Chat stream with a `web.fetch` call and a citation | `ops.chat.say` | `opsai chat say` | Citation chip in chat |
+| An admin turns web tools on and picks a search connection | `PUT /v1/web-tools` | `ops.raw.tools` operation | `opsai tools web --search on --fetch on` | Settings, Web tools |
+| A tool server asks a question mid-call | Chat stream with an `interrupt` of kind `question` | `ops.chat.answer` | `opsai chat answer` | The approval card carrying a question |
 
 ## Files to add, change and delete
 
 | Package | Add | Change | Delete |
 |---|---|---|---|
-| `services/tools-service` | `src/ops_tools/web_tools.py` (search and fetch as `app` functions), `web_extract.py` (HTML to text), `web_routes.py`, `store/web.py`, `connections/search.py` (the provider port), a migration | `mcp.py` (structured results, list-changed, elicitation, progress, resources), `mcp_tools.py`, `gateway_calls.py` (the `needs_person` outcome), `app.py`, `openapi.json` | |
+| `services/tools-service` (1.4.0) | `src/ops_tools/approvals.py` (mint, verify, held answers), the three routes above | `gateway_calls.py` (one decision function behind `decide` and `calls`) | |
+| `services/tools-service` | `src/ops_tools/web_tools.py` (search and fetch as `app` functions), `web_routes.py`, `store/web.py`, `connections/search.py` (the provider port), a migration | `mcp.py` (structured results, list-changed, elicitation, progress, resources), `mcp_tools.py`, `gateway_calls.py` (the `needs_person` outcome, the held answer), `app.py`, `openapi.json` | |
 | `packages/contracts` | `tools.py` (`ToolOutcome`, `PersonQuestion`, `SourceRef`) | | |
-| `packages/ops_agent_kernel` | | The tool wrapper maps `needs_person` to a `question` interrupt and `sources` to citations | |
+| `packages/ops_agent_kernel` | | The tool wrapper returns `needs_person` to the model as a result that says to ask the person, and maps `sources` to citations. The `ask_person` tool exists from 1.4.0 | |
 | `builtin-plugins` | The Brave Search adapter | | |
 
 ## Open points
 
 | # | Open point | Settled by |
 |---|---|---|
+| 4 | Whether the tool gateway should stop importing the agents service's catalogue and local executor (`registry.py:15`, `tools.py:11`), so that it no longer installs the loop library | A later release; nothing here depends on it |
 | 2 | Whether `web.fetch` should render pages that need scripts | Not in 1.5.0. Browser use is the one feature left out of the plan |
 | 3 | Whether a tool server's OAuth sign-in can reuse the connection kinds unchanged | A spike against one public server that requires OAuth, before the lane starts |

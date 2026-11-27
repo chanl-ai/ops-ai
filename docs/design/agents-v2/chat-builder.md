@@ -24,7 +24,7 @@ what the drafter is never allowed to do.
 | Searching the catalogues the builder may use | Granting anything. A suggested tool the builder cannot use is never shown |
 | Drafting eval cases, including cases that check the mode | Publishing, the evals gate, the reviewer |
 
-It extends what exists: the Draft button on an agent's instructions proposes text per heading from a description
+It replaces what exists, and the earlier route is removed: the Draft button on an agent's instructions proposes text per heading from a description
 (`services/agents-service/src/ops_agents/app/brief_draft.py`, route at
 `services/agents-service/src/ops_agents/api/routers/agents.py:803`).
 
@@ -113,15 +113,17 @@ A try runs on a test thread with test accounts, exactly as the agent page's Test
 
 | Status | `code` | When |
 |---|---|---|
-| 400 | `validation_failed` | The body is malformed |
+| 422 | `validation_failed` | The body is malformed |
 | 403 | `forbidden` | The caller may not create agents in the team |
-| 429 | `draft_limit_reached` | More than `OPS_AGENTS_DRAFTS_PER_HOUR` drafts by one person |
+| 429 | `drafts_limit` | More than `OPS_AGENTS_DRAFTS_PER_HOUR` drafts by one person |
 | 502 | `model_unavailable` | The drafter's model call failed after retries; the earlier draft is unchanged |
 
 ## Data model
 
 No table. A draft lives in the browser until it is saved as a spec. The drafter's model calls are in the model
-gateway's call log under a model key of purpose `builder`, with a budget per person per hour.
+gateway's call log under a model key of kind `purpose` (`purpose:builder`). Each draft or try request creates a budget of
+kind `draft` (`draft:<draft id>`, `OPS_AGENTS_BUILDER_BUDGET_USD`) at the model gateway and sends its id, so the
+gateway refuses the drafter's calls past it. The per-person hourly limit counts requests in the agents service.
 
 | Item | Where | Retention |
 |---|---|---|
@@ -211,15 +213,15 @@ sequenceDiagram
 
 | Use case | api | sdk | cli | ui |
 |---|---|---|---|---|
-| Draft an agent from a description, accept some sections, create it | `POST /v1/agents/spec/draft`, `POST /v1/agents`, `PUT /v1/agents/{id}/spec` | `ops.agents.draft`, `ops.agents.apply` | `opsai agents draft "<job>" --out file.yaml`, `opsai agents apply` | New agent, chat builder |
-| Try a draft before saving | `POST /v1/agents/spec/try` | `ops.agents.dev` | `opsai agents dev FILE --say TEXT` | Try it panel beside the draft |
+| Draft an agent from a description, accept some sections, create it | `POST /v1/agents/spec/draft`, `POST /v1/agents`, `PUT /v1/agents/{id}/spec` | `ops.agents.draft`, `ops.agents.apply` | `opsai agents draft "<job>" -o file.yaml`, `opsai agents apply` | New agent, chat builder |
+| Try a draft before saving | `POST /v1/agents/spec/try` | `ops.agents.try_spec` | `opsai agents try -f FILE "MESSAGE"` | Try it panel beside the draft |
 
 ## Files to add, change and delete
 
 | Package | Add | Change | Delete |
 |---|---|---|---|
 | `services/agents-service` | `app/spec_draft.py` (run the drafter, apply the server rules), `app/builder_tools.py` (the five search tools as kernel tools over existing list routes), `api/routers/agent_spec.py` gains `draft` and `try` | `app/brief_draft.py` (reuses the section-by-section accept shape; the instructions-only route stays and calls the same drafter with one section) | |
-| `services/models-service` | Seed: alias `builder`, model key purpose `builder` | | |
+| `services/models-service` | Seed: alias `builder`, model key `purpose:builder` of kind `purpose` | | |
 | `apps/console` | See [console screens](console-screens.md) | `components/agents/draft-brief-dialog.tsx` becomes the Instructions section card | |
 
 ## Open points

@@ -23,20 +23,20 @@ merged.
 
 | # | Trial | Gates | Release |
 |---|---|---|---|
-| 0 | Licences and status of every new dependency | Adding any dependency | all |
-| 1 | A paused turn saved and resumed on another server | The Strands driver's pause design | 1.4.0 |
+| 0 | Licences and status of every new dependency, the exit gate's candidate proxies and the HTML-to-text library among them | Adding any dependency | all |
+| 1 | A paused turn saved and resumed on another server, a helper's nested pause included, and the replay hash of a resumed request | The Strands driver's pause design; the one pause seam; replay | 1.4.0 |
 | 2 | Step-hold rules on Strands hooks | Porting the 13 kernel features | 1.4.0 |
 | 3 | Event stream mapping, and six smaller checks | The chat stream, the scripted model, the builder | 1.4.0 |
 | 4 | A swarm paused for days | Nothing: hand-overs by our engine were decided on 2026-11-26. For information only | Any time |
 | 5 | A Sprite's network allow-list and restore after sleep | The Sprites backend | 1.5.0 |
 | 6 | The SSH sandbox driving a Sprite, and Strands' tools on our sandbox | The kernel's sandbox adapter | 1.5.0 |
-| 7 | Adding a secret at the exit gate | The exit gate's inspect mode | 1.5.0 |
-| 8 | Isolation level per install | The Docker and Kubernetes defaults | 1.5.0 |
+| 7 | Inspecting every host and adding a secret at the exit gate, on mitmproxy and Envoy before a proxy of ours | The exit gate and whether it is written or adopted | 1.5.0 |
+| 8 | Isolation level per install | The Docker default in 1.5.0 lane A and the Kubernetes default in lane E | 1.5.0 |
 | 9 | Start time and the warm pool | Pool sizes; whether WebAssembly stays for functions | 1.5.0 |
 | 10 | Save, sleep and wake with 1 GB of files | The save design and its limits | 1.5.0 |
 | 11 | A waiting run across an upgrade | Rebuild from the journal | 1.6.0 |
 | 12 | A crash in the middle of a team, on both databases | Engine-driven hand-overs and cycles | 1.6.0 |
-| 13 | An agent step paused for approval | The agent port's pause and resume | 1.6.0 |
+| 13 | An agent step paused for approval | The agent port's pause and resume in 1.6.0 lane D. The approval pause itself is proven by trial 1 in 1.4.0, so lane F of 1.4.0 does not wait for this trial | 1.6.0 |
 | 14 | The engine on SQL Server under load | Removing the engine's lines from the portable baseline | 1.6.0 |
 
 Trials 1, 2 and 3 can run in parallel after trial 0. Trials 5 to 10 can run in parallel. Trials 11 to 14 can run in
@@ -61,6 +61,8 @@ Question: may we depend on each part, and is it maintained?
 | A YAML parser for the TypeScript SDK | Not chosen | Licence and size |
 | Brave Search, the one search adapter shipped | Chosen as the default | The provider's terms for a self-installed product where each tenant brings its own key |
 | The Kubernetes project's sandbox resource | Unverified | Status and licence; not adopted unless mature |
+| mitmproxy, Envoy | Candidates for the exit gate; licences **unverified** | Licence, and whether an add-on or filter can apply our lists, token and grants (trial 7) |
+| An HTML-to-text library for `web.fetch` | Not chosen | Licence, size and upkeep; one is chosen here |
 | Fly Sprites | A hosted service, not a dependency | Terms for running tenants' code and regions. This check does not block the Sprites lane |
 
 Pass: every part we would add is under Apache-2.0, MIT, BSD or a comparable permissive licence, with no AGPL anywhere
@@ -83,10 +85,15 @@ continue?
 | 5 | Confirm the write tool runs once, the read tool does not run again, and the reply completes |
 | 6 | Repeat with "rejected", with two tool calls pending in one step, and with the snapshot loaded 10 times in a row (size must not grow) |
 | 7 | Measure the snapshot's size after 5, 20 and 60 messages |
+| 8 | A helper's pause: the outer agent's `before_tool` hook for an `ask helper` tool runs a second agent whose own write raises an interrupt. The hook raises the outer interrupt carrying the helper's snapshot. In process B, resume: the hook runs again for the same call, loads the helper's snapshot, resumes it, and supplies its reply as the tool's result. Confirm the helper's write runs once and the outer tool's body never runs |
+| 9 | At a stub gateway, record the body of the model request before the pause and of the same step's request after resume. Hash both with the fields of `model_ledger.py:49` removed and compare |
 
-Pass: steps 5 and 6 hold on the pinned version, and a 60-message snapshot is under 2 MB.
+Pass: steps 5, 6 and 8 hold on the pinned version, a 60-message snapshot is under 2 MB, and step 9's hashes are equal
+or differ only in fields that can be listed in `OPS_MODELS_REPLAY_STRIP_FIELDS`.
 
-Gates: the pause persistence decision in the runtime contract (our checkpoint holds `LoopState`).
+Gates: the pause persistence decision in the runtime contract (our checkpoint holds `LoopState`), the one pause seam,
+and replay after a resume. If step 9 fails with differences that cannot be listed, replay is keyed by step number
+alone and the request hash becomes a warning in the log.
 
 Fallback: if a pending interrupt is not restored, the kernel rebuilds the agent from our own transcript and re-raises
 the interrupt itself (`LoopDriver.rebuild`), or uses a Strands session manager on a storage backend of ours. Both are
@@ -127,7 +134,7 @@ Question: does the library's event stream carry everything our chat stream shows
 | part a | Record the exact constructor arguments of the OpenAI-compatible provider for a base URL, extra headers and an injected HTTP client |
 | part b | Replay: record a streamed model answer at a stub gateway, serve it again as a stream, and compare the loop's events |
 | part c | Offloader: give the context offloader a storage object of ours and confirm a large tool result is stored there and referenced |
-| part d | Real model, 20 requests, after 20 scripted ones prove the wiring: does the model call the mode tool with a useful reason, and does it stay direct for lookups? Count agreement with a reviewer's label |
+| part d | Real model, 20 requests, after 20 scripted ones prove the wiring: does the model give a useful `why` when it first plans, asks a helper or opens the workspace, and does it stay direct for lookups? Count agreement with a reviewer's label |
 | part e | Images: pass one image through the gateway to a model that accepts images |
 | part f | Builder: draft the ten seeded descriptions on two model aliases; count drafts that validate and sections a reviewer would accept |
 
@@ -191,14 +198,14 @@ sandbox object of ours?
 | part a | Reach a Sprite's SSH port through the provider's proxy. Record whether `SshSandbox` can connect without the unsafe options flag, how long each command takes, and where the key must live |
 | part b | Write a 60-line sandbox class implementing the six operations over a local folder. Bind `sandbox_shell`, `sandbox_file_editor` and `python_repl` to it. Run a scripted turn that writes a file, runs it and reads the output |
 | 1 | In part b, confirm output streams while the command runs, and that wrapping each tool as a kernel tool keeps the before and after seams |
-| part c | Make the sandbox object's remove operation answer "needs approval". Confirm the turn can pause from inside the tool's body and resume to run the operation once |
+| part c | For each command of the file editor, the shell tool and the Python tool, record the tool input and the sandbox operations it causes. Confirm the kernel can name one `sandbox.<operation>` call from the input alone, before the body runs |
 
 Pass: part b works with streaming. Part a is recorded either way.
 
 Gates: `GatewaySandbox` in the kernel.
 
-If part c fails, the kernel asks the tool gateway to decide a sandbox call in its before-tool seam, where trial 1's
-pause already works, and the tool's body runs only after that decision.
+If part c finds a tool input that causes more than one kind of operation, the kernel offers its own tools for that
+case, one operation each. A turn never pauses inside a tool's body.
 
 Fallback: if the tools cannot be bound to our object, the kernel defines its own three tools with the same names and
 inputs and calls the tool gateway directly. Part a failing changes nothing: the Sprites backend uses the HTTP API.
@@ -212,13 +219,16 @@ Question: can a proxy of ours add a credential to a sandbox's outgoing request w
 | 1 | Run a forward proxy with a certificate authority the sandbox image trusts. Mark one test host as inspected |
 | 2 | From a sandbox, call the host with a placeholder in a header using Python `requests`, `httpx`, `curl` and Node `fetch` |
 | 3 | Confirm the host received the real value, the answer the script read has the value scrubbed, and the sandbox's environment and files hold only the placeholder |
-| 4 | Call a host in tunnel mode and confirm the proxy sees the host name only |
+| 4 | Mark a host not inspected and confirm the proxy sees the host name only and refuses the connection without a grant |
+| 7 | Run steps 1 to 6 on mitmproxy and on Envoy with the two lists, the per-command token and the grant check as an add-on or filter. Record what each cannot do |
 | 5 | Try a client that pins the host's certificate and record the failure the script sees |
 | 6 | Measure added time per request |
 
 Pass: step 3 holds for all four clients, and the added time is under 20 ms at the median.
 
-Gates: the exit gate's inspect mode and the `network_write` and `install_packages` approvals.
+Decides whether the gate is an adopted proxy with our rules or one of ours.
+
+Gates: the exit gate, the always-on approval of requests that change data, and the `install_packages` approval.
 
 Fallback: secrets are not offered inside sandboxes; a script that needs a credentialed system calls a gateway tool from
 inside the box instead (`ops.call`), which already keeps the secret outside.
