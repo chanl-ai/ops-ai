@@ -5,8 +5,8 @@ ends.
 
 A trial is a short experiment that answers one question the specs could not settle from documentation. Each has a plan
 someone can run in a day or two, one line that says what passing means, the build step that waits for it, and what we
-do if it fails. Fifteen trials are listed in the order they should run. The first four gate release 1.4.0, the next six
-gate 1.5.0 and the last five gate 1.6.0. Trial code is thrown away: it lives on a branch named for the trial and is not
+do if it fails. Fifteen trials are listed in the order they should run. Trial 0 gates every release, trials 1 to 4 belong to
+1.4.0, trials 5 to 10 to 1.5.0 and trials 11 to 14 to 1.6.0. Trial code is thrown away: it lives on a branch named for the trial and is not
 merged.
 
 ## How a trial is run
@@ -57,7 +57,7 @@ Question: may we depend on each part, and is it maintained?
 | Strands Agents Python SDK | Apache-2.0 on its repository page | The sandbox tools' package and licence; transitive licences |
 | OpenHands agent server | The main repository states MIT; the agent server is in a separate SDK repository | That repository's licence. Not adopted in 1.5.0 either way |
 | Anthropic sandbox-runtime | Apache-2.0; a beta research preview by its authors' description | Whether "research preview" carries any use limit |
-| gVisor, Kata Containers | Open source; Kata states Apache-2.0 on its site | Both licences from their repositories |
+| gVisor, Kata Containers | Both state Apache-2.0 on their repositories | Transitive licences of what an install adds |
 | A YAML parser for the TypeScript SDK | Not chosen | Licence and size |
 | A search provider adapter | Not chosen | The provider's terms for a self-installed product |
 | The Kubernetes project's sandbox resource | Unverified | Status and licence; not adopted unless mature |
@@ -127,7 +127,7 @@ Question: does the library's event stream carry everything our chat stream shows
 | part a | Record the exact constructor arguments of the OpenAI-compatible provider for a base URL, extra headers and an injected HTTP client |
 | part b | Replay: record a streamed model answer at a stub gateway, serve it again as a stream, and compare the loop's events |
 | part c | Offloader: give the context offloader a storage object of ours and confirm a large tool result is stored there and referenced |
-| part d | Real model, 20 requests: does the model call the mode tool with a useful reason, and does it stay direct for lookups? Count agreement with a reviewer's label |
+| part d | Real model, 20 requests, after 20 scripted ones prove the wiring: does the model call the mode tool with a useful reason, and does it stay direct for lookups? Count agreement with a reviewer's label |
 | part e | Images: pass one image through the gateway to a model that accepts images |
 | part f | Builder: draft the ten seeded descriptions on two model aliases; count drafts that validate and sections a reviewer would accept |
 
@@ -191,10 +191,14 @@ sandbox object of ours?
 | part a | Reach a Sprite's SSH port through the provider's proxy. Record whether `SshSandbox` can connect without the unsafe options flag, how long each command takes, and where the key must live |
 | part b | Write a 60-line sandbox class implementing the six operations over a local folder. Bind `sandbox_shell`, `sandbox_file_editor` and `python_repl` to it. Run a scripted turn that writes a file, runs it and reads the output |
 | 1 | In part b, confirm output streams while the command runs, and that wrapping each tool as a kernel tool keeps the before and after seams |
+| part c | Make the sandbox object's remove operation answer "needs approval". Confirm the turn can pause from inside the tool's body and resume to run the operation once |
 
 Pass: part b works with streaming. Part a is recorded either way.
 
 Gates: `GatewaySandbox` in the kernel.
+
+If part c fails, the kernel asks the tool gateway to decide a sandbox call in its before-tool seam, where trial 1's
+pause already works, and the tool's body runs only after that decision.
 
 Fallback: if the tools cannot be bound to our object, the kernel defines its own three tools with the same names and
 inputs and calls the tool gateway directly. Part a failing changes nothing: the Sprites backend uses the HTTP API.

@@ -27,21 +27,29 @@ would hold credentials inside the loop.
 
 ## Tool server client additions
 
+Facts about the tool-server standard on this page are from its 2025-06-18 specification, read on 2026-11-26:
+[tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools),
+[elicitation](https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation) and
+[authorization](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization). The rows on progress,
+resources, prompts, sampling and the older transport were not re-read and are marked **unverified**; the lane's first
+step is to read those pages and correct this table.
+
 Today the client does three things over streamable HTTP: initialize, list tools and call a tool
 (`services/tools-service/src/ops_tools/mcp.py:1`, methods at `:131`, `:137`, `:151`). The protocol version sent is
 `2025-06-18` (`mcp.py:30`).
 
 | Addition | Today | Change | Why it matters |
 |---|---|---|---|
-| Structured results | `tool_output` reads text content (`mcp.py:155`) | When a result carries `structuredContent`, it is the tool's output, validated against the tool's declared output schema when one is given; text content stays the fallback | Typed answers from tool servers without parsing text |
+| Paged tool lists | One `tools/list` request | Follow `nextCursor` until the list ends, up to a cap of 2,000 tools | The specification pages `tools/list` with a cursor |
+| Structured results | `tool_output` reads text content (`mcp.py:155`) | When a result carries `structuredContent`, it is the tool's output, validated against the tool's `outputSchema` when one is given; text content stays the fallback. The specification says a client should validate | Typed answers from tool servers without parsing text |
 | Tool list changes | Discovery runs when a person presses Refresh | A `notifications/tools/list_changed` message, or a changed list at the next scheduled check, marks the module "changed" and opens the existing review of discovered operations. New tools are never usable until a person accepts them | A server cannot add a write tool to an agent silently |
-| A question mid-call (elicitation) | Not supported: the call fails | An `elicitation/create` request becomes a `needs_person` outcome with the question and its schema. The kernel turns it into a `question` interrupt, and the answer is sent back on resume with the same call key | A tool server that needs one more value does not fail the turn |
-| Progress | Ignored | `notifications/progress` messages are passed to the kernel as tool stream events and shown as the tool's status line | Long tool calls no longer look stuck |
-| Resources | Not supported | `resources/list` and `resources/read` are exposed as two read-only operations of the module, `list_resources` and `read_resource`, subject to the same policy and masking | Agents can read a server's documents |
-| Prompts | Not supported | Not built. A server's prompt templates would be instructions from outside our review | Stated so nobody adds it by accident |
-| Sampling | Not supported | Not built. A server asking our model for a completion would spend a tenant's budget on a third party's request | Same |
-| Sign-in | Bearer and header keys through connections | OAuth 2.1 authorization-code sign-in for a server that advertises it, using the connection kinds that exist; the token is held by the gateway's secret store | Hosted tool servers that require OAuth |
-| The older event-stream transport | Not supported | Not built; streamable HTTP only | The standard has replaced it |
+| A question mid-call (elicitation) | Not supported: the call fails | The client declares the `elicitation` capability. An `elicitation/create` request becomes a `needs_person` outcome with the question and its schema. The kernel turns it into a `question` interrupt, and the answer is sent back on resume with the same call key as `accept` with the content, or `decline` or `cancel`. The specification forbids a server from asking for sensitive information this way; a question whose schema names a field matching the secret patterns is refused | A tool server that needs one more value does not fail the turn |
+| Progress (**unverified**) | Ignored | `notifications/progress` messages are passed to the kernel as tool stream events and shown as the tool's status line | Long tool calls no longer look stuck |
+| Resources (**unverified**) | Not supported | `resources/list` and `resources/read` are exposed as two read-only operations of the module, `list_resources` and `read_resource`, subject to the same policy and masking | Agents can read a server's documents |
+| Prompts (**unverified**) | Not supported | Not built. A server's prompt templates would be instructions from outside our review | Stated so nobody adds it by accident |
+| Sampling (**unverified**) | Not supported | Not built. A server asking our model for a completion would spend a tenant's budget on a third party's request | Same |
+| Sign-in | Bearer and header keys through connections | The specification's authorization flow for HTTP transports, which is optional and built on OAuth 2.1: read the server's protected-resource metadata after a 401, discover the authorization server, use PKCE and the `resource` parameter, and send the token only to the server it was issued for. The token is held by the gateway's secret store | Hosted tool servers that require OAuth |
+| The older event-stream transport (**unverified**) | Not supported | Not built; streamable HTTP only | Believed deprecated by the standard |
 | The process transport (stdio) | Not supported | Not built in the gateway. A stdio server can run inside a sandbox, where its calls leave through the exit gate | The gateway starts no process |
 
 Every request still goes through the egress policy's client, so a tool server is reached only on a listed host at an

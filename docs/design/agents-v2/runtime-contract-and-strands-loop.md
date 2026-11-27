@@ -147,6 +147,11 @@ class TurnResult:                      # types.py:397, plus:
 
 `stop_reason` gains `cancelled` and `hook_denied`; every existing value keeps its meaning (`types.py:400`).
 
+Release 1.6.0 adds four request fields and two result fields for a team member's turn (hand-over targets, ask
+targets, shared notes and extra budget ids). They are listed in
+[teams and human tasks](workflow-teams-and-human-tasks.md#how-a-members-turn-reaches-the-runtime) and change nothing
+for a turn that does not use them.
+
 ### The loop driver contract
 
 This is the one contract a loop plugs into. It is internal: our engineers add a driver, customers do not.

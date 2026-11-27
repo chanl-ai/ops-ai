@@ -104,7 +104,6 @@ These restate the standards for routes; a new route that breaks one fails an exi
 | POST | `/v1/calls` | 1.5.0 | Changed. Outcome may carry `needsPerson` and `sources`; `sandbox.*` and `web.*` tools; new error codes | [Tool gateway](tool-gateway.md) |
 | GET, PUT | `/v1/web-tools` | 1.5.0 | New | same |
 | POST | `/v1/code-runs/calls` | 1.5.0 | Changed. Accepts a sandbox's token | [Sandbox service](sandbox-service.md) |
-| GET, POST | `/v1/sandbox-grants`, `/v1/sandbox-grants/{id}/decision` | 1.5.0 | New. Network grants waiting for approval; shown in the inbox | same |
 
 ### Sandbox service
 
@@ -234,4 +233,4 @@ The use cases are on each component page. The `api` layer of each is a script un
 | # | Open point | Settled by |
 |---|---|---|
 | 1 | Whether `GET …/spec?format=yaml` is worth serving, or the SDK and CLI convert | Owner; the CLI converts either way |
-| 2 | Whether sandbox grants appear as tasks in `/v1/tasks` or stay a separate list in 1.5.0, since the tasks prefix is new in 1.6.0 | Decide when the 1.5.0 lane starts: in 1.5.0 they appear in the existing reviews list |
+| 2 | A sandbox network grant is asked for with a tool call that pauses the turn, so it needs no route of its own. In 1.5.0 it appears in the existing reviews list and in 1.6.0 under `/v1/tasks` | Confirm when the 1.5.0 lane starts |

@@ -50,6 +50,13 @@ registered unless the spec has a sandbox.
 | Sandbox service | Finds or wakes the conversation's sandbox and runs the operation on its backend | This page |
 | Backend | Sprites, Docker or Kubernetes | The three backend pages |
 
+A held call pauses the turn in one of two places. `sandbox.request_access` and `sandbox.save_file` are ordinary kernel
+tools, so the kernel's before-tool seam pauses them as it pauses any write. `sandbox.remove_file` under `delete_files`
+is reached from inside a Strands tool's body: the gateway answers "needs approval", `GatewaySandbox` returns that as the
+tool's outcome, and the kernel's tool wrapper raises the interrupt. Whether a pause can start inside a tool's body is
+**unverified**; trial 6, part c settles it, and the fallback is to ask the gateway for its decision in the before-tool
+seam.
+
 The agent's process never talks to a sandbox directly. This keeps the five protections where they already are.
 
 ## Parts evaluated for inside and around the box

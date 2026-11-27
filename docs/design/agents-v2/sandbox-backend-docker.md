@@ -73,6 +73,10 @@ capabilities = BackendCapabilities(
 | gVisor | The host has the `runsc` runtime | Any install | Default for a shared install |
 | Locked-down container | No gVisor | A single firm's own install, where every user of the sandbox belongs to that firm | With `shared_install` true and no gVisor the service refuses to start, naming the setting (CF3, CF5) |
 
+gVisor is Apache-2.0 and its `runsc` runtime integrates with Docker, per its
+[repository](https://github.com/google/gvisor) (read 2026-11-26). How a rootless engine and volume size limits behave
+per storage driver was not read from a source for this page and is **unverified** until trial 8.
+
 Anthropic's sandbox-runtime is a candidate inner wall for the second level: it limits files and network per command
 with bubblewrap. It needs unprivileged user namespaces inside the container, which the locked-down settings above may
 not allow. Trial 8 settles whether it is added.

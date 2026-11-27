@@ -14,7 +14,7 @@ earlier design page ruled hosted sandboxes out, and this decision replaces that 
 |---|---|
 | One Sprite per conversation, used only through the sandbox service | The backend passes the shared acceptance suite in [sandbox service](sandbox-service.md) |
 | No network except our exit gate | Trial 5, part a |
-| Files restored after a long sleep, and after the Sprite is gone | Trial 5, parts b and d |
+| Files restored after a long sleep, and after the Sprite is gone | Trial 5, part b, and trial 10, step 3 |
 
 ## What it owns and what it must not own
 

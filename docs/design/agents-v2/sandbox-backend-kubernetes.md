@@ -77,8 +77,11 @@ capabilities = BackendCapabilities(
 
 | Layer | Works on | Trade-off | Source |
 |---|---|---|---|
-| gVisor (default) | Ordinary cloud virtual machines, with no nested virtualisation | File-heavy work is slower | [gVisor documentation](https://gvisor.dev/docs/); its licence is checked in trial 0 |
-| Kata Containers | Nodes with nested virtualisation or bare metal | A virtual machine per pod: a stronger wall, more memory per sandbox, slower start | [Kata Containers](https://katacontainers.io/), Apache-2.0 as stated on its site (**unverified** against the repository) |
+| gVisor (default) | Ordinary cloud virtual machines, with no nested virtualisation | File-heavy work is slower (**unverified**; measured in trial 8) | Apache-2.0, and its `runsc` runtime integrates with Docker and Kubernetes, per its [repository](https://github.com/google/gvisor) (read 2026-11-26) |
+| Kata Containers | Nodes with nested virtualisation or bare metal | A virtual machine per pod. More memory per sandbox and a slower start are expected (**unverified**; measured in trial 8) | Apache-2.0, described as lightweight virtual machines that feel like containers, per its [repository](https://github.com/kata-containers/kata-containers) (read 2026-11-26) |
+
+Which managed clusters allow each runtime class, and the exact fields of the restricted pod security standard, were
+not read from a source for this page and are **unverified** until trial 8.
 
 An install with neither runs no sandbox on Kubernetes: the service refuses to start when the runtime class is missing.
 There is no locked-down-container level here, because a Kubernetes install is assumed to be able to add a runtime class.

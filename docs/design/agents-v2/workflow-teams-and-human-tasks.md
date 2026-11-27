@@ -248,6 +248,25 @@ class TaskNotifier(Protocol):          # a port in the engine's host; adapters: 
     async def closed(self, task: TaskView) -> None: ...
 ```
 
+### How a member's turn reaches the runtime
+
+The engine knows steps and lines. The kernel knows tools and interrupts. The agents service's engine adapter
+(`services/agents-service/src/ops_agents/api/engine_agents.py`) translates between them, and the kernel learns nothing
+about workflows.
+
+| Engine side (`AgentRequest`) | Kernel side (`TurnRequest`, release 1.6.0 additions) | Who defines the tool the model sees | What comes back |
+|---|---|---|---|
+| `handoffs` | `handoff_targets: list[MemberOption]` | The kernel's `hand_over` tool, the same one the swarm loop kind uses in chat, with these targets as its options | `TurnResult.handoff: {to, message, why}`, mapped to `AgentResult.handoff`. The kernel ends the turn and switches nothing; the engine follows the line |
+| `asks` | `ask_targets: list[MemberOption]` | The kernel adds one tool per target, `ask_<id>(question, why)`. Calling one pauses the turn | An `Interrupt` of kind `question` with `question.to` set to the target. The adapter returns `AgentResult.asked`. The engine answers it by running an agent step or opening a task, then resumes with `TurnRequest.answers[interrupt_id]` |
+| `notes`, `may_write_notes` | `notes: NotesGrant` (the notes to read, and whether writing is allowed) | The kernel's `add_note(text)` tool, a local tool like the plan tool: it makes no gateway call | `TurnResult.notes_added`; the engine stores them after the secret scan |
+| `budget_ids` | `budget_ids: list[str]`, sent innermost first in `X-Budget-Id` after the turn's own budget | None | `TurnResult.usage` and cost, summed onto the step row |
+| `resume` | `loop_state` and `answers` | None | The same turn continues |
+| `goal` | Added to the volatile tail of the prompt, after the stable part | None | |
+
+In chat, a helper named in an agent's spec is asked inline by the runtime, within the turn. In a team, an `ask` always
+pauses and returns to the engine, so that each member's turn is a journal row. The kernel decides which by whether the
+target arrived in `helpers` or in `ask_targets`.
+
 ## Data model
 
 In the workflow engine's store, within the agents service's migration chain.
@@ -373,6 +392,7 @@ sequenceDiagram
 
 | Package | Add | Change | Delete |
 |---|---|---|---|
+| `packages/ops_agent_kernel` | `notes.py` (the `add_note` tool and the notes block) | `types.py` (`handoff_targets`, `ask_targets`, `notes`, `budget_ids` on the request; `handoff`, `notes_added` on the result; `question.to` on an interrupt), `kernel.py` (the `ask_<id>` tools; `hand_over` with targets from the request) | |
 | `packages/ops_engine` | `groups.py` (limits, the way out), `handoffs.py` (ports from lines, the cycle rule), `notes.py`, `undo.py`, `store/notes.py`, `store/group_usage.py` | `definition.py` (connection fields, groups, checks 1 to 8), `compiler.py` (hand-over ports, child steps for `ask`, the check loop, group limits, pause in place of failure at `:720`), `node_types.py` (member settings on three step types, `undo`), `ports.py`, `journal.py`, `store/tables.py`, `store/steps.py` | |
 | `services/agents-service` | `app/tasks.py` (answer, take over, return, move on), `app/task_notify.py` and adapters `adapters/task_email.py`, `adapters/task_teams.py`, `api/routers/task_actions.py`, `store/engine_notes.py`, `store/task_notifications.py`, a migration | `api/engine_agents.py` (the new request and result fields; a pause is returned, not raised, at `:204`), `api/engine_reviews.py`, `api/hitl_facade.py`, `api/routers/engine.py`, `api/routers/tasks.py`, `api/timers.py` (escalation), `openapi.json` | The first engine's escalation code in `graphs/sla.py`, once the inbox no longer reads it |
 | `packages/ops_email` | | `inbound.py` (match a reply to a task by message reference) | |

@@ -29,7 +29,7 @@ the canvas and need redrawing; that is the first open point.
 | Rule | Detail |
 |---|---|
 | Data | Through the generated SDK and its hooks. No `fetch` in a component. No list filtered, sorted or joined in the browser |
-| Lists | `DataTable` with server paging (`components/shared/server-pagination.ts`); search, filters and sort are query parameters |
+| Lists | `DataTableWithViews` (`components/data-table-with-views.tsx`) with server paging (`components/shared/server-pagination.ts`); search, filters and sort are query parameters |
 | States | `PageSkeleton` while loading; `QueryError` and `ListEmpty` from `components/shared/query-states.tsx`; `DisabledReason` or `LockedReason` when an action is not allowed, with the reason in words |
 | Pickers | `EntityPicker` or `SearchSelect`, always searching their source; no hard-coded option list |
 | Forms from a schema | `SchemaForm` (`components/shared/schema-form.tsx`), as for loop kind settings and task answers |
@@ -105,7 +105,7 @@ Route: `apps/console/src/app/chat/` (exists).
 | A hand-over | A divider naming the new agent | `handoff` frame |
 | A pause | `ApprovalCard` for an approval or a plan review; `SchemaForm` in a card for a question | `interrupt` frame, `POST /v1/threads/{id}/approvals` |
 | A command (1.5.0) | A collapsible block with the command, exit status and changed files | `sandbox_command` frames |
-| Files button and panel (1.5.0) | `DetailSheet` holding a `DataTable` of files with upload (`FileUpload`), download, delete (`DeleteDialog`) and "Save to Files" | `GET /v1/threads/{id}/sandbox/files` |
+| Files button and panel (1.5.0) | `DetailSheet` holding a table of files (the same table component as every list) with upload (`FileUpload`), download, delete (`DeleteDialog`) and "Save to Files" | `GET /v1/threads/{id}/sandbox/files` |
 | A limit was hit (1.5.0) | An alert under the reply with the sentence from the sandbox page's limits table | `sandbox_command.stoppedBy` |
 | Stop | The composer's stop button | `POST …/runs/{run}/cancel` |
 
@@ -194,7 +194,7 @@ Routes: `apps/console/src/app/work/tasks/` and `work/tasks/[id]/` (exist).
 | Region | Component | Data |
 |---|---|---|
 | Views: Mine, My roles, All | `DataTableWithViews` | `GET /v1/tasks` |
-| Columns: task, kind, asked by, assigned to, due, status | `DataTable`; due shows time left and turns red past the deadline | |
+| Columns: task, kind, asked by, assigned to, due, status | The same table; due shows time left and turns red past the deadline | |
 | Filters: kind, role | Facets from the list result | |
 | An approval | `ApprovalCard` with the change, its inputs (editable when allowed) and the notes | `POST /v1/tasks/{id}/decision` |
 | A question | The question, the notes so far, and a text box or `SchemaForm` | `POST /v1/tasks/{id}/answer` |
