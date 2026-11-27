@@ -15,6 +15,11 @@ from ops_ingest.models import ParsedDocument, ParsingSettings, SourceMetadata
 from ops_ingest.parsers.builder import DocumentBuilder
 
 _HEADING_STYLE = re.compile(r"^heading\s*(\d)$", re.IGNORECASE)
+# A numbered line such as "2. Open risks" or "3) Next steps".
+_NUMBERED = re.compile(r"^\d{1,2}(\.\d{1,2})*[.)]?\s+\S")
+# A line read as a heading in a file with no heading styles is at most this long and does not end like a sentence.
+_INFERRED_MAX_CHARS = 80
+_INFERRED_MAX_WORDS = 10
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
@@ -25,6 +30,26 @@ def _heading_level(paragraph: DocxParagraph) -> int | None:
         return 1
     match = _HEADING_STYLE.match(name)
     return int(match.group(1)) if match else None
+
+
+def _bold(paragraph: DocxParagraph) -> bool:
+    """Every run with text is bold, set on the run or on its character or paragraph style."""
+    runs = [r for r in paragraph.runs if r.text.strip()]
+    if not runs:
+        return False
+    style_bold = bool(paragraph.style is not None and paragraph.style.font.bold)
+    return all(r.bold or (r.bold is None and (style_bold or bool(r.style.font.bold))) for r in runs)
+
+
+def _inferred_heading(paragraph: DocxParagraph) -> bool:
+    """A short line written as a heading without a heading style: all bold, or numbered, and not ending like a
+    sentence. Used only in a file that has no heading styles at all, so a styled file keeps exactly its own headings."""
+    text = " ".join(paragraph.text.split())
+    if not text or len(text) > _INFERRED_MAX_CHARS or len(text.split()) > _INFERRED_MAX_WORDS:
+        return False
+    if text[-1] in ".,;:!?":
+        return False
+    return _bold(paragraph) or bool(_NUMBERED.match(text))
 
 
 def _table_rows(table: DocxTable) -> list[list[str]]:
@@ -52,10 +77,13 @@ def parse_docx(
     parsing = parsing or ParsingSettings()
     document = Document(io.BytesIO(data))
     builder = DocumentBuilder()
+    styled = any(_heading_level(p) is not None for p in document.paragraphs)
 
     for block in document.iter_inner_content():
         if isinstance(block, DocxParagraph):
             level = _heading_level(block)
+            if level is None and not styled and _inferred_heading(block):
+                level = 1
             if level is not None:
                 builder.heading(block.text, level)
             else:

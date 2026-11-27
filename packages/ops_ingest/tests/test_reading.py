@@ -7,6 +7,7 @@ import struct
 import zlib
 
 import pytest
+from docx import Document
 from PIL import Image
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.utils import ImageReader
@@ -332,3 +333,29 @@ def test_corrupt_image_fails_its_page_with_a_reason() -> None:
     page = reading.pages[0]
     assert page.source == "none"
     assert page.unread_reason is not None and "could not be decoded" in page.unread_reason
+
+
+def _bold_line_note() -> bytes:
+    """A decision note written the way people write one: bold lines for headings, no heading styles, and one bold
+    phrase inside a sentence that is not a heading."""
+    d = Document()
+    d.add_paragraph().add_run("Claims intake redesign - decision note").bold = True
+    d.add_paragraph("Owner: Amara Osei. Date: 12 November 2026.")
+    d.add_paragraph().add_run("Decision").bold = True
+    p = d.add_paragraph("We chose the event queue over nightly batch files because adjusters need ")
+    p.add_run("a claim's photos within five minutes").bold = True
+    d.add_paragraph().add_run("Who does what").bold = True
+    d.add_paragraph("Tomas Vega owns the intake service. Lin Zhao owns the photo store.")
+    d.add_paragraph().add_run("Open risks").bold = True
+    d.add_paragraph("Queue replay after an outage is untested.")
+    out = io.BytesIO()
+    d.save(out)
+    return out.getvalue()
+
+
+def test_word_note_with_bold_lines_reads_into_its_sections() -> None:
+    reading = read(_bold_line_note(), filename="decision-note.docx", settings=AUTO)
+    doc = to_parsed_document(reading)
+    paths = [" > ".join(s.heading_path) for s in doc.sections]
+    assert paths == ["Claims intake redesign - decision note", "Decision", "Who does what", "Open risks"]
+    assert "five minutes" in " ".join(getattr(b, "text", "") for b in doc.sections[1].blocks)
