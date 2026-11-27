@@ -100,9 +100,10 @@ jobs:
                 || { echo "::error title=Staging freeze unreadable::git ls-remote failed, so a branch freeze cannot be ruled out"; exit 1; }
               branches=$(printf '%s\n' "$listing" | sed 's|.*refs/heads/||' | tr '\n' ' ') ;;
           esac
-          verdict=$(HOLD="$HOLD" BRANCHES="${branches% }" python3 scripts/staging_hold.py) || true
+          verdict=$(HOLD="$HOLD" SHA="$sha" BRANCHES="${branches% }" python3 scripts/staging_hold.py) || true
           state=$(printf '%s\n' "$verdict" | sed -n 's/^state=//p'); text=$(printf '%s\n' "$verdict" | sed -n 's/^text=//p')
           pin=$(printf '%s\n' "$verdict" | sed -n 's/^pin=//p')
+          printf '%s\n' "$verdict" | sed -n 's/^notice=//p' | while IFS= read -r n; do echo "::notice title=Merged branch freeze ignored::$n"; done
           [ -n "$state" ] || { echo "::error title=Staging hold unreadable::scripts/staging_hold.py printed no state"; exit 1; }
           case "$state" in
             invalid) echo "::error title=Staging hold invalid::$text"; exit 1 ;;
