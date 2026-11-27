@@ -1,0 +1,1 @@
+{"date": "2026-11-26", "title": "Approvals are checked where changes are sent", "description": "The tool gateway now decides whether a change waits for a person before anything is sent, and it alone issues the approval that lets the change through. With the two-person rule on, the person who asked for a change cannot approve it themselves.", "tag": "improved"}

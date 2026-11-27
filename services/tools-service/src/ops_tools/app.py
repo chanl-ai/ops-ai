@@ -44,6 +44,7 @@ from ops_store.background import report as background_report
 from ops_store.background import supervisor as background_supervisor
 from ops_store.database import reachable
 
+from .approvals import ApprovalIn, ApprovalMint, ApprovalToken, DecideResult, decide_result
 from .auth import Authenticator
 from .code_runs import CodeExecutor, resolve_handles, run_acting_for, run_caller, run_claims
 from .egress import EgressPolicy, egress_client
@@ -281,6 +282,7 @@ def create_gateway_app(
     modules: ModuleService | None = None,
     links: McpLinks | None = None,
     agents_url: str | None = None,
+    approval_ttl_s: int | None = None,
 ) -> FastAPI:
     """`clock` is the time a token's expiry is judged by, sent to OPA with each call; tests pass a fixed one.
     `policy` is the Rego the gateway decides by, `policy/gateway.rego` unless given; it is written into OPA at start
@@ -300,7 +302,9 @@ def create_gateway_app(
     `flags` are the install's feature flags, none on unless given: /mcp is served only with `mcp_gateway` on.
     `agents_url` is where the MCP address's platform operations reach agents-service.
     `links` holds the teams' MCP links, each served at `/mcp/{team}/{link}`; without it only `/mcp/{team}` answers.
-    `code` runs code operations on runner-service and checks their calls back; without it they fail."""
+    `code` runs code operations on runner-service and checks their calls back; without it they fail.
+    `review_key` signs approval tokens (POST /v1/approvals) and OPA verifies them with it; `approval_ttl_s` is a
+    token's life, Settings' review_token_ttl_seconds unless given."""
     rules = policy if policy is not None else POLICY_FILE.read_text()
     client = http_client or (egress_client(egress) if egress else httpx.AsyncClient())
     http_executor = HttpExecutor(client, egress, secret_resolver, authenticator)
@@ -352,6 +356,13 @@ def create_gateway_app(
         approver=approver,
         # An approval the asker gave themselves counts only while today's policy lets an asker decide.
         requester_may_decide=(requester_policy or RequesterMayDecide(None, dev=Settings().dev_policies)).allowed,
+    )
+    minter = ApprovalMint(
+        calls,
+        log,
+        review_key,
+        approval_ttl_s if approval_ttl_s is not None else Settings().review_token_ttl_seconds,
+        clock=clock,
     )
     if modules is not None:
         # A tool page's Real run is this gateway's call, never a path of the registry's own.
@@ -609,6 +620,41 @@ def create_gateway_app(
         )
         found = await calls.call(caller, request, generation=x_lease_generation, channel=API, sees=team_view(caller))
         return as_response(found)
+
+    @app.post("/v1/calls/decide", tags=["gateway"], response_model=Envelope[DecideResult], responses=error_responses())
+    async def decide(  # pyright: ignore[reportUnusedFunction]
+        body: CallIn,
+        caller: CurrentService,
+        x_acting_for: Annotated[str | None, Header()] = None,
+    ) -> JSONResponse:
+        """Internal (service token): what POST /v1/calls would do with this call, from the same checks, with nothing
+        sent, claimed or logged. The kernel asks it before a tool runs, so a write that waits for a person pauses
+        there. Off the request transaction, as a call."""
+        acting = await resolved_auth.identity.acting_for(x_acting_for, caller) if x_acting_for else None
+        request = CallRequest(
+            tool=body.tool,
+            input=body.input,
+            key=body.key,
+            run_context=body.run_context.model_dump(),
+            approval_token=body.approval_token,
+            acting_for=acting,
+        )
+        found = await calls.call(caller, request, channel=API, sees=team_view(caller), decide_only=True)
+        return ok(decide_result(found, input_hash(body.input)).model_dump(by_alias=True))
+
+    @app.post("/v1/approvals", tags=["gateway"], response_model=Envelope[ApprovalToken], responses=error_responses())
+    async def approvals(  # pyright: ignore[reportUnusedFunction]
+        body: ApprovalIn,
+        caller: CurrentService,
+        x_acting_for: Annotated[str | None, Header()] = None,
+    ) -> JSONResponse:
+        """Internal (service token): the approval token for one call its approvers decided. The call is decided again,
+        the person it acts for (X-Acting-For) counts as an approver only while the tenant's approval policy lets an
+        asker decide (403 requester_cannot_approve), and a step that already sent another write is closed (409
+        interrupt_closed). The token is never stored. Off the request transaction, as a call."""
+        acting = await resolved_auth.identity.acting_for(x_acting_for, caller) if x_acting_for else None
+        minted = await minter.mint(caller, body, acting)
+        return ok(minted.model_dump(by_alias=True))
 
     @app.post("/v1/code-runs/calls", tags=["gateway"], response_model=Envelope[CallResult], responses=error_responses())
     async def code_run_call(  # pyright: ignore[reportUnusedFunction]
