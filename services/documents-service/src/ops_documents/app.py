@@ -30,6 +30,7 @@ from ops_documents.errors import (
     FileNotReadyError,
     IdempotencyConflictError,
     InvalidRequestError,
+    PolicyUnreadError,
     StateError,
 )
 from ops_documents.extraction import Extractor
@@ -71,7 +72,7 @@ from ops_identity import Auth, CurrentCaller, Principal, install_auth
 from ops_identity.fastapi import Tx
 from ops_ingest.reading import OcrMode, ocr_installed
 from ops_service_kit.background import BackgroundHealthOut
-from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
+from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import (
     Envelope,
     ListResult,
@@ -115,6 +116,8 @@ def _status(e: DocumentsError) -> ApiError:
         return Conflict(message)
     if isinstance(e, InvalidRequestError):
         return ValidationFailed(message)
+    if isinstance(e, PolicyUnreadError):
+        return ServiceUnavailable(message, code="policy_unread")
     return ApiError(message)
 
 

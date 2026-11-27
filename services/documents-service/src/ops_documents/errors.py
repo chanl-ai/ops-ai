@@ -35,3 +35,7 @@ class IdempotencyConflictError(DocumentsError):
 
 class CreateNotAllowedError(DocumentsError):
     """The caller reads the team's documents but may not change them: documents.edit in the team (403)."""
+
+
+class PolicyUnreadError(DocumentsError):
+    """A policy a request depends on could not be read from platform-service, and nothing stored answers it (503)."""

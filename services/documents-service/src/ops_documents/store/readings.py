@@ -85,6 +85,9 @@ documents_reading_pages = sa.Table(
     sa.Column("page", sa.Integer, primary_key=True),
     # ops_ingest.reading.Page as gzipped JSON: about five times smaller than the text.
     sa.Column("body", sa.LargeBinary, nullable=False),
+    # How often the page's picture was refused for a reason that passes (the model busy, today's limit), so it is
+    # described again later on its own; null once the page is settled (described, refused for good, or out of tries).
+    sa.Column("picture_retries", sa.Integer),
     info=TEAM_OWNED,
 )
 
@@ -119,14 +122,13 @@ class ReadingRow(Out):
     team: str
     actor: str
     duration_ms: int | None
-    finished_at: datetime | None = None
 
 
 _t = documents_readings.c
-# The columns a ReadingRow names: of its times, only when it finished is read (a reading to retry waits on it).
+# The columns a ReadingRow names: every other column (its times) is read by no caller.
 ROW = (
     _t.tenant_id, _t.file_digest, _t.reader_version, _t.settings_key, _t.status, _t.pages_total, _t.pages_done,
-    _t.facts, _t.error_code, _t.error, _t.attempts, _t.file_id, _t.team, _t.actor, _t.duration_ms, _t.finished_at,
+    _t.facts, _t.error_code, _t.error, _t.attempts, _t.file_id, _t.team, _t.actor, _t.duration_ms,
 )  # fmt: skip
 
 
@@ -192,10 +194,8 @@ class ReadingsStore(Store):
         team: str,
         actor: str,
         at: datetime,
-        again: bool = False,
     ) -> ReadingRow:
-        """The team's reading queued, or the one already there; a failed reading asked for again is queued afresh, and
-        so is a finished one when `again` (its page pictures were refused for a reason that passes)."""
+        """The team's reading queued, or the one already there; a failed reading asked for again is queued afresh."""
         t = documents_readings
         values = {
             "tenant_id": isolation.tenant(),
@@ -217,14 +217,13 @@ class ReadingsStore(Store):
             except IntegrityError:
                 found = await self.get(team, digest, version, key)
                 assert found is not None
-                redo: tuple[str, ...] = ("failed", "done") if again else ("failed",)
-                if found.status not in redo:
+                if found.status != "failed":
                     return found
                 p = documents_reading_pages
                 await c.execute(sa.delete(p).where(self._where(p, team, digest, version, key)))
                 await c.execute(
                     sa.update(t)
-                    .where(self._where(t, team, digest, version, key), t.c.status.in_(redo))
+                    .where(self._where(t, team, digest, version, key), t.c.status == "failed")
                     .values(
                         status="queued", pages_done=0, pages_total=None, attempts=0, error_code=None, error=None,
                         file_id=file_id, actor=actor, created_at=at, started_at=None, finished_at=None,
@@ -255,17 +254,28 @@ class ReadingsStore(Store):
                 .values(pages_total=pages_total, facts=json.dumps(facts))
             )
 
-    async def save_page(self, row: ReadingRow, number: int, page: Json) -> None:
+    async def save_page(self, row: ReadingRow, number: int, page: Json, *, retries: int | None = None) -> None:
         """One finished page, and the count of pages done; saving a page again (after a restart) replaces it."""
         t = documents_readings
         async with self.tx() as c:
-            await self._put_page(c, row.team, row.digest, row.version, row.key, number=number, page=page)
+            await self._put_page(
+                c, row.team, row.digest, row.version, row.key, number=number, page=page, retries=retries
+            )
             await c.execute(
                 sa.update(t).where(self._where(t, row.team, row.digest, row.version, row.key)).values(pages_done=number)
             )
 
     async def _put_page(
-        self, c: AsyncConnection, team: str, digest: str, version: str, key: str, *, number: int, page: Json
+        self,
+        c: AsyncConnection,
+        team: str,
+        digest: str,
+        version: str,
+        key: str,
+        *,
+        number: int,
+        page: Json,
+        retries: int | None = None,
     ) -> None:
         p = documents_reading_pages
         await c.execute(sa.delete(p).where(self._where(p, team, digest, version, key), p.c.page == number))
@@ -278,8 +288,56 @@ class ReadingsStore(Store):
                 settings_key=key,
                 page=number,
                 body=_pack(page),
+                picture_retries=retries,
             )
         )
+
+    async def claim_retry(self, row: ReadingRow, *, code: str, at: datetime, due_before: datetime) -> bool:
+        """Takes a finished reading's picture retry once its wait is over: true for the one caller whose update moved
+        its finish time, so two processes asked at once do not both describe the pages again."""
+        t = documents_readings
+        due = sa.or_(t.c.finished_at.is_(None), t.c.finished_at <= due_before)
+        async with self.tx() as c:
+            done = await c.execute(
+                sa.update(t)
+                .where(self._where(t, row.team, row.digest, row.version, row.key), t.c.status == "done")
+                .where(t.c.error_code == code, due)
+                .values(finished_at=at)
+            )
+        return bool(done.rowcount)
+
+    async def pages_to_retry(self, row: ReadingRow) -> tuple[int, list[tuple[Page, int]]]:
+        """Pages a model described so far, and each page still to describe again with its refusals so far."""
+        p = documents_reading_pages
+        query = sa.select(p.c.body, p.c.picture_retries).where(
+            self._where(p, row.team, row.digest, row.version, row.key), team_visible(p)
+        )
+        async with self.tx() as c:
+            found = (await c.execute(query.order_by(p.c.page))).all()
+        pages = [(_unpack(body), retries) for body, retries in found]
+        described = sum(page.source == "model" for page, _ in pages)
+        return described, [(page, int(retries)) for page, retries in pages if retries is not None]
+
+    async def retried(
+        self, row: ReadingRow, pages: list[tuple[Page, int | None]], *, code: str | None, at: datetime, changed: bool
+    ) -> None:
+        """The pages described again, the reading's mark kept while one still waits, and `reading.finished` sent again
+        when a page now has text, so a knowledge base indexes it; all in one transaction."""
+        t = documents_readings
+        async with self.tx() as c:
+            for page, retries in pages:
+                body = page.model_dump(mode="json", by_alias=True)
+                await self._put_page(
+                    c, row.team, row.digest, row.version, row.key, number=page.number, page=body, retries=retries
+                )
+            await c.execute(
+                sa.update(t)
+                .where(self._where(t, row.team, row.digest, row.version, row.key))
+                .values(error_code=code, finished_at=at)
+            )
+            if changed:
+                said: Json = {"status": "done", "pages": row.pages_total}
+                await self._events(c, row.team, row.digest, row.version, row.key, name=FINISHED_EVENT, said=said)
 
     async def put_done(
         self,

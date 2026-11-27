@@ -5,18 +5,20 @@ and shown once to a model that can see, and its description becomes the page's t
 nobody takes it for the author's words. The description is stored with the reading, so it is cited like any page and
 never asked for again for the same bytes.
 
-Only knowledge reads ask for pictures, with the item's sensitivity. Gates, in order, before any picture leaves: the
-file's limit of pages read by a model, then the team's pageImages policy (read when the reading is asked for and kept
-in its key; a policy that cannot be read counts as off), then models-service's clearance for pictures and for the
-file's sensitivity, and its daily limit on documents-service's key. A gate that says no leaves that page unread with
-the reason in plain words; the reading still finishes, and is read again on the next ask when the reason passes (the
-model busy or out of reach, today's limit). Calls go through the one model client (`ops_service_kit.model_calls`)."""
+Only knowledge reads ask for pictures, with the source's sensitivity; a picture goes at the stricter of that and the
+file's own level in files-service. Gates, in order, before any picture leaves: the file's limit of pages read by a
+model, then the team's pageImages policy (read when the reading is asked for, kept POLICY_FRESH_S, and part of its
+key), then models-service's clearance for pictures and for that sensitivity, and its daily limit on
+documents-service's key. A gate that says no leaves that page unread with the reason in plain words and the reading
+still finishes. A page refused for a reason that passes (the model busy, today's limit) is described again later on
+its own, at most PICTURE_RETRIES times. Calls go through the one model client (`ops_service_kit.model_calls`)."""
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
-from dataclasses import dataclass
+import time
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from ops_extract import page_images
@@ -63,8 +65,22 @@ REASONS = {
 }
 POLICY_OFF = "this team does not send page pictures to a model"
 UNREACHABLE = "the model could not be reached"
-# Refusals that pass with time: a reading holding one is served, then read again on the next ask.
+# Refusals that pass with time: the page is described again later. Any other failure, an unknown code or a page over its
+# time included, is kept: retrying it would pay for the same failure again.
 PASSING = frozenset({"key_budget_exhausted", "tenant_budget_exhausted", "rate_limited"})
+# How often a page refused for a passing reason is described again before it keeps its note for good.
+PICTURE_RETRIES = 3
+# How long a team's pageImages answer is kept: every page view asks for the reading, and a policy change applies
+# within this long. A failed read is never kept.
+POLICY_FRESH_S = 30.0
+# A file's sensitivity, least to most strict. A level outside this list counts as the strictest.
+LEVELS = ("public", "internal", "confidential", "restricted")
+NOT_DESCRIBED = "Not described: "
+
+
+def stricter(*levels: str) -> str:
+    """The strictest of the levels, so a caller can never send a picture below the file's own level."""
+    return max(levels, key=lambda lv: LEVELS.index(lv) if lv in LEVELS else len(LEVELS))
 
 
 class SeeingModel(Protocol):
@@ -85,7 +101,9 @@ class SeeingModel(Protocol):
 
 
 class PageImagePolicy(Protocol):
-    async def allowed(self, tenant: str, team: str) -> bool: ...
+    async def read(self, tenant: str, team: str) -> bool | None:
+        """The team's pageImages policy; None when it cannot be read."""
+        ...
 
 
 def wants_picture(page: Page, mime: str) -> bool:
@@ -102,15 +120,25 @@ class PictureReading:
     models: SeeingModel
     policy: PageImagePolicy | None
     per_file: int = PICTURE_PAGES_PER_FILE
+    clock: Callable[[], float] = time.monotonic
+    _kept: dict[tuple[str, str], tuple[float, bool]] = field(default_factory=dict[tuple[str, str], tuple[float, bool]])
 
-    async def allowed(self, tenant: str, team: str) -> bool:
+    async def allowed(self, tenant: str, team: str) -> bool | None:
+        """Whether the team sends page pictures; None when its policy cannot be read, which never counts as off, so a
+        failed read neither sends a page nor makes a second reading."""
         if self.policy is None:
             return False
+        kept = self._kept.get((tenant, team))
+        if kept is not None and self.clock() - kept[0] < POLICY_FRESH_S:
+            return kept[1]
         try:
-            return await self.policy.allowed(tenant, team)
-        except Exception as e:  # a policy that cannot be read must never send a page
-            log.warning("pageImages policy unread; no page picture is sent", extra={"error": str(e)})
-            return False
+            found = await self.policy.read(tenant, team)
+        except Exception as e:
+            log.warning("pageImages policy unread", extra={"error": str(e)})
+            found = None
+        if found is not None:
+            self._kept[(tenant, team)] = (self.clock(), found)
+        return found
 
     async def describe(
         self, page: Page, *, data: bytes, mime: str, used: int, sensitivity: str | None, tenant: str, run: str
@@ -133,7 +161,7 @@ class PictureReading:
             )  # fmt: skip
         except ModelCallError as e:
             log.info("picture_not_described", extra={"code": e.code, "page": page.number})
-            return not_described(page, REASONS.get(e.code, UNREACHABLE)), e.code not in REASONS or e.code in PASSING
+            return not_described(page, REASONS.get(e.code, UNREACHABLE)), e.code in PASSING
         said = cast(dict[str, Any], answer) if isinstance(answer, dict) else {}
         words, description = str(said.get("text") or "").strip(), str(said.get("description") or "").strip()
         text = "\n\n".join(t for t in (words, description) if t)
@@ -146,7 +174,7 @@ class PictureReading:
 
 
 def not_described(page: Page, why: str) -> Page:
-    reason = f"Not described: {why}."
+    reason = f"{NOT_DESCRIBED}{why}."
     if page.source == "none":
         return page.model_copy(update={"unread_reason": reason})
     return page.model_copy(update={"warnings": [*page.warnings, reason]})
@@ -156,9 +184,18 @@ def picture_reading(extractor: Extractor) -> PictureReading | None:
     """On extraction's own model key and the team's pageImages policy; None (pictures stay unread) when this process
     has no model key."""
     # Imported here: extraction imports readings, which imports this module.
-    from ops_documents.extraction import ModelsService  # noqa: PLC0415
+    from ops_documents.extraction import ModelsService, PlatformPageImages  # noqa: PLC0415
 
     models = extractor.models
     if not isinstance(models, ModelsService):
         return None
-    return PictureReading(ModelCalls(models.http, models.key, models.alias), extractor.page_image_policy)
+    policy = extractor.page_image_policy
+    readable = policy if isinstance(policy, PlatformPageImages) else None  # no policy reader: pictures stay off
+    return PictureReading(ModelCalls(models.http, models.key, models.alias), readable)
+
+
+def as_read(page: Page) -> Page:
+    """The page as reading left it, before a refusal's note, so describing it again does not pile up notes."""
+    if page.source == "none" and (page.unread_reason or "").startswith(NOT_DESCRIBED):
+        return page.model_copy(update={"unread_reason": None})
+    return page.model_copy(update={"warnings": [w for w in page.warnings if not w.startswith(NOT_DESCRIBED)]})

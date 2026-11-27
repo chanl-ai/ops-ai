@@ -1,6 +1,6 @@
 {
   "date": "2026-11-26",
   "title": "Open a knowledge document beside the text read from it",
-  "description": "A knowledge document now opens on its own page with the original on the left and what was read from it on the right, section by section. Clicking a paragraph of a PDF highlights its lines on the page, and clicking the lines selects the paragraph.",
+  "description": "A knowledge document now opens on its own page with the original on the left and what was read from it on the right, section by section. Clicking a paragraph of a PDF highlights its lines on the page, and clicking the lines selects the paragraph. A page that is only a picture, such as a diagram, is described by a model when the team allows page pictures, and marked as read by a model. After this update each knowledge file is read once more, the first time it is opened or synced.",
   "tag": "new"
 }

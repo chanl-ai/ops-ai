@@ -19,10 +19,17 @@ from contextlib import ExitStack
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from ops_documents.errors import FileMissingError, FileNotReadyError
+from ops_documents.errors import FileMissingError, FileNotReadyError, PolicyUnreadError
 from ops_documents.files import Files, Who
 from ops_documents.pending import Pending
-from ops_documents.picture_reading import PictureReading, not_described, wants_picture
+from ops_documents.picture_reading import (
+    PICTURE_RETRIES,
+    PictureReading,
+    as_read,
+    not_described,
+    stricter,
+    wants_picture,
+)
 from ops_documents.store.readings import PENDING, ReadingRow, ReadingsStore
 from ops_files_client import FileInfo
 from ops_ingest.reading import (
@@ -62,14 +69,16 @@ def settings_of(ocr: str | bool | None, language: str | None = None) -> ReadingS
     return ReadingSettings.model_validate({"ocr": mode, "language": language or "eng"})
 
 
-# A knowledge read asks for page pictures with the item's sensitivity. The answer is part of the reading's key, so a
-# reading made while the team's policy was off, or for another sensitivity, is not served once that changes.
+# A knowledge read asks for page pictures with the source's sensitivity, raised to the file's own level. The answer is
+# part of the reading's key, so a reading made while the team's policy was off, or for another sensitivity, is not
+# served once that changes.
 PICTURES_OFF = "p-off"
-# Kept on a finished reading whose pictures were refused for a reason that passes (the model busy or out of reach,
-# today's limit): the reading is served as it is, and an ask once RETRY_AFTER has passed reads it again. The wait
-# keeps a refusal that lasts (a limit reached for the day) from re-reading the file on every ask.
+# Kept on a finished reading with a page whose picture was refused for a reason that passes (the model busy, today's
+# limit). The reading is served as it is; an ask once RETRY_AFTER has passed describes those pages again in the
+# background, alone, keeping every other page.
 RETRY_PICTURES = "pictures_retry"
 RETRY_AFTER = timedelta(minutes=10)
+POLICY_UNREAD = "The team's page picture policy could not be read. Try again shortly."
 
 
 def reading_key(settings: ReadingSettings, pictures: str | None, allowed: bool) -> str:
@@ -165,15 +174,19 @@ class Readings:
         read may send page pictures at; None reads text and OCR only."""
         file = await self.files.readable(who, file_id)
         digest = self._digest(file)
-        key = await self._key(who, settings, pictures)
+        level = None if pictures is None else stricter(file.sensitivity, pictures)
+        key = await self._key(who, settings, level)
+        if key is None:
+            return 200, await self._without_policy(who, file, settings, level)
         # Gate: the file's link and its stored reading in one transaction, closed before the bytes are read.
         async with isolation.request_transaction():
             await self.store.link(file.id, who.team, digest, self.clock())
             row = await self.store.get(who.team, digest, READER_VERSION, key)
-            again = row is not None and row.status == "done" and self._retry_due(row)
-            if row is not None and row.status == "done" and not again:
-                pages = await self.store.pages(who.team, digest, READER_VERSION, key)
-                return 200, answer_of(row, file_id, pages)
+            done = row is not None and row.status == "done"
+            pages = await self.store.pages(who.team, digest, READER_VERSION, key) if done else None
+        if row is not None and pages is not None:
+            await self._retry_if_due(who, file, row)
+            return 200, answer_of(row, file_id, pages)
         if row is not None and row.status in PENDING:
             return 202, answer_of(row, file_id)
         if file.size <= SYNC_BYTES:
@@ -193,9 +206,8 @@ class Readings:
         # The queued row commits before the task that reads it starts, so the task finds it.
         async with isolation.request_transaction():
             row = await self.store.queue(
-                digest, READER_VERSION, key, file_id=file.id, team=who.team, actor=who.actor, at=self.clock(),
-                again=again,
-            )  # fmt: skip
+                digest, READER_VERSION, key, file_id=file.id, team=who.team, actor=who.actor, at=self.clock()
+            )
         if row.status in PENDING:
             await self._later(row)
         return 202, answer_of(row, file_id)
@@ -206,8 +218,13 @@ class Readings:
         """The reading as it is now, with its pages (or one page) once done; status `none` when never asked for."""
         file = await self.files.readable(who, file_id)
         digest = self._digest(file)
-        key = await self._key(who, settings, pictures)
+        level = None if pictures is None else stricter(file.sensitivity, pictures)
+        key = await self._key(who, settings, level)
+        if key is None:
+            return await self._without_policy(who, file, settings, level, page=page)
         row = await self.store.get(who.team, digest, READER_VERSION, key)
+        if row is not None and row.status == "done":
+            await self._retry_if_due(who, file, row)
         if row is None:
             mode, language = settings.ocr, settings.language
             return {"fileId": file_id, "digest": digest, "status": "none", "readerVersion": READER_VERSION,
@@ -259,18 +276,38 @@ class Readings:
             raise FileNotReadyError(f"{file.id} has no content digest yet")
         return file.digest
 
-    def _retry_due(self, row: ReadingRow) -> bool:
-        if row.error_code != RETRY_PICTURES:
-            return False
-        finished = row.finished_at
-        if finished is not None and finished.tzinfo is None:  # SQL Server hands the time back without its zone
-            finished = finished.replace(tzinfo=UTC)
-        return finished is None or self.clock() - finished >= RETRY_AFTER
-
-    async def _key(self, who: Who, settings: ReadingSettings, pictures: str | None) -> str:
-        if pictures is None or self.pictures is None:
+    async def _key(self, who: Who, settings: ReadingSettings, level: str | None) -> str | None:
+        """The reading's key; None when pictures were asked for and the team's policy cannot be read."""
+        if level is None or self.pictures is None:
             return settings.key
-        return reading_key(settings, pictures, await self.pictures.allowed(who.tenant_id, who.team))
+        allowed = await self.pictures.allowed(who.tenant_id, who.team)
+        return None if allowed is None else reading_key(settings, level, allowed)
+
+    async def _without_policy(
+        self, who: Who, file: FileInfo, settings: ReadingSettings, level: str | None, *, page: int | None = None
+    ) -> Json:
+        """With the team's policy unread, the reading already made with pictures or without them; nothing is read or
+        kept, so an outage of platform-service never makes a second reading."""
+        digest = self._digest(file)
+        for allowed in (True, False):
+            key = reading_key(settings, level, allowed)
+            async with isolation.request_transaction():
+                row = await self.store.get(who.team, digest, READER_VERSION, key)
+                if row is not None and row.status == "done":
+                    pages = await self.store.pages(who.team, digest, READER_VERSION, key, page=page)
+                    return answer_of(row, file.id, pages)
+        raise PolicyUnreadError(POLICY_UNREAD)
+
+    async def _retry_if_due(self, who: Who, file: FileInfo, row: ReadingRow) -> None:
+        """Describes the reading's refused pages again in the background once its wait is over; one process takes it.
+        The pages are read from the asker's file, so a first file deleted since does not stop it."""
+        if row.error_code != RETRY_PICTURES or self.pictures is None:
+            return
+        now = self.clock()
+        async with isolation.request_transaction():
+            claimed = await self.store.claim_retry(row, code=RETRY_PICTURES, at=now, due_before=now - RETRY_AFTER)
+        if claimed:
+            await self._later(row.model_copy(update={"file_id": file.id, "actor": who.actor}))
 
     async def _keep(self, who: Who, file: FileInfo, made: Reading, key: str | None = None) -> None:
         await self.store.put_done(
@@ -333,7 +370,7 @@ class Readings:
         still queued is left to `resume` after the restart."""
         try:
             with isolation.scope(row.tenant_id, row.team):
-                await self._run(row)
+                await (self._retry(row) if row.status == "done" else self._run(row))
         except asyncio.CancelledError:
             self._running.pop(_identity(row), None)
             self._pending.done(1 + len(self._queued))
@@ -385,6 +422,7 @@ class Readings:
                     stack.close()
                     stack = ExitStack()
                     reader = await asyncio.to_thread(self._open, stack, data, file, settings)
+                passing = False
                 if self.pictures is not None and wanted and wants_picture(page, reader.facts.mime_type):
                     try:
                         page, passing = await asyncio.wait_for(
@@ -395,10 +433,11 @@ class Readings:
                             self.page_timeout_s,
                         )  # fmt: skip
                     except TimeoutError:
-                        page, passing = not_described(page, "the model took too long"), True
+                        page, passing = not_described(page, "the model took too long"), False
                     described += page.source == "model"
                     retry |= passing
-                await self.store.save_page(row, number, page.model_dump(mode="json", by_alias=True))
+                retries = 1 if passing else None
+                await self.store.save_page(row, number, page.model_dump(mode="json", by_alias=True), retries=retries)
             took = round((time.perf_counter() - started) * 1000)
             done = await self.store.get(row.team, row.digest, row.version, row.key)
             await self.store.finish(
@@ -422,6 +461,41 @@ class Readings:
             raise
         finally:
             stack.close()
+
+    async def _retry(self, row: ReadingRow) -> None:
+        """Describes again only the pages whose picture was refused for a reason that passes; every other page is kept.
+        A page refused again counts one more try, and after PICTURE_RETRIES it keeps its note for good."""
+        assert self.pictures is not None
+        who = Who(tenant_id=row.tenant_id, team=row.team, actor=row.actor)
+        level = key_parts(row.key)[2]
+        try:
+            file = await self.files.readable(who, row.file_id)
+            data = await self.files.read(who, file)
+        except (FileMissingError, FileNotReadyError):
+            return  # kept as it is; an ask after the next wait tries again
+        if level is None or row.facts is None:
+            return
+        level = stricter(level, file.sensitivity)
+        mime = FileFacts.model_validate(row.facts).mime_type
+        described, waiting = await self.store.pages_to_retry(row)
+        redone: list[tuple[Page, int | None]] = []
+        for page, tries in waiting:
+            before = as_read(page)
+            try:
+                after, passing = await asyncio.wait_for(
+                    self.pictures.describe(
+                        before, data=data, mime=mime, used=described, sensitivity=level, tenant=row.tenant_id,
+                        run=f"reading:{row.digest[:24]}",
+                    ),
+                    self.page_timeout_s,
+                )  # fmt: skip
+            except TimeoutError:
+                after, passing = not_described(before, "the model took too long"), False
+            described += after.source == "model"
+            redone.append((after, tries + 1 if passing and tries < PICTURE_RETRIES else None))
+        waits = any(tries is not None for _, tries in redone)
+        changed = any(page.source == "model" for page, _ in redone)
+        await self.store.retried(row, redone, code=RETRY_PICTURES if waits else None, at=self.clock(), changed=changed)
 
     async def _described_so_far(self, row: ReadingRow) -> int:
         """Pages of this reading a model already described, so a reading resumed after a restart keeps its limit."""
