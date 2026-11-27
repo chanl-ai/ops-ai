@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -292,9 +293,19 @@ class Models:
 
     def __init__(self) -> None:
         self.model, self.down, self.calls = "scripted/concept-embed", False, 0
+        # A tenant whose budget is spent: the first one to call, when `spent` is set.
+        self.spent: str | None = None
+        self.refused: list[str] = []
 
     def answer(self, request: httpx.Request) -> httpx.Response:
         self.calls += 1
+        tenant = request.headers["x-tenant-id"]
+        if self.spent == "first":
+            self.spent = tenant
+        if tenant == self.spent:
+            self.refused.append(tenant)
+            error = {"code": "tenant_budget_exhausted", "message": "this tenant's budget is spent"}
+            return httpx.Response(429, json={"success": False, "error": error})
         if self.down:
             error = {"code": "provider_unavailable", "message": "the provider did not answer"}
             return httpx.Response(503, json={"success": False, "error": error})
@@ -315,7 +326,7 @@ async def test_a_new_version_of_the_embedding_alias_embeds_every_unit_again(
     engine: AsyncEngine, tenant: str, tmp_path: Path
 ) -> None:
     """An admin points the environment's embedding alias at another model (Settings, Model aliases): the alias name is
-    unchanged, so vectors are keyed by the model that served them, and the background beat notices on its own."""
+    unchanged, so vectors are keyed by the model that served them; the first search after the move makes them stale."""
     await _with_vectors(engine, tenant)
     models = Models()
     async with httpx.AsyncClient(transport=httpx.MockTransport(models.answer), base_url="http://models") as http:
@@ -329,8 +340,10 @@ async def test_a_new_version_of_the_embedding_alias_embeds_every_unit_again(
             await embed_all(store, vectors, embedder, Backlog())
             assert sections(await stack.search(kb["id"], PARAPHRASE))[:1] == ["Early repayment"]
             models.model = "scripted/concept-embed-2"
+            stale = await stack.search(kb["id"], PARAPHRASE)
+            assert stale["lanes"]["skipped"] == [{"lane": "meaning", "reason": "no_vectors"}], stale["lanes"]
             reads = len(readings.reads)
-            assert await embed_all(store, vectors, embedder, Backlog()) > 0, "the beat did not notice the alias moved"
+            assert await embed_all(store, vectors, embedder, Backlog()) > 0
             assert len(readings.reads) == reads
             again = await stack.search(kb["id"], PARAPHRASE)
             assert again["lanes"]["ran"] == ["keyword", "meaning"] and sections(again)[:1] == ["Early repayment"]
@@ -376,3 +389,25 @@ async def test_a_down_model_gives_one_reason_and_one_call_per_search_however_lon
             calls = models.calls
             found = await stack.search(unembedded["id"], PARAPHRASE)
             assert (found["lanes"]["skipped"], models.calls) == ([{"lane": "meaning", "reason": "no_vectors"}], calls)
+
+
+async def test_a_tenant_the_model_refuses_holds_no_other_tenant_back(engine: AsyncEngine, tmp_path: Path) -> None:
+    """One tenant out of budget is refused by models-service; the beat still embeds every other tenant's units."""
+    tenants = [f"t_{uuid4().hex[:10]}" for _ in range(2)]
+    await _with_vectors(engine, tenants[0])
+    bases: dict[str, str] = {}
+    for t in tenants:
+        files = KnowledgeFiles(tmp_path / t)
+        async with kb_client(engine, t, files=files) as client:
+            stack = Stack(client, ConceptEmbedder(), LocalReadings(files))
+            bases[t] = (await stack.base())[1]["id"]
+    models = Models()
+    models.spent = "first"
+    async with httpx.AsyncClient(transport=httpx.MockTransport(models.answer), base_url="http://models") as http:
+        embedder = ModelsEmbedder(ModelCalls(http, "kb-key"), "bank-embed", 64)
+        await embed_all(KnowledgeStore(engine), PgVectorStore(engine), embedder, Backlog())
+    vectors = PgVectorStore(engine)
+    for t in tenants:
+        with isolation.tenant_wide("test: coverage", tenant_id=t):
+            embedded, units = await vectors.coverage(t, [bases[t]], model="scripted/concept-embed", width=64)
+        assert (embedded == units > 0) == (t != models.spent), (t, models.spent, embedded, units)

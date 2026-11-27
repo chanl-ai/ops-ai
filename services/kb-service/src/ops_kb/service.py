@@ -2285,7 +2285,7 @@ class KnowledgeService:
             return None
         # Read with no model call: the model last heard from, else the one the stored vectors were made by.
         width = self.embedder.width
-        model = self.embedder.model or await self.vectors.latest_model(who.tenant_id, width=width)
+        model = self.embedder.model or await self.vectors.stored_model(who.tenant_id, width=width)
         embedded, total = await self.vectors.coverage(who.tenant_id, [kb_id], model=model, width=width)
         return {"model": model, "width": width, "embedded": embedded, "units": total}
 

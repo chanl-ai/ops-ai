@@ -46,8 +46,3 @@ class ConceptEmbedder:
             raise EmbedFailed(self.down, "the embedding model did not answer")
         self.texts += len(texts)
         return [concept_vector(t, self.width) for t in texts], sum(len(t.split()) for t in texts)
-
-    async def refresh(self, *, tenant: str) -> None:
-        """Its model is set by the test; down, it refuses as embed does."""
-        if self.down:
-            raise EmbedFailed(self.down, "the embedding model did not answer")

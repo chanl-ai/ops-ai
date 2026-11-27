@@ -4,8 +4,9 @@ with each unit.
 
 Each vector records the model that served it, as models-service names it in each reply, not the alias: an admin can
 point the alias at another model (Settings, Model aliases), and vectors of two models are not comparable. The embedder
-learns the serving model from every reply, and each background beat asks once (a few tokens), so a moved alias is
-noticed by the beat itself and every unit is embedded again under the new model, with no file read again.
+learns the serving model from every reply, so the first search or pass after a move sees every stored vector as stale
+and the beat embeds every unit again under the new model, with no file read again. Until a reply has named the model, a
+tenant's own stored vectors say which model it was: nothing calls the model just to ask.
 
 After a sync or rebuild settles, its tenant's units without a vector of the current model are embedded at once; a
 background beat embeds whatever is left (a model that was down, a model or width changed). Each batch is one request;
@@ -44,10 +45,6 @@ class Embedder(Protocol):
         """One vector per text and the input tokens charged; raises EmbedFailed when the model cannot answer."""
         ...
 
-    async def refresh(self, *, tenant: str) -> None:
-        """Sets `model` to the one serving the alias now, in one short call; raises EmbedFailed when it cannot."""
-        ...
-
 
 class EmbedFailed(Exception):
     """The embedding model did not answer (down, out of budget, refused); `code` says which, for a lane's reason."""
@@ -55,10 +52,6 @@ class EmbedFailed(Exception):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
-
-
-# What the call that asks which model serves the alias embeds: a few tokens.
-PROBE = "embedding model check"
 
 
 @dataclass
@@ -79,8 +72,10 @@ class ModelsEmbedder:
         self.model = done.model
         return done.vectors, done.input_tokens
 
-    async def refresh(self, *, tenant: str) -> None:
-        await self.embed([PROBE], tenant=tenant)
+
+async def current_model(vectors: PgVectorStore, embedder: Embedder, tenant: str) -> str:
+    """The model last heard from, else the model of one of the tenant's stored vectors ("" with none)."""
+    return embedder.model or await vectors.stored_model(tenant, width=embedder.width)
 
 
 def unit_text(heading: str | None, text: str) -> str:
@@ -93,22 +88,21 @@ async def embed_pending(vectors: PgVectorStore, embedder: Embedder, tenant: str,
     EmbedFailed when the model refuses, keeping what earlier batches stored."""
     if not await vectors.ready():
         return 0
-    if not embedder.model:
-        # Listing under no model would embed again units another process already embedded under the current one.
-        await embedder.refresh(tenant=tenant)
+    model = await current_model(vectors, embedder, tenant)
     done = 0
     while done < limit:
-        units = await vectors.pending(tenant, model=embedder.model, width=embedder.width, limit=BATCH)
+        units = await vectors.pending(tenant, model=model, width=embedder.width, limit=BATCH)
         if not units:
             break
         # A reply from another model than the one the units were listed for is stored under the model it names; the
         # next listing then holds every unit that model has not embedded.
         found, _ = await embedder.embed([unit_text(u["heading"], u["text"]) for u in units], tenant=tenant)
+        model = embedder.model
         rows = [
             UnitVector(unit_id=u["id"], chunk_id=u["chunk_id"], item_id=u["item_id"], vector=v)
             for u, v in zip(units, found, strict=True)
         ]
-        await vectors.put(tenant, rows, model=embedder.model, width=embedder.width)
+        await vectors.put(tenant, rows, model=model, width=embedder.width)
         done += len(units)
     return done
 
@@ -122,27 +116,20 @@ class Backlog:
 
 
 async def embed_all(store: KnowledgeStore, vectors: PgVectorStore, embedder: Embedder, backlog: Backlog) -> int:
-    """One beat: which model serves the alias now, then every tenant's pending units, tenant by tenant; the number
-    embedded. A model that does not answer leaves the beat to the next one."""
+    """One beat: every tenant's pending units, tenant by tenant; the number embedded. A tenant the model refuses (its
+    budget spent, the model down) is tried again at the next beat and holds no other tenant back."""
     total, left = 0, 0
     backlog.last_error = None
-    asked, down = False, False
     for tenant in await store.tenants():
         with isolation.tenant_wide(FIND_PENDING, tenant_id=tenant):
-            if not await vectors.ready():
-                continue
             try:
-                if not asked:
-                    asked = True
-                    down = True
-                    await embedder.refresh(tenant=tenant)
-                    down = False
-                if not down:
-                    total += await embed_pending(vectors, embedder, tenant)
+                total += await embed_pending(vectors, embedder, tenant)
             except EmbedFailed as e:
                 backlog.last_error = e.code
                 log.warning("kb_embed_failed", tenant=tenant, code=e.code)
-            left += await vectors.pending_count(tenant, model=embedder.model, width=embedder.width)
+            if await vectors.ready():
+                model = await current_model(vectors, embedder, tenant)
+                left += await vectors.pending_count(tenant, model=model, width=embedder.width)
     backlog.pending = left
     return total
 

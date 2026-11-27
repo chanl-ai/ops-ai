@@ -172,16 +172,12 @@ class PgVectorStore(Store):
                 ],
             )
 
-    async def latest_model(self, tenant: str, *, width: int) -> str:
-        """The model of the tenant's newest vector at `width`, "" with none: what a process that has not yet heard
-        from the embedding model compares a question with."""
+    async def stored_model(self, tenant: str, *, width: int) -> str:
+        """The model of one of the tenant's vectors at `width`, "" with none: what a process that has not heard from
+        the embedding model yet lists and compares under. One row on the (tenant, unit) key, so no sort; during a
+        re-embed it may name the old model, and the next reply names the new one."""
         v = kb_unit_vectors
-        q = (
-            sa.select(v.c.model)
-            .where(v.c.tenant_id == tenant, v.c.width == width, team_visible(v))
-            .order_by(v.c.embedded_at.desc())
-            .limit(1)
-        )
+        q = sa.select(v.c.model).where(v.c.tenant_id == tenant, v.c.width == width, team_visible(v)).limit(1)
         async with self.tx() as conn:
             return str(await conn.scalar(q) or "")
 

@@ -53,8 +53,8 @@ class HybridRetriever:
         if not await self.vectors.ready():
             return "no_vector_store", [], 0
         # No call before the question's own: a process that has not heard from the model yet compares with the model
-        # of the newest stored vectors, so the reason a search gives does not depend on how long the process has run.
-        before = embedder.model or await self.vectors.latest_model(tenant, width=embedder.width)
+        # of the tenant's stored vectors, so the reason a search gives does not depend on how long the process has run.
+        before = embedder.model or await self.vectors.stored_model(tenant, width=embedder.width)
         embedded, _ = await self.vectors.coverage(tenant, kb_ids, model=before, width=embedder.width)
         if embedded == 0:
             return "no_vectors", [], 0

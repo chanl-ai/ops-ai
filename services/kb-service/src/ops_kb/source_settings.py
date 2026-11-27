@@ -223,12 +223,12 @@ def setting(s: SourceSettings, path: str) -> object:
 
 
 def rebuild_for(before: SourceSettings, after: SourceSettings) -> Rebuild:
-    """What a settings change runs again, by the EFFECTS of the settings it changes: a reading again when one is
-    `read`, a split again when one is `split` and the pieces depend on it (index_key: an AI step not yet approved
-    changes nothing), else nothing now."""
+    """What a settings change runs again: a reading again when a setting it changes is `read` in EFFECTS, a split
+    again when what the pieces are built from changed (index_key, made of the `split` settings; an AI step not yet
+    approved changes nothing), else nothing now."""
     changed = {EFFECTS[path] for path in EFFECTS if setting(before, path) != setting(after, path)}
     if "read" in changed:
         return "read"
-    if "split" in changed and index_key(before) != index_key(after):
+    if index_key(before) != index_key(after):
         return "split"
     return "none"
