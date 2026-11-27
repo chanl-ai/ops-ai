@@ -361,7 +361,21 @@ Fallback: the statement that deadlocks keeps a SQL Server-specific form inside `
 | Trial | Date | Result |
 |---|---|---|
 | 0 | 2026-11-26 | Not run. No licence file, release date or advisory was checked |
-| 1 | 2026-11-26 | Not run: stopped before the first execution. No pass or fail against the pass line |
+| 1 | 2026-11-26 | Passed steps 2 to 6, 8 and 9 on `strands-agents` 1.67.0 with the script `scripts/trials/strands_pause_resume.py`. Step 7 (size at 20 and 60 messages) not measured. Details below |
+
+Trial 1, run. Each resume is a fresh interpreter that loads the snapshot from a file written by the pausing one. The
+model is a scripted OpenAI-compatible gateway on an `httpx.MockTransport`, given to `OpenAIModel(client=...)`.
+
+| Step | Seen |
+|---|---|
+| 2 | Stop reason `interrupt`, one pending interrupt, after the read tool ran once |
+| 3 | The `session` snapshot as JSON is 2,194 bytes after one read and one pending write |
+| 5 | Resumed with `[{"interruptResponse": {"interruptId": ..., "response": "approved"}}]`: the write ran once, the read did not run again, and the turn ended with one model call. The step that asked for the write is not sent again |
+| 6, rejected | The hook sets `cancel_tool`; the write never ran and the model received the refusal |
+| 6, two pending | Two writes in one step give two interrupts; one resume with both answers ran both writes once each |
+| 6, ten loads | The snapshot size stayed at 2,291 bytes across ten load and take cycles |
+| 8 | The helper's write ran once and `ask_helper`'s body never ran; the outer hook supplied the helper's reply through `selected_tool`. On resume the hook runs again from the start, so a helper must load its saved state before calling the model: in the script it did not, and its first request was sent a second time (the same hash, which a replay key would serve at no cost). The driver keeps each helper's state in `LoopState`, keyed by tool-use id, and loads it first |
+| 9 | Two resumes from one snapshot sent byte-identical requests, after leaving out `stream`, `user`, `metadata` and `stream_options`. `OPS_MODELS_REPLAY_STRIP_FIELDS` stays empty |
 
 Trial 1, state when stopped. A scripted OpenAI-compatible stub and the shared agents and hooks were drafted and never
 executed, so they were not committed. No database schema was created and no process was left running.
