@@ -7,9 +7,11 @@
  * - a table cell that starts with built, partial, planned, upcoming or not built shows that word as a badge
  * - `<!-- site: cards -->` above a table or a list renders it as summary cards
  * - `<!-- site: steps -->` above a numbered list renders it as steps
+ * - `<!-- site: <figure> caption="..." -->` above a list or code blocks renders a figure from the figure library
+ *   (src/components/figures; every kind with its markdown on docs/contributing/figures.md); an unknown kind is an error
  * - `<!-- site: whats-new -->` becomes the What's new entries in changelog/, newest first, so release notes never go stale
  * - a GitHub alert (`> [!NOTE]`, `> [!WARNING]` ...) becomes a callout
- * - ```mermaid blocks render as diagrams that follow the light and dark theme
+ * - ```mermaid blocks render as diagrams that follow the light and dark theme; ```mermaid caption="..." adds the caption
  * - an image of docs/diagrams/<name>.svg, where docs/diagrams/<name>.yaml exists, becomes the live diagram
  * - any other lone image becomes a framed figure with its alt text as the caption
  * - every relative link resolves to a page here, a standalone HTML page, or a file on GitHub; a code span that names
@@ -26,7 +28,10 @@ import { remark } from 'remark';
 import remarkGfm from 'remark-gfm';
 import { SKIP, visit } from 'unist-util-visit';
 
+import { FIGURE_KINDS, figureFromMarker } from '../components/figures/markdown.mjs';
 import { githubUrl, isSitePage, pageAnchors, repoIndex } from './repo.mjs';
+
+const SITE_MARKERS = ['cards', 'steps', 'whats-new'];
 
 const BADGE = /^(not built|built|partial|planned|upcoming)(?=$|[\s,.;:)])[\s,.;:)-]*/i;
 const STATUS_WORDS =
@@ -278,6 +283,29 @@ export function remarkOpsAi(options = {}) {
       return [SKIP, i];
     });
 
+    // Figure markers: `<!-- site: <kind> caption="..." -->` above a block becomes that figure (the figure library).
+    // With a bare `source` attribute the figure is followed by its own markdown, for the gallery.
+    visit(tree, 'html', (n, i, parent) => {
+      const m = n.value.trim().match(/^<!--\s*site:\s*([a-z-]+)\b([^>]*?)-->$/);
+      if (!m || !parent || i === undefined) return;
+      const [, kind, attrs] = m;
+      if (!FIGURE_KINDS.includes(kind)) {
+        if (!SITE_MARKERS.includes(kind)) errors.push(`${source}: <!-- site: ${kind} --> is not a marker (${[...SITE_MARKERS, ...FIGURE_KINDS].join(', ')})`);
+        return;
+      }
+      const fig = figureFromMarker(kind, attrs, parent.children.slice(i + 1));
+      if (fig.error) return void errors.push(`${source}: <!-- site: ${kind} --> ${fig.error}`);
+      const out = [jsx(fig.component, fig.props)];
+      const last = parent.children[i + fig.take];
+      const text = typeof file.value === 'string' ? file.value : String(file.value ?? '');
+      if (fig.showSource && text && n.position && last?.position) {
+        const md = text.slice(n.position.start.offset, last.position.end.offset).replace(/\s+source(?=[\s>-])/, '');
+        out.push({ type: 'code', lang: 'md', meta: 'title="Markdown"', value: md });
+      }
+      parent.children.splice(i, 1 + fig.take, ...out);
+      return [SKIP, i + out.length];
+    });
+
     // Markers: an HTML comment above a block.
     visit(tree, 'html', (n, i, parent) => {
       const kind = n.value.trim().match(/^<!--\s*site:\s*(cards|steps)\s*-->$/)?.[1];
@@ -318,7 +346,8 @@ export function remarkOpsAi(options = {}) {
     visit(tree, (node, i, parent) => {
       if (!parent || i === undefined) return;
       if (node.type === 'code' && node.lang === 'mermaid') {
-        parent.children[i] = jsx('OpsMermaid', { chart: node.value });
+        const caption = node.meta?.match(/caption="([^"]*)"/)?.[1];
+        parent.children[i] = jsx('OpsMermaid', { chart: node.value, caption });
         return SKIP;
       }
       if (node.type !== 'paragraph' || parent.type !== 'root') return;
