@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-26",
+  "title": "Publish says when an install has no tool gateway",
+  "description": "Publishing a workflow with a tool step on an install that has no tool gateway now says the gateway is missing, instead of saying your team lacks the tool.",
+  "tag": "improved"
+}

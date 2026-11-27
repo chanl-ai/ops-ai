@@ -39,11 +39,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import atomic_json
 import ci_steps
 
 ROOT = Path(__file__).resolve().parents[1]
-# Jobs that are not checks of the change: the plan itself, the join, and the deploy that follows a green push.
-NOT_CHECKS = ("plan", "ci-ok", "staging")
+# Jobs that are not checks of the change: the plan itself, the joins (ready reads GitHub), the bot's commit of the
+# generated files, and the deploy and web scan that follow a green push.
+NOT_CHECKS = ("plan", "ci-ok", "ready", "generated-commit", "staging", "staging-scan")
 # Ports of the shared infrastructure, which every job reaches; the rest are service ports a test may bind.
 SHARED_PORTS = re.compile(r"^OPS_(PG|OPA|GREENMAIL_.*|MAILPIT_.*)_?PORT$|^OPS_PORT_OFFSET$")
 # Long suites first, so the run does not end waiting on one of them alone (as VERIFY_POOL does in make/python.mk).
@@ -409,9 +411,7 @@ def main(argv: list[str]) -> int:
     if args.out:
         everything = results + [carried(e) for e in earlier if e["label"] not in {r.job.label for r in results}]
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True)
-        Path(args.out).write_text(
-            json.dumps(report(everything, base, head.stdout.strip(), wall, plan), indent=2) + "\n"
-        )
+        atomic_json.write_json(args.out, report(everything, base, head.stdout.strip(), wall, plan))
     for r in results:
         if r.status == "failed":
             print(f"\n--- {r.job.label}: last lines of {r.log}\n{tail(r.log)}")

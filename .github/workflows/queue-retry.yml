@@ -1,0 +1,35 @@
+# What happens when a merge queue run of ci.yml finishes red. The first failure reruns the failed jobs once, since a
+# flaky job should not cost a pull request its place (a known flaky use case is already covered by
+# scripts/ci_usecases.py and config/quarantine.json and never fails the run). A second failure comments on the pull
+# request with each failed job's name and the first error line of its log. A rerun that passes puts the pull request
+# back in the queue, which had dropped it at the first failure. Decisions: scripts/pr_flow.py queue-failure.
+# A workflow_run workflow starts only from the default branch, so this does nothing until it is on main.
+name: queue-retry
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  retry:
+    if: github.event.workflow_run.event == 'merge_group'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          URL: ${{ github.event.workflow_run.html_url }}
+        run: python3 scripts/pr_flow.py queue-failure --run "$RUN" --attempt "$ATTEMPT" --conclusion "$CONCLUSION" --branch "$BRANCH" --url "$URL"

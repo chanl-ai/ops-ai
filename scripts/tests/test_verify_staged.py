@@ -150,7 +150,7 @@ def test_a_worktree_without_a_venv_names_the_missing_install_not_a_home_path(tmp
         subprocess.run(["git", *args], cwd=repo, check=True)
     done = subprocess.run(["bash", "scripts/verify-staged.sh"], cwd=repo, capture_output=True, text=True, check=False)
     out = done.stdout + done.stderr
-    assert done.returncode != 0 and "this worktree has no .venv" in out and "uv sync" in out, out
+    assert done.returncode != 0 and "no .venv here or in the main checkout" in out and "uv sync" in out, out
     assert "names a home path" not in out, out
 
 
