@@ -63,18 +63,20 @@ export function AliasDialog({ open, onOpenChange, editing }: { open: boolean; on
       name: editing ? undefined : aliasNameProblem(name),
       connection: connection ? undefined : 'Pick the connection it calls.',
       model: model ? undefined : 'Pick the model.',
-      inputPerMillion: priceProblem(input),
-      outputPerMillion: priceProblem(output),
+      inputPerMillion: priceProblem(input) ?? (!input.trim() && output.trim() ? 'Enter the input price too, or clear both to use the catalog price.' : undefined),
+      outputPerMillion: priceProblem(output) ?? (input.trim() && !output.trim() ? 'Enter the output price too, or clear both to use the catalog price.' : undefined),
     };
     if (Object.values(found).some(Boolean)) return setErrors(found);
-    const body = { providerId: connection!.id, modelId: model!.id, clearedSensitivity: cleared, inputPerMillion: Number(input || 0), outputPerMillion: Number(output || 0) };
+    // Both blank sends no price, so models-service prices the model from its catalog or says it needs one.
+    const price = input.trim() ? { inputPerMillion: Number(input), outputPerMillion: Number(output) } : {};
+    const body = { providerId: connection!.id, modelId: model!.id, clearedSensitivity: cleared, ...price };
     try {
       const saved = await save.mutateAsync({ name: editing?.name ?? name.trim(), version: !!editing, input: body });
       toast.success(editing ? `Saved ${saved.name} as version ${saved.version}` : `Made ${saved.name}`, { description: 'Builders can pick it on an agent.' });
       onOpenChange(false);
     } catch (e) {
       const message = (e as Error).message;
-      setErrors(/exists|named/i.test(message) && !editing ? { name: message } : { submit: message });
+      setErrors(/exists|named/i.test(message) && !editing ? { name: message } : /price/i.test(message) ? { inputPerMillion: message } : { submit: message });
     }
   };
 

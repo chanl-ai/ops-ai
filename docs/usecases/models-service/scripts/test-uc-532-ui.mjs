@@ -49,7 +49,7 @@ await withUiStack(
     // A connection to the run's fake OpenAI that signs in with OPENAI, and an alias on gpt-4.1-mini through it.
     const fake = (await data(await fetch(`${models}/v1/models/providers`, { headers: S }))).data.find((p) => p.id === 'openai-local').baseUrl;
     const made = await data(await fetch(`${models}/v1/models/providers`, { method: 'POST', headers: S, body: JSON.stringify({ name: 'openai-uc532', type: 'openai-compatible', baseUrl: fake, keyRef: KEY }) }));
-    await data(await fetch(`${models}/v1/models/aliases`, { method: 'POST', headers: S, body: JSON.stringify({ name: ALIAS, kind: 'chat', providerId: made.id, modelId: MODEL, clearedSensitivity: 'confidential' }) }));
+    await data(await fetch(`${models}/v1/models/aliases`, { method: 'POST', headers: S, body: JSON.stringify({ name: ALIAS, kind: 'chat', providerId: made.id, modelId: MODEL, clearedSensitivity: 'confidential', inputPerMillion: '0.4', outputPerMillion: '1.6' }) }));
     const chat = () =>
       fetch(`${models}/v1/models/chat/completions`, {
         method: 'POST',
