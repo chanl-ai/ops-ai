@@ -2,9 +2,9 @@
 record's data, for `make health` and the staging check. GET /v1/background: every listed process of every service and
 the latest jobs, for an account admin's Govern > Background page; anyone else gets not found.
 
-The page's one call reads agents-service's own heartbeats and jobs, and only reads files', documents', tools', kb's
-and platform's /health/background for theirs; it never acts on another service. A service that does not answer shows
-its processes as not reported."""
+The page's one call reads agents-service's own heartbeats and jobs, and only reads files', documents', tools', kb's,
+models' and platform's /health/background for theirs; it never acts on another service. A service that does not
+answer shows its processes as not reported."""
 
 from __future__ import annotations
 
@@ -81,6 +81,8 @@ def _urls(settings: Settings) -> dict[str, str | None]:
         "tools": settings.tools_url or settings.gateway_url,
         # The knowledge schedule, which runs only where plugins are installed.
         "kb": settings.kb_url,
+        # The model gateway's spend retention.
+        "models": settings.models_url,
         # The workspace purge.
         "platform": settings.platform_url,
     }
