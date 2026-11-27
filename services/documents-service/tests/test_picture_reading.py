@@ -241,6 +241,21 @@ async def test_a_page_refused_every_time_stops_after_its_retries(make: Make, ref
     assert body["pages"][1]["source"] == "none" and body["pages"][1]["unreadReason"].count("Not described") == 1
 
 
+async def test_a_retry_sends_no_picture_once_the_team_turned_pictures_off(make: Make) -> None:
+    model, policy = Seeing("rate_limited", on_calls={1}), Policy()
+    s = make(Models(), Floor(), pictures=PictureReading(model, policy))
+    readings = s.extractor.readings
+    assert readings is not None
+    async with s.client as c:
+        fid = await s.stored(pdf("picture"), name="slide.pdf", mime="application/pdf")
+        await read_all(s, c, fid)
+        policy.on = False
+        later(s, 11)
+        await c.post("/v1/documents/readings", json={"fileId": fid, **PICTURES}, headers=OPS)
+        await readings.drain()
+    assert len(model.calls) == 1, "a retry asks the policy as it is now before a picture leaves"
+
+
 async def test_an_unread_policy_serves_the_stored_reading_and_never_reads_again(make: Make) -> None:
     model, policy = Seeing(), Policy()
     pictures = PictureReading(model, policy)

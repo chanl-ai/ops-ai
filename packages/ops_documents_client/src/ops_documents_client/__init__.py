@@ -64,10 +64,10 @@ def _id(value: str) -> str:
 
 
 def _refused(e: ServiceCallError) -> DocumentsRefused | ServiceUnreachable:
-    """The refusal as callers handle it. A 503 (documents-service could not read a policy it depends on) is
-    unreachable, so a caller waits and asks again instead of failing the file for good."""
+    """The refusal as callers handle it. A 503 `policy_unread` (documents-service could not read the team's picture
+    policy) is unreachable, so a knowledge sync waits and asks again instead of failing the file for good."""
     code, message = e.code or "error", str(e)
-    if e.status == 503:
+    if e.status == 503 and code == "policy_unread":
         return ServiceUnreachable(message)
     return DocumentNotFound(404, code, message) if e.status == 404 else DocumentsRefused(e.status, code, message)
 

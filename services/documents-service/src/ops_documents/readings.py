@@ -482,12 +482,15 @@ class Readings:
         assert self.pictures is not None
         who = Who(tenant_id=row.tenant_id, team=row.team, actor=row.actor)
         level = key_parts(row.key)[2]
+        # The key says the policy was on when the reading was made; a picture sent now needs it on now.
+        if level is None or await self.pictures.allowed(row.tenant_id, row.team, fresh=True) is not True:
+            return  # kept as it is; an ask after the next wait tries again
         try:
             file = await self.files.readable(who, row.file_id)
             data = await self.files.read(who, file)
         except (FileMissingError, FileNotReadyError):
             return  # kept as it is; an ask after the next wait tries again
-        if level is None or row.facts is None:
+        if row.facts is None:
             return
         level = stricter(level, file.sensitivity)
         mime = FileFacts.model_validate(row.facts).mime_type
