@@ -1,9 +1,9 @@
 [project]
 name = "ops-agent-kernel"
 version = "0.1.0"
-description = "Agent loop per spec 15 on Pydantic AI; no Temporal, no database"
+description = "Agent loop per spec 15 on Strands; no Temporal, no database"
 requires-python = ">=3.12,<3.13"
-dependencies = ["ops-service-kit", "ops-contracts", "ops-pii", "pydantic-ai-slim[anthropic,openai]>=2.51,<3", "strands-agents[openai]==1.67.0", "jsonschema>=4.23"]
+dependencies = ["ops-service-kit", "ops-contracts", "ops-pii", "strands-agents[openai]==1.67.0", "openai>=3.19,<4", "jsonschema>=4.23"]
 
 [build-system]
 requires = ["hatchling>=1.25"]

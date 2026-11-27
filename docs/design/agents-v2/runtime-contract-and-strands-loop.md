@@ -644,7 +644,7 @@ Today that model is a Pydantic AI class, so the tests that prove the port are ti
 | 1. New seam | `ops_agent_kernel.testing.ScriptedModel`: an `httpx` transport that answers the OpenAI chat-completions route from a Python function `(messages, tools) -> reply`. It is injected as `ModelEndpoint.http_client`. The model gateway keeps its own `scripted` adapter (`services/models-service/src/ops_models/providers.py:183`) for use cases |
 | 2. Port the scripts first | The scripted replies in `services/agents-service/tests/conftest.py` are rewritten against `ScriptedModel` while Pydantic AI is still the loop; its OpenAI model class is pointed at the same transport. The suite must stay green. This proves the tests no longer depend on the library |
 | 3. Swap the loop | `KernelPorts.loop` selects the driver. Both drivers run under the same suite until Strands passes all of it |
-| 4. Delete | The Pydantic AI driver, the dependency, and the `pydantic_ai` rows in the dependency register |
+| 4. Delete | The Pydantic AI driver, the dependency, and its rows in the dependency register. Done: the lock holds no Pydantic AI package |
 
 The mock sits at the edge named by the test standard (the model), and no test asserts Strands' own behaviour.
 
@@ -664,7 +664,6 @@ The kernel has no tables. The runtime's storage of `LoopState` is one new key in
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `OPS_AGENTS_LOOP` | `strands` | The loop driver. `pydantic_ai` exists only during the side-by-side period and is removed with it |
 | `OPS_AGENTS_LOOP_STATE_MAX_BYTES` | `2097152` | Cap on compressed loop state |
 | `OPS_AGENTS_MODEL_RETRY_ATTEMPTS` | `3` | Retries of a model call the gateway answered with 502, 503 or 504. A 429 from the gateway is never retried, as today (`models.py:55`) |
 | `OPS_AGENTS_MODEL_RETRY_MAX_SECONDS` | `20` | Longest wait between retries |

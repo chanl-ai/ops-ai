@@ -191,7 +191,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `architecture/decisions/prompt-management.md` | Superseded 2026-10-08: shared text is an always-on skill (spec 11). Instructions stay on agent versions; no external prompt registry in phase 1 |
 | `architecture/decisions/assurance.md` | Governance and testing as one system: one asset lifecycle, one Reviews queue with tier-set approval properties, one eval primitive with calibrated judges, one evidence bundle the model inventory reads |
 | `architecture/decisions/auth-provider-seam.md` | Human sign-in: one AuthProvider seam with mock, oidc and firebase adapters; policy from the API |
-| `architecture/decisions/agent-loop-library.md` | Agent loop library scored; Pydantic AI for Python, AI SDK for TypeScript |
+| `architecture/decisions/agent-loop-library.md` | Agent loop library scored (superseded for Python: the kernel runs on Strands) |
 | `architecture/decisions/execution-engine-seam.md` | Engine seam: Temporal preferred where allowed, LangGraph on PostgreSQL built first, one conformance suite |
 | `architecture/decisions/fencing-and-timers.md` | Fencing the thread by lease generation; timers as a port with a fire endpoint; Temporal tests before a Temporal adapter |
 | `architecture/decisions/database-support.md` | ADR-0017, decided: PostgreSQL and SQL Server 2025 (Azure SQL first in intent), MySQL dropped, and the rule every change follows |

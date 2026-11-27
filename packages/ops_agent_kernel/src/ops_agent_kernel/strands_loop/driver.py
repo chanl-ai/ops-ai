@@ -181,8 +181,8 @@ class _KernelTool(AgentTool):
             yield _result(call_id, False, run.rejected[call_id])
             return
         if not await self.spec.offered(ctx):
-            # As Pydantic AI tells a model that called a tool its step did not offer: the model is told what it may
-            # call and the run goes on, within its step limit.
+            # A tool its step did not offer: the model is told what it may call and the run goes on, within its step
+            # limit.
             said = _unknown(self.spec.name, run.offered)
             run.events.append(ToolEnded(call_id, False, said))
             yield _result(call_id, False, said)
@@ -233,8 +233,8 @@ class _Gate(HookProvider):
         spec = run.tools.get(use["name"])
         call_id = str(use["toolUseId"])
         if spec is None:
-            # A name the run has no tool for (guessed, or a deferred one not found yet): recorded and told, as
-            # Pydantic AI tells a model an unknown tool name.
+            # A name the run has no tool for (guessed, or a deferred one not found yet): recorded, and the model is
+            # told the names it may call.
             arguments = cast(Json, dict(use.get("input") or {}))
             said = _unknown(str(use["name"]), run.offered)
             run.events.append(ToolStarted(call_id, str(use["name"]), arguments))

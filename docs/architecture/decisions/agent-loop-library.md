@@ -1,6 +1,6 @@
 # ADR-0014 Agent loop library
 
-Status: option, not decided. No ADR had been confirmed as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
+Status: superseded for Python by [the agents-v2 runtime contract](../../design/agents-v2/runtime-contract-and-strands-loop.md): the kernel runs on Strands, and Pydantic AI is no longer installed. Kept as the original scoring. Earlier status: option, not decided. No ADR had been confirmed as of 2026-10-10; each one records the options, a scoring and a recommendation, and the build keeps a seam open so the choice can differ per enterprise deployment.
 
 ## Context
 
