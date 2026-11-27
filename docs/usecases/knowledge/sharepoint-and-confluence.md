@@ -222,11 +222,11 @@ The console steps run in their own script, since a browser cannot run the code a
 | 4 | Create and sync | The source is made on the site and both libraries and indexes the text files |
 | 5 | Add source, Confluence; type "eng" in the spaces picker | Engineering alone is listed |
 
-![The sites picker when SharePoint refuses a search, 1440 wide](media/uc-678-sites-picker-error-1440.png)
-![The same picker, 390 wide](media/uc-678-sites-picker-error-390.png)
-![The Confluence spaces picker, 1440 wide](media/uc-678-spaces-picker-1440.png)
-![The same picker, 390 wide](media/uc-678-spaces-picker-390.png)
-![Searching sites, picking a site and its libraries](media/uc-678-pick-libraries.gif)
+![The sites picker when SharePoint refuses a search, 1440 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-678-sites-picker-error-1440.png)
+![The same picker, 390 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-678-sites-picker-error-390.png)
+![The Confluence spaces picker, 1440 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-678-spaces-picker-1440.png)
+![The same picker, 390 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-678-spaces-picker-390.png)
+![Searching sites, picking a site and its libraries](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-678-pick-libraries.gif)
 
 `OPS_USECASE_MEDIA=1 make usecase-test UC=uc-678 LAYER=ui` writes the pictures and the clip here. The script checks that the
 clip is under 15 s and 2 MB.

@@ -65,11 +65,12 @@ shared list: the shareable guide built from `guide/*.md` is meant to present the
 | `<!-- site: <figure> caption="..." -->` (journey, annotated, widget, preview, layers, before-after, sequence, state, decision, compare, timeline, exchange), directly above a list or two code blocks | That figure from the figure library; every kind with its markdown is on [Figures](contributing/figures.md) |
 | `> [!NOTE]`, `> [!WARNING]` (GitHub alerts) | A callout |
 | A ```` ```mermaid ```` block (flowchart, sequence, state, ER); `caption="..."` after the fence adds a caption | The diagram in the site's theme |
-| `![caption](../diagrams/<name>.svg)` where `diagrams/<name>.yaml` exists | The live architecture diagram drawn from that data file; GitHub shows the exported SVG |
+| `![caption](https://opsai.chanl.ai/docs/diagrams/<name>.svg)` where `diagrams/<name>.yaml` exists | The live architecture diagram drawn from that data file; GitHub shows the exported SVG |
 | Any other image alone in a paragraph | A framed figure with the alt text as its caption |
+| An image named by its site URL, `https://opsai.chanl.ai/docs/<path under docs/>` | The image from this commit, read from the repository; GitHub loads the same URL from the site, which publishes every image under `docs/` at that path |
 | A relative link, or a code span naming a file (`services/x/y.py:42`) | A link to the page here, or to the file on GitHub |
 
-A link to a page or file that does not exist fails the site build, and so does a diagram SVG that no longer matches
+A markdown image anywhere in the repository names its site URL: `make checks` refuses a relative image or a raw.githubusercontent.com one, and `python3 scripts/check_md_images.py --fix` rewrites relative ones. A link to a page or file that does not exist fails the site build, and so does a diagram SVG that no longer matches
 its data file. The sidebar is the list `SITE` in `apps/docs/src/lib/nav.mjs`: five tabs (Docs, Deploy and operate,
 Security, Reference, Contributing), each with groups in the order a reader needs them. Internals (architecture,
 standards, services, packages, use cases, designs, plans) go only in Contributing. On a Docs, Security or Reference

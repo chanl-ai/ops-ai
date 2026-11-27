@@ -34,7 +34,7 @@ same chat answers questions from the handbook and follows up on a run.
 Sign in and ask **What needs me today**. If a card is waiting, press **Approve** or **Reject**. If the list is empty,
 start a task with [Card disputes](card-disputes.md) first.
 
-![The chat home: Good morning, Maya; a message box; four starting points (What needs me today, Find a case, Start a workflow, What happened to a run); and your waiting work below](images/chat-home-light.png)
+![The chat home: Good morning, Maya; a message box; four starting points (What needs me today, Find a case, Start a workflow, What happened to a run); and your waiting work below](https://opsai.chanl.ai/docs/guide/use-cases/images/chat-home-light.png)
 
 ## What success looks like
 

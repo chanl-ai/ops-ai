@@ -8,7 +8,7 @@ processes they run, and where each can be deployed.
 
 ## Services
 
-![Callers reach agents-service; every tool and model call leaves through tools-service and models-service; files and documents are separate services](../diagrams/component-map.svg)
+![Callers reach agents-service; every tool and model call leaves through tools-service and models-service; files and documents are separate services](https://opsai.chanl.ai/docs/diagrams/component-map.svg)
 
 Ops AI is one platform. Agents and workflows are two ways of running work; both use the shared services (Reviews,
 Cases and work items, triggers, identity, knowledge, files) and the two gateways (data and AI). Each service is named

@@ -29,7 +29,7 @@ import remarkGfm from 'remark-gfm';
 import { SKIP, visit } from 'unist-util-visit';
 
 import { FIGURE_KINDS, figureFromMarker } from '../components/figures/markdown.mjs';
-import { githubUrl, isSitePage, pageAnchors, repoIndex } from './repo.mjs';
+import { githubUrl, isSitePage, pageAnchors, repoIndex, siteImagePath } from './repo.mjs';
 
 const SITE_MARKERS = ['cards', 'steps', 'whats-new'];
 
@@ -194,6 +194,19 @@ export function remarkOpsAi(options = {}) {
       frontmatter.title ??= mdToString(tree.children[h1]).trim();
       tree.children.splice(h1, 1);
     }
+
+    // Images named by their URL on this site are read from the working tree instead, so a page renders the image of
+    // the commit it is built from and the build needs no network. The figure and diagram steps below see a local path.
+    visit(tree, 'image', (node) => {
+      const repoPath = siteImagePath(node.url);
+      if (!repoPath) return;
+      if (!idx.files.has(repoPath)) errors.push(`${at(node.url)}: no such image under docs/`);
+      else {
+        // A bare `media/x.png` would be resolved as a package name, so a path below the page starts with ./
+        const rel = path.posix.relative(dir, repoPath);
+        node.url = rel.startsWith('../') ? rel : `./${rel}`;
+      }
+    });
 
     // Links
     visit(tree, 'link', (node) => {

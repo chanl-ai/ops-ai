@@ -17,8 +17,8 @@ there; the rows below cover what the library does not draw.
 | Steps a reader performs | Steps | `<!-- site: steps -->` above a numbered list |
 | Options, roles or parts, three to six of them, each a link | Cards | `<!-- site: cards -->` above a table or list; the first cell or bold opening is the title |
 | Status of several things | Badges inside a table | A cell starting with built, partial or planned |
-| A screen as it ships | A framed screenshot | `![caption](../media/name-light.png)` alone in a paragraph, light and dark variants as the page already does |
-| A system's boxes and their links | The live architecture diagram | `![caption](../diagrams/name.svg)` where `diagrams/name.yaml` exists |
+| A screen as it ships | A framed screenshot | `![caption](https://opsai.chanl.ai/docs/media/name-light.png)` alone in a paragraph, light and dark variants as the page already does |
+| A system's boxes and their links | The live architecture diagram | `![caption](https://opsai.chanl.ai/docs/diagrams/name.svg)` where `diagrams/name.yaml` exists |
 | A data model | Mermaid `erDiagram` | A ```` ```mermaid caption="..." ```` block |
 | A comparison across many attributes | A table, not a figure | Plain table |
 

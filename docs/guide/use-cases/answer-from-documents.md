@@ -42,7 +42,7 @@ section and the version it quoted, so a reviewer can check the answer against th
 5. **Give it to an agent.** On an agent's page, add the base under **Knowledge** and publish. In chat, the agent answers
    from it and cites the section each answer came from.
 
-![The test sheet answering from the branch manual, with the passage, its section and its page](../../usecases/knowledge/media/uc-096-playground-1440.png)
+![The test sheet answering from the branch manual, with the passage, its section and its page](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-096-playground-1440.png)
 
 ## From the CLI or SDK
 

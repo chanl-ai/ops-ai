@@ -187,11 +187,11 @@ The console steps run in their own script, since a browser cannot run the code a
 | 1 | Knowledge, Payments, Retrieval tab: turn Rerank on, name alias `default`, save | One PATCH with `rerank: true` |
 | 2 | Playground: ask "domestic wire" | The trace says Reranked 2 on default and shows a Reranked column with 9 of 10 first |
 
-![The Retrieval tab with Rerank on, 1440 wide](media/uc-677-retrieval-rerank-1440.png)
-![The same tab, 390 wide](media/uc-677-retrieval-rerank-390.png)
-![The Playground trace with the Reranked column, 1440 wide](media/uc-677-playground-reranked-1440.png)
-![The same trace, 390 wide](media/uc-677-playground-reranked-390.png)
-![Turning rerank on and asking the Playground](media/uc-677-rerank.gif)
+![The Retrieval tab with Rerank on, 1440 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-677-retrieval-rerank-1440.png)
+![The same tab, 390 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-677-retrieval-rerank-390.png)
+![The Playground trace with the Reranked column, 1440 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-677-playground-reranked-1440.png)
+![The same trace, 390 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-677-playground-reranked-390.png)
+![Turning rerank on and asking the Playground](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-677-rerank.gif)
 
 `OPS_USECASE_MEDIA=1 make usecase-test UC=uc-677 LAYER=ui` writes the pictures and the clip here. The script checks that the
 clip is under 15 s and 2 MB.

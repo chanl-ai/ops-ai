@@ -11,9 +11,9 @@ needs to see what the case is about, what it is waiting on and who, what actions
 source documents are. The case page as first rebuilt was a timeline, a deadline card, a status form and, for some
 cases, a read-only list of fields. It did not answer any of those questions.
 
-![A court order case as first rebuilt: deadlines, a status form and a timeline, no fields](images/before-levy-notice.png)
+![A court order case as first rebuilt: deadlines, a status form and a timeline, no fields](https://opsai.chanl.ai/docs/design/cases/images/before-levy-notice.png)
 
-![A tax order case as first rebuilt: fields truncated in the rail, the document as plain text](images/before-tax-levy.png)
+![A tax order case as first rebuilt: fields truncated in the rail, the document as plain text](https://opsai.chanl.ai/docs/design/cases/images/before-tax-levy.png)
 
 | What was wrong | Effect |
 |---|---|
@@ -29,7 +29,7 @@ An earlier version of the console drew cases as a working surface for one workfl
 extracted from the email (each correctable), one card per drafted action with its payload, approver group and four-eyes
 progress, the email thread with attachment summaries, and typed events.
 
-![The first case design: extracted fields, drafted action cards, the email thread and typed activity](images/initial-design.png)
+![The first case design: extracted fields, drafted action cards, the email thread and typed activity](https://opsai.chanl.ai/docs/design/cases/images/initial-design.png)
 
 | Region | First design | Rebuilt page |
 |---|---|---|
@@ -77,15 +77,15 @@ layout with three configurations.
 
 ### Tax order
 
-![A tax order case: next action in the header, the order's fields, the open read check and the drafted acknowledgement](images/tax-levy.png)
+![A tax order case: next action in the header, the order's fields, the open read check and the drafted acknowledgement](https://opsai.chanl.ai/docs/design/cases/images/tax-levy.png)
 
 ### Customer complaint
 
-![A complaint case: duplicate charge fields, a refund waiting on two approvers, and linked receipts](images/complaint.png)
+![A complaint case: duplicate charge fields, a refund waiting on two approvers, and linked receipts](https://opsai.chanl.ai/docs/design/cases/images/complaint.png)
 
 ### KYC review
 
-![A KYC review: an overdue resolution clock, two open tasks and a held wire](images/kyc-review.png)
+![A KYC review: an overdue resolution clock, two open tasks and a held wire](https://opsai.chanl.ai/docs/design/cases/images/kyc-review.png)
 
 ## What the API returns
 
