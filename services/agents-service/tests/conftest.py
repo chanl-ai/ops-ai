@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from ops_agent_kernel import judge
 from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.models import ModelsServiceModels
+from ops_agent_kernel.modes import PLAN_FIRST
 from ops_agent_kernel.testing import (
     Answer,
     Reply,
@@ -152,6 +153,10 @@ _FINISHED = re.compile(r"""['"]finished['"]""")
 
 def scripted(messages: list[Json], tools: list[Json]) -> Answer:
     """Replies by keyword so each test can drive one path: tool results first, then citations, then tool calls."""
+    if refused := plan_first_refused(messages):
+        # Automatic mode refuses a change until a plan is shown (modes.PLAN_FIRST): a model told so plans, then makes
+        # the same calls again in the same step.
+        return Reply(tool_calls=[ToolCall("plan", SCRIPTED_PLAN), *refused])
     if returns := trailing_tool_results(messages):
         body = " ".join(returns)
         if "rejected" in body:
@@ -225,6 +230,35 @@ def scripted(messages: list[Json], tools: list[Json]) -> Answer:
         # Any other turn with passages answers from the first one and cites it, as a model told to cite would.
         return "Here is what the policy says [1]."
     return "I could not find that."
+
+
+SCRIPTED_PLAN: dict[str, Any] = {
+    "title": "Make the change",
+    "why": "The person asked for a change.",
+    "steps": [
+        {"title": "Check what is asked", "status": "doing"},
+        {"title": "Make the change", "status": "todo"},
+        {"title": "Tell the person", "status": "todo"},
+    ],
+}
+
+
+def plan_first_refused(messages: list[Json]) -> list[ToolCall]:
+    """The calls of the model's last step that were refused for want of a plan, to make again; empty when none were."""
+    refused = {
+        str(m.get("tool_call_id"))
+        for m in messages[-8:]
+        if m.get("role") == "tool" and PLAN_FIRST in str(m.get("content") or "")
+    }
+    last = next((m for m in reversed(messages) if m.get("role") == "assistant"), None)
+    if not refused or last is None:
+        return []
+    out: list[ToolCall] = []
+    for c in cast(list[Json], last.get("tool_calls") or []):
+        fn = cast(Json, c["function"])
+        if str(c.get("id")) in refused:
+            out.append(ToolCall(str(fn["name"]), json.loads(str(fn.get("arguments") or "{}"))))
+    return out
 
 
 def asked(messages: list[Json]) -> str:

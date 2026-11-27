@@ -1,5 +1,5 @@
 """Automatic mode and the loop kinds, one test per failure mode of the acceptance table in
-docs/design/agents-v2/automatic-mode-and-loop-kinds.md: a lookup that plans, a workspace the
+docs/design/agents-v2/automatic-mode-and-loop-kinds.md: a write before any plan, a lookup that plans, a workspace the
 spec lacks, a `single` agent that plans, and a quality bar that never stops."""
 
 from __future__ import annotations
@@ -7,13 +7,14 @@ from __future__ import annotations
 from typing import Any
 
 from ops_agent_kernel import judge
-from ops_agent_kernel.events import KernelEvent, ModeChanged, TurnFinished
+from ops_agent_kernel.events import Interrupted, KernelEvent, ModeChanged, PlanChanged, TurnFinished
 from ops_agent_kernel.kernel import run_turn
+from ops_agent_kernel.modes import PLAN_FIRST
 from ops_agent_kernel.ports import KernelPorts
-from ops_agent_kernel.testing import tool_names
+from ops_agent_kernel.testing import Reply, ToolCall, tool_names
 from ops_agent_kernel.types import LoopSettings, ToolGrant, TurnRequest, TurnResult
 from ops_service_kit.http import Json
-from tests.conftest import last_user_text, model_on, scripted, scripted_model
+from tests.conftest import last_user_text, model_on, scripted, scripted_model, trailing_tool_results
 from tests.unit.test_kernel import HOLD, LIMITS, SETTINGS, FixedKnowledge, RecordingTools
 
 HELPER = ToolGrant(
@@ -24,6 +25,16 @@ HELPER = ToolGrant(
     {"type": "object", "properties": {"question": {"type": "string"}}},
 )
 WORKSPACE = ToolGrant("run_command", "workspace", "Run a command in the workspace", "write", {"type": "object"})
+PLAN = {
+    "title": "Hold the wire",
+    "why": "The person asked for a change to a wire.",
+    "steps": [
+        {"title": "Check the wire", "status": "doing"},
+        {"title": "Place the hold", "status": "todo"},
+        {"title": "Tell the person", "status": "todo"},
+    ],
+}
+HOLD_ARGS = {"wireId": "W-88213", "hours": 24, "reason": "New payee"}
 
 
 async def run(req: TurnRequest, ports: KernelPorts) -> tuple[list[KernelEvent], TurnResult]:
@@ -31,6 +42,25 @@ async def run(req: TurnRequest, ports: KernelPorts) -> tuple[list[KernelEvent], 
     last = events[-1]
     assert isinstance(last, TurnFinished)
     return events, last.result
+
+
+async def test_a_write_before_any_plan_is_refused_and_the_plan_shows_before_the_pause() -> None:
+    told: list[Any] = []
+
+    def script(messages: list[Json], tools: list[Json]) -> Reply:
+        if not (results := trailing_tool_results(messages)):
+            return Reply(tool_calls=[ToolCall("place_wire_hold", HOLD_ARGS)])
+        told.append(results)
+        return Reply(tool_calls=[ToolCall("plan", PLAN), ToolCall("place_wire_hold", HOLD_ARGS)])
+
+    tools = RecordingTools()
+    req = TurnRequest("t1", "th1", SETTINGS, [HOLD], user_turn="Hold wire W-88213")
+    events, result = await run(req, KernelPorts(model=model_on(script), tools=tools, knowledge=FixedKnowledge([])))
+    assert PLAN_FIRST in told[0][0]
+    assert tools.calls == []
+    assert result.status == "interrupted" and result.plan_required
+    kinds = [type(e).__name__ for e in events if isinstance(e, PlanChanged | ModeChanged | Interrupted)]
+    assert kinds.index("PlanChanged") < kinds.index("Interrupted")
 
 
 async def test_a_lookup_is_answered_directly_in_one_model_request() -> None:

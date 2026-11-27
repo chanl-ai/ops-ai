@@ -15,7 +15,16 @@ from ops_agent_kernel.events import SkillLoaded, TextReplaced, TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.testing import Answer, Reply, Structured, ToolCall, last_user_text, system_text, tool_names
-from ops_agent_kernel.types import AgentSettings, PromptFragment, Resume, Skill, ToolGrant, TurnRequest, TurnResult
+from ops_agent_kernel.types import (
+    AgentSettings,
+    LoopSettings,
+    PromptFragment,
+    Resume,
+    Skill,
+    ToolGrant,
+    TurnRequest,
+    TurnResult,
+)
 from ops_service_kit.http import Json
 from tests.conftest import model_on, returned
 
@@ -210,7 +219,15 @@ async def test_a_skill_loaded_before_an_approval_still_guards_the_answer_after_i
     settings = AgentSettings("ag_advisor", 1, [PromptFragment("You help bankers.")], "m", skills=[HARDSHIP])
     tools = Recording()
     first, _ = await _run(
-        TurnRequest("t1", "th1", settings, [HOLD], user_turn="My client cannot pay; hold the payment."),
+        # A single-step agent: the write pauses on the step after the load, with no plan between.
+        TurnRequest(
+            "t1",
+            "th1",
+            settings,
+            [HOLD],
+            user_turn="My client cannot pay; hold the payment.",
+            loop=LoopSettings("single"),
+        ),
         Script([("load", "hardship-request-triage"), ("call", "place_hold")]),
         tools,
     )
@@ -218,7 +235,7 @@ async def test_a_skill_loaded_before_an_approval_still_guards_the_answer_after_i
     assert [s["skillId"] for s in first.interrupt.loaded_skills] == ["sk_1"]
     resume = Resume(first.interrupt, "approved", approval_token="tok")
     after, events = await _run(
-        TurnRequest("t2", "th1", settings, [HOLD], resume=resume),
+        TurnRequest("t2", "th1", settings, [HOLD], resume=resume, loop=LoopSettings("single")),
         Script([("say", "Done, and I promise a payment deferral.")], _deferral),
         tools,
     )

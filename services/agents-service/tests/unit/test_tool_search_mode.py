@@ -18,6 +18,7 @@ from ops_agent_kernel.testing import Answer, Reply, ToolCall, tool_names
 from ops_agent_kernel.types import (
     TOOL_SEARCH_ABOVE,
     AgentSettings,
+    LoopSettings,
     PromptFragment,
     Resume,
     ToolGrant,
@@ -125,11 +126,13 @@ async def test_a_found_gated_write_pauses_and_resumes() -> None:
         call("place_hold", {"customerId": "CUS-1002"}),
         say("The hold is in place."),
     ]
-    first = await turn(Model(steps), tools, [*FILLER, HOLD], user_turn="Hold Priya's account.")
+    # Single-step: the found write pauses on the step after the search, with no plan step between.
+    single = LoopSettings("single")
+    first = await turn(Model(steps), tools, [*FILLER, HOLD], user_turn="Hold Priya's account.", loop=single)
     assert first.status == "interrupted" and first.interrupt is not None and tools.calls == []
     resume = Resume(first.interrupt, "approved", approval_token="tok")
     model = Model([say("The hold is in place.")])
-    result = await turn(model, tools, [*FILLER, HOLD], resume=resume)
+    result = await turn(model, tools, [*FILLER, HOLD], resume=resume, loop=single)
     assert result.status == "completed", result.error
     assert tools.calls == [("place_hold", "tok")], "the approved write runs once, with its token"
 

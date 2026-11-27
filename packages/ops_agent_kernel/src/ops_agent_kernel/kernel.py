@@ -197,11 +197,20 @@ class _TurnState:
     # The modes the turn named (modes.py), and whether a change was refused for want of a plan.
     modes: modes.Modes = field(default_factory=lambda: modes.Modes(fixed=False))
     plan_required: bool = False
+    # Calls refused for want of a plan: kept off the record and the stream; only the model is told.
+    unplanned: set[str] = field(default_factory=set[str])
 
     def mode(self, name: ModeName, reason: str) -> None:
         """Names `name` at its first use this turn; its event goes out with the call's result."""
         if (named := self.modes.first(name, reason, max(self.step, 1))) is not None:
             self.events.append(ModeChanged(named.mode, named.reason, named.fixed, named.at_step))
+
+    def plan_first(self, grant: ToolGrant) -> str | None:
+        """Why a change may not run yet: the kind plans and the turn has shown no plan."""
+        # Only while the plan tool is on offer: a skill's step names its own tool and offers nothing to plan with.
+        if self.plan is not None or planner.NAME not in self.grants or not self.free():
+            return None
+        return modes.PLAN_FIRST if modes.needs_plan(self.req.loop, grant) else None
 
     def drop_carried(self) -> None:
         """A skill loaded or started in this reply takes the place of the ones carried from earlier replies: one
@@ -825,6 +834,12 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
             rec = state.record(tool_call_id, grant.name, arguments)
             rec.status, rec.output = "error", {"error": why}
             return {"error": why}
+        if (why := state.plan_first(grant)) is not None:
+            # Refused in code, so the rule never depends on the model remembering it; nothing reaches the gateway.
+            # Only the model reads the refusal: the person sees the plan, then the call it was made for.
+            state.plan_required = True
+            state.unplanned.add(tool_call_id)
+            return {"error": why}
         if modes.is_helper(grant) or modes.is_workspace(grant):
             state.mode("helpers" if modes.is_helper(grant) else "sandbox", modes.reason_of(arguments))
             arguments = {k: v for k, v in arguments.items() if k != "why"}
@@ -941,7 +956,7 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
         offered,
         gated=grant.gated,
         # A change refused for want of a plan is not asked about: its body says what to do first.
-        barred=lambda: state.barred(grant.name),
+        barred=lambda: state.barred(grant.name) or state.plan_first(grant),
     )
 
 
@@ -1586,12 +1601,16 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                             yield TextDelta(step.text)
                     elif isinstance(step, contract.ToolStarted):
                         writing = False
+                        # Read as the call starts, after the step's earlier calls ran: the body refuses it the same way.
+                        if (g := state.grants.get(step.name)) is not None and state.plan_first(g) is not None:
+                            state.unplanned.add(step.tool_call_id)
+                            continue
                         rec = state.record(step.tool_call_id, step.name, step.arguments)
                         yield StatusChanged("calling_tool")
                         yield ToolInputAvailable(rec)
                     elif isinstance(step, contract.ToolEnded):
                         rec = state.records.get(step.tool_call_id)
-                        if rec is None:
+                        if rec is None or step.tool_call_id in state.unplanned:
                             continue
                         if rec.status == "running":
                             rec.status, rec.output = ("ok" if step.ok else "error"), step.content

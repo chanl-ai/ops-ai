@@ -13,7 +13,7 @@ from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.testing import Answer, Reply, ToolCall
 from ops_agent_kernel.tool_cache import EARLIER, ToolCache
-from ops_agent_kernel.types import AgentSettings, PromptFragment, ToolGrant, TurnRequest, TurnResult
+from ops_agent_kernel.types import AgentSettings, LoopSettings, PromptFragment, ToolGrant, TurnRequest, TurnResult
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.api.chat_threads import AssistantBuilder
 from ops_agents.api.read_caches import ChatReads
@@ -70,7 +70,8 @@ def calling(*calls: tuple[str, dict[str, Any]], told: list[Any] | None = None) -
 
 
 async def turn(model: ModelEndpoint, tools: Tools, chat: OneChat, ask: str = "What is Acme's phone?") -> TurnResult:
-    req = TurnRequest("t", "r", SETTINGS, [READ, SAVE], user_turn=ask)
+    # Single-step: these turns are about what a read keeps, so a save runs without a plan step before it.
+    req = TurnRequest("t", "r", SETTINGS, [READ, SAVE], user_turn=ask, loop=LoopSettings("single"))
     ports = KernelPorts(model=model, tools=tools, knowledge=Empty(), tool_caches=chat)
     events = [e async for e in run_turn(req, ports)]
     assert isinstance(events[-1], TurnFinished)

@@ -15,6 +15,7 @@ from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.testing import Answer, Reply, ToolCall, tool_names
 from ops_agent_kernel.types import (
     AgentSettings,
+    LoopSettings,
     Passage,
     PromptFragment,
     Resume,
@@ -38,6 +39,7 @@ HOLD = ToolGrant(
     },
 )
 SETTINGS = AgentSettings("ag_fraud", 7, [PromptFragment("You help Fraud Operations.")], "test-model")
+SINGLE = LoopSettings(kind="single")
 LIMITS = Passage(
     "doc_wire_limits",
     "Wire Transfer Policy",
@@ -431,7 +433,8 @@ def ports_on(model: ModelEndpoint, tools: RecordingTools) -> KernelPorts:
 async def test_a_resume_in_a_fresh_kernel_repeats_no_model_call() -> None:
     before: list[list[Json]] = []
     paused_tools = RecordingTools()
-    req = TurnRequest("t1", "th1", SETTINGS, [HOLD], user_turn="Hold wire W-88213")
+    # A single-step agent: the pause comes on the first model step, with no plan before it.
+    req = TurnRequest("t1", "th1", SETTINGS, [HOLD], user_turn="Hold wire W-88213", loop=SINGLE)
     _, first = await run(req, ports_on(counted(before), paused_tools))
     assert first.interrupt is not None and len(before) == 1, first
     assert paused_tools.calls == [], "the write ran before a person approved it"
@@ -440,7 +443,9 @@ async def test_a_resume_in_a_fresh_kernel_repeats_no_model_call() -> None:
     after: list[list[Json]] = []
     tools = RecordingTools()
     resume = Resume(stored, "approved", approval_token="tok")
-    _, result = await run(TurnRequest("t2", "th1", SETTINGS, [HOLD], resume=resume), ports_on(counted(after), tools))
+    _, result = await run(
+        TurnRequest("t2", "th1", SETTINGS, [HOLD], resume=resume, loop=SINGLE), ports_on(counted(after), tools)
+    )
     assert result.status == "completed", result
     assert [(tool, token) for tool, _, _, token in tools.calls] == [("place_wire_hold", "tok")]
     assert len(after) == 1, f"the resume asked the model {len(after)} times"

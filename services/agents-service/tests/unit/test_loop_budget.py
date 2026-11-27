@@ -14,7 +14,15 @@ from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import BUILTIN_LIMIT, run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.testing import Answer, Reply, ToolCall, tool_names
-from ops_agent_kernel.types import AgentSettings, Passage, PromptFragment, ToolGrant, TurnRequest, TurnResult
+from ops_agent_kernel.types import (
+    AgentSettings,
+    LoopSettings,
+    Passage,
+    PromptFragment,
+    ToolGrant,
+    TurnRequest,
+    TurnResult,
+)
 from ops_service_kit.http import Json
 from tests.conftest import model_on
 
@@ -125,6 +133,8 @@ async def test_a_write_on_the_step_before_the_last_still_pauses_for_approval() -
     # F9: closing tools at the last step must not lose a gated write asked for on the step before it.
     tools = Tools()
     model = eager(lambda offered, _m: ("place_wire_hold", {"id": "W-1"}) if "place_wire_hold" in offered else None)
-    result = await run(TurnRequest("t1", "th1", settings(2), [HOLD], user_turn="Hold W-1"), model, tools)
+    # A single-step agent: the write is the one call of the step before the last, with no plan step ahead of it.
+    req = TurnRequest("t1", "th1", settings(2), [HOLD], user_turn="Hold W-1", loop=LoopSettings("single"))
+    result = await run(req, model, tools)
     assert result.status == "interrupted" and result.interrupt is not None, result
     assert tools.calls == []

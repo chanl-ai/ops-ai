@@ -23,7 +23,7 @@ STATUSES = ("todo", "doing", "done", "blocked", "skipped")
 # The order a step moves in; blocked sits beside doing, as a paused step goes on from where it stopped.
 RANK = {"todo": 0, "doing": 1, "blocked": 1, "done": 2, "skipped": 2}
 FINISHED = ("done", "skipped")
-MIN_STEPS, MAX_STEPS = 3, 7
+MIN_STEPS, MAX_STEPS = 1, 7
 MAX_REPLANS = 2
 TITLE_CHARS = 120
 # The steps shape's states (console lib/types/widgets.ts StepState).
@@ -35,7 +35,8 @@ GRANT = ToolGrant(
     SERVER,
     "Keep a short checklist the person sees while you work, for an ask that needs a chain of lookups (a later one "
     "depends on an earlier result), more than one app, or a change. Never for one lookup or reads that answer one "
-    "question together. Send the whole list every time: a title and 3 to 7 steps, each {title, status, note?} with "
+    "question together. A change always needs one: no tool that changes data runs before it. Send the whole list "
+    "every time: a title, why, and 1 to 7 steps, each {title, status, note?} with "
     "status todo, doing, done, blocked or skipped, the first one doing. Send it once, in the same step as the "
     "first step's reads, never alone: it then ticks itself as each step's reads come back and your answer finishes "
     "it, so you never call plan again.",
@@ -75,7 +76,7 @@ def given(arguments: Json) -> tuple[Plan | None, str | None]:
     """The plan the call sends, cleaned and masked, or why its shape is refused."""
     raw = arguments.get("steps")
     if not isinstance(raw, list) or not MIN_STEPS <= len(raw) <= MAX_STEPS:
-        return None, f"A plan has {MIN_STEPS} to {MAX_STEPS} steps; for fewer, make the reads without a plan."
+        return None, f"A plan has {MIN_STEPS} to {MAX_STEPS} steps."
     steps: list[PlanStep] = []
     for s in raw:
         step = json_object(s)
