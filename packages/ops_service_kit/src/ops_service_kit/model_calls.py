@@ -37,10 +37,13 @@ class ModelCallError(Exception):
 
 @dataclass(frozen=True)
 class Embedded:
-    """One vector per text, in the order sent, and the input tokens models-service charged for them."""
+    """One vector per text, in the order sent, the input tokens models-service charged for them, and the model that
+    made them (its provider and model id): an alias can be pointed at another model, and vectors of two models are not
+    comparable."""
 
     vectors: list[list[float]]
     input_tokens: int
+    model: str = ""
 
 
 def _headers(key: str, tenant: str, step: str, sensitivity: str) -> dict[str, str]:
@@ -83,11 +86,14 @@ def _embedded(r: httpx.Response, sent: int) -> Embedded:
         rows = sorted(cast(list[dict[str, Any]], data["data"]), key=lambda d: int(d["index"]))
         vectors = [[float(x) for x in cast(list[Any], d["embedding"])] for d in rows]
         tokens = int(cast(dict[str, Any], data.get("usage") or {}).get("prompt_tokens", 0))
+        model = data["model"]
+        if not isinstance(model, str) or not model:
+            raise TypeError("no model named the vectors")
     except (ValueError, KeyError, TypeError) as e:
         raise ModelCallError(f"models-service's embeddings answer could not be read: {e}", code=UNREADABLE) from e
     if len(vectors) != sent:
         raise ModelCallError(f"models-service returned {len(vectors)} vectors for {sent} texts", code=UNREADABLE)
-    return Embedded(vectors, tokens)
+    return Embedded(vectors, tokens, model)
 
 
 @dataclass
