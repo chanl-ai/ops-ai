@@ -16,6 +16,7 @@ names.
    [tenant isolation and access](../../docs/architecture/standards/tenancy-and-access.md), then
    `packages/ops_store/CLAUDE.md`, `docs/architecture/data.md`, `docs/architecture/data-model.md`,
    `docs/design/data/sql-server.md`, `docs/deploy/database.md` and the service's own `CLAUDE.md`.
+4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section and `docs/architecture/standards/delivery.md` DL2; run the DL2 local gate before the pull request leaves draft.
 
 ## Owns
 | Paths | What |

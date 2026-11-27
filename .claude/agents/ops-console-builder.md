@@ -16,6 +16,7 @@ browser; it reads through hooks; it is drawn from the components the console alr
    [tenant isolation and access](../../docs/architecture/standards/tenancy-and-access.md) (`AC1`); then
    `apps/console/CLAUDE.md` (layers, components, states, copy), `docs/console/page-plan.md`,
    `docs/console/standards.md` and `apps/embed/CLAUDE.md`.
+4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section and `docs/architecture/standards/delivery.md` DL2; run the DL2 local gate before the pull request leaves draft.
 
 ## Owns
 | Paths | What |
