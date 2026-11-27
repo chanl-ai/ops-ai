@@ -488,14 +488,17 @@ def model_endpoint(model: Any) -> contract.ModelEndpoint:
     budgeted gateway model), else the OpenAI-compatible client of the model it wraps."""
     named = getattr(model, "loop_endpoint", None)
     if callable(named):
-        return cast(contract.ModelEndpoint, named())
-    inner = model
-    while isinstance(inner, WrapperModel):
-        inner = inner.wrapped
-    client = getattr(inner, "client", None)
-    if client is None:
+        endpoint = cast(contract.ModelEndpoint, named())
+    else:
+        inner = model
+        while isinstance(inner, WrapperModel):
+            inner = inner.wrapped
+        endpoint = contract.ModelEndpoint(getattr(inner, "client", None), str(getattr(inner, "model_name", "default")))
+    # With no client Strands builds its own from the environment's key, which would reach the provider past the
+    # gateway's budget and tenant.
+    if endpoint.client is None:
         raise TypeError(f"{type(model).__name__} has no OpenAI-compatible client for the Strands loop")
-    return contract.ModelEndpoint(client, str(getattr(inner, "model_name", "default")))
+    return endpoint
 
 
 def _loop_tool(state: _TurnState, tool: Tool[None]) -> contract.LoopTool:

@@ -128,20 +128,23 @@ class _GatewayModel(OpenAIModel):
                 refused = e.__cause__ if isinstance(e, ModelThrottledException) else e
                 if not isinstance(refused, openai.APIStatusError):
                     raise
-                if not read and self._fall_back(refused.status_code, refused.body):
+                if not read and await self._fall_back(refused.status_code, refused.body):
                     continue
                 raise LoopRefused(refused.status_code, refused.body) from refused
         if self.endpoint.answered is not None:
             took = time.perf_counter() - started
             self.endpoint.answered(int(usage.get("inputTokens") or 0), int(usage.get("outputTokens") or 0), took)
 
-    def _fall_back(self, status: int, body: object) -> bool:
-        """Moves this run's calls to the endpoint's fallback when it says this refusal falls back."""
+    async def _fall_back(self, status: int, body: object) -> bool:
+        """Moves this run's calls to the endpoint's fallback when it says this refusal falls back, with the headers
+        the fallback names for the call."""
         spare, decide = self.endpoint.fallback, self.endpoint.falls_back
         if spare is None or decide is None or not decide(status, body):
             return False
         self.endpoint, self._custom_client = spare, spare.client
         self.update_config(model_id=spare.model_id)
+        headers = await spare.headers(self.run.purpose) if spare.headers is not None else {}
+        self.call_headers = {PURPOSE_HEADER: self.run.purpose, **headers}
         return True
 
 
