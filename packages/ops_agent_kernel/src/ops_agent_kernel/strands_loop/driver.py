@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+import time
 from collections.abc import AsyncIterator, Callable
 from typing import Any, cast
 
@@ -112,8 +113,12 @@ class _GatewayModel(OpenAIModel):
         offered = [s for s in specs if (t := run.tools.get(s["name"])) is not None and await t.offered(at)]
         headers = await self.endpoint.headers(run.purpose) if self.endpoint.headers is not None else {}
         self.call_headers = {PURPOSE_HEADER: run.purpose, **headers}
+        started = time.perf_counter()
+        usage: dict[str, int] = {}
         try:
             async for event in super().stream(messages, offered or None, self.instructions(), **kwargs):
+                if "metadata" in event:
+                    usage = cast(dict[str, int], cast(Json, event["metadata"]).get("usage") or {})
                 yield event
         except ModelThrottledException as e:
             cause = e.__cause__
@@ -122,6 +127,9 @@ class _GatewayModel(OpenAIModel):
             raise
         except openai.APIStatusError as e:
             raise LoopRefused(e.status_code, e.body) from e
+        if self.endpoint.answered is not None:
+            took = time.perf_counter() - started
+            self.endpoint.answered(int(usage.get("inputTokens") or 0), int(usage.get("outputTokens") or 0), took)
 
 
 class _KernelTool(AgentTool):

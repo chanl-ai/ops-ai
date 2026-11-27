@@ -287,12 +287,17 @@ class BudgetedModel(WrapperModel):
         return await self._named(purpose, _site())
 
     def loop_endpoint(self) -> ModelEndpoint:
-        """Where the Strands loop sends this model's calls: the wrapped gateway client, with each call's headers."""
+        """Where the Strands loop sends this model's calls: the wrapped gateway client, with each call's headers, and
+        each answered call recorded on its step as a call through `request` is."""
         inner = self.wrapped
         while isinstance(inner, WrapperModel):
             inner = inner.wrapped
         model_id = str(getattr(inner, "model_name", self.alias))
-        return ModelEndpoint(getattr(inner, "client", None), model_id, self.call_headers if self.headers else None)
+        client = getattr(inner, "client", None)
+        return ModelEndpoint(client, model_id, self.call_headers if self.headers else None, self.answered)
+
+    def answered(self, input_tokens: int, output_tokens: int, seconds: float) -> None:
+        self._record(_site(), input_tokens, output_tokens, seconds)
 
     async def _named(self, purpose: str, site: _Site | None) -> dict[str, str]:
         headers: dict[str, str] = {}
@@ -319,17 +324,20 @@ class BudgetedModel(WrapperModel):
         return headers
 
     def _emit(self, site: _Site | None, response: ModelResponse, started: float) -> None:
+        u = response.usage
+        self._record(site, u.input_tokens, u.output_tokens, time.perf_counter() - started)
+
+    def _record(self, site: _Site | None, input_tokens: int, output_tokens: int, seconds: float) -> None:
         if site is None or site.thread_id is None:
             return
-        u = response.usage
         emit(
             "model_call",
             site.node,
             {
                 "alias": self.alias,
-                "inputTokens": u.input_tokens,
-                "outputTokens": u.output_tokens,
-                "latencyMs": int((time.perf_counter() - started) * 1000),
+                "inputTokens": input_tokens,
+                "outputTokens": output_tokens,
+                "latencyMs": int(seconds * 1000),
             },
         )
 

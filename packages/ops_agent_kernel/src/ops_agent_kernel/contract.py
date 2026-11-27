@@ -21,7 +21,7 @@ LOOPS: tuple[LoopName, ...] = ("pydantic_ai", "strands")
 class LoopChoice:
     """The loop a new turn runs on when its ports name none. A paused turn resumes on the loop that paused it."""
 
-    default: LoopName = "pydantic_ai"
+    default: LoopName = "strands"
 
 
 LOOP = LoopChoice()
@@ -40,11 +40,13 @@ class CallContext:
 @dataclass(frozen=True)
 class ModelEndpoint:
     """Where the loop sends model calls: an OpenAI-compatible client (models-service's gateway), the alias it asks
-    for, and the headers each call names (tenant, budget, replay key), computed in the kernel's task per call."""
+    for, the headers each call names (tenant, budget, replay key), computed in the kernel's task per call, and who is
+    told each answered call's tokens and seconds (the run's step record), in the same task."""
 
     client: Any
     model_id: str
     headers: Callable[[str], Awaitable[dict[str, str]]] | None = None
+    answered: Callable[[int, int, float], None] | None = None
 
 
 @dataclass
