@@ -93,6 +93,7 @@ stack's chat alias points at one. Reference: [make/CLAUDE.md](../../make/CLAUDE.
 - A worker loop or queue supervisor => start it through `background.start` and hold the task; an unreferenced task is dropped
 - A new `GET` route => add its row to `budgets.toml`, and open no second transaction in its session check; `tests/api/test_statement_budget.py` fails any route without a row
 - A store change (tables, repositories, migrations, queries) pushed after `make ci-local` alone => ci-local lists `store-mssql` as skipped, so run `deploy/database/mssql_remote.sh test services/agents-service -q <tests>` before the push
+- A use case that publishes or runs a tool step => start `tools()` and pass `gateway_url`, as uc-223 and uc-620 do; without `OPS_GATEWAY_URL` the publish check reads the in-process catalogue, which holds no platform or app tool, and the runner calls no tool step (`NoGatewayError`)
 
 ## Reference docs
 
