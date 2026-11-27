@@ -31,7 +31,7 @@ the values it had.
 | Needs | How |
 |---|---|
 | A fresh database and the stack | `make up` without `KEEP_DATA=1` |
-| A model key | the account's own OpenAI, Azure OpenAI or Anthropic key |
+| A model key | none for the run: the stack's fake OpenAI answers; a real install saves the account's own OpenAI, Azure OpenAI or Anthropic key |
 
 ## Steps and expected results
 
@@ -63,5 +63,5 @@ models only (`services/models-service/src/ops_models/key_check.py`, `is_chat_mod
 
 Run: `make usecase-test UC=uc-949 LAYER=api` (its own services, the scripted model, no key) and
 `make usecase-test UC=uc-949 LAYER=ui` (its own stack and the fake OpenAI, no model key). The sdk layer needs a running
-stack on a fresh database and the company's key: `make up OPS_PORT_OFFSET=<n>`, then `scripts/test-uc-949-sdk.py` with
-the offset's OPS_*_PORT and OPENAI_API_KEY.
+stack on a fresh database: `make up OPS_PORT_OFFSET=<n>`, then `scripts/test-uc-949-sdk.py` with
+the offset's OPS_*_PORT; it saves a stand-in key and the stack's fake OpenAI answers, so no model key is needed.

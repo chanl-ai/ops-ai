@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, Literal, TypedDict, cast
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import Depends, FastAPI, Header, Path, Query
@@ -75,7 +76,7 @@ from ops_store.database import Database
 
 from .alias_users import AgentsAliasUsers, AliasUsers, NoAliasUsers
 from .catalog import Catalog, CatalogModel
-from .connection_settings import azure_openai_problem
+from .connection_settings import OPENAI_LOCAL, azure_openai_problem
 from .key_check import EndpointRefused, KeyRefused, azure_host, listed_models
 from .provider_keys import ProviderKeys
 from .providers import ADAPTERS, AzureOpenAIProvider, ProviderError, StreamUsage, provider_for, region_mismatch
@@ -515,8 +516,6 @@ def create_models_app(
     the lifespan runs beside the server, by default the sweep of idle key spend. `alias_users` says how many agents
     name each alias; by default agents-service on `OPS_AGENTS_URL`, and no counts when that is unset."""
     http = upstream or httpx.AsyncClient(timeout=60)
-    # Testing a key sends it out: only to a public address, never following a redirect with it.
-    key_fetch = key_fetch or PublicFetch(max_redirects=0, timeout_s=20)
 
     stop = asyncio.Event()
     providers, aliases, key_store, call_log = Providers(db), Aliases(db), ModelKeys(db), CallLog(db)
@@ -566,6 +565,10 @@ def create_models_app(
     )
     install_error_handlers(app)
     settings = Settings()
+    # Testing a key sends it out: only to a public address, never following a redirect with it. In dev the fake OpenAI
+    # the stack runs beside is the one address reached as it is.
+    fake = urlsplit(settings.models_fake_openai_url or "").netloc.lower() if settings.environment == "dev" else ""
+    key_fetch = key_fetch or PublicFetch(max_redirects=0, timeout_s=20, local=(fake,) if fake else ())
     # Read and checked here, at start-up: an entry naming an adapter no code registers stops the service.
     registry = load_registry(ADAPTERS, BUILTIN, settings.models_provider_registry_extra)
     catalog = Catalog.load()
@@ -793,6 +796,19 @@ def create_models_app(
         keys.forget(p.tenant_id, name)
         return typed(_provider_key_view(saved))
 
+    async def connection_base(provider: str) -> str | None:
+        """The base URL the connection serving `provider` is saved with, the one place a key check, a model list and
+        the chat choice learn where calls go: the connection the chat choice keeps for it, else for OpenAI the
+        install's own. None when neither names one, so the provider's own address applies."""
+        if provider not in CHAT_BASES:
+            return None
+        names = [f"{chat_aliases[0]}-{provider}", *([OPENAI_LOCAL] if provider == "openai" else [])]
+        for name in names:
+            row = next(iter((await providers.page(ListParams(), name=name)).data), None)
+            if row is not None and row.type == "openai-compatible" and row.base_url:
+                return row.base_url
+        return None
+
     async def saved_key(p: Principal, name: str) -> str:
         """The key's value, read in a transaction of its own that is closed before the key goes to the provider; inside
         a route on `Tx` it is the request's."""
@@ -825,6 +841,7 @@ def create_models_app(
                 endpoint=body.endpoint,
                 api_version=body.api_version,
                 region=body.region,
+                connection_base=await connection_base(body.provider),
             )
         except KeyRefused as e:
             return typed(KeyCheckOut(ok=False, reason=str(e)))
@@ -853,7 +870,14 @@ def create_models_app(
         value = await saved_key(p, name)
         try:
             found = await listed_models(
-                http, key_fetch, entry, value, endpoint=endpoint, api_version=api_version, region=region
+                http,
+                key_fetch,
+                entry,
+                value,
+                endpoint=endpoint,
+                api_version=api_version,
+                region=region,
+                connection_base=await connection_base(provider),
             )
         except KeyRefused as e:
             raise Unprocessable(str(e), code="key_refused") from e
@@ -924,7 +948,8 @@ def create_models_app(
                 raise Unprocessable(str(e), code="endpoint_refused") from e
             kind, base_url, api_version = "azure-openai", base, body.api_version or "v1"
         else:
-            kind, base_url, api_version = "openai-compatible", CHAT_BASES[body.provider], None
+            kind, api_version = "openai-compatible", None
+            base_url = await connection_base(body.provider) or CHAT_BASES[body.provider]
         # Every price is settled before anything is written. An alias kept on the same model keeps its nonzero prices,
         # which an admin may have set on the Models page; a body price, or a new model, sets them.
         catalog_id = registry.catalog_for(kind, base_url)

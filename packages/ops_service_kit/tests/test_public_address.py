@@ -68,3 +68,13 @@ async def test_plain_http_is_refused() -> None:
     async with _client([]) as client:
         with pytest.raises(AddressRefused):
             await fetch.get(client, "http://idp.example.com/metadata")
+
+
+async def test_only_the_listed_local_host_is_reached_as_it_is() -> None:
+    seen: list[httpx.Request] = []
+    fetch = PublicFetch(resolver=Answers(), local=("127.0.0.1:8746",))
+    async with _client(seen) as client:
+        assert await fetch.get(client, "http://127.0.0.1:8746/v1/models") == b"<md/>"
+        with pytest.raises(AddressRefused):
+            await fetch.get(client, "http://127.0.0.1:9999/v1/models")
+    assert [r.url.port for r in seen] == [8746]

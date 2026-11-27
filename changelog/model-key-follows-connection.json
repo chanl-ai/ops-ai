@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-27",
+  "title": "Model key checks follow your connection's address",
+  "description": "Testing a key, listing its models and choosing the chat model now use the base URL of the connection you saved, such as a gateway in front of OpenAI, instead of always calling api.openai.com.",
+  "tag": "fix"
+}

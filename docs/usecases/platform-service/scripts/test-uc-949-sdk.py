@@ -1,14 +1,14 @@
 """uc-949, sdk layer (test-uc-949-api.py is the api layer, on its own services): docs/usecases/platform-service/a-new-workspace-chats-and-writes.md, steps 1, 2, 4, 5 and
 10. On a running stack started on a fresh database (`make up OPS_PORT_OFFSET=<n>`, ports from the OPS_*_PORT the
 make target exports), the first admin finds the first-run defaults off, saves the company's OpenAI key
-(OPENAI_API_KEY), sees it tested and its models listed, points chat at one and an agent answers through it.
+(a stand-in the stack's fake OpenAI accepts, as the stack's models-service reaches it through its connection's base
+URL), sees it tested and its models listed, points chat at one and an agent answers through it.
 `--layer api` makes the key and chat-model calls over plain HTTP instead of the Python SDK. A model the catalog
 does not price is chosen with a price, as a fresh chat alias at zero would let every budget pass."""
 
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -31,6 +31,10 @@ def check(label: str, ok: bool, seen: Any = "") -> None:
         failures.append(label)
 
 
+# The key saved for the run: the stack's fake OpenAI (OPS_MODELS_FAKE_OPENAI_URL) answers whatever key it is sent, and
+# the model key the run needs is none, so the use case runs with every model key removed.
+FAKE_KEY = "sk-usecase-fake-openai"
+
 # Catalogued small models first: the chat-model route prices those from the catalog.
 CATALOGUED = ("gpt-5.4-mini", "gpt-5.2")
 PRICE = {"inputPerMillion": "1", "outputPerMillion": "4"}
@@ -42,7 +46,8 @@ def pick(models: list[dict[str, Any]]) -> str:
     for want in (*CATALOGUED, "gpt-4.1-mini", "gpt-4o-mini", "gpt-4.1-nano"):
         if want in ids:
             return want
-    return next(i for i in ids if i.startswith("gpt-"))
+    # The fake lists the models its script names, any id; the choice is then priced by the admin (not catalogued).
+    return next((i for i in ids if i.startswith("gpt-")), ids[0])
 
 
 def choice(model: str) -> dict[str, Any]:
@@ -53,10 +58,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--layer", choices=("sdk", "api"), default="sdk")
     layer = parser.parse_args().layer
-    key = os.environ.get("OPENAI_API_KEY")
-    if not key:
-        print("FAIL OPENAI_API_KEY is not set: the use case needs the company's own key")
-        return 1
+    key = FAKE_KEY
     urls = api_as.addresses("local")
     session = api_as.token("local", "admin", urls)
     team = session.get("team")
@@ -94,7 +96,7 @@ def main() -> int:
                 check("PUT /v1/models/chat-model answers 200", r.status_code == 200, r.text)
                 chosen = r.json()["data"]
         check("the provider accepts the key", tested.get("ok") is True and tested.get("models", 0) > 0, tested)
-        check("the key lists chat models", any(m["id"].startswith("gpt-") for m in listed), listed[:5])
+        check("the key lists models", bool(listed), listed[:5])
         check("default and assistant point at the chosen model", chosen.get("aliases") == ["default", "assistant"] and chosen.get("model") == model, chosen)
         with OpsAI(base_url=urls["platform"], services=urls, access_token=owner["token"], team=SECURITY) as sec:
             conns = {c["name"]: c for c in sec.models.providers()}

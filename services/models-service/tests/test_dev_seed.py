@@ -7,7 +7,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from ops_models.seed import OPENAI_LOCAL, seed
+from ops_models.connection_settings import OPENAI_LOCAL
+from ops_models.seed import seed
 from ops_models.store import provider_connections
 from ops_models.store.tables import model_aliases
 from ops_service_kit.ids import now_iso

@@ -73,7 +73,8 @@ class FetchFailed(ValueError):
 @dataclass(frozen=True)
 class PublicFetch:
     """How a service fetches a URL someone typed in. `ranges` lists private networks that may be reached;
-    `require_https` is off only in dev and tests, where the fake identity provider serves plain http."""
+    `require_https` is off only in dev and tests, where the fake identity provider serves plain http. `local` lists
+    `host:port` pairs reached as given, over http, with no address check: dev only, for a fake the stack runs beside."""
 
     resolver: Resolver = field(default_factory=SystemResolver)
     ranges: tuple[str, ...] = ()
@@ -81,10 +82,13 @@ class PublicFetch:
     max_bytes: int = 256 * 1024
     max_redirects: int = 3
     timeout_s: float = 5.0
+    local: tuple[str, ...] = ()
 
     async def checked_address(self, url: str) -> tuple[str, str, int]:
         """The (host, address, port) a fetch of `url` connects to. Raises AddressRefused."""
         parts = urlsplit(url)
+        if parts.scheme == "http" and parts.hostname and parts.netloc.lower() in self.local:
+            return parts.hostname, parts.hostname, parts.port or 80
         if parts.scheme != "https" and (self.require_https or parts.scheme != "http"):
             raise AddressRefused("The address must start with https://.")
         host = (parts.hostname or "").lower()

@@ -56,6 +56,8 @@ def azure_openai_problem(endpoint: str | None, api_version: str | None) -> tuple
     return None
 
 
+# The connection the dev seed and the install settings keep for the install's own model (alias `default` at first).
+OPENAI_LOCAL = "openai-local"
 _NAMES = {"endpoint": "OPENAI_API_BASE", "api_version": "OPENAI_API_VERSION"}
 
 
