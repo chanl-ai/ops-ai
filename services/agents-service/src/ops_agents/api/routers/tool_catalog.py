@@ -127,7 +127,8 @@ async def known_tools(rt: Runtime, *, fresh: bool = False, listed: ToolRows | No
     `workflow:<id>`: what an agent may be granted, and what search_tools finds among an agent's grants. `listed` is
     the operations a caller already fetched with `directory_tools`, so its local reads can share one transaction."""
     rows = list(listed) if listed is not None else await directory_tools(rt, fresh=fresh)
-    v1 = {w["id"] for w in await published_workflows(rt)}
+    published = await published_workflows(rt)
+    v1 = {w["id"] for w in published}
     for d in await engine_workflows(rt):
         if d["workflow_id"] in v1:
             continue  # a v1 registry workflow of the same id is the one a grant names
@@ -144,7 +145,7 @@ async def known_tools(rt: Runtime, *, fresh: bool = False, listed: ToolRows | No
                 "approval": None,
             }
         )
-    for w in await published_workflows(rt):
+    for w in published:
         rows.append(
             {
                 "id": f"workflow:{w['id']}",

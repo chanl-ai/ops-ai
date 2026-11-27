@@ -20,6 +20,7 @@ from ops_agents.activities.tool_directory import ToolsUnavailable
 from ops_agents.app import agent_spec as checks
 from ops_agents.app.agent_spec import HelperFacts, Versions
 from ops_agents.domain import agent_spec as doc
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, ServiceUnavailable, Unprocessable, ValidationFailed
 from ops_service_kit.http import Envelope, Json, JsonList
 from ops_service_kit.ids import now_iso
@@ -74,21 +75,13 @@ class RouteRecords:
         except KnowledgeUnavailable as exc:
             raise _unavailable("The knowledge service", exc) from exc
 
-    async def skill(self, skill_id: str) -> Versions | None:
-        reg = skills(self.rt)
-        row = await reg.find(skill_id)
-        if row is None:
-            return None
-        published = frozenset(int(v.version) for v in await reg.versions(skill_id) if v.published_at is not None)
-        return Versions(published, row.published_version)
+    async def skills(self, skill_ids: list[str]) -> dict[str, Versions]:
+        found = await skills(self.rt).published_versions(skill_ids)
+        return {k: Versions(published, serving) for k, (published, serving) in found.items()}
 
-    async def guardrail(self, guardrail_id: str) -> Versions | None:
-        reg = guardrails(self.rt)
-        row = await reg.find(guardrail_id)
-        if row is None:
-            return None
-        published = frozenset(int(v.version) for v in await reg.versions(guardrail_id) if v.published_at is not None)
-        return Versions(published, row.published_version)
+    async def guardrails(self, guardrail_ids: list[str]) -> dict[str, Versions]:
+        found = await guardrails(self.rt).published_versions(guardrail_ids)
+        return {k: Versions(published, serving) for k, (published, serving) in found.items()}
 
     async def agent(self, agent_id: str) -> HelperFacts | None:
         reg = registry(self.rt)
@@ -144,9 +137,10 @@ async def _view(rt: Runtime, me: Principal, agent_id: str, version: int | None =
 
 @router.get("/{agent_id}/spec", response_model=Envelope[SpecView])
 async def read_spec(
-    rt: Rt, me: Reader, agent_id: str, version: Annotated[int | None, Query(ge=1)] = None
+    rt: Rt, me: Reader, _: Tx, agent_id: str, version: Annotated[int | None, Query(ge=1)] = None
 ) -> JSONResponse:
-    """The agent as a spec document: the newest version, or `version`. The CLI writes it as YAML."""
+    """The agent as a spec document: the newest version, or `version`, read in one request transaction. The CLI
+    writes it as YAML."""
     return ok((await _view(rt, me, agent_id, version)).model_dump(by_alias=True))
 
 

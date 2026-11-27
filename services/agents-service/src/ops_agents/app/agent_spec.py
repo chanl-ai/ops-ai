@@ -44,8 +44,8 @@ class SpecRecords(Protocol):
 
     async def tools(self) -> set[str]: ...
     async def knowledge_bases(self) -> set[str]: ...
-    async def skill(self, skill_id: str) -> Versions | None: ...
-    async def guardrail(self, guardrail_id: str) -> Versions | None: ...
+    async def skills(self, skill_ids: list[str]) -> dict[str, Versions]: ...
+    async def guardrails(self, guardrail_ids: list[str]) -> dict[str, Versions]: ...
     async def agent(self, agent_id: str) -> HelperFacts | None: ...
     async def aliases(self) -> set[str]: ...
 
@@ -99,14 +99,15 @@ async def _reference_problems(
         for i, kb in enumerate(spec.collections):
             if kb not in bases:
                 out.append(Problem(pointer("collections", i), "record_unknown", f"{kb} is not a knowledge base."))
-    for i, s in enumerate(spec.skills or []):
-        ref = s if isinstance(s, SkillRef) else SkillRef(id=s)
-        out.extend(_versioned(await records.skill(ref.id), ref.id, ref.version, pointer("skills", i), "skill"))
-    for i, g in enumerate(spec.guardrails or []):
-        gref = g if isinstance(g, GuardrailRef) else GuardrailRef(id=g)
-        out.extend(
-            _versioned(await records.guardrail(gref.id), gref.id, gref.version, pointer("guardrails", i), "guardrail")
-        )
+    skill_refs = [s if isinstance(s, SkillRef) else SkillRef(id=s) for s in spec.skills or []]
+    # One read per kind of record, however many the spec names.
+    found = await records.skills([r.id for r in skill_refs]) if skill_refs else {}
+    for i, ref in enumerate(skill_refs):
+        out.extend(_versioned(found.get(ref.id), ref.id, ref.version, pointer("skills", i), "skill"))
+    guard_refs = [g if isinstance(g, GuardrailRef) else GuardrailRef(id=g) for g in spec.guardrails or []]
+    found = await records.guardrails([r.id for r in guard_refs]) if guard_refs else {}
+    for i, gref in enumerate(guard_refs):
+        out.extend(_versioned(found.get(gref.id), gref.id, gref.version, pointer("guardrails", i), "guardrail"))
     for i, h in enumerate(spec.agents or []):
         out.extend(await _helper_problems(records, h.id, i, team_id=team_id, agent_id=agent_id))
     if not aliases:

@@ -108,8 +108,14 @@ queries = 6
 queries = 2
 
 ["GET /v1/agents/{agent_id}/publish-check"]
-queries = 3
+# The spec's rules are read again at publish: the tools the team may use (published and engine workflows, the
+# tenant's agents) are three of these.
+queries = 6
 query = { version = "1" }
+
+["GET /v1/agents/{agent_id}/spec"]
+# The row, the version, and the skills, guardrails and widget it pins, each read once.
+queries = 5
 
 ["GET /v1/agents/{agent_id}/skills"]
 queries = 3
