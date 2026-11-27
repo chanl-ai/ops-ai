@@ -97,7 +97,8 @@ async def test_a_cited_answer_logs_text_citations_and_the_model(client: AsyncCli
 
 async def test_a_gated_call_logs_the_whole_call_and_who_asked(client: AsyncClient) -> None:
     log = await events(client, await agent_run(client, "Place a 24-hour hold on wire W-88213"))
-    call = next(e["data"] for e in log if e["type"] == "tool_call")
+    # The plan is the turn's first call; the gated write comes after it.
+    call = next(e["data"] for e in log if e["type"] == "tool_call" and e["data"]["tool"] != "plan")
     assert {"id", "tool", "server", "access", "input", "status"} <= set(call)
     assert call["tool"] == "place_wire_hold" and call["access"] == "write"
     waiting = next(e["data"] for e in log if e["type"] == "waiting_review")
