@@ -1,6 +1,6 @@
 # The agent scripts (scripts/agents/): the repeatable part of a review, a test audit, a browser walk and the finder
 # scorecard, run before an agent reads anything. Every path and command they use comes from .claude/project-profile.md.
-.PHONY: agent-affected-usecases agent-review-context agent-test-audit agent-ui-walk agent-canary agent-canary-score agent-scripts-test
+.PHONY: agent-affected-usecases agent-review-context agent-test-audit agent-ui-walk agent-canary agent-canary-score agent-scripts-test agent-handback-check
 
 ##@ Agent scripts
 
@@ -25,9 +25,14 @@ agent-canary: ## Plant known bugs on a throwaway branch for a finder to look for
 agent-canary-score: ## Score a finder's report against a canary key: make agent-canary-score REPORT=findings.md KEY=$(AGENT_OUT)/canary-keys/<branch>.json
 	@python3 scripts/agents/seed_canaries.py score --report $(REPORT) --key $(KEY)
 
+agent-handback-check: ## A builder's last step, run from the main checkout after git worktree remove: fails while BRANCH's worktree or preview remains or the branch is not pushed: make agent-handback-check BRANCH=feat/x
+	@[ -n "$(BRANCH)" ] || { echo "make agent-handback-check: name the branch, e.g. BRANCH=feat/x" >&2; exit 2; }
+	@python3 scripts/agents/handback_check.py --branch $(BRANCH)
+
 agent-scripts-test: ## Every agent script's own red and green cases
 	python3 scripts/agents/review_context.py --self-test
 	python3 scripts/agents/seed_canaries.py --self-test
 	node scripts/agents/ui_walk.mjs --self-test
 	python3 scripts/agents/test_audit.py --self-test
 	python3 scripts/agents/affected_usecases.py --self-test
+	cd scripts/agents && uv run --no-project --with pytest python -m pytest -q test_handback_check.py
