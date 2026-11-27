@@ -11,7 +11,7 @@ is not asked again. A model that does not answer, or the run's ceiling, stops th
 
 from __future__ import annotations
 
-from ops_ingest.model_client import ModelBudgetSpent, ModelUnavailable
+from ops_ingest.model_client import ModelBudgetSpent, ModelReplyUnusable, ModelUnavailable
 from ops_ingest.models import Chunk, FaqPair
 from ops_ingest.strategies.base import FENCE_RULE, SplitContext, json_list, json_object, unfenced
 from ops_ingest.strategies.faq import piece_digest
@@ -104,6 +104,10 @@ def draft_pairs(chunks: list[Chunk], ctx: SplitContext) -> list[FaqPair]:
         )
         try:
             reply = ctx.call_model(prompt, max_tokens=MAX_TOKENS)
+        except ModelReplyUnusable as e:
+            where = " > ".join(path) or "untitled"
+            ctx.notes.append(f"FAQ drafts for section {where} were skipped: the reply held no answer ({e}).")
+            continue
         except ModelBudgetSpent as e:
             ctx.notes.append(f"FAQ drafts stopped at a spend ceiling: {e}")
             ctx.section_digests += [section_digest(rest) for rest in sections_of(chunks)[len(ctx.section_digests) :]]
