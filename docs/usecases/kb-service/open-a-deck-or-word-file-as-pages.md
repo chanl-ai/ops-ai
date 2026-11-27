@@ -16,7 +16,8 @@ the slide or page it came from.
 |---|---|---|
 | Maya | builder | Adds a project-update deck and a decision note to a push source and opens each one |
 | William | platform admin | Turns on sending page pictures to a model for the team |
-| Priya | viewer | Opens the same deck to read it |
+| Priya Shah | admin | Opens the deck and checks the described slide |
+| Ravi | viewer | Opens the same deck to read it |
 
 ## In this example
 
@@ -35,7 +36,7 @@ deck still gives its text.
 | S3 | Slide 2 is served as a picture drawn from the deck's PDF | api | 3 | 3 |
 | S4 | Each paragraph of the Word note sits on the page it is drawn on | api | 4 | 4 |
 | S5 | With no converter, `opsai kb text` still prints the deck's text | cli | 5 | 5 |
-| S6 | Maya opens the deck, turns to slide 2, chooses its description and sees the whole slide highlighted; Priya sees the same | ui | 6-7 | 7 |
+| S6 | Priya opens the deck, turns to slide 2, sees it read by a model, chooses its description and sees the whole slide highlighted; Ravi sees the same | ui | 6-7 | 7 |
 
 ## Preconditions
 
@@ -58,7 +59,7 @@ Run: `make usecase-test UC=uc-951 LAYER=api`.
 | 4 | Push `decision-note.docx` (a page break between its two paragraphs) and read its text | Two pages; the decision on page 1, the risks on page 2, each boxed as its whole page |
 | 5 | With no converter, push the deck and run `opsai kb text <item>` | `[p1 text] The event queue went live…` and `[p3 text] Replay after an outage…`: the text, with no drawn pages |
 | 6 | Open `/data/knowledge/documents/{id}` for the deck | The drawn slides show on the left, `Page 1 of 3` |
-| 7 | Turn to page 2 and choose the model's description | The whole slide is highlighted and the description is pressed; the same as a viewer |
+| 7 | Turn to page 2 and choose the model's description | Read by shows A model; the whole slide is highlighted and the description is pressed; the same as a viewer |
 
 ## Acceptance layers
 
