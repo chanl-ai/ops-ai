@@ -204,6 +204,10 @@ class ChatModelIn(_Wire):
     model: str = Field(min_length=1, max_length=200)
     endpoint: str | None = Field(default=None, max_length=500)
     api_version: str | None = Field(default=None, max_length=40, pattern=r"^[0-9a-z-]+$")
+    # Dollars per million tokens, for a model the catalog does not price (an Azure deployment); a catalogued model
+    # takes the catalog's price when these are left out.
+    input_per_million: Decimal | None = Field(default=None, ge=0)
+    output_per_million: Decimal | None = Field(default=None, ge=0)
 
 
 class ChatModelOut(Out):
@@ -856,12 +860,27 @@ def create_models_app(
             raise Unprocessable(str(e), code="endpoint_refused") from e
         return ok(found)
 
+    def chat_price(body: ChatModelIn) -> tuple[Decimal, Decimal] | None:
+        """The price a fresh chat alias starts at: the one the admin gave, else the catalog's for the model; None when
+        neither prices it."""
+        if body.input_per_million is not None and body.output_per_million is not None:
+            return body.input_per_million, body.output_per_million
+        entry = registry.get(body.provider)
+        found = catalog.model(entry.catalog if entry else None, body.model)
+        if found is None or found.input_per_million is None or found.output_per_million is None:
+            return None
+        return Decimal(str(found.input_per_million)), Decimal(str(found.output_per_million))
+
     @app.put(
         "/v1/models/chat-model",
         tags=["providers"],
         response_model=Envelope[ChatModelOut],
         responses=error_responses(
-            {403: "Not an account admin", 404: "No key saved under that name", 422: "The endpoint is refused"}
+            {
+                403: "Not an account admin",
+                404: "No key saved under that name",
+                422: "The endpoint is refused, or a fresh chat alias has no price",
+            }
         ),
     )
     async def set_chat_model(body: ChatModelIn, p: CurrentPrincipal, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -871,6 +890,7 @@ def create_models_app(
         also needs `install.manage` (403 `install_admin_only`)."""
         await saved_key(p, body.key_name)
         await alias_writer(p)
+        price = chat_price(body)
         if body.provider == "azure-openai":
             try:
                 base = azure_host(body.endpoint)
@@ -904,14 +924,19 @@ def create_models_app(
             "provider_id": pid,
             "model_id": body.model,
             "cleared_sensitivity": "confidential",
-            "input_per_million": Decimal(0),
-            "output_per_million": Decimal(0),
+            "input_per_million": price[0] if price else Decimal(0),
+            "output_per_million": price[1] if price else Decimal(0),
             "reasoning_effort": None,
             "images": False,
         }
+        if price is None and any([await aliases.current(a) is None for a in chat_aliases]):
+            raise Unprocessable(
+                f"{body.model} has no price in the model catalog; give inputPerMillion and outputPerMillion.",
+                code="price_required",
+            )
         for alias in chat_aliases:
-            # A new model keeps the alias's prices: zero would let every budget pass. A fresh alias starts at zero
-            # until an admin prices it on the Models page.
+            # A new model keeps the alias's prices, which an admin may have set on the Models page; a fresh alias
+            # takes the given or catalogued price, as zero would let every budget pass.
             held_version = await aliases.current(alias)
             priced: AliasFields = (
                 version_fields

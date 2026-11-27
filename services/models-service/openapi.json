@@ -915,6 +915,22 @@
             ],
             "title": "Endpoint"
           },
+          "inputPerMillion": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inputpermillion"
+          },
           "keyName": {
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$",
             "title": "Keyname",
@@ -925,6 +941,22 @@
             "minLength": 1,
             "title": "Model",
             "type": "string"
+          },
+          "outputPerMillion": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outputpermillion"
           },
           "provider": {
             "enum": [
@@ -4241,7 +4273,7 @@
                 }
               }
             },
-            "description": "The endpoint is refused"
+            "description": "The endpoint is refused, or a fresh chat alias has no price"
           },
           "429": {
             "content": {

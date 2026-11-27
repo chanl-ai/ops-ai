@@ -1,7 +1,8 @@
 """Choosing the chat model on first run, by failure mode: the chat aliases left on the old model or never created on a
 fresh install; a call that goes to the wrong place or with the wrong header for its provider (Anthropic through its
 OpenAI-compatible endpoint); a second choice adding a second connection instead of moving the first; someone who is
-not an account admin, or a key not saved, changing what chat uses; and an Azure endpoint outside openai.azure.com."""
+not an account admin, or a key not saved, changing what chat uses; an Azure endpoint outside openai.azure.com; and a
+fresh chat alias priced at zero, which lets every budget pass."""
 
 from __future__ import annotations
 
@@ -20,6 +21,8 @@ from .conftest import SERVICE, Models
 from .test_provider_keys import people
 
 AZURE = "https://contoso.openai.azure.com"
+# An Azure deployment name is the customer's own, so the catalog never prices it: the admin gives the price.
+PRICE = {"inputPerMillion": "2", "outputPerMillion": "8"}
 
 
 @dataclass
@@ -69,11 +72,11 @@ async def rig(models: Models) -> AsyncIterator[Rig]:
 @pytest.mark.parametrize(
     ("body", "sent_to", "header", "model"),
     [
-        ({"provider": "openai", "model": "gpt-4.1-mini"}, "api.openai.com/v1/chat/completions", "Bearer sk-good",
-         "gpt-4.1-mini"),
-        ({"provider": "anthropic", "model": "claude-sonnet-4-5"}, "api.anthropic.com/v1/chat/completions",
-         "Bearer sk-good", "claude-sonnet-4-5"),
-        ({"provider": "azure-openai", "model": "chat-prod", "endpoint": AZURE, "apiVersion": "v1"},
+        ({"provider": "openai", "model": "gpt-5.4-mini"}, "api.openai.com/v1/chat/completions", "Bearer sk-good",
+         "gpt-5.4-mini"),
+        ({"provider": "anthropic", "model": "claude-sonnet-5"}, "api.anthropic.com/v1/chat/completions",
+         "Bearer sk-good", "claude-sonnet-5"),
+        ({"provider": "azure-openai", "model": "chat-prod", "endpoint": AZURE, "apiVersion": "v1", **PRICE},
          "contoso.openai.azure.com/openai/v1/chat/completions", "sk-good", "chat-prod"),
     ],
 )  # fmt: skip
@@ -88,19 +91,19 @@ async def test_a_fresh_install_chats_with_the_model_the_admin_picked(
 
 
 async def test_a_second_choice_moves_chat_without_a_second_connection(rig: Rig) -> None:
-    first = {"provider": "openai", "model": "gpt-4.1-mini", "keyName": "MAIN"}
+    first = {"provider": "openai", "model": "gpt-5.4-mini", "keyName": "MAIN"}
     assert (await rig.client.put("/v1/models/chat-model", json=first)).status_code == 200
-    again = await rig.client.put("/v1/models/chat-model", json={**first, "model": "gpt-4.1"})
+    again = await rig.client.put("/v1/models/chat-model", json={**first, "model": "gpt-5.4"})
     assert again.status_code == 200, again.text
     assert (await rig.complete(rig.aliases[0])).status_code == 200
-    assert rig.seen[-1][2] == "gpt-4.1"
+    assert rig.seen[-1][2] == "gpt-5.4"
     versions = await rig.client.get(f"/v1/models/aliases/{rig.aliases[0]}/versions", headers=SERVICE)
     assert [v["version"] for v in versions.json()["data"]["data"]] == [1, 2]
     assert len({v["providerId"] for v in versions.json()["data"]["data"]}) == 1
 
 
 async def test_only_an_account_admin_with_a_saved_key_sets_the_chat_model(rig: Rig) -> None:
-    body = {"provider": "openai", "model": "gpt-4.1-mini", "keyName": "MAIN"}
+    body = {"provider": "openai", "model": "gpt-5.4-mini", "keyName": "MAIN"}
     member = {"X-Team-Id": "team_ops", "X-Role": "viewer"}
     assert (await rig.client.put("/v1/models/chat-model", json=body, headers=member)).status_code == 403
     missing = await rig.client.put("/v1/models/chat-model", json={**body, "keyName": "NOT_SAVED"})
@@ -115,14 +118,26 @@ async def test_an_azure_endpoint_outside_openai_azure_com_is_refused(rig: Rig) -
 
 
 async def test_a_new_chat_model_keeps_the_prices_the_alias_had(rig: Rig) -> None:
-    first = {"provider": "openai", "model": "gpt-4.1-mini", "keyName": "MAIN"}
+    first = {"provider": "openai", "model": "gpt-5.4-mini", "keyName": "MAIN"}
     assert (await rig.client.put("/v1/models/chat-model", json=first)).status_code == 200
     url = f"/v1/models/aliases/{rig.aliases[0]}/versions"
     held = (await rig.client.get(url, headers=SERVICE)).json()["data"]["data"][-1]
     price = {"inputPerMillion": "2.5", "outputPerMillion": "10"}
     body = {"providerId": held["providerId"], "modelId": held["modelId"], "clearedSensitivity": "confidential", **price}
     assert (await rig.client.post(url, json=body, headers=SERVICE)).status_code in (200, 201)
-    again = await rig.client.put("/v1/models/chat-model", json={**first, "model": "gpt-4.1"})
+    again = await rig.client.put("/v1/models/chat-model", json={**first, "model": "gpt-5.4"})
     assert again.status_code == 200, again.text
     now = (await rig.client.get(url, headers=SERVICE)).json()["data"]["data"][-1]
-    assert (now["modelId"], float(now["inputPerMillion"]), float(now["outputPerMillion"])) == ("gpt-4.1", 2.5, 10.0)
+    assert (now["modelId"], float(now["inputPerMillion"]), float(now["outputPerMillion"])) == ("gpt-5.4", 2.5, 10.0)
+
+
+async def test_a_fresh_chat_alias_is_priced_and_an_unpriced_model_is_refused(rig: Rig) -> None:
+    unknown = {"provider": "openai", "model": "house-model-7", "keyName": "MAIN"}
+    refused = await rig.client.put("/v1/models/chat-model", json=unknown)
+    assert refused.status_code == 422 and refused.json()["error"]["code"] == "price_required", refused.text
+    assert (await rig.client.get(f"/v1/models/aliases/{rig.aliases[0]}/versions", headers=SERVICE)).status_code == 404
+    known = {"provider": "openai", "model": "gpt-5.4-mini", "keyName": "MAIN"}
+    assert (await rig.client.put("/v1/models/chat-model", json=known)).status_code == 200
+    for alias in rig.aliases:
+        now = (await rig.client.get(f"/v1/models/aliases/{alias}/versions", headers=SERVICE)).json()["data"]["data"][-1]
+        assert (float(now["inputPerMillion"]), float(now["outputPerMillion"])) == (0.75, 4.5), now
