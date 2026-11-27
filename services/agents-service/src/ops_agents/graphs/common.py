@@ -422,6 +422,8 @@ async def _kernel_turn(node: str, req: TurnRequest, ports: KernelPorts) -> TurnR
                     {
                         "model": r.model_name,
                         "status": r.status,
+                        # Why the turn ended (TurnResult.stop_reason); the run trace shows it.
+                        "stopReason": r.stop_reason,
                         "noAnswer": r.no_answer,
                         "error": r.error,
                         "errorCode": r.error_code,

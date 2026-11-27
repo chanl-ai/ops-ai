@@ -47,6 +47,6 @@ def trace_of(thread_id: str, run_id: str, events: list[EventOut], *, agent_id: s
         elif e.type in ("waiting", "waiting_review"):
             add("interrupt", "Waiting for a person", e, status="waiting")
         elif e.type == "turn":
-            stop = str(d.get("status") or "") or None
+            stop = str(d.get("stopReason") or "") or None
             add("model", str(d.get("model") or "model"), e, model=d.get("model"), status=d.get("status"))
     return RunTrace(run_id=run_id, thread_id=thread_id, agent_id=agent_id, modes=modes, steps=steps, stop_reason=stop)

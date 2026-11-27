@@ -1,6 +1,6 @@
 """The built-in `plan` tool: the model's checklist for an ask that takes more than one lookup, kept current as it works.
 
-Each call sends the whole list (title, three to seven steps, each todo, doing, done, blocked or skipped). The checks
+Each call sends the whole list (title, one to seven steps, each todo, doing, done, blocked or skipped). The checks
 keep it honest: one step doing or blocked at most, a step never moves back, a done step's title never changes, and the
 plan is replaced (`replan`) at most twice a turn. A refused call returns the rule and leaves the plan on screen as it
 was. The plan is drawn in the existing `steps` shape, one part per turn that each call redraws; once every step is done

@@ -21,3 +21,5 @@ async def test_the_traces_mode_steps_equal_the_mode_events_of_the_same_run(stack
     shown = trace.json()["data"]["modes"]
     assert sent, "the run streamed no mode"
     assert [(m["mode"], m["reason"], m["fixed"]) for m in shown] == [(m["mode"], m["reason"], m["fixed"]) for m in sent]
+    # Why the turn ended, as the kernel named it: an answer is `final`, never the run's status.
+    assert trace.json()["data"]["stopReason"] == "final", trace.json()["data"]
