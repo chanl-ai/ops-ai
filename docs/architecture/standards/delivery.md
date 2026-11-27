@@ -40,6 +40,8 @@ it, its packages or a shared package changes; the console job on `apps/` or `sdk
 under `services/`, `packages/` or `deploy/database/`. A skipped job counts as passed in
 `ci-ok`. `[ci full]` in the pull request title, or the `ci:full` label, runs every job.
 
+Before a pull request leaves draft and before it enters the merge queue, `make ci-local FULL=1` passes in a `git archive` export of develop merged with the branch, not in a live checkout, plus `store-mssql` on the shared SQL Server when store, migrations, `ops_store` or `deploy/database` change.
+
 Check: `.github/workflows/ci.yml` job `ci-ok`; `make checks`; `scripts/tests/test_checks_list.py` (every check named
 in it runs from `make checks`, and every place that checks calls it). Needed: make `scan` and CodeQL required.
 
