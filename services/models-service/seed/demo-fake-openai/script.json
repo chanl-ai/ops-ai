@@ -1,4 +1,5 @@
 {
+ "models": ["gpt-5.4-mini", "gpt-4.1-mini"],
  "rules": [
   {"when": "read my open work and my recent runs", "tools": [{"tool": "read_document", "arguments": {"file": "open", "documentType": "human_task"}}, {"tool": "read_document", "arguments": {"file": "mine", "documentType": "case"}}]},
   {"when": "read my open work", "after": "read_document", "text": "The reads failed because there are no files named open or mine; I can retry with your own cases and tasks. Proceed?"},

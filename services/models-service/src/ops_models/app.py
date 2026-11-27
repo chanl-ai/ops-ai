@@ -566,8 +566,8 @@ def create_models_app(
     install_error_handlers(app)
     settings = Settings()
     # Testing a key sends it out: only to a public address, never following a redirect with it. In dev the fake OpenAI
-    # the stack runs beside is the one address reached as it is.
-    fake = urlsplit(settings.models_fake_openai_url or "").netloc.lower() if settings.environment == "dev" else ""
+    # the stack runs beside is the one address reached as it is (settings refuse the URL outside dev).
+    fake = urlsplit(settings.models_fake_openai_url or "").netloc.lower()
     key_fetch = key_fetch or PublicFetch(max_redirects=0, timeout_s=20, local=(fake,) if fake else ())
     # Read and checked here, at start-up: an entry naming an adapter no code registers stops the service.
     registry = load_registry(ADAPTERS, BUILTIN, settings.models_provider_registry_extra)
@@ -952,7 +952,9 @@ def create_models_app(
             base_url = await connection_base(body.provider) or CHAT_BASES[body.provider]
         # Every price is settled before anything is written. An alias kept on the same model keeps its nonzero prices,
         # which an admin may have set on the Models page; a body price, or a new model, sets them.
-        catalog_id = registry.catalog_for(kind, base_url)
+        # Priced by the provider's catalogue, whatever address its connection calls: a gateway in front of OpenAI
+        # serves OpenAI's models.
+        catalog_id = registry.catalog_for(kind, CHAT_BASES.get(body.provider, base_url))
         given = body.input_per_million is not None or body.output_per_million is not None
         prices: dict[str, tuple[Decimal, Decimal]] = {}
         fresh: set[str] = set()

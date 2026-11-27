@@ -46,8 +46,7 @@ def pick(models: list[dict[str, Any]]) -> str:
     for want in (*CATALOGUED, "gpt-4.1-mini", "gpt-4o-mini", "gpt-4.1-nano"):
         if want in ids:
             return want
-    # The fake lists the models its script names, any id; the choice is then priced by the admin (not catalogued).
-    return next((i for i in ids if i.startswith("gpt-")), ids[0])
+    return next(i for i in ids if i.startswith("gpt-"))
 
 
 def choice(model: str) -> dict[str, Any]:
@@ -96,7 +95,7 @@ def main() -> int:
                 check("PUT /v1/models/chat-model answers 200", r.status_code == 200, r.text)
                 chosen = r.json()["data"]
         check("the provider accepts the key", tested.get("ok") is True and tested.get("models", 0) > 0, tested)
-        check("the key lists models", bool(listed), listed[:5])
+        check("the key lists chat models", any(m["id"].startswith("gpt-") for m in listed), listed[:5])
         check("default and assistant point at the chosen model", chosen.get("aliases") == ["default", "assistant"] and chosen.get("model") == model, chosen)
         with OpsAI(base_url=urls["platform"], services=urls, access_token=owner["token"], team=SECURITY) as sec:
             conns = {c["name"]: c for c in sec.models.providers()}

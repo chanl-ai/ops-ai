@@ -3,10 +3,11 @@ Anthropic account, the deployments of an Azure OpenAI resource, the foundation m
 each provider keeps its list and which header takes the key is the registry entry's `modelList`; the request is
 built from it here and nowhere else.
 
-The key leaves only for the provider: at the entry's own address unless the admin names an endpoint, and for Azure
-OpenAI at a resource host under openai.azure.com. Every request goes through ops_service_kit's PublicFetch (the
-address rule tools-service and platform-service use), which refuses a private, loopback, link-local or metadata
-address and, with no redirects allowed, never follows one with the key. A refusal reads by status only; the
+The key leaves only for the provider: at the base URL of the connection that serves it, else the entry's own
+address, unless the admin names an endpoint, and for Azure OpenAI at a resource host under openai.azure.com. Every
+request goes through ops_service_kit's PublicFetch (the address rule tools-service and platform-service use), which
+refuses a private, loopback, link-local or metadata address and, with no redirects allowed, never follows one with
+the key. A refusal reads by status only; the
 provider's body is never passed on."""
 
 from __future__ import annotations
@@ -83,8 +84,8 @@ def _request(
     if listing.host == "azure":
         base: str | None = azure_host(endpoint)
     else:
-        # A key goes to an address the admin typed only for a type whose connections name their own base URL;
-        # OpenAI's or Gemini's key always goes to the provider's own address.
+        # A key goes to an address typed in the request only for a type whose connections name their own base URL;
+        # otherwise to the base URL a saved connection of the provider holds, else the provider's own address.
         own = endpoint if "baseUrl" in entry.connection.properties else None
         base = listing.base or own or connection_base or entry.base_url
         if base and "{region}" in base:
