@@ -19,6 +19,7 @@ Status: current. Id: `uc-092`. Service: `agents-service`. Layers: ui, sdk.
 | PostgreSQL :5477 and OPA (docker) | `make db-up` |
 | Free use-case ports | the runner picks free ports and a database of its own |
 | Publish review on for team_ops: a new workspace publishes at once | Priya, `PUT /v1/policies/publishReview` (`publishReviewOn` in `docs/usecases/lib/workflow_ui.mjs` for the ui scripts) |
+| The two-person rule on for team_ops: a requester may decide their own request by default | Priya, `PUT /v1/policies/requesterMayDecide` with `false` (`twoPersonRuleOn` in the same file for the ui scripts) |
 
 The script starts its own agents-service (scripted model) with `OPS_REGISTRY_AUTO_APPROVE=false`, platform-service
 for sign-in (James builds, Maya approves), tools-service as the gateway, the console, and workflow workers it starts and

@@ -66,13 +66,15 @@ def refused(call: Any) -> OpsError | None:
 
 with platform(), agents(env=AUTH):
     # Publish review is optional and a new workspace publishes at once: Priya, the team's admin, turns it on for
-    # workflows first. A policy change refreshes every token, so James and Maya sign in after it.
+    # workflows first, with the two-person rule (requesterMayDecide off, as it is on by default) so James cannot
+    # approve his own request. A policy change refreshes every token, so James and Maya sign in after it.
     priya = OpsAI.sign_in(PRIYA, PASSWORD, team="team_ops", **CONN)
     on = priya.raw.platform.policies_set_policy("publishReview", {"value": {"workflows": "always"}})
+    rule = priya.raw.platform.policies_set_policy("requesterMayDecide", {"value": False})
     check(
-        "0 Priya turns publish review on for the team's workflows",
-        "'workflows': 'always'" in str(on.get("value")),
-        on,
+        "0 Priya turns publish review on for the team's workflows, with the two-person rule",
+        "'workflows': 'always'" in str(on.get("value")) and "'team_ops': False" in str(rule.get("value")),
+        {"publishReview": on, "requesterMayDecide": rule},
     )
     james = OpsAI.sign_in(JAMES, PASSWORD, team="team_ops", **CONN)
     maya = OpsAI.sign_in(MAYA, PASSWORD, team="team_ops", **CONN)
