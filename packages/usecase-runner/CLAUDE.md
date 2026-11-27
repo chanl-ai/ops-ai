@@ -53,3 +53,10 @@ A change here is skipped by `scripts/verify-changed.sh` (`packages/usecase-runne
 The rules the code in this folder is held to, each with a real example from this repository and the check that
 enforces it: [tests](../../docs/architecture/standards/testing.md) (`TS1` to `TS8`), [layers and ownership](../../docs/architecture/standards/layers.md) (`LY1` to `LY9`). The index of every rule is
 [engineering standards](../../docs/architecture/engineering-standards.md); a review cites the rule id.
+
+## Known traps
+
+- A use case needs the plugins checkout, a standing `make up` stack or a real provider key and a hosted runner has none => say so in its registry status (`needs-plugins`, `manual`, `needs-key`; `make checks` runs `scripts/check_usecase_needs.py`) or start the need from the script
+- A hosted runner reaches PostgreSQL at `localhost:5477`, not the devcontainer's `postgres:5432` => take host and port from `OPS_DATABASE_URL` (`pgUrl` in `isolation.ts`), never a fixed name
+- Scan fixtures read through OCR fail on a runner without tesseract => the usecases job installs `tesseract-ocr`; a script that needs another binary installs it in the job, not in the script
+- A test of a two-person rule passes only with `requesterMayDecide` off, and it defaults on => set it in the test (`twoPersonRuleOn()` in `docs/usecases/lib/workflow_ui.mjs`, or the policy route), never rely on the default

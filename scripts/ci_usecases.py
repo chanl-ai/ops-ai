@@ -46,6 +46,16 @@ ROW = re.compile(r"^\|\s*(uc-[a-z0-9]+(?:-[a-z0-9]+)*)\s*\|[^|]*\|[^|]*\|\s*([^|
 NOT_RUN = ("retired", "superseded", "draft", "page", "manual")
 
 
+def manual(registry: str) -> list[str]:
+    """Ids of the rows with a layer and status manual: they need a standing stack (the nightly's `examples` job)."""
+    ids = []
+    for line in registry.splitlines():
+        m = ROW.match(line)
+        if m and m.group(2) and "manual" in m.group(3).lower().split():
+            ids.append(m.group(1))
+    return ids
+
+
 def runnable(registry: str) -> list[str]:
     """Ids of the registry rows with at least one layer and a status other than the ones above, in id order."""
     ids = []
@@ -254,6 +264,7 @@ def main(argv: list[str]) -> int:
     p.add_argument("--head", default="HEAD")
     a = sub.add_parser("all")
     a.add_argument("--shard", default="1/1")
+    sub.add_parser("manual")
     r = sub.add_parser("run")
     r.add_argument("--shard", default="1/1")
     r.add_argument("--slots", type=int, default=3)
@@ -278,6 +289,9 @@ def main(argv: list[str]) -> int:
             print(f"ci_usecases: {why}", file=sys.stderr)
         if chosen:
             print("\n".join(chosen))
+        return 0
+    if args.cmd == "manual":
+        print("\n".join(manual(REGISTRY.read_text(encoding="utf-8"))))
         return 0
     if args.cmd == "all":
         print("\n".join(shard(known, args.shard)))
