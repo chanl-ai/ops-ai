@@ -9,15 +9,14 @@ The scripted model, the systems and the skill builders are those of `test_skill_
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any
 
 import pytest
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models import Model
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-from pydantic_ai.profiles import ModelProfile
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from ops_agent_kernel.ports import ToolOutcome
 from ops_agent_kernel.types import Resume, Skill, SkillInput, ToolGrant, TurnRequest
@@ -45,6 +44,7 @@ from tests.unit.test_skill_steps_kernel import (
     stepped,
     tool,
 )
+from tests.wire_model import on_wire
 
 
 def _amount(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -810,9 +810,7 @@ async def test_a_step_with_a_tool_offers_no_plan_search_or_plain_skill_and_searc
 
 
 class ThinkingScript(Script):
-    """A scripted model that takes a thinking setting, and records the one each request resolved to. The library
-    drops `thinking` from the settings of a model that does not take it (`Model.prepare_request`), so the plain
-    scripted model never sees one."""
+    """A scripted model that records the reasoning effort each request sent to the gateway."""
 
     def __init__(self, *actions: Any) -> None:
         super().__init__(*actions)
@@ -823,18 +821,7 @@ class ThinkingScript(Script):
         return super().respond(messages, info)
 
     def build(self) -> Model:
-        # Off the wire: neither loop sends a thinking setting to the gateway, so only a FunctionModel that takes one
-        # sees it, and this test runs on Pydantic AI alone.
-        async def stream(
-            messages: list[ModelMessage], info: AgentInfo
-        ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-            for i, part in enumerate(self.respond(messages, info).parts):
-                if isinstance(part, TextPart):
-                    yield part.content
-                elif isinstance(part, ToolCallPart):
-                    yield {i: DeltaToolCall(name=part.tool_name, json_args=part.args_as_json_str())}
-
-        return FunctionModel(self.respond, stream_function=stream, profile=ModelProfile(supports_thinking=True))
+        return on_wire(FunctionModel(self.respond))
 
 
 async def test_a_saved_agent_sends_no_thinking_setting_and_a_set_one_reaches_the_model() -> None:
