@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 20261126_2300_drop_model_ledger
+-- agents-service, stamped at 20261127_1000_tenant_slug_keys
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -585,7 +585,7 @@ CREATE TABLE registry_skills (
 	created_by VARCHAR(200) NOT NULL DEFAULT '', 
 	published_loading VARCHAR(16) NULL, 
 	CONSTRAINT registry_skills_pkey PRIMARY KEY (id), 
-	CONSTRAINT uq_registry_skills_team_slug UNIQUE (team_id, slug)
+	CONSTRAINT uq_registry_skills_team_slug UNIQUE (tenant_id, team_id, slug)
 );
 GO
 CREATE INDEX ix_registry_skills_team_origin ON registry_skills (tenant_id, team_id, origin);
@@ -812,7 +812,7 @@ CREATE TABLE registry_guardrails (
 	created_at VARCHAR(32) NOT NULL, 
 	updated_at VARCHAR(32) NOT NULL, 
 	CONSTRAINT registry_guardrails_pkey PRIMARY KEY (id), 
-	CONSTRAINT uq_registry_guardrails_team_slug UNIQUE (team_id, slug)
+	CONSTRAINT uq_registry_guardrails_team_slug UNIQUE (tenant_id, team_id, slug)
 );
 GO
 CREATE INDEX ix_registry_guardrails_tenant_team ON registry_guardrails (tenant_id, team_id);
@@ -1654,5 +1654,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('20261126_2300_drop_model_ledger');
+INSERT INTO alembic_version (version_num) VALUES ('20261127_1000_tenant_slug_keys');
 GO
