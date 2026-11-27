@@ -178,12 +178,13 @@ A role is a reviewer group of the team, resolved to people when the task opens a
 who is on duty takes effect. Who may decide is still `can()` with the rule that the person who started the run cannot
 approve its changes (`services/agents-service/src/ops_agents/api/engine_reviews.py:1215`).
 
-Answering outside the console:
+Answering outside the console. Decided on 2026-11-26: a person can answer from email or Teams, and an approval opens a
+page where they sign in first.
 
 | Channel | Notification | How an answer is accepted |
 |---|---|---|
 | Email | A message per task with the question or summary, the notes, and one link | An `answer` task: a reply from an address that belongs to an assignee, on a message that passes the sender checks the mail provider reports, is recorded as that person's answer. An `approve` task: the link opens a confirm page that requires sign-in; a link is never a decision by itself, because mail scanners open links |
-| Teams | A card in the role's channel or the person's chat | A button posts to our endpoint with the Teams user's identity, which is matched to a member by the directory id. `approve` asks for the same step-up sign-in the console asks for when the policy requires one |
+| Teams | A card in the role's channel or the person's chat | For an `answer` task, a button or a text field posts to our endpoint with the Teams user's identity, which is matched to a member by the directory id. For an `approve` task the card carries a link to the same signed-in confirm page as email; no button on the card decides |
 
 The link carries a signed, expiring claim made the way run resume links are today
 (`services/agents-service/src/ops_agents/api/engine_resume.py:78`).
@@ -400,10 +401,11 @@ sequenceDiagram
 
 ## Open points
 
+Default, 2026-11-26: the three team mocks are redrawn for this design before the 1.6.0 console lane and copied into
+`docs/design/agents-v2/mocks`.
+
 | # | Open point | Settled by |
 |---|---|---|
-| 1 | The canvas mocks were drawn for the earlier Team step: a member list inside one step's sheet. They need redrawing with members as steps and the three line kinds | Owner, before the console lane starts |
 | 2 | Whether `ask` should be allowed to nest more than one level | After trial 12; one level matches today's rule for agents asking agents |
-| 3 | Whether a Teams card may carry an approval without opening the console when the tenant's policy requires no step-up | Owner and a security review |
 | 4 | Whether an email reply can be trusted for an answer on the sender checks alone | A security review, with trial 13's notes |
 | 5 | Whether the compiled graph's cycle support holds under a crash in the middle of a cycle | Trial 12 |

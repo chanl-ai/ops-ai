@@ -4,9 +4,9 @@ Status: proposed design, written 2026-11-26. Nothing on this page is built. Each
 
 This page lists every console screen the three releases add or change, the states each must draw and the existing
 component each region is built from. Nine screens were drawn as mocks: six for the agent builder's experience and three
-for teams. The mocks are kept with the product plans, outside this repository, so this page names each mock by its
-screen and repeats what a builder needs from it. Three of the team mocks were drawn before the team design moved onto
-the canvas and need redrawing; that is the first open point.
+for teams. Final mocks are copied into the `mocks` folder beside this page; until then this page names each mock by its
+screen and repeats what a builder needs from it. The three team mocks were drawn before the team design moved onto
+the canvas and are redrawn before the 1.6.0 console lane starts.
 
 ## Purpose
 
@@ -313,9 +313,10 @@ The `ui` layer of each component's use cases is a Playwright script under
 
 ## Open points
 
+Defaults, 2026-11-26: the three team mocks are redrawn with members as steps, three line kinds and a foldable group
+before the 1.6.0 console lane; final mocks are copied into `docs/design/agents-v2/mocks`.
+
 | # | Open point | Settled by |
 |---|---|---|
-| 1 | The three team mocks show a member list inside one step's sheet. They need redrawing with members as steps, three line kinds and a foldable group | Owner, before the 1.6.0 console lane starts |
-| 2 | The mocks are outside this repository, so a contributor cannot open them. Either copies are added under `docs/` here or this page stays the reference | Owner |
 | 3 | Whether the agent's tabs should be reduced: twelve tabs is many for one record | A mock review; candidates are merging Output into Instructions and Limits into Guardrails |
 | 4 | Whether canvas editing at 390 wide is needed | Owner; this page assumes view-only |

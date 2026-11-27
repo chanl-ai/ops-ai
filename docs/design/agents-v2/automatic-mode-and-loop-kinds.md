@@ -85,8 +85,8 @@ Decision: a hand-over is carried out by our runtime, not by a Strands swarm obje
 
 | Option | Verdict | Reason |
 |---|---|---|
-| A. The runtime hands over (chosen as the build default) | Chosen | The `hand_over` tool ends the current agent's turn with a hand-over result. The runtime records it, switches the conversation's active agent, and starts that agent's turn with the notes and the message. Each turn is an ordinary turn, so pause, resume, budget and trace need nothing new. It is the same mechanism the workflow canvas uses for a hand-over connection ([workflow teams](workflow-teams-and-human-tasks.md)) |
-| B. A Strands `Swarm` holds the agents | Kept only if trial 4 passes and shows a benefit A lacks | Strands documents swarm pause and resume through its older session managers, with no code on the page read ([multi-agent interrupts](https://strandsagents.com/docs/user-guide/sdk/multi-agent/interrupts-multi-agent/)). It would be a second place where a pause is stored |
+| A. The runtime hands over | Decided on 2026-11-26 | The `hand_over` tool ends the current agent's turn with a hand-over result. The runtime records it, switches the conversation's active agent, and starts that agent's turn with the notes and the message. Each turn is an ordinary turn, so pause, resume, budget and trace need nothing new. It is the same mechanism the workflow canvas uses for a hand-over connection ([workflow teams](workflow-teams-and-human-tasks.md)) |
+| B. A Strands `Swarm` holds the agents | Not built. Trial 4 records what it can do, for information only | Strands documents swarm pause and resume through its older session managers, with no code on the page read ([multi-agent interrupts](https://strandsagents.com/docs/user-guide/sdk/multi-agent/interrupts-multi-agent/)). It would be a second place where a pause is stored |
 
 Hand-over rules: at most `maxHandoffs` per turn of the person; an agent cannot hand to itself or back to the agent that
 handed to it in the same turn unless the person spoke in between; the receiving agent gets the conversation's shared
@@ -252,9 +252,10 @@ sequenceDiagram
 
 ## Open points
 
+Settled on 2026-11-26: hand-overs are carried out by the runtime and the workflow engine, not a Strands swarm
+(decided), and the seven explicit kinds stay (default).
+
 | # | Open point | Settled by |
 |---|---|---|
-| 1 | Hand-overs carried out by the runtime (option A) or by a Strands swarm (option B) | Owner decision, informed by trial 4 |
-| 2 | Whether `evaluator` and `long_running` should stay kinds. Both are `auto` plus one setting (`output.rubric`; `background` with a sandbox), so a builder can reach the same behaviour two ways | Owner decision. This page keeps all seven, as decided, and makes the two kinds thin presets over the same code |
 | 3 | Whether the model reliably supplies a useful `why` | Trial 3, part d: 20 scripted and 20 real requests; a reason is useful when a reviewer can tell the mode from it without the transcript |
 | 4 | Whether a plan should also wait for the person (`reviewPlan`) by default for agents with write tools | Owner decision; default here is to show the plan and wait at the write |

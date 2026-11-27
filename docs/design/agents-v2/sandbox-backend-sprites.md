@@ -196,4 +196,4 @@ they need a provider account; CI runs them against Docker.
 | 2 | How to hold memory and processor per size | Trial 5, part c |
 | 3 | Setup time for an image, and whether a prepared Sprite or a checkpoint can seed a new one | Trial 5, part d |
 | 4 | Whether Strands' SSH sandbox can drive a Sprite, and whether that is worth using | Trial 6 |
-| 5 | The provider's terms for running tenants' code, and regions | Owner, with the provider |
+| 5 | The provider's terms for running tenants' code, and regions. Decided on 2026-11-26: the backend is built now and this check does not block it | Checked with the provider before hosted tenants are onboarded |

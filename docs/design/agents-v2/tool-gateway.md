@@ -75,7 +75,7 @@ Rules:
 | Citations | Each result and fetched page is numbered like a knowledge passage, so the answer can cite it and the chat shows the source |
 | robots | `web.fetch` sends a fixed user agent and honours a site's robots rules for that agent |
 | Caching | A fetched page is cached per tenant for `OPS_TOOLS_WEB_CACHE_SECONDS`; a cached answer is marked `cached` on the call record, as reads are today |
-| Search provider | A connection of kind `search` with an adapter per provider, in the plugin form the gateway already uses. No provider is bundled or on by default. An install with none lists `web.search` as "not set up" |
+| Search provider | A connection of kind `search` with an adapter per provider, in the plugin form the gateway already uses. The provider is a setting, `OPS_TOOLS_WEB_SEARCH_PROVIDER`, and one adapter ships: Brave Search (default, 2026-11-26; its terms are checked in trial 0). Nothing is on until a tenant adds its own key. An install with none lists `web.search` as "not set up" |
 | Hosted provider tools | A model provider's own web search tool is never switched on: it runs on the provider's servers, outside the gateway |
 
 ## What the sandbox needs from the gateway
@@ -191,6 +191,7 @@ sequenceDiagram
 
 | Setting | Default | Meaning |
 |---|---|---|
+| `OPS_TOOLS_WEB_SEARCH_PROVIDER` | `brave` | Which search adapter a search connection uses |
 | `OPS_TOOLS_WEB_FETCH_MAX_BYTES` | `5000000` | Bytes read from one page |
 | `OPS_TOOLS_WEB_FETCH_SECONDS` | `15` | Time for one fetch, redirects included |
 | `OPS_TOOLS_WEB_CACHE_SECONDS` | `900` | Life of a cached page |
@@ -236,12 +237,11 @@ sequenceDiagram
 | `services/tools-service` | `src/ops_tools/web_tools.py` (search and fetch as `app` functions), `web_extract.py` (HTML to text), `web_routes.py`, `store/web.py`, `connections/search.py` (the provider port), a migration | `mcp.py` (structured results, list-changed, elicitation, progress, resources), `mcp_tools.py`, `gateway_calls.py` (the `needs_person` outcome), `app.py`, `openapi.json` | |
 | `packages/contracts` | `tools.py` (`ToolOutcome`, `PersonQuestion`, `SourceRef`) | | |
 | `packages/ops_agent_kernel` | | The tool wrapper maps `needs_person` to a `question` interrupt and `sources` to citations | |
-| `builtin-plugins` | One search provider adapter as an example plugin, chosen in the open points | | |
+| `builtin-plugins` | The Brave Search adapter | | |
 
 ## Open points
 
 | # | Open point | Settled by |
 |---|---|---|
-| 1 | Which search provider adapter ships as the example, and its terms for a self-installed product | Licence and terms check (trial 0), then an owner choice |
 | 2 | Whether `web.fetch` should render pages that need scripts | Not in 1.5.0. Browser use is the one feature left out of the plan |
 | 3 | Whether a tool server's OAuth sign-in can reuse the connection kinds unchanged | A spike against one public server that requires OAuth, before the lane starts |

@@ -146,7 +146,8 @@ the gate's address and nothing else.
 
 ## Approvals for risky actions
 
-Decision: approvals are enforced at points the sandbox cannot avoid, not by reading command text. A shell command can
+Decided on 2026-11-26: approvals are set at network grants and at writes to saved files, points the sandbox cannot
+avoid, and not by reading command text. A shell command can
 delete a file or install a package in more ways than a text rule can list, so a rule on text would look safe and not be.
 This departs from the design page, which tied an approval to the command's exact text.
 
@@ -479,5 +480,4 @@ Run against each backend; a backend that cannot pass a row is not offered for a 
 | 1 | Whether the WebAssembly engine stays as the engine for one-shot functions. It starts in milliseconds; a fresh computer per function call takes one to two seconds on Sprites by its own figures | Trial 9: function start time on each backend; keep WebAssembly unless p95 is at most 300 ms |
 | 2 | Whether the gate can add a secret to an encrypted request for the systems customers use, given clients that pin certificates | Trial 7 |
 | 3 | Whether Strands' three tools can be bound to our sandbox object and wrapped as kernel tools without losing their streaming output | Trial 6, part b |
-| 4 | Whether approving network grants by host, method and path is acceptable in place of approving a command's exact text | Owner decision |
 | 5 | How large the warm pool must be for a 2-second first command | Trial 9 |

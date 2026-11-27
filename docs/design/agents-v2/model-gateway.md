@@ -233,7 +233,7 @@ sequenceDiagram
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `OPS_MODELS_REPLAY_HOURS` | `168` | Life of a replay row |
+| `OPS_MODELS_REPLAY_HOURS` | `168` | Life of a replay row (default, 2026-11-26). A retry after expiry pays for the call again; nothing is sent twice |
 | `OPS_MODELS_RESERVATION_SECONDS` | `300` | Life of an unsettled reservation |
 | `OPS_MODELS_RESERVE_OUTPUT_TOKENS` | `1024` | Output tokens assumed when the request sets no `max_tokens` |
 | `OPS_MODELS_CHECK_CALLS_PER_KEY` | `6` | Calls of purpose `check` or `judge` admitted past a spent budget per replay key |
@@ -292,5 +292,4 @@ copied; workspaces are reseeded.
 | # | Open point | Settled by |
 |---|---|---|
 | 1 | Whether a streamed answer can be recorded and replayed as a stream without the loop noticing a difference | Trial 3, part b: replay a streamed call and compare the loop's events |
-| 2 | Whether one week is the right life for a replay row when a workflow step is retried by a person days later | Owner decision. A retry after expiry pays for the call again; nothing is sent twice, because tool keys do not expire |
 | 3 | Whether per-tenant model-key shares (`app.py:1310`) and budgets should be shown as one figure on the usage page | Console design, not a trial |

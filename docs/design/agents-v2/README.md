@@ -106,7 +106,7 @@ it names are done.
 
 | Order | Lane | Builds | Needs |
 |---|---|---|---|
-| 0 | Trials 11 to 14; the team mocks redrawn | | |
+| 0 | Trials 11 to 14; the team mocks redrawn and copied into `mocks/` | | |
 | 1 | A. Engine durability | Rebuild from the journal; the SQL Server statements | Trials 11, 14 |
 | 1 | B. Run budgets | | 1.4.0 lane B |
 | 1 | C. Tasks | The tasks routes, kinds, roles, `thenAsk`, escalation on the engine | |
@@ -137,28 +137,30 @@ led to the changes below. Each is specified on the page named.
 | Input said | These specs say | Reason | Page |
 |---|---|---|---|
 | A Team step holds its members, kind and hand-over map | Members are steps on the canvas; hand-overs, questions and checks are kinds of line; a group frame holds the limits. The Team step is the folded view of a group | A direction given on 2026-11-26: the team should be visible as connected agents, not one level down. It also needs no new engine port and no new journal table | Teams and human tasks |
-| Strands' swarm and graph run teams and hand-overs | The runtime and the engine move the work between agents; each agent's turn is its own Strands run | Pausing a library swarm for days is documented only through session managers that write outside our database. Per-turn runs keep budgets, approvals and saved state where they already are. Trial 4 keeps the other option open | Automatic mode; Teams |
+| Strands' swarm and graph run teams and hand-overs | The runtime and the engine move the work between agents; each agent's turn is its own Strands run | Pausing a library swarm for days is documented only through session managers that write outside our database. Per-turn runs keep budgets, approvals and saved state where they already are. Decided on 2026-11-26; trial 4 is for information only | Automatic mode; Teams |
 | The library's session manager can hold a paused run | Our checkpoint holds an opaque loop state | One store, one lease, one encryption key, on both databases | Runtime contract |
 | Hosted sandboxes were ruled out on one design page | Fly Sprites is the hosted backend | The later decision replaces that line | Sprites backend |
 | A sandbox's files persist with its computer | A copy in the team's storage after every turn is the truth on every backend; a backend's own disk is a fast path | Resume on another server must work on Docker and Kubernetes too, and one deletion rule must cover all three | Sandbox service |
 | An approval is tied to a risky command's exact text | Approvals sit where the sandbox cannot avoid them: the file tools and the exit gate | A command can delete or install in more ways than a text rule can list | Sandbox service |
 | The exit gate's owner was not stated | The tool gateway runs it | It already owns the host list and the secrets; a third way out would break the two-gateway rule | Sandbox service |
 | Plan, skills and typed answers could use the library's plugins | They stay ours, written against the seams | They must behave the same under any loop driver, and they are covered by existing tests | Runtime contract |
-| Seven loop kinds | Seven explicit kinds plus automatic; two of them, evaluator and long-running, are thin presets of settings | Kept because the decision lists seven; flagged below | Automatic mode |
+| Seven loop kinds | Seven explicit kinds plus automatic; two of them, evaluator and long-running, are thin presets of settings | Kept as the default | Automatic mode |
 
-## Points that need a decision
+## Decisions and defaults recorded on 2026-11-26
 
-| # | Point | Recommended |
-|---|---|---|
-| 1 | Hand-overs are carried out by the runtime and the engine, not by the library's swarm | Yes; revisit only if trial 4 shows a benefit |
-| 2 | Approvals for sandbox actions are by file tool and by network grant (host, method, path), not by command text | Yes |
-| 3 | The three team mocks need redrawing for the canvas design before the 1.6.0 console lane | Redraw first |
-| 4 | The mocks live outside this repository; contributors cannot open them | Copy the final ones under `docs/` here |
-| 5 | Evaluator and long-running could be settings on other kinds, leaving five kinds | Keep seven for now; decide after first use |
-| 6 | Whether a Teams card or an email reply may carry an answer or an approval without opening the console | Answers yes; approvals open a signed-in confirm page |
-| 7 | How long the model gateway keeps replay rows, which hold model answers | 168 hours, deleted earlier when a run ends |
-| 8 | The provider's terms and regions for running tenants' code on Sprites | Confirm before the Sprites lane |
-| 9 | Which search provider adapter ships as the example | After trial 0 |
+| # | Point | Outcome | Status |
+|---|---|---|---|
+| 1 | Who moves a hand-over between agents | Our workflow engine and runtime, not a Strands swarm. Trial 4 is for information only | Decided |
+| 2 | Where sandbox approvals are set | At network grants and at writes to saved files, not by reading command text | Decided |
+| 3 | Answering outside the console | A person can answer from email or Teams. An approval opens a page where they sign in first | Decided |
+| 4 | Sprites | Build on Sprites now. Its terms and regions are checked later and stay an open point, not a blocker | Decided |
+| 5 | Loop kinds | Keep the seven explicit kinds beside automatic | Default |
+| 6 | Replay rows in the model gateway | Kept for 168 hours, deleted earlier when a run ends | Default |
+| 7 | Team mocks | The three team mocks are redrawn for the canvas design before the 1.6.0 console lane | Default |
+| 8 | Where final mocks live | Copied into `docs/design/agents-v2/mocks` in this repository | Default |
+| 9 | Search provider | A setting, with one adapter shipped: Brave Search | Default |
+
+A row marked "Default" was not ruled on and can be changed without reopening the rest.
 
 ## Open points
 

@@ -27,7 +27,7 @@ merged.
 | 1 | A paused turn saved and resumed on another server | The Strands driver's pause design | 1.4.0 |
 | 2 | Step-hold rules on Strands hooks | Porting the 13 kernel features | 1.4.0 |
 | 3 | Event stream mapping, and six smaller checks | The chat stream, the scripted model, the builder | 1.4.0 |
-| 4 | A swarm paused for days | Only the choice between runtime-driven and library-driven hand-overs | 1.4.0, not blocking |
+| 4 | A swarm paused for days | Nothing: hand-overs by our engine were decided on 2026-11-26. For information only | Any time |
 | 5 | A Sprite's network allow-list and restore after sleep | The Sprites backend | 1.5.0 |
 | 6 | The SSH sandbox driving a Sprite, and Strands' tools on our sandbox | The kernel's sandbox adapter | 1.5.0 |
 | 7 | Adding a secret at the exit gate | The exit gate's inspect mode | 1.5.0 |
@@ -59,9 +59,9 @@ Question: may we depend on each part, and is it maintained?
 | Anthropic sandbox-runtime | Apache-2.0; a beta research preview by its authors' description | Whether "research preview" carries any use limit |
 | gVisor, Kata Containers | Both state Apache-2.0 on their repositories | Transitive licences of what an install adds |
 | A YAML parser for the TypeScript SDK | Not chosen | Licence and size |
-| A search provider adapter | Not chosen | The provider's terms for a self-installed product |
+| Brave Search, the one search adapter shipped | Chosen as the default | The provider's terms for a self-installed product where each tenant brings its own key |
 | The Kubernetes project's sandbox resource | Unverified | Status and licence; not adopted unless mature |
-| Fly Sprites | A hosted service, not a dependency | Terms for running tenants' code; regions |
+| Fly Sprites | A hosted service, not a dependency | Terms for running tenants' code and regions. This check does not block the Sprites lane |
 
 Pass: every part we would add is under Apache-2.0, MIT, BSD or a comparable permissive licence, with no AGPL anywhere
 in its install tree, and has had a release in the last six months.
@@ -154,8 +154,8 @@ Question: can Strands' multi-agent swarm pause in the middle, be stored by us, a
 
 Pass: step 3 holds without a session manager that writes outside our database, and step 4 shows per-agent headers.
 
-Gates: nothing in the build. The specs choose runtime-driven hand-overs, where each agent is its own turn. A pass makes
-the library's swarm an option to revisit.
+Gates: nothing. It was decided on 2026-11-26 that our workflow engine moves hand-overs, with each agent as its own
+turn. The trial is for information and can be skipped.
 
 Fallback: none needed.
 
