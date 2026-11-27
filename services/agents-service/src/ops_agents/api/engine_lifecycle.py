@@ -158,7 +158,14 @@ async def _missing_tools(rt: Runtime, definition: Json) -> list[Blocker]:
     out: list[Blocker] = []
     for nid, op in steps:
         if op and op not in offered:
-            message = f"Step {nid} calls {op}, which this team does not have; add the tool or change the step."
+            # Without a gateway the list is the in-process catalogue, which holds none of the platform's tools
+            # (send_reply among them) and no app's, and the runner calls no tool at all; naming the gateway says why.
+            message = (
+                f"Step {nid} calls {op}, which this team does not have; add the tool or change the step."
+                if rt.gateway
+                else f"Step {nid} calls {op}, but this install has no tool gateway (OPS_GATEWAY_URL is not set), so "
+                "it cannot run tool steps; set the gateway or change the step."
+            )
             err = Unprocessable(message, code="tool_not_available", details={"node": nid})
             out.append(
                 Blocker(
