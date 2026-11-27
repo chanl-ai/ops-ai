@@ -34,15 +34,17 @@ QUEUE_BRANCH = re.compile(r"^gh-readonly-queue/[^/]+(?:/.+)?/pr-(\d+)-[0-9a-f]+$
 def first_error(log: str) -> str:
     """The line of a failed step's log that names the failure, without its timestamp. A real log holds many lines that
     only look like errors (a self-test printing its planted failure, a command echoed with `grep FAILED` in it), so the
-    order is: a workflow annotation, the entry under `make checks`' own "check(s) failed:" list, a pytest FAILED or E
-    line, make's own error, then the last line. The runner's "Process completed with exit code" says nothing."""
+    order is: a pytest FAILED or ERROR line, the entry under `make checks`' own "check(s) failed:" list, a workflow
+    annotation (a warning raised inside a passing test is annotated too, so it comes after), a pytest E line, make's own
+    error, then the last line. The runner's "Process completed with exit code" says nothing."""
     lines = [STAMP.sub("", raw.split("\t")[-1]).rstrip() for raw in log.splitlines()]
     lines = [ln for ln in lines if ln.strip() and "Process completed with exit code" not in ln]
     listed = [lines[k + 1] for k, ln in enumerate(lines[:-1]) if "check(s) failed:" in ln]
     picks = (
-        [ln for ln in lines if "##[error]" in ln],
+        [ln for ln in lines if re.match(r"(FAILED|ERROR) \S+(::| - )", ln)],
         listed,
-        [ln for ln in lines if re.match(r"(FAILED |ERROR |E   )", ln)],
+        [ln for ln in lines if "##[error]" in ln],
+        [ln for ln in lines if ln.startswith("E   ")],
         [ln for ln in lines if ln.startswith("make: ***")],
         lines[-1:],
     )
@@ -332,6 +334,9 @@ def self_test() -> int:
         "j\ts\t2026-11-26T10:00:00Z grep -E ' (FAILED|ERROR)' log\n"
         "j\ts\t2026-11-26T10:00:01Z FAILED tests/test_x.py::test_y - boom"
     )
+    noisy = (
+        "j\ts\t2026-11-26T10:00:00Z ##[error]  raise RuntimeError('x')\nj\ts\t2026-11-26T10:00:01Z FAILED a.py::t - no"
+    )
     green = {"checks": {"result": "success"}, "docs": {"result": "skipped"}}
     prs = [
         {"number": 1, "isDraft": False, "isCrossRepository": False, "isInMergeQueue": False},
@@ -357,6 +362,11 @@ def self_test() -> int:
             "a pytest failure is named, not the command that greps for one",
             first_error(pytest_log),
             "FAILED tests/test_x.py::test_y - boom",
+        ),
+        (
+            "a failed test wins over an annotation raised inside a passing one",
+            first_error(noisy),
+            "FAILED a.py::t - no",
         ),
         ("a cancelled queue run is the queue regrouping, not a failure", queue_step(1, "cancelled"), "nothing"),
         (

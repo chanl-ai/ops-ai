@@ -598,7 +598,7 @@ jobs:
     # `ready` is one of them, so the queue requires it without a second required check.
     name: ci-ok
     if: always()
-    needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, usecases, maintainer-review, ready]
+    needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, usecases, maintainer-review, generated, generated-commit, ready]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -627,7 +627,7 @@ jobs:
     # the release under test (release-security.yml holds the branch's other scans, which need no deploy). Passive rules
     # only: it spiders for a minute and sends no attack. Report only for now: baseline rules warn, and -I keeps a
     # warning from failing the job; the report is the artifact zap-baseline.
-    needs: [plan, staging]
+    needs: [plan, ci-ok, staging]
     if: ${{ !cancelled() && needs.plan.outputs.release == 'true' && needs.staging.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
