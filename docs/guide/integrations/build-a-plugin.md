@@ -5,8 +5,15 @@ Status: current.
 Your team uses a system that has no app in the catalog, such as a ticket desk, and every agent that needs it would otherwise
 carry its own copy of the request details and its own key. A plugin brings the system in once. It is one package that says
 how a team signs in, which tools agents may call, and what knowledge a knowledge base can take from it. Most plugins are a
-single manifest file with no code, because each tool is a request template that the gateway runs. You could build a tool on a custom app instead, but only your team could use it. A plugin is installed once for the whole
-install, so every team can turn it on.
+single manifest file with no code, because each tool is a request template that the gateway runs.
+
+<!-- site: compare caption="A tool on a custom app, and a plugin" -->
+- **Tool on a custom app**: Built on **Add custom app** for your own team.
+  - **Who can use it**: Only your team
+  - **Made of**: A tool you build in the console
+- **Plugin**: Installed once for the whole install.
+  - **Who can use it**: Every team, once its admin turns the app on
+  - **Made of**: One manifest, usually with no code
 
 ## From manifest to a working app
 

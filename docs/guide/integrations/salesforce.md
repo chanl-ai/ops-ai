@@ -40,8 +40,15 @@ The app reads **Connected**, and an agent that you grant its tools can answer fr
 Test panel and ask for the latest cases on an account. The reply lists them, and the call appears on the app's **Logs** tab
 with the login it ran as.
 
-Without the app, nobody gets a case summary until someone pastes the case into a chat. Any change made in Salesforce by hand
-also happens outside your approvals and audit trail.
+<!-- site: sequence caption="An agent reading a case: the gateway adds the sign-in and the call is logged" -->
+1. **Person → Agent**: Asks for the latest cases on an account
+2. **Agent → Gateway**: Calls the case tool, holding no password
+3. **Gateway → Salesforce**: Sends the call as the signed-in user, after checking the host
+   - Salesforce returns only the records that user may see.
+4. **Salesforce → Agent**: Returns the cases
+5. **Gateway → Logs**: Records the call and the login it ran as
+
+Without the app, nobody gets a case summary until someone pastes the case into a chat.
 
 ## Tools, articles and templates
 

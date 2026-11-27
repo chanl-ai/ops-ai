@@ -51,10 +51,11 @@ Without the app, the agent sees an edit to a runbook only after someone exports 
 
 ## Sign-in
 
-| Confluence | Kind | You give |
-|---|---|---|
-| Cloud | Username and password (basic) | The account's email and an Atlassian API token |
-| Data Center | Bearer token | A personal access token |
+<!-- site: compare caption="The two ways to sign in to Confluence, by where it runs" -->
+- **Cloud**: Username and password (basic)
+  - **You give**: The account's email and an Atlassian API token
+- **Data Center**: Bearer token
+  - **You give**: A personal access token
 
 Both are kept sealed, are never shown again, and serve only your team. See [Sign in with a key or
 password](sign-in-keys.md).

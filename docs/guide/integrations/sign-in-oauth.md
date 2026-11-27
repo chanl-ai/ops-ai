@@ -41,10 +41,13 @@ When a team admin turns an app on, they choose who signs in: **Everyone uses the
 in**. An app lists which of these it allows. Nobody is asked to choose in a chat or in a Human Task, so the answer an
 admin sets applies to every call.
 
-| Choice | A call acting for a person | A call nobody started, such as a schedule |
-|---|---|---|
-| Everyone uses the team's login | The team login, with the person recorded as the one who asked | The team login |
-| Each person signs in | That person's login. Without one, they are asked to sign in once | Refused, because there is no person to act as. The team's login is not used as a backup |
+<!-- site: decision caption="Whose login a call uses, by the app's setting and who started the call" -->
+- **Which did the admin choose?**
+  - **Everyone uses the team's login**: The call uses the team login. A call for a person records them as the one who asked.
+  - **Each person signs in**
+    - **Did a person start the call?**
+      - **Yes**: It uses that person's login. Without one, they are asked to sign in once.
+      - **No, such as a schedule**: It is refused, because there is no person to act as. The team's login is not used as a backup.
 
 A refused scheduled call names the app and the two ways forward: set the app to **Everyone uses the team's login**, or
 have a person start the run. When a run waits for a person, **Human Tasks** shows **Sign in to <App> to continue**, and

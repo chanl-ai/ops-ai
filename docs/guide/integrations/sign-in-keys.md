@@ -7,6 +7,13 @@ sign-in. If an agent or a tool holds that secret itself, anyone who can read the
 and rotating it means editing every place it was pasted. Ops AI keeps the secret sealed on the app's account and adds it
 to each call, so a tool, an agent or a model never holds it.
 
+<!-- site: before-after caption="A key pasted into each tool, and a key sealed on the app's account" -->
+- **Key held by the tool**: Anyone who can read the agent's configuration can read the key.
+  - Rotating it means editing every place it was pasted
+- **Key sealed on the account**: Ops AI adds it to each call, so no tool, agent or model holds it.
+  - One key serves every tool that calls the app
+  - You change it in one place
+
 ## Give the key
 
 <!-- site: steps -->

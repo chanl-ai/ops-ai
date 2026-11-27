@@ -21,6 +21,17 @@ and apps](apps.md).
 Every app card, on the **Apps** page and at the top of the app's own page, shows one state. The app's **Settings** tab
 reads the same state, and each state has one next action.
 
+<!-- site: state caption="An app from installed to connected, and where it can fall back" -->
+- **Available**: Installed and not on for the team
+  - **Needs sign-in**: A team admin presses **Turn on**
+- **Needs sign-in**: On, with no account signed in yet
+  - **Connected**: Someone signs in and the test passes
+  - **Signed in, test failed**: The sign-in worked and the test failed
+- **Signed in, test failed**: The failure is shown to members
+  - **Connected**: A team admin presses **Reconnect** and the test passes
+- **Connected**: The app works for the team
+  - **Available**: A team admin presses **Turn off**
+
 | State (`appState` in the API) | When | What a team admin does | What a member sees |
 |---|---|---|---|
 | Connected (`connected`) | The app is on and its account has signed in | Nothing to do | Nothing to do |

@@ -22,11 +22,19 @@ public certificate registered at the app.
 
 ## The options
 
-| Option | What it does | You give | Typical use |
-|---|---|---|---|
-| OAuth app proves itself with a certificate (under **More settings**, set **How the client is sent** to private_key_jwt) | Every token request, refresh and sign-in carries a client assertion signed by your key, in place of a client secret | Client ID, signing certificate, signing key | Microsoft Entra app registrations at banks |
-| Signed service account (JWT bearer) | Ops AI asks for a token with a JWT signed by your key, and signs a new one when it expires. No person signs in | Client ID (the issuer) and signing key. Optionally the certificate, a subject, an audience, and whether scopes go in the form or the claim | DocuSign (the integration key, with a user ID as subject) and Google service accounts |
-| Client certificate (mutual TLS) | Presents your certificate on the TLS handshake of every call, together with any of the kinds above or a key | Client certificate, client key, and optionally a trusted CA | APIs on a private network that require mutual TLS |
+<!-- site: compare caption="The three certificate sign-ins, and what each one proves" -->
+- **OAuth app with a certificate**: Under **More settings**, set **How the client is sent** to private_key_jwt.
+  - **What it does**: Every token request, refresh and sign-in carries a client assertion signed by your key, in place of a client secret
+  - **You give**: Client ID, signing certificate, signing key
+  - **Typical use**: Microsoft Entra app registrations at banks
+- **Signed service account**: JWT bearer. No person signs in.
+  - **What it does**: Ops AI asks for a token with a JWT signed by your key, and signs a new one when it expires
+  - **You give**: Client ID (the issuer) and signing key. Optionally the certificate, a subject, an audience, and whether scopes go in the form or the claim
+  - **Typical use**: DocuSign (the integration key, with a user ID as subject) and Google service accounts
+- **Client certificate**: Mutual TLS.
+  - **What it does**: Presents your certificate on the TLS handshake of every call, together with any of the kinds above or a key
+  - **You give**: Client certificate, client key, and optionally a trusted CA
+  - **Typical use**: APIs on a private network that require mutual TLS
 
 The signing pair and the TLS pair are kept apart, so a signing key is never offered on a TLS handshake.
 

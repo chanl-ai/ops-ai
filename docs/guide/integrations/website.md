@@ -42,11 +42,11 @@ If you skip the preview, a rule that is too wide or too narrow shows up only aft
 
 ## How syncs keep it current
 
-| At the site | On the next sync |
-|---|---|
-| A page changes | Only that page is fetched again, and it becomes a new version |
-| A page leaves the sitemap | It leaves the knowledge base and search |
-| A page answers 404 or 410 | It stays after the first miss and is removed after the second |
+<!-- site: decision caption="What the next sync does with a page, by what happened at the site" -->
+- **What happened to the page?**
+  - **It changed**: Only that page is fetched again, and it becomes a new version.
+  - **It left the sitemap**: It leaves the knowledge base and search.
+  - **It answers 404 or 410**: It stays after the first miss and is removed after the second.
 
 ## Pages the source cannot read
 

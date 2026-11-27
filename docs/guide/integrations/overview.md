@@ -33,11 +33,11 @@ tool](../build-your-first-tool.md) on it, or [build a plugin](build-a-plugin.md)
 
 Each app accepts one or more kinds of sign-in. Pick the page that matches what the system's API asks for.
 
-| Kind | Use it when | Page |
-|---|---|---|
-| OAuth, either signing in at the app or app-to-app | The app has its own sign-in page, or a service API issues tokens to an app | [Sign in with OAuth](sign-in-oauth.md) |
-| API key, username and password, or bearer token | The API takes a static secret | [Sign in with a key or password](sign-in-keys.md) |
-| A certificate: signed assertion, signed service account, or mutual TLS | Your policy forbids shared secrets, or the API requires mutual TLS | [Sign in with a certificate](sign-in-certificates.md) |
+<!-- site: decision caption="Which sign-in an app needs, by what the system's API asks for" -->
+- **What does the API ask for?**
+  - **A person signs in on its own page, or a service API issues tokens to an app**: [Sign in with OAuth](sign-in-oauth.md).
+  - **A static secret: an API key, a username and password, or a bearer token**: [Sign in with a key or password](sign-in-keys.md).
+  - **Your policy forbids shared secrets, or the API requires mutual TLS**: [Sign in with a certificate](sign-in-certificates.md).
 
 ## What holds for every app
 

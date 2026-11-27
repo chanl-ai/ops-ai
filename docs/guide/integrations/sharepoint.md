@@ -34,7 +34,13 @@ The **Documents** tab lists the source's files as indexed, and the knowledge bas
 them with the file cited. After that, a later sync fetches only what was added, changed or deleted, so the base follows
 the library without anyone touching it.
 
-If your team copies files in by hand instead, each policy change waits for a person to remember it.
+<!-- site: before-after caption="Policy files copied by hand, and a knowledge base that follows the library" -->
+- **Copied by hand**: Each policy change waits for a person to remember it.
+  - Agents keep quoting last quarter's version
+  - Nobody notices until a customer does
+- **With the app**: Each sync fetches only what was added, changed or deleted.
+  - Agents answer from the latest version
+  - The answer cites the file
 
 ## Files and tools
 
