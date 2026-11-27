@@ -197,6 +197,9 @@ REVOKE UPDATE, DELETE ON dbo.model_call_log FROM ops_models_runtime;
 GRANT SELECT, INSERT ON dbo.model_call_log TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_calls_untenanted TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_key_spend TO ops_models_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_budgets TO ops_models_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_budget_reservations TO ops_models_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_replays TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_aliases TO ops_models_runtime;
 GRANT SELECT ON dbo.alembic_version_models TO ops_models_runtime;
 GO

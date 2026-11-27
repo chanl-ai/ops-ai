@@ -200,3 +200,74 @@ model_key_spend = sa.Table(
     sa.Column("last_call_s", sa.Float(asdecimal=False), nullable=False),
     info=system("a model key's spend and call count per period, summed across the tenants it spends for"),
 )
+
+# A conversation's, run's, step's, group's, eval run's or builder draft's caps, spend and live reservations
+# (docs/design/agents-v2/model-gateway.md, "Data model"). A call reserves on each budget it names before the provider
+# is called, with one conditional update per budget, and settles to its actual usage after. Spend is counted on each
+# budget a request names, never rolled up to a parent.
+model_budgets = sa.Table(
+    "model_budgets",
+    metadata,
+    # (tenant_id, id): two tenants can never share or collide on a budget id.
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("id", sa.String(200), primary_key=True),
+    sa.Column("team_id", sa.String(64), nullable=False),
+    sa.Column("kind", sa.String(8), nullable=False),  # thread | run | step | group | eval | draft
+    sa.Column("created_by", sa.String(80), nullable=False),
+    sa.Column("expires_at", sa.DateTime(timezone=True)),
+    sa.Column("parent_id", sa.String(200)),
+    # A null cap is no cap.
+    sa.Column("max_cost", MONEY),
+    sa.Column("max_calls", sa.Integer),
+    sa.Column("max_tokens", sa.BigInteger),
+    sa.Column("spent_cost", MONEY, nullable=False, server_default="0"),
+    sa.Column("spent_calls", sa.Integer, nullable=False, server_default="0"),
+    sa.Column("spent_tokens", sa.BigInteger, nullable=False, server_default="0"),
+    # The sum of the live reservations' estimates.
+    sa.Column("reserved_cost", MONEY, nullable=False, server_default="0"),
+    sa.Column("reserved_calls", sa.Integer, nullable=False, server_default="0"),
+    sa.Column("reserved_tokens", sa.BigInteger, nullable=False, server_default="0"),
+    # The last 20 replay keys that used their closing call past the caps, and the check and judge calls per replay
+    # key past them: what bounds how far a spent budget can be passed.
+    sa.Column("closing_keys", sa.JSON, nullable=False),
+    sa.Column("check_calls", sa.JSON, nullable=False),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
+    sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
+    sa.Index("ix_model_budgets_parent", "tenant_id", "parent_id"),
+    # Held to its tenant by the database: read and written only as ROLE in that tenant.
+    info=TENANT_SCOPED,
+)
+
+# One call's hold on one budget, from its reservation until it settles or fails. The row is the token: settle and
+# release delete it first and move the budget only when they did, so a second release adds nothing back.
+model_budget_reservations = sa.Table(
+    "model_budget_reservations",
+    metadata,
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("budget_id", sa.String(200), nullable=False),
+    sa.Column("tenant_id", sa.String(64), nullable=False),
+    sa.Column("cost", MONEY, nullable=False),
+    sa.Column("calls", sa.Integer, nullable=False),
+    sa.Column("tokens", sa.BigInteger, nullable=False),
+    sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
+    sa.Index("ix_model_budget_reservations_budget", "tenant_id", "budget_id"),
+    sa.Index("ix_model_budget_reservations_expires", "expires_at"),
+    info=TENANT_SCOPED,
+)
+
+# The provider's final answer for a request under a replay key, so a re-run after a crash is answered without paying
+# again. The one table that holds completion text: tenant scoped, kept OPS_MODELS_REPLAY_HOURS, never listed or logged.
+model_replays = sa.Table(
+    "model_replays",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("replay_key", sa.String(240), primary_key=True),
+    # SHA-256 of the request's canonical JSON: a changed request under the same key is never answered from this row.
+    sa.Column("request_hash", sa.String(64), primary_key=True),
+    sa.Column("response", sa.UnicodeText, nullable=False),
+    sa.Column("call_id", sa.String(64), nullable=False),
+    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
+    sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
+    sa.Index("ix_model_replays_expires", "expires_at"),
+    info=TENANT_SCOPED,
+)
