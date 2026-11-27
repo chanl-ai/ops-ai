@@ -204,14 +204,17 @@ class Budgets(Store):
         """Reserves one call and its estimate on each budget of `ids`, in id order, in the open transaction. The first
         budget that cannot cover it refuses the call, and the ones reserved before it are given back."""
         holds: list[Hold] = []
+        # A closing key or check count is written only once every budget admitted the call, so a refusal on a later
+        # budget leaves the earlier one's key unspent.
+        counts: list[sa.Update] = []
         async with self.tx() as c:
             for budget_id in sorted(set(ids)):
-                refusal = None
                 if not await self._take(c, tenant_id, budget_id, ask):
-                    refusal = await self._past_caps(c, tenant_id, budget_id, ask)
-                if refusal is not None:
-                    await self._give_back(c, tenant_id, holds)
-                    return Reserved([], refusal)
+                    past = await self._past_caps(c, tenant_id, budget_id, ask)
+                    if isinstance(past, BudgetRefusal):
+                        await self._give_back(c, tenant_id, holds)
+                        return Reserved([], past)
+                    counts.append(past)
                 hold = Hold(new_id("rsv"), budget_id, ask.cost, ask.tokens)
                 await c.execute(
                     holds_t.insert().values(
@@ -225,6 +228,8 @@ class Budgets(Store):
                     )
                 )
                 holds.append(hold)
+            for count in counts:
+                await c.execute(count)
         return Reserved(holds)
 
     async def _take(self, c: AsyncConnection, tenant_id: str, budget_id: str, ask: Ask, *, capped: bool = True) -> bool:
@@ -246,10 +251,13 @@ class Budgets(Store):
         )
         return bool((await c.execute(q)).rowcount)
 
-    async def _past_caps(self, c: AsyncConnection, tenant_id: str, budget_id: str, ask: Ask) -> BudgetRefusal | None:
-        """A budget that could not cover the call: 404 when the tenant has none by that id; otherwise None when the
-        call is the replay key's closing call or one of its capped check calls, reserved past the caps and counted on
-        the budget, else the refusal naming the cap. The row is locked while its counts move."""
+    async def _past_caps(
+        self, c: AsyncConnection, tenant_id: str, budget_id: str, ask: Ask
+    ) -> BudgetRefusal | sa.Update:
+        """A budget that could not cover the call: 404 when the tenant has none by that id; when the call is the
+        replay key's closing call or one of its capped check calls, reserved past the caps, and the statement that
+        counts it on the budget, for `reserve` to run once every budget admitted it; else the refusal naming the cap.
+        The row stays locked until the transaction ends."""
         q = sa.select(t).where(t.c.tenant_id == tenant_id, t.c.id == budget_id)
         row = (await c.execute(locked(q, t))).first()
         if row is None:
@@ -263,18 +271,18 @@ class Budgets(Store):
             closed = [str(k) for k in kept]
             if key in closed:
                 return refused
-            await c.execute(t.update().where(*mine).values(closing_keys=[*closed, key][-KEPT_KEYS:]))
+            count = t.update().where(*mine).values(closing_keys=[*closed, key][-KEPT_KEYS:])
         elif ask.purpose in ("check", "judge"):
             calls: dict[Any, Any] = dict(row.check_calls or {})
             counted = {str(k): int(v) for k, v in calls.items()}
             if counted.get(key, 0) >= ask.check_calls:
                 return BudgetRefusal(429, "check_cap_reached", budget_id, limit, spent, cap)
             counted[key] = counted.pop(key, 0) + 1
-            await c.execute(t.update().where(*mine).values(check_calls=dict(list(counted.items())[-KEPT_KEYS:])))
+            count = t.update().where(*mine).values(check_calls=dict(list(counted.items())[-KEPT_KEYS:]))
         else:
             return refused
         await self._take(c, tenant_id, budget_id, ask, capped=False)
-        return None
+        return count
 
     async def settle(self, tenant_id: str, holds: Sequence[Hold], *, cost: Decimal, tokens: int) -> None:
         """Replaces each reservation with the call's actual cost and tokens, in the open transaction; a reservation

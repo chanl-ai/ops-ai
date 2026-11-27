@@ -1508,17 +1508,17 @@ def create_models_app(
             return await gate.refuse(
                 400, "tenant_required", "A call that sends X-Budget-Id or X-Replay-Key sends X-Tenant-Id too."
             )
+        if (why := _key_refusal(key, now)) is not None:
+            return await gate.refuse(*why)
         if call.replay_key and hashed and tenant:
             gate.replay = (call.replay_key, hashed)
             with isolation.scope(tenant, None):
                 found = await replays.find(tenant, call.replay_key, hashed, now)
             if found is not None:
-                # Answered as it was the first time, at no cost and past every later check: the call was admitted
-                # and paid for when it was made.
+                # Answered as it was the first time, at no cost and past the budget and rate checks: the call was
+                # admitted and paid for when it was made. A revoked or expired key was refused above.
                 await gate.log("replayed")
                 return replayed(found)
-        if (why := _key_refusal(key, now)) is not None:
-            return await gate.refuse(*why)
         if key.tenant_budget is not None:
             # A key one service spends for many tenants: the tenant names its own budget row.
             if not tenant:

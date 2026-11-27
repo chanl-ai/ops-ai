@@ -195,16 +195,21 @@ async def test_another_tenants_budget_id_is_not_found_and_reserves_nothing(model
 async def test_a_second_closing_call_and_a_closing_call_with_tools_are_refused(models: Models) -> None:
     _, secret = await models.key(budget="5")
     budget_id, key = _ids()
-    await _budget(models.client, budget_id, maxCalls=1)
+    later = f"{budget_id}:z"  # sorts after budget_id, so it is reserved second
+    for listed in (budget_id, later):
+        await _budget(models.client, listed, maxCalls=1)
     url = "/v1/models/chat/completions"
-    spent = await models.client.post(url, json=_ask("bank-standard"), headers=_call(secret, budget_id, key))
+    both = f"{budget_id},{later}"
+    spent = await models.client.post(url, json=_ask("bank-standard"), headers=_call(secret, both, key))
     assert spent.status_code == 200, spent.text
-    closing = _call(secret, budget_id, key, **{"X-Call-Purpose": "closing"})
     answers: list[httpx.Response] = []
-    for said in ("Wrap up the reply", "Wrap up the reply once more"):
+    # The later budget's closing call is spent first, so a call naming both is refused there; the first budget's
+    # closing call is still unspent afterwards.
+    for listed, said in ((later, "Close out"), (both, "Close out both"), (budget_id, "Wrap up"), (budget_id, "Again")):
+        closing = _call(secret, listed, key, **{"X-Call-Purpose": "closing"})
         answers.append(await models.client.post(url, json=_ask("bank-standard", said), headers=closing))
     tools = [{"type": "function", "function": {"name": "lookup_case", "parameters": {"type": "object"}}}]
     other = _call(secret, budget_id, key + ":other", **{"X-Call-Purpose": "closing"})
     with_tools = await models.client.post(url, json=_ask("bank-standard", tools=tools), headers=other)
     statuses = [(a.status_code, json.loads(a.text).get("error", {}).get("code")) for a in [*answers, with_tools]]
-    assert statuses == [(200, None), (429, "budget_reached"), (429, "budget_reached")]
+    assert statuses == [(200, None), (429, "budget_reached"), (200, None), *[(429, "budget_reached")] * 2]
