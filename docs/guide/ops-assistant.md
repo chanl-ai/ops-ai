@@ -2,31 +2,34 @@
 
 Status: current. Rows marked planned are designed and not built.
 
-**Let staff ask for work in plain words, and let other systems reach the same agents without a person in between.**
+This page shows how your staff can ask for work in plain words in a chat, and how other systems can reach the same
+agents without a person passing the request along.
 
-## Staff ask in plain words, and systems should ask too
+## Why teams ask in chat, and why systems need a way in too
 
-An operations team gets the same questions all day: which customers have a dispute open, what the branch cash limit is,
-who owns this case. A claims handler asks which policy applies. A lender's analyst asks where a loan stands. Answering
-each by hand means opening three systems and copying the result. Meanwhile another system that wants the same answer has
-no way in except a person.
+An operations team fields the same questions all day: which customers have a dispute open, what the branch cash limit
+is, who owns a case. A claims handler asks which policy applies, and a lender's analyst asks where a loan stands.
+Answering each one by hand means opening three systems and copying the result across. Another system that needs the
+same answer has no way in unless a person relays it.
 
-A chat is a conversation with an agent or with the team's Ops Assistant, which looks things up in your team's apps and
-replies with what it read. A channel is where that conversation, or a workflow run, comes in. Without channels, every
-new way of asking, from a mailbox to an API call, would need its own copy of the agent and its own rules.
+A chat is a conversation with one of your team's agents or with the team's Ops Assistant. The assistant looks things up
+in your team's apps and replies with what it read. A channel is the route by which that conversation, or a workflow
+run, arrives. Without channels, each new way of asking, from a mailbox to an API call, would need its own copy of the
+agent and its own set of rules.
 
-## The plan
+## From question to action
 
 <!-- site: steps -->
-1. **Ask.** Open **Chat** and type the question the way you would say it.
-2. **Read the answer and its sources.** The reply streams with the passages and tool results it used.
-3. **Let it act, with your yes.** When the answer needs a change in an app, the assistant reads the change back and
-   writes only after you say **Save**.
-4. **Open other doors.** Point a mailbox, the HTTP API or a due date at the same agent so work starts with no one typing.
+1. **Ask.** Open **Chat** and type your question the way you would say it out loud.
+2. **Check the answer and its sources.** The reply streams in, along with the passages and tool results it drew on.
+3. **Approve any change.** When the answer needs a change in an app, the assistant reads the change back to you and
+   makes it only after you choose **Save**.
+4. **Connect other channels.** Point a mailbox, the HTTP API or a due date at the same agent, so work can start without
+   anyone typing.
 
-## Try it
+## Ask your first question
 
-Open **Chat** in the console and ask a question, or from the command line:
+Open **Chat** in the console and ask a question. You can also ask from the command line:
 
 ```bash
 opsai chat say -m "Which customers have a card dispute open?"
@@ -34,10 +37,10 @@ opsai chat say --agent "Branch policy" --test -m "What is the daily cash limit a
 opsai chat say --thread <thread-id> -m "And who owns the first one?"
 ```
 
-The reply streams with its sources. The command prints a link to the same conversation in the console. The assistant
-acts as you, so it reaches only what your own sign-in allows.
+The reply streams in with its sources, and the command prints a link to the same conversation in the console. Because
+the assistant acts as you, it can reach only what your own sign-in allows.
 
-## Channels
+## Where requests can come from
 
 | Channel | What comes in | Status |
 |---|---|---|
@@ -49,77 +52,78 @@ acts as you, so it reaches only what your own sign-in allows.
 | A due time | A run that starts when a date passes | built. A recurring schedule is planned |
 | A webhook from another system | A signed incoming request that starts a run | planned |
 
-## What a chat does for you
+## What you can do in a chat
 
-### A checklist for longer asks
+### A checklist for longer requests
 
-An ask that needs several lookups, more than one App, or a change shows a short checklist above the answer. The assistant
-ticks each step off as it finishes it.
+When a request needs several lookups, more than one app, or a change, the assistant shows a short checklist above the
+answer. It ticks off each step as it finishes it.
 
-### When a sign-in is needed
+### When you need to sign in to an app
 
-If a step needs an App you have not connected, the assistant stops at that step and shows a **Connect** card. Press it,
-sign in, and the chat carries on at the same step. Nothing is retyped.
+If a step needs an app you have not connected yet, the assistant pauses at that step and shows a **Connect** card. Press
+it and sign in, and the chat picks up again at the same step, so you do not need to retype anything.
 
 ### Think harder
 
-A reply that took a plan or several lookups offers **Think harder**. One press answers the same question again on the
-deeper model. Writing "think harder" in a message, alone or with the question, does the same.
+When a reply needed a plan or several lookups, it offers **Think harder**. Pressing it answers the same question again
+using the deeper model. You get the same result by writing "think harder" in a message, either on its own or alongside
+your question.
 
-### Saving to an app
+### Approving a change to an app
 
-Before it changes anything in an App, the assistant reads the change back to you. It writes only after you say **Save**.
-Until then nothing in the App has changed.
+Before the assistant changes anything in an app, it reads the change back to you, and it makes the change only after you
+choose **Save**. Until you do, nothing in the app has changed.
 
-### Follow-ups
+### Follow-up questions
 
-- **Reused reads.** A chat reuses what it already read from an App with your own sign-in for 5 minutes, so a follow-up
-  answers faster. A read made on the team's account is never reused, because the team may see other records than you. The
-  reply says when it used an earlier read. A save to that App clears the reused reads, so the next look reads the App
-  again.
-- **Suggestion chips.** Under a reply, short chips offer likely next questions. Press one to ask it.
-- **Memories.** The assistant suggests what to remember and asks first. It keeps nothing silently.
+- For 5 minutes, a chat reuses what it has already read from an app with your own sign-in, so follow-up questions are
+  answered faster. It does not reuse a read made on the team's account, because the team's account may see different
+  records from the ones you can see. The reply tells you when it used an earlier read. Saving a change to that app
+  clears the reused reads, so the next lookup reads the app afresh.
+- Under a reply, short suggestion chips offer likely next questions. Press one to ask it.
+- The assistant may suggest things to remember, but it asks you first. It does not store a memory without asking.
 
-### Attached files
+### Files you attach
 
-A file you attach in chat is read once, and the assistant gets its text whole, up to about 24,000 characters for the
-turn. This covers scanned pages, half-scanned pages, images of text and filled forms (the typed values in a form's
-fields are read too). Scans are read by OCR, so a long scan can take a moment before the assistant answers. If a file is
-longer than the limit, or could not be read, the reply says so in words.
+When you attach a file in a chat, it is read once and the assistant receives its full text, up to about 24,000
+characters for that turn. This works for scanned pages, partly scanned pages, images of text and filled-in forms,
+including the typed values in a form's fields. Scans are read by OCR, so a long scan can take a moment before the
+assistant answers. If a file is longer than the limit, or could not be read, the reply tells you so in plain words.
 
-### Replies without a matching source
+### When no source matches your question
 
-When no knowledge passage matched your question, the reply keeps its lists and paragraphs, with a note under it:
-"No knowledge passage matched this question." The reply is often still a full answer, such as a question back or a
-plan.
+If no knowledge passage matched your question, the reply still keeps its lists and paragraphs, and a note appears under
+it: "No knowledge passage matched this question." The reply is often a complete answer anyway, such as a question back
+to you or a plan.
 
 The assistant states facts about your organisation (policies, processes, timelines, fees, products, teams, customers)
-only when your knowledge or a tool result in the chat gives them. When neither does, it says it does not have that
-information and what it can do instead. When a reply that uses knowledge lacks source numbers, the check adds the
-numbers. It does not replace a correct answer with "nothing found".
+only when your knowledge or a tool result in the chat supports them. When neither does, it tells you it does not have
+that information and suggests what it can do instead. If a reply that draws on knowledge is missing its source numbers,
+a check adds them. That check does not replace a correct answer with "nothing found".
 
-### Which app and which account
+### Choosing apps and accounts
 
-- A chat uses the Apps your team turned on. The **Connectors** button in the chat box lets you leave an App out of that
-  chat, before or during the chat.
-- The button shows the icons of the Apps in use (up to four, then a count). The list stays open while you check and
-  uncheck Apps, and each row shows the App's icon. An App that needs your sign-in has a **Connect** button in its row.
-- With two accounts of the same App connected and no default, the assistant asks which one to use. Your pick becomes the
-  default for calls that name no account.
-- An App your team has off shows a card with **Ask an admin**.
+- A chat uses the apps your team has turned on. You can use the **Connectors** button in the chat box to leave an app
+  out of a chat, either before you start or partway through.
+- The button shows the icons of the apps in use, up to four and then a count. The list stays open while you tick and
+  untick apps, and each row shows the app's icon. If an app needs your sign-in, its row has a **Connect** button.
+- If you have two accounts for the same app connected and neither is the default, the assistant asks which one to use.
+  The one you pick becomes the default for any call that does not name an account.
+- If your team has turned an app off, you see a card with **Ask an admin**.
 
-Your sign-ins are managed on **Apps › Mine** ([Apps](apps.md#your-own-sign-ins)).
+You manage your sign-ins on **Apps › Mine** ([Apps](apps.md#your-own-sign-ins)).
 
-## What success looks like
+## When this is working
 
-A member of staff asks a question in the console and the reply streams with its sources, acting only on what that
-person's own sign-in allows. A change to an app waits until they say **Save**. A mailbox, the HTTP API or a due date
-starts the same agent with no one typing.
+A member of staff asks a question in the console, and the reply streams in with its sources, drawing only on what that
+person's own sign-in allows. Any change to an app waits until they choose **Save**. Meanwhile a mailbox, the HTTP API or
+a due date can start the same agent without anyone typing.
 
-## What skipping it costs
+## Without chat and channels
 
-Without a chat, each question is a ticket to a person who opens the same three systems. Without channels, each system
-that wants an answer gets its own copy of the agent, and the copies drift apart.
+Without a chat, each question becomes a ticket for a person who then opens the same three systems. Without channels,
+every system that needs an answer ends up with its own copy of the agent, and over time those copies drift apart.
 
 ## Next
 

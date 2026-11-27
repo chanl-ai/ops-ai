@@ -3,20 +3,21 @@
 Status: current. The server side, the loader and the embed app are built and checked end to end on a sample page. The
 installer does not run the embed app yet; adding it to the Compose and Kubernetes installs is planned.
 
-**Put your agent on your own intranet or portal page, so people ask it where they already work.**
+If your people spend their day in an intranet or a portal, you can put your agent on that page, so they can ask it a
+question without leaving their work.
 
 ## People will not leave the page they work in to ask a question
 
-A bank's staff work in the intranet. A claims team lives in its case portal. If the agent is only in the Ops AI console,
-people do not open it, and the questions go back to colleagues. If the page embeds a chat that anyone can read from the
-outside, the first conversation leaks.
+A bank's staff work in the intranet, and a claims team spends its day in its case portal. If the agent lives only in the
+Ops AI console, people rarely open it, and their questions go back to colleagues. Embedding a chat carries its own risk,
+because a chat that anyone outside it can read exposes conversations from the very first one.
 
-Chat on your own pages puts the agent a launcher away. A launcher in the corner opens the same chat people use in the
-console, with sources, answer widgets, tool cards and approval cards (an approver decides them in Human Tasks). The chat
-runs in an iframe served by your own Ops AI deployment, so nothing on the page can read the conversation, and the person
-is identified by a short session your server mints for them.
+With Chat on your own pages, the agent sits behind a launcher in the corner of the page. The launcher opens the same chat
+people use in the console, with sources, answer widgets, tool cards and approval cards, and an approver decides those
+approvals in Human Tasks. The chat runs in an iframe served by your own Ops AI deployment, so nothing else on the page can
+read the conversation. Each person is identified by a short session that your server mints for them.
 
-## The plan
+## Four steps to a working chat
 
 <!-- site: steps -->
 1. **Create a widget deployment** for the agent and list the page origins that may embed it.
@@ -35,27 +36,32 @@ is identified by a short session your server mints for them.
 
 ## 1. Create a widget deployment
 
-In the console, open the agent's **Channels** tab and choose **Embed on a page** (or Deployments > New deployment > Chat
-widget, which asks for the agent), and list every page origin that will embed it, for example
-`https://intranet.harborpine.example`. The snippet it then shows is steps 2 and 3 below with the deployment and tenant
-filled in. Only an exact origin is accepted (scheme, host and port; no wildcards and
-no paths). The API is `POST /v1/widget-deployments` with `{ name, agentId, origins }`; it answers the deployment id
-(`wd_…`).
+In the console, open the agent's **Channels** tab and choose **Embed on a page**. You can also start from Deployments >
+New deployment > Chat widget, which asks you to pick the agent. Then list every page origin that will embed the chat, for
+example `https://intranet.harborpine.example`. Only an exact origin is accepted, meaning the scheme, host and port, with
+no wildcards and no paths. The console then shows a snippet that contains steps 2 and 3 below, with the deployment and
+tenant already filled in.
 
-Pausing the deployment stops every embedded conversation: new sessions are refused with 409 `widget_paused`, and so is
-every request of a session already open.
+If you work through the API instead, call `POST /v1/widget-deployments` with `{ name, agentId, origins }`. The response
+contains the deployment id (`wd_…`).
+
+Pausing the deployment stops every embedded conversation at once. New sessions are refused with 409 `widget_paused`, and
+so is every request from a session that is already open.
 
 ## 2. Mint a session on your server
 
-The bank's server already knows who is signed in to the intranet. It asks Ops AI for a session for that person, with the
-widget's **mint key**, and hands only the session to the page. A mint key mints sessions for one widget deployment and
-does nothing else; a team API key or a person's token is refused here.
+Your server, here the bank's, already knows who is signed in to the intranet. It asks Ops AI for a session for that
+person using the widget's **mint key**, and then passes only the session to the page. A mint key can mint sessions for one
+widget deployment and can do nothing else. If your server sends a team API key or a person's token here instead, the
+request is refused.
 
-Create the key with `POST /v1/widget-deployments/{id}/keys` and `{ "name": "Intranet server" }` as a builder or admin of
-the widget's team. The answer carries the secret once (`wk.<tenant>.<key id>.<secret>`); only its hash is kept. List
-keys with `GET /v1/widget-deployments/{id}/keys` and revoke one with `POST /v1/widget-deployments/{id}/keys/{keyId}/revoke`.
-In the console: the agent's Channels tab, the embed's row, **Mint keys**. Builders of the agent's team create and
-revoke keys there; viewers see no key controls.
+A builder or admin of the widget's team creates the key with `POST /v1/widget-deployments/{id}/keys` and
+`{ "name": "Intranet server" }`. The response carries the secret only once (`wk.<tenant>.<key id>.<secret>`), because
+Ops AI keeps only its hash, so store it as soon as you receive it. You can list keys with
+`GET /v1/widget-deployments/{id}/keys` and revoke one with `POST /v1/widget-deployments/{id}/keys/{keyId}/revoke`.
+
+In the console, the same controls sit on the agent's Channels tab: open the embed's row and choose **Mint keys**.
+Builders of the agent's team can create and revoke keys there, while viewers see no key controls.
 
 ```http
 POST https://ops.harborpine.example/v1/widget-deployments/wd_123/sessions
@@ -77,7 +83,7 @@ Content-Type: application/json
 | The session lasts 15 minutes and is not renewable | A copied session is useless soon; the loader asks the bank for a new one before it ends |
 | Keep the key in the bank's secrets manager, never in the page | Anyone holding it can mint a session for any person in this chat |
 
-A minimal endpoint (Node, any framework is the same):
+Here is a minimal endpoint in Node. The same shape works in any framework.
 
 ```js
 app.post('/api/ops-chat/session', requireIntranetLogin, async (req, res) => {
@@ -113,10 +119,11 @@ app.post('/api/ops-chat/session', requireIntranetLogin, async (req, res) => {
 </script>
 ```
 
-The page holds no key. The loader first reads the deployment's config; on a page whose origin the deployment does not
-list, the read is refused, nothing is drawn and the `error` event says `origin_not_allowed`. It then draws the launcher,
-creates the iframe (`/embed/{deployment}` on the same host) on first open, and passes the session to it. `getSession`
-may also return the session as a string; it is then refreshed after 14 minutes.
+The page holds no key. When it starts, the loader first reads the deployment's config. If the page's origin is not on
+the deployment's list, that read is refused, nothing is drawn, and the `error` event reports `origin_not_allowed`.
+Otherwise the loader draws the launcher, creates the iframe (`/embed/{deployment}` on the same host) the first time
+someone opens it, and passes the session to it. `getSession` may also return the session as a plain string, in which
+case the loader refreshes it after 14 minutes.
 
 ## 4. Control it from the page
 
@@ -134,7 +141,7 @@ may also return the session as a string; it is then refreshed after 14 minutes.
 | `signed-out` | none | No session, or the bank's endpoint returned none |
 | `error` | `{ code }` | One of the codes below |
 
-The host page never receives message text: the conversation stays inside the iframe.
+The host page never receives message text, because the conversation stays inside the iframe.
 
 ## 5. Errors
 
@@ -163,20 +170,20 @@ The host page never receives message text: the conversation stays inside the ifr
    mint key.
 2. Serve a test page from that origin with the script tag above, and a session endpoint that calls step 2's route with
    the mint key.
-3. Open the page: the launcher shows, and opening it shows the agent's greeting. Check that a page on an origin you did
-   not list loads nothing, and that the browser console shows no message text reaching the page.
+3. Open the page. The launcher should appear, and opening it should show the agent's greeting. Then check that a page
+   on an origin you did not list loads nothing, and that the browser console shows no message text reaching the page.
 
-## What success looks like
+## How you know it works
 
-A person opens the intranet page, sees the launcher and chats with the agent, with sources and approval cards. A page on
+Once the embed is working, a person opens the intranet page, sees the launcher and chats with the agent, with sources and approval cards. A page on
 an origin you did not list loads nothing, and the browser console shows no message text reaching the host page.
 
-## What skipping it costs
+## If you do without it
 
-Without the embed, people keep asking colleagues instead of the agent. With a hand-built embed, the conversation is
-readable by the host page, and a leaked key lets anyone chat as anyone.
+Without the embed, people keep taking their questions to colleagues instead of the agent. A hand-built embed brings a
+different problem: the host page can read the conversation, and a leaked key lets anyone chat as anyone.
 
-## Next
+## Where to go next
 
 <!-- site: cards -->
 - **[Chat and channels](../guide/ops-assistant.md)**: what the chat does once it is open.
