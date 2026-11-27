@@ -9,7 +9,7 @@ install: ## pnpm install at the workspace root
 	cd ../.. && pnpm install
 
 run: ## next dev in the foreground on :3016, chat on the agents service
-	NODE_OPTIONS=--max-old-space-size=$${OPS_CONSOLE_HEAP_MB:-3072} NEXT_PUBLIC_OPS_CHAT_API_URL=http://localhost:$(OPS_AGENTS_PORT) pnpm exec next dev -p $(OPS_CONSOLE_PORT)
+	NODE_OPTIONS=--max-old-space-size=$${OPS_CONSOLE_HEAP_MB:-3072} NEXT_PUBLIC_OPS_CHAT_API_URL=http://localhost:$(OPS_AGENTS_PORT) env -u AI_AGENT -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT pnpm exec next dev -p $(OPS_CONSOLE_PORT)
 
 test: ## No console tests yet; typecheck and the standards check are the gate
 	@echo "console: no tests yet (verify runs tsc and the standards check)"

@@ -87,6 +87,7 @@ stack's chat alias points at one. Reference: [make/CLAUDE.md](../../make/CLAUDE.
 - A migration that creates a tenant or team table creates its SQL Server security policy after the table
   (`mssql_predicates_ddl`, then `isolation_ddl`) and drops it before the table (`isolation_drop_ddl`): SQL Server refuses
   to drop a table a policy is bound to (error 3729), and only the store-mssql CI job runs that path.
+- No gateway, no tool steps: Every deployment sets `OPS_GATEWAY_URL` (fly, k8s, compose, `make up`). Without it the publish check reads the in-process catalogue, which holds no platform tool (send_reply) and no app's, and refuses such a step naming the missing gateway; a catalogue tool step still publishes, and the runner calls no tool step at all (`NoGatewayError`). A use case that publishes or runs a tool step starts `tools()` and passes `gateway_url`, as uc-223 and uc-620 do
 
 ## Reference docs
 
