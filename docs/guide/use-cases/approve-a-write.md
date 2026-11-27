@@ -56,7 +56,7 @@ With approvals turned off, an agent's changes go straight to the app. If the age
 app before anyone has had a chance to check it. Approvals kept in an email thread don't record which input was
 approved either, so each time someone asks you for the audit trail, your team has to piece it together by hand.
 
-![The Human Tasks queue: open, overdue and decided counts, then each request with its time left, status and risk](../../media/human-tasks-light.png)
+![The Human Tasks queue: open, overdue and decided counts, then each request with its time left, status and risk](https://opsai.chanl.ai/docs/media/human-tasks-light.png)
 
 ## Decide from code
 

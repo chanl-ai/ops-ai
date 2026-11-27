@@ -440,11 +440,11 @@ serves clients configured with a header (coding assistants), and the others wait
 
 | Screen | Wireframe |
 |---|---|
-| Tools › MCP for a team: endpoint, what assistants can call, connected assistants, calls | ![Team MCP page](images/mcp-tab-team.png) |
-| Connect a client, with Sign in and API key tabs | ![Connect a client dialog](images/mcp-connect-client.png) |
-| A module's MCP tab for one scope | ![Module MCP tab](images/mcp-tab-module.png) |
-| The consent screen on the platform's sign-in pages | ![Consent screen](images/mcp-consent.png) |
-| The review an MCP write opens: the same card and decide call as every review | ![Review card for an MCP write](images/mcp-review.png) |
+| Tools › MCP for a team: endpoint, what assistants can call, connected assistants, calls | ![Team MCP page](https://opsai.chanl.ai/docs/design/tools/images/mcp-tab-team.png) |
+| Connect a client, with Sign in and API key tabs | ![Connect a client dialog](https://opsai.chanl.ai/docs/design/tools/images/mcp-connect-client.png) |
+| A module's MCP tab for one scope | ![Module MCP tab](https://opsai.chanl.ai/docs/design/tools/images/mcp-tab-module.png) |
+| The consent screen on the platform's sign-in pages | ![Consent screen](https://opsai.chanl.ai/docs/design/tools/images/mcp-consent.png) |
+| The review an MCP write opens: the same card and decide call as every review | ![Review card for an MCP write](https://opsai.chanl.ai/docs/design/tools/images/mcp-review.png) |
 
 ## Proof
 
