@@ -1,6 +1,7 @@
 # Experiments for agents version 2
 
-Status: proposed design, written 2026-11-26. Experiment 1 ran on 2026-11-26; the others have not run (see Results).
+Status: proposed design, written 2026-11-26. Experiment 1 ran on 2026-11-26 and experiment 0's Strands row on
+2026-11-27; the others have not run (see Results).
 Each result is written into this page when its experiment ends.
 
 Each experiment is a throwaway script that answers one question the specs could not settle from documentation: does a
@@ -366,8 +367,22 @@ Fallback: the statement that deadlocks keeps a SQL Server-specific form inside `
 
 | Experiment | Date | Result |
 |---|---|---|
-| 0 | 2026-11-26 | Not run. No licence file, release date or advisory was checked |
+| 0 | 2026-11-27 | Passed for the Strands Agents Python SDK, the one part 1.4.0 adds: `strands-agents[openai]` 1.67.0 and its install tree are under permissive licences. The other parts of the table were not checked. Details below |
 | 1 | 2026-11-26 | Passed steps 2 to 6, 8 and 9 on `strands-agents` 1.67.0 with the script `scripts/experiments/strands_pause_resume.py`. Step 7 (size at 20 and 60 messages) not measured. Details below |
+
+Experiment 0, run for the Strands row. The licences were read from the installed package metadata of the locked
+install (`uv lock` with `strands-agents[openai]==1.67.0` in the kernel's `pyproject.toml`), walking every dependency of
+`strands-agents` and its `openai` extra.
+
+| Item | Seen |
+|---|---|
+| Strands Agents | `strands-agents` 1.67.0, Apache-2.0, released 2026-11-25 |
+| Install tree | 50 packages. Apache-2.0: boto3, botocore, s3transfer, openai, aws-bedrock-token-generator, watchdog, python-multipart, the five OpenTelemetry packages. MIT: mcp, pydantic, jsonschema, anyio, pyjwt, pyyaml and others. BSD: httpx, httpx2, httpcore, starlette, uvicorn, click, wrapt, idna. PSF-2.0: typing-extensions. MPL-2.0: certifi. Dual Apache-2.0 or BSD: packaging, python-dateutil |
+| AGPL, SSPL, source-available or field-of-use terms | None in the tree |
+| New to the lock | strands-agents, watchdog, aws-bedrock-token-generator, opentelemetry-sdk, opentelemetry-instrumentation, opentelemetry-instrumentation-threading, opentelemetry-semantic-conventions. Every other package was already locked at the same version |
+| Mirror cutoff | 1.67.0 is younger than the repository's 30-day `exclude-newer` cutoff, so the root `pyproject.toml` names it in `exclude-newer-package` with its reason. Its dependencies resolve inside the cutoff |
+
+Not checked: the release cadence over 12 months and open security advisories (step 2).
 
 Experiment 1, run. Each resume is a fresh interpreter that loads the snapshot from a file written by the pausing one. The
 model is a scripted OpenAI-compatible gateway on an `httpx.MockTransport`, given to `OpenAIModel(client=...)`.
