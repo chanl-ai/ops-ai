@@ -95,3 +95,7 @@ Fixes follow the ops-fix-the-class skill (`docs/guide/skills/ops-fix-the-class.m
 ## Report (at most 10 lines)
 Commits; the routes added or changed with their operation ids; the settings added; tests and use cases run per layer
 with what they printed; each new test's first failure; anything not run.
+
+## Known traps
+
+Before the first edit in a folder, read the "Known traps" section of the nearest CLAUDE.md and follow it. When you fix a red that could happen again, add one "- trigger => fix" line there in the same commit (public repo: no card ids, session links or customer names).

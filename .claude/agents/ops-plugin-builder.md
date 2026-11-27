@@ -93,3 +93,7 @@ Fixes follow the ops-fix-the-class skill (`docs/guide/skills/ops-fix-the-class.m
 ## Report (at most 10 lines)
 Commits; the plugins or tools added or changed with their manifest versions; the pin changes; tests seen failing and what
 they printed; `make plugins-check` output; anything not run.
+
+## Known traps
+
+Before the first edit in a folder, read the "Known traps" section of the nearest CLAUDE.md and follow it. When you fix a red that could happen again, add one "- trigger => fix" line there in the same commit (public repo: no card ids, session links or customer names).
