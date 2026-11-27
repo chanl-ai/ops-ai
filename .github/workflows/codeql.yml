@@ -8,7 +8,7 @@ on:
     branches: [develop, main]
   push:
     # A release or hotfix branch is scanned on every push, with the rest of its security scans (release-security.yml).
-    branches: [main, "release/**", "hotfix/**"]
+    branches: [main, "release/[0-9]*", "hotfix/**"]
   schedule:
     # Weekly, so new CodeQL queries run against code that has not changed.
     - cron: "17 4 * * 1"

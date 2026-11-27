@@ -17,7 +17,7 @@ on:
   # develop and main run the same checks after a merge; the staging job at the end deploys develop, and a release or
   # hotfix branch (docs/deploy/release.md) so the release is tested on staging.
   push:
-    branches: [develop, main, "release/**", "hotfix/**"]
+    branches: [develop, main, "release/[0-9]*", "hotfix/**"]
 
 permissions:
   contents: read
@@ -623,12 +623,27 @@ jobs:
     secrets: inherit
 
   staging-scan:
-    # A release or hotfix branch's web scan, after its own deploy so it reads the release under test
-    # (release-security.yml holds the branch's other scans, which need no deploy).
+    # A release or hotfix branch's web scan: an OWASP ZAP baseline of staging after that branch's own deploy, so it reads
+    # the release under test (release-security.yml holds the branch's other scans, which need no deploy). Passive rules
+    # only: it spiders for a minute and sends no attack. Report only for now: baseline rules warn, and -I keeps a
+    # warning from failing the job; the report is the artifact zap-baseline.
     needs: [plan, staging]
     if: ${{ !cancelled() && needs.plan.outputs.release == 'true' && needs.staging.result == 'success' }}
-    permissions:
-      contents: read
-    uses: ./.github/workflows/release-security.yml
-    with:
-      web: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ORIGIN: https://${{ vars.STG_APP }}.fly.dev
+      # By digest, so a moved tag cannot change what runs here.
+      ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:2.16.1@sha256:7840969c7c9fead565bf9734b12f49f6886db90b1d35b1f74d79710bbd081dab
+    steps:
+      - name: ZAP baseline scan of staging
+        run: |
+          mkdir -p zap && chmod 777 zap
+          docker run --rm -v "$PWD/zap:/zap/wrk:rw" "$ZAP_IMAGE" zap-baseline.py -t "$ORIGIN" -m 1 -I -r zap.html -J zap.json
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: zap-baseline
+          path: zap/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -28,18 +28,26 @@ WORKFLOW = "verify-full.yml"
 LABEL = "needs-merge"
 RED = ("failure", "cancelled", "timed_out")
 STAMP = re.compile(r"^\S*\d{4}-\d\d-\d\dT[\d:.]+Z ?")
-ERROR = re.compile(r"##\[error\]|^E  |\b(FAILED|ERROR|Error:|error:|Traceback)\b|make: \*\*\*")
 QUEUE_BRANCH = re.compile(r"^gh-readonly-queue/[^/]+(?:/.+)?/pr-(\d+)-[0-9a-f]+$")
 
 
 def first_error(log: str) -> str:
-    """The first line of a job log that names the failure, without its timestamp; the last line when none does."""
-    lines = [STAMP.sub("", raw.split("\t")[-1]).strip() for raw in log.splitlines()]
-    lines = [ln for ln in lines if ln]
-    # "Process completed with exit code 1" is the runner's own line and says nothing; an earlier line is the cause.
-    named = [ln for ln in lines if ERROR.search(ln) and "Process completed with exit code" not in ln]
-    line = named[0] if named else (lines[-1] if lines else "no log")
-    return line.replace("##[error]", "").strip()[:300]
+    """The line of a failed step's log that names the failure, without its timestamp. A real log holds many lines that
+    only look like errors (a self-test printing its planted failure, a command echoed with `grep FAILED` in it), so the
+    order is: a workflow annotation, the entry under `make checks`' own "check(s) failed:" list, a pytest FAILED or E
+    line, make's own error, then the last line. The runner's "Process completed with exit code" says nothing."""
+    lines = [STAMP.sub("", raw.split("\t")[-1]).rstrip() for raw in log.splitlines()]
+    lines = [ln for ln in lines if ln.strip() and "Process completed with exit code" not in ln]
+    listed = [lines[k + 1] for k, ln in enumerate(lines[:-1]) if "check(s) failed:" in ln]
+    picks = (
+        [ln for ln in lines if "##[error]" in ln],
+        listed,
+        [ln for ln in lines if re.match(r"(FAILED |ERROR |E   )", ln)],
+        [ln for ln in lines if ln.startswith("make: ***")],
+        lines[-1:],
+    )
+    line = next((found[0] for found in picks if found), "no log")
+    return line.replace("##[error]", "").strip(" -")[:300]
 
 
 def ready_reasons(needs: dict[str, dict[str, str]], behind: int, codeql: dict[str, str]) -> list[str]:
@@ -75,7 +83,8 @@ def to_sync(prs: list[dict], behind: set[int]) -> list[int]:
 def queue_step(attempt: int, conclusion: str) -> str:
     """What a finished merge queue run asks for: rerun (first failure), comment (it failed again), requeue (the rerun
     passed, and the queue had already dropped the pull request), or nothing."""
-    if conclusion in RED:
+    # A cancelled run is the queue rebuilding its group, not a failure of this pull request.
+    if conclusion in ("failure", "timed_out"):
         return "rerun" if attempt <= 1 else "comment"
     return "requeue" if conclusion == "success" and attempt > 1 else "nothing"
 
@@ -110,14 +119,14 @@ def repo() -> str:
 
 
 def failures(run: str) -> list[tuple[str, str]]:
+    """Each failed job with the first error of its failed steps (`gh run view --log-failed`: job, step, line)."""
     jobs = json.loads(gh("run", "view", run, "--json", "jobs"))["jobs"]
-    out = []
-    for job in jobs:
-        if job.get("conclusion") not in RED:
-            continue
-        log = gh("api", f"repos/{repo()}/actions/jobs/{job['databaseId']}/logs", check=False)
-        out.append((job["name"], first_error(log) if log else f"{job['conclusion']}, no log"))
-    return out
+    # ci-ok and ready only repeat that another job failed.
+    red = [job["name"] for job in jobs if job.get("conclusion") in RED and job["name"] not in ("ci-ok", "ready")]
+    logs: dict[str, list[str]] = {}
+    for raw in gh("run", "view", run, "--log-failed", check=False).splitlines():
+        logs.setdefault(raw.split("\t", 1)[0], []).append(raw)
+    return [(name, first_error("\n".join(logs[name])) if name in logs else "no log of a failed step") for name in red]
 
 
 def print_failures(run: str) -> int:
@@ -297,6 +306,10 @@ def cmd_queue_failure(run: str, attempt: int, conclusion: str, *, branch: str, u
     print(f"queue run {run} attempt {attempt} on {branch}: {conclusion}, so {step}" + (f" (#{pr})" if pr else ""))
     if dry or step == "nothing" or pr is None:
         return 0
+    state = json.loads(gh("pr", "view", str(pr), "--json", "state,isDraft"))
+    if state["state"] != "OPEN":
+        print(f"#{pr} is {state['state']}; nothing to do")
+        return 0
     if step == "rerun":
         gh("run", "rerun", run, "--failed")
     elif step == "comment":
@@ -308,9 +321,16 @@ def cmd_queue_failure(run: str, attempt: int, conclusion: str, *, branch: str, u
 
 def self_test() -> int:
     log = (
-        "checks\tmake\t2026-11-26T10:00:00.1Z == sbom\n"
-        "checks\tmake\t2026-11-26T10:00:01.1Z FAILED scripts/tests/test_x.py::test_y - AssertionError\n"
-        "checks\tmake\t2026-11-26T10:00:02.1Z ##[error]Process completed with exit code 1.\n"
+        "checks\tmake\t2026-11-26T10:00:00.1Z == ci-local-self-test\n"
+        "checks\tmake\t2026-11-26T10:00:00.2Z ci-local: 2 jobs run, 1 failed, 0 skipped {'x: red': 'failed'}\n"
+        "checks\tmake\t2026-11-26T10:00:01.1Z verify: 1 check(s) failed:\n"
+        "checks\tmake\t2026-11-26T10:00:01.2Z   - node scripts/changelog-check.mjs --entries (exit 1)\n"
+        "checks\tmake\t2026-11-26T10:00:01.3Z make: *** [make/checks.mk:167: checks] Error 1\n"
+        "checks\tmake\t2026-11-26T10:00:02.1Z ##[error]Process completed with exit code 2.\n"
+    )
+    pytest_log = (
+        "j\ts\t2026-11-26T10:00:00Z grep -E ' (FAILED|ERROR)' log\n"
+        "j\ts\t2026-11-26T10:00:01Z FAILED tests/test_x.py::test_y - boom"
     )
     green = {"checks": {"result": "success"}, "docs": {"result": "skipped"}}
     prs = [
@@ -329,10 +349,16 @@ def self_test() -> int:
     ]
     cases = [
         (
-            "the first error is the failing test, not the runner's exit line",
+            "the failed check is named, not a self-test's planted failure or the runner's exit line",
             first_error(log),
-            "FAILED scripts/tests/test_x.py::test_y - AssertionError",
+            "node scripts/changelog-check.mjs --entries (exit 1)",
         ),
+        (
+            "a pytest failure is named, not the command that greps for one",
+            first_error(pytest_log),
+            "FAILED tests/test_x.py::test_y - boom",
+        ),
+        ("a cancelled queue run is the queue regrouping, not a failure", queue_step(1, "cancelled"), "nothing"),
         (
             "a log with no error line gives its last line",
             first_error("a\tb\t2026-11-26T10:00:00Z one\na\tb\t2026-11-26T10:00:01Z two"),

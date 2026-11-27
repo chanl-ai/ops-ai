@@ -53,6 +53,9 @@
     "ready": [
       {"step": "Ready for the queue", "no_local_twin": "Reads the other jobs' results, CodeQL's check runs and the distance from develop on GitHub; `python3 scripts/pr_flow.py --self-test` proves the decisions."}
     ],
+    "staging-scan": [
+      {"step": "ZAP baseline scan of staging", "no_local_twin": "Scans the staging app after a release or hotfix branch's deploy; the same docker command runs against any origin."}
+    ],
     "ci-ok": [
       {"step": "if grep -qE '\"result\": \"(failure|cancelled)\"' <<<\"$NEEDS\"; then echo \"$NEEDS\"; exit 1; fi", "no_local_twin": "Reads the other jobs' results on GitHub."}
     ]
