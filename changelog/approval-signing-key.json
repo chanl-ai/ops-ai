@@ -1,0 +1,1 @@
+{"date": "2026-11-27", "title": "Only the tool gateway can approve a change", "description": "Approvals for agent changes are issued by the tool gateway alone, which checks the change again before it signs. Sign-in confirmations, chat widget sessions and links that resume a paused workflow use a separate key, OPS_SESSION_TOKEN_KEY, which an install must set.", "tag": "improved"}

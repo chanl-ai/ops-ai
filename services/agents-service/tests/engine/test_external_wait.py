@@ -108,7 +108,7 @@ async def client(engine: AsyncEngine, settings: Settings) -> AsyncIterator[Async
 
 def _worker(engine: AsyncEngine, settings: Settings) -> Worker:
     w = worker(engine, CountingTools(), InMemorySaver())
-    key = settings.review_key.get_secret_value()
+    key = settings.session_token_key.get_secret_value()
     w.host.resume_link = lambda run, waiting, seconds: resume_link(
         key,
         tenant=run.tenant_id,

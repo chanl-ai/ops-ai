@@ -4,7 +4,8 @@ signed callback or a service event, whichever comes first; and the callback's to
 A resume row is keyed `resume:{run}:{node}:{iteration}`, so a second resume of the same pause finds the first and
 changes nothing; the worker drops a row meant for a pause the run has already left (its interrupt id). The callback
 token is derived when the step parks and derived again to check, never stored, like the approval token minted at the
-call: an HMAC over the run, step, pass, interrupt, tenant, team and expiry with a key derived from the review key.
+call: an HMAC over the run, step, pass, interrupt, tenant, team and expiry with a key derived from the session-token
+key.
 """
 
 from __future__ import annotations
@@ -75,17 +76,17 @@ def _unb64(text: str) -> bytes:
     return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
 
 
-def resume_token(review_key: str, claim: ResumeClaim) -> str:
+def resume_token(key: str, claim: ResumeClaim) -> str:
     """`<claim>.<signature>`: the claim names the pause so the route finds the run without a person's token."""
     head = _b64(json.dumps(claim.__dict__, separators=(",", ":")).encode())
-    return f"{head}.{_b64(HmacSigner.derived(review_key, RESUME_PURPOSE).sign(_message(claim)))}"
+    return f"{head}.{_b64(HmacSigner.derived(key, RESUME_PURPOSE).sign(_message(claim)))}"
 
 
 class BadResumeToken(ValueError):
     """The token is not one this service signed, or it has expired."""
 
 
-def read_token(review_key: str, token: str, *, now: float | None = None) -> ResumeClaim:
+def read_token(key: str, token: str, *, now: float | None = None) -> ResumeClaim:
     """The claim a valid, unexpired token carries; BadResumeToken otherwise."""
     try:
         head, sig = token.split(".", 1)
@@ -94,16 +95,14 @@ def read_token(review_key: str, token: str, *, now: float | None = None) -> Resu
         signature = _unb64(sig)
     except (ValueError, TypeError, binascii.Error) as e:
         raise BadResumeToken("not a resume token") from e
-    if not HmacSigner.derived(review_key, RESUME_PURPOSE).verify(_message(claim), signature):
+    if not HmacSigner.derived(key, RESUME_PURPOSE).verify(_message(claim), signature):
         raise BadResumeToken("the signature does not match")
     if claim.expires_at < (time.time() if now is None else now):
         raise BadResumeToken("the token has expired")
     return claim
 
 
-def resume_link(
-    review_key: str, *, tenant: str, team: str, run_id: str, waiting: Json, seconds: float
-) -> dict[str, str]:
+def resume_link(key: str, *, tenant: str, team: str, run_id: str, waiting: Json, seconds: float) -> dict[str, str]:
     """The URL and token an outside system posts its result to, valid a day past the step's own limit."""
     claim = ResumeClaim(
         tenant=tenant,
@@ -114,7 +113,7 @@ def resume_link(
         interrupt_id=str(waiting["interruptId"]),
         expires_at=int(time.time() + seconds + 86400),
     )
-    return {"url": f"/v1/runs/{run_id}/steps/{claim.node}/resume", "token": resume_token(review_key, claim)}
+    return {"url": f"/v1/runs/{run_id}/steps/{claim.node}/resume", "token": resume_token(key, claim)}
 
 
 async def resumed(

@@ -195,7 +195,7 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             end_turn=end_late(rt) if chats else None,
             turn_limit_s=settings.turn_deadline_seconds,
             resume_link=lambda run, waiting, seconds: resume_link(
-                settings.review_key.get_secret_value(),
+                settings.session_token_key.get_secret_value(),
                 tenant=run.tenant_id,
                 team=run.team_id,
                 run_id=run.id,
@@ -322,7 +322,7 @@ def main() -> None:
     configure_logging(service="agents-worker")
     settings = Settings()
     settings.require(*settings.identity_endpoints)
-    require_keys(settings, "review_key")
+    require_keys(settings, "review_key", "session_token_key")
     require_current_schema(settings.database_url, MIGRATIONS)
 
     async def run() -> None:

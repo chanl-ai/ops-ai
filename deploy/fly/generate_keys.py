@@ -36,6 +36,7 @@ def generate() -> dict[str, str]:
     keys["OPS_SERVICE_PUBLIC_KEYS"] = json.dumps(public, separators=(",", ":"))
     keys["OPS_PLATFORM_SIGNING_KEY"] = Ed25519Signer.generate("platform-1").private_text()
     keys["OPS_REVIEW_KEY"] = secrets.token_urlsafe(32)
+    keys["OPS_SESSION_TOKEN_KEY"] = secrets.token_urlsafe(32)
     keys["OPS_SECRETS_KEY"] = secrets.token_hex(32)
     return keys
 

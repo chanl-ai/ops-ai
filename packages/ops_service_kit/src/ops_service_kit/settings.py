@@ -29,6 +29,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 _SEED_DIR = _REPO_ROOT / "services" / "agents-service" / "seed"
 _DEV_SECRETS_KEY = "00" * 32
 _DEV_REVIEW_KEY = "dev-review-key-not-secret"
+_DEV_SESSION_TOKEN_KEY = "dev-session-token-key-not-secret"
 # The console's tool modules, loaded by a dev tools-service so it serves what the console's mock shows.
 _TOOLS_SEED = _REPO_ROOT / "services" / "tools-service" / "seed" / "tool_modules.json"
 # The development tenant, team and people platform-service seeds in dev.
@@ -630,6 +631,9 @@ class Settings(BaseSettings):
     # The review service signs approval tokens with this HMAC key; the gateway hands it to OPA, which verifies them.
     review_key: SecretStr = SecretStr(_DEV_REVIEW_KEY)
     review_token_ttl_seconds: int = 900
+    # agents-service alone signs and verifies with this HMAC key: the step-up, widget-session and resume-link tokens it
+    # hands a person. It is never the review key, so nothing agents holds signs an approval the gateway accepts.
+    session_token_key: SecretStr = SecretStr(_DEV_SESSION_TOKEN_KEY)
     # agents-service's Reviews list, Overview counts and a task's place merge three sources (graph threads, publish
     # requests, waiting workflow runs) in Python before paging, so each source reads at most this many rows, newest
     # first after the open ones; a source at the cap is logged as `review_source_capped`, and its older rows are left
@@ -800,13 +804,18 @@ def endpoint_env(name: str) -> str:
     return f"OPS_{name.upper()}_URL"
 
 
-_PUBLIC_DEFAULTS = {"review_key": _DEV_REVIEW_KEY, "secrets_key": _DEV_SECRETS_KEY}
+_PUBLIC_DEFAULTS = {
+    "review_key": _DEV_REVIEW_KEY,
+    "session_token_key": _DEV_SESSION_TOKEN_KEY,
+    "secrets_key": _DEV_SECRETS_KEY,
+}
 
 
 def require_keys(settings: Settings, *names: str) -> None:
     """Refuses to start a service outside dev while a key it uses still holds its public default. Called by each
-    service that uses the key, so a service that does not use one is never handed it (`review_key`: agents-service and
-    its worker, tools-service; `secrets_key`: tools-service, files-service, models-service, platform-service)."""
+    service that uses the key, so a service that does not use one is never handed it (`review_key`: tools-service;
+    `session_token_key`: agents-service and its worker; `secrets_key`: tools-service, files-service, models-service,
+    platform-service)."""
     if settings.environment == "dev":
         return
     for name in names:

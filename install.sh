@@ -491,7 +491,7 @@ write_env() {
     if [ "$MODEL_KIND" = provider ]; then printf 'OPS_INSTALL_MODEL_URL=%s\nOPS_INSTALL_MODEL_NAME=%s\n' "$A_MODEL" "$A_MODEL_NAME"; fi
     if [ "$DB_MODE" = dba ]; then printf 'OPS_INSTALL_DB_ADMIN=%s\n' "${DB_USER:-}"; fi
   } >>"$ENV_FILE"
-  say "keys generated: $(grep -c '^OPS_SVC_KEY_[A-Z]*=.' "$ENV_FILE") service keys, platform, review and secrets keys (not shown)"
+  say "keys generated: $(grep -c '^OPS_SVC_KEY_[A-Z]*=.' "$ENV_FILE") service keys, platform, review, session-token and secrets keys (not shown)"
 }
 
 connect_model() {
@@ -604,7 +604,7 @@ install() {
 # The first pull, before the real env file exists: every ${VAR:?} in app.yaml must resolve, so the stub fills them.
 get_images_stub() {
   local s
-  for s in OPS_PLATFORM_SIGNING_KEY OPS_REVIEW_KEY OPS_SECRETS_KEY OPS_DATABASE_URL OPS_DATABASE_URL_PLATFORM; do printf '%s=stub\n' "$s" >>"$ENV_FILE"; done
+  for s in OPS_PLATFORM_SIGNING_KEY OPS_REVIEW_KEY OPS_SESSION_TOKEN_KEY OPS_SECRETS_KEY OPS_DATABASE_URL OPS_DATABASE_URL_PLATFORM; do printf '%s=stub\n' "$s" >>"$ENV_FILE"; done
   # Read from the compose file, not $SERVICES: the runner has a service key but no database of its own.
   for s in $(grep -o 'OPS_SVC_KEY_[A-Z]*' "$COMPOSE_DIR/app.yaml" | sort -u); do printf '%s=stub\n' "$s" >>"$ENV_FILE"; done
   get_images
