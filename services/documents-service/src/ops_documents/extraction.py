@@ -194,7 +194,7 @@ class ModelsService:
         def ask(alias: str) -> partial[Any]:
             # The tenant spends from its own share of this key, so one tenant cannot drain the others.
             calls = ModelCalls(self.http, self.key, alias)
-            return partial(calls.structured, system, user, cast(dict[str, Any], schema), tenant=tenant, step=step,
+            return partial(calls.structured, system, user, schema, tenant=tenant, step=step,
                            run=run, usage=spent, max_tokens=self.output_tokens)  # fmt: skip
 
         try:
