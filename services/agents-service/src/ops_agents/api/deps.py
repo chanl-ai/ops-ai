@@ -10,7 +10,7 @@ from fastapi import Request
 
 from ops_agent_kernel.ports import KernelPorts
 from ops_agents.activities.catalog import Catalog
-from ops_agents.activities.gateway import GatewayClient
+from ops_agents.activities.gateway import GatewayClient, TokenMinter
 from ops_agents.activities.knowledge import KnowledgeBases, NoKnowledgeService
 from ops_agents.activities.tool_directory import AppStates, CatalogTools, ToolDirectory
 from ops_agents.graphs.common import GraphDeps
@@ -52,6 +52,9 @@ class Runtime:
     gateway: bool = False
     # The tools-service client when a gateway is configured; the review service asks it for tool access classes.
     tools: GatewayClient | None = None
+    # Mints a decided call's approval token: the gateway, which holds the only signing key. None without a gateway, when
+    # an approval records who approved and no token is minted.
+    approvals: TokenMinter | None = None
     # tools-service for applying tool module review decisions: the gateway's client, or one for `tools_url`
     # when this service runs without a gateway.
     tool_reviews: GatewayClient | None = None

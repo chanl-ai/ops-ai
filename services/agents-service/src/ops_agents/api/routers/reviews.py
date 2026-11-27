@@ -21,11 +21,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from ops_policy import input_hash
-from ops_policy.approval import Binding, mint_approval
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound
 from ops_service_kit.http import Envelope, In, Json, Out
 from ops_store import isolation
 
+from ...activities.gateway import ApprovalAsk
 from ...store.review_assignments import ReviewAssignments
 from ...store.reviews import ReviewStore
 from ...store.service_events import attempts_of
@@ -111,15 +111,21 @@ async def record_approval(
         raise Forbidden("You already approved this; a second, different person has to approve it.")
     approvers = found
     needed = policy.approvers
-    token = (
-        mint_approval(
-            Binding(thread_id, step, tool, digest, approvers),
-            rt.settings.review_key.get_secret_value(),
-            ttl_s=rt.settings.review_token_ttl_seconds,
+    token = None
+    if len(approvers) >= needed and rt.approvals is not None:
+        # The gateway holds the only key that signs approvals: it decides the call again and refuses one it would
+        # not run (the asker approving their own write, a step that sent another write), with its own status.
+        asker = hitl_facade.requester_of(row, payload)
+        ask = ApprovalAsk(
+            thread_id,
+            step,
+            tool,
+            cast(Json, call["input"]),
+            digest,
+            tuple(approvers),
+            asker=None if asker.startswith("workflow:") else asker,
         )
-        if len(approvers) >= needed
-        else None
-    )
+        token = await rt.approvals.approval(ask)
     return {"approvers": approvers, "needed": needed, "inputHash": digest, "approvalToken": token}
 
 

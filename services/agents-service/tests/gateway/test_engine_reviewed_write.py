@@ -106,24 +106,26 @@ async def stack(engine: AsyncEngine, gateway: Gateway) -> AsyncIterator[tuple[ht
         knowledge=fixture_knowledge(),
     )
     owner = f"test-{uuid4().hex[:6]}"
+    # The run's calls and its approval asks go to the gateway on one client, as the worker builds it.
+    worker_gateway = GatewayClient(
+        # The run's team rides in the token, as required_client sets it (app.py).
+        ServiceClient(
+            gateway.client,
+            dev_service_signer(),
+            "agents",
+            "tools",
+            ["tools:view"],
+            tenant=lambda: "local",
+            team=current_team,
+        )
+    )
     host = WorkerHost(
         tx=EngineTransactions(engine),
         registry=default_registry(),
         ports=EnginePorts(
             tools=GatewayTools(
-                GatewayClient(
-                    # The run's team rides in the token, as required_client sets it (app.py).
-                    ServiceClient(
-                        gateway.client,
-                        dev_service_signer(),
-                        "agents",
-                        "tools",
-                        ["tools:view"],
-                        tenant=lambda: "local",
-                        team=current_team,
-                    )
-                ),
-                ApprovalMinter(engine, REVIEW_KEY, 300),
+                worker_gateway,
+                ApprovalMinter(engine, worker_gateway),
             ),
             reviews=RunReviews(),
         ),

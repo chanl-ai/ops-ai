@@ -322,7 +322,8 @@ everything again.
 
 | Key | Steps |
 |---|---|
-| Approval key (`OPS_REVIEW_KEY`) | Set the new value for agents and tools and restart both. Approvals in flight must be given again |
+| Approval key (`OPS_REVIEW_KEY`) | Set the new value for tools and restart it. Approvals in flight must be given again |
+| Session-token key (`OPS_SESSION_TOKEN_KEY`) | Set the new value for agents and restart it and the worker. Open widget chats, step-ups and resume links are made again |
 | A service's signing key | Give the service a new key and key id, add its public key to every other service's trusted list beside the old one, restart the others, then the service; then remove the old key id and restart the others again |
 | Sign-in token key (`OPS_PLATFORM_SIGNING_KEY`) | Set a new key and key id and restart every service; people may need to sign in again |
 | Secrets key (`OPS_SECRETS_KEY`) | Changing it makes every stored credential unreadable, so each must be entered again. A rotation that re-encrypts them is planned |

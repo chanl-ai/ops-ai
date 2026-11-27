@@ -1468,7 +1468,8 @@ everything again.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Key</th><th>Steps</th></tr></thead>
 <tbody>
-<tr><td>Approval key (<code>OPS_REVIEW_KEY</code>)</td><td>Set the new value for agents and tools and restart both. Approvals in flight must be given again</td></tr>
+<tr><td>Approval key (<code>OPS_REVIEW_KEY</code>)</td><td>Set the new value for tools and restart it. Approvals in flight must be given again</td></tr>
+<tr><td>Session-token key (<code>OPS_SESSION_TOKEN_KEY</code>)</td><td>Set the new value for agents and restart it and the worker. Open widget chats, step-ups and resume links are made again</td></tr>
 <tr><td>A service&#39;s signing key</td><td>Give the service a new key and key id, add its public key to every other service&#39;s trusted list beside the old one, restart the others, then the service; then remove the old key id and restart the others again</td></tr>
 <tr><td>Sign-in token key (<code>OPS_PLATFORM_SIGNING_KEY</code>)</td><td>Set a new key and key id and restart every service; people may need to sign in again</td></tr>
 <tr><td>Secrets key (<code>OPS_SECRETS_KEY</code>)</td><td>Changing it makes every stored credential unreadable, so each must be entered again. A rotation that re-encrypts them is planned</td></tr>

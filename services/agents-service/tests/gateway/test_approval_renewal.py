@@ -3,7 +3,7 @@ good although its approvals stand, and an old approval renewed forever."""
 
 from __future__ import annotations
 
-import asyncio
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -11,7 +11,6 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from langgraph.checkpoint.memory import InMemorySaver
-from pydantic import SecretStr
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -34,8 +33,6 @@ async def app_with(gateway: Gateway, **settings: Any) -> AsyncIterator[tuple[htt
         Settings(
             database_url="sqlite+aiosqlite://",
             seed_dir=SEED,
-            review_key=SecretStr("test-review-key"),
-            review_token_ttl_seconds=1,
             **settings,
         ),
         model=scripted_model(),
@@ -52,14 +49,14 @@ async def app_with(gateway: Gateway, **settings: Any) -> AsyncIterator[tuple[htt
         yield c, app
 
 
-async def decided_then_expired(client: httpx.AsyncClient, app: FastAPI) -> str:
-    """A decision whose resume found the thread busy, retried after its token's TTL."""
+async def decided_then_expired(client: httpx.AsyncClient, app: FastAPI, gateway: Gateway) -> str:
+    """A decision whose resume found the thread busy, retried after its token's TTL on the gateway's clock."""
     tid, _ = await paused_dispute(client)
     leases = app.state.runtime.leases
     await leases.acquire(tid, "run_busy")
     busy = await client.post(f"/reviews/{tid}/decision", json={"decision": "approved"})
     assert busy.status_code == 409, busy.text
-    await asyncio.sleep(1.5)  # past the 1-second token TTL
+    gateway.clock.at = time.time() + 2 * Settings().review_token_ttl_seconds
     await leases.release(tid, "run_busy")
     await decide(client, tid)
     return tid
@@ -81,7 +78,7 @@ async def test_a_late_resume_renews_the_token_from_the_recorded_approvals(
     renewing: tuple[httpx.AsyncClient, FastAPI], gateway: Gateway
 ) -> None:
     client, app = renewing
-    tid = await decided_then_expired(client, app)
+    tid = await decided_then_expired(client, app, gateway)
     assert (await last_run(client, tid))["status"] == "done"
     rows = await gateway.log.for_thread(tid, tenant_id="local")
     # The expired token was refused once, then the renewed one sent the reply exactly once.
@@ -92,7 +89,7 @@ async def test_an_approval_older_than_the_renewal_age_needs_a_fresh_review(
     strict: tuple[httpx.AsyncClient, FastAPI], gateway: Gateway
 ) -> None:
     client, app = strict
-    tid = await decided_then_expired(client, app)
+    tid = await decided_then_expired(client, app, gateway)
     assert (await last_run(client, tid))["status"] == "error"
     assert [(r.decision, r.outcome) for r in await gateway.log.for_thread(tid, tenant_id="local")] == [
         ("deny", "refused")

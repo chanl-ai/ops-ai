@@ -5,13 +5,17 @@ and fake bank, where the team asks a reviewer before a write."""
 
 from __future__ import annotations
 
+import importlib.util
+import secrets
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+from ops_policy.approval import Binding, mint_approval
 from ops_service_kit.ids import input_hash
 
-from .conftest import service_headers
+from .conftest import REVIEW_KEY, service_headers
 from .test_asker_token_recheck import ASKER, acting_for_asker
 from .test_calls import Gateway, gateway
 
@@ -85,3 +89,26 @@ async def test_a_step_that_already_sent_its_write_is_closed_to_another_approval(
 @pytest.fixture
 def two_person_rule_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPS_DEV_POLICIES", '{"requesterMayDecide": false}')
+
+
+def _keys_agents_holds() -> tuple[str, ...]:
+    """The keys every deployment hands agents-service and its worker (deploy/images/service_keys.py)."""
+    path = Path(__file__).parents[3] / "deploy/images/service_keys.py"
+    spec = importlib.util.spec_from_file_location("service_keys", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.USES["agents"]
+
+
+async def test_no_key_agents_holds_signs_a_token_the_gateway_accepts(gateway: Gateway) -> None:
+    # A deployment gives each named key its own value; the gateway verifies with OPS_REVIEW_KEY's (REVIEW_KEY here).
+    binding = Binding(gateway.thread, "s1", gateway.tool("place_hold"), input_hash(ARGS), [REVIEWER])
+    for env in _keys_agents_holds():
+        key = REVIEW_KEY if env == "OPS_REVIEW_KEY" else secrets.token_urlsafe(32)
+        token = mint_approval(binding, key, ttl_s=300)
+        r = await gateway.client.post(
+            "/v1/calls", json=call_body(gateway, ARGS, "s1", token), headers=acting_for_asker(gateway.tenant)
+        )
+        assert r.status_code == 403, f"a token signed with {env}, which agents holds, ran a write: {r.text}"
+    assert gateway.received == []

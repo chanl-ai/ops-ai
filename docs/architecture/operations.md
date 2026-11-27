@@ -98,7 +98,8 @@ capped at ten real model calls unless more are approved.
 
 | Key | Today | Steps |
 |---|---|---|
-| Review key (`OPS_REVIEW_KEY`) | HMAC, shared by agents-service and tools-service | Set the new value for both and restart both; tokens minted with the old key are refused, so re-approve open reviews with live tokens |
+| Review key (`OPS_REVIEW_KEY`) | HMAC, held by tools-service alone: the gateway mints approval tokens (`POST /v1/approvals`) and its OPA verifies them | Set the new value and restart tools-service; tokens minted with the old key are refused, so re-approve open reviews with live tokens |
+| Session-token key (`OPS_SESSION_TOKEN_KEY`) | HMAC, held by agents-service and its worker alone: signs step-up, widget-session and resume-link tokens | Set the new value and restart both; open widget sessions, step-ups and resume links stop working and are made again |
 | Service keys (`OPS_SERVICE_SIGNING_KEY`, `OPS_SERVICE_SIGNING_KID`, `OPS_SERVICE_PUBLIC_KEYS`) | Each service signs its calls to another with its own Ed25519 key; a callee trusts the public keys it lists, each bound to one service | Give the service a new `OPS_SERVICE_SIGNING_KEY` and, with it, a new `OPS_SERVICE_SIGNING_KID`; add its public key to every callee's `OPS_SERVICE_PUBLIC_KEYS` beside the old one; restart the callees, then the caller; then drop the old kid from each callee's list and restart the callees again. An `OPS_SERVICE_TOKEN` left over from before is ignored; remove it |
 | Model provider keys | Held by models-service per account; other services hold only their own models-service key | Replace the key in models-service's provider keys (`/v1/provider-keys`) |
 | Database credential | In `OPS_DATABASE_URL` | Change, then restart every service and rerun migrations under the new role |

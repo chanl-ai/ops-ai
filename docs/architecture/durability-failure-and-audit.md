@@ -118,8 +118,9 @@ routed at once under its lease. Code graphs answer 409 `not_routable`. Routing n
 ## Approval expiry
 
 A decision resumes at once, but a resume retried after a busy lease, or a run the sweeper recovers, can reach the
-gateway after the token's TTL. The agents service renews the token from the recorded approvals of that exact call
-(thread, step, tool, input hash, the same approvers) while they are younger than `approval_renewal_max_age_seconds`
+gateway after the token's TTL. The agents service asks the gateway for a new token (`POST /v1/approvals`), naming the
+recorded approvals of that exact call (thread, step, tool, input hash), rebuilt from the call and the review rows and
+never from the expired token, while they are younger than `approval_renewal_max_age_seconds`
 (24 h); past that, the call fails asking for a fresh review (`api/approval_renewal.py`, uc-027).
 
 | Option | For | Against |

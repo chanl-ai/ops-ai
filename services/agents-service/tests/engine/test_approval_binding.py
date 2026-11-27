@@ -21,10 +21,9 @@ from ops_policy import input_hash
 from ops_policy.approval import binding_of
 from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
+from tests.approval_minter import KEY, GatewayMint
 from tests.engine.test_not_decided_by import FLOW
 from tests.run_rows import write_run
-
-KEY = "k" * 40
 
 
 @pytest.fixture
@@ -52,7 +51,7 @@ async def token_for(engine: AsyncEngine, tenant: str, wid: str, *, team: str | N
         await write_run(tx, base | {"run_key": run_id, "mode": "live", "input": {}, "created_by": "a@x"})
         call: dict[str, Any] = {"step": "s1", "tool": "apply_tool_access_approved", "input": {"module": "m"}}
         approval: Json = {"approvers": ["r@x"], "step": "s1", "inputHash": input_hash(call["input"])}
-        token = await ApprovalMinter(engine, KEY, 60).mint(run_id, call, approval)
+        token = await ApprovalMinter(engine, GatewayMint()).mint(run_id, call, approval)
     assert token is not None
     return token
 

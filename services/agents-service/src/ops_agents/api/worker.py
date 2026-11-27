@@ -123,7 +123,7 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             # A takeover raises tools-service's fence first, as the v1 sweeper's does (E2c).
             on_takeover=ToolsFence(gateway, GraphStore(db)) if gateway else None,
         )
-        minter = ApprovalMinter(db, settings.review_key.get_secret_value(), settings.review_token_ttl_seconds)
+        minter = ApprovalMinter(db, gateway) if gateway is not None else None
         # One kernel for agent steps and AI steps: an AI step's call is the agent port's prompt.
         # A step approving a write its starter may approve is decided as theirs.
         starters = StarterApprovals(db, gateway)
@@ -322,7 +322,7 @@ def main() -> None:
     configure_logging(service="agents-worker")
     settings = Settings()
     settings.require(*settings.identity_endpoints)
-    require_keys(settings, "review_key", "session_token_key")
+    require_keys(settings, "session_token_key")
     require_current_schema(settings.database_url, MIGRATIONS)
 
     async def run() -> None:

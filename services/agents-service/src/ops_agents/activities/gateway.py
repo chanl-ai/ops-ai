@@ -14,7 +14,7 @@ from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
-from typing import NotRequired, Protocol, TypedDict, cast
+from typing import NotRequired, Protocol, TypedDict, cast, runtime_checkable
 
 import httpx
 
@@ -121,9 +121,38 @@ NEEDS_REVIEW = "the approval is too old to renew; it needs a fresh review"
 
 
 class TokenRenewer(Protocol):
-    async def renew(self, token: str) -> str | None:
-        """A fresh token for the same call and approvers while their recorded approvals stand; None otherwise."""
+    async def renew(self, tool: str, arguments: Json, *, key: str) -> str | None:
+        """A fresh token for this call while its recorded approvals stand; None otherwise."""
         ...
+
+
+@dataclass(frozen=True)
+class ApprovalAsk:
+    """One call its approvers decided, as the gateway mints a token for it: the thread (or engine run, `run`) and
+    step it waits at, the exact input, who approved, and the person who asked, when one did."""
+
+    thread: str
+    step: str
+    tool: str
+    input: Json
+    input_hash: str
+    approvers: tuple[str, ...]
+    asker: str | None = None
+    run: bool = False
+    workflow: str = ""
+    system: bool = False
+    environment: str | None = None
+
+
+class TokenMinter(Protocol):
+    async def approval(self, ask: ApprovalAsk) -> str: ...
+
+
+@runtime_checkable
+class AskerHeaders(Protocol):
+    """The acting-for header for a named person, for a request made outside any run (an approval)."""
+
+    async def for_person(self, email: str, *, tenant_id: str | None, team_id: str | None) -> dict[str, str]: ...
 
 
 class ActingForHeaders(Protocol):
@@ -238,6 +267,37 @@ class GatewayClient:
         it lost the answer to."""
         return cast(Json, await self.tools.post("/v1/calls/abandon", {"key": key, "tool": tool, "thread": thread}))
 
+    async def decide(self, tool: str, arguments: Json, *, key: str) -> Json:
+        """What the gateway would do with this call, sent nowhere (POST /v1/calls/decide): `verdict` allow,
+        needs_review or refuse, with the input hash an approval binds."""
+        headers, body = await self._request(tool, arguments, key=key, approval_token=None)
+        return cast(Json, await self.tools.post("/v1/calls/decide", body, headers=headers))
+
+    async def approval(self, ask: ApprovalAsk) -> str:
+        """The approval token for one call its approvers decided, minted by the gateway (POST /v1/approvals), which
+        holds the only signing key. `ask.asker` is the person the call acts for, sent as the acting-for token the
+        gateway verifies, so it can hold the two-person rule; a refusal raises ServiceCallError with its code
+        (requester_cannot_approve, interrupt_closed)."""
+        headers: dict[str, str] = {}
+        if ask.asker is not None and isinstance(self.people, AskerHeaders):
+            headers = await self.people.for_person(ask.asker, tenant_id=self.tools.tenant(), team_id=self.tools.team())
+        owner = {"runId": ask.thread} if ask.run else {"threadId": ask.thread}
+        body: Json = {
+            "binding": {
+                **owner,
+                "step": ask.step,
+                "tool": ask.tool,
+                "inputHash": ask.input_hash,
+                "workflow": ask.workflow,
+                "system": ask.system,
+            },
+            "input": ask.input,
+            "approvers": list(ask.approvers),
+            **({"environment": ask.environment} if ask.environment else {}),
+        }
+        data = cast(Json, await self.tools.post("/v1/approvals", body, headers=headers))
+        return str(data["token"])
+
     async def call(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> GatewayAnswer:
         try:
             return await self._call(tool, arguments, key=key, approval_token=approval_token)
@@ -246,12 +306,26 @@ class GatewayClient:
             # call and try once more; past the renewal age the reviewers have to decide again.
             if EXPIRED not in e.reasons or approval_token is None or self.renewer is None:
                 raise
-            renewed = await self.renewer.renew(approval_token)
+            renewed = await self.renewer.renew(tool, arguments, key=key)
             if renewed is None:
                 raise GatewayRefused(NEEDS_REVIEW, [NEEDS_REVIEW]) from e
             return await self._call(tool, arguments, key=key, approval_token=renewed)
 
     async def _call(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> GatewayAnswer:
+        headers, body = await self._request(tool, arguments, key=key, approval_token=approval_token)
+        try:
+            return cast(GatewayAnswer, await self.tools.post("/v1/calls", body, headers=headers))
+        except ServiceCallError as e:
+            # A refusal the chat draws as a card keeps its envelope (code and details), so the card can name the app,
+            # the team or the accounts; any other 403 or 409 is a refusal the model reads in words.
+            if e.status in (403, 409) and e.code not in CARD_CODES:
+                raise GatewayRefused(str(e), [str(r) for r in (e.details or {}).get("reasons", [])], code=e.code) from e
+            raise
+
+    async def _request(
+        self, tool: str, arguments: Json, *, key: str, approval_token: str | None
+    ) -> tuple[dict[str, str], Json]:
+        """The headers and body of one call as the gateway reads it, for the call and for its decision alike."""
         ctx = current_run_context()
         # The lease generation travels as a header; the gateway fences writes on it (E2b).
         headers = {"X-Lease-Generation": str(ctx.generation)} if ctx.generation is not None else {}
@@ -270,14 +344,7 @@ class GatewayClient:
             },
             "approvalToken": approval_token,
         }
-        try:
-            return cast(GatewayAnswer, await self.tools.post("/v1/calls", body, headers=headers))
-        except ServiceCallError as e:
-            # A refusal the chat draws as a card keeps its envelope (code and details), so the card can name the app,
-            # the team or the accounts; any other 403 or 409 is a refusal the model reads in words.
-            if e.status in (403, 409) and e.code not in CARD_CODES:
-                raise GatewayRefused(str(e), [str(r) for r in (e.details or {}).get("reasons", [])], code=e.code) from e
-            raise
+        return headers, cast(Json, body)
 
 
 # What the model is told when the chat shows the person a card for the refusal (connection-required-card.tsx): what

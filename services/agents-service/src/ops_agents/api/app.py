@@ -349,6 +349,7 @@ async def open_runtime(
         else StaticModelAliases({settings.model_alias})
     )
     rt.tools = gateway_client
+    rt.approvals = gateway_client
     rt.tool_reviews = gateway_client or (
         GatewayClient(
             required_client(settings, httpx.AsyncClient(base_url=settings.tools_url, timeout=30), "tools", timeout=30)
@@ -371,7 +372,7 @@ async def open_runtime(
             )
     rt.knowledge_bases = knowledge
     if gateway_client is not None:
-        gateway_client.renewer = ApprovalRenewal(rt)
+        gateway_client.renewer = ApprovalRenewal(rt, gateway_client)
         gateway_client.people = CallPeople.on(acting_for_tokens(settings, gateway_client.http), db)
         if gateway_http is not None:
             # The Tools page's app states, on a client of its own: only this read claims connections:view.
