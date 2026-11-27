@@ -457,14 +457,14 @@ Strands names below are as read on its user guide on 2026-11-26; each is confirm
 | Contract moment | Strands mechanism | Source | Confirmed by |
 |---|---|---|---|
 | Build one agent per turn | `Agent(model=..., tools=..., system_prompt=..., hooks=..., conversation_manager=..., retry_strategy=..., trace_attributes=...)`; the docs recommend one agent per task | [agent loop](https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/) | Experiment 1 |
-| Reach the model | Its OpenAI-compatible provider pointed at `ModelEndpoint.base_url` with our headers. Constructor argument names are **unverified** | [model providers](https://strandsagents.com/docs/user-guide/sdk/model-providers/) | Experiment 3 |
+| Reach the model | Its OpenAI-compatible provider given `client=openai.AsyncOpenAI(base_url=..., default_headers=..., http_client=...)`, pointed at `ModelEndpoint.base_url` with our headers (confirmed on 1.67.0) | [model providers](https://strandsagents.com/docs/user-guide/sdk/model-providers/) | Experiment 3 |
 | `before_tool`, refuse | `BeforeToolCallEvent` with `cancel_tool` | [hooks](https://strandsagents.com/docs/user-guide/sdk/agents/hooks/) | Experiment 2 |
 | `before_tool`, pause | An interrupt raised from the hook; the run returns with stop reason `interrupt` and `result.interrupts` | [interrupts](https://strandsagents.com/docs/user-guide/sdk/interrupts/) | Experiment 1 |
 | `before_tool`, answered | The hook cancels the tool and supplies the result. Whether a cancelled tool can carry a successful result is **unverified** | hooks page | Experiment 2, part a |
 | `after_tool` | `AfterToolCallEvent`, whose `result` can be replaced | hooks page | Experiment 2 |
 | `before_model`: the volatile tail and the offered tool list | Middleware on the model stage, input phase, replacing the context. Whether the tool list can be narrowed per call is **unverified** | [middleware](https://strandsagents.com/docs/user-guide/sdk/agents/middleware/) | Experiment 2 |
 | `after_model`: guide or retry | `AfterModelCallEvent` with `retry`, or an intervention returning `Guide` | [interventions](https://strandsagents.com/docs/user-guide/sdk/agents/interventions/) | Experiment 2 |
-| Steps limit | `limits={"turns": n}`; stop reason `limit_turns`. It is checked at the top of each loop step, so one step can overshoot | agent loop page | Experiment 3 |
+| Steps limit | `limits={"turns": n}`; stop reason `limit_turns`, after exactly `n` model requests (confirmed on 1.67.0) | agent loop page | Experiment 3 |
 | Stop a reply | `cancel_signal` passed to the call, polled about every 50 ms; stop reason `cancelled`; a cancelled run cannot resume | [lifecycle controls](https://strandsagents.com/docs/user-guide/sdk/agents/lifecycle-controls/) | Experiment 3 |
 | Retry a failed model call | `ModelRetryStrategy` with a custom `is_retryable` | [retry strategies](https://strandsagents.com/docs/user-guide/sdk/agents/retry-strategies/) | Experiment 3 |
 | Fall back to a second model | `ModelRouter` with `FallbackStrategy` and `max_switches=1`, both candidates on our gateway | [model routing](https://strandsagents.com/docs/user-guide/sdk/model-providers/model-routing/) | Experiment 3 |
@@ -522,6 +522,7 @@ fields are listed once, on the [API page](api.md#streams); this page gives only 
 | `current_tool_use`, `tool_stream_event` | dropped: the kernel's tool wrapper reports calls | `ToolInputAvailable`, `ToolOutput` | `tool_start`, `tool_end`; the chat stream also `widget`, `part` |
 | `event_loop_throttled_delay` | `Throttled(seconds)` | `StatusChanged("thinking")` and a log line | `status` |
 | `message` | `ModelEnded(usage)` | none; usage is summed for the result | none |
+| `structured_output` | `Ended(answer)` | the typed answer; the stop reason is `tool_use` here, so the kernel reads this event, not the reason | none |
 | `force_stop` | `Ended(error)` | `TurnFinished(status="failed", stop_reason="error")` | `turn` on the thread stream, `error` on chat |
 | `result` with stop reason `interrupt` | `Paused(interrupt_ids, state)` | `Interrupted` then `TurnFinished(status="interrupted")` | `interrupt`, then `turn` or `done` |
 | `result`, any other stop reason | `Ended(reason, state)` | `CitationsReady`, `TurnFinished` | `citation` or `citations`, then `turn` or `done` |

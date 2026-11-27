@@ -369,6 +369,7 @@ Fallback: the statement that deadlocks keeps a SQL Server-specific form inside `
 |---|---|---|
 | 0 | 2026-11-27 | Passed for the Strands Agents Python SDK, the one part 1.4.0 adds: `strands-agents[openai]` 1.67.0 and its install tree are under permissive licences. The other parts of the table were not checked. Details below |
 | 1 | 2026-11-26 | Passed steps 2 to 6, 8 and 9 on `strands-agents` 1.67.0 with the script `scripts/experiments/strands_pause_resume.py`. Step 7 (size at 20 and 60 messages) not measured. Details below |
+| 3 | 2026-11-27 | Steps 1 to 4 and part a passed on `strands-agents` 1.67.0 with the script `scripts/experiments/strands_stream_events.py`. Parts b to f not run, so the pass line (replay, 17 of 20) is not settled. Details below |
 
 Experiment 0, run for the Strands row. The licences were read from the installed package metadata of the locked
 install (`uv lock` with `strands-agents[openai]==1.67.0` in the kernel's `pyproject.toml`), walking every dependency of
@@ -397,6 +398,34 @@ model is a scripted OpenAI-compatible gateway on an `httpx.MockTransport`, given
 | 6, ten loads | The snapshot size stayed at 2,291 bytes across ten load and take cycles |
 | 8 | The helper's write ran once, `ask_helper`'s body never ran, and no request was sent twice. The outer hook supplied the helper's reply through `selected_tool`. On resume the hook runs again from the start: it finds the helper's saved state by tool-use id, gets the answer from `event.interrupt`, which returns it without raising, loads the helper and answers it. The helper's state is kept in our saved state beside the outer snapshot, which is where the driver keeps it in `LoopState` |
 | 9 | Two resumes from one snapshot sent byte-identical requests, after leaving out `stream`, `user`, `metadata` and `stream_options`. `OPS_MODELS_REPLAY_STRIP_FIELDS` stays empty |
+
+Experiment 3, steps 1 to 4 and part a, run. The model is a scripted OpenAI-compatible gateway on an
+`httpx.MockTransport` that answers every stream with usage of 10 prompt tokens, 4 of them cached, and 5 completion tokens.
+
+| Turn | Events seen, in order of first appearance | Stop reason | Text pieces | Usage summed |
+|---|---|---|---|---|
+| Text only | `init_event_loop`, `start`, `start_event_loop`, model `event` (messageStart, contentBlockStart, contentBlockDelta), `data`, model `event` (contentBlockStop, messageStop, metadata), `message`, `result` | `end_turn` | 3, as sent | 10 in, 5 out, 4 cached |
+| One tool | As above, with `current_tool_use` for each argument delta; the tool's result comes as the next `message` (role user); text then streams in the second step | `end_turn` | 1 | 20 in, 10 out, 8 cached |
+| Two tools in one step | As one tool; both results arrive in one `message` | `end_turn` | 1 | 20 in, 10 out, 8 cached |
+| Typed answer | As one tool, plus `structured_output` before `result` | `tool_use` | 0 | 10 in, 5 out, 4 cached |
+| Steps limit, `limits={"turns": 3}` | As one tool, three model requests | `limit_turns` | 0 | 30 in, 15 out, 12 cached |
+| Cancel after two pieces (`Agent.cancel()`) | Text events stop; one `message` and a `result` follow | `cancelled` | 2 | zero |
+
+What this settles: text arrives in pieces; a tool's start is `current_tool_use` and its end is only visible as the
+tool-result `message`, so the kernel's tool wrapper stays the source of `tool_start` and `tool_end`, as the mapping
+table already says; the result's `accumulated_usage` carries `cacheReadInputTokens` from the provider's
+`prompt_tokens_details.cached_tokens`; a typed answer ends with stop reason `tool_use`, not `end_turn`, so the stop
+mapping reads `structured_output` rather than the stop reason. No `tool_stream_event`, `reasoning`, `force_stop` or
+`event_loop_throttled_delay` was produced by these turns. The modes, plans, helpers and hand-overs have no Strands event:
+the kernel makes them.
+
+Part a: `OpenAIModel.__init__(client, client_args, bedrock_mantle_config, model_config)`. A base URL, extra headers and
+an injected HTTP client are `openai.AsyncOpenAI(base_url=..., default_headers=..., http_client=...)` passed as
+`client`. `Agent.stream_async` takes `limits` and `cancel_signal`; `Agent.cancel()` exists.
+
+Not run: part b (replay through a stub gateway), part c (offloader), part d (20 real requests: no stack or key was
+allowed for this run, so automatic mode's model-chosen modes are not yet measured against a reviewer), part e (images)
+and part f (builder drafts).
 
 Facts read from the source of `strands-agents` 1.67.0 on Python 3.12.6. They were read, not exercised, so the
 "unverified" marks in the specs stay until the experiment runs:
