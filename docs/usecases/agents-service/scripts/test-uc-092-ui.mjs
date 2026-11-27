@@ -3,7 +3,7 @@
 // tools-service as the gateway so the tool form lists real operations, publish requests left pending for a second
 // person, and workflow workers this script starts and stops. No model is called.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { publishReviewOn, twoPersonRuleOn, versionFromEditor } from '../../lib/workflow_ui.mjs';
+import { publishReviewOn, twoPersonRuleOn, until, versionFromEditor } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
@@ -88,7 +88,9 @@ await withUiStack(
       await output.getByTestId('field-chip').waitFor({ timeout: 10_000 });
       await page.getByTestId('definition-problems').getByText(/No problems/).waitFor({ timeout: 30_000 }).catch(() => undefined);
       const v2 = await versionFromEditor(page, id, { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
-      const stored = (await (await api(`/v1/workflows/definitions/${id}`)).json()).data;
+      // The editor saves a moment after the chip shows, so the stored definition is read until it holds the typed outcome.
+      const readStored = async () => (await (await api(`/v1/workflows/definitions/${id}`)).json()).data;
+      const stored = (await until(async () => { const d = await readStored(); return d.definition.nodes.find((n) => n.id === 'done')?.parameters?.outcome === 'refunded' ? d : undefined; }, 30)) ?? (await readStored());
       const done = stored.definition.nodes.find((n) => n.id === 'done');
       await page.waitForFunction(() => document.querySelector('[data-testid="definition-stage"]')?.getAttribute('data-stage') === 'draft', null, { timeout: 30_000 }).catch(() => undefined);
       check('4 Save stores the form as version 2, a draft, with the outcome and a path as output', v2?.version === 2 && stored.stage === 'draft' && done?.parameters?.outcome === 'refunded' && done?.parameters?.output === '$.input.amount', { v2, stage: stored.stage, done: done?.parameters });
