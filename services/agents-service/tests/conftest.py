@@ -25,6 +25,7 @@ from pydantic_ai.models.function import AgentInfo
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agent_kernel import judge
+from ops_agent_kernel.contract import LOOP
 from ops_agent_kernel.models import ModelsServiceModels
 from ops_agent_kernel.testing import (
     Answer,
@@ -54,6 +55,8 @@ from tests.knowledge_fixture import FixtureKnowledge
 from .contract import response_checker
 
 SEED = Path(__file__).parent / "fixtures" / "seed"
+# The agent loop these tests run the kernel on: OPS_AGENTS_LOOP=strands runs the same tests on Strands Agents.
+LOOP.default = "strands" if os.environ.get("OPS_AGENTS_LOOP") == "strands" else "pydantic_ai"
 ROOT = Path(__file__).parents[1]
 # The running stack's, exported by `make` from the root .env. Cleared in pytest_configure, before test modules are
 # collected: they build Settings at their own import (before any fixture runs) and would otherwise call the live

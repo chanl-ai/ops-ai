@@ -6,17 +6,18 @@ lost (F9)."""
 
 from __future__ import annotations
 
-import json
-from collections.abc import AsyncIterator, Callable
-from typing import Any
+from collections.abc import Callable
+from typing import Any, cast
 
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+from pydantic_ai.models import Model
 
 from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import BUILTIN_LIMIT, run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
+from ops_agent_kernel.testing import Answer, Reply, ToolCall, tool_names
 from ops_agent_kernel.types import AgentSettings, Passage, PromptFragment, ToolGrant, TurnRequest, TurnResult
+from ops_service_kit.http import Json
+from tests.conftest import model_on
 
 CASES = ToolGrant(
     "find_cases", "ops", "Find cases", "read", {"type": "object", "properties": {"search": {"type": "string"}}}
@@ -51,40 +52,31 @@ class NoKnowledge:
         return []
 
 
-def told_to_answer(messages: list[ModelMessage]) -> bool:
+def told_to_answer(messages: list[Json]) -> bool:
     """The last tool result is the built-in cap's instruction to answer in text."""
-    back = [p for m in messages for p in getattr(m, "parts", []) if isinstance(p, ToolReturnPart)]
-    return bool(back) and "answer in text" in json.dumps(back[-1].content)
+    back = [str(m.get("content") or "") for m in messages if m.get("role") == "tool"]
+    return bool(back) and "answer in text" in back[-1]
 
 
-def eager(pick: Callable[[Any, Any], tuple[str, dict[str, Any]] | None]) -> FunctionModel:
+def calls_made(messages: list[Json]) -> int:
+    return sum(len(cast(list[Json], m.get("tool_calls") or [])) for m in messages if m.get("role") == "assistant")
+
+
+def eager(pick: Callable[[Any, Any], tuple[str, dict[str, Any]] | None]) -> Model:
     """A model that calls whatever `pick(offered names, messages)` returns while it is offered, else answers, and
     answers once told to; one that ignores the instruction is the step-limit case (tests/api/test_turn_limits.py)."""
 
-    def choose(offered: list[str], messages: list[ModelMessage]) -> Any:
-        return None if told_to_answer(messages) else pick(offered, messages)
-
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        offered = [t.name for t in info.function_tools]
-        call = choose(offered, messages)
+    def script(messages: list[Json], tools: list[Json]) -> Answer:
+        call = None if told_to_answer(messages) else pick(sorted(tool_names(tools)), messages)
         if call is None:
-            return ModelResponse(parts=[TextPart(ANSWER)])
+            return ANSWER
         name, args = call
-        return ModelResponse(parts=[ToolCallPart(name, args)])
+        return Reply(tool_calls=[ToolCall(name, args)])
 
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        offered = [t.name for t in info.function_tools]
-        call = choose(offered, messages)
-        if call is None:
-            yield ANSWER
-            return
-        name, args = call
-        yield {0: DeltaToolCall(name=name, json_args=json.dumps(args))}
-
-    return FunctionModel(respond, stream_function=stream)
+    return model_on(script)
 
 
-async def run(req: TurnRequest, model: FunctionModel, tools: Tools) -> TurnResult:
+async def run(req: TurnRequest, model: Model, tools: Tools) -> TurnResult:
     events = [e async for e in run_turn(req, KernelPorts(model=model, tools=tools, knowledge=NoKnowledge()))]
     last = events[-1]
     assert isinstance(last, TurnFinished)
@@ -115,8 +107,8 @@ async def test_search_tools_stops_after_three_calls_and_the_turn_answers() -> No
 
 async def test_present_past_the_builtin_cap_answers_in_text() -> None:
     # F8: present after the cap is refused with an instruction and the turn still completes with an answer.
-    def pick(offered: list[str], messages: list[ModelMessage]) -> tuple[str, dict[str, Any]] | None:
-        made = sum(1 for m in messages for p in getattr(m, "parts", []) if isinstance(p, ToolCallPart))
+    def pick(offered: list[str], messages: list[Json]) -> tuple[str, dict[str, Any]] | None:
+        made = calls_made(messages)
         if made < 3 and "search_tools" in offered:
             return "search_tools", {"query": "cases"}
         if "present" in offered:

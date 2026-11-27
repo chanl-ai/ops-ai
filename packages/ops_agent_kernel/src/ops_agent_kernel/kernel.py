@@ -8,6 +8,7 @@ one. The agent object is built per turn and holds no state between turns.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -32,6 +33,7 @@ from pydantic_ai.messages import (
     FunctionToolResultEvent,
     ModelMessage,
     ModelMessagesTypeAdapter,
+    ModelRequest,
     ModelResponse,
     PartDeltaEvent,
     PartStartEvent,
@@ -39,7 +41,10 @@ from pydantic_ai.messages import (
     TextPart,
     TextPartDelta,
     ToolCallPart,
+    ToolReturnPart,
+    UserPromptPart,
 )
+from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.output import NativeOutput, StructuredDict
 from pydantic_ai.run import AgentRunResultEvent
 from pydantic_ai.settings import ModelSettings
@@ -51,7 +56,7 @@ from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import action_id, input_hash
 from ops_service_kit.narrow import json_object
 
-from . import answer_check, guard, judge, pii, present, prompt_writer, search, step_tools, steps, tool_cache
+from . import answer_check, contract, guard, judge, pii, present, prompt_writer, search, step_tools, steps, tool_cache
 from . import plan as planner
 from . import skills as skillset
 from .context import UnknownVariableError, assemble, cited_numbers
@@ -458,6 +463,197 @@ async def _closing_answer(
             model_settings=purpose("closing"),
         )
         text = said.output.strip()
+        if text and rules and await guard.check(guard_model, rules, text) is not None:
+            return ""
+    except Exception:  # the reply then ends with the budget notice alone
+        return ""
+    return text
+
+
+# A 429 with one of these codes is models-service refusing the call at its budget (ports.BudgetReachedError).
+BUDGET_CODES = frozenset({"budget_reached", "check_cap_reached"})
+
+
+def _paused_on_strands(history: bytes) -> bool:
+    """Whether a stored pause was written by the Strands loop (strands_loop/state.py); Pydantic AI's is a JSON list."""
+    try:
+        data: object = json.loads(history)
+    except ValueError:
+        return False
+    return isinstance(data, dict) and cast(Json, data).get("loop") == "strands"
+
+
+def _endpoint(model: Any) -> contract.ModelEndpoint:
+    """Where the Strands loop sends this turn's model calls: the model's own endpoint when it names one (the
+    budgeted gateway model), else the OpenAI-compatible client of the model it wraps."""
+    named = getattr(model, "loop_endpoint", None)
+    if callable(named):
+        return cast(contract.ModelEndpoint, named())
+    inner = model
+    while isinstance(inner, WrapperModel):
+        inner = inner.wrapped
+    client = getattr(inner, "client", None)
+    if client is None:
+        raise TypeError(f"{type(model).__name__} has no OpenAI-compatible client for the Strands loop")
+    return contract.ModelEndpoint(client, str(getattr(inner, "model_name", "default")))
+
+
+def _loop_tool(state: _TurnState, tool: Tool[None]) -> contract.LoopTool:
+    """A kernel tool as the loop offers it: the same body and the same per-step offer as on Pydantic AI."""
+    definition = tool.tool_def
+    grant = state.grants.get(tool.name)
+    body = cast(Callable[..., Awaitable[Any]], tool.function)
+    prepare = tool.prepare
+
+    async def call(ctx: contract.CallContext, arguments: Json) -> Any:
+        try:
+            return await body(ctx, **arguments)
+        except ApprovalRequired as e:
+            reason = (e.metadata or {}).get("reason")
+            raise contract.LoopPause(str(reason) if reason else None) from e
+
+    async def offered(ctx: contract.CallContext) -> bool:
+        if prepare is None:
+            return True
+        found: Any = prepare(cast(Any, ctx), definition)
+        return (await found if inspect.isawaitable(found) else found) is not None
+
+    return contract.LoopTool(
+        tool.name,
+        definition.description or "",
+        cast(Json, definition.parameters_json_schema),
+        call,
+        offered,
+        gated=bool(grant and grant.gated),
+        barred=lambda: state.barred(tool.name),
+    )
+
+
+def _loop_history(history: list[ModelMessage]) -> list[Json]:
+    """The assembled transcript (context.py: text only) as the loop's messages."""
+    out: list[Json] = []
+    for m in history:
+        parts = [p.content for p in m.parts if isinstance(p, UserPromptPart | TextPart)]
+        text = "".join(p if isinstance(p, str) else str(p) for p in parts)
+        if text:
+            out.append({"role": "user" if isinstance(m, ModelRequest) else "assistant", "content": [{"text": text}]})
+    return out
+
+
+def _exchanged(messages: list[Json]) -> list[ModelMessage]:
+    """The loop's messages as Pydantic AI history, for the checks that still run there (end check, correction)."""
+    out: list[ModelMessage] = []
+    names: dict[str, str] = {}
+    for m in messages:
+        blocks = cast(list[Json], m.get("content") or [])
+        if m.get("role") == "assistant":
+            reply: list[Any] = []
+            for b in blocks:
+                if "text" in b:
+                    reply.append(TextPart(str(b["text"])))
+                elif isinstance(use := b.get("toolUse"), dict):
+                    names[str(use["toolUseId"])] = str(use["name"])
+                    reply.append(
+                        ToolCallPart(str(use["name"]), cast(Json, use.get("input") or {}), str(use["toolUseId"]))
+                    )
+            if reply:
+                out.append(ModelResponse(parts=reply))
+            continue
+        asked: list[Any] = []
+        for b in blocks:
+            if "text" in b:
+                asked.append(UserPromptPart(str(b["text"])))
+            elif isinstance(res := b.get("toolResult"), dict):
+                said = " ".join(str(c.get("text", "")) for c in cast(list[Json], res.get("content") or []))
+                call_id = str(res["toolUseId"])
+                asked.append(ToolReturnPart(names.get(call_id, "tool"), said, call_id))
+        if asked:
+            out.append(ModelRequest(parts=asked))
+    return out
+
+
+def _loop_params(req: TurnRequest) -> Json:
+    """`_model_settings` as request body fields for the Strands loop's OpenAI client."""
+    sent = _model_settings(req) or {}
+    params: Json = {}
+    for name in ("temperature", "parallel_tool_calls", "extra_body"):
+        if name in sent:
+            params[name] = cast(Any, sent)[name]
+    return params
+
+
+def _response_format(schema: Json | None) -> Json | None:
+    if schema is None:
+        return None
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "final_result",
+            "description": "The step's answer, matching its schema",
+            "schema": schema,
+        },
+    }
+
+
+def _schema_check(state: _TurnState, schema: Json | None) -> Callable[[str], str | None] | None:
+    """What is wrong with a final answer against the turn's schema, or None when it matches."""
+    if schema is None:
+        return None
+    validator = Draft202012Validator(schema)
+
+    def check(text: str) -> str | None:
+        try:
+            value = json.loads(text)
+        except ValueError:
+            state.schema_problem = "the answer: it is not JSON"
+            return state.schema_problem
+        found: list[Any] = list(validator.iter_errors(value))  # pyright: ignore[reportUnknownMemberType]
+        problems = sorted(found, key=lambda e: [str(p) for p in e.absolute_path])
+        if not problems:
+            return None
+        where = "/".join(str(p) for p in problems[0].absolute_path) or "the answer"
+        state.schema_problem = f"{where}: {problems[0].message}"
+        return state.schema_problem
+
+    return check
+
+
+def _loop_raised(e: Exception, endpoint: contract.ModelEndpoint) -> Exception:
+    """A loop's stop as the exception the turn's endings already handle."""
+    if isinstance(e, contract.StepLimitReached):
+        return UsageLimitExceeded(str(e))
+    if isinstance(e, contract.UnofferedTool):
+        return UnexpectedModelBehavior(f"Tool {e} was called on a step that offered it none.")
+    if isinstance(e, contract.SchemaMismatch):
+        return UnexpectedModelBehavior(str(e))
+    if isinstance(e, contract.LoopRefused):
+        if e.status == 429 and refusal_code(e.body) in BUDGET_CODES:
+            return BudgetReachedError()
+        return ModelHTTPError(e.status, endpoint.model_id, cast(Any, e.body))
+    return e
+
+
+async def _loop_closing(
+    *,
+    endpoint: contract.ModelEndpoint,
+    guard_model: Any,
+    rules: list[Guardrail],
+    system_prompt: str,
+    exchanged: list[Json],
+    params: Json,
+) -> str:
+    """`_closing_answer` on the Strands loop: one tool-less request over what the run exchanged."""
+    from . import strands_loop  # noqa: PLC0415 - the library is large; imported only when a turn runs on it
+
+    try:
+        text = await strands_loop.close(
+            endpoint=endpoint,
+            system_prompt=system_prompt,
+            messages=exchanged,
+            prompt=CLOSING_PROMPT,
+            purpose="closing",
+            params=params,
+        )
         if text and rules and await guard.check(guard_model, rules, text) is not None:
             return ""
     except Exception:  # the reply then ends with the budget notice alone
@@ -1006,11 +1202,24 @@ def _reason(requests: DeferredToolRequests, call_id: str) -> str | None:
 
 def _interrupt(state: _TurnState, requests: DeferredToolRequests, history: list[ModelMessage]) -> Interrupt:
     part = requests.approvals[0]
-    arguments = _args(part)
-    rec = state.record(part.tool_call_id, part.tool_name, arguments)
+    return _paused(
+        state,
+        tool_call_id=part.tool_call_id,
+        tool=part.tool_name,
+        arguments=_args(part),
+        why=_reason(requests, part.tool_call_id),
+        history=ModelMessagesTypeAdapter.dump_json(history),
+    )
+
+
+def _paused(
+    state: _TurnState, *, tool_call_id: str, tool: str, arguments: Json, why: str | None, history: bytes
+) -> Interrupt:
+    """The turn's pause at one call, with the loop's own record of the run (`history`) to resume it from."""
+    rec = state.record(tool_call_id, tool, arguments)
     rec.status = "gated"
     pending = PendingCall(
-        tool_call_id=part.tool_call_id,
+        tool_call_id=tool_call_id,
         key=rec.key,
         action_id=action_id(rec.key),
         tool=rec.tool,
@@ -1022,9 +1231,9 @@ def _interrupt(state: _TurnState, requests: DeferredToolRequests, history: list[
     return Interrupt(
         interrupt_id=rec.key,
         kind="approval",
-        needed=f"Approval to run {rec.tool}" + (f": {why}" if (why := _reason(requests, part.tool_call_id)) else ""),
+        needed=f"Approval to run {rec.tool}" + (f": {why}" if why else ""),
         pending_call=pending,
-        history=ModelMessagesTypeAdapter.dump_json(history),
+        history=history,
         loaded_skills=[e for s, e in zip(state.loaded, state.loads, strict=True) if s.loading == "on_match"],
         plan=state.plan,
         run=state.run.model_copy(deep=True) if state.tracks else None,
@@ -1208,7 +1417,14 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     # Many tools: each is deferred and pydantic-ai's tool search (search.strategy) reveals the ones the model finds;
     # its `search_tools` replaces the kernel's own, so that one is not added.
     above = req.settings.tool_search_above
-    searching = builtins and above is not None and len(req.tools) > above
+    # A paused turn resumes on the loop that paused it; a new one on the ports' loop.
+    on_strands = (
+        _paused_on_strands(req.resume.interrupt.history)
+        if req.resume
+        else (ports.loop or contract.LOOP.default) == "strands"
+    )
+    # Pydantic AI's deferred tool search has no Strands counterpart yet: on Strands every tool is sent with its schema.
+    searching = builtins and above is not None and len(req.tools) > above and not on_strands
     state = _TurnState(
         req=req,
         grants={
@@ -1303,6 +1519,9 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     digest: dict[str, str] = {}
     all_messages: list[ModelMessage] = []
     usage = TokenUsage()
+    # On Strands: where its calls go, and the messages it exchanged so far, for the closing answer at the budget.
+    endpoint: contract.ModelEndpoint | None = None
+    loop_messages: list[Json] = []
 
     # Filled once the turn's rules are known; a turn that ends before then checked none.
     checked: list[Guardrail] = []
@@ -1318,7 +1537,11 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             reason = extra.get("error") or state.text or f"The turn ended ({stop}) without an answer."
             status, stop, extra = "failed", "no_output", {**extra, "error": reason, "error_code": "no_output"}
         records = [state.records[i] for i in state.order]
-        answered = next((m.model_name for m in reversed(all_messages) if isinstance(m, ModelResponse)), None)
+        answered = (
+            endpoint.model_id
+            if endpoint is not None and all_messages
+            else next((m.model_name for m in reversed(all_messages) if isinstance(m, ModelResponse)), None)
+        )
         every = state.passages
         cited = [CitationRef(n, every[n - 1]) for n in cited_numbers(state.text) if 0 < n <= len(every)]
         return TurnFinished(
@@ -1395,7 +1618,11 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     state.events.clear()
     yield StatusChanged("thinking")
     try:
-        if req.resume:
+        if req.resume and on_strands:
+            history = []
+            results = None
+            system_prompt, user_prompt = "\n\n".join(f.text for f in req.settings.instructions if f.stable), None
+        elif req.resume:
             history: list[ModelMessage] = ModelMessagesTypeAdapter.validate_json(req.resume.interrupt.history)
             call_id = req.resume.interrupt.pending_call.tool_call_id
             decision: ToolApproved | ToolDenied = (
@@ -1501,59 +1728,125 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     events: Any = None
     try:
         async with asyncio.timeout(req.deadline_seconds):
-            async with agent.run_stream_events(
-                user_prompt,
-                message_history=history,
-                deferred_tool_results=results,
-                usage_limits=limits,
-                model_settings=_model_settings(req),
-            ) as stream:
-                events = stream
-                async for event in stream:
-                    if isinstance(event, PartStartEvent):
-                        if event.index == 0:
+            if on_strands:
+                from . import strands_loop  # noqa: PLC0415 - the library is large; imported only when a turn runs on it
+
+                endpoint = _endpoint(model)
+                limits_now = limits
+                resumed = req.resume
+                try:
+                    async for step in strands_loop.run(
+                        endpoint=endpoint,
+                        tools=[_loop_tool(state, t) for t in tools],
+                        instructions=instructions,
+                        history=_loop_history(history),
+                        prompt=user_prompt,
+                        step_limit=lambda: limits_now.request_limit,
+                        params=_loop_params(req),
+                        paused=resumed.interrupt.history if resumed else None,
+                        decision=(
+                            resumed.decision == "approved",
+                            f"The reviewer rejected this action: {resumed.reason or 'no reason given'}",
+                        )
+                        if resumed
+                        else None,
+                        response_format=_response_format(req.output_schema),
+                        check=_schema_check(state, req.output_schema),
+                        exchanged=loop_messages,
+                    ):
+                        if isinstance(step, contract.StepStarted):
                             if (ticked := _tick_plan(state)) is not None:
                                 yield ticked
                             state.step += 1
-                        if isinstance(event.part, TextPart) and event.part.content:
+                        elif isinstance(step, contract.TextChunk):
                             if not writing:
                                 writing = True
                                 yield StatusChanged("writing" if streaming else "checking")
-                            state.text += event.part.content
+                            state.text += step.text
                             if streaming:
-                                state.shown_text += event.part.content
-                                yield TextDelta(event.part.content)
-                    elif isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
-                        if not writing:
-                            writing = True
-                            yield StatusChanged("writing" if streaming else "checking")
-                        state.text += event.delta.content_delta
-                        if streaming:
-                            state.shown_text += event.delta.content_delta
-                            yield TextDelta(event.delta.content_delta)
-                    elif isinstance(event, FunctionToolCallEvent):
-                        writing = False
-                        rec = state.record(event.part.tool_call_id, event.part.tool_name, _args(event.part))
-                        yield StatusChanged("calling_tool")
-                        yield ToolInputAvailable(rec)
-                    elif isinstance(event, FunctionToolResultEvent):
-                        rec = state.records.get(event.tool_call_id)
-                        if rec is None:
-                            continue
-                        if isinstance(event.part, RetryPromptPart):
-                            rec.status, rec.output = "error", event.part.model_response()
-                        elif rec.status == "running":
-                            # A call no kernel function recorded (pydantic-ai's search_tools): its result as returned.
-                            rec.status, rec.output = "ok", event.part.content
-                        yield ToolOutput(rec)
-                        for raised in state.events:
-                            yield raised
-                        state.events.clear()
-                    elif isinstance(event, AgentRunResultEvent):
-                        output = event.result.output
-                        all_messages = event.result.all_messages()
-                        u = event.result.usage
-                        usage = TokenUsage(u.input_tokens, u.output_tokens, u.requests)
+                                state.shown_text += step.text
+                                yield TextDelta(step.text)
+                        elif isinstance(step, contract.ToolStarted):
+                            writing = False
+                            rec = state.record(step.tool_call_id, step.name, step.arguments)
+                            yield StatusChanged("calling_tool")
+                            yield ToolInputAvailable(rec)
+                        elif isinstance(step, contract.ToolEnded):
+                            rec = state.records.get(step.tool_call_id)
+                            if rec is None:
+                                continue
+                            if rec.status == "running":
+                                rec.status, rec.output = ("ok" if step.ok else "error"), step.content
+                            yield ToolOutput(rec)
+                            for raised in state.events:
+                                yield raised
+                            state.events.clear()
+                        elif isinstance(step, contract.LoopPaused):
+                            output = step
+                            all_messages = _exchanged(step.messages)
+                        else:
+                            output = json.loads(step.text) if req.output_schema is not None else step.text
+                            all_messages = _exchanged(step.messages)
+                            usage = TokenUsage(step.input_tokens, step.output_tokens, step.requests)
+                except Exception as e:
+                    raised_as = _loop_raised(e, endpoint)
+                    if raised_as is e:
+                        raise
+                    raise raised_as from e
+            else:
+                async with agent.run_stream_events(
+                    user_prompt,
+                    message_history=history,
+                    deferred_tool_results=results,
+                    usage_limits=limits,
+                    model_settings=_model_settings(req),
+                ) as stream:
+                    events = stream
+                    async for event in stream:
+                        if isinstance(event, PartStartEvent):
+                            if event.index == 0:
+                                if (ticked := _tick_plan(state)) is not None:
+                                    yield ticked
+                                state.step += 1
+                            if isinstance(event.part, TextPart) and event.part.content:
+                                if not writing:
+                                    writing = True
+                                    yield StatusChanged("writing" if streaming else "checking")
+                                state.text += event.part.content
+                                if streaming:
+                                    state.shown_text += event.part.content
+                                    yield TextDelta(event.part.content)
+                        elif isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
+                            if not writing:
+                                writing = True
+                                yield StatusChanged("writing" if streaming else "checking")
+                            state.text += event.delta.content_delta
+                            if streaming:
+                                state.shown_text += event.delta.content_delta
+                                yield TextDelta(event.delta.content_delta)
+                        elif isinstance(event, FunctionToolCallEvent):
+                            writing = False
+                            rec = state.record(event.part.tool_call_id, event.part.tool_name, _args(event.part))
+                            yield StatusChanged("calling_tool")
+                            yield ToolInputAvailable(rec)
+                        elif isinstance(event, FunctionToolResultEvent):
+                            rec = state.records.get(event.tool_call_id)
+                            if rec is None:
+                                continue
+                            if isinstance(event.part, RetryPromptPart):
+                                rec.status, rec.output = "error", event.part.model_response()
+                            elif rec.status == "running":
+                                # A call no kernel function recorded (pydantic-ai's search_tools): its result as is.
+                                rec.status, rec.output = "ok", event.part.content
+                            yield ToolOutput(rec)
+                            for raised in state.events:
+                                yield raised
+                            state.events.clear()
+                        elif isinstance(event, AgentRunResultEvent):
+                            output = event.result.output
+                            all_messages = event.result.all_messages()
+                            u = event.result.usage
+                            usage = TokenUsage(u.input_tokens, u.output_tokens, u.requests)
     except TimeoutError:
         if (cleared := _withhold(state, guarded)) is not None:
             yield cleared
@@ -1579,7 +1872,16 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         for closed in _close_open(state, NOT_RUN["budget_reached"]):
             yield closed
         closing = ""
-        if req.output_schema is None:
+        if req.output_schema is None and endpoint is not None:
+            closing = await _loop_closing(
+                endpoint=endpoint,
+                guard_model=guard_model,
+                rules=rules,
+                system_prompt=instructions(),
+                exchanged=loop_messages,
+                params=_loop_params(req),
+            )
+        elif req.output_schema is None:
             exchanged: list[ModelMessage] = events.all_messages() if events is not None else history
             closing = await _closing_answer(model, guard_model, rules, instructions(), exchanged)
         said = closing if closing else (CUT_SHORT_BUDGET if state.text else BUDGET_REACHED)
@@ -1647,6 +1949,24 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         if (cleared := _withhold(state, guarded)) is not None:
             yield cleared
         yield finish("failed", "error", error=f"The model call failed: {type(e).__name__}: {e}")
+        return
+
+    if isinstance(output, contract.LoopPaused):
+        if (cleared := _withhold(state, guarded)) is not None:
+            yield cleared
+        if (held := _plan_left(state, "waiting for your approval")) is not None:
+            yield held
+        interrupt = _paused(
+            state,
+            tool_call_id=output.tool_call_id,
+            tool=output.name,
+            arguments=output.arguments,
+            why=output.reason,
+            history=output.state,
+        )
+        yield ToolOutput(state.records[interrupt.pending_call.tool_call_id])
+        yield Interrupted(interrupt)
+        yield finish("interrupted", "interrupt", interrupt=interrupt)
         return
 
     if isinstance(output, DeferredToolRequests) and output.approvals:

@@ -11,6 +11,7 @@ from pydantic_ai.settings import ModelSettings
 from ops_contracts.chat import SignedIn
 from ops_service_kit.http import Json
 
+from .contract import LoopName
 from .tool_cache import ToolCaches
 from .types import Passage
 
@@ -82,3 +83,6 @@ class KernelPorts:
     models: ModelSource | None = None
     # The reads of the conversation and person a call is made for (tool_cache.py); None reads every time.
     tool_caches: ToolCaches | None = None
+    # The agent loop a new turn runs on (contract.py); None takes contract.LOOP.default. A paused turn resumes on the
+    # loop that paused it, whatever this says.
+    loop: LoopName | None = None
