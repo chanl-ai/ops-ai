@@ -54,7 +54,7 @@ git-rules: ## Print the git rules for the shared tree and check them
 # the stack back. The review worktree is detached at origin/BRANCH, so any branch can be reviewed, including one that is
 # checked out somewhere else.
 #   make review BRANCH=feat/apps-salesforce
-.PHONY: review builder-watch lane
+.PHONY: review builder-watch
 REVIEW_DIR ?= $(STACK_HOME)-review
 
 review: ## Check BRANCH out from origin into the review worktree and run the stack from it, restarting only what changed
@@ -78,6 +78,7 @@ review: ## Check BRANCH out from origin into the review worktree and run the sta
 builder-watch: ## Every worktree under ops-ai-worktrees: last commit age, uncommitted files, a process in it; stalled = 30 min, changes, no process (WATCH=<seconds> prints only changes; exit 1 on a stalled one)
 	@bash $(ROOT)/scripts/builder-watch.sh $(if $(WATCH),--watch $(WATCH))
 
+.PHONY: lane
 lane: ## A worktree for BRANCH off origin/develop under ops-ai-worktrees, with the main checkout's .venv and node_modules linked in and the lane written to .git/lanes.tsv
 	@test -n "$(BRANCH)" || { echo "usage: make lane BRANCH=<type>/<scope>-<what-changed>"; exit 2; }
 	@bash $(ROOT)/scripts/lane.sh "$(BRANCH)"
