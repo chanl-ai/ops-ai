@@ -3,10 +3,26 @@
 Status: current. The server side, the loader and the embed app are built and checked end to end on a sample page. The
 installer does not run the embed app yet; adding it to the Compose and Kubernetes installs is planned.
 
-A bank team puts its Ops AI agent on an intranet page: a launcher in the corner opens the same chat people use in the
+**Put your agent on your own intranet or portal page, so people ask it where they already work.**
+
+## People will not leave the page they work in to ask a question
+
+A bank's staff work in the intranet. A claims team lives in its case portal. If the agent is only in the Ops AI console,
+people do not open it, and the questions go back to colleagues. If the page embeds a chat that anyone can read from the
+outside, the first conversation leaks.
+
+Chat on your own pages puts the agent a launcher away. A launcher in the corner opens the same chat people use in the
 console, with sources, answer widgets, tool cards and approval cards (an approver decides them in Human Tasks). The chat
-runs in an iframe served by the bank's own Ops AI deployment, so nothing on the intranet page can read the conversation,
-and the person is identified by a short session the bank's server mints for them.
+runs in an iframe served by your own Ops AI deployment, so nothing on the page can read the conversation, and the person
+is identified by a short session your server mints for them.
+
+## The plan
+
+<!-- site: steps -->
+1. **Create a widget deployment** for the agent and list the page origins that may embed it.
+2. **Mint a session on your server** for the person who is signed in. The page never holds a key.
+3. **Add the script tag** to the page.
+4. **Try it** on a test page before you go live.
 
 ## How the pieces fit
 
@@ -149,6 +165,16 @@ The host page never receives message text: the conversation stays inside the ifr
    the mint key.
 3. Open the page: the launcher shows, and opening it shows the agent's greeting. Check that a page on an origin you did
    not list loads nothing, and that the browser console shows no message text reaching the page.
+
+## What success looks like
+
+A person opens the intranet page, sees the launcher and chats with the agent, with sources and approval cards. A page on
+an origin you did not list loads nothing, and the browser console shows no message text reaching the host page.
+
+## What skipping it costs
+
+Without the embed, people keep asking colleagues instead of the agent. With a hand-built embed, the conversation is
+readable by the host page, and a leaked key lets anyone chat as anyone.
 
 ## Next
 

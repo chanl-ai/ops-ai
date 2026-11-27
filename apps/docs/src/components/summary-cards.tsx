@@ -12,7 +12,9 @@ export function SummaryCard({ title, href, children }: { title: string; href?: s
       <div className="ops-card-body">{children}</div>
     </>
   );
-  if (!href) return <div className="ops-card">{body}</div>;
+  // A with and without pair: the "Without" card is muted and the "With" card carries the accent, so the sides read apart.
+  const side = /^without\b/i.test(title) ? ' ops-card-without' : /^with\b/i.test(title) ? ' ops-card-with' : '';
+  if (!href) return <div className={`ops-card${side}`}>{body}</div>;
   const external = /^https?:/.test(href);
   return external ? (
     <a href={href} className="ops-card ops-card-link" target="_blank" rel="noreferrer">

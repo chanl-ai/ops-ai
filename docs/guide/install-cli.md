@@ -1,13 +1,23 @@
 # Install the command line
 
-Status: current. The package is not on the public Python index yet: install it from a clone, or from the wheel your
-operator gives you. Publishing it is planned.
+Status: current.
 
-The opsai command line scripts a team's agents, workflows, knowledge, apps and tasks against an Ops AI install that
-someone else runs. It installs on its own, without the platform, and needs only Python 3.11 or newer and two small
-packages, so it also installs through a company package mirror or with no network at all.
+## Why a terminal helps once a team grows
+
+A console is the right place to look at a run. It is the wrong place to keep forty agent definitions, apply the same
+change to staging and production, or let a pipeline publish after a review. Without a command line, every change is a
+sequence of clicks that nobody can compare, repeat or hand to a colleague, and the definitions live only in the
+database. With one, you can script your team's agents, workflows, knowledge, apps and tasks from a terminal and keep
+them in version control.
+
+The `opsai` command line works against an Ops AI install that someone else runs. It installs on its own, without the
+platform. It needs only Python 3.11 or newer and two small packages, so you can also install it through a company
+package mirror, or with no network at all. The steps below install it, sign you in and check that it works.
 
 ## Install
+
+The package is not on the public Python index yet, so you install it from a clone or from the wheel your operator gives
+you. Publishing it is planned.
 
 From a clone of the repository, with uv or pip:
 
@@ -23,10 +33,10 @@ uv tool install ops-ai                   # or: python -m pip install --user ops-
 ```
 
 The package is `ops-ai` and the command is `opsai`. The package also installs an `ops` command for one release, which
-prints that `opsai` is the new name.
+only prints a message that `opsai` is the new name.
 
-If `opsai` is not found after the install, its folder is not on your PATH: run `uv tool update-shell` and open a new
-shell, or add `~/.local/bin` (pip on Linux and macOS) to PATH.
+If your shell cannot find `opsai` after the install, its folder is not on your PATH. Run `uv tool update-shell` and open
+a new shell, or add `~/.local/bin` (where pip installs on Linux and macOS) to your PATH.
 
 ## Sign in
 
@@ -36,7 +46,7 @@ opsai people me
 ```
 
 `opsai login` asks for your password and saves the address, your team and the session in a profile, which every later
-command and the Python client read. The session renews itself. No token is printed.
+command and the Python client read. The session renews itself, and no token is ever printed.
 
 | Setting | What it does | Default |
 |---|---|---|
@@ -49,7 +59,7 @@ command and the Python client read. The session renews itself. No token is print
 ## Through a company mirror
 
 Point uv or pip at your mirror's Python index. For Sonatype Nexus the index is
-`https://<nexus-host>/repository/<repo-name>/simple/`; the trailing `/simple/` matters.
+`https://<nexus-host>/repository/<repo-name>/simple/`, so include the trailing `/simple/`.
 
 | Setting | For | Notes |
 |---|---|---|
@@ -68,7 +78,7 @@ Keep credentials out of URLs in shared files, because a URL with a password show
 `~/.netrc` file (`machine nexus.example.com login <user> password <token>`, mode 600), which uv and pip both read, or
 uv's `UV_INDEX_<NAME>_USERNAME` and `UV_INDEX_<NAME>_PASSWORD` with a named index.
 
-If a firewall policy on the mirror blocks packages, these are the ones the command line needs, at any version in range:
+If a firewall policy on the mirror blocks packages, allow the ones below, which the command line needs, at any version in range:
 
 | Package | Versions accepted | Newest tested |
 |---|---|---|
@@ -102,9 +112,15 @@ opsai --help
 To build the folder for other operating systems or Python versions than the one you are on, or to upload it to a Nexus
 hosted repository, see [Install from a company registry](../deploy/install.md#install-from-a-company-registry).
 
+## What success looks like
+
+`opsai --help` prints the areas, and `opsai people me` prints you and your team. From then on a definition is a file:
+validate it, apply it, and review the change in your repository like any other.
+
 ## Next
 
 <!-- site: cards -->
 - **[Quickstart](quickstart.md)**: build and run a first workflow with the command line.
-- **[Agents](agents.md)**: the agent commands.
-- **[Workflows](workflows.md)**: the workflow commands.
+- **[Build an agent](use-cases/build-an-agent.md)**: write, test and publish an agent from a file.
+- **[Agents](agents.md)**: see the agent commands.
+- **[Workflows](workflows.md)**: see the workflow commands.

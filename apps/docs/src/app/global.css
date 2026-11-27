@@ -2,6 +2,8 @@
 @import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
 @import 'fumadocs-openapi/css/preset.css';
+/* The figure library's styles; its tokens (--ops-lift, --ops-hair) stay with the theme below. */
+@import '../components/figures/figures.css';
 
 @source '../../node_modules/fumadocs-ui/dist/**/*.js';
 @source '../../node_modules/fumadocs-openapi/dist/**/*.js';
@@ -33,6 +35,9 @@
   --ops-pack-soft: #efeafc;
   --ops-host: #1a5fb4;
   --ops-host-soft: #e4edf9;
+  /* Figures: a soft layered lift for screen fragments, and a hairline tinted to the surface. */
+  --ops-lift: 0 1px 1px rgb(20 24 31 / 0.04), 0 2px 6px rgb(20 24 31 / 0.04), 0 12px 28px -6px rgb(20 24 31 / 0.08);
+  --ops-hair: color-mix(in oklab, var(--ops-line) 75%, var(--ops-card));
 }
 .dark {
   --ops-bg: #15171a;
@@ -54,6 +59,8 @@
   --ops-pack-soft: #2a2347;
   --ops-host: #8ab6f2;
   --ops-host-soft: #1c2a40;
+  --ops-lift: 0 1px 1px rgb(0 0 0 / 0.2), 0 2px 6px rgb(0 0 0 / 0.18), 0 14px 32px -8px rgb(0 0 0 / 0.45);
+  --ops-hair: color-mix(in oklab, var(--ops-line) 85%, var(--ops-fg));
 }
 :root,
 .dark {
@@ -232,6 +239,10 @@ body {
   font-size: 15px;
   line-height: 1.55;
 }
+.ops-card-without { background: var(--ops-soft); color: var(--ops-muted); }
+.ops-card-without .ops-card-title { color: var(--ops-muted); }
+.ops-card-with { border-color: var(--ops-accent); }
+.ops-card-with .ops-card-title { color: var(--ops-accent); }
 .ops-card-link { text-decoration: none; transition: border-color 120ms; }
 .ops-card-link:hover { border-color: var(--ops-accent); }
 .ops-card-title { margin: 0; font-size: 1.05rem; font-weight: 600; }
@@ -250,8 +261,8 @@ body {
 .ops-figure-media { display: flex; justify-content: safe center; overflow-x: auto; }
 .ops-figure-media p { margin: 0; }
 .ops-figure-media img { border-radius: 6px; margin: 0; max-width: 100%; height: auto; }
-/* Diagrams keep their drawn size and scroll sideways rather than shrink below legible text. */
-.ops-mermaid svg { flex: none; max-width: none; height: auto; display: block; }
+/* Diagrams shrink to the frame down to 80% of their drawn size (min-width, set in mermaid.tsx), then scroll sideways. */
+.ops-mermaid svg { flex: none; max-width: 100%; height: auto; display: block; }
 /* Architecture diagrams fit the column down to 720px wide, then scroll, so their 13px labels stay readable. */
 .ops-diagram svg { flex: none; width: 100%; min-width: 720px; max-width: 980px; height: auto; display: block; }
 .ops-figure figcaption {

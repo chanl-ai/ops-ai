@@ -4,7 +4,7 @@ Status: current.
 
 Start here if you are changing Ops AI itself. This page says how the repository is laid out, where the rules and
 designs live, and how to check a change. Setting up, branching, commit messages and pull requests are in the
-[contributing guide](../CONTRIBUTING.md) at the root of the repository.
+[contributing guide](../../CONTRIBUTING.md) at the root of the repository.
 
 ## How the repository is laid out
 
@@ -22,14 +22,14 @@ designs live, and how to check a change. Setting up, branching, commit messages 
 
 | You want | Go to |
 |---|---|
-| How the system fits together and why | [Architecture](architecture/README.md) |
-| The rules a change is reviewed against, each with the check that enforces it | [Engineering standards](architecture/engineering-standards.md) |
-| What one service does, its routes, tables and tests | [Services](services/README.md) |
-| What one shared library does | [Packages](packages/README.md) |
-| The end-to-end checks that prove a feature | [Use-case catalogue](usecases/README.md) |
-| Designs proposed or approved | [Design proposals](design/README.md) |
-| The skills a coding assistant uses in this repository | [Agent skills](guide/skills/ops-run.md) |
-| How a release is cut and shipped | [Release process](deploy/release.md) |
+| How the system fits together and why | [Architecture](../architecture/README.md) |
+| The rules a change is reviewed against, each with the check that enforces it | [Engineering standards](../architecture/engineering-standards.md) |
+| What one service does, its routes, tables and tests | [Services](../services/README.md) |
+| What one shared library does | [Packages](../packages/README.md) |
+| The end-to-end checks that prove a feature | [Use-case catalogue](../usecases/README.md) |
+| Designs proposed or approved | [Design proposals](../design/README.md) |
+| The skills a coding assistant uses in this repository | [Agent skills](../guide/skills/ops-run.md) |
+| How a release is cut and shipped | [Release process](../deploy/release.md) |
 
 ## Run the checks
 
@@ -45,5 +45,5 @@ A change to a screen, an API or a data model is done when its use case has run, 
 ## Next
 
 <!-- site: cards -->
-- **[Contributing guide](../CONTRIBUTING.md)**: Set up, branch, commit and open a pull request.
-- **[All documents](README.md)**: Every page in the repository's docs, with one line on each.
+- **[Contributing guide](../../CONTRIBUTING.md)**: Set up, branch, commit and open a pull request.
+- **[All documents](../README.md)**: Every page in the repository's docs, with one line on each.

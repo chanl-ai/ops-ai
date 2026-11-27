@@ -2,9 +2,27 @@
 
 Status: current. Rows marked planned are designed and not built.
 
-Staff should be able to ask for something in plain words, and other systems should reach the same agents without a
-person in between. A chat is a conversation with an agent or with the team's Ops Assistant, which looks things up in
-your team's apps and replies with what it read. A channel is where that conversation, or a workflow run, comes in.
+**Let staff ask for work in plain words, and let other systems reach the same agents without a person in between.**
+
+## Staff ask in plain words, and systems should ask too
+
+An operations team gets the same questions all day: which customers have a dispute open, what the branch cash limit is,
+who owns this case. A claims handler asks which policy applies. A lender's analyst asks where a loan stands. Answering
+each by hand means opening three systems and copying the result. Meanwhile another system that wants the same answer has
+no way in except a person.
+
+A chat is a conversation with an agent or with the team's Ops Assistant, which looks things up in your team's apps and
+replies with what it read. A channel is where that conversation, or a workflow run, comes in. Without channels, every
+new way of asking, from a mailbox to an API call, would need its own copy of the agent and its own rules.
+
+## The plan
+
+<!-- site: steps -->
+1. **Ask.** Open **Chat** and type the question the way you would say it.
+2. **Read the answer and its sources.** The reply streams with the passages and tool results it used.
+3. **Let it act, with your yes.** When the answer needs a change in an app, the assistant reads the change back and
+   writes only after you say **Save**.
+4. **Open other doors.** Point a mailbox, the HTTP API or a due date at the same agent so work starts with no one typing.
 
 ## Try it
 
@@ -31,41 +49,45 @@ acts as you, so it reaches only what your own sign-in allows.
 | A due time | A run that starts when a date passes | built. A recurring schedule is planned |
 | A webhook from another system | A signed incoming request that starts a run | planned |
 
-## A checklist for longer asks
+## What a chat does for you
+
+### A checklist for longer asks
 
 An ask that needs several lookups, more than one App, or a change shows a short checklist above the answer. The assistant
 ticks each step off as it finishes it.
 
-## When a sign-in is needed
+### When a sign-in is needed
 
 If a step needs an App you have not connected, the assistant stops at that step and shows a **Connect** card. Press it,
 sign in, and the chat carries on at the same step. Nothing is retyped.
 
-## Think harder
+### Think harder
 
 A reply that took a plan or several lookups offers **Think harder**. One press answers the same question again on the
 deeper model. Writing "think harder" in a message, alone or with the question, does the same.
 
-## Saving to an app
+### Saving to an app
 
 Before it changes anything in an App, the assistant reads the change back to you. It writes only after you say **Save**.
 Until then nothing in the App has changed.
 
-## Follow-ups
+### Follow-ups
 
-- **Reused reads.** A chat reuses what it already read from an App for 5 minutes, so a follow-up answers faster. The reply
-  says when it used an earlier read. A save to that App clears the reused reads, so the next look reads the App again.
+- **Reused reads.** A chat reuses what it already read from an App with your own sign-in for 5 minutes, so a follow-up
+  answers faster. A read made on the team's account is never reused, because the team may see other records than you. The
+  reply says when it used an earlier read. A save to that App clears the reused reads, so the next look reads the App
+  again.
 - **Suggestion chips.** Under a reply, short chips offer likely next questions. Press one to ask it.
 - **Memories.** The assistant suggests what to remember and asks first. It keeps nothing silently.
 
-## Attached files
+### Attached files
 
 A file you attach in chat is read once, and the assistant gets its text whole, up to about 24,000 characters for the
 turn. This covers scanned pages, half-scanned pages, images of text and filled forms (the typed values in a form's
 fields are read too). Scans are read by OCR, so a long scan can take a moment before the assistant answers. If a file is
 longer than the limit, or could not be read, the reply says so in words.
 
-## Replies without a matching source
+### Replies without a matching source
 
 When no knowledge passage matched your question, the reply keeps its lists and paragraphs, with a note under it:
 "No knowledge passage matched this question." The reply is often still a full answer, such as a question back or a
@@ -76,7 +98,7 @@ only when your knowledge or a tool result in the chat gives them. When neither d
 information and what it can do instead. When a reply that uses knowledge lacks source numbers, the check adds the
 numbers. It does not replace a correct answer with "nothing found".
 
-## Which app and which account
+### Which app and which account
 
 - A chat uses the Apps your team turned on. The **Connectors** button in the chat box lets you leave an App out of that
   chat, before or during the chat.
@@ -87,6 +109,17 @@ numbers. It does not replace a correct answer with "nothing found".
 - An App your team has off shows a card with **Ask an admin**.
 
 Your sign-ins are managed on **Apps › Mine** ([Apps](apps.md#your-own-sign-ins)).
+
+## What success looks like
+
+A member of staff asks a question in the console and the reply streams with its sources, acting only on what that
+person's own sign-in allows. A change to an app waits until they say **Save**. A mailbox, the HTTP API or a due date
+starts the same agent with no one typing.
+
+## What skipping it costs
+
+Without a chat, each question is a ticket to a person who opens the same three systems. Without channels, each system
+that wants an answer gets its own copy of the agent, and the copies drift apart.
 
 ## Next
 
