@@ -24,6 +24,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import atomic_json
+
 ROOT = Path(__file__).resolve().parents[1]
 FILE = ROOT / "config/quarantine.json"
 ID = re.compile(r"^uc-[a-z0-9]+(-[a-z0-9]+)*(:[a-z]+)?$")
@@ -35,7 +38,7 @@ def load(path: Path = FILE) -> dict[str, Any]:
 
 
 def save(data: dict[str, Any], path: Path = FILE) -> None:
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    atomic_json.write_json(path, data)
 
 
 def problems(data: dict[str, Any], today: dt.date) -> list[str]:
