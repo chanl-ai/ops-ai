@@ -1555,7 +1555,7 @@ class KnowledgeService:
             latest[name] = found
             refused.pop(name, None)
         excluded: list[str] = []
-        # The names whose newest version this run settled, so their earlier files are let go after the loop.
+        # The names whose newest version is indexed, so their earlier files are let go after the loop.
         settled: set[str] = set()
         for name, found in latest.items():
             counts["listed"] += 1
@@ -1599,8 +1599,11 @@ class KnowledgeService:
                     await self.files.use(
                         who.tenant_id, source_team(s), found.file_id, source_id=s.id, source_name=s.name
                     )
-            settled.add(name)
             item = await self._read_file(who, s, existing, name=name, found=found, rebuild=same)
+            if item.status not in ("failed", "reading"):
+                # Indexed: the earlier version no longer answers. A read still going or failed keeps it until a sync
+                # finds this version unchanged.
+                settled.add(name)
             digests[name] = item.digest
             if item.status == "failed":
                 counts["failed"] += 1
