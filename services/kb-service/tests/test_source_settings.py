@@ -4,6 +4,7 @@ that approves AI steps, and a settings change nobody is told needs a rebuild."""
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any
@@ -12,8 +13,9 @@ import httpx
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_kb import source_settings
 from ops_kb.files import KnowledgeFiles
-from ops_kb.source_settings import EFFECTS, SourceSettings, defaults, merged, rebuild_for
+from ops_kb.source_settings import EFFECTS, SourceSettings, defaults, index_key, merged, rebuild_for, wire
 
 from .conftest import kb_client
 from .pdfs import HARDSHIP, RATES, policy_pdf
@@ -170,14 +172,29 @@ def _leaves(model: type[BaseModel], prefix: str = "") -> list[str]:
     return out
 
 
-def test_every_source_setting_is_applied_where_its_effect_says_or_kept_unshown() -> None:
-    """A setting the console saves and nothing reads is the failure: each field has an effect, and a saved change to
-    it rebuilds what that effect says (a split or a reading again, in the background) or nothing."""
+def _readers(path: str) -> int:
+    """Reads of a source's setting at `path` in kb-service's code outside this module's own validation."""
+    pattern = re.compile(rf"(?:settings|settings_of\([^()]*\))\.{re.escape(path)}\b")
+    src = Path(source_settings.__file__).parent
+    return sum(len(pattern.findall(f.read_text())) for f in src.rglob("*.py") if f.name != "source_settings.py")
+
+
+def test_every_source_setting_does_what_its_effect_says() -> None:
+    """A setting the console saves that nothing reads is the failure. Each effect is checked against the code: a
+    `split` change reaches what the pieces are built from, a `read` or `sync` setting has a reader, a `kept` one has
+    none and a `label` save changes nothing; a save rebuilds exactly what its effect says."""
     assert sorted(_leaves(SourceSettings)) == sorted(EFFECTS) == sorted(CHANGES)
     base = defaults("files")
-    for path, patch in CHANGES.items():
-        if patch is None:
+    for path, effect in EFFECTS.items():
+        readers = _readers(path)
+        if effect in ("read", "sync"):
+            assert readers > 0, f"{path}: nothing reads it"
+        elif effect == "kept":
+            assert readers == 0, f"{path} is read; say where it applies"
+        if (patch := CHANGES[path]) is None:
             continue
         after = merged(base, patch)
-        expected = {"read": "read", "split": "split"}.get(EFFECTS[path], "none")
-        assert rebuild_for(base, after) == expected, path
+        stored, pieces = wire(after) != wire(base), index_key(after) != index_key(base)
+        assert stored == (effect != "label"), f"{path}: a save stored={stored}"
+        assert pieces == (effect == "split"), f"{path}: the pieces depend on it={pieces}"
+        assert rebuild_for(base, after) == {"read": "read", "split": "split"}.get(effect, "none"), path

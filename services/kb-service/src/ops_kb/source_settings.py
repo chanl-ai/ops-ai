@@ -183,12 +183,13 @@ def index_key(s: SourceSettings, repeats: list[str] | None = None) -> str:
 
 
 Rebuild = Literal["none", "split", "read"]
-Effect = Literal["read", "split", "sync", "kept"]
+Effect = Literal["read", "split", "sync", "kept", "label"]
 
-# What each setting a source keeps does once saved: `read` reads every file again, `split` splits the stored readings
-# again (a rebuild in the background), `sync` applies at the next sync, and `kept` is stored with nothing reading it
-# yet, so the console offers no control for it. Every field of SourceSettings is listed (test_source_settings checks),
-# so a new one is either applied or shown as not applied.
+# What each setting a source keeps does once saved, the one place that says so: `read` reads every file again, `split`
+# splits the stored readings again (both a rebuild in the background, which rebuild_for starts), `sync` is read by the
+# next sync, `kept` is stored with nothing reading it yet, so the console offers no control for it, and `label` is read
+# from other settings, so a save of it alone changes nothing. Every field of SourceSettings is listed, and
+# test_source_settings checks each effect against what the code does with a change.
 EFFECTS: dict[str, Effect] = {
     "parsing.ocr": "read",
     "parsing.tables": "kept",
@@ -197,7 +198,7 @@ EFFECTS: dict[str, Effect] = {
     "cleaning.main_content": "split",
     "cleaning.site_repeats": "split",
     "cleaning.duplicates": "split",
-    "ingest.preset": "kept",
+    "ingest.preset": "label",
     "ingest.strategies": "split",
     "ingest.size": "split",
     "ingest.overlap": "split",
@@ -213,12 +214,21 @@ EFFECTS: dict[str, Effect] = {
 }
 
 
+def setting(s: SourceSettings, path: str) -> object:
+    """The value at an EFFECTS path, as JSON."""
+    value: object = s
+    for name in path.split("."):
+        value = getattr(value, name)
+    return value.model_dump(mode="json") if isinstance(value, BaseModel) else value
+
+
 def rebuild_for(before: SourceSettings, after: SourceSettings) -> Rebuild:
-    """What a settings change runs again: a new OCR mode reads the files again (a new reading per file), a split,
-    cleaning or metadata change splits the stored readings again, and rules or anything else rebuilds nothing now
-    (the next sync takes in or removes what the rules allow)."""
-    if before.parsing.ocr != after.parsing.ocr:
+    """What a settings change runs again, by the EFFECTS of the settings it changes: a reading again when one is
+    `read`, a split again when one is `split` and the pieces depend on it (index_key: an AI step not yet approved
+    changes nothing), else nothing now."""
+    changed = {EFFECTS[path] for path in EFFECTS if setting(before, path) != setting(after, path)}
+    if "read" in changed:
         return "read"
-    if index_key(before) != index_key(after):
+    if "split" in changed and index_key(before) != index_key(after):
         return "split"
     return "none"
