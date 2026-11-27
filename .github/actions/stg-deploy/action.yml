@@ -34,7 +34,7 @@ runs:
         fi
         echo "Deploying $SHA to the staging app"
     - uses: superfly/flyctl-actions/setup-flyctl@98172f70657cb3e15db199af139be99bd3e61200 # master
-    - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+    - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
     - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v4.4.0
     - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
