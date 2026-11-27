@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-26",
+  "title": "Your own workflow runs wait for your Approve click",
+  "description": "A review step in a workflow you started now waits in Human Tasks for an Approve click, so no write runs without someone seeing it.",
+  "tag": "improved"
+}

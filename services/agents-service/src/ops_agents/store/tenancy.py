@@ -43,6 +43,7 @@ ENGINE_PASS = "engine_pass"  # the workflow worker runs one claimed run's pass
 MEMORY_RETENTION = "memory_retention"  # the retention sweep expires one tenant's memories
 MAIL_LISTENER = "mail_listener"  # the mailbox listener polls one tenant's bound mailboxes
 SCHEDULE_CLOCK = "schedule_clock"  # the schedule clock ticks one tenant's saved schedules on their live workflows
+SCHEDULE_VIEWS = "schedule_views"  # a live-places list shows the schedules of every team its caller may view
 RUN_RECONCILER = "run_reconciler"  # the run reconciler gives one tenant's run with nothing behind it its state
 TESTS = "tests"  # `tenant_scope`, which tests use to act for a tenant
 ASSISTANT_CATCH_UP = "assistant_catch_up"  # start-up: one tenant's Ops Assistants brought to the declared version
@@ -81,6 +82,7 @@ __all__ = [
     "RUN_RECONCILER",
     "SCHEDULE_CLOCK",
     "SCHEDULE_TENANTS",
+    "SCHEDULE_VIEWS",
     "SEED",
     "SERVE_PUBLISHED",
     "SYSTEM_ROLE",

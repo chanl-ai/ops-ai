@@ -48,15 +48,13 @@ registry-tenant-preflight: ## Teams the registry tenant migration cannot place (
 clean: ## Remove caches
 	rm -rf .pytest_cache .ruff_cache
 
-db-up: ## PostgreSQL and OPA in compose (same as the root db-up)
-ifeq ($(OPS_INFRA),external)
-	@echo "OPS_INFRA=external: postgres and opa are side containers"
-else
-	$(COMPOSE) up -d --wait --no-recreate postgres opa  # never recreate the shared containers (make/db.mk)
-endif
+# The root targets own compose and its OPS_INFRA branches (make/db.mk); a copy here would start an offset stack's own
+# containers on the default stack's ports under OPS_INFRA=shared.
+db-up: ## The root db-up: PostgreSQL, OPA and the test mail servers
+	$(MAKE) -C $(ROOT) db-up
 
-db-down: ## Stop compose
-	$(COMPOSE) down
+db-down: ## The root db-down
+	$(MAKE) -C $(ROOT) db-down
 
 standards: ## Service standards check
 	uv run python scripts/check_standards.py
