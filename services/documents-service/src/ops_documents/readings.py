@@ -23,6 +23,7 @@ from ops_documents.errors import FileMissingError, FileNotReadyError, PolicyUnre
 from ops_documents.files import Files, Who
 from ops_documents.pending import Pending
 from ops_documents.picture_reading import (
+    BUDGET,
     PICTURE_RETRIES,
     PictureReading,
     as_read,
@@ -73,12 +74,46 @@ def settings_of(ocr: str | bool | None, language: str | None = None) -> ReadingS
 # part of the reading's key, so a reading made while the team's policy was off, or for another sensitivity, is not
 # served once that changes.
 PICTURES_OFF = "p-off"
-# Kept on a finished reading with a page whose picture was refused for a reason that passes (the model busy, today's
-# limit). The reading is served as it is; an ask once RETRY_AFTER has passed describes those pages again in the
-# background, alone, keeping every other page.
+# Kept on a finished reading with a page whose picture was refused for a reason that passes. The reading is served as
+# it is; an ask once the wait is over describes those pages again in the background, alone, keeping every other page.
+# The model busy waits RETRY_AFTER and counts a retry; today's spend limit waits for the next day (UTC, when
+# models-service starts a new day's spend) and counts none, as no call was paid for.
 RETRY_PICTURES = "pictures_retry"
+RETRY_TOMORROW = "pictures_budget"
 RETRY_AFTER = timedelta(minutes=10)
+
+
+def retry_due_before(code: str | None, now: datetime) -> datetime | None:
+    """A reading marked `code` and finished at or before this is due to be described again; None when not marked."""
+    if code == RETRY_PICTURES:
+        return now - RETRY_AFTER
+    if code == RETRY_TOMORROW:
+        day = now.astimezone(UTC)
+        return day.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(microseconds=1)
+    return None
+
+
+def retry_code(waits: set[str]) -> str | None:
+    """The reading's mark from its pages' passing refusals: a spent limit waits longest, so it wins."""
+    if waits & BUDGET:
+        return RETRY_TOMORROW
+    return RETRY_PICTURES if waits else None
+
+
+def next_tries(wait: str | None, tries: int) -> int | None:
+    """A page's count of passing refusals after one more `wait` (None: a lasting one); None settles it for good."""
+    if wait is None:
+        return None
+    if wait in BUDGET:
+        return tries
+    return tries + 1 if tries < PICTURE_RETRIES else None
+
+
 POLICY_UNREAD = "The team's page picture policy could not be read. Try again shortly."
+# A queued reading whose team turned page pictures off (or whose policy could not be read) before a picture left: it
+# fails, so the next ask, under the policy as it is then, reads the file again.
+POLICY_CHANGED = "policy_changed"
+POLICY_CHANGED_SAID = "The team's page picture policy changed while the file was being read. Ask again."
 
 
 def reading_key(settings: ReadingSettings, pictures: str | None, allowed: bool) -> str:
@@ -315,11 +350,12 @@ class Readings:
     async def _retry_if_due(self, who: Who, file: FileInfo, row: ReadingRow) -> None:
         """Describes the reading's refused pages again in the background once its wait is over; one process takes it.
         The pages are read from the asker's file, so a first file deleted since does not stop it."""
-        if row.error_code != RETRY_PICTURES or self.pictures is None:
-            return
         now = self.clock()
+        due_before = retry_due_before(row.error_code, now)
+        if due_before is None or row.error_code is None or self.pictures is None:
+            return
         async with isolation.request_transaction():
-            claimed = await self.store.claim_retry(row, code=RETRY_PICTURES, at=now, due_before=now - RETRY_AFTER)
+            claimed = await self.store.claim_retry(row, code=row.error_code, at=now, due_before=due_before)
         if claimed:
             await self._later(row.model_copy(update={"file_id": file.id, "actor": who.actor}))
 
@@ -422,7 +458,8 @@ class Readings:
             total = reader.facts.page_count
             await self.store.opened(row, pages_total=total, facts=reader.facts.model_dump(mode="json", by_alias=True))
             described = await self._described_so_far(row)
-            retry = False
+            waits: set[str] = set()
+            sends: bool | None = None  # the policy as it is now, asked before the first picture leaves
             for number in range(row.pages_done + 1, total + 1):
                 try:
                     page = await asyncio.wait_for(asyncio.to_thread(reader.page, number), self.page_timeout_s)
@@ -436,10 +473,19 @@ class Readings:
                     stack.close()
                     stack = ExitStack()
                     reader = await asyncio.to_thread(self._open, stack, data, file, settings)
-                passing = False
+                wait: str | None = None
                 if self.pictures is not None and wanted and wants_picture(page, reader.facts.mime_type):
+                    # The key says the policy was on when the reading was asked for; it may have been turned off since.
+                    if sends is None:
+                        on = sensitivity is None or await self.pictures.allowed(row.tenant_id, row.team, fresh=True)
+                        sends = on is True
+                    if not sends:
+                        await self.store.finish(
+                            row, status="failed", at=self.clock(), error_code=POLICY_CHANGED, error=POLICY_CHANGED_SAID
+                        )
+                        return
                     try:
-                        page, passing = await asyncio.wait_for(
+                        page, wait = await asyncio.wait_for(
                             self.pictures.describe(
                                 page, data=data, mime=reader.facts.mime_type, used=described, sensitivity=sensitivity,
                                 tenant=row.tenant_id, run=f"reading:{row.digest[:24]}",
@@ -447,10 +493,10 @@ class Readings:
                             self.page_timeout_s,
                         )  # fmt: skip
                     except TimeoutError:
-                        page, passing = not_described(page, "the model took too long"), False
+                        page, wait = not_described(page, "the model took too long"), None
                     described += page.source == "model"
-                    retry |= passing
-                retries = 1 if passing else None
+                    waits |= {wait} if wait else set()
+                retries = next_tries(wait, 0)
                 await self.store.save_page(row, number, page.model_dump(mode="json", by_alias=True), retries=retries)
             took = round((time.perf_counter() - started) * 1000)
             done = await self.store.get(row.team, row.digest, row.version, row.key)
@@ -459,7 +505,7 @@ class Readings:
                 status="done",
                 at=self.clock(),
                 duration_ms=took,
-                error_code=RETRY_PICTURES if retry else None,
+                error_code=retry_code(waits),
             )
         except ReadingError as e:
             await self.store.finish(row, status="failed", at=self.clock(), error_code=e.code, error=str(e))
@@ -496,10 +542,11 @@ class Readings:
         mime = FileFacts.model_validate(row.facts).mime_type
         described, waiting = await self.store.pages_to_retry(row)
         redone: list[tuple[Page, int | None]] = []
+        waits: set[str] = set()
         for page, tries in waiting:
             before = as_read(page)
             try:
-                after, passing = await asyncio.wait_for(
+                after, wait = await asyncio.wait_for(
                     self.pictures.describe(
                         before, data=data, mime=mime, used=described, sensitivity=level, tenant=row.tenant_id,
                         run=f"reading:{row.digest[:24]}",
@@ -507,12 +554,13 @@ class Readings:
                     self.page_timeout_s,
                 )  # fmt: skip
             except TimeoutError:
-                after, passing = not_described(before, "the model took too long"), False
+                after, wait = not_described(before, "the model took too long"), None
             described += after.source == "model"
-            redone.append((after, tries + 1 if passing and tries < PICTURE_RETRIES else None))
-        waits = any(tries is not None for _, tries in redone)
+            left = next_tries(wait, tries)
+            redone.append((after, left))
+            waits |= {wait} if wait and left is not None else set()
         changed = any(page.source == "model" for page, _ in redone)
-        await self.store.retried(row, redone, code=RETRY_PICTURES if waits else None, at=self.clock(), changed=changed)
+        await self.store.retried(row, redone, code=retry_code(waits), at=self.clock(), changed=changed)
 
     async def _described_so_far(self, row: ReadingRow) -> int:
         """Pages of this reading a model already described, so a reading resumed after a restart keeps its limit."""

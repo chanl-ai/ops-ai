@@ -367,7 +367,9 @@ def create_kb_app(
         if handled and file_id:
             with isolation.scope(caller.tenant_id, body.team_id):
                 settled = await service.finish_reading(
-                    Who(caller.tenant_id, "documents-service", body.team_id), file_id
+                    Who(caller.tenant_id, "documents-service", body.team_id),
+                    file_id,
+                    redescribed=body.payload.get("redescribed") is True,
                 )
         out = {"name": body.name, "key": body.key, "status": "handled" if handled else "unhandled", "items": settled}
         return ok(out, 202)

@@ -1917,11 +1917,14 @@ class KnowledgeService:
             "created_at": datetime.now(UTC), **origin.extra,
         }  # fmt: skip
 
-    async def finish_reading(self, who: Who, file_id: str) -> int:
+    async def finish_reading(self, who: Who, file_id: str, *, redescribed: bool = False) -> int:
         """Indexes the source items waiting on this file's reading, once documents-service has it (its
-        reading.finished event, or the knowledge schedule asking again); the number of items it settled."""
+        reading.finished event, or the knowledge schedule asking again); the number of items it settled. With
+        `redescribed` (a retry described a page the first reading could not) items already indexed from the file are
+        indexed again, so the new page reaches search."""
         settled = 0
-        for item in await self.store.reading_items(who.tenant_id, file_id=file_id):
+        statuses = ("reading", "indexed") if redescribed else ("reading",)
+        for item in await self.store.reading_items(who.tenant_id, file_id=file_id, statuses=statuses):
             found_sources = await self.store.sources(who.tenant_id, [item.source_id])
             if not found_sources:
                 continue
@@ -1929,7 +1932,8 @@ class KnowledgeService:
             found = Stored(item.file_id, item.path, item.mime, item.size, item.digest, False)
             # A fetched item keeps the system's id as its key and its own title; a file's title comes from its reading.
             origin = Origin(item.path, item.title) if source.type == "tool" else None
-            done = await self._read_file(who, source, item, name=item.path, found=found, rebuild=False, origin=origin)
+            rebuild = item.status == "indexed"
+            done = await self._read_file(who, source, item, name=item.path, found=found, rebuild=rebuild, origin=origin)
             if done.status != "reading":
                 settled += 1
                 if done.status == "indexed":

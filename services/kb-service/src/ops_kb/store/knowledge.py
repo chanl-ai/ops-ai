@@ -1627,10 +1627,12 @@ class KnowledgeStore(Store):
             team = await self._team_of(c, kb_sources, tenant, str(item["source_id"]))
             await c.execute(sa.insert(kb_items).values(**item, team_id=team))
 
-    async def reading_items(self, tenant: str, *, file_id: str | None = None) -> list[ItemRow]:
-        """The visible items waiting for their file's reading, one file's or all of them."""
+    async def reading_items(
+        self, tenant: str, *, file_id: str | None = None, statuses: tuple[str, ...] = ("reading",)
+    ) -> list[ItemRow]:
+        """The visible items waiting for their file's reading (or in `statuses`), one file's or all of them."""
         q = sa.select(*ITEM_COLUMNS).where(
-            kb_items.c.tenant_id == tenant, kb_items.c.status == "reading", team_visible(kb_items)
+            kb_items.c.tenant_id == tenant, kb_items.c.status.in_(statuses), team_visible(kb_items)
         )
         if file_id is not None:
             q = q.where(kb_items.c.file_id == file_id)

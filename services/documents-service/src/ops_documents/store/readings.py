@@ -13,12 +13,14 @@ queried (database portability D5)."""
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 import sqlalchemy as sa
-from pydantic import Field
+from pydantic import Field, model_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -71,6 +73,8 @@ documents_readings = sa.Table(
     sa.Column("file_id", sa.String(64), nullable=False),
     sa.Column("actor", sa.String(320), nullable=False),
     sa.Column("duration_ms", sa.Integer),
+    # The whole settings key when it is longer than the key column holds (see stored_key); null otherwise.
+    sa.Column("settings_full", sa.String(200)),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("started_at", sa.DateTime(timezone=True)),
     sa.Column("finished_at", sa.DateTime(timezone=True)),
@@ -104,13 +108,37 @@ documents_reading_files = sa.Table(
 )
 
 
+# A settings key longer than its column (a long language list with the picture suffix) is kept as a hash in the key
+# columns and whole in settings_full, so the key is still one value per reading and the row still names its settings.
+KEY_LENGTH = 64
+
+
+def stored_key(key: str) -> str:
+    return key if len(key) <= KEY_LENGTH else "h-" + hashlib.sha256(key.encode()).hexdigest()[: KEY_LENGTH - 2]
+
+
+def full_key(key: str) -> str | None:
+    return key if stored_key(key) != key else None
+
+
 class ReadingRow(Out):
-    """A reading's row, its key columns under shorter names."""
+    """A reading's row, its key columns under shorter names; `key` is always the whole settings key."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _whole_key(cls, data: object) -> object:
+        if not isinstance(data, Mapping):
+            return data
+        found: dict[str, object] = {str(k): v for k, v in cast(Mapping[object, object], data).items()}
+        if found.get("settings_full"):
+            found["settings_key"] = found["settings_full"]
+        return found
 
     tenant_id: str
     digest: str = Field(alias="file_digest")
     version: str = Field(alias="reader_version")
     key: str = Field(alias="settings_key")
+    full: str | None = Field(None, alias="settings_full")
     status: ReadingStatus
     pages_total: int | None
     pages_done: int
@@ -127,8 +155,8 @@ class ReadingRow(Out):
 _t = documents_readings.c
 # The columns a ReadingRow names: every other column (its times) is read by no caller.
 ROW = (
-    _t.tenant_id, _t.file_digest, _t.reader_version, _t.settings_key, _t.status, _t.pages_total, _t.pages_done,
-    _t.facts, _t.error_code, _t.error, _t.attempts, _t.file_id, _t.team, _t.actor, _t.duration_ms,
+    _t.tenant_id, _t.file_digest, _t.reader_version, _t.settings_key, _t.settings_full, _t.status, _t.pages_total,
+    _t.pages_done, _t.facts, _t.error_code, _t.error, _t.attempts, _t.file_id, _t.team, _t.actor, _t.duration_ms,
 )  # fmt: skip
 
 
@@ -154,7 +182,7 @@ class ReadingsStore(Store):
             t.c.team == team,
             t.c.file_digest == digest,
             t.c.reader_version == version,
-            t.c.settings_key == key,
+            t.c.settings_key == stored_key(key),
         )
 
     async def get(self, team: str, digest: str, version: str, key: str) -> ReadingRow | None:
@@ -202,7 +230,8 @@ class ReadingsStore(Store):
             "team": team,
             "file_digest": digest,
             "reader_version": version,
-            "settings_key": key,
+            "settings_key": stored_key(key),
+            "settings_full": full_key(key),
             "status": "queued",
             "pages_done": 0,
             "attempts": 0,
@@ -285,7 +314,7 @@ class ReadingsStore(Store):
                 team=team,
                 file_digest=digest,
                 reader_version=version,
-                settings_key=key,
+                settings_key=stored_key(key),
                 page=number,
                 body=_pack(page),
                 picture_retries=retries,
@@ -322,7 +351,8 @@ class ReadingsStore(Store):
         self, row: ReadingRow, pages: list[tuple[Page, int | None]], *, code: str | None, at: datetime, changed: bool
     ) -> None:
         """The pages described again, the reading's mark kept while one still waits, and `reading.finished` sent again
-        when a page now has text, so a knowledge base indexes it; all in one transaction."""
+        with `redescribed` when a page now has text, so kb-service indexes its already indexed items from the file
+        again; all in one transaction."""
         t = documents_readings
         async with self.tx() as c:
             for page, retries in pages:
@@ -336,7 +366,7 @@ class ReadingsStore(Store):
                 .values(error_code=code, finished_at=at)
             )
             if changed:
-                said: Json = {"status": "done", "pages": row.pages_total}
+                said: Json = {"status": "done", "pages": row.pages_total, "redescribed": True}
                 await self._events(c, row.team, row.digest, row.version, row.key, name=FINISHED_EVENT, said=said)
 
     async def put_done(
@@ -363,7 +393,8 @@ class ReadingsStore(Store):
                     await c.execute(
                         sa.insert(t).values(
                             tenant_id=isolation.tenant(), team=team, file_digest=digest, reader_version=version,
-                            settings_key=key, status="done", pages_total=len(pages), pages_done=len(pages),
+                            settings_key=stored_key(key), settings_full=full_key(key), status="done",
+                            pages_total=len(pages), pages_done=len(pages),
                             facts=json.dumps(facts), attempts=1, file_id=file_id, actor=actor,
                             duration_ms=duration_ms, created_at=at, started_at=at, finished_at=at,
                         )
@@ -420,7 +451,7 @@ class ReadingsStore(Store):
             await add(
                 c, service_outbox, tenant_id=tenant, team_id=team, name=name,
                 key=readings_contract.event_key(
-                    name, digest=digest, reader_version=version, settings_key=key, file_id=file_id
+                    name, digest=digest, reader_version=version, settings_key=stored_key(key), file_id=file_id
                 ),
                 payload=payload,
             )  # fmt: skip

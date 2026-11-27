@@ -13,15 +13,18 @@ from typing import Any
 
 import httpx
 import pytest
+import sqlalchemy as sa
 from PIL import Image, ImageDraw
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen.canvas import Canvas
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_documents.picture_reading import PictureReading
+from ops_documents.store.extractions import service_outbox
 from ops_service_kit.model_calls import ModelCallError
 
-from .conftest import OPS, Make
+from .conftest import OPS, Make, tenant_outbox
 from .test_extractions import Floor, Models
 
 DIAGRAM = "Three boxes, Mobile app, Intake service and Event queue, joined left to right by arrows."
@@ -202,7 +205,9 @@ def later(s: Any, minutes: float) -> None:
     s.extractor.readings.clock = lambda: now + timedelta(minutes=minutes)
 
 
-async def test_a_retry_describes_only_the_refused_page_and_serves_the_reading_meanwhile(make: Make) -> None:
+async def test_a_retry_describes_only_the_refused_page_and_serves_the_reading_meanwhile(
+    make: Make, engine: AsyncEngine
+) -> None:
     model = Seeing("rate_limited", on_calls={2})
     s = make(Models(), Floor(), pictures=PictureReading(model, Policy()))
     readings = s.extractor.readings
@@ -224,18 +229,35 @@ async def test_a_retry_describes_only_the_refused_page_and_serves_the_reading_me
     assert due.status_code == 200 and due.json()["data"]["pages"], "the reading is served while its page is redone"
     assert [k["user"] for k in model.calls[2:]] == ["Page 2 of the document."], "only the refused page is sent again"
     assert [p["source"] for p in got["pages"]] == ["model", "model"] and got["pages"][1]["unreadReason"] is None
+    mine = service_outbox.c.tenant_id == s.tenant
+    events = await tenant_outbox(
+        engine, s.tenant, sa.select(service_outbox.c.name, service_outbox.c.payload).where(mine)
+    )
+    finished = [e["payload"].get("redescribed") for e in events if e["name"] == "reading.finished"]
+    assert finished == [None, True], "the retry tells kb-service to index the file's items again"
 
 
-@pytest.mark.parametrize(("refuse", "sent"), [("rate_limited", 4), ("upstream_failed", 1)])
-async def test_a_page_refused_every_time_stops_after_its_retries(make: Make, refuse: str, sent: int) -> None:
-    """Three retries for a refusal that passes; none for an unknown failure, which would only be paid for again."""
+@pytest.mark.parametrize(
+    ("refuse", "minutes", "sent"),
+    [
+        ("rate_limited", 11, 4),
+        ("upstream_failed", 11, 1),
+        ("key_budget_exhausted", 11, 1),
+        ("key_budget_exhausted", 1440, 6),
+    ],
+)
+async def test_a_page_refused_every_time_stops_after_its_retries(
+    make: Make, refuse: str, minutes: int, sent: int
+) -> None:
+    """Three retries for a refusal that passes; none for an unknown failure, which would only be paid for again. Today's
+    spend limit waits for the next day and spends no retry, since no call was paid for."""
     model = Seeing(refuse)
     s = make(Models(), Floor(), pictures=PictureReading(model, Policy()))
     async with s.client as c:
         fid = await s.stored(pdf("text", "picture"), name="review.pdf", mime="application/pdf")
         body = await read_all(s, c, fid)
         for _ in range(5):
-            later(s, 11)
+            later(s, minutes)
             body = await read_all(s, c, fid)
     assert len(model.calls) == sent, f"{len(model.calls)} pictures sent"
     assert body["pages"][1]["source"] == "none" and body["pages"][1]["unreadReason"].count("Not described") == 1
@@ -256,6 +278,21 @@ async def test_a_retry_sends_no_picture_once_the_team_turned_pictures_off(make: 
     assert len(model.calls) == 1, "a retry asks the policy as it is now before a picture leaves"
 
 
+async def test_a_queued_reading_sends_no_picture_once_the_team_turned_pictures_off(make: Make) -> None:
+    model, policy = Seeing(), Policy()
+    s = make(Models(), Floor(), pictures=PictureReading(model, policy))
+    readings = s.extractor.readings
+    assert readings is not None
+    async with s.client as c:
+        fid = await s.stored(pdf("picture"), name="slide.pdf", mime="application/pdf")
+        asked = await c.post("/v1/documents/readings", json={"fileId": fid, **PICTURES}, headers=OPS)
+        policy.on = False
+        await readings.drain()
+        got = (await c.get(f"/v1/documents/readings/{fid}", params=PICTURES, headers=OPS)).json()["data"]
+    assert asked.status_code == 202 and model.calls == [], "the policy is asked again before a picture leaves"
+    assert got["status"] == "none", "asked now, with pictures off, the file has no reading yet"
+
+
 async def test_an_unread_policy_serves_the_stored_reading_and_never_reads_again(make: Make) -> None:
     model, policy = Seeing(), Policy()
     pictures = PictureReading(model, policy)
@@ -263,6 +300,7 @@ async def test_an_unread_policy_serves_the_stored_reading_and_never_reads_again(
     async with s.client as c:
         fid = await s.stored(pdf("text", "picture"), name="review.pdf", mime="application/pdf")
         first = await read_all(s, c, fid)
+        reads_first = policy.reads
         policy.on = None
         cached = await c.post("/v1/documents/readings", json={"fileId": fid, **PICTURES}, headers=OPS)
         reads_cached = policy.reads
@@ -271,7 +309,7 @@ async def test_an_unread_policy_serves_the_stored_reading_and_never_reads_again(
         other = await s.stored(pdf("picture"), name="slide.pdf", mime="application/pdf")
         none = await c.post("/v1/documents/readings", json={"fileId": other, **PICTURES}, headers=OPS)
     assert first["pages"][1]["source"] == "model" and cached.status_code == 200
-    assert reads_cached == 1, "the policy is kept a while, not read on every page view"
+    assert reads_cached == reads_first, "the policy is kept a while, not read on every page view"
     assert unread.status_code == 200 and unread.json()["data"]["pages"][1]["source"] == "model", unread.text
     assert none.status_code == 503 and none.json()["error"]["code"] == "policy_unread", none.text
     assert len(model.calls) == 1, "an unread policy never makes a second reading"
@@ -302,3 +340,20 @@ async def test_a_reading_resumed_mid_file_keeps_its_limit(make: Make) -> None:
             body = (await c.get(f"/v1/documents/readings/{fid}", params=PICTURES, headers=OPS)).json()["data"]
     assert [p["source"] for p in body["pages"]] == ["model", "model", "none"], [p["source"] for p in body["pages"]]
     assert body["pages"][2]["unreadReason"] == "Not described: this file reached its limit of 2 pages read by a model."
+
+
+async def test_a_reading_with_the_longest_language_list_is_kept_and_served(make: Make) -> None:
+    model = Seeing()
+    s = make(Models(), Floor(), pictures=PictureReading(model, Policy()))
+    language = "+".join(["chi_sim_vert"] * 5)[:64].rstrip("+_")  # the request's limit, 64 characters
+    asked = {"ocr": "off", "language": language, "pictureSensitivity": "confidential"}
+    readings = s.extractor.readings
+    assert readings is not None
+    async with s.client as c:
+        fid = await s.stored(pdf("text", "picture"), name="review.pdf", mime="application/pdf")
+        made = await c.post("/v1/documents/readings", json={"fileId": fid, **asked}, headers=OPS)
+        await readings.drain()
+        got = (await c.get(f"/v1/documents/readings/{fid}", params=asked, headers=OPS)).json()["data"]
+    assert made.status_code in (200, 202), made.text
+    assert got["status"] == "done" and got["settings"]["language"] == language, got
+    assert [p["source"] for p in got["pages"]] == ["text", "model"], got["pages"]

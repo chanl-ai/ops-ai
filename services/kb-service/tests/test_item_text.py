@@ -14,12 +14,13 @@ from reportlab.lib.pagesizes import LETTER
 from reportlab.pdfgen.canvas import Canvas
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_identity.fastapi import DEV_TEAM
 from ops_kb.files import KnowledgeFiles
 
 from .conftest import kb_client
 from .readings_fake import LocalReadings
 from .test_bases_and_sources import data
-from .test_readings import base_with
+from .test_readings import base_with, documents
 from .test_retrieval import ask
 
 DIAGRAM = "Three boxes, Mobile app, Intake service and Event queue, joined left to right by arrows."
@@ -94,3 +95,20 @@ async def test_text_of_a_file_without_pages_has_sections_and_no_boxes(client: ht
     assert text["status"] == "done" and text["paged"] is False, text
     assert [s["headingPath"] for s in text["sections"]] == [["Refunds"], ["Disputes"]], text["sections"]
     assert all(b["page"] is None and b["boxes"] == [] for s in text["sections"] for b in s["blocks"])
+
+
+async def test_a_page_described_on_a_retry_reaches_search(engine: AsyncEngine, tenant: str, tmp_path: Path) -> None:
+    intake = KnowledgeFiles(tmp_path)
+    readings = LocalReadings(intake, engine=_NoWords())
+    async with kb_client(engine, tenant, files=intake, readings=readings) as client:
+        src, kb = await base_with(client, ("review.pdf", review_pdf()))
+        await client.post(f"/v1/sources/{src['id']}/sync")
+        item = data(await client.get(f"/v1/sources/{src['id']}/items"))["data"][0]
+        # documents-service describes page 2 on a retry and says so again.
+        readings.described, readings.kept = {2: DIAGRAM}, {}
+        payload = {"fileId": item["fileId"], "redescribed": True}
+        event = {"name": "reading.finished", "key": "reading.finished:retry", "teamId": DEV_TEAM, "payload": payload}
+        sent = await client.post("/v1/events", json=event, headers=documents(tenant))
+        answer = await ask(client, kb["id"], "How do the mobile app and the event queue connect?")
+    assert item["status"] == "indexed" and sent.json()["data"]["items"] == 1, sent.text
+    assert any(c.get("page") == 2 for c in answer["citations"]), answer

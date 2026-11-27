@@ -68,6 +68,8 @@ UNREACHABLE = "the model could not be reached"
 # Refusals that pass with time: the page is described again later. Any other failure, an unknown code or a page over its
 # time included, is kept: retrying it would pay for the same failure again.
 PASSING = frozenset({"key_budget_exhausted", "tenant_budget_exhausted", "rate_limited"})
+# Of those, the day's spend limits: they reset the next day (UTC), so the page waits for that and keeps its retries.
+BUDGET = frozenset({"key_budget_exhausted", "tenant_budget_exhausted"})
 # How often a page refused for a passing reason is described again before it keeps its note for good.
 PICTURE_RETRIES = 3
 # How long a team's pageImages answer is kept: every page view asks for the reading, and a policy change applies
@@ -147,17 +149,17 @@ class PictureReading:
 
     async def describe(
         self, page: Page, *, data: bytes, mime: str, used: int, sensitivity: str | None, tenant: str, run: str
-    ) -> tuple[Page, bool]:
-        """The page with its description, or unchanged but for the reason it was not described; and whether that
-        reason passes with time, so the reading is worth reading again. `sensitivity` is the file's, which the model
-        must be cleared for; None when the team's policy does not send pictures."""
+    ) -> tuple[Page, str | None]:
+        """The page with its description, or unchanged but for the reason it was not described; and the refusal's
+        code when it passes with time (PASSING), so the page is worth describing again. `sensitivity` is the file's,
+        which the model must be cleared for; None when the team's policy does not send pictures."""
         if used >= self.per_file:
-            return not_described(page, f"this file reached its limit of {self.per_file} pages read by a model"), False
+            return not_described(page, f"this file reached its limit of {self.per_file} pages read by a model"), None
         if sensitivity is None:
-            return not_described(page, POLICY_OFF), False
+            return not_described(page, POLICY_OFF), None
         drawn = await asyncio.to_thread(page_images.render, data, mime, [page.number])
         if page.number not in drawn:
-            return not_described(page, "the page could not be drawn"), False
+            return not_described(page, "the page could not be drawn"), None
         part = page_images.whole(page.number, drawn[page.number]).part()
         try:
             answer = await self.models.structured(
@@ -166,16 +168,16 @@ class PictureReading:
             )  # fmt: skip
         except ModelCallError as e:
             log.info("picture_not_described", extra={"code": e.code, "page": page.number})
-            return not_described(page, REASONS.get(e.code, UNREACHABLE)), e.code in PASSING
+            return not_described(page, REASONS.get(e.code, UNREACHABLE)), e.code if e.code in PASSING else None
         said = cast(dict[str, Any], answer) if isinstance(answer, dict) else {}
         words, description = str(said.get("text") or "").strip(), str(said.get("description") or "").strip()
         text = "\n\n".join(t for t in (words, description) if t)
         if not text:
-            return not_described(page, "the model found nothing to describe"), False
+            return not_described(page, "the model found nothing to describe"), None
         block = Block(id=f"p{page.number}.m0", kind="paragraph", text=text, box=[0.0, 0.0, 1.0, 1.0], read_by="model")
         return page.model_copy(
             update={"source": "model", "text": text, "blocks": [block], "unread_reason": None, "words": []}
-        ), False
+        ), None
 
 
 def not_described(page: Page, why: str) -> Page:
