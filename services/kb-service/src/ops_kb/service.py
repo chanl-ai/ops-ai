@@ -1195,8 +1195,9 @@ class KnowledgeService:
         return s
 
     async def upload(self, who: Who, source_id: str, data: bytes, *, name: str, mime: str) -> Uploaded:
-        """Stores bytes kb-service writes itself (a page, the demo seed) and adds them to the source under `name`.
-        People add files through Files and `add_files`."""
+        """Stores bytes kb-service writes itself (a page, a pushed item, the demo seed) and adds them to the source
+        under `name`, holding the file in Files as `add_files` does; the file it replaces under that name is let go, so
+        Files keeps no version nothing reads. People add files through Files and `add_files`."""
         s = await self._changeable_source(who, source_id)
         if not data:
             raise ValidationFailed("The file is empty.")
@@ -1206,7 +1207,11 @@ class KnowledgeService:
             stored = await self.files.put(who.tenant_id, source_team(s), data, name=name, mime=mime, actor=who.email)
         except ValueError as e:
             raise ValidationFailed(str(e), code="file_not_ready") from e
+        await self._use_file(who, s, stored.file_id)
+        replaced = [f for f, n in (s.file_names or {}).items() if n == name and f != stored.file_id]
         await self.store.add_file(who.tenant_id, source_id, stored.file_id, name)
+        for file_id in replaced:
+            await self.files.release(who.tenant_id, source_team(s), file_id, source_id=source_id)
         return {
             "fileId": stored.file_id,
             # The name it was uploaded under, which the source indexes it by; the stored blob may carry an earlier one.

@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import time
 from pathlib import Path
+from typing import Any
 
 from pydantic import HttpUrl
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -115,6 +116,37 @@ async def test_an_item_written_before_its_scan_is_refused_as_not_ready_then_read
         assert (early.status_code, early.json()["error"]["code"]) == (409, "file_not_ready"), early.text
         await scanned()
         assert data(await client.post(f"/v1/knowledge-bases/{kb['id']}/pages", json=page), 201)["title"] == "Vault"
+
+
+async def test_a_pushed_item_holds_its_file_in_files_and_lets_go_of_the_version_it_replaced(
+    engine: AsyncEngine, tenant: str
+) -> None:
+    """A written item's file had no reference in Files, so Files listed it as unreferenced and a person could delete it
+    from under the base; a new version left the old file stored with nothing reading it."""
+    fake = FakeFilesService()
+    scanner = fake.client(service="scanner", scopes=["files:decide"])
+
+    async def put(client: Any, source_id: str, item: dict[str, str]) -> dict[str, Any]:
+        await client.post(f"/v1/sources/{source_id}/items", json=item)  # stored, then held until its scan
+        for fid, f in fake.files.items():
+            if f["scan"]["status"] == "pending":
+                await scanner.report_scan(tenant, fid, status="clean", engine="clamav")
+        return data(await client.post(f"/v1/sources/{source_id}/items", json=item))
+
+    async with kb_client(engine, tenant, files=FilesServiceIntake(fake.client())) as client:
+        kb = data(
+            await client.post("/v1/knowledge-bases", json={"name": "Disputes", "owner": "james@harborpine.example"}),
+            201,
+        )
+        src = data(await client.post("/v1/sources", json={"type": "push", "name": "Rules", "kbIds": [kb["id"]]}), 201)
+        item = {"name": "chargeback-window", "title": "Chargeback window", "text": "Raised within 120 days."}
+        first = await put(client, src["id"], item)
+        second = await put(client, src["id"], {**item, "text": "Raised within 90 days."})
+        held = data(await client.get(f"/v1/sources/{src['id']}"))["config"]["fileIds"]
+    assert (first["outcome"], second["outcome"], len(held)) == ("created", "updated", 1), (first, second, held)
+    old = next(fid for fid in fake.files if fid not in held)
+    assert fake.files[held[0]]["referenceCount"] == 1, "the item's file is held by its source in Files"
+    assert fake.files[old]["referenceCount"] == 0, "the replaced version is let go"
 
 
 async def test_start_up_waits_for_files_service_about_its_setting_not_a_probe_timeout_per_try() -> None:
