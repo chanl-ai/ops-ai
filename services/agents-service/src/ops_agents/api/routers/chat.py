@@ -983,7 +983,9 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
                 ErrorEvent(message=said, partial=partial, code=err.code, kind=err.kind, retryable=err.retryable)
             )
         else:
-            yield _frame(DoneEvent(message=hitl_facade.message_as_seen_by(me, assistant, row.team_id)))
+            yield _frame(
+                DoneEvent(message=hitl_facade.message_as_seen_by(me, assistant, row.team_id), modes=builder.modes)
+            )
 
     # `sep="\n"`: the console splits frames on a blank line made of "\n\n", not "\r\n\r\n".
     return EventSourceResponse(stream(), sep="\n", ping=15)

@@ -9612,7 +9612,11 @@ export interface components {
             /** Waitingat */
             waitingAt: string[];
         };
-        /** ModeStep */
+        /**
+         * ModeStep
+         * @description One way of working a turn used, named at its first use (docs/design/agents-v2/automatic-mode-and-loop-kinds.md).
+         *     `fixed` when the builder set the loop kind.
+         */
         ModeStep: {
             /**
              * Atstep

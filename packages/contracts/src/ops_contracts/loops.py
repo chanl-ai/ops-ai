@@ -7,9 +7,9 @@ from typing import Any, Literal
 
 from pydantic import JsonValue
 
-from .chat import WireModel
+from .chat import ModeName, ModeStep, WireModel
 
-ModeName = Literal["direct", "plan", "helpers", "sandbox"]
+__all__ = ["LoopKindOut", "ModeName", "ModeStep", "RunTrace", "TraceStep"]
 Requirement = Literal["agents", "sandbox", "workflow", "rubric"]
 StepKind = Literal["model", "tool", "mode", "plan", "agent_asked", "handoff", "interrupt", "guardrail"]
 
@@ -26,13 +26,6 @@ class LoopKindOut(WireModel):
     # False when the install lacks what the kind requires, or the kind arrives in a later release.
     available: bool
     unavailable_reason: str | None = None
-
-
-class ModeStep(WireModel):
-    mode: ModeName
-    reason: str
-    fixed: bool
-    at_step: int = 0
 
 
 class TraceStep(WireModel):

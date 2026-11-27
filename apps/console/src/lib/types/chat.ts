@@ -500,5 +500,29 @@ export type ChatStreamEvent =
   | { type: 'citations'; citations: Citation[] }
   /** The first time the turn works a way (automatic mode): answered directly, planned, asked a helper or used the workspace. */
   | { type: 'mode'; mode: 'direct' | 'plan' | 'helpers' | 'sandbox'; reason: string; fixed: boolean }
-  | { type: 'done'; message: ChatMessage }
+  /** The turn's plan, sent whole each time it changes; `revision` counts the replans. */
+  | {
+      type: 'plan';
+      title: string;
+      steps: { id: string; text: string; status: 'pending' | 'doing' | 'done' | 'skipped'; note?: string }[];
+      revision: number;
+    }
+  /** A helper agent was asked on this turn, then answered. */
+  | {
+      type: 'agent_asked';
+      agentId: string;
+      agentName: string;
+      question: string;
+      status: 'started' | 'finished';
+      summary?: string;
+      callId: string;
+    }
+  /** The conversation was handed to another agent. */
+  | { type: 'handoff'; to: string; toName: string; message: string }
+  /** `modes`: the ways of working the turn used, in order. */
+  | {
+      type: 'done';
+      message: ChatMessage;
+      modes?: { mode: 'direct' | 'plan' | 'helpers' | 'sandbox'; reason: string; fixed: boolean; atStep: number }[];
+    }
   | { type: 'error'; message: string; partial: ChatMessage; code?: string; kind?: ChatMessage['errorKind']; retryable?: boolean };

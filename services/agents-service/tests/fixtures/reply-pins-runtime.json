@@ -228,6 +228,14 @@
             "widgetsOff": []
           }
         },
+        "modes": [
+          {
+            "atStep": 0,
+            "fixed": false,
+            "mode": "direct",
+            "reason": "Answered without a plan, a helper or the workspace."
+          }
+        ],
         "type": "done"
       }
     ],

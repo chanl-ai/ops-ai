@@ -15238,6 +15238,7 @@
       },
       "ModeStep": {
         "additionalProperties": false,
+        "description": "One way of working a turn used, named at its first use (docs/design/agents-v2/automatic-mode-and-loop-kinds.md).\n`fixed` when the builder set the loop kind.",
         "properties": {
           "atStep": {
             "default": 0,

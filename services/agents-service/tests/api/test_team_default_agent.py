@@ -163,6 +163,9 @@ async def test_the_default_asks_only_specialists_the_person_may_chat_with_and_as
     events = await say(c, thread, 'call agent__ag_dispute {"question": "Can I dispute a card charge?"}', VIEWER)
     ended = [e["call"] for e in events if e.get("type") == "tool_end"]
     assert [(t["name"], t["output"]["status"]) for t in ended] == [("agent__ag_dispute", "answered")], ended
+    # The person reads the helper being asked, then answering, named as the agents list names it.
+    asked = [(e["agentId"], e["status"], bool(e.get("summary"))) for e in events if e.get("type") == "agent_asked"]
+    assert asked == [("ag_dispute", "started", False), ("ag_dispute", "finished", True)], asked
     assert rt.graph_store is not None
     children = [
         t

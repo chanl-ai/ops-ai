@@ -24,6 +24,7 @@ from ops_agent_kernel.search import NAME as SEARCH_TOOL
 from ops_agents.activities.catalog import Catalog
 from ops_agents.activities.tools import fill
 from ops_contracts.chat import (
+    AgentAskedEvent,
     ApprovalState,
     ApprovalWidget,
     BudgetPause,
@@ -40,7 +41,10 @@ from ops_contracts.chat import (
     LoadedSkill,
     MessageFeedback,
     ModeEvent,
+    ModeStep,
     PartEvent,
+    PlanEvent,
+    PlanStepOut,
     RecordWidget,
     RememberedItem,
     ReplaceEvent,
@@ -55,11 +59,11 @@ from ops_contracts.chat import (
     WidgetEvent,
     WidgetPart,
 )
-from ops_contracts.skill_run import SkillRunState
+from ops_contracts.skill_run import AGENT_TOOL_PREFIX, SkillRunState, hands_to_agent
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import now_iso
-from ops_service_kit.narrow import json_object
+from ops_service_kit.narrow import json_list, json_object
 
 from ..store.chat_list import ChatListQuery, unsummarised_rows
 from ..store.chat_search import index_thread, indexed_ids, matching_threads
@@ -107,6 +111,16 @@ def _worth_more_thought(m: ChatMessage) -> bool:
     return any(p.id == PLAN_PART for p in m.parts or []) or len(calls) >= 2
 
 
+# The kernel's plan statuses (plan.py) as the plan frame names them: a blocked step is still the one being worked.
+PLAN_STATUS: dict[str, Literal["pending", "doing", "done", "skipped"]] = {
+    "todo": "pending",
+    "doing": "doing",
+    "blocked": "doing",
+    "done": "done",
+    "skipped": "skipped",
+}
+
+
 @dataclass
 class AssistantBuilder:
     """One assistant message, built from one run's events."""
@@ -126,6 +140,28 @@ class AssistantBuilder:
     presented: set[str] = field(default_factory=set[str])
     # The alias Think harder reruns a reply on; a reply that made a plan or two calls, on another model, offers it.
     think_alias: str = ""
+    # The ways of working the turn used, read from its turn event; the done frame carries them.
+    modes: list[ModeStep] | None = None
+
+    def _asked(self, call: ToolCall, c: Json) -> list[ChatStreamEvent]:
+        """A call to a helper agent, as the person reads it: asked (started), then answered (finished)."""
+        if not hands_to_agent(call.name):
+            return []
+        agent_id = call.name.removeprefix(AGENT_TOOL_PREFIX)
+        a = self.catalog.agent(agent_id)
+        out = json_object(c.get("output"))
+        done = call.status != "running"
+        answer = str(out.get("answer") or "") if done else ""
+        return [
+            AgentAskedEvent(
+                agent_id=agent_id,
+                agent_name=a.name if a is not None else str(out.get("agentName") or agent_id),
+                question=str(json_object(c.get("input")).get("question") or ""),
+                status="finished" if done else "started",
+                summary=answer[:280] or None,
+                call_id=call.id,
+            )
+        ]
 
     def _call(self, c: Json) -> ToolCall:
         status = str(c.get("status") or "")
@@ -251,9 +287,10 @@ class AssistantBuilder:
                         return [PartEvent(part=part)]
                     return []
                 m.tool_calls = [*(c for c in m.tool_calls or [] if c.id != call.id), call]
+                asked = self._asked(call, json_object(data))
                 if call.status == "running":
-                    return [ToolStartEvent(call=call)]
-                out: list[ChatStreamEvent] = [ToolEndEvent(call=call)]
+                    return [ToolStartEvent(call=call), *asked]
+                out: list[ChatStreamEvent] = [ToolEndEvent(call=call), *asked]
                 view = json_object(data).get("view")
                 if view and json_object(data).get("status") == "ok" and "part" in json_object(view):
                     # A shaped result (activities/shaper.py): its id is the call's, so a reload keeps the same one.
@@ -286,6 +323,19 @@ class AssistantBuilder:
             case "mode":
                 d = json_object(data)
                 return [ModeEvent.model_validate({k: d[k] for k in ("mode", "reason", "fixed")})]
+            case "plan":
+                d = json_object(data)
+                steps = [
+                    PlanStepOut(
+                        id=str(i + 1),
+                        text=str(json_object(s).get("title") or ""),
+                        status=PLAN_STATUS.get(str(json_object(s).get("status")), "pending"),
+                        note=cast(str | None, json_object(s).get("note")),
+                    )
+                    for i, s in enumerate(json_list(d.get("steps")))
+                ]
+                title = str(d.get("title") or "Plan")
+                return [PlanEvent(title=title, steps=steps, revision=int(str(d.get("revision") or 0)))]
             case "skill_loaded":
                 m.skills = [*(m.skills or []), LoadedSkill.model_validate(json_object(data))]
                 return []
@@ -308,6 +358,7 @@ class AssistantBuilder:
                 return []
             case "turn":
                 d = json_object(data)
+                self.modes = [ModeStep.model_validate(json_object(x)) for x in json_list(d.get("modes"))]
                 # The turn event as the agent graph writes it: its fields are strings.
                 m.model = cast(str | None, d.get("model"))
                 if self.think_alias and m.model != self.think_alias and _worth_more_thought(m):
