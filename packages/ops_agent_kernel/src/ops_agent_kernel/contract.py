@@ -21,7 +21,7 @@ LOOPS: tuple[LoopName, ...] = ("pydantic_ai", "strands")
 class LoopChoice:
     """The loop a new turn runs on when its ports name none. A paused turn resumes on the loop that paused it."""
 
-    default: LoopName = "pydantic_ai"
+    default: LoopName = "strands"
 
 
 LOOP = LoopChoice()

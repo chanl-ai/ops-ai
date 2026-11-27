@@ -171,8 +171,8 @@ class Settings(BaseSettings):
     port: int = 8700
     # The runtime's alias, which models-service serves; no vendor model is named here (a direct call sets one).
     model_alias: str = "default"
-    # The agent loop new kernel turns run on (OPS_AGENTS_LOOP): Strands Agents or Pydantic AI; unset takes the kernel's
-    # default (ops_agent_kernel.contract.LOOP).
+    # The agent loop new kernel turns run on (OPS_AGENTS_LOOP): Strands Agents, or Pydantic AI while it is still kept;
+    # unset takes the kernel's default, Strands (ops_agent_kernel.contract.LOOP).
     agents_loop: Literal["pydantic_ai", "strands"] | None = None
     # The alias a chat reply reruns on when the person taps Think harder (OPS_THINK_HARDER_ALIAS); empty offers no chip.
     think_harder_alias: str = "thinking"
