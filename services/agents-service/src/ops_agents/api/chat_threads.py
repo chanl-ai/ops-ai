@@ -37,6 +37,7 @@ from ops_contracts.chat import (
     EffectiveSettings,
     GuardrailAudit,
     GuardrailHit,
+    HandoffEvent,
     LabelValue,
     LoadedSkill,
     MessageFeedback,
@@ -323,6 +324,12 @@ class AssistantBuilder:
             case "mode":
                 d = json_object(data)
                 return [ModeEvent.model_validate({k: d[k] for k in ("mode", "reason", "fixed")})]
+            case "handoff":
+                # The next agent's answer follows the previous one's line in the same message.
+                d = json_object(data)
+                m.content += "\n\n"
+                handed = HandoffEvent(to=str(d.get("to")), to_name=str(d.get("toName")), message=str(d.get("message")))
+                return [handed, TextEvent(delta="\n\n")]
             case "plan":
                 d = json_object(data)
                 steps = [

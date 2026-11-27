@@ -241,6 +241,8 @@ class AgentDefinition(_Model):
     # The spec's `loop` as written (camelCase keys), and whether the spec has a workspace.
     loop: dict[str, Any] = {}
     sandbox: bool = False
+    # The agents a swarm turn may hand the conversation to: the spec's `agents` with `use: handoff`.
+    handoffs: list[str] = []
 
     def loop_settings(self) -> LoopSettings:
         """The turn's loop: the spec's kind and its own settings, defaults where the spec leaves one out."""

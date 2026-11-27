@@ -74,7 +74,6 @@ KINDS: tuple[Kind, ...] = (
         "Conversations that move between specialists, such as intake and then a desk.",
         _schema(maxHandoffs={"type": "integer", "minimum": 1, "maximum": 10}),
         requires=("agents",),
-        later="Hand-overs between agents arrive in a later build.",
     ),
     Kind(
         "workflow",

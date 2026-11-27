@@ -23,7 +23,7 @@ from ops_agents.activities.catalog import AgentDefinition, Catalog, Fragment, Gu
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.logging import get_logger
-from ops_service_kit.narrow import json_object
+from ops_service_kit.narrow import json_list, json_object
 from ops_store import isolation
 
 from ..app import agent_brief
@@ -279,6 +279,11 @@ def definition_of(agent_id: str, version: int, spec: Json) -> AgentDefinition:
         model_settings=model_settings_of(spec),
         loop=json_object(document.get("loop")),
         sandbox=document.get("sandbox") is not None,
+        handoffs=[
+            str(json_object(h).get("id"))
+            for h in json_list(document.get("agents"))
+            if json_object(h).get("use") == "handoff"
+        ],
     )
 
 

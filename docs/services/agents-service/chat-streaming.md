@@ -22,7 +22,7 @@ A chat reply reaches the console as server-sent events from `POST /chat/threads/
 | `mode` | `mode` (direct, plan, helpers, sandbox), `reason`, `fixed` | The first time the turn works a way: `direct` when the first model step ends with nothing else used, the others when the plan is accepted, a helper is first asked or the workspace is first used ([automatic mode](../../design/agents-v2/automatic-mode-and-loop-kinds.md)) |
 | `plan` | `title`, `steps` (`id`, `text`, `status`: pending, doing, done, skipped, `note`), `revision` | Each time the turn's plan changes, sent whole. A change never runs before one ([automatic mode](../../design/agents-v2/automatic-mode-and-loop-kinds.md)) |
 | `agent_asked` | `agentId`, `agentName`, `question`, `status` (started, finished), `summary`, `callId` | Beside the `tool_start` and `tool_end` of a call to a helper agent |
-| `handoff` | `to`, `toName`, `message` | Defined on the wire; nothing sends it yet, as hand-overs are not built |
+| `handoff` | `to`, `toName`, `message` | A `swarm` agent handed the conversation to another agent; that agent's answer follows in the same message |
 | `done` | `message`, `modes` | The finished message, as a reload will show it, and the ways of working the turn used, in order |
 | `error` | `message`, `partial`, `code` | The turn failed; `partial` is what was built so far |
 

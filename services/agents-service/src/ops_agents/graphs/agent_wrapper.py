@@ -26,6 +26,7 @@ from ops_agent_kernel.types import (
     ToolGrant,
     TranscriptMessage,
     TurnRequest,
+    TurnResult,
 )
 from ops_agents.activities.attachments import ATTACHMENT_KB
 from ops_agents.activities.catalog import AgentDefinition
@@ -43,6 +44,7 @@ from .common import (
     PendingApproval,
     agent_grants,
     approval_token,
+    emit,
     interrupt_from_state,
     interrupt_to_state,
     kernel_turn,
@@ -51,6 +53,8 @@ from .common import (
     with_apps,
     with_memory,
 )
+from .handovers import Handovers, HandoverTools, run_with_handovers
+from .handovers import grants as handover_grants
 from .metering import turn_ids
 
 # How many earlier lines of reads a turn is given, newest kept.
@@ -143,6 +147,10 @@ class AgentState(TypedDict):
     # Set by a chat run (api/skills.py skill_turn): kernel skills beyond the pins (team skills the agent may use, a
     # picked part filled with its inputs, carried picks) and the skills this reply carries or was picked.
     skill_turn: NotRequired[Json]
+    # The agent a hand-over left the conversation with (swarm kind), and each agent's own history, so the agent handed
+    # to answers from what it was told, and the first agent's history is intact when the conversation comes back.
+    active_agent: NotRequired[str]
+    loop_states: NotRequired[dict[str, list[Json]]]
 
 
 def build(
@@ -155,7 +163,7 @@ def build(
         definition it started on even if the agent was paused since."""
         if (snapshot := state.get("test_agent")) is not None:
             return AgentDefinition.model_validate(snapshot)
-        aid = agent_id or state.get("agent_id")
+        aid = state.get("active_agent") or agent_id or state.get("agent_id")
         pinned = state.get("agent_version")
         # A pinned version serves a new turn only while the agent is live: a pause stops widget turns too.
         live = in_flight or (aid is not None and deps.catalog.agent(aid) is not None)
@@ -178,13 +186,76 @@ def build(
     async def agent(state: AgentState) -> Json:
         await held(state)
         a = agent_of(state)
+        source = cast(list[Json], state["history"] if "history" in state else state["messages"])
+        # An agent handed to on an earlier message answers from its own history, not the conversation's.
+        if (active := state.get("active_agent")) and active != (agent_id or state.get("agent_id")):
+            source = (state.get("loop_states") or {}).get(active) or []
+        loop = a.loop_settings()
+        states = {k: list(v) for k, v in (state.get("loop_states") or {}).items()}
+        if loop.kind != "swarm" or not a.handoffs:
+            result = await one_turn(state, a, state["message"], source, None)
+            pair: list[Json] = [
+                {"role": "user", "content": state["message"]},
+                {"role": "assistant", "content": result.text},
+            ]
+            out: Json = {
+                "messages": cast(JsonValue, pair),
+                "pending": interrupt_to_state(result.interrupt) if result.interrupt else None,
+                "reply": result.text,
+                "stop": result.stop_reason,
+            }
+            if states:
+                # A conversation that was handed over keeps each agent's own history, this agent's included.
+                states[a.id] = [*states.get(a.id, []), *pair]
+                out["loop_states"] = cast(JsonValue, states)
+            return out
+
+        async def handed(aid: str, said: str, h: Handovers) -> TurnResult:
+            who = a if aid == a.id else deps.catalog.agent(aid)
+            if who is None:
+                raise ValueError(f"Agent {aid} is not live, so it takes no new turns.")
+            own = source if aid == a.id else states.get(aid) or []
+            r = await one_turn(state, who, said, own, h)
+            states[aid] = [
+                *states.get(aid, []),
+                {"role": "user", "content": said},
+                {"role": "assistant", "content": r.text},
+            ]
+            if h.asked is not None:
+                to = deps.catalog.agent(h.asked[0])
+                emit(
+                    "handoff",
+                    "agent",
+                    {"to": h.asked[0], "toName": to.name if to else h.asked[0], "message": h.asked[1]},
+                )
+            return r
+
+        turns = await run_with_handovers(a.id, state["message"], handed, Handovers(loop.max_handoffs))
+        last, result = turns[-1]
+        text = "\n\n".join(r.text for _, r in turns if r.text)
+        return {
+            "messages": [{"role": "user", "content": state["message"]}, {"role": "assistant", "content": text}],
+            "pending": interrupt_to_state(result.interrupt) if result.interrupt else None,
+            "reply": text,
+            "stop": result.stop_reason,
+            "active_agent": last,
+            "loop_states": cast(JsonValue, states),
+        }
+
+    async def one_turn(
+        state: AgentState, a: AgentDefinition, message: str, source: list[Json], h: Handovers | None
+    ) -> TurnResult:
+        """One agent's turn on `message`, answering from `source`; with `h`, it may hand the conversation over."""
         ports, offers = await ports_with_workflows(deps, list(a.tools), agent_id=a.id, version=a.version)
-        source = state["history"] if "history" in state else state["messages"]
+        if h is not None:
+            targets = {t.id: t.name for i in a.handoffs if (t := deps.catalog.agent(i)) is not None and i != a.id}
+            ports = replace(ports, tools=HandoverTools(ports.tools, h, a.id, frozenset(targets)))
+            offers = [*offers, *handover_grants(targets)]
         transcript = [TranscriptMessage(m["role"], m["content"]) for m in source]  # pyright: ignore[reportArgumentType]
-        carried, reads = _earlier(cast(list[Json], source))
+        carried, reads = _earlier(source)
         if (turn := state.get("skill_turn")) is not None:
             carried = list(cast(list[Json], turn.get("carried") or []))
-        replies = [m for m in cast(list[Json], source) if m.get("role") == "assistant"]
+        replies = [m for m in source if m.get("role") == "assistant"]
         open_plan = cast(Json | None, replies[-1].get("plan")) if replies else None
         effective = _effective(state)
         grants = _kb_grants(a, deps.model_alias, effective)
@@ -218,8 +289,8 @@ def build(
             carried_skills=carried,
             earlier_reads=reads,
             carried_plan=open_plan,
-            carried_run=_carried_run(cast(list[Json], source)),
-            user_turn=state["message"],
+            carried_run=_carried_run(source),
+            user_turn=message,
             kb_ids=_granted(state, grants),
             all_team_knowledge=a.all_team_knowledge,
             attached=attached,
@@ -235,13 +306,7 @@ def build(
         # The agent is the actor of every call its turn makes, in the gateway's log, on the accounts it and the chat
         # chose.
         with acting_as(f"agent:{a.id}", turn_environment(state), turn_accounts(a, state)):
-            result = await kernel_turn("agent", req, ports, deps.meter, deps.model_alias)
-        return {
-            "messages": [{"role": "user", "content": state["message"]}, {"role": "assistant", "content": result.text}],
-            "pending": interrupt_to_state(result.interrupt) if result.interrupt else None,
-            "reply": result.text,
-            "stop": result.stop_reason,
-        }
+            return await kernel_turn("agent", req, ports, deps.meter, deps.model_alias)
 
     async def operations() -> list[OperationRef]:
         return await (deps.tools or CatalogTools(deps.catalog)).operations()
