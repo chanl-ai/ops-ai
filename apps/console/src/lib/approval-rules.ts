@@ -28,3 +28,10 @@ export function requesterMayDecideOf(value: unknown, teamId: string): boolean {
 const NOT_ON_POLICIES = new Set(['appChanges', 'appChangesByApp', 'toolWritesNeedApproval', 'appWritesNeedApproval', 'appsChangeWithoutAsking', 'requesterMayDecide', 'approvalsFloor']);
 
 export const listedOnPolicies = (key: string) => !NOT_ON_POLICIES.has(key);
+
+/** The team's makers' ask as saved (its part over the workspace's `*`), or null when neither stores one. */
+export const makersAskOf = (saved: Record<string, unknown>): boolean | null => (typeof saved.makersAsk === 'boolean' ? saved.makersAsk : null);
+
+/** Whether Approvals may save the makers' ask: only a choice, and one that differs from what is saved. Unset is never
+ * saved as on or off for the admin: tools-service refuses the team's writes until they pick. */
+export const makersAskSavable = (saved: boolean | null, chosen: boolean | null): boolean => chosen !== null && chosen !== saved;

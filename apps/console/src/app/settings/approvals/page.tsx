@@ -25,7 +25,7 @@ import { TOOL_KEY, usePolicyEditor, useSetWorkspacePolicy, useWorkspacePolicies 
 import { usePoliciesAreSample } from '@/hooks/use-preview';
 import { useTeam } from '@/hooks/use-team';
 import { ApiError } from '@/lib/api/contract';
-import { requesterMayDecideOf } from '@/lib/approval-rules';
+import { makersAskOf, makersAskSavable, requesterMayDecideOf } from '@/lib/approval-rules';
 
 // The answer that asks someone other than the asker (an answer, not a role name).
 const BY_REVIEWER = 'reviewer';
@@ -38,7 +38,7 @@ const MAKERS = 'Writes an app or template marks “ask first” wait for approva
 const REVIEWER_ROLES = rolesWhere('role-reviewer-options', [], { canDecideReviews: ['true'] });
 
 const teamSchema = z
-  .object({ ask: z.boolean(), answer: z.enum(['person', 'reviewer']), reviewerRole: z.string().nullable(), twoPersonRule: z.boolean(), testAccountsNeverAsk: z.boolean(), testRunsAsk: z.boolean(), makersAsk: z.boolean() })
+  .object({ ask: z.boolean(), answer: z.enum(['person', 'reviewer']), reviewerRole: z.string().nullable(), twoPersonRule: z.boolean(), testAccountsNeverAsk: z.boolean(), testRunsAsk: z.boolean(), makersAsk: z.boolean().nullable() })
   .refine((v) => !v.ask || v.answer !== BY_REVIEWER || !!v.reviewerRole, { message: 'Choose the role that reviews.', path: ['reviewerRole'] });
 type TeamForm = z.infer<typeof teamSchema>;
 
@@ -88,11 +88,14 @@ export default function ApprovalsPage() {
       twoPersonRule: !mayDecide,
       testAccountsNeverAsk: saved.testAccountsNeverAsk !== false,
       testRunsAsk: saved.testRunsAsk !== false,
-      // A new workspace stores it; not stored, the gateway refuses the team's writes until an admin saves on or off.
-      makersAsk: saved.makersAsk === true,
+      // A new workspace stores it; not stored, it opens with no choice and the gateway refuses the team's writes until
+      // an admin picks on or off and saves.
+      makersAsk: makersAskOf(saved),
     },
   });
-  const makersUnset = !!changes && typeof saved.makersAsk !== 'boolean';
+  const makersSaved = makersAskOf(saved);
+  const makersUnset = !!changes && makersSaved === null;
+  const makersChosen = form.watch('makersAsk');
   const ask = form.watch('ask');
   const answer = form.watch('answer');
   const [overrides, setOverrides] = React.useState<Record<string, Entry>>(savedByApp);
@@ -141,8 +144,10 @@ export default function ApprovalsPage() {
   };
   // Saves this switch alone into the team's part, on top of what the team saved; the team's part wins over the workspace's.
   const saveMakers = async () => {
+    const makersAsk = form.getValues('makersAsk');
+    if (makersAsk === null) return;
     try {
-      const value = { ask: saved.ask === true, answer: saved.answer === BY_REVIEWER ? BY_REVIEWER : 'person', reviewerRole: (saved.reviewerRole as string | null) ?? null, testAccountsNeverAsk: saved.testAccountsNeverAsk !== false, testRunsAsk: saved.testRunsAsk !== false, makersAsk: form.getValues('makersAsk') };
+      const value = { ask: saved.ask === true, answer: saved.answer === BY_REVIEWER ? BY_REVIEWER : 'person', reviewerRole: (saved.reviewerRole as string | null) ?? null, testAccountsNeverAsk: saved.testAccountsNeverAsk !== false, testRunsAsk: saved.testRunsAsk !== false, makersAsk };
       await set.mutateAsync({ key: 'appChanges', teamId, value });
       toast.success(`Saved: ${MAKERS}`, { description: 'New requests follow it. Open ones keep the rule they were made under.' });
     } catch (e) {
@@ -232,17 +237,23 @@ export default function ApprovalsPage() {
             requiredRole="admin"
             onSave={saveMakers}
             saving={set.isPending}
-            dirty={form.formState.dirtyFields.makersAsk === true || makersUnset}
+            dirty={makersAskSavable(makersSaved, makersChosen)}
           >
             <Controller
               control={form.control}
               name="makersAsk"
               render={({ field }) => (
                 <div className="flex flex-col gap-2">
-                  <label className="flex items-center gap-3 text-sm">
-                    <Switch checked={field.value} onCheckedChange={field.onChange} disabled={locked} aria-label={MAKERS} data-testid="approvals-makers-switch" />
-                    {field.value ? 'On: they wait for approval' : 'Off: they run unless the switch above asks'}
-                  </label>
+                  <ChoiceCards
+                    name="approvals-makers"
+                    label={MAKERS}
+                    value={field.value === null ? '' : field.value ? 'on' : 'off'}
+                    onChange={(v) => field.onChange(v === 'on')}
+                    choices={[
+                      { value: 'on', title: 'On', description: 'They wait for approval.' },
+                      { value: 'off', title: 'Off', description: 'They run unless the switch above asks.' },
+                    ]}
+                  />
                   {makersUnset && (
                     <p className="text-sm text-destructive" data-testid="approvals-makers-unset">
                       Not set: this team’s app changes are refused until you choose on or off and save.

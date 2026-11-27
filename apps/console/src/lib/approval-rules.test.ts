@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { listedOnPolicies, requesterMayDecideOf } from './approval-rules.ts';
+import { listedOnPolicies, makersAskOf, makersAskSavable, requesterMayDecideOf } from './approval-rules.ts';
 
 test('self-approval is read from the team’s own saved part, falling back to the workspace’s', () => {
   // As platform-service stores it after a team save.
@@ -18,4 +18,15 @@ test('Governance › Policies does not list the approvals floor', () => {
   assert.equal(listedOnPolicies('approvalsFloor'), false);
   assert.equal(listedOnPolicies('requesterMayDecide'), false);
   assert.equal(listedOnPolicies('egressNewHosts'), true);
+});
+
+// An unset makers' ask read as off let an admin press Save untouched and store off where the gateway had held every
+// maker's ask: the form opens with no choice, and Save waits for one.
+test('an unset makers ask opens with no choice and saves only once one is made', () => {
+  const unset = makersAskOf({ ask: false, answer: 'person' });
+  assert.deepEqual([unset, makersAskSavable(unset, unset), makersAskSavable(unset, false), makersAskSavable(unset, true)], [null, false, true, true]);
+});
+
+test('a saved makers ask saves only when changed', () => {
+  assert.deepEqual([makersAskOf({ makersAsk: false }), makersAskSavable(false, false), makersAskSavable(false, true)], [false, false, true]);
 });

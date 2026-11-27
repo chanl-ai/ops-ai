@@ -1,6 +1,6 @@
 {
   "date": "2026-11-27",
-  "title": "A workspace must choose whether ask-first writes wait",
-  "description": "If your workspace has never chosen whether writes an app or template marks ask first wait for approval, your team's app changes are refused with a message saying so, and Settings, Approvals shows the setting as not set. An admin chooses on or off and saves; new workspaces start with it off.",
+  "title": "Each team chooses whether ask-first writes wait",
+  "description": "In a workspace that never stored whether writes an app or template marks ask first wait for approval, a team's app changes are refused with a message saying so, and Settings, Approvals shows the setting as not set, with Save off until an admin picks on or off. Each team saves its own choice; new workspaces start with it off for every team.",
   "tag": "improved"
 }
