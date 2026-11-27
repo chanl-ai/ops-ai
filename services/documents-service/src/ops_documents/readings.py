@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 from ops_documents.errors import FileMissingError, FileNotReadyError
 from ops_documents.files import Files, Who
 from ops_documents.pending import Pending
-from ops_documents.picture_reading import PictureReading, wants_picture
+from ops_documents.picture_reading import PictureReading, not_described, wants_picture
 from ops_documents.store.readings import PENDING, ReadingRow, ReadingsStore
 from ops_files_client import FileInfo
 from ops_ingest.reading import (
@@ -60,6 +60,30 @@ def settings_of(ocr: str | bool | None, language: str | None = None) -> ReadingS
     """A request's OCR choice as reading settings: `true` and `false` from older callers mean `auto` and `off`."""
     mode = "auto" if ocr is True else "off" if ocr is False else (ocr or "auto")
     return ReadingSettings.model_validate({"ocr": mode, "language": language or "eng"})
+
+
+# A knowledge read asks for page pictures with the item's sensitivity. The answer is part of the reading's key, so a
+# reading made while the team's policy was off, or for another sensitivity, is not served once that changes.
+PICTURES_OFF = "p-off"
+# Kept on a finished reading whose pictures were refused for a reason that passes (the model busy or out of reach,
+# today's limit): the reading is served, and the next ask reads it again.
+RETRY_PICTURES = "pictures_retry"
+
+
+def reading_key(settings: ReadingSettings, pictures: str | None, allowed: bool) -> str:
+    """The stored reading's key: the OCR settings, then whether pictures were asked for, allowed, and at what
+    sensitivity."""
+    if pictures is None:
+        return settings.key
+    return f"{settings.key}:{f'p-{pictures}' if allowed else PICTURES_OFF}"
+
+
+def key_parts(key: str) -> tuple[ReadingSettings, bool, str | None]:
+    """A stored key as (settings, pictures asked for, the sensitivity they may be sent at, None when not allowed)."""
+    ocr, language, *rest = key.split(":")
+    if not rest:
+        return settings_of(ocr, language), False, None
+    return settings_of(ocr, language), True, None if rest[0] == PICTURES_OFF else rest[0].removeprefix("p-")
 
 
 def next_reading(queued: Sequence[ReadingRow], running_teams: Sequence[str]) -> int | None:
@@ -131,56 +155,63 @@ class Readings:
 
     # ── Asking ────────────────────────────────────────────────────────────
 
-    async def ask(self, who: Who, file_id: str, settings: ReadingSettings) -> tuple[int, Json]:
+    async def ask(
+        self, who: Who, file_id: str, settings: ReadingSettings, *, pictures: str | None = None
+    ) -> tuple[int, Json]:
         """(200, the reading) when it is stored or was made now, (202, its status) when it is read in the background,
-        (200, failed with the reason) for a file that cannot be read at all."""
+        (200, failed with the reason) for a file that cannot be read at all. `pictures` is the sensitivity a knowledge
+        read may send page pictures at; None reads text and OCR only."""
         file = await self.files.readable(who, file_id)
         digest = self._digest(file)
+        key = await self._key(who, settings, pictures)
         # Gate: the file's link and its stored reading in one transaction, closed before the bytes are read.
         async with isolation.request_transaction():
             await self.store.link(file.id, who.team, digest, self.clock())
-            row = await self.store.get(who.team, digest, READER_VERSION, settings.key)
-            if row is not None and row.status == "done":
-                pages = await self.store.pages(who.team, digest, READER_VERSION, settings.key)
+            row = await self.store.get(who.team, digest, READER_VERSION, key)
+            again = row is not None and row.status == "done" and row.error_code == RETRY_PICTURES
+            if row is not None and row.status == "done" and not again:
+                pages = await self.store.pages(who.team, digest, READER_VERSION, key)
                 return 200, answer_of(row, file_id, pages)
         if row is not None and row.status in PENDING:
             return 202, answer_of(row, file_id)
         if file.size <= SYNC_BYTES:
             data = await self.files.read(who, file)
             try:
-                made = await asyncio.to_thread(_read_now, data, file, settings, pictures=self.pictures is not None)
+                made = await asyncio.to_thread(_read_now, data, file, settings, pictures=key != settings.key)
             except ReadingError as e:
                 async with isolation.request_transaction():
-                    failed = await self._failed_now(who, file, settings, e)
+                    failed = await self._failed_now(who, file, key, e)
                 return 200, answer_of(failed, file_id)
             if made is not None:
                 async with isolation.request_transaction():
-                    await self._keep(who, file, made)
-                    row = await self.store.get(who.team, digest, READER_VERSION, settings.key)
+                    await self._keep(who, file, made, key)
+                    row = await self.store.get(who.team, digest, READER_VERSION, key)
                 assert row is not None
                 return 200, answer_of(row, file_id, made.pages)
         # The queued row commits before the task that reads it starts, so the task finds it.
         async with isolation.request_transaction():
             row = await self.store.queue(
-                digest, READER_VERSION, settings.key, file_id=file.id, team=who.team, actor=who.actor, at=self.clock()
-            )
+                digest, READER_VERSION, key, file_id=file.id, team=who.team, actor=who.actor, at=self.clock(),
+                again=again,
+            )  # fmt: skip
         if row.status in PENDING:
             await self._later(row)
         return 202, answer_of(row, file_id)
 
-    async def get(self, who: Who, file_id: str, settings: ReadingSettings, *, page: int | None = None) -> Json:
+    async def get(
+        self, who: Who, file_id: str, settings: ReadingSettings, *, page: int | None = None, pictures: str | None = None
+    ) -> Json:
         """The reading as it is now, with its pages (or one page) once done; status `none` when never asked for."""
         file = await self.files.readable(who, file_id)
         digest = self._digest(file)
-        row = await self.store.get(who.team, digest, READER_VERSION, settings.key)
+        key = await self._key(who, settings, pictures)
+        row = await self.store.get(who.team, digest, READER_VERSION, key)
         if row is None:
             mode, language = settings.ocr, settings.language
             return {"fileId": file_id, "digest": digest, "status": "none", "readerVersion": READER_VERSION,
                     "settings": {"ocr": mode, "language": language}, "pagesTotal": None, "pagesDone": 0}  # fmt: skip
         pages = (
-            await self.store.pages(who.team, digest, READER_VERSION, settings.key, page=page)
-            if row.status == "done"
-            else None
+            await self.store.pages(who.team, digest, READER_VERSION, key, page=page) if row.status == "done" else None
         )
         return answer_of(row, file_id, pages)
 
@@ -226,11 +257,16 @@ class Readings:
             raise FileNotReadyError(f"{file.id} has no content digest yet")
         return file.digest
 
-    async def _keep(self, who: Who, file: FileInfo, made: Reading) -> None:
+    async def _key(self, who: Who, settings: ReadingSettings, pictures: str | None) -> str:
+        if pictures is None or self.pictures is None:
+            return settings.key
+        return reading_key(settings, pictures, await self.pictures.allowed(who.tenant_id, who.team))
+
+    async def _keep(self, who: Who, file: FileInfo, made: Reading, key: str | None = None) -> None:
         await self.store.put_done(
             self._digest(file),
             READER_VERSION,
-            made.settings.key,
+            key or made.settings.key,
             facts=made.facts.model_dump(mode="json", by_alias=True),
             pages=[p.model_dump(mode="json", by_alias=True) for p in made.pages],
             file_id=file.id,
@@ -240,14 +276,14 @@ class Readings:
             at=self.clock(),
         )
 
-    async def _failed_now(self, who: Who, file: FileInfo, settings: ReadingSettings, e: ReadingError) -> ReadingRow:
+    async def _failed_now(self, who: Who, file: FileInfo, key: str, e: ReadingError) -> ReadingRow:
         digest = self._digest(file)
         row = await self.store.queue(
-            digest, READER_VERSION, settings.key, file_id=file.id, team=who.team, actor=who.actor, at=self.clock()
+            digest, READER_VERSION, key, file_id=file.id, team=who.team, actor=who.actor, at=self.clock()
         )
         await self.store.start(row, at=self.clock())
         await self.store.finish(row, status="failed", at=self.clock(), error_code=e.code, error=str(e))
-        found = await self.store.get(who.team, digest, READER_VERSION, settings.key)
+        found = await self.store.get(who.team, digest, READER_VERSION, key)
         assert found is not None
         return found
 
@@ -317,7 +353,7 @@ class Readings:
         except (FileMissingError, FileNotReadyError) as e:
             await self.store.finish(row, status="failed", at=self.clock(), error_code="file_unavailable", error=str(e))
             return
-        settings = settings_of(*row.key.split(":", 1))
+        settings, wanted, sensitivity = key_parts(row.key)
         started = time.perf_counter()
         stack = ExitStack()
         try:
@@ -325,7 +361,7 @@ class Readings:
             total = reader.facts.page_count
             await self.store.opened(row, pages_total=total, facts=reader.facts.model_dump(mode="json", by_alias=True))
             described = await self._described_so_far(row)
-            allowed: bool | None = None
+            retry = False
             for number in range(row.pages_done + 1, total + 1):
                 try:
                     page = await asyncio.wait_for(asyncio.to_thread(reader.page, number), self.page_timeout_s)
@@ -339,18 +375,29 @@ class Readings:
                     stack.close()
                     stack = ExitStack()
                     reader = await asyncio.to_thread(self._open, stack, data, file, settings)
-                if self.pictures is not None and wants_picture(page, reader.facts.mime_type):
-                    if allowed is None:
-                        allowed = await self.pictures.allowed(row.tenant_id, row.team)
-                    page = await self.pictures.describe(
-                        page, data=data, mime=reader.facts.mime_type, used=described, allowed=allowed,
-                        tenant=row.tenant_id, run=f"reading:{row.digest[:24]}",
-                    )  # fmt: skip
+                if self.pictures is not None and wanted and wants_picture(page, reader.facts.mime_type):
+                    try:
+                        page, passing = await asyncio.wait_for(
+                            self.pictures.describe(
+                                page, data=data, mime=reader.facts.mime_type, used=described, sensitivity=sensitivity,
+                                tenant=row.tenant_id, run=f"reading:{row.digest[:24]}",
+                            ),
+                            self.page_timeout_s,
+                        )  # fmt: skip
+                    except TimeoutError:
+                        page, passing = not_described(page, "the model took too long"), True
                     described += page.source == "model"
+                    retry |= passing
                 await self.store.save_page(row, number, page.model_dump(mode="json", by_alias=True))
             took = round((time.perf_counter() - started) * 1000)
             done = await self.store.get(row.team, row.digest, row.version, row.key)
-            await self.store.finish(done or row, status="done", at=self.clock(), duration_ms=took)
+            await self.store.finish(
+                done or row,
+                status="done",
+                at=self.clock(),
+                duration_ms=took,
+                error_code=RETRY_PICTURES if retry else None,
+            )
         except ReadingError as e:
             await self.store.finish(row, status="failed", at=self.clock(), error_code=e.code, error=str(e))
         except Exception as e:
@@ -368,7 +415,7 @@ class Readings:
 
     async def _described_so_far(self, row: ReadingRow) -> int:
         """Pages of this reading a model already described, so a reading resumed after a restart keeps its limit."""
-        if self.pictures is None or row.pages_done == 0:
+        if self.pictures is None or not key_parts(row.key)[1] or row.pages_done == 0:
             return 0
         pages = await self.store.pages(row.team, row.digest, row.version, row.key)
         return sum(p.source == "model" for p in pages)

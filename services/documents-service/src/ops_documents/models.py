@@ -421,12 +421,18 @@ class TestRun(Out):
     error: str | None = None
 
 
+PictureSensitivity = Literal["public", "internal", "confidential", "restricted"]
+
+
 class ReadingIn(In):
     file_id: str = Field(min_length=1, max_length=64)
     # off: text layers only; auto: scans and the picture parts of mixed pages; always: every page, for a bad text layer.
     ocr: OcrMode = "auto"
     # A Tesseract language, or several joined by + (eng+fra).
     language: str = Field("eng", min_length=2, max_length=64, pattern=r"^[A-Za-z_]+(\+[A-Za-z_]+)*$")
+    # A knowledge read's sensitivity: pages with no text may be shown to a model cleared for it, when the team's
+    # pageImages policy allows. Left out, nothing leaves the service.
+    picture_sensitivity: PictureSensitivity | None = None
 
 
 class ReadingSettingsOut(Out):

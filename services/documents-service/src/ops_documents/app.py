@@ -323,21 +323,28 @@ def create_documents_app(
         """The file's reading: every page's text in reading order, blocks with boxes, words with confidence, form
         fields and OCR quality. Answered at once when it is stored, or when the file is small (5 pages and 5 MB) with no
         page to OCR; otherwise 202 with its status, and reading.finished or reading.failed when it ends."""
-        status, answer = await readings.ask(who, body.file_id, settings_of(body.ocr, body.language))
+        status, answer = await readings.ask(
+            who, body.file_id, settings_of(body.ocr, body.language), pictures=body.picture_sensitivity
+        )
         return ok(answer, status)
 
     @docs.get("/readings/{file_id}", response_model=Envelope[FileReading], dependencies=[service_scope("view")])
     async def get_reading(  # pyright: ignore[reportUnusedFunction]
         file_id: str,
         who: Caller,
+        *,
         _: Tx,
         ocr: OcrMode = "auto",
         language: str = Query("eng", min_length=2, max_length=64, pattern=r"^[A-Za-z_]+(\+[A-Za-z_]+)*$"),
         page: int | None = Query(None, ge=1),
+        picture_sensitivity: str | None = Query(
+            None, alias="pictureSensitivity", pattern="^(public|internal|confidential|restricted)$"
+        ),
     ) -> JSONResponse:
         """The reading as it is now, with every page or the one asked for once done; status none when never asked
-        for. A file the team cannot see is 404, whoever else holds its bytes."""
-        return ok(await readings.get(who, file_id, settings_of(ocr, language), page=page))
+        for. A file the team cannot see is 404, whoever else holds its bytes. `pictureSensitivity` names the same
+        reading the POST asked for."""
+        return ok(await readings.get(who, file_id, settings_of(ocr, language), page=page, pictures=picture_sensitivity))
 
     @docs.get(
         "/readings/{file_id}/pages/{number}/image",

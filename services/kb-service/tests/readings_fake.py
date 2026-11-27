@@ -25,7 +25,10 @@ class LocalReadings:
         # model's description, as documents-service stores it.
         self.described: dict[int, str] = {}
 
-    async def reading(self, tenant: str, team: str, file_id: str, *, ocr: str) -> dict[str, Any]:
+    async def reading(
+        self, tenant: str, team: str, file_id: str, *, ocr: str, pictures: str | None = None
+    ) -> dict[str, Any]:
+        del pictures
         if self.down:
             raise ServiceUnreachable("documents-service did not answer")
         head = {"fileId": file_id, "readerVersion": "reading-1", "settings": {"ocr": ocr, "language": "eng"}}

@@ -18,7 +18,9 @@ __all__ = ["READING_PENDING", "DocumentsReadings", "ReadingAnswer", "Readings", 
 
 
 class Readings(Protocol):
-    async def reading(self, tenant: str, team: str, file_id: str, *, ocr: str) -> dict[str, JsonValue]:
+    async def reading(
+        self, tenant: str, team: str, file_id: str, *, ocr: str, pictures: str | None = None
+    ) -> dict[str, JsonValue]:
         """documents-service's answer for the file's reading: done with its pages, queued or reading, or failed."""
         ...
 
@@ -27,8 +29,10 @@ class DocumentsReadings:
     def __init__(self, documents: DocumentsClient) -> None:
         self.documents = documents
 
-    async def reading(self, tenant: str, team: str, file_id: str, *, ocr: str) -> dict[str, JsonValue]:
-        return await self.documents.reading(tenant, team, file_id, ocr=ocr)
+    async def reading(
+        self, tenant: str, team: str, file_id: str, *, ocr: str, pictures: str | None = None
+    ) -> dict[str, JsonValue]:
+        return await self.documents.reading(tenant, team, file_id, ocr=ocr, pictures=pictures)
 
 
 class ReadingFailure(BaseModel):

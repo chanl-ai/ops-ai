@@ -1829,7 +1829,9 @@ class KnowledgeService:
         try:
             ocr = self.settings_of(s).parsing.ocr
             answer = ReadingAnswer.model_validate(
-                await self.readings.reading(who.tenant_id, source_team(s), found.file_id, ocr=ocr)
+                await self.readings.reading(
+                    who.tenant_id, source_team(s), found.file_id, ocr=ocr, pictures=s.sensitivity
+                )
             )
         except DocumentsRefused as e:
             failed = ("parse", e.message)
@@ -2423,7 +2425,9 @@ class KnowledgeService:
         try:
             ocr = self.settings_of(s).parsing.ocr
             answer = ReadingAnswer.model_validate(
-                await self.readings.reading(who.tenant_id, source_team(s), item.file_id, ocr=ocr)
+                await self.readings.reading(
+                    who.tenant_id, source_team(s), item.file_id, ocr=ocr, pictures=s.sensitivity
+                )
             )
         except (DocumentsRefused, ServiceUnreachable):
             return None
@@ -2856,7 +2860,9 @@ class KnowledgeService:
         settings = self.settings_of(s)
         ocr = settings.parsing.ocr
         try:
-            answer = await self.readings.reading(who.tenant_id, source_team(s), i.file_id, ocr=ocr)
+            answer = await self.readings.reading(
+                who.tenant_id, source_team(s), i.file_id, ocr=ocr, pictures=s.sensitivity
+            )
         except (DocumentsRefused, ServiceUnreachable):
             return None
         if answer.get("status") != "done":
@@ -2901,7 +2907,9 @@ class KnowledgeService:
         answer: Json | None = None
         if i.file_id and self.readings is not None:
             try:
-                answer = await self.readings.reading(who.tenant_id, source_team(s), i.file_id, ocr=settings.parsing.ocr)
+                answer = await self.readings.reading(
+                    who.tenant_id, source_team(s), i.file_id, ocr=settings.parsing.ocr, pictures=s.sensitivity
+                )
             except (DocumentsRefused, ServiceUnreachable):
                 answer = None
         return item_text(item_id, i.file_id or None, i.mime or None, answer, settings.cleaning)

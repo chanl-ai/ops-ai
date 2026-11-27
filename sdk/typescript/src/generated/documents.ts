@@ -483,7 +483,8 @@ export interface paths {
         /**
          * Get Reading
          * @description The reading as it is now, with every page or the one asked for once done; status none when never asked
-         *     for. A file the team cannot see is 404, whoever else holds its bytes.
+         *     for. A file the team cannot see is 404, whoever else holds its bytes. `pictureSensitivity` names the same
+         *     reading the POST asked for.
          */
         get: operations["documents_get_reading"];
         put?: never;
@@ -1705,6 +1706,8 @@ export interface components {
              * @enum {string}
              */
             ocr: "off" | "auto" | "always";
+            /** Picturesensitivity */
+            pictureSensitivity?: ("public" | "internal" | "confidential" | "restricted") | null;
         };
         /** ReadingLine */
         ReadingLine: {
@@ -4655,6 +4658,7 @@ export interface operations {
                 ocr?: "off" | "auto" | "always";
                 language?: string;
                 page?: number | null;
+                pictureSensitivity?: string | null;
             };
             header?: never;
             path: {

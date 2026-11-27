@@ -284,6 +284,7 @@ class ReadingIn(TypedDict, closed=True):
     fileId: str
     language: NotRequired[str]
     ocr: NotRequired[Literal["off", "auto", "always"]]
+    pictureSensitivity: NotRequired[Literal["public", "internal", "confidential", "restricted"] | None]
 
 
 class ReadingLine(TypedDict, closed=True):

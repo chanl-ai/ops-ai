@@ -68,14 +68,16 @@ async def test_an_invalid_setting_is_refused_and_nothing_is_saved(client: httpx.
     assert data(await client.get(f"/v1/sources/{src['id']}"))["ingest"]["overlap"] == 40
 
 
-async def test_the_sources_ocr_mode_reaches_its_reading(engine: AsyncEngine, tenant: str) -> None:
+async def test_the_sources_ocr_mode_and_sensitivity_reach_its_reading(engine: AsyncEngine, tenant: str) -> None:
     intake = KnowledgeFiles(Path(mkdtemp(prefix="kb-files-")))
     readings = LocalReadings(intake)
-    asked: list[str] = []
+    asked: list[tuple[str, str | None]] = []
     real = readings.reading
 
-    async def recording(tenant: str, team: str, file_id: str, *, ocr: str) -> dict[str, Any]:
-        asked.append(ocr)
+    async def recording(
+        tenant: str, team: str, file_id: str, *, ocr: str, pictures: str | None = None
+    ) -> dict[str, Any]:
+        asked.append((ocr, pictures))
         return await real(tenant, team, file_id, ocr=ocr)
 
     readings.reading = recording  # type: ignore[method-assign]
@@ -87,10 +89,10 @@ async def test_the_sources_ocr_mode_reaches_its_reading(engine: AsyncEngine, ten
         )
         await upload(client, src["id"], "hardship.pdf", HARDSHIP)
         data(await client.post(f"/v1/sources/{src['id']}/sync"))
-        assert asked == ["off"]
+        assert asked == [("off", "internal")], "page pictures go at the source's sensitivity"
         saved = data(await client.patch(f"/v1/sources/{src['id']}", json={"parsing": {"ocr": "always"}}))
         await finished(client, saved["rebuild"]["id"])
-        assert asked == ["off", "always"]
+        assert [o for o, _ in asked] == ["off", "always"]
 
 
 async def test_an_exclude_rule_keeps_an_item_out_and_takes_an_indexed_one_out_of_search(

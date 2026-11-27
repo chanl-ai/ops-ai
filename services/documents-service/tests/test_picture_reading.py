@@ -5,6 +5,7 @@ a refused model call fails the whole reading instead of leaving that one page un
 
 from __future__ import annotations
 
+import asyncio
 import io
 import shutil
 from typing import Any
@@ -69,15 +70,18 @@ def pdf(*pages: str) -> bytes:
 class Seeing:
     """The model edge: answers each page picture with a description, or refuses with a models-service code."""
 
-    def __init__(self, refuse: str | None = None) -> None:
-        self.refuse = refuse
+    def __init__(self, refuse: str | None = None, *, times: int | None = None, crash_at: int | None = None) -> None:
+        # `times`: refuse only the first so many calls; `crash_at`: that call fails as a process dying mid-reading.
+        self.refuse, self.times, self.crash_at = refuse, times, crash_at
         self.calls: list[dict[str, Any]] = []
 
     async def structured(
         self, system: str, user: str, schema: dict[str, Any], *, tenant: str, step: str, **kw: Any
     ) -> Any:
         self.calls.append(kw)
-        if self.refuse:
+        if self.crash_at == len(self.calls):
+            raise RuntimeError("the process stopped")
+        if self.refuse and (self.times is None or len(self.calls) <= self.times):
             raise ModelCallError("refused", code=self.refuse, status=403)
         return {"text": "", "description": DIAGRAM}
 
@@ -90,10 +94,17 @@ class Policy:
         return self.on
 
 
-async def read_all(s: Any, c: httpx.AsyncClient, fid: str, ocr: str = "off") -> dict[str, Any]:
-    await c.post("/v1/documents/readings", json={"fileId": fid, "ocr": ocr}, headers=OPS)
+PICTURES = {"ocr": "off", "pictureSensitivity": "internal"}
+
+
+async def read_all(
+    s: Any, c: httpx.AsyncClient, fid: str, ocr: str = "off", sensitivity: str = "internal"
+) -> dict[str, Any]:
+    """A knowledge read: asks for page pictures at the item's sensitivity."""
+    asked = {"ocr": ocr, "pictureSensitivity": sensitivity}
+    await c.post("/v1/documents/readings", json={"fileId": fid, **asked}, headers=OPS)
     await s.extractor.readings.drain()
-    got = await c.get(f"/v1/documents/readings/{fid}", params={"ocr": ocr}, headers=OPS)
+    got = await c.get(f"/v1/documents/readings/{fid}", params=asked, headers=OPS)
     return got.json()["data"]
 
 
@@ -103,7 +114,10 @@ async def test_a_picture_page_is_described_once_and_a_text_page_is_not_sent(make
     async with s.client as c:
         fid = await s.stored(pdf("text", "picture"), name="review.pdf", mime="application/pdf")
         body = await read_all(s, c, fid)
-        again = await c.post("/v1/documents/readings", json={"fileId": fid, "ocr": "off"}, headers=OPS)
+        again = await c.post(
+            "/v1/documents/readings", json={"fileId": fid, "ocr": "off", "pictureSensitivity": "internal"}, headers=OPS
+        )
+        plain = await c.post("/v1/documents/readings", json={"fileId": fid, "ocr": "off"}, headers=OPS)
     assert body["status"] == "done", body
     text, picture = body["pages"]
     assert text["source"] == "text" and picture["source"] == "model", [p["source"] for p in body["pages"]]
@@ -111,6 +125,7 @@ async def test_a_picture_page_is_described_once_and_a_text_page_is_not_sent(make
     assert picture["blocks"][0]["box"] == [0.0, 0.0, 1.0, 1.0], "the description cites the whole page"
     assert len(model.calls) == 1 and model.calls[0]["parts"][0]["type"] == "image_url", model.calls
     assert again.status_code == 200 and len(model.calls) == 1, "a stored description is not asked for again"
+    assert plain.json()["data"]["pages"][1]["source"] == "none", "a read that is not a knowledge read sends no picture"
 
 
 @pytest.mark.skipif(shutil.which("tesseract") is None, reason="tesseract binary not on PATH")
@@ -156,3 +171,52 @@ async def test_a_refused_picture_leaves_its_page_unread_with_the_reason(
     assert body["status"] == "done" and body["pages"][1]["source"] == "none", body
     assert body["pages"][1]["unreadReason"] == reason
     assert len(model.calls) == (0 if not policy else 1), "a picture never leaves when the policy says no"
+
+
+async def test_turning_the_policy_on_reads_a_file_read_while_it_was_off(make: Make) -> None:
+    model, policy = Seeing(), Policy(on=False)
+    s = make(Models(), Floor(), pictures=PictureReading(model, policy))
+    async with s.client as c:
+        fid = await s.stored(pdf("text", "picture"), name="review.pdf", mime="application/pdf")
+        off = await read_all(s, c, fid)
+        calls_off = len(model.calls)
+        policy.on = True
+        on = await read_all(s, c, fid)
+    assert off["pages"][1]["source"] == "none" and calls_off == 0, off["pages"][1]
+    assert on["pages"][1]["source"] == "model", "a reading made with pictures off is not served once they are on"
+
+
+async def test_a_refusal_that_passes_is_read_again_on_the_next_ask(make: Make) -> None:
+    model = Seeing("rate_limited", times=1)
+    s = make(Models(), Floor(), pictures=PictureReading(model, Policy()))
+    async with s.client as c:
+        fid = await s.stored(pdf("text", "picture"), name="review.pdf", mime="application/pdf")
+        busy = await read_all(s, c, fid)
+        later = await read_all(s, c, fid)
+    assert busy["status"] == "done" and busy["pages"][1]["unreadReason"] == "Not described: the model was busy."
+    assert later["pages"][1]["source"] == "model" and len(model.calls) == 2, later["pages"][1]
+
+
+async def test_a_page_picture_goes_at_the_files_sensitivity_and_a_refusal_says_why(make: Make) -> None:
+    model = Seeing("sensitivity_not_cleared")
+    s = make(Models(), Floor(), pictures=PictureReading(model, Policy()))
+    async with s.client as c:
+        fid = await s.stored(pdf("text", "picture"), name="merger.pdf", mime="application/pdf")
+        body = await read_all(s, c, fid, sensitivity="restricted")
+    assert [k["sensitivity"] for k in model.calls] == ["restricted"], model.calls
+    assert body["pages"][1]["unreadReason"] == "Not described: the model is not cleared for this file's sensitivity."
+
+
+async def test_a_reading_resumed_mid_file_keeps_its_limit(make: Make) -> None:
+    model = Seeing(crash_at=2)
+    s = make(Models(), Floor(), pictures=PictureReading(model, Policy(), per_file=2))
+    async with s.client as c:
+        fid = await s.stored(pdf("picture", "picture", "picture"), name="deck.pdf", mime="application/pdf")
+        body = await read_all(s, c, fid)  # stops on page 2 with page 1 kept, then carries on from page 2
+        for _ in range(100):
+            if body["status"] == "done":
+                break
+            await asyncio.sleep(0.02)
+            body = (await c.get(f"/v1/documents/readings/{fid}", params=PICTURES, headers=OPS)).json()["data"]
+    assert [p["source"] for p in body["pages"]] == ["model", "model", "none"], [p["source"] for p in body["pages"]]
+    assert body["pages"][2]["unreadReason"] == "Not described: this file reached its limit of 2 pages read by a model."

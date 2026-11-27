@@ -182,9 +182,19 @@ class ReadingsStore(Store):
                 return  # linked by a request racing this one
 
     async def queue(
-        self, digest: str, version: str, key: str, *, file_id: str, team: str, actor: str, at: datetime
+        self,
+        digest: str,
+        version: str,
+        key: str,
+        *,
+        file_id: str,
+        team: str,
+        actor: str,
+        at: datetime,
+        again: bool = False,
     ) -> ReadingRow:
-        """The team's reading queued, or the one already there; a failed reading asked for again is queued afresh."""
+        """The team's reading queued, or the one already there; a failed reading asked for again is queued afresh, and
+        so is a finished one when `again` (its page pictures were refused for a reason that passes)."""
         t = documents_readings
         values = {
             "tenant_id": isolation.tenant(),
@@ -206,13 +216,14 @@ class ReadingsStore(Store):
             except IntegrityError:
                 found = await self.get(team, digest, version, key)
                 assert found is not None
-                if found.status != "failed":
+                redo: tuple[str, ...] = ("failed", "done") if again else ("failed",)
+                if found.status not in redo:
                     return found
                 p = documents_reading_pages
                 await c.execute(sa.delete(p).where(self._where(p, team, digest, version, key)))
                 await c.execute(
                     sa.update(t)
-                    .where(self._where(t, team, digest, version, key), t.c.status == "failed")
+                    .where(self._where(t, team, digest, version, key), t.c.status.in_(redo))
                     .values(
                         status="queued", pages_done=0, pages_total=None, attempts=0, error_code=None, error=None,
                         file_id=file_id, actor=actor, created_at=at, started_at=None, finished_at=None,
