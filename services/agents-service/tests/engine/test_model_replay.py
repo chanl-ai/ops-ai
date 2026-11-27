@@ -136,7 +136,7 @@ SUMMARISE = parse(
 def graph(db: AsyncEngine, m: Models, saver: InMemorySaver, *, crash: bool = False, journal: Any = None) -> Any:
     """The step as the worker compiles it, with a fresh model and prompt port each time: a process (re)started."""
     through = ModelsServiceModels("http://models", m.secret, http_client=m.completions)
-    kernel = KernelPorts(BudgetedModel(through.model_for(ALIAS), None, ALIAS), NoTools(), NoKnowledge())  # type: ignore[arg-type]
+    kernel = KernelPorts(BudgetedModel(through.model_for(ALIAS), None, ALIAS).endpoint(), NoTools(), NoKnowledge())  # type: ignore[arg-type]
     prompts = CrashOnce(KernelPrompts(kernel, ALIAS), crash=crash)
     ports = EnginePorts(tools=NoTools(), reviews=None, prompts=prompts)  # type: ignore[arg-type]
     return compile_definition(
