@@ -86,3 +86,49 @@ def test_the_pin_joins_a_branch_freeze_and_a_live_hold(tmp_path: Path) -> None:
         check=False,
     )
     assert "pin=staging is frozen for release/1.1.0; STAGING_HOLD is set: 1.1.0: under test" in r.stdout
+
+
+def branch_at(repo_dir: Path, name: str, merged_into_head: bool) -> None:
+    """A remote-tracking release branch: at HEAD's parent (merged) or on a commit HEAD lacks (unmerged)."""
+    git = ["git", "-C", str(repo_dir), "-c", "user.name=t", "-c", "user.email=t@t"]
+    if merged_into_head:
+        sha = subprocess.run([*git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+        subprocess.run([*git, "update-ref", f"refs/remotes/origin/{name}", sha], check=True)
+        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "next"], check=True)
+    else:
+        subprocess.run([*git, "checkout", "-q", "-b", "side"], check=True)
+        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "side"], check=True)
+        sha = subprocess.run([*git, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+        subprocess.run([*git, "update-ref", f"refs/remotes/origin/{name}", sha], check=True)
+        subprocess.run([*git, "checkout", "-q", "-"], check=True)
+
+
+def freeze(cwd: Path, branches: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["python3", str(SCRIPT)],
+        cwd=cwd,
+        env={**os.environ, "HOLD": "", "BRANCHES": branches, "SHA": "HEAD"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_a_branch_already_merged_into_the_deployed_commit_does_not_freeze(tmp_path: Path) -> None:
+    r = repo(tmp_path)
+    branch_at(r, "release/1.1.0", True)
+    out = freeze(r, "release/1.1.0").stdout
+    assert "notice=release/1.1.0 is merged into develop, freeze ignored" in out and "\npin=\n" in out
+
+
+def test_a_branch_with_commits_the_deployed_commit_lacks_still_freezes(tmp_path: Path) -> None:
+    r = repo(tmp_path)
+    branch_at(r, "release/1.1.0", True)
+    branch_at(r, "hotfix/x", False)
+    out = freeze(r, "release/1.1.0 hotfix/x").stdout
+    assert "pin=staging is frozen for hotfix/x\n" in out and "notice=release/1.1.0" in out
+
+
+def test_a_head_that_cannot_be_read_keeps_the_freeze(tmp_path: Path) -> None:
+    out = freeze(repo(tmp_path), "release/9.9.9").stdout
+    assert "pin=staging is frozen for release/9.9.9\n" in out and "notice=" not in out
