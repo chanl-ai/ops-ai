@@ -548,6 +548,9 @@ class FileReading(Out):
     facts: FileFacts | None = None
     duration_ms: int | None = None
     pages: list[ReadingPage] | None = None
+    # The PDF a Word file or deck was drawn into for the document view (a files-service file of the team); None when
+    # it is not drawn: another format, the converter off, or the drawing failed.
+    rendition_id: str | None = None
 
 
 class PurgeIn(In):

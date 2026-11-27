@@ -2517,6 +2517,17 @@
             ],
             "title": "Readerversion"
           },
+          "renditionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renditionid"
+          },
           "sections": {
             "items": {
               "$ref": "#/components/schemas/TextSection"
@@ -2542,6 +2553,7 @@
           "paged",
           "page",
           "readerVersion",
+          "renditionId",
           "pages",
           "sections",
           "notes"

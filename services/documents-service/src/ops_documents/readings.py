@@ -31,6 +31,7 @@ from ops_documents.picture_reading import (
     stricter,
     wants_picture,
 )
+from ops_documents.renditions import DRAWN, Renditions, on_pages, page_texts
 from ops_documents.store.readings import PENDING, ReadingRow, ReadingsStore
 from ops_files_client import FileInfo
 from ops_ingest.reading import (
@@ -74,6 +75,8 @@ def settings_of(ocr: str | bool | None, language: str | None = None) -> ReadingS
 # part of the reading's key, so a reading made while the team's policy was off, or for another sensitivity, is not
 # served once that changes.
 PICTURES_OFF = "p-off"
+# The key part of a Word file or deck read with the converter on: its pages come from the drawn PDF.
+DRAWN_PART = "d"
 # Kept on a finished reading with a page whose picture was refused for a reason that passes. The reading is served as
 # it is; an ask once the wait is over describes those pages again in the background, alone, keeping every other page.
 # The model busy waits RETRY_AFTER and counts a retry; today's spend limit waits for the next day (UTC, when
@@ -116,12 +119,19 @@ POLICY_CHANGED = "policy_changed"
 POLICY_CHANGED_SAID = "The team's page picture policy changed while the file was being read. Ask again."
 
 
-def reading_key(settings: ReadingSettings, pictures: str | None, allowed: bool) -> str:
+def reading_key(settings: ReadingSettings, pictures: str | None, allowed: bool, *, drawn: bool = False) -> str:
     """The stored reading's key: the OCR settings, then whether pictures were asked for, allowed, and at what
-    sensitivity."""
+    sensitivity, then `d` when a Word file or deck is drawn as pages (DRAWN_PART), so turning the converter on reads
+    it again."""
     if pictures is None:
         return settings.key
-    return f"{settings.key}:{f'p-{pictures}' if allowed else PICTURES_OFF}"
+    key = f"{settings.key}:{f'p-{pictures}' if allowed else PICTURES_OFF}"
+    return f"{key}:{DRAWN_PART}" if drawn else key
+
+
+def drawn_key(key: str) -> bool:
+    """Whether the reading under `key` draws its file as pages."""
+    return key.split(":")[3:4] == [DRAWN_PART]
 
 
 def key_parts(key: str) -> tuple[ReadingSettings, bool, str | None]:
@@ -161,6 +171,7 @@ def answer_of(row: ReadingRow, file_id: str, pages: Sequence[Page] | None = None
     if row.status == "done":
         out["facts"] = row.facts
         out["durationMs"] = row.duration_ms
+        out["renditionId"] = row.rendition_id
         if pages is not None:
             out["pages"] = [p.model_dump(mode="json", by_alias=True) for p in pages]
     return out
@@ -170,10 +181,14 @@ def _identity(row: ReadingRow) -> tuple[str, ...]:
     return (row.tenant_id, row.team, row.digest, row.version, row.key)
 
 
-def _read_now(data: bytes, file: FileInfo, settings: ReadingSettings, *, pictures: bool = False) -> Reading | None:
+def _read_now(
+    data: bytes, file: FileInfo, settings: ReadingSettings, *, pictures: bool = False, drawn: bool = False
+) -> Reading | None:
     """The whole reading when the file is small enough and needs no OCR, else None (it is queued instead). With
     picture reading on, a file with a page a model could describe is queued too, since a model call does not belong
-    inside the request."""
+    inside the request. A file drawn as pages is always queued: the converter takes seconds."""
+    if drawn:
+        return None
     with open_file(data, filename=file.name, mime_type=file.mime, settings=settings) as reader:
         count = reader.facts.page_count
         if count > SYNC_PAGES or any(reader.needs_ocr(n) for n in range(1, count + 1)):
@@ -195,6 +210,8 @@ class Readings:
     page_timeout_s: float = PAGE_TIMEOUT_S
     # Describes pages that came out with no text; None reads text and OCR only.
     pictures: PictureReading | None = None
+    # Draws Word files and decks as pages for a knowledge read; None reads them as text only.
+    renditions: Renditions | None = None
     _queued: list[ReadingRow] = field(default_factory=list[ReadingRow])
     _running: dict[tuple[str, ...], str] = field(default_factory=dict[tuple[str, ...], str])
     _pending: Pending = field(default_factory=Pending)
@@ -210,7 +227,8 @@ class Readings:
         file = await self.files.readable(who, file_id)
         digest = self._digest(file)
         level = None if pictures is None else stricter(file.sensitivity, pictures)
-        key, kept = await self._key_kept(who, settings, level)
+        drawn = self._draws(file)
+        key, kept = await self._key_kept(who, settings, level, drawn=drawn)
         # A stored reading is found on the kept policy; one about to be made asks the policy again (`fresh`).
         for fresh in (False, True):
             if key is None:
@@ -226,7 +244,7 @@ class Readings:
                 return 200, answer_of(row, file_id, pages)
             if row is not None and row.status in PENDING:
                 return 202, answer_of(row, file_id)
-            live = key if fresh or not kept else await self._key(who, settings, level, fresh=True)
+            live = key if fresh or not kept else await self._key(who, settings, level, fresh=True, drawn=drawn)
             if live == key:
                 break
             key = live
@@ -235,7 +253,9 @@ class Readings:
         if file.size <= SYNC_BYTES:
             data = await self.files.read(who, file)
             try:
-                made = await asyncio.to_thread(_read_now, data, file, settings, pictures=key != settings.key)
+                made = await asyncio.to_thread(
+                    _read_now, data, file, settings, pictures=key != settings.key, drawn=drawn_key(key)
+                )
             except ReadingError as e:
                 async with isolation.request_transaction():
                     failed = await self._failed_now(who, file, key, e)
@@ -262,7 +282,7 @@ class Readings:
         file = await self.files.readable(who, file_id)
         digest = self._digest(file)
         level = None if pictures is None else stricter(file.sensitivity, pictures)
-        key = await self._key(who, settings, level)
+        key = await self._key(who, settings, level, drawn=self._draws(file))
         if key is None:
             return await self._without_policy(who, file, settings, level, page=page)
         row = await self.store.get(who.team, digest, READER_VERSION, key)
@@ -319,18 +339,27 @@ class Readings:
             raise FileNotReadyError(f"{file.id} has no content digest yet")
         return file.digest
 
-    async def _key(self, who: Who, settings: ReadingSettings, level: str | None, *, fresh: bool = False) -> str | None:
+    def _draws(self, file: FileInfo) -> bool:
+        """Whether a knowledge read of the file draws it as pages: a Word file or deck, with a converter."""
+        return self.renditions is not None and file.mime in DRAWN
+
+    async def _key(
+        self, who: Who, settings: ReadingSettings, level: str | None, *, fresh: bool = False, drawn: bool = False
+    ) -> str | None:
         """The reading's key; None when pictures were asked for and the team's policy cannot be read."""
-        return (await self._key_kept(who, settings, level, fresh=fresh))[0]
+        return (await self._key_kept(who, settings, level, fresh=fresh, drawn=drawn))[0]
 
     async def _key_kept(
-        self, who: Who, settings: ReadingSettings, level: str | None, *, fresh: bool = False
+        self, who: Who, settings: ReadingSettings, level: str | None, *, fresh: bool = False, drawn: bool = False
     ) -> tuple[str | None, bool]:
         """`_key`, and whether it rests on the policy as kept rather than read now."""
-        if level is None or self.pictures is None:
+        if level is None:
             return settings.key, False
+        if self.pictures is None:
+            # No model key: nothing is described, but a Word file or deck is still drawn for the document view.
+            return (reading_key(settings, level, False, drawn=True) if drawn else settings.key), False
         allowed, kept = await self.pictures.answer(who.tenant_id, who.team, fresh=fresh)
-        return (None if allowed is None else reading_key(settings, level, allowed)), kept
+        return (None if allowed is None else reading_key(settings, level, allowed, drawn=drawn)), kept
 
     async def _without_policy(
         self, who: Who, file: FileInfo, settings: ReadingSettings, level: str | None, *, page: int | None = None
@@ -339,7 +368,7 @@ class Readings:
         kept, so an outage of platform-service never makes a second reading."""
         digest = self._digest(file)
         for allowed in (True, False):
-            key = reading_key(settings, level, allowed)
+            key = reading_key(settings, level, allowed, drawn=self._draws(file))
             async with isolation.request_transaction():
                 row = await self.store.get(who.team, digest, READER_VERSION, key)
                 if row is not None and row.status == "done":
@@ -455,14 +484,24 @@ class Readings:
         stack = ExitStack()
         try:
             reader = await asyncio.to_thread(self._open, stack, data, file, settings)
-            total = reader.facts.page_count
-            await self.store.opened(row, pages_total=total, facts=reader.facts.model_dump(mode="json", by_alias=True))
+            facts, mime = reader.facts, reader.facts.mime_type
+            drawn = await self._drawn(who, row, file, data, reader) if drawn_key(row.key) else None
+            seen, total = (data, mime), facts.page_count
+            if drawn is not None:
+                pdf, pages_drawn = drawn
+                seen, total = (pdf, "application/pdf"), len(pages_drawn)
+                facts = facts.model_copy(update={"page_count": total, "paged": True})
+            await self.store.opened(row, pages_total=total, facts=facts.model_dump(mode="json", by_alias=True))
             described = await self._described_so_far(row)
             waits: set[str] = set()
             sends: bool | None = None  # the policy as it is now, asked before the first picture leaves
             for number in range(row.pages_done + 1, total + 1):
                 try:
-                    page = await asyncio.wait_for(asyncio.to_thread(reader.page, number), self.page_timeout_s)
+                    page = (
+                        drawn[1][number - 1]
+                        if drawn is not None
+                        else await asyncio.wait_for(asyncio.to_thread(reader.page, number), self.page_timeout_s)
+                    )
                 except TimeoutError:
                     page = Page(
                         number=number,
@@ -474,7 +513,7 @@ class Readings:
                     stack = ExitStack()
                     reader = await asyncio.to_thread(self._open, stack, data, file, settings)
                 wait: str | None = None
-                if self.pictures is not None and wanted and wants_picture(page, reader.facts.mime_type):
+                if self.pictures is not None and wanted and wants_picture(page, seen[1]):
                     # The key says the policy was on when the reading was asked for; it may have been turned off since.
                     if sends is None:
                         on = sensitivity is None or await self.pictures.allowed(row.tenant_id, row.team, fresh=True)
@@ -487,7 +526,7 @@ class Readings:
                     try:
                         page, wait = await asyncio.wait_for(
                             self.pictures.describe(
-                                page, data=data, mime=reader.facts.mime_type, used=described, sensitivity=sensitivity,
+                                page, data=seen[0], mime=seen[1], used=described, sensitivity=sensitivity,
                                 tenant=row.tenant_id, run=f"reading:{row.digest[:24]}",
                             ),
                             self.page_timeout_s,
@@ -522,6 +561,24 @@ class Readings:
         finally:
             stack.close()
 
+    async def _drawn(
+        self, who: Who, row: ReadingRow, file: FileInfo, data: bytes, reader: FileReader
+    ) -> tuple[bytes, list[Page]] | None:
+        """The file drawn as a PDF (made once per content digest for the team, else the one already kept) and its
+        reading's pages as drawn; None when it cannot be drawn, so the reading goes on as text only."""
+        if self.renditions is None or reader.facts.mime_type not in DRAWN:
+            return None
+        kept = await self.store.rendition(row.team, row.digest)
+        pdf = await self.renditions.read(who, kept) if kept else None
+        if kept is None or pdf is None:
+            made = await self.renditions.make(who, file, data, row.digest)
+            if made is None:
+                return None
+            kept, pdf = made.file_id, made.pdf
+        await self.store.set_rendition(row, kept)
+        pages = [reader.page(n) for n in range(1, reader.facts.page_count + 1)]
+        return pdf, on_pages(reader.facts.mime_type, pages, await asyncio.to_thread(page_texts, pdf))
+
     async def _retry(self, row: ReadingRow) -> None:
         """Describes again only the pages whose picture was refused for a reason that passes; every other page is kept.
         A page refused again counts one more try, and after PICTURE_RETRIES it keeps its note for good."""
@@ -540,6 +597,12 @@ class Readings:
             return
         level = stricter(level, file.sensitivity)
         mime = FileFacts.model_validate(row.facts).mime_type
+        if row.rendition_id and self.renditions is not None:
+            # A drawn file's pages are drawn from its PDF, as the first reading drew them.
+            data = await self.renditions.read(who, row.rendition_id)
+            if data is None:
+                return  # kept as it is; an ask after the next wait tries again
+            mime = "application/pdf"
         described, waiting = await self.store.pages_to_retry(row)
         redone: list[tuple[Page, int | None]] = []
         waits: set[str] = set()

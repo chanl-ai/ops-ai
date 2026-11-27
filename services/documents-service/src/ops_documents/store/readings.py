@@ -75,6 +75,8 @@ documents_readings = sa.Table(
     sa.Column("duration_ms", sa.Integer),
     # The whole settings key when it is longer than the key column holds (see stored_key); null otherwise.
     sa.Column("settings_full", sa.String(200)),
+    # The files-service file the bytes were drawn into as a PDF (a Word file or deck read with the converter on).
+    sa.Column("rendition_id", sa.String(64)),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("started_at", sa.DateTime(timezone=True)),
     sa.Column("finished_at", sa.DateTime(timezone=True)),
@@ -150,6 +152,7 @@ class ReadingRow(Out):
     team: str
     actor: str
     duration_ms: int | None
+    rendition_id: str | None = None
 
 
 _t = documents_readings.c
@@ -157,6 +160,7 @@ _t = documents_readings.c
 ROW = (
     _t.tenant_id, _t.file_digest, _t.reader_version, _t.settings_key, _t.settings_full, _t.status, _t.pages_total,
     _t.pages_done, _t.facts, _t.error_code, _t.error, _t.attempts, _t.file_id, _t.team, _t.actor, _t.duration_ms,
+    _t.rendition_id,
 )  # fmt: skip
 
 
@@ -190,6 +194,25 @@ class ReadingsStore(Store):
         async with self.tx() as c:
             query = sa.select(*ROW).where(self._where(t, team, digest, version, key), team_visible(t))
             return await one(c, query, ReadingRow)
+
+    async def rendition(self, team: str, digest: str) -> str | None:
+        """The PDF the team's bytes were already drawn into, under any reading of them: drawn once per digest."""
+        t = documents_readings
+        query = sa.select(t.c.rendition_id).where(
+            t.c.tenant_id == isolation.tenant(), t.c.team == team, t.c.file_digest == digest,
+            t.c.rendition_id.is_not(None), team_visible(t),
+        ).limit(1)  # fmt: skip
+        async with self.tx() as c:
+            return (await c.execute(query)).scalar_one_or_none()
+
+    async def set_rendition(self, row: ReadingRow, file_id: str) -> None:
+        t = documents_readings
+        async with self.tx() as c:
+            await c.execute(
+                sa.update(t)
+                .where(self._where(t, row.team, row.digest, row.version, row.key))
+                .values(rendition_id=file_id)
+            )
 
     async def link(self, file_id: str, team: str, digest: str, at: datetime) -> None:
         """Records that the team's file holds these bytes; a file that changes content is linked to its new digest."""

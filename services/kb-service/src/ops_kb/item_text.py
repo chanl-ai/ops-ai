@@ -91,7 +91,10 @@ def item_text(
     """The `ItemText` reply for an item whose file's reading answered `answer` (None: no file, or no answer now). A
     paged file answers one page's sections at a time (`page`, clamped to the file's pages; the first when left out),
     with headings carried from the pages before it; a file without pages answers all of its sections."""
-    head: Json = {"itemId": item_id, "fileId": file_id, "mimeType": mime, "readerVersion": None, "page": None}
+    head: Json = {
+        "itemId": item_id, "fileId": file_id, "mimeType": mime, "readerVersion": None, "page": None,
+        "renditionId": None,
+    }  # fmt: skip
     empty: Json = {**head, "paged": False, "pages": [], "sections": []}
     if file_id is None:
         return {**empty, "status": "none", "notes": [NO_FILE]}
@@ -159,6 +162,7 @@ def item_text(
     return {
         **head,
         "readerVersion": answer.get("readerVersion"),
+        "renditionId": answer.get("renditionId"),
         "status": "done",
         "paged": paged,
         "page": shown,

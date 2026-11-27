@@ -329,6 +329,8 @@ class Settings(BaseSettings):
     # documents-service: what is read from a file, beside files-service, which keeps the bytes.
     documents_port: int = 8760
     documents_url: str | None = None
+    # The converter worker that draws Word files and decks as PDF (deploy/images/converter); unset reads them as text.
+    documents_converter_url: str | None = None
     # The OCR mode files are read with for a knowledge source and for a chat attachment or read_file: "auto" reads
     # scanned pages and the picture parts of mixed pages, "off" reads text layers only, "always" OCRs every page.
     # A server without Tesseract reports OCR as missing in documents-service's /health and fails each scanned page.
@@ -588,7 +590,15 @@ class Settings(BaseSettings):
             # events:emit: it reports a person's correction as a service event, which saves it on the file.
             # tools:view: it reads the document type templates of the plugins on for the caller's team.
             # workflows:view: before a document type is deleted it asks agents-service which workflows read it.
-            "documents": ["files:view", "files:edit", "settings:view", "events:emit", "tools:view", "workflows:view"],
+            "documents": [
+                "files:view",
+                "files:create",
+                "files:edit",
+                "settings:view",
+                "events:emit",
+                "tools:view",
+                "workflows:view",
+            ],
             # workflows:view: it reads a team's runs in progress and live workflows before the team is deleted or its
             # workspace closed. connections:delete: a member removed from a team has their own accounts on its
             # apps deleted in tools-service. tools:create, agents:create: a new team's defaults are written

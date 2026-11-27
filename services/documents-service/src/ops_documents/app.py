@@ -62,6 +62,7 @@ from ops_documents.models import (
     TestRun,
 )
 from ops_documents.readings import Readings, settings_of
+from ops_documents.renditions import DRAWN
 from ops_documents.store import DocumentTypesStore, ExtractionsStore, NameTakenError, ReadingsStore, TemplateCopies
 from ops_documents.store.metadata import reachable
 from ops_documents.templates import templates_router
@@ -368,8 +369,15 @@ def create_documents_app(
     ) -> Response:
         """One page drawn as an image, on request and never stored: 150 DPI, longest side 1,600 pixels (512 at low)."""
         file = await extractor.files.readable(who, file_id)
-        data = await extractor.files.read(who, file)
-        drawn = await asyncio.to_thread(page_images.render, data, file.mime, [number])
+        data, mime = await extractor.files.read(who, file), file.mime
+        if file.mime in DRAWN:
+            # A Word file or deck has pages only as drawn into its PDF.
+            kept = await readings.store.rendition(who.team, file.digest or "") if readings.renditions else None
+            pdf = await readings.renditions.read(who, kept) if readings.renditions and kept else None
+            if pdf is None:
+                raise NotFound(f"Page {number}")
+            data, mime = pdf, "application/pdf"
+        drawn = await asyncio.to_thread(page_images.render, data, mime, [number])
         if number not in drawn:
             raise NotFound(f"Page {number}")
         image = drawn[number]

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-27",
+  "title": "Word files and decks open as pages",
+  "description": "With the page converter on, a Word file or slide deck in a knowledge base opens as pages beside its text, and a slide that is only a picture is described by a model when the team allows it. Choosing a paragraph highlights its whole slide or page, and with the converter off these files still show their text.",
+  "tag": "new"
+}

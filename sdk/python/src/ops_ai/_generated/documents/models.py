@@ -667,6 +667,7 @@ class FileReading(TypedDict, closed=True):
     pagesDone: int
     pagesTotal: int | None
     readerVersion: str
+    renditionId: NotRequired[str | None]
     settings: ReadingSettingsOut
     status: Literal["none", "queued", "reading", "done", "failed"]
 

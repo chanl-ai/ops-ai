@@ -35,7 +35,7 @@ from ops_store.team_scope import any_team, team_visible
 
 # Listed in Files only when a filter asks for them: every email's text is stored so a workflow can read it, and
 # listed beside the documents they would bury them. A run or case that used one still opens it by id.
-LISTED_WHEN_ASKED: tuple[str, ...] = ("email_body", "knowledge_snapshot")
+LISTED_WHEN_ASKED: tuple[str, ...] = ("email_body", "knowledge_snapshot", "knowledge_rendition")
 # Why the retention process reads past one tenant: it lists every tenant's released files past their date.
 RETENTION_DUE = "background process: the retention process lists each tenant's released files past their date"
 

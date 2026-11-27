@@ -21,6 +21,7 @@ from ops_documents.document_types import DocumentTypes, Prices
 from ops_documents.extraction import Extractor, Floors, Models
 from ops_documents.files import Files
 from ops_documents.readings import Readings
+from ops_documents.renditions import Renditions
 from ops_documents.store import DocumentTypesStore, ExtractionsStore, ReadingsStore
 from ops_files_client.testing import FakeFilesService
 from ops_identity import Auth, Principal
@@ -183,10 +184,14 @@ def make(engine: AsyncEngine, tenant: str) -> Make:
         *,
         background: Sequence[Callable[[], Coroutine[Any, Any, None]]] = (),
         pictures: Any = None,
+        converter: Any = None,
     ) -> Service:
         fake = FakeFilesService()
         files = Files(fake.client(service="documents", scopes=["files:view", "files:edit"]))
         readings = Readings(files, ReadingsStore(engine), pictures=pictures)
+        if converter is not None:
+            writer = fake.client(service="documents", scopes=["files:view", "files:create", "files:edit"])
+            readings.renditions = Renditions(converter, writer)
         extractor = Extractor(files, ExtractionsStore(engine), models, floors, readings=readings)
         types = DocumentTypes(DocumentTypesStore(engine), files, extractor, prices)
         extractor.types = types

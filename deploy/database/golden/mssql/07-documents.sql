@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- documents-service, stamped at documents_0022
+-- documents-service, stamped at documents_0023
 CREATE TABLE document_types (
 	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
@@ -175,6 +175,7 @@ CREATE TABLE documents_readings (
 	actor VARCHAR(320) NOT NULL, 
 	duration_ms INTEGER NULL, 
 	settings_full VARCHAR(200) NULL, 
+	rendition_id VARCHAR(64) NULL, 
 	created_at DATETIMEOFFSET NOT NULL, 
 	started_at DATETIMEOFFSET NULL, 
 	finished_at DATETIMEOFFSET NULL, 
@@ -323,5 +324,5 @@ CREATE TABLE alembic_version_documents (
     CONSTRAINT alembic_version_documents_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_documents (version_num) VALUES ('documents_0022');
+INSERT INTO alembic_version_documents (version_num) VALUES ('documents_0023');
 GO

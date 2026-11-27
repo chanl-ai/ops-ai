@@ -1350,6 +1350,7 @@ class ItemText(TypedDict, closed=True):
     paged: bool
     pages: list[TextPage]
     readerVersion: str | None
+    renditionId: str | None
     sections: list[TextSection]
     status: Literal["done", "reading", "none"]
 

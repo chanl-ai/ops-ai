@@ -2201,6 +2201,17 @@
             "title": "Readerversion",
             "type": "string"
           },
+          "renditionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renditionid"
+          },
           "settings": {
             "$ref": "#/components/schemas/ReadingSettingsOut"
           },

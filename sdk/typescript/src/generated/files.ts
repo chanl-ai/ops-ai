@@ -968,7 +968,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "knowledge_rendition" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
             /**
              * Referencecount
              * @default 0
@@ -1080,7 +1080,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "knowledge_rendition" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
             /** Referencecount */
             referenceCount: number;
             retention: components["schemas"]["FileRetention"];
@@ -1314,7 +1314,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "knowledge_rendition" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
         };
         /** PurposeLimitIn */
         PurposeLimitIn: {
@@ -1326,7 +1326,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "knowledge_rendition" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
         };
         /** PurposeRetention */
         PurposeRetention: {
@@ -1334,7 +1334,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "knowledge_rendition" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
             /** Retentionclass */
             retentionClass: string;
         };
@@ -1344,7 +1344,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "knowledge_rendition" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
             /** Retentionclass */
             retentionClass: string;
         };
@@ -1554,7 +1554,7 @@ export interface components {
              */
             endpoint: string;
             /** Purpose */
-            purpose: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar") | "default";
+            purpose: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "knowledge_rendition" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar") | "default";
             /**
              * Region
              * @default
@@ -1595,7 +1595,7 @@ export interface components {
              */
             endpoint: string;
             /** Purpose */
-            purpose: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar") | "default";
+            purpose: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "knowledge_rendition" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar") | "default";
             /**
              * Region
              * @default
@@ -1627,7 +1627,7 @@ export interface components {
              * Purpose
              * @enum {string}
              */
-            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "knowledge_rendition" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
             /** Retentionclass */
             retentionClass?: string | null;
             /**
@@ -1834,7 +1834,7 @@ export interface operations {
         parameters: {
             query?: {
                 uploadedBy?: "me" | null;
-                purpose?: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar")[] | null;
+                purpose?: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "knowledge_rendition" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar")[] | null;
                 scan?: string[] | null;
                 sensitivity?: string[] | null;
                 readAs?: string[] | null;
@@ -1980,7 +1980,7 @@ export interface operations {
         parameters: {
             query: {
                 name: string;
-                purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+                purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "knowledge_rendition" | "source_file" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
                 uploadedBy?: string | null;
             };
             header: {

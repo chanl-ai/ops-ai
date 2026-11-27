@@ -1380,6 +1380,8 @@ export interface components {
             pagesTotal: number | null;
             /** Readerversion */
             readerVersion: string;
+            /** Renditionid */
+            renditionId?: string | null;
             settings: components["schemas"]["ReadingSettingsOut"];
             /**
              * Status

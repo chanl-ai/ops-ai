@@ -747,6 +747,8 @@ class ItemText(Out):
     # The page whose sections are answered, for a paged file; None for a file without pages, whose sections all are.
     page: int | None
     reader_version: str | None
+    # The PDF a Word file or deck was drawn into, shown in place of the file; None when the file is not drawn.
+    rendition_id: str | None
     # Every page's summary; only `page`'s sections are in `sections`.
     pages: list[TextPage]
     sections: list[TextSection]

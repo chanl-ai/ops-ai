@@ -1733,6 +1733,8 @@ export interface components {
             pages: components["schemas"]["TextPage"][];
             /** Readerversion */
             readerVersion: string | null;
+            /** Renditionid */
+            renditionId: string | null;
             /** Sections */
             sections: components["schemas"]["TextSection"][];
             /**

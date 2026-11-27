@@ -39,6 +39,7 @@ Purpose = Literal[
     "document_type_sample",
     "email_body",
     "knowledge_snapshot",
+    "knowledge_rendition",
     "test_import",
     "evidence_bundle",
     "export",
