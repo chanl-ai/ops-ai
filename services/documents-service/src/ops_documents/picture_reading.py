@@ -32,6 +32,9 @@ log = get_logger("ops_documents.picture_reading")
 PICTURE_PAGES_PER_FILE = 20
 # A page with fewer characters than this after reading counts as having no text.
 EMPTY_BELOW_CHARS = 20
+# A page OCR read (it had no text layer) with fewer words than this is a picture with labels, such as a diagram whose
+# boxes are named: the labels alone do not say how the parts connect. A scanned page of prose has hundreds of words.
+LABELS_BELOW_WORDS = 30
 STEP = "read:vision"
 DRAWABLE = ("application/pdf", *page_images.IMAGE_MIMES)
 
@@ -79,9 +82,12 @@ class PageImagePolicy(Protocol):
 
 
 def wants_picture(page: Page, mime: str) -> bool:
-    """A page that a picture could add text to: read from no text layer, with next to no text, in a format the
-    service can draw."""
-    return mime in DRAWABLE and page.source in ("none", "ocr") and len(page.text.strip()) < EMPTY_BELOW_CHARS
+    """A page that a picture could add text to, in a format the service can draw: read from no text layer and left
+    with next to no text, or OCR'd into no more than a diagram's labels."""
+    if mime not in DRAWABLE or page.source not in ("none", "ocr"):
+        return False
+    text = page.text.strip()
+    return len(text) < EMPTY_BELOW_CHARS or (page.source == "ocr" and len(text.split()) < LABELS_BELOW_WORDS)
 
 
 @dataclass

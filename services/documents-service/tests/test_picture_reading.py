@@ -6,6 +6,7 @@ a refused model call fails the whole reading instead of leaving that one page un
 from __future__ import annotations
 
 import io
+import shutil
 from typing import Any
 
 import httpx
@@ -38,6 +39,19 @@ def _diagram() -> ImageReader:
     return ImageReader(out)
 
 
+def _labelled() -> ImageReader:
+    """The same diagram with its boxes named in pixels, which OCR reads as a handful of words."""
+    img = Image.new("RGB", (900, 500), "white")
+    draw = ImageDraw.Draw(img)
+    for x, label in ((60, "Mobile app"), (340, "Intake service"), (620, "Event queue")):
+        draw.rectangle([x, 200, x + 200, 300], outline="black", width=3)
+        draw.text((x + 15, 235), label, fill="black", font_size=26)
+    out = io.BytesIO()
+    img.save(out, "PNG")
+    out.seek(0)
+    return ImageReader(out)
+
+
 def pdf(*pages: str) -> bytes:
     """One page per entry: "text" draws a sentence, "picture" only the diagram."""
     buf = io.BytesIO()
@@ -46,7 +60,7 @@ def pdf(*pages: str) -> bytes:
         if kind == "text":
             c.drawString(72, 700, "Claims intake review: the event queue went live in three regions.")
         else:
-            c.drawImage(_diagram(), 72, 300, width=450, height=250)  # pyright: ignore[reportUnknownMemberType]
+            c.drawImage(_labelled() if kind == "labelled" else _diagram(), 72, 300, width=450, height=250)  # pyright: ignore[reportUnknownMemberType]
         c.showPage()
     c.save()
     return buf.getvalue()
@@ -76,10 +90,10 @@ class Policy:
         return self.on
 
 
-async def read_all(s: Any, c: httpx.AsyncClient, fid: str) -> dict[str, Any]:
-    await c.post("/v1/documents/readings", json={"fileId": fid, "ocr": "off"}, headers=OPS)
+async def read_all(s: Any, c: httpx.AsyncClient, fid: str, ocr: str = "off") -> dict[str, Any]:
+    await c.post("/v1/documents/readings", json={"fileId": fid, "ocr": ocr}, headers=OPS)
     await s.extractor.readings.drain()
-    got = await c.get(f"/v1/documents/readings/{fid}", params={"ocr": "off"}, headers=OPS)
+    got = await c.get(f"/v1/documents/readings/{fid}", params={"ocr": ocr}, headers=OPS)
     return got.json()["data"]
 
 
@@ -97,6 +111,18 @@ async def test_a_picture_page_is_described_once_and_a_text_page_is_not_sent(make
     assert picture["blocks"][0]["box"] == [0.0, 0.0, 1.0, 1.0], "the description cites the whole page"
     assert len(model.calls) == 1 and model.calls[0]["parts"][0]["type"] == "image_url", model.calls
     assert again.status_code == 200 and len(model.calls) == 1, "a stored description is not asked for again"
+
+
+@pytest.mark.skipif(shutil.which("tesseract") is None, reason="tesseract binary not on PATH")
+async def test_a_diagram_whose_labels_ocr_reads_is_still_described(make: Make) -> None:
+    """OCR reads a labelled diagram as a few words, which say nothing about how the parts connect."""
+    model = Seeing()
+    s = make(Models(), Floor(), pictures=PictureReading(model, Policy()))
+    async with s.client as c:
+        fid = await s.stored(pdf("labelled"), name="diagram.pdf", mime="application/pdf")
+        body = await read_all(s, c, fid, ocr="auto")
+    assert body["pages"][0]["source"] == "model" and DIAGRAM in body["pages"][0]["text"], body["pages"][0]
+    assert len(model.calls) == 1
 
 
 async def test_picture_reading_stops_at_its_limit_per_file_and_says_so(make: Make) -> None:
