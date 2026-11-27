@@ -70,8 +70,6 @@ BACKGROUND = {
 REVIEWED_ACROSS_TEAMS = {
     "registry_publish_requests": "a publish request is read by reviewers outside its subject's team; can() checks the "
     "team, the tenant policy holds the tenant",
-    "workflow_schedules": "a schedule is read and written through its workflow's own rights, which cover shared "
-    "workflows the team policy has no branch for; the tenant policy holds the tenant (agents 20261123_1900)",
     "tool_modules": "a module with no team is read by every team and one granted to another team's workflow by that "
     "team; the store's team_modules and granted check the team, the tenant policy holds the tenant (tools_0086)",
 }

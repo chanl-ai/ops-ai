@@ -150,7 +150,7 @@ A `walk_passed=true` dispatch counts only from a repository admin; a writer's di
 | A numbered `release/X.Y.Z` or a `hotfix/*` branch exists on origin | Freezes develop merges the same way: the deploy is skipped and the job fails red with the branch names |
 | A hand-started run | Overrides the hold and the freeze, as before; the summary says so |
 
-The rule is `scripts/staging_hold.py`, which `deploy-staging.yml` calls; `scripts/tests/test_staging_hold.py` proves it.
+A release or hotfix branch whose head is already an ancestor of the deployed commit protects nothing, so it does not freeze staging (a notice names it); a head the runner cannot read keeps the freeze. The rule is `scripts/staging_hold.py`, which `deploy-staging.yml` calls; `scripts/tests/test_staging_hold.py` proves it.
 
 ## Version tags
 
