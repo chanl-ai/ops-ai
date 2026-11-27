@@ -28,7 +28,7 @@ from ops_service_kit.narrow import an_object
 
 from ..store.engine import EngineTransactions
 from ..store.tenancy import current_tenant
-from .auth import Principal, approves_own_writes, started_by
+from .auth import Principal, started_by
 from .deps import Runtime
 from .email_trigger import EmailStarts, Target, binding_of
 from .engine_runs import checked_values, start_run
@@ -63,7 +63,6 @@ async def by_form(rt: Runtime, h: HandStart) -> RunRow:
         run_key=None,
         created_by=started_by(h.me),
         started_via=h.via,
-        started_by_approver=approves_own_writes(h.me),
     )
     return run
 
