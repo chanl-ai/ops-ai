@@ -1519,7 +1519,7 @@ export interface components {
              * Source
              * @enum {string}
              */
-            source: "text" | "ocr" | "mixed" | "none";
+            source: "text" | "ocr" | "mixed" | "model" | "none";
             /** Width */
             width: number | null;
         };
@@ -1633,7 +1633,7 @@ export interface components {
              * @default text
              * @enum {string}
              */
-            readBy: "text" | "ocr";
+            readBy: "text" | "ocr" | "model";
             /** Sheet */
             sheet?: string | null;
             /** Text */
@@ -1747,7 +1747,7 @@ export interface components {
              * Source
              * @enum {string}
              */
-            source: "text" | "ocr" | "mixed" | "none";
+            source: "text" | "ocr" | "mixed" | "model" | "none";
             /**
              * Text
              * @default
