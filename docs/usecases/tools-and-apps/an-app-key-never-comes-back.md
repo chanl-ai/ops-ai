@@ -139,11 +139,11 @@ Expected: two logged calls, each saying whom it ran as; neither key appears.
 
 This page does not pass while a row here is open. Each open gap is a product change tracked on its own; no test helper stands in for it.
 
-| Product fix | Step | Tab | What is missing | Where |
-|---|---|---|---|---|
-| The TypeScript SDK reads the saved profile | All | TypeScript | `new OpsAI({ profile })` cannot read the saved sign-in profile | `sdk/typescript/src/client.ts:257-263` |
-| `opsai apps add-custom` and `set-key` | 1 | CLI | `opsai apps add-custom` | `sdk/python/src/ops_ai/_cli/apps.py:20-51` |
-| `opsai apps add-custom` and `set-key` | 3 | CLI | `opsai apps set-key` | `sdk/python/src/ops_ai/_cli/apps.py:20-51` |
+| Product fix | Step | Tab | What is missing | Where | Owner | Until |
+|---|---|---|---|---|---|---|
+| The TypeScript SDK reads the saved profile | All | TypeScript | `new OpsAI({ profile })` cannot read the saved sign-in profile | `sdk/typescript/src/client.ts:257-263` | ops-release | 2026-12-26 |
+| `opsai apps add-custom` and `set-key` | 1 | CLI | `opsai apps add-custom` | `sdk/python/src/ops_ai/_cli/apps.py:20-51` | ops-release | 2026-12-26 |
+| `opsai apps add-custom` and `set-key` | 3 | CLI | `opsai apps set-key` | `sdk/python/src/ops_ai/_cli/apps.py:20-51` | ops-release | 2026-12-26 |
 
 ## What proves it
 

@@ -43,7 +43,7 @@ REGISTRY = ROOT / "docs/usecases/README.md"
 ROW = re.compile(r"^\|\s*(uc-[a-z0-9]+(?:-[a-z0-9]+)*)\s*\|[^|]*\|[^|]*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|")
 # Rows the runner has nothing to run for: a page is documentation, draft has no script yet, and manual needs the
 # standing stack (`make up`, `make sample-team`) a hosted runner never starts, so it runs by hand.
-NOT_RUN = ("retired", "superseded", "draft", "page", "manual")
+NOT_RUN = ("retired", "superseded", "draft", "page", "manual", "needs-plugins", "needs-key")
 
 
 def manual(registry: str) -> list[str]:
@@ -195,12 +195,26 @@ def self_test() -> int:
         named == ["uc-007", "uc-workflows-2"],  # a named id runs too, after the numbered ones
         cap(["uc-1", "uc-2", "uc-3"], 5) == (["uc-1", "uc-2", "uc-3"], ""),
         cap(["uc-1", "uc-2", "uc-3"], 2)[0] == [] and "nightly" in cap(["uc-1", "uc-2", "uc-3"], 2)[1],
+        runnable("| uc-5 | s | A | api | current needs-plugins owner=a |\n| uc-6 | s | A | api | current |\n")
+        == ["uc-6"],  # a need status leaves the shards; the check script makes it carry an owner and a date
+        manual(
+            "| uc-5 | s | A | sdk | manual owner=a |\n| uc-6 | s | A | sdk | current |\n| uc-7 | s | A |  | manual |\n"
+        )
+        == ["uc-5"],  # the nightly's stack job runs the manual rows that have a layer
         shard(["a", "b", "c", "d", "e"], "2/3") == ["b", "e"],
         sorted(x for i in (1, 2, 3) for x in shard(list("abcdefg"), f"{i}/3")) == list("abcdefg"),
     ]
     rep = report_md(results, 1, 2)
     ok.append(rep.count("FAILED uc-") == 2 and "quarantined uc-010:ui" in rep and "FAILED shards: only 1 of 2" in rep)
     ok.append("FAILED" not in report_md([{"id": "uc-1", "status": "passed", "log": ""}], 2, 2))
+    with tempfile.TemporaryDirectory() as tmp:
+        for n in range(1, 9):
+            (Path(tmp) / f"s{n}").mkdir()
+            (Path(tmp) / f"s{n}" / "shard.json").write_text(json.dumps({"results": []}), encoding="utf-8")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            main(["report", tmp])
+        ok.append("only 8 of 9" in buf.getvalue())  # eight shards without the stack job's file is a red night
     try:
         shard(["a"], "4/3")
         ok.append(False)
@@ -276,7 +290,7 @@ def main(argv: list[str]) -> int:
     r.add_argument("ids", nargs="*")
     n = sub.add_parser("report")
     n.add_argument("dir")
-    n.add_argument("--expected", type=int, default=8)
+    n.add_argument("--expected", type=int, default=9, help="the eight shards and the stack job")
     n.add_argument("--run-url", default="")
     args = ap.parse_args(argv)
     known = runnable(REGISTRY.read_text(encoding="utf-8"))

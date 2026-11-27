@@ -3,7 +3,7 @@
 // tools-service as the gateway so the tool form lists real operations, publish requests left pending for a second
 // person, and workflow workers this script starts and stops. No model is called.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { publishReviewOn, twoPersonRuleOn, until, versionFromEditor } from '../../lib/workflow_ui.mjs';
+import { publishReviewOn, twoPersonRuleOn, until, waitForSaved } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
@@ -92,7 +92,7 @@ await withUiStack(
       const readStored = async () => (await (await api(`/v1/workflows/definitions/${id}`)).json()).data;
       const typed = (d) => d.workingCopy?.definition?.nodes?.find((n) => n.id === 'done')?.parameters;
       await until(async () => { const p = typed(await readStored()); return p?.outcome === 'refunded' && p?.output === '$.input.amount' ? p : undefined; }, 30);
-      await versionFromEditor(page, id, { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
+      await waitForSaved(page);
       // Editing makes no version: the typed settings sit in the working copy over version 1, and publishing (step 6) makes version 2.
       const stored = await readStored();
       const done = typed(stored);

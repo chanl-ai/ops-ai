@@ -178,10 +178,10 @@ Expected: the reply comes after `lookup_device` returns.
 
 This page does not pass while a row here is open. Each open gap is a product change tracked on its own; no test helper stands in for it.
 
-| Product fix | Step | Tab | What is missing | Where |
-|---|---|---|---|---|
-| The TypeScript SDK reads the saved profile | All | TypeScript | `new OpsAI({ profile })` cannot read the saved sign-in profile | `sdk/typescript/src/client.ts:257-263` |
-| `opsai agents` takes options after the verb | All | CLI | `--json` and `--profile` are accepted only before the verb | `sdk/python/src/ops_ai/_cli/agents.py:15-38` |
+| Product fix | Step | Tab | What is missing | Where | Owner | Until |
+|---|---|---|---|---|---|---|
+| The TypeScript SDK reads the saved profile | All | TypeScript | `new OpsAI({ profile })` cannot read the saved sign-in profile | `sdk/typescript/src/client.ts:257-263` | ops-release | 2026-12-26 |
+| `opsai agents` takes options after the verb | All | CLI | `--json` and `--profile` are accepted only before the verb | `sdk/python/src/ops_ai/_cli/agents.py:15-38` | ops-release | 2026-12-26 |
 
 ## What proves it
 

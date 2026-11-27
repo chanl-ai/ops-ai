@@ -162,12 +162,12 @@ Expected: refused with `invalid_input` at `customerEmail`; no run starts.
 
 ## Gaps
 
-An open gap is a product change tracked on its own; no test helper stands in for it. The run prints each row as SKIP with the date it opened, and skips the tab of a row whose step is All.
+An open gap is a product change tracked on its own; no test helper stands in for it. The run prints each row as SKIP and skips the tab of a row whose step is All, but only while the row names an Owner and an Until date that has not passed; any other row fails the run.
 
-| Product fix | Step | Tab | What is missing | Where | Open since |
-|---|---|---|---|---|---|
-| The TypeScript SDK reads the saved profile | All | TypeScript | `new OpsAI({ profile })` cannot read the saved sign-in profile | `sdk/typescript/src/client.ts:257-263` | 2026-11-12 |
-| The TypeScript SDK reads workflow YAML | 1, 2 | TypeScript | `workflows.validate` and `apply` take JSON, not the YAML file | `sdk/typescript/src/workflows.ts:3` | 2026-11-12 |
+| Product fix | Step | Tab | What is missing | Where | Open since | Owner | Until |
+|---|---|---|---|---|---|---|
+| The TypeScript SDK reads the saved profile | All | TypeScript | `new OpsAI({ profile })` cannot read the saved sign-in profile | `sdk/typescript/src/client.ts:257-263` | 2026-11-12 | ops-release | 2026-12-26 |
+| The TypeScript SDK reads workflow YAML | 1, 2 | TypeScript | `workflows.validate` and `apply` take JSON, not the YAML file | `sdk/typescript/src/workflows.ts:3` | 2026-11-12 | ops-release | 2026-12-26 |
 
 ## What proves it
 

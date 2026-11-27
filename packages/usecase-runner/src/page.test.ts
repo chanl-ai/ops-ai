@@ -2,11 +2,11 @@
 // step run on a broken state, an open gap ignored, or a use case without a page losing its script.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { cliProgram, parsePage, pythonProgram, stepVerdicts, typescriptProgram } from './page.ts';
+import { cliProgram, parsePage, prepareWork, pythonProgram, stepVerdicts, typescriptProgram } from './page.ts';
 import { parseRegistry } from './registry.ts';
 import { resolveScript } from './resolve.ts';
 
@@ -121,11 +121,26 @@ test('a page parses into its setup, numbered steps with page lines, profiles and
   assert.equal(page.gaps.length, 1);
 });
 
-test('a titled block with no tab is a file the run writes, and a gap whose step is All names the tab to skip', () => {
-  const text = ['## Gaps', '', '| Product fix | Step | Tab | What is missing | Where | Open since |', '|---|---|---|---|---|---|', '| X | All | TypeScript | y | z | 2026-11-12 |', '', '```yaml title="workflow.yaml"', 'id: a', '```', ''].join('\n');
-  const parsed = parsePage(text, 'p.md');
-  assert.deepEqual(parsed.files, { 'workflow.yaml': 'id: a\n' });
-  assert.equal(parsed.gaps[0]?.allOf, 'TypeScript');
+test('a titled block is a file the run writes, and an owned gap is skipped while an unowned or expired one fails', () => {
+  const row = (owner: string, until: string) => `| X | All | TypeScript | y | z | 2026-11-12 | ${owner} | ${until} |`;
+  const text = (r: string) => ['## Gaps', '', '| Product fix | Step | Tab | What is missing | Where | Open since | Owner | Until |', '|---|---|---|---|---|---|---|---|', r, '', '```yaml title="workflow.yaml"', 'id: a', '```', ''].join('\n');
+  const prepare = (r: string) => {
+    const work = mkdtempSync(join(tmpdir(), 'ucr-work-'));
+    const said: string[] = [];
+    const out = prepareWork(parsePage(text(r), 'p.md'), work, (l) => said.push(l), '2026-11-27');
+    return { work, said, ...out };
+  };
+  const owned = prepare(row('ops-release', '2026-12-26'));
+  assert.equal(readFileSync(join(owned.work, 'workflow.yaml'), 'utf8'), 'id: a\n');
+  assert.equal(owned.failed, false);
+  assert.deepEqual([...owned.skippedTabs], ['TypeScript']);
+  assert.match(owned.said[0]!, /^SKIP gap open/);
+  for (const bad of [row('', '2026-12-26'), row('ops-release', ''), row('ops-release', '2026-11-26')]) {
+    const r = prepare(bad);
+    assert.equal(r.failed, true);
+    assert.equal(r.skippedTabs.size, 0);
+    assert.match(r.said[0]!, /^FAIL gap/);
+  }
 });
 
 // Each tab's program: step 1 passes, step 2 fails at its assert's page line, step 3 never runs.

@@ -7,7 +7,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { versionFromEditor } from '../../lib/workflow_ui.mjs';
+import { waitForSaved, workingCopyOf } from '../../lib/workflow_ui.mjs';
 
 const PASSWORD = 'northfield-demo';
 const JAMES = 'j.richardson@harborpine.example';
@@ -291,7 +291,10 @@ await withUiStack(
       };
       const dragged = rel(afterDrag, moved.id);
       // The seeds are baked tidy, so the drag is saved first; the Tidy up after it is then a change of its own.
-      const saveNow = () => versionFromEditor(james, 'levy_case', H);
+      const saveNow = async () => {
+        await waitForSaved(james);
+        return workingCopyOf('levy_case', H);
+      };
       const draggedVersion = await saveNow();
       await james.keyboard.press('t');
       await james.getByText('Steps tidied').waitFor({ timeout: 10_000 });
@@ -314,9 +317,9 @@ await withUiStack(
       const tidiedVersion = await saveNow();
       // The seeds are baked with the same layout, so the tidied workflow is version 1 again, byte for byte.
       check(
-        'levy_case: a version made from the saved working copy keeps the dragged layout, and Tidy up lays it out exactly as the baked seed',
-        draggedVersion?.created === true && tidiedVersion?.version === 1 && tidiedVersion.created === false,
-        { draggedVersion, tidiedVersion },
+        'levy_case: the saved working copy keeps the dragged layout, and Tidy up lays it out exactly as the baked seed (version 1)',
+        !!draggedVersion.copy && tidiedVersion.version === 1 && (!tidiedVersion.copy || JSON.stringify(tidiedVersion.copy.definition) === JSON.stringify(tidiedVersion.definition)),
+        { dragged: !!draggedVersion.copy, tidiedVersion: tidiedVersion.version, tidiedCopy: !!tidiedVersion.copy },
       );
       await james.screenshot({ path: join(EDITOR_SHOTS, 'levy_case-tidied-1280.png') });
 

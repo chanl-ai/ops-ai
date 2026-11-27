@@ -4,7 +4,7 @@
 // mailbox on Channels > Email, tests it, opens its page, then connects a second mailbox from a workflow's Email
 // received trigger and saves the version, which names the new mailbox.
 import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { versionFromEditor } from '../../lib/workflow_ui.mjs';
+import { workingCopyWhen, waitForSaved } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -140,7 +140,7 @@ await withUiStack(
         );
       });
 
-      await step('3 Connect a mailbox from the trigger sheet fills the trigger, and the saved version keeps it', async () => {
+      await step('3 Connect a mailbox from the trigger sheet fills the trigger, and the saved working copy keeps it', async () => {
         await page.goto(`${consoleUrl}/workflows/definitions/${WORKFLOW.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         const canvas = page.getByTestId('definition-canvas');
         await canvas.locator('[data-testid="definition-node"]').first().waitFor({ timeout: 120_000 });
@@ -153,18 +153,12 @@ await withUiStack(
         await pickSecret(page, 'connect-dialog-secret');
         await page.getByTestId('connect-mailbox-submit').click();
         await page.getByRole('dialog', { name: 'Connect a mailbox' }).waitFor({ state: 'detached', timeout: 30_000 });
-        await versionFromEditor(page, WORKFLOW.id, J);
-        let mailbox = null;
-        for (let i = 0; i < 30; i++) {
-          const latest = await (await fetch(`${agents}/v1/workflows/definitions/${WORKFLOW.id}`, { headers: J })).json();
-          if (latest.data?.version === 2) {
-            mailbox = latest.data.definition.nodes.find((n) => n.id === 'start').parameters.mailbox;
-            break;
-          }
-          await page.waitForTimeout(500);
-        }
+        await waitForSaved(page);
+        // Editing makes no version: the picked mailbox is kept in the working copy until a publish makes version 2.
+        const saved = await workingCopyWhen(WORKFLOW.id, J, (r) => r.copy?.definition.nodes.find((n) => n.id === 'start')?.parameters.mailbox === LEVY);
+        const mailbox = saved.copy?.definition.nodes.find((n) => n.id === 'start')?.parameters.mailbox ?? null;
         const listed = (await (await fetch(`${agents}/v1/channels/mailboxes`, { headers: J })).json()).data.map((m) => m.address);
-        check('3 Connect a mailbox from the trigger sheet fills the trigger, and the saved version keeps it', mailbox === LEVY && listed.includes(LEVY) && listed.includes(DESK), { mailbox, listed });
+        check('3 Connect a mailbox from the trigger sheet fills the trigger, and the saved working copy keeps it', mailbox === LEVY && listed.includes(LEVY) && listed.includes(DESK), { mailbox, listed });
       });
 
       await step('3b the trigger shows the picked mailbox with its state and a link to it, and warns while it is paused', async () => {

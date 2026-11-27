@@ -71,6 +71,9 @@ jobs:
           node: "true"
           browser: "true"
           infra: "true"
+      - name: Install the OCR engine
+        # uc-250, 672 and 673 read a scanned page with tesseract (ops_ingest reading/images.py); the runner image has none.
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends tesseract-ocr
       - name: Run this shard
         env:
           SHARD: ${{ matrix.shard }}/8
@@ -110,6 +113,9 @@ jobs:
           node: "true"
           infra: "true"
       - name: Start the stack and run the stack-bound use cases
+        env:
+          # The stack `make up` starts on this runner; the Examples' setup reads it to find the services.
+          OPS_BASE_URL: http://127.0.0.1
         run: |
           make up AUTH=platform DEMO_MODEL=fake
           mapfile -t ids < <(python3 scripts/ci_usecases.py manual)
