@@ -475,7 +475,7 @@ jobs:
       - if: steps.pick.outputs.ids != ''
         # A scanned page is read by tesseract (ops_ingest reading/images.py); the runner image has none, so uc-250's scan checks fail.
         name: Install the OCR engine
-        run: sudo apt-get install -y --no-install-recommends tesseract-ocr
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends tesseract-ocr
       - if: steps.pick.outputs.ids != ''
         name: Run them on the scripted model
         env:
