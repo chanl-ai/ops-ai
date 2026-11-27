@@ -48,7 +48,10 @@ def _held(rt: Runtime, grant: ToolGrant) -> Json:
 
 
 def _given(asked: tuple[str, ...], defn: AgentDefinition, alias: str) -> list[str]:
-    """An agent set to search every base of its team may be tested on any of them (kb-service keeps it to the team)."""
+    """The bases an eval case names, cut to the ones its agent may search. A case names its bases as data, so one
+    outside the agent's is dropped here rather than refused as a chat override is (overrides.py), and a case left with
+    none searches none, never the agent's defaults. An agent set to search every base of its team may be tested on any
+    of them (kb-service keeps it to the team)."""
     if defn.all_team_knowledge:
         return list(dict.fromkeys(asked))
     allowed = limits_for(defn, alias).allowed_knowledge_base_ids
