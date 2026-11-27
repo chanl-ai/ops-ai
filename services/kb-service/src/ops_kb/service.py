@@ -1176,13 +1176,21 @@ class KnowledgeService:
         return scopes_of(places, following)
 
     async def remove_source(self, who: Who, source_id: str) -> None:
-        """Removes the source and lets go of every file it held in Files, its versions and its items' files, so
-        none stays undeletable in Files for a source that is gone."""
+        """Lets go of every file the source held in Files, its versions and its items' files, then removes it, under
+        its lease so no sync takes a reference meanwhile. A release Files refuses keeps the source and answers 503, so
+        the caller retries and no file stays undeletable in Files for a source that is gone."""
         s = await self._changeable_source(who, source_id, "delete")
-        held = set(s.file_ids) | {i.file_id for i in await self.store.items(who.tenant_id, source_ids=[source_id])}
-        if not await self.store.remove_source(who.tenant_id, source_id):
-            raise NotFound("No source with that id.")
-        await self._let_go(who, s, {f for f in held if f})
+        lease = await self.take_lease(who.tenant_id, source_id)
+        if lease is None:
+            raise Conflict(f"{s.name} is syncing or rebuilding now; wait for that run to end.", code="sync_running")
+        try:
+            s = await self._source_row(who, source_id)
+            items = await self.store.items(who.tenant_id, source_ids=[source_id])
+            await self._let_go(who, s, {f for f in {*s.file_ids, *(i.file_id for i in items)} if f}, strict=True)
+            if not await self.store.remove_source(who.tenant_id, source_id):
+                raise NotFound("No source with that id.")
+        finally:
+            await lease.release()
 
     # ── Files and sync ───────────────────────────────────────────────────
 
@@ -1224,15 +1232,19 @@ class KnowledgeService:
             "deduplicated": stored.deduplicated,
         }
 
-    async def _let_go(self, who: Who, s: SourceRow, file_ids: set[str]) -> None:
+    async def _let_go(self, who: Who, s: SourceRow, file_ids: set[str], *, strict: bool = False) -> None:
         """Releases the source's reference on files it no longer reads: versions a sync replaced, or every file of a
         removed source. A release Files refuses is logged: the source no longer reads the file, and Files keeps it
-        until someone deletes it there."""
+        until someone deletes it there. `strict` raises after trying them all, so a removal keeps its source."""
+        refused: ServiceUnavailable | None = None
         for file_id in sorted(file_ids):
             try:
                 await self.files.release(who.tenant_id, source_team(s), file_id, source_id=s.id)
-            except ServiceUnavailable:
+            except ServiceUnavailable as e:
                 logger.warning("kb_file_release_failed", source=s.id, file=file_id)
+                refused = e
+        if strict and refused is not None:
+            raise refused
 
     async def _use_file(self, who: Who, s: SourceRow, file_id: str) -> tuple[str, str]:
         try:
@@ -1305,7 +1317,7 @@ class KnowledgeService:
             # the files the source holds now, not from a row read before another write or sync changed them.
             s = await self._source_row(who, source_id)
             with ai_run(self.ai_clients, who.tenant_id, ceiling=self.settings_of(s).ai_ceiling):
-                return await self._sync(who, s, full=full, retry=retry, trigger=trigger, only=only)
+                return await self._sync(who, s, lease, full=full, retry=retry, trigger=trigger, only=only)
         finally:
             await lease.release()
 
@@ -1498,6 +1510,7 @@ class KnowledgeService:
         self,
         who: Who,
         s: SourceRow,
+        lease: Lease,
         *,
         full: bool,
         retry: bool,
@@ -1558,6 +1571,8 @@ class KnowledgeService:
         # The names whose newest version is indexed, so their earlier files are let go after the loop.
         settled: set[str] = set()
         for name, found in latest.items():
+            if lease.lost:
+                break
             counts["listed"] += 1
             existing = items.get(name)
             if (verdict := refused.get(name)) is not None:
@@ -1566,7 +1581,14 @@ class KnowledgeService:
                 counts["failed"] += 1
                 log.append(f"{name}: its scan found it {verdict}, so it is not read")
                 why = ("scan", f"The scan found this version {verdict}, so it was not read; send a clean copy.")
-                if not (existing and existing.status == "failed" and existing.digest == found.digest):
+                if existing is not None and existing.status not in ("failed", "reading"):
+                    # The indexed version keeps answering; the item and the run say the newer one was refused.
+                    errors.append({"itemId": existing.id, "itemTitle": existing.title, "phase": "parse",
+                                   "errorClass": why[0], "message": why[1]})  # fmt: skip
+                    note = f"A newer version was not read: its scan found it {verdict}. Send a clean copy."
+                    if existing.warning != note:
+                        await self.store.update_item(who.tenant_id, existing.id, {"warning": note})
+                elif not (existing and existing.status == "failed" and existing.digest == found.digest):
                     errors.append(parse_error(await self._failed(who, s, existing, name=name, found=found, error=why)))
                 continue
             facts = ItemFacts(path=name, title=name, mime=found.mime, modified=started, size=found.size)
@@ -1616,9 +1638,16 @@ class KnowledgeService:
         # An item a rule now excludes leaves search with its pieces; the file stays in the source.
         counts["deleted"] += await self.store.remove_items(who.tenant_id, excluded)
         # A file replaced by a version this run read is no longer read by anything: out of the source, out of Files.
+        # Dropped under the source's row lock, and only while this run still holds the lease and each name's newest
+        # file is still the one it read: a write during the run (earlier content sent again) leaves its file be.
         replaced = {f for name, files in superseded.items() if name in settled for f in files}
-        await self.store.drop_files(who.tenant_id, source_id, replaced)
-        await self._let_go(who, s, replaced)
+        read = {name: latest[name].file_id for name in settled}
+        dropped = await self.store.drop_files(who.tenant_id, source_id, replaced, owner=lease.owner, newest=read)
+        if dropped is None:
+            lease.lost = True
+            log.append("another run took this source's lease, so this one let go of no file")
+        else:
+            await self._let_go(who, s, dropped)
         status = (
             "failed" if counts["failed"] and not counts["upserted"] else "partial" if counts["failed"] else "success"
         )

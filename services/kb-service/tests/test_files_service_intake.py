@@ -6,9 +6,11 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import httpx
+import sqlalchemy as sa
 from httpx import AsyncClient
 from pydantic import HttpUrl
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -19,6 +21,7 @@ from ops_kb.files import FilesServiceIntake, KnowledgeFiles
 from ops_kb.search import HybridRetriever
 from ops_kb.service import KnowledgeService
 from ops_kb.store import KnowledgeStore
+from ops_kb.store.knowledge import kb_sources
 from ops_service_kit.settings import FilesEndpoint, Settings
 
 from .conftest import kb_client
@@ -272,6 +275,108 @@ async def test_two_writes_of_one_name_at_once_leave_only_the_newest_file_held(en
         held = data(await client.get(f"/v1/sources/{src}"))["config"]["fileIds"]
     counts = {fid: f["referenceCount"] for fid, f in fake.files.items()}
     assert counts == {fid: int(fid in held) for fid in counts} and len(held) == 1, (held, counts)
+
+
+async def test_a_refused_new_version_leaves_the_indexed_one_answering_search(engine: AsyncEngine, tenant: str) -> None:
+    """A refused scan of a new version marked the indexed item failed under the refused file, so the good earlier
+    version stopped answering search. It keeps answering, and the item and the run say the new version was refused."""
+    fake = FakeFilesService()
+    async with kb_client(engine, tenant, files=FilesServiceIntake(fake.client())) as client:
+        kb = data(
+            await client.post("/v1/knowledge-bases", json={"name": "Disputes", "owner": "james@harborpine.example"}),
+            201,
+        )
+        src = data(await client.post("/v1/sources", json={"type": "push", "name": "Rules", "kbIds": [kb["id"]]}), 201)
+        for text, verdict in (
+            ("Chargebacks are raised within 120 days.", "clean"),
+            ("Chargebacks are raised within 90 days.", "infected"),
+        ):
+            await client.post(
+                f"/v1/sources/{src['id']}/items", json={"name": "window", "title": "Window", "text": text}
+            )
+            await scan_all(fake, tenant, verdict)
+            run = data(await client.post(f"/v1/sources/{src['id']}/sync"))
+        item = data(await client.get(f"/v1/sources/{src['id']}/items"))["data"][0]
+        found = data(await client.post(f"/v1/knowledge-bases/{kb['id']}/query", json={"question": "chargeback days"}))
+    assert run["counts"]["failed"] == 1 and run["errors"][0]["errorClass"] == "scan", run
+    assert item["status"] == "indexed" and "infected" in (item.get("warning") or ""), item
+    assert found["chunks"] and "120 days" in found["chunks"][0]["text"], found
+
+
+class _MidSync(FilesServiceIntake):
+    """kb-service's Files adapter that runs `during` once, as the sync takes its reference on a new version."""
+
+    during: Callable[[], Awaitable[object]] | None = None
+
+    async def use(self, tenant: str, team: str, file_id: str, *, source_id: str, source_name: str) -> str:
+        if (during := self.during) is not None:
+            self.during = None
+            await during()
+        return await super().use(tenant, team, file_id, source_id=source_id, source_name=source_name)
+
+
+async def _two_versions(
+    engine: AsyncEngine, tenant: str, during: Callable[[AsyncClient, str], Awaitable[object]]
+) -> tuple[FakeFilesService, str, list[str]]:
+    """Writes window at 120 days, then at 90 days with `during` run as that sync reads the new version; the 120-day
+    file's id and the files the source holds after."""
+    fake = _ScannedAtOnce()
+    intake = _MidSync(fake.client())
+    async with kb_client(engine, tenant, files=intake) as client:
+        src = await push_source(client)
+        first = {"name": "window", "title": "W", "text": "Raised within 120 days."}
+        data(await client.post(f"/v1/sources/{src}/items", json=first))
+        old = data(await client.get(f"/v1/sources/{src}"))["config"]["fileIds"][0]
+        intake.during = lambda: during(client, src)
+        await client.post(f"/v1/sources/{src}/items", json={**first, "text": "Raised within 90 days."})
+        held = data(await client.get(f"/v1/sources/{src}"))["config"]["fileIds"]
+    return fake, old, held
+
+
+async def test_earlier_content_sent_again_during_a_sync_stays_held(engine: AsyncEngine, tenant: str) -> None:
+    """A sync dropped and released the files it read as replaced at its start, so earlier content sent again under the
+    same name while it ran lost the file that was now the name's newest."""
+
+    async def resend(client: AsyncClient, src: str) -> None:
+        await client.post(
+            f"/v1/sources/{src}/items", json={"name": "window", "title": "W", "text": "Raised within 120 days."}
+        )
+
+    fake, old, held = await _two_versions(engine, tenant, resend)
+    assert held[-1] == old and fake.files[old]["referenceCount"] == 1, (held, fake.files)
+
+
+async def test_a_sync_that_lost_its_lease_lets_go_of_nothing(engine: AsyncEngine, tenant: str) -> None:
+    """A sync whose lease another run took still dropped and released the files it saw as replaced."""
+
+    async def taken(_client: AsyncClient, src: str) -> None:
+        async with engine.begin() as c:
+            await c.execute(sa.update(kb_sources).where(kb_sources.c.id == src).values(lease_owner="lease_other"))
+
+    fake, old, held = await _two_versions(engine, tenant, taken)
+    assert old in held and fake.files[old]["referenceCount"] == 1, (held, fake.files)
+
+
+async def test_a_source_whose_files_cannot_be_released_is_kept_to_retry(engine: AsyncEngine, tenant: str) -> None:
+    """Removing a source deleted its row and then released its files, so a release Files refused left a file held
+    for a source that no longer existed. The source stays, the caller can retry, and the retry lets go of all."""
+    fake = FakeFilesService()
+    async with kb_client(engine, tenant, files=FilesServiceIntake(fake.client())) as client:
+        src = await push_source(client)
+        await client.post(
+            f"/v1/sources/{src}/items", json={"name": "window", "title": "W", "text": "Raised in 120 days."}
+        )
+        await scan_all(fake, tenant)
+        data(await client.post(f"/v1/sources/{src}/sync"))
+        fake.refuse = 401
+        refused = await client.delete(f"/v1/sources/{src}")
+        fake.refuse = None
+        assert refused.status_code == 503, refused.text
+        assert (await client.get(f"/v1/sources/{src}")).status_code == 200, (
+            "the source stays while Files holds its files"
+        )
+        assert (await client.delete(f"/v1/sources/{src}")).status_code == 204
+    assert all(f["referenceCount"] == 0 for f in fake.files.values()), fake.files
 
 
 async def test_start_up_waits_for_files_service_about_its_setting_not_a_probe_timeout_per_try() -> None:

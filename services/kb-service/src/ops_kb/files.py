@@ -157,8 +157,11 @@ class FilesServiceIntake:
         return info.name
 
     async def release(self, tenant: str, team: str, file_id: str, *, source_id: str) -> None:
-        with contextlib.suppress(FileNotFound):
-            await self._client.detach(tenant, team, file_id, type="source", ref_id=source_id)
+        try:
+            with contextlib.suppress(FileNotFound):
+                await self._client.detach(tenant, team, file_id, type="source", ref_id=source_id)
+        except (FilesRefused, httpx.HTTPError) as e:
+            raise _unavailable(e, "let go of the file") from e
 
 
 class _Storage(BaseModel):
