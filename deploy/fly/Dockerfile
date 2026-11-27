@@ -29,7 +29,8 @@ ARG COREPACK_NPM_REGISTRY=
 WORKDIR /app
 # The pnpm version is the one package.json names; corepack fetches it once here from COREPACK_NPM_REGISTRY, and pnpm
 # then installs from NPM_CONFIG_REGISTRY. Both stay in this build stage, which no shipped image copies from.
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# .pnpmfile.cjs is part of the lock (pnpmfileChecksum): a frozen install without it is refused.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmfile.cjs ./
 RUN corepack enable \
  && ${COREPACK_NPM_REGISTRY:+env COREPACK_NPM_REGISTRY=$COREPACK_NPM_REGISTRY} corepack prepare --activate \
  && if [ -n "$NPM_CONFIG_REGISTRY" ]; then echo "registry=$NPM_CONFIG_REGISTRY" >> /root/.npmrc; fi
