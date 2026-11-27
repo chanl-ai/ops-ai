@@ -1,6 +1,6 @@
 # The use case runner puts docs/usecases/lib (usecase_harness) on the path; pyright alone cannot see it.
 # pyright: basic, reportMissingImports=false
-"""uc-949 open a document beside the text read from it, cli layer: docs/usecases/kb-service/open-a-document-beside-
+"""uc-950 open a document beside the text read from it, cli layer: docs/usecases/kb-service/open-a-document-beside-
 the-text.md, story S5 (step 6). A developer reads a pushed PDF's text with `opsai kb text`, reading the address from a
 saved profile. Own kb-service with its files-service and documents-service; no model is called."""
 
@@ -31,7 +31,7 @@ def review() -> bytes:
 
 
 def main() -> None:
-    with tempfile.TemporaryDirectory(prefix="uc-949-cli-") as tmp, kb(Path(tmp) / "files") as k:
+    with tempfile.TemporaryDirectory(prefix="uc-950-cli-") as tmp, kb(Path(tmp) / "files") as k:
         base = data(k.post("/v1/knowledge-bases", json={"name": "Claims intake", "owner": "maya@harborpine.example"}))
         src = data(k.post("/v1/sources", json={"type": "push", "name": "Project files", "kbIds": [base["id"]]}))
         body = {"name": "review.pdf", "content": base64.b64encode(review()).decode(), "mime": "application/pdf"}

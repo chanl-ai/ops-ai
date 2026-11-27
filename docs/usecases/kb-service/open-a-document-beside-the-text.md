@@ -1,6 +1,6 @@
 # Open a document beside the text read from it
 
-Status: passing. Id: `uc-949`. Service: `kb-service`. Layers: api, cli, ui.
+Status: passing. Id: `uc-950`. Service: `kb-service`. Layers: api, cli, ui.
 
 Short title: Open a document beside the text read from it
 
@@ -41,7 +41,7 @@ the fake model describes each picture the same way.
 | PostgreSQL with pgvector, OPA | `make db-up` |
 | kb-service, files-service, documents-service, platform-service, models-service with the fake OpenAI | the harness's `kb()`, `platform()`, `models()`, `fake_openai()` |
 
-Run: `make usecase-test UC=uc-949 LAYER=api`.
+Run: `make usecase-test UC=uc-950 LAYER=api`.
 
 ## Steps and expected results
 
@@ -60,9 +60,9 @@ Run: `make usecase-test UC=uc-949 LAYER=api`.
 
 | Layer | Script | State |
 |---|---|---|
-| api | `kb-service/scripts/test-uc-949-api.py` | passing |
-| cli | `kb-service/scripts/test-uc-949-cli.py` | passing |
-| ui | `kb-service/scripts/test-uc-949-ui.mjs` | passing |
+| api | `kb-service/scripts/test-uc-950-api.py` | passing |
+| cli | `kb-service/scripts/test-uc-950-cli.py` | passing |
+| ui | `kb-service/scripts/test-uc-950-ui.mjs` | passing |
 
 ## Non-vacuous check
 

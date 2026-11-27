@@ -1,6 +1,6 @@
 # The use case runner puts docs/usecases/lib (usecase_harness) on the path; pyright alone cannot see it.
 # pyright: basic, reportMissingImports=false
-"""uc-949 open a document beside the text read from it, api layer: docs/usecases/kb-service/open-a-document-beside-
+"""uc-950 open a document beside the text read from it, api layer: docs/usecases/kb-service/open-a-document-beside-
 the-text.md. Own kb-service with its files-service and documents-service, platform-service for the team's pageImages
 policy, and models-service with the fake OpenAI describing page pictures by
 services/kb-service/tests/fixtures/picture-reading-fake-openai; no provider is called."""
@@ -98,7 +98,7 @@ def blocks(text: dict[str, Any]) -> list[dict[str, Any]]:
 
 def main() -> None:
     with (
-        tempfile.TemporaryDirectory(prefix="uc-949-") as tmp,
+        tempfile.TemporaryDirectory(prefix="uc-950-") as tmp,
         platform() as (people, _inner),
         fake_openai(RULES) as fake,
         models({"OPS_MODELS_FAKE_OPENAI_URL": fake}) as models_url,

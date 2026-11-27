@@ -1,4 +1,4 @@
-// uc-949 open a document beside the text read from it, ui layer: docs/usecases/kb-service/open-a-document-beside-the-text.md, story S6 (steps 7-8).
+// uc-950 open a document beside the text read from it, ui layer: docs/usecases/kb-service/open-a-document-beside-the-text.md, story S6 (steps 7-8).
 // Signed in as James on the demo stack: a pushed two-paragraph PDF opens beside its text; a paragraph lights its lines on the page and a line selects its paragraph.
 import { KB_PORT, PLATFORM_PORT, check, chromium, finish, shootBothWidths, withUiStack } from '@ops-ai/usecase-runner/harness';
 
@@ -67,7 +67,7 @@ await withUiStack(
       await page.locator(`[data-box-key="${second}"]`).first().click();
       check('8 choosing a line on the page presses its paragraph', (await paragraphs.nth(1).getAttribute('aria-pressed')) === 'true' && (await paragraphs.first().getAttribute('aria-pressed')) === 'false', { second });
 
-      await shootBothWidths(page, 'knowledge', 'uc-949-document-view', async () => {
+      await shootBothWidths(page, 'knowledge', 'uc-950-document-view', async () => {
         await page.goto(`${consoleUrl}/data/knowledge/documents/${item.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
         await paragraphs.first().waitFor({ timeout: 120_000 });
         await page.getByTestId('viewer-page-1').locator('img').waitFor({ timeout: 120_000 });

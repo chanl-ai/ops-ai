@@ -679,4 +679,4 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/files-service/a-watched-folder-brings-files-in.md` | uc-779: A watched folder brings files in |
 | `usecases/models-service/a-provider-type-added-as-a.md` | uc-791: A provider type added as a file shows in the add list |
 | `usecases/models-service/an-admin-connects-anthropic-and-an.md` | uc-792: An admin connects Anthropic and an agent's model settings reach its chat |
-| `usecases/kb-service/open-a-document-beside-the-text.md` | uc-949: Open a document beside the text read from it |
+| `usecases/kb-service/open-a-document-beside-the-text.md` | uc-950: Open a document beside the text read from it |
