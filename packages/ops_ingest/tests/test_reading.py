@@ -19,6 +19,7 @@ from ops_ingest.reading import (
     FORM_FIELDS_HEADING,
     MAX_PAGES,
     MAX_RENDER_PIXELS,
+    Block,
     ReadingError,
     ReadingSettings,
     open_file,
@@ -359,3 +360,21 @@ def test_word_note_with_bold_lines_reads_into_its_sections() -> None:
     paths = [" > ".join(s.heading_path) for s in doc.sections]
     assert paths == ["Claims intake redesign - decision note", "Decision", "Who does what", "Open risks"]
     assert "five minutes" in " ".join(getattr(b, "text", "") for b in doc.sections[1].blocks)
+
+
+def test_a_page_a_model_described_is_cited_at_its_own_page_under_the_same_headings() -> None:
+    out = io.BytesIO()
+    c = Canvas(out, pagesize=LETTER)
+    c.setFont("Helvetica-Bold", 18)
+    c.drawString(72, 720, "Claims intake review")
+    c.setFont("Helvetica", 11)
+    c.drawString(72, 680, "The event queue carries every claim photo to the adjusters.")
+    c.showPage()
+    c.showPage()
+    c.save()
+    reading = read(out.getvalue(), filename="review.pdf", settings=OFF)
+    described = Block(id="p2.m0", kind="paragraph", text="Three boxes joined by arrows.", read_by="model")
+    pages = [reading.pages[0], reading.pages[1].model_copy(update={"source": "model", "blocks": [described]})]
+    doc = to_parsed_document(reading.model_copy(update={"pages": pages}))
+    by_model = [s for s in doc.sections if any("Three boxes" in getattr(b, "text", "") for b in s.blocks)]
+    assert [(s.page, s.heading_path) for s in by_model] == [(2, ["Claims intake review"])], doc.sections
