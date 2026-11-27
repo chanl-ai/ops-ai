@@ -180,11 +180,11 @@ The console steps run in their own script, since a browser cannot run the code a
 | 6a | Settings: piece size 500, pieces returned 3, a no-answer message; Save, reload; then a question nothing answers | Settings first show Precise's 5 pieces and 0.65 keyword floor; Stale after and Offer as an MCP tool are not shown, since nothing reads them yet; every change is kept; the Playground says the base's own no-answer message |
 | 6 | Delete a base an agent cites | The dialog names the agent and keeps Delete off until the name is typed; the base leaves the list |
 
-![The Documents tab with an indexed file and a failed scan, 1440 wide](media/uc-096-documents-1440.png)
-![The same tab, 390 wide](media/uc-096-documents-390.png)
-![The Playground answering from the manual, 1440 wide](media/uc-096-playground-1440.png)
-![The same screen, 390 wide](media/uc-096-playground-390.png)
-![Writing a page and asking the Playground a question](media/uc-096-base-end-to-end.gif)
+![The Documents tab with an indexed file and a failed scan, 1440 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-096-documents-1440.png)
+![The same tab, 390 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-096-documents-390.png)
+![The Playground answering from the manual, 1440 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-096-playground-1440.png)
+![The same screen, 390 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-096-playground-390.png)
+![Writing a page and asking the Playground a question](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-096-base-end-to-end.gif)
 
 `OPS_USECASE_MEDIA=1 make usecase-test UC=uc-096 LAYER=ui` writes the pictures and the clip here. The script checks that the
 clip is under 15 s and 2 MB.

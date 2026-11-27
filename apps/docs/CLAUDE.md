@@ -17,6 +17,7 @@ in @AGENTS.md before writing Next.js code. How to run it: [README.md](README.md)
 | `src/app/` | The catch-all page route, search, and `files/[...path]` for linked repository files |
 | `scripts/check-links.mjs` | Every link resolves and every page sits in a tab |
 | `scripts/check-public-pages.mjs`, `scripts/public-pages-allowlist.json` | Pages in the Docs, Security and Reference tabs name no repository path, `file:line`, local port or make target in code; the allowlist of older pages may only shrink |
+| `scripts/copy-images.mjs` | Every image under `docs/` copied into `public/` (git ignores it) before `dev` and `build`, so the site serves it at `/docs/<path under docs/>`, the URL markdown across the repository uses |
 | `scripts/export-diagrams.mjs` | `docs/diagrams/<name>.yaml` exported to its SVG; `--check` fails on a stale SVG |
 | `vercel.json` | Static hosting under `/docs` ([docs/deploy/docs-site.md](../../docs/deploy/docs-site.md)) |
 
