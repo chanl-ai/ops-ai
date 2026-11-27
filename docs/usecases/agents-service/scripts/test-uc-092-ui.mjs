@@ -3,7 +3,7 @@
 // tools-service as the gateway so the tool form lists real operations, publish requests left pending for a second
 // person, and workflow workers this script starts and stops. No model is called.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { publishReviewOn, versionFromEditor } from '../../lib/workflow_ui.mjs';
+import { publishReviewOn, twoPersonRuleOn, versionFromEditor } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const PASSWORD = 'northfield-demo';
@@ -17,6 +17,8 @@ await withUiStack(
   async (consoleUrl, stack) => {
     // A new workspace publishes at once; Priya turns review on for the team's workflows before anyone signs in.
     await publishReviewOn({ workflows: 'always' });
+    // The two-person rule is off by default, and the page's steps 6 and 7 need the requester refused.
+    await twoPersonRuleOn();
     const as = (token) => ({ Authorization: `Bearer ${token}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
     const H = as(await tokenFor(JAMES));
     const M = as(await tokenFor(MAYA));
