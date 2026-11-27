@@ -196,6 +196,17 @@ def test_listener_that_is_a_child_of_the_stacks_pidfile_pid_is_its_own(tmp_path:
     assert run(tmp_path, "check-offset", "--offset", "38000", env=env).returncode == 1
 
 
+def test_the_stacks_own_converter_container_does_not_block_make_up(tmp_path: Path) -> None:
+    # make converter-up runs before make up CONVERTER=1; docker's backend holds the converter's port.
+    env = fake_lsof(tmp_path, [(91017, "com.docker.backend", 8780 + 35000)])
+    (tmp_path / "bin" / "docker").write_text(
+        '#!/bin/sh\ncase "$*" in *ops-converter-35000*) echo "127.0.0.1:43780->8770/tcp";; esac\n'
+    )
+    assert run(tmp_path, "check-offset", "--offset", "35000", env=env).returncode == 0
+    (tmp_path / "bin" / "docker").write_text("#!/bin/sh\nexit 0\n")
+    assert run(tmp_path, "check-offset", "--offset", "35000", env=env).returncode == 1
+
+
 def test_missing_lsof_and_docker_warn_and_the_rest_of_the_check_runs(tmp_path: Path) -> None:
     bin_dir = tmp_path / "nobin"
     bin_dir.mkdir()

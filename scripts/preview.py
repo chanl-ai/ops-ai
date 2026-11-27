@@ -285,6 +285,12 @@ def docker_ports(project: str) -> set[int]:
     return {int(m) for m in re.findall(r":(\d+)->", tool_output(cmd))}
 
 
+def container_ports(name: str) -> set[int]:
+    """Host ports one named container publishes: the converter worker (make converter-up) runs outside compose."""
+    cmd = ["docker", "ps", "--filter", f"name=^{name}$", "--format", "{{.Ports}}"]
+    return {int(m) for m in re.findall(r":(\d+)->", tool_output(cmd))}
+
+
 def brief(held: list[str], limit: int = 2) -> str:
     """The first few blockers of one offset, so a refusal stays one readable line."""
     more = f" (+{len(held) - limit} more)" if len(held) > limit else ""
@@ -391,7 +397,9 @@ def check_offset(p: Previews, a: argparse.Namespace) -> int:
         elif marker.read_text().strip() != branch:
             held.append(f"data in .data/offset-{off} belongs to {marker.read_text().strip()}, not {branch}")
     ports = ports_for(off, dict(os.environ))
-    own_ports = docker_ports(f"ops-runtime-{off}") if any(v > 0 for v in ports) else set()
+    own_ports: set[int] = set()
+    if any(v > 0 for v in ports):
+        own_ports = docker_ports(f"ops-runtime-{off}") | container_ports(f"ops-converter-{off}")
     held += blockers(ports, listening(), with_descendants(p.own_pids(off)), own_ports)
     if held:
         print(f"refused: offset {off} is in use: " + brief(held, 4), file=sys.stderr)
