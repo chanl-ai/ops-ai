@@ -167,9 +167,9 @@ The console steps run in their own script, since a browser cannot run the code a
 | 2 | Add documents: upload a PDF, Pick from Files, choose the PDF already there, Add 2 documents | One call with both file ids; both indexed |
 | 3 | Reload the base | The documents source is active with two indexed items |
 
-![The Add documents dialog with an upload and a picked file, 1440 wide](media/uc-129-add-documents-1440.png)
-![The same dialog, 390 wide](media/uc-129-add-documents-390.png)
-![Uploading one file and picking another](media/uc-129-add-documents.gif)
+![The Add documents dialog with an upload and a picked file, 1440 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-129-add-documents-1440.png)
+![The same dialog, 390 wide](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-129-add-documents-390.png)
+![Uploading one file and picking another](https://opsai.chanl.ai/docs/usecases/knowledge/media/uc-129-add-documents.gif)
 
 `OPS_USECASE_MEDIA=1 make usecase-test UC=uc-129 LAYER=ui` writes the pictures and the clip here. The script checks that the
 clip is under 15 s and 2 MB.

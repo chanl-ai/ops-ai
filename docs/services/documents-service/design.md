@@ -6,7 +6,7 @@ The documents service turns a PDF that arrives by email, API, chat or upload int
 
 ## Flow
 
-![Steps from Layout to Validate are the documents service; it returns fields with a flag on those below the floor and stops. Everything in the right-hand column is a workflow: it stores the fields on the file, sends flagged fields to a person and acts on the result. The bottom row is the learning loop: corrections are kept beside the original read, become examples for the next read, and after five confirmed files with one layout the service offers a template, which a builder confirms as a new version of the document type.](images/design-flow.svg)
+![Steps from Layout to Validate are the documents service; it returns fields with a flag on those below the floor and stops. Everything in the right-hand column is a workflow: it stores the fields on the file, sends flagged fields to a person and acts on the result. The bottom row is the learning loop: corrections are kept beside the original read, become examples for the next read, and after five confirmed files with one layout the service offers a template, which a builder confirms as a new version of the document type.](https://opsai.chanl.ai/docs/services/documents-service/images/design-flow.svg)
 
 ## Neighbours
 
@@ -27,17 +27,17 @@ Subsystems compose through workflows, not through each other. The documents serv
 
 These wireframes fix what each screen shows and which existing component builds it (purple tags are files under `apps/console/src/components`). They are not visual designs: the built page, composed from those components and recorded under `docs/console/approved/`, becomes the spec once it is approved. `DocumentViewer` is the one new shared component; the read check reuses it.
 
-![1 · Data Hub › Files](images/design-data-hub-files.png)
+![1 · Data Hub › Files](https://opsai.chanl.ai/docs/services/documents-service/images/design-data-hub-files.png)
 
-![2 · File page](images/design-file-page.png)
+![2 · File page](https://opsai.chanl.ai/docs/services/documents-service/images/design-file-page.png)
 
-![3 · Extract](images/design-extract.png)
+![3 · Extract](https://opsai.chanl.ai/docs/services/documents-service/images/design-extract.png)
 
-![4 · Suggest template](images/design-suggest-template.png)
+![4 · Suggest template](https://opsai.chanl.ai/docs/services/documents-service/images/design-suggest-template.png)
 
-![5 · Data Hub › Document types › Restraining notice](images/design-data-hub-document-types-restraining-notice.png)
+![5 · Data Hub › Document types › Restraining notice](https://opsai.chanl.ai/docs/services/documents-service/images/design-data-hub-document-types-restraining-notice.png)
 
-![6 · Human Task › Read check](images/design-human-task-read-check.png)
+![6 · Human Task › Read check](https://opsai.chanl.ai/docs/services/documents-service/images/design-human-task-read-check.png)
 
 ## API
 

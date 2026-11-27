@@ -29,7 +29,7 @@ import remarkGfm from 'remark-gfm';
 import { SKIP, visit } from 'unist-util-visit';
 
 import { FIGURE_KINDS, figureFromMarker } from '../components/figures/markdown.mjs';
-import { githubUrl, isSitePage, pageAnchors, repoIndex } from './repo.mjs';
+import { githubUrl, isSitePage, pageAnchors, repoIndex, siteImagePath } from './repo.mjs';
 
 const SITE_MARKERS = ['cards', 'steps', 'whats-new'];
 
@@ -195,9 +195,30 @@ export function remarkOpsAi(options = {}) {
       tree.children.splice(h1, 1);
     }
 
+    // Images named by their URL on this site are read from the working tree instead, so a page renders the image of
+    // the commit it is built from and the build needs no network. The figure and diagram steps below see a local path.
+    visit(tree, 'image', (node) => {
+      const repoPath = siteImagePath(node.url);
+      if (!repoPath) return;
+      if (!idx.files.has(repoPath)) errors.push(`${at(node.url)}: no such image under docs/`);
+      else {
+        // A bare `media/x.png` would be resolved as a package name, so a path below the page starts with ./
+        const rel = path.posix.relative(dir, repoPath);
+        node.url = rel.startsWith('../') ? rel : `./${rel}`;
+      }
+    });
+
     // Links
     visit(tree, 'link', (node) => {
       const url = node.url;
+      // A link that opens an image this site publishes stays on this deployment, as a plain file link.
+      const imagePath = siteImagePath(url);
+      if (imagePath) {
+        if (!idx.files.has(imagePath)) errors.push(`${at(url)}: no such image under docs/`);
+        else node.url = `/${imagePath.slice('docs/'.length)}`;
+        (node.data ??= {}).siteFile = true;
+        return;
+      }
       if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('//')) return;
       if (url.startsWith('#')) {
         if (!ownAnchors.includes(decodeURIComponent(url.slice(1)))) errors.push(`${at(url)}: no such heading`);
@@ -366,7 +387,7 @@ export function remarkOpsAi(options = {}) {
 
     // A standalone HTML page is a plain file, not a route: a native link, so the router never prefetches it.
     visit(tree, 'link', (node, i, parent) => {
-      if (!node.url.startsWith('/files/') || !parent || i === undefined) return;
+      if (!(node.url.startsWith('/files/') || node.data?.siteFile) || !parent || i === undefined) return;
       parent.children[i] = jsx('FileLink', { href: node.url }, node.children, false);
       return SKIP;
     });
