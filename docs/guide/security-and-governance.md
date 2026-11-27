@@ -57,10 +57,14 @@ In the console you will find the same views in three places. **Govern › Access
 | Fresh sign-in for sensitive decisions (step-up) | A payment approval needs a sign-in less than five minutes old, by password or through the same identity provider; the decision keeps a fingerprint of it | Built |
 | Invites | An admin invites by email; the invite holds a hashed single-use token; a person who already has an account signs in first | Built |
 
-Once you are signed in, platform-service issues you a short-lived access token, signed with Ed25519 and valid for 15
-minutes. It renews that token with a rotating refresh token, so your session lasts 8 hours in total. If a refresh token
-is ever used a second time, it is refused and the attempt is recorded in the audit log. Every service checks tokens for
-itself against the public keys that platform-service publishes, rather than trusting another service's word.
+Once you are signed in, you hold a short-lived token that renews itself for up to 8 hours. Every service checks the
+token for itself against the public keys that platform-service publishes, rather than trusting another service's word.
+
+<!-- site: timeline caption="How long a sign-in lasts: a 15-minute token, renewed until the 8-hour session ends" -->
+- **0 minutes**: You sign in and platform-service issues an access token, signed with Ed25519
+- **15 minutes**: The access token expires
+  - A rotating refresh token renews it. If a refresh token is used a second time, it is refused and the attempt is recorded in the audit log.
+- **8 hours**: The session ends and you sign in again
 
 ## Roles
 
@@ -174,16 +178,18 @@ Ops AI records every security-relevant change and every call to an outside syste
 When someone saves or clears a workflow's schedule, the audit log shows the old and the new schedule written out in
 words. For the details of each record and its status, see [Data and database](data-and-database.md#the-audit-trail).
 
-## When the review goes well
+## With and without these controls
 
-When a reviewer asks who approved a change and which hosts the agent reached, you can answer by pointing to a row in a
-log instead of searching through code. Each action that changes data waits for a named person, who approves the exact
-input they saw. No host is reachable until a Security admin adds it to the list.
+When a reviewer asks who approved a change and which hosts the agent reached, the answer depends on whether these
+controls are in place.
 
-## Without these controls
-
-If you leave these controls out, each agent has to be reviewed on its own. A single unreviewed change to a customer's
-account could be enough to end the pilot, and answering an auditor's question could take days of reading code.
+<!-- site: before-after caption="Answering a risk review without the controls and with them" -->
+- **Without these controls**: Each agent is reviewed on its own, from its code.
+  - One unreviewed change to a customer's account could be enough to end the pilot
+  - Answering an auditor's question can take days of reading code
+- **With Ops AI**: You answer by pointing to a row in a log.
+  - Each action that changes data waits for a named person, who approves the exact input they saw
+  - No host is reachable until a Security admin adds it to the list
 
 ## Platform hardening
 

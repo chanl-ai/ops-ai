@@ -38,9 +38,15 @@ carries on from the one before it.
 
 ## Put an agent your team can chat with into a file
 
-Every agent starts here. Each agent has a draft and a published version. People chat with the published version, so
-your edits reach them only after you publish. Because the definition lives in a file or a few lines of code, a change
-to it can be reviewed like any other change.
+Every agent starts here. People chat with the published version, so your edits reach them only after you publish.
+Because the definition lives in a file or a few lines of code, a change to it can be reviewed like any other change.
+
+<!-- site: state caption="An agent's draft reaches people only after a publish request is approved" -->
+- **Draft**: Your edits, which nobody chats with
+  - **Publish requested**: You send a publish request
+- **Publish requested**: Your team's publish policy decides whether a reviewer is needed
+  - **Published**: A reviewer approves. A first publish needs one, and the person who asked cannot approve it
+- **Published**: People chat with this version
 
 In Python, `apply` creates the agent, or updates the draft of the agent that already has this name.
 

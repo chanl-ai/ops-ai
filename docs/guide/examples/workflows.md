@@ -204,10 +204,13 @@ opsai tasks decide "$TASK" approve --reason "The photo shows the damage." --prof
 opsai runs show "$RUN"
 ```
 
-A run that stops at a review has the status `waiting` and names the task. The decision is one of the actions the task
-offers, here `approve` or `reject`, and the run leaves the review step by the port with that name. The reviewer signs
-in under their own saved profile. After the decision, the run carries on in the background, so `opsai runs show` may
-print `queued` for a moment.
+<!-- site: sequence caption="A large refund stops at a review, waits for a second person and carries on by the port they choose" -->
+1. **You → Workflow run**: Start the refund
+2. **Workflow run → Human task**: Stops at the review with the status `waiting` and names the task
+3. **Reviewer → Human task**: Decides with one of the task's actions, here `approve` or `reject`
+   - The reviewer signs in under their own saved profile.
+4. **Human task → Workflow run**: The run leaves the review step by the port with that name
+5. **Workflow run → You**: Carries on in the background, so `opsai runs show` may print `queued` for a moment
 
 ## Let an agent answer one step
 

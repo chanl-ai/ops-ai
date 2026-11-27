@@ -24,11 +24,13 @@ it, a team that needs a fixed order has to choose between an agent that may skip
 
 ## Which to use
 
-| Use | When |
-|---|---|
-| A skill with instructions only | The agent needs guidance, and the order of actions does not matter |
-| A step-by-step skill | A person is in the conversation, the actions must happen in order, and some of them must be checked before the next one starts |
-| A workflow | No conversation is needed, or the work must survive long waits and restarts |
+<!-- site: decision caption="Choosing between a skill with instructions only, a step-by-step skill and a workflow" -->
+- **Is a person in the conversation?**
+  - **No, or the work must survive long waits and restarts**: Use a workflow.
+  - **Yes**: The next question is about order.
+    - **Must the actions happen in order, with some checked before the next one starts?**
+      - **Yes**: Use a step-by-step skill.
+      - **No, the agent only needs guidance**: Use a skill with instructions only.
 
 ## Write a skill with steps
 

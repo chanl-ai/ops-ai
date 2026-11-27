@@ -23,8 +23,16 @@ click from done. The same chat also answers questions from the handbook and foll
 2. **Ask what needs you.** Press **What needs me today** (or the waiting-task hint), or type the question yourself. The
    assistant lists your Human Tasks as cards, oldest first, and each card has **Approve** and **Reject**.
 3. **Decide in the chat.** A decision you make here goes through the same review as one made on the **Human Tasks**
-   page, under the same rules. A payment asks you to sign in again before it approves, and a second approver is needed
-   wherever the policy says so.
+   page, under the same rules.
+
+<!-- site: annotated caption="A waiting task as a card in the chat, with the rules that still apply to a decision made there" -->
+- **Human task · Approve a credit**: Listed by What needs me today, oldest first
+- **Actions**: Approve, Reject
+  - The same review as the Human Tasks page, under the same rules.
+- **Payment**: Asks you to sign in again before it approves
+  - A payment needs a fresh sign-in, as it does on the Human Tasks page.
+- **Second approver**: Needed wherever the policy says so
+  - The task stays open until that second person approves it.
 4. **Ask about the work.** You might ask, "What does the handbook say about debit disputes after 60 days?" Your
    team's agents answer from the knowledge bases they are given, and each answer cites the section it came from.
 5. **Follow up on a run.** Press **What happened to a run** and name the run you mean. The assistant reads it and tells
