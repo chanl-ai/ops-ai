@@ -1,24 +1,27 @@
 # Build with Ops AI
 
-Status: current. Each step has a runnable example folder in the repository, tested on every change.
+Status: current.
 
-**Climb from one chat message to an agent and a workflow that call each other, in seven steps you can run.**
+This guide starts with a single chat message and ends with an agent and a workflow that call each other, in seven
+steps you can run yourself.
 
-## You know what you want to build, not where to start
+## Where to begin when you are new to Ops AI
 
-A developer new to Ops AI has an agent or a workflow in mind and no path to it. The pieces (chat, knowledge, tools,
-agents, workflows) each have a page, and each page assumes the one before it.
+If you are new to Ops AI, you may already have an agent or a workflow in mind without knowing where to begin. Each
+of the pieces you will use (chat, knowledge, tools, agents and workflows) has its own page, and each of those pages
+assumes you have read the one before it.
 
-This guide is the path: seven short steps, each through the Ops AI command line, with the same calls available in the
-Python and TypeScript SDKs. Each step links to an example folder in the repository that you can run and copy.
+This guide takes you through the pieces in order, in seven short steps. You run each step from the Ops AI command
+line, and the same calls are available in the Python and TypeScript SDKs. Every step links to a runnable example
+folder in the repository that you can copy, and those examples are tested on every change.
 
 ## The plan
 
 <!-- site: steps -->
-1. **Talk to it**: one chat message, then a knowledge page.
-2. **Give it a tool**: one read operation, in Mock and then for real.
-3. **Make an agent and a workflow**: each applied from a file.
-4. **Make them call each other**: a workflow step asks an agent, and an agent starts a workflow.
+1. **Talk to it.** Send one chat message, then add a knowledge page.
+2. **Give it a tool.** Run one read operation, first in Mock and then for real.
+3. **Make an agent and a workflow.** You apply each one from a file.
+4. **Make them call each other.** A workflow step asks an agent a question, and an agent starts a workflow.
 
 ## Before you start
 
@@ -30,49 +33,52 @@ Python and TypeScript SDKs. Each step links to an example folder in the reposito
 
 ## Try it
 
-Run the steps in order. Each step's example folder holds the files and ids its command names, such as `agent.yaml`,
-`workflow.yaml` and `request.json`: open the folder first and copy them.
+Run the steps in order. Before each one, open its example folder and copy the files and ids that its command names,
+such as `agent.yaml`, `workflow.yaml` and `request.json`.
 
 <!-- site: steps -->
-1. **Chat**: send one message and read the reply.
+1. **Chat.** Send one message and read the reply.
    `opsai chat say -m "What can you help me with?"`
    ([example](../../examples/chat/01-ask-once/README.md))
-2. **Knowledge**: add one page to a knowledge base and search it.
+2. **Knowledge.** Add one page to a knowledge base and search it.
    `opsai kb add-text kb_... --title "ATM limits" --text "The daily limit is 500 dollars."`, then
    `opsai kb search kb_... "What is the daily limit?"`
    ([example](../../examples/knowledge/01-search-a-page/README.md))
-3. **Tool**: run one read operation in Mock, then for real.
+3. **Tool.** Run one read operation in Mock, then for real.
    `opsai tools run <app> <tool> --input id=42`, then the same with `--real`
    ([example](../../examples/tools/01-find-a-customer/README.md))
-4. **Agent**: apply an agent from a file, publish it, and ask it one question.
+4. **Agent.** Apply an agent from a file, publish it, and ask it one question.
    `opsai agents apply agent.yaml`, `opsai agents publish <id>`, `opsai agents chat <id> --message "..."`
    ([example](../../examples/agents/01-answer-from-instructions/README.md))
-5. **Workflow**: validate, apply and test-run a three-step workflow.
+5. **Workflow.** Validate, apply and test-run a three-step workflow.
    `opsai workflows validate workflow.yaml`, `opsai workflows apply workflow.yaml`,
    `opsai workflows run <id> --input request.json`
    ([example](../../examples/workflows/01-normalize-a-request/README.md))
-6. **A workflow asks an agent**: an Agent step calls a published agent and keeps its cited answer
+6. **A workflow asks an agent.** An Agent step calls a published agent and keeps the answer it gives, along with its
+   citations
    ([example](../../examples/compositions/01-workflow-asks-agent/README.md)).
-7. **An agent starts a workflow**: a chat calls a published workflow as a tool
+7. **An agent starts a workflow.** A chat calls a published workflow as one of its tools
    ([example](../../examples/compositions/02-agent-starts-workflow/README.md)).
 
 ## What success looks like
 
-At each step the command prints the record it made or the answer it got. A refused step prints why, such as a workflow
-input missing a required field, naming the field. After step 7 a chat starts a published workflow and a workflow
-step asks a published agent.
+At each step, the command prints the record it created or the answer it received. When a step is refused, the command
+tells you why. For example, if a workflow input is missing a required field, the message names that field. Once you
+have finished step 7, you have a chat that starts a published workflow and a workflow step that asks a published agent.
 
-## What skipping it costs
+## Why the order matters
 
-Without taking the steps in order, the first agent is built before the first tool runs, and a failure in one piece looks like a
-failure in all of them. Each step is small enough that a failure points to the piece that caused it.
+If you skip ahead, you may build your first agent before you have run your first tool. A failure in one piece then
+looks like a failure in all of them. Because each step is small, a failure that happens along the way points you to
+the piece that caused it.
 
-The [workflows](workflows.md) and [agents](agents.md) pages list every further example: approvals, checklists,
-delegation, evaluations.
+The [workflows](workflows.md) and [agents](agents.md) pages list every further example, including approvals,
+checklists, delegation and evaluations.
 
 ## How agents and workflows meet
 
-Agents and workflows call each other only through their public APIs, so either one works without the other.
+Agents and workflows call each other only through their public APIs. That means you can use either one on its own,
+without the other.
 
 <!-- site: compare caption="The two ways an agent and a workflow call each other" -->
 - **A workflow asks an agent**: Step 6 above
