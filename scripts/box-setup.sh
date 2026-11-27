@@ -137,6 +137,11 @@ if [ "$EXTERNAL_DB" = 0 ]; then
     printf 'ops' >"$BOX/pg.pw"
     initdb -D "$BOX/pg" -U ops --pwfile="$BOX/pg.pw" --auth=scram-sha-256 >/dev/null
   fi
+  # A box that went cold leaves postmaster.pid and the socket lock behind; the pid they name is then another process
+  # (opa, on the box this was seen on), so postgres refuses to start naming a postmaster that does not exist.
+  if ! pgrep -x postgres >/dev/null 2>&1; then
+    rm -f "$BOX/pg/postmaster.pid" "$BOX/pg-run/.s.PGSQL.5432.lock" "$BOX/pg-run/.s.PGSQL.5432"
+  fi
   define_service postgres "exec postgres -D $BOX/pg -k $BOX/pg-run -c listen_addresses=127.0.0.1 -c port=5432 -c max_connections=300"
   for _ in $(seq 40); do pg_isready -q -h 127.0.0.1 -p 5432 && break; sleep 1; done
   pg_isready -q -h 127.0.0.1 -p 5432 || die "postgres did not become ready"
