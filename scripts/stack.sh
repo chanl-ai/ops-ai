@@ -197,7 +197,7 @@ cmd_of() {
     # The worker also reads the workflows' mailboxes (Email received) and stores their attachments in files-service.
     worker) echo "$(auth_env)env $AGENTS_URLS $MAILBOX_ENV OPS_EMAIL_POLL_SECONDS=3 uv run --directory services/agents-service python -m ops_agents.api.worker" ;;
     # Seeds the openai-local connection at the fake on start; agents reach it with the dev runtime key it seeds.
-    models) echo "$(auth_env)env OPS_MODELS_PORT=$MODELS_PORT OPS_MODELS_FAKE_OPENAI_URL=http://127.0.0.1:$FAKE_OPENAI_PORT/v1 uv run --directory services/models-service python -m ops_models" ;;
+    models) echo "$(auth_env)env OPS_MODELS_PORT=$MODELS_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_FAKE_OPENAI_URL=http://127.0.0.1:$FAKE_OPENAI_PORT/v1 uv run --directory services/models-service python -m ops_models" ;;
     fakeai) echo "env FAKE_OPENAI_PORT=$FAKE_OPENAI_PORT uv run --directory services/models-service/scripts --project .. python -m fake_openai $PWD/services/models-service/seed/demo-fake-openai" ;;
     fakebank) echo "env FAKE_BANK_PORT=$FAKE_BANK_PORT uv run --directory services/tools-service/scripts --project .. python -m fake_bank $RUN_ABS/fake-bank" ;;
     apidocs) echo "env OPS_API_DOCS_PORT=$API_DOCS_PORT OPS_PLATFORM_PORT=$PLATFORM_PORT OPS_AGENTS_PORT=$AGENTS_PORT OPS_TOOLS_PORT=$TOOLS_PORT OPS_MODELS_PORT=$MODELS_PORT OPS_KB_PORT=$KB_PORT OPS_FILES_PORT=$FILES_PORT OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT python3 scripts/api_docs.py" ;;
@@ -205,8 +205,9 @@ cmd_of() {
     # Plugin knowledge sources are read through tools-service's gateway, when the plugins folder holds any.
     kb) echo "$(auth_env)env OPS_KB_PORT=$KB_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_kb OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_DOCUMENTS_URL=http://127.0.0.1:$DOCUMENTS_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT OPS_TOOLS__TIMEOUT_S=60 OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT uv run --directory services/kb-service python -m ops_kb" ;;
     # Local backend under .data/files, bytes through its proxy routes; scanning off marks files clean (dev only).
-    # files-service delivers its service events (file.deleted, file.read_requested) to agents-service.
-    files) echo "$(auth_env)env OPS_FILES_PORT=$FILES_PORT OPS_FILES_SCANNING=off OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT uv run --directory services/files-service python -m ops_files" ;;
+    # files-service delivers its service events (file.deleted, file.read_requested) to agents-service, and refuses to
+    # start without tools-service's address, which its watched folders read apps through.
+    files) echo "$(auth_env)env OPS_FILES_PORT=$FILES_PORT OPS_FILES_SCANNING=off OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT uv run --directory services/files-service python -m ops_files" ;;
     # documents-service extracts on its own models-service key, whatever key the root .env hands agents.
     documents) echo "$(auth_env)env OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_extract uv run --directory services/documents-service python -m ops_documents" ;;
     console)

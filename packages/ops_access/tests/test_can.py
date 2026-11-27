@@ -114,6 +114,9 @@ async def test_a_reviewers_own_request_is_refused_only_while_the_teams_two_perso
     assert ACCESS.can(strict, "reviews", "decide", team="team_a", requested_by=["b@bank.test"]) == "all"
     refused("own_request", ACCESS.can, strict, "reviews", "decide", team="team_a", requested_by=["a@bank.test"])
     refused("own_request", ACCESS.can, strict, "reviews", "decide", team="team_a", requested_by=[None, "usr_1"])
+    # A caller with neither email nor subject is recorded under its name (the services' `actor`), and is the requester.
+    nameless = await person(access={"team_a": ["reviewer"]}, policies={"requesterMayDecide": False}, email="", sub="")
+    refused("own_request", ACCESS.can, nameless, "reviews", "decide", team="team_a", requested_by=["Ana"])
     dev = Principal(
         kind="person",
         sub="usr_dev",
@@ -393,8 +396,8 @@ def test_a_grid_encodes_into_a_short_claim_and_back() -> None:
     grants: list[Grant] = [("agents", "view", "all"), ("memory", "edit", "own"), ("chat", "view", "own")]
     claim = encode_grid(grants)
     assert sorted(decode_grid(claim)) == sorted(grants)
-    # Every cell of the catalogue's 26 areas: one more area adds about 22 characters.
-    assert len(str(encode_grid([(a, x, "all") for a in AREAS for x in ACTIONS]))) < 640
+    # Every cell of the catalogue's 28 areas: one more area adds about 22 characters.
+    assert len(str(encode_grid([(a, x, "all") for a in AREAS for x in ACTIONS]))) < 680
 
 
 async def test_a_refusal_names_the_roles_the_workspaces_edited_grid_gives_the_cell() -> None:

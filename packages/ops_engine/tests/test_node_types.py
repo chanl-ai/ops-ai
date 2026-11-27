@@ -3,6 +3,7 @@ and a review's options become its out ports."""
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from typing import Any, cast
 
@@ -72,3 +73,38 @@ def test_what_a_step_acts_on_cannot_be_read_from_the_run(type_id: str, field: st
     assert [list(e.path) for e in errors] == [[field]], errors
     literal = {k: ("get_customer" if k == "operation" else "review") for k in params}
     assert not list(cast(Any, Draft202012Validator(dict(t.parameters))).iter_errors(literal))
+
+
+_NOT_FOR_BUILDERS = re.compile(r"ops\.|`|\$\.|Effects:|-service|gateway|\bports?\b", re.IGNORECASE)
+
+
+def test_every_type_explains_itself_to_a_builder_in_plain_words() -> None:
+    """The step sheet shows summary and how to people who build workflows; type ids, paths, port names and service
+    names there read as code."""
+    problems: list[str] = []
+    for t in default_registry().all():
+        if not t.summary.strip() or not t.how.strip():
+            problems.append(f"{t.id}: summary or how is empty")
+            continue
+        if len(t.summary) > 120 or not t.summary.endswith(".") or len(re.findall(r"[.!?](?:\s|$)", t.summary)) != 1:
+            problems.append(f"{t.id}: summary is not one sentence under 120 characters")
+        for name, text in (("summary", t.summary), ("how", t.how)):
+            if found := _NOT_FOR_BUILDERS.search(text):
+                problems.append(f"{t.id}: {name} contains {found.group(0)!r}")
+    assert not problems, "\n".join(problems)
+
+
+def test_what_a_failure_does_matches_the_worker() -> None:
+    """The sheet's When it fails reads `fails`: after its retries a step with an error port goes on by it (the
+    wrapper's `"error" in output_ports`); any other step's run waits as Stuck or stops as Failed, by the cause. A
+    `how` naming an Error path the type does not have would contradict it."""
+    problems: list[str] = []
+    for t in default_registry().all():
+        wired = "error" in t.output_ports() or any(p == "error" for _, _, p in t.optional_outputs)
+        fails = str(t.view().get("fails") or "")
+        always = "error" in t.output_ports()
+        if wired != ("Error path" in fails) or always == ("Stuck" in fails and "Failed" in fails):
+            problems.append(f"{t.id}: fails says {fails!r}")
+        if "Error path" in t.how and not wired:
+            problems.append(f"{t.id}: how names an Error path it does not have")
+    assert not problems, "\n".join(problems)

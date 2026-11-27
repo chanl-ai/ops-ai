@@ -495,6 +495,7 @@ class KnowledgeSourceView(TypedDict, closed=True):
     deletedTool: str | None
     egressFrom: NotRequired[str | None]
     fetchAtOnce: NotRequired[int]
+    files: NotRequired[bool]
     getTakesTag: NotRequired[bool]
     getTool: str
     inputs: NotRequired[dict[str, JsonValue]]

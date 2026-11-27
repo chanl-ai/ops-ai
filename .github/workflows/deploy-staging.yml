@@ -4,7 +4,7 @@
 #     with a branch, tag or commit.
 # A merge to develop is not deployed while staging is frozen: a release/X.Y.Z or hotfix/* branch exists on origin (a
 # release under test must not be overwritten; the permanent train, release/current, does not freeze it, and the owner
-# sets STAGING_HOLD while a hand-started deploy of the train is under test) or the repository variable STAGING_HOLD is set (its value is the reason). A push
+# sets STAGING_HOLD while a hand-started deploy of the train is under test) or the repository variable STAGING_HOLD is set (`X.Y.Z: reason`; it is ignored once tag vX.Y.Z exists, and a skipped deploy fails the job). A push
 # to a release or hotfix branch is deployed, and so is a hand-started run, which says in the summary what it overrode.
 #
 # The deploy is .github/actions/stg-deploy (`make stg-deploy REF=<sha>`): build once per commit, migrate, grants, every
@@ -81,22 +81,36 @@ jobs:
         env:
           ASKED: ${{ inputs.ref }}
           HOLD: ${{ vars.STAGING_HOLD }}
+        shell: bash
         run: |
+          set -o pipefail
           started=$(date +%s); echo "STG_STARTED=$started" >> "$GITHUB_ENV"
           sha=$(git rev-parse --verify -q "$ASKED^{commit}" || git rev-parse --verify -q "origin/$ASKED^{commit}") \
             || { echo "::error title=Staging not deployed::No commit named $ASKED"; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          # The pin file stg_deploy.sh reads lives on the owner's machine, so the runner asks the remote instead. Only a
-          # develop push is frozen: a push to the release or hotfix branch itself is the deploy being tested.
-          pin=""
+          # The pin file stg_deploy.sh reads lives on the owner's machine, so the runner asks the remote instead.
+          # The reasons a develop merge is not deployed (a release or hotfix branch on origin, STAGING_HOLD) are decided in
+          # scripts/staging_hold.py. Only a develop push is frozen by a branch: a push to the release or hotfix branch
+          # itself is the deploy being tested.
+          branches=""
           case "$GITHUB_REF" in
             refs/heads/release/* | refs/heads/hotfix/*) ;;
             *)
-              branches=$(git ls-remote --heads origin 'refs/heads/release/[0-9]*' 'refs/heads/hotfix/*' | sed 's|.*refs/heads/||' | tr '\n' ' ')
-              [ -z "$branches" ] || pin="staging is frozen for ${branches% }"
-              ;;
+              listing=$(git ls-remote --heads origin 'refs/heads/release/[0-9]*' 'refs/heads/hotfix/*') \
+                || { echo "::error title=Staging freeze unreadable::git ls-remote failed, so a branch freeze cannot be ruled out"; exit 1; }
+              branches=$(printf '%s\n' "$listing" | sed 's|.*refs/heads/||' | tr '\n' ' ') ;;
           esac
-          [ -z "$HOLD" ] || pin="${pin:+$pin; }STAGING_HOLD is set: $HOLD"
+          verdict=$(HOLD="$HOLD" SHA="$sha" BRANCHES="${branches% }" python3 scripts/staging_hold.py) || true
+          state=$(printf '%s\n' "$verdict" | sed -n 's/^state=//p'); text=$(printf '%s\n' "$verdict" | sed -n 's/^text=//p')
+          pin=$(printf '%s\n' "$verdict" | sed -n 's/^pin=//p')
+          printf '%s\n' "$verdict" | sed -n 's/^notice=//p' | while IFS= read -r n; do echo "::notice title=Merged branch freeze ignored::$n"; done
+          [ -n "$state" ] || { echo "::error title=Staging hold unreadable::scripts/staging_hold.py printed no state"; exit 1; }
+          case "$state" in
+            invalid) echo "::error title=Staging hold invalid::$text"; exit 1 ;;
+            ignored) echo "::notice title=Stale staging hold ignored::$text. Clear the variable." ;;
+          esac
+          held=false
+          [ -z "$pin" ] || held=true
           go=true
           if [ -n "$pin" ] && [ "$MANUAL" = true ]; then
             note="Started by hand, so it overrides the pin: $pin."
@@ -108,8 +122,7 @@ jobs:
           else
             note=""
           fi
-          echo "go=$go" >> "$GITHUB_OUTPUT"
-          echo "note=$note" >> "$GITHUB_OUTPUT"
+          { echo "go=$go"; echo "held=$held"; echo "hold_note=$note"; echo "note=$note"; } >> "$GITHUB_OUTPUT"
       - name: Deploy
         id: deploy
         if: steps.plan.outputs.go == 'true'
@@ -190,3 +203,12 @@ jobs:
               if [ -n "$failures" ]; then printf '\n%s\n%s\n%s\n' "$fence" "$failures" "$fence"; fi
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: A freeze or hold that skipped the deploy is a red job
+        # Green must mean deployed. A deploy skipped by a release or hotfix branch or by STAGING_HOLD fails the job with the hold text, so a stale
+        # variable or branch cannot sit behind a green run (a hand-started run overrides the pin and never gets here).
+        if: always() && steps.plan.outputs.go == 'false' && steps.plan.outputs.held == 'true'
+        env:
+          NOTE: ${{ steps.plan.outputs.hold_note }}
+        run: |
+          echo "::error title=Staging not deployed::$NOTE"
+          exit 1

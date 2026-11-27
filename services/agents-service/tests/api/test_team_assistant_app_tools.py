@@ -10,6 +10,8 @@ import json
 from types import SimpleNamespace
 from typing import Any, cast
 
+import pytest
+
 from ops_agents.activities.tool_directory import OperationRef
 from ops_agents.api.agent_registry import registry
 from ops_agents.api.ops_tools import ops_assistant_id
@@ -162,3 +164,36 @@ async def test_a_plugin_release_that_changes_a_skill_reaches_the_assistant_on_th
     [pinned] = live.skills
     assert pinned.version == 2 and "one query" in pinned.instructions, pinned
     assert (await give(c, ADMIN)).json()["data"]["state"] == "already"
+
+
+async def test_a_skill_draft_saved_while_the_plugin_update_is_built_is_never_written_over(
+    stack: Stack,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The update names the version it read, so a draft another builder saves before it saves is kept and the turn-on
+    answers 409 stale_base."""
+    from ops_agents.api.routers import team_assistant  # noqa: PLC0415 - the step interleaved is private
+    from ops_agents.api.routers import templates as template_routes  # noqa: PLC0415
+    from ops_agents.api.skills import skills  # noqa: PLC0415
+
+    c, rt = stack
+    rt.tool_directory = Directory()
+    templates = ChangingTemplates()
+    rt.tool_reviews = SimpleNamespace(tools=templates)  # type: ignore[assignment]
+    await start(c, ADMIN)
+    await give(c, ADMIN)
+    templates.instructions = "Read the client in one query with its related records."
+    build = template_routes._skill_content  # pyright: ignore[reportPrivateUsage]
+
+    async def build_then_lose_the_race(runtime: Any, team: str, t: Any, name: str, kbs: list[str]) -> Any:
+        content = await build(runtime, team, t, name, kbs)
+        [row] = [r for r in await skills(runtime).rows() if r.published_version is not None]
+        newest = (await skills(runtime).versions(row.id))[0].content
+        await skills(runtime).save_draft(
+            row.id, {**newest, "instructions": "Edited by someone else."}, by="other@x", note="meanwhile"
+        )
+        return content
+
+    monkeypatch.setattr(team_assistant, "_skill_content", build_then_lose_the_race)
+    refused = await give(c, ADMIN)
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "stale_base", refused.text

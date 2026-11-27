@@ -29,8 +29,9 @@ CHECKS = \
   isolation-markings isolation-sites \
   store-inventory roles-matrix sbom k8s-base \
   ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards \
-  downgrades migration-heads token-lifetime cross-service standards service-standards service-standards-self-test list-routes \
-  ci-steps ci-steps-self-test ci-local-self-test new-migration-self-test builder-watch-self-test usecase-outputs
+  downgrades migration-heads token-lifetime cross-service standards service-standards service-standards-self-test list-routes gateway-routes \
+  ci-steps ci-steps-self-test ci-local-self-test new-migration-self-test builder-watch-self-test usecase-outputs \
+  staging-hold-tests quarantine quarantine-self-test ci-usecases-self-test
 
 # Access decided outside can(), the exceptions each lane may still hold, and the trailer a new line needs.
 CHECK_ACCESS_PATHS = ^(services|packages)/[^/]+/src/.*\.py$$|^apps/(console|embed)/src/|^access-exceptions-allowlist\.txt$$|^docs/architecture/roles-and-permissions\.md$$|^scripts/(check_access_exceptions\.py|access-baselines/)
@@ -137,6 +138,11 @@ check-paths.service-standards-self-test = ^scripts/check_service_standards\.py$$
 check-run.list-routes = $(PY) scripts/check_list_routes.py && $(PY) scripts/check_list_routes.py --self-test
 check-paths.list-routes = ^services/[^/]+/openapi\.json$$|^list-routes-allowlist\.txt$$|^scripts/check_list_routes\.py$$
 
+# Every /api/<service>/ path the console's clients call has a route in each gateway config (deploy/**/Caddyfile); a
+# call the gateway leaves out falls through to the console and answers 404.
+check-run.gateway-routes = $(PY) scripts/check_gateway_routes.py && $(PY) scripts/check_gateway_routes.py --self-test
+check-paths.gateway-routes = ^deploy/.*Caddyfile$$|^deploy/compose/app\.yaml$$|^apps/console/src/lib/api/.*-http\.ts$$|^apps/console/src/lib/api/index\.ts$$|^scripts/check_gateway_routes\.py$$
+
 # Strict types on the code and its tests: `packages` as one run, and each service through its own typecheck target. A new
 # test file's untyped helper reached CI because nothing on this list type-checked tests. Pre-commit runs only the members
 # whose files are staged. Code outside tests stays at zero errors; a test file may hold no more than its row in the
@@ -179,6 +185,14 @@ check-run.ci-steps-self-test = $(PY) scripts/ci_steps.py --self-test
 check-paths.ci-steps-self-test = ^scripts/ci_steps\.py$$
 
 # The jobs CI would run for this change (scripts/ci-plan.sh + ci.yml), side by side, each on its own database and ports.
+check-run.staging-hold-tests = $(PYTEST) scripts/tests/test_staging_hold.py
+check-paths.staging-hold-tests = ^scripts/(staging_hold\.py|tests/test_staging_hold\.py)$$|^\.github/workflows/deploy-staging\.yml$$
+check-run.quarantine = $(PY) scripts/quarantine.py check
+check-paths.quarantine = ^config/quarantine\.json$$|^scripts/quarantine\.py$$
+check-run.quarantine-self-test = $(PY) scripts/quarantine.py --self-test
+check-paths.quarantine-self-test = ^scripts/quarantine\.py$$
+check-run.ci-usecases-self-test = $(PY) scripts/ci_usecases.py --self-test
+check-paths.ci-usecases-self-test = ^scripts/(ci_usecases|quarantine)\.py$$|^scripts/agents/(affected_usecases\.py|usecase_map\.json)$$
 check-run.ci-local-self-test = $(PY) scripts/ci_local.py --self-test
 check-paths.ci-local-self-test = ^scripts/ci_local\.py$$|^\.github/workflows/ci\.yml$$
 

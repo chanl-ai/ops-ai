@@ -2,7 +2,7 @@
 # while :3016 runs the latest main. scripts/preview.py owns the list and the offsets; the stack is the ordinary one.
 #   make wt BRANCH=feat/x          worktree under ../ops-ai-worktrees/feat/x, installs, starts its stack
 #   make wt-list                   branch, console URL and age; regenerates the local page
-#   make wt-stop BRANCH=feat/x     stops it by pid; its data and worktree stay
+#   make wt-stop BRANCH=feat/x     stops it by pid and drops its offset's database volume; the worktree stays
 #   make review-main               moves :3016 to the latest origin/main and restarts it (data stays)
 .PHONY: wt wt-list wt-stop review-main
 
@@ -18,7 +18,7 @@ wt: ## Worktree and stack for BRANCH on the next free port offset (shared packag
 wt-list: ## Each preview's branch, console URL and age; rewrites the previews page (PREVIEW_PAGE, default .run/previews.html)
 	@$(PREVIEW) list
 
-wt-stop: ## Stop BRANCH's preview by pid; its data stays
+wt-stop: ## Stop BRANCH's preview by pid and drop its offset's database volume; the worktree stays
 	@$(PREVIEW) stop --branch "$(BRANCH)"
 
 review-main: ## Move the :3016 stack to the latest origin/main and restart it, never reset (DRY_RUN=1 prints the steps)

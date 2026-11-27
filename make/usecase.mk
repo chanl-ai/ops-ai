@@ -2,7 +2,7 @@
 # tests; these targets only call scripts/usecase.mjs, which runs one script per use case and layer. Scripts start the
 # agents service on the scripted model on their own ports, so no target here makes a real model call unless
 # APPROVED_REAL_CALLS=<n> is set.
-.PHONY: usecase-extract usecase-add usecase-update usecase-run usecase-index usecase-test usecase-report usecase-list usecase-show usecase-coverage usecase-new usecase-runner-test usecase-reset
+.PHONY: usecase-pick quarantine usecase-extract usecase-add usecase-update usecase-run usecase-index usecase-test usecase-report usecase-list usecase-show usecase-coverage usecase-new usecase-runner-test usecase-reset
 
 # Each run picks free ports and creates its own database (ops_usecase_r<pid>_<hex>), dropped when it ends, so runs
 # from different sessions never collide. OPS_USECASE_{AGENTS,TOOLS,MODELS,CONSOLE}_PORT and OPS_USECASE_DB set in the
@@ -45,6 +45,15 @@ usecase-reset: ## Drop runner-made use-case databases, including ones a killed r
 
 usecase-runner-test: ## Type-check and test packages/usecase-runner
 	pnpm --filter @ops-ai/usecase-runner verify
+
+usecase-pick: ## The use cases CI runs for a change, from the file-to-use-case map: make usecase-pick [BASE=origin/develop] [HEAD=HEAD]
+	@python3 scripts/ci_usecases.py pick --base $(or $(BASE),origin/develop) --head $(or $(HEAD),HEAD)
+
+quarantine: ## Flaky use cases CI runs but does not gate on: make quarantine | quarantine ADD=uc-12[:layer] OWNER=<name> UNTIL=YYYY-MM-DD WHY=<reason> | quarantine REMOVE=uc-12 | quarantine CHECK=1
+	@if [ -n "$(ADD)" ]; then python3 scripts/quarantine.py add "$(ADD)" --owner "$(OWNER)" --until "$(UNTIL)" --why "$(WHY)"; \
+	elif [ -n "$(REMOVE)" ]; then python3 scripts/quarantine.py remove "$(REMOVE)"; \
+	elif [ -n "$(CHECK)" ]; then python3 scripts/quarantine.py check; \
+	else python3 scripts/quarantine.py list; fi
 
 uc-impacted: ## The core UI use cases plus the ones the change since BASE touches, run by WORKERS exports that share the list, one summary line each: make uc-impacted [BASE=origin/main] [MAX=8] [WORKERS=4 when free memory is above 30%, else 2] [UC_IDS="uc-1 uc-2"] [VERBOSE=1]
 	@python3 scripts/uc_impacted.py --base $(or $(BASE),origin/main) $(if $(MAX),--max $(MAX))

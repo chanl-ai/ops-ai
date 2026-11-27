@@ -40,7 +40,7 @@ await withUiStack(
       await dialog.getByLabel('Name').fill(NAME);
       await dialog.getByLabel('Starts when').fill('A customer asks for a refund');
       const created = armed(page.waitForResponse((r) => r.request().method() === 'POST' && r.url() === `${agents}/v1/workflows/definitions`, { timeout: 60_000 }));
-      await dialog.getByRole('button', { name: 'Create and open' }).click();
+      await dialog.getByRole('button', { name: 'Create', exact: true }).click();
       const id = (await (await created).json()).data?.workflowId;
       await page.waitForURL(`**/workflows/definitions/${id}`, { timeout: 60_000 });
       await page.getByTestId('definition-node').first().waitFor({ timeout: 60_000 });
@@ -78,11 +78,12 @@ await withUiStack(
       await page.locator('[data-testid="definition-node"][data-node-id="done"]').dblclick();
       await page.locator('[data-field="node-done-outcome"]').fill('refunded');
       const output = page.locator('[data-mapping="node-done-output"]');
-      await output.getByRole('combobox', { name: 'Value kind' }).click();
-      await page.getByRole('option', { name: 'Step output' }).click();
-      await output.getByRole('combobox', { name: 'Insert a step output' }).click();
-      await page.getByRole('option', { name: /Run input/ }).click();
-      await page.locator('[data-field="node-done-output"]').fill('$.input.amount');
+      // The trigger declares no input, so the picker has no Amount to offer; the path is typed under All settings,
+      // the one place a path is typed, and the Output field then shows it as a chip.
+      await page.getByTestId('definition-node-all-settings').click();
+      const raw = page.getByTestId('definition-node-parameters');
+      await raw.fill(JSON.stringify({ ...JSON.parse(await raw.inputValue()), outcome: 'refunded', output: '$.input.amount' }, null, 2));
+      await output.getByTestId('field-chip').waitFor({ timeout: 10_000 });
       await page.getByTestId('definition-problems').getByText(/No problems/).waitFor({ timeout: 30_000 }).catch(() => undefined);
       const v2 = await versionFromEditor(page, id, { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
       const stored = (await (await api(`/v1/workflows/definitions/${id}`)).json()).data;

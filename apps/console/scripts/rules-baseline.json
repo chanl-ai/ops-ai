@@ -6,6 +6,7 @@
     "src/app/build/runs/batches/[id]/page.tsx": 2,
     "src/app/connections/connect/page.tsx": 1,
     "src/app/connections/sign-in/return/page.tsx": 1,
+    "src/app/data/files/watches/page.tsx": 1,
     "src/app/data/knowledge/_parts/kb-settings-tab.tsx": 1,
     "src/app/data/knowledge/page.tsx": 1,
     "src/app/data/secrets/[id]/page.tsx": 1,
@@ -148,5 +149,10 @@
     "src/components/widgets/layout-editor.tsx": 7,
     "src/components/workflows/canvas-controls.tsx": 5,
     "src/components/workflows/story-feed.tsx": 1
+  },
+  "sections": {
+    "src/app/build/skills/[id]/_parts/skill-editor.tsx": 1,
+    "src/components/chat/widget-layout.tsx": 1,
+    "src/components/chat/widgets.tsx": 1
   }
 }

@@ -131,7 +131,7 @@ function StepSheet({
   const index = node ? order.findIndex((n) => n.id === node.id) : -1;
   const steps: StepRefs = React.useMemo(() => {
     if (!node) return { all: [], earlier: [] };
-    const ref = (n: EngineNode): StepRef => ({ id: n.id, label: n.name || n.id, type: n.type });
+    const ref = (n: EngineNode): StepRef => ({ id: n.id, label: n.name || n.id, type: n.type, typeLabel: 'Step' });
     const before = upstream(def, node.id);
     const others = def.nodes.filter((n) => n.id !== node.id);
     return { all: others.map(ref), earlier: others.filter((n) => before.has(n.id)).map(ref) };

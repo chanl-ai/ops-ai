@@ -164,3 +164,13 @@ def test_cli_eval_exits_by_the_runs_gate_so_ci_stops_on_a_blocked_check(
     out = capsys.readouterr()
     if answer == "blocked":
         assert "Does not name the fee." in out.out and "BLOCKED" in out.out and "cost: $0.0123" in out.out
+
+
+def test_apply_sends_the_agents_model_settings_on_update() -> None:
+    def handler(r: httpx.Request) -> httpx.Response:
+        if r.method == "PATCH":
+            assert json.loads(r.content)["modelSettings"] == {"temperature": 0.2}
+            return ok({"id": "ag_2"})
+        return ok({"id": "ag_2", "name": "A", "version": 1, "digest": "d"})
+
+    client(handler).agents.apply({"id": "ag_2", "name": "A", "role": "r", "modelSettings": {"temperature": 0.2}})

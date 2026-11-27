@@ -21,15 +21,25 @@ queries = 2
 queries = 1
 query = { provider = "openai" }
 
-# The shared list contract: the page's count and its rows.
+# The shared list contract: the page's count and its rows, then one page of their connections by id, for their names.
 ["GET /v1/models/aliases"]
-queries = 2
-caller = "service"
+queries = 4
 
-# The shared list contract: the page's count and its rows.
+# The shared list contract: the page's count and its rows, then one page of their connections by id, for their names.
 ["GET /v1/models/aliases/{name}/versions"]
+queries = 4
+
+# The alias's serving version, then its connection's type; the knobs come from the catalog in memory.
+["GET /v1/models/aliases/{name}/knobs"]
 queries = 2
-caller = "service"
+
+# The registry, read at start-up: no statement.
+["GET /v1/models/provider-types"]
+queries = 0
+
+# The connection's row; its models come from the catalog in memory.
+["GET /v1/models/providers/{provider_id}/catalog"]
+queries = 1
 
 # The shared list contract: the page's count and its rows.
 ["GET /v1/models/keys"]

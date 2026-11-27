@@ -15,9 +15,11 @@ from sqlalchemy.pool import StaticPool
 
 from ops_access import AREAS, BUILTIN_GRIDS, encode_grid
 from ops_agents.api.app import create_app
+from ops_agents.api.engine_lifecycle import KIND
 from ops_agents.api.routers import channel_list, forms, workflows
 from ops_agents.api.routers.engine import router as engine_router
 from ops_agents.api.routers.engine import runs_router
+from ops_agents.store.agent_registry import AgentRegistry
 from ops_agents.store.base import metadata
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
@@ -42,12 +44,13 @@ def person(
     *,
     policies: dict[str, Any] | None = None,
     unticked: tuple[tuple[str, str], ...] = (),
+    email: str | None = None,
 ) -> dict[str, str]:
     """A platform token for `role` in `team`. `unticked` names cells an admin took off the role on the Roles page: the
     token then carries the role's stored grid without them, as platform-service issues it after that edit."""
     claims: dict[str, Any] = {
         "sub": sub,
-        "email": f"{sub}@harborpine.example",
+        "email": f"{sub}@harborpine.example" if email is None else email,
         "name": sub,
         "kind": "person",
         "security_team": "team_security",
@@ -172,6 +175,7 @@ async def test_a_member_without_the_workflows_view_cell_reads_no_workflow_defini
         "/v1/workflows/definitions/account-uses": {"app": "gmail", "name": "ops"},
         wf: {},
         f"{wf}/versions/{base['version']}/shapes": {},
+        f"{wf}/sample": {"step": "small"},
         f"{wf}/diff": {"from": "1", "to": "working-copy"},
         f"{wf}/publish-preview": {},
     }
@@ -197,6 +201,10 @@ async def test_a_member_without_the_workflows_view_cell_reads_no_workflow_defini
     assert (await c.get(picker, params={"source": "workflows"}, headers=NOT_A_WORKFLOW_READER)).status_code == 403
     assert (await c.get(picker, params={"source": "agents"}, headers=NOT_A_WORKFLOW_READER)).status_code == 200
     assert (await c.get(picker, params={"source": "workflows"}, headers=VIEWER)).status_code == 200
+    # The step types a form is built from are read with the same view cell.
+    for who in (NOT_A_WORKFLOW_READER, CHAT_USER):
+        assert (await c.get("/v1/workflows/node-types", headers=who)).status_code == 403
+    assert (await c.get("/v1/workflows/node-types", headers=VIEWER)).status_code == 200
 
 
 # Every GET on these routers asks workflows.view, except the step-form picker, which asks each source's own view cell
@@ -243,3 +251,44 @@ async def test_a_member_without_the_workflows_view_cell_reads_no_workflow_run_or
         reader = BUILDER if template.endswith("publish-preview") else VIEWER
         read = await c.get(path, params=params, headers=reader)
         assert read.status_code in (200, 404), f"{template}: {read.status_code} {read.text[:200]}"
+
+
+async def test_a_save_and_a_publish_by_someone_with_no_email_record_their_subject_as_author(
+    stack: tuple[AsyncClient, AsyncEngine],
+) -> None:
+    # An API key cannot edit a workflow (403 role_required), so these builders carry a token that names no email.
+    c, engine = stack
+    first, second = (
+        person("nomail-a", "team_ops", "builder", email=""),
+        person("nomail-b", "team_ops", "builder", email=""),
+    )
+    saved = await c.post("/v1/workflows/definitions", json={"definition": definition("by_sub")}, headers=first)
+    assert saved.status_code == 201, saved.text
+    asked = await c.post("/v1/workflows/definitions/by_sub/publish-requests", json={}, headers=first)
+    assert asked.status_code == 201, asked.text
+    with tenant_scope(TENANT):
+        [version] = await DefinitionStore(EngineTransactions(engine)).versions("by_sub")
+    assert version.created_by == "nomail-a", version.created_by
+    with tenant_scope(TENANT):
+        requests = await AgentRegistry(engine).requests(KIND, "by_sub")
+    assert [r.requested_by for r in requests] == ["nomail-a"], requests
+    wf = "/v1/workflows/definitions/by_sub"
+    base = (await c.get(wf, headers=first)).json()["data"]["saveBase"]
+    body = {
+        "definition": definition("by_sub") | {"name": "A"},
+        "baseVersion": base["version"],
+        "baseDigest": base["digest"],
+    }
+    assert (await c.put(f"{wf}/working-copy", json=body, headers=first)).status_code == 200
+    # A newer version lands; the first person's copy is now outdated and is theirs. The second person, starting from the
+    # newest version, would drop it unseen: refused, because their subjects differ though neither has an email.
+    newer = await c.post(
+        "/v1/workflows/definitions", json={"definition": definition("by_sub") | {"name": "V2"}}, headers=BUILDER
+    )
+    assert newer.status_code == 201, newer.text
+    fresh = (await c.get(wf, headers=second)).json()["data"]["saveBase"]
+    again = {"baseVersion": fresh["version"], "baseDigest": fresh["digest"]}
+    other = await c.put(
+        f"{wf}/working-copy", json={"definition": definition("by_sub") | {"name": "B"}} | again, headers=second
+    )
+    assert other.status_code == 409 and other.json()["error"]["code"] == "stale_base", other.text

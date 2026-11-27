@@ -1167,6 +1167,7 @@ class SessionOut(TypedDict, closed=True):
 
 
 class TeamPermissions(TypedDict, closed=True):
+    heldInTeam: list[EffectivePermission]
     permissions: list[EffectivePermission]
     teamId: str
     teamName: str

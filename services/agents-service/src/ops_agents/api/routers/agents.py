@@ -25,7 +25,7 @@ from ops_agent_kernel.prompt_writer import Brief, Patterns
 from ops_agents.activities.agent_limits import AgentLimits, check_limits, limits_of
 from ops_agents.activities.agent_limits import wire as wire_limits
 from ops_agents.activities.tool_directory import ToolsUnavailable
-from ops_agents.app import agent_brief
+from ops_agents.app import agent_brief, instruction_sections
 from ops_agents.app.brief_draft import draft_brief
 from ops_agents.app.evals import parse_cases, run_eval
 from ops_agents.domain.evals import TRIGGER_CLI, TRIGGER_MANUAL
@@ -41,6 +41,7 @@ from ops_store import isolation
 from ...app.skill_content import Problem, blocker_of
 from ...store.agent_registry import AgentRow, digest_of, refuse_stale
 from ...store.graphs import StoredThread
+from ...store.instruction_sections import InstructionSections
 from ...store.template_copies import TemplateCopies
 from .. import eval_gate, publish_reviews
 from ..account_names import require_team_accounts
@@ -69,7 +70,7 @@ from ..engine_agents import KernelModels
 from ..envelope import ok
 from ..eval_runs import judge_for, prices_of, run_saved, version_turn
 from ..guardrails import resolve_pins
-from ..model_aliases import chat_aliases
+from ..model_aliases import chat_aliases, model_setting_problem
 from ..publish_policy import Decision, decide, team_document
 from ..review_sla import sla_hours
 from ..rights import rights
@@ -187,6 +188,14 @@ class AgentPatch(In):
     brief: Brief | None = None
     prompt_mode: Literal["brief", "full"] | None = None
     patterns: Patterns | None = None
+    # The model settings by knob name, as the whole map: checked against the knobs of the version's alias
+    # (GET /v1/model-aliases/{name}/knobs) and refused (422 `model_setting_invalid`) naming the knob it breaks.
+    model_settings: (
+        dict[
+            Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")], float | int | Annotated[str, Field(max_length=40)]
+        ]
+        | None
+    ) = Field(default=None, max_length=12)
     note: str | None = None
     # Set by the provisioning service only.
     template_id: str | None = Field(default=None, min_length=1, max_length=120)
@@ -276,7 +285,7 @@ async def _offered(rt: Runtime, directory: ToolRows | None) -> set[str] | None:
     return {t["id"] for t in await known_tools(rt, listed=directory)}
 
 
-def _stale(tool_ids: list[str], offered: set[str] | None) -> list[str]:
+def stale_tool_ids(tool_ids: list[str], offered: set[str] | None) -> list[str]:
     """Granted ids the directory no longer offers (unpublished, hidden, drifted or deleted). `workflow:` grants are
     judged by the workflow runner. Unknown when tools-service cannot answer: an agent page should not fail on it, so
     nothing is reported stale then."""
@@ -373,7 +382,7 @@ async def _view(rt: Runtime, agent_id: str, *, directory: ToolRows | Literal["as
 def _decorated(row: Json, offered: set[str] | None, uses: list[WorkflowUse]) -> AgentView:
     """An agent's reply from its row joined to its newest version's `spec` and its `tasks_24h`."""
     view = agent_view(row, cast(Json, row["spec"]), int(cast(int | str | float, row["tasks_24h"])))
-    view["staleToolIds"] = _stale(view["toolIds"], offered)
+    view["staleToolIds"] = stale_tool_ids(view["toolIds"], offered)
     view["usedIn"] = sorted(uses, key=lambda u: u["workflowName"])
     view["workflowIds"] = sorted({u["workflowId"] for u in uses if not u.get("own")})
     view["templateId"], view["protection"] = row.get("template_id"), row.get("protection")
@@ -532,6 +541,7 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
             "brief",
             "prompt_mode",
             "patterns",
+            "model_settings",
             "template_id",
             "protection",
         },
@@ -559,12 +569,16 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
         spec["widgets"] = body.widgets.model_dump(by_alias=True)
     if body.memory is not None:
         spec["memory"] = body.memory.model_dump(by_alias=True)
+    if body.model_settings is not None:
+        alias = str(spec.get("model") or "") or rt.settings.model_alias
+        spec["modelSettings"] = await _checked_model_settings(rt, alias, body.model_settings)
     spec = agent_brief.patched(
         spec,
         brief=body.brief,
         mode=body.prompt_mode,
         patterns=body.patterns,
         writes_prompt=body.instructions is not None or body.role is not None,
+        listing=await instruction_sections.effective(InstructionSections(rt.db)),
     )
     # Saved limits must still agree with the version: a changed model or a dropped tool without new limits is refused,
     # naming the limit, rather than leaving callers a choice the agent no longer has.
@@ -573,6 +587,20 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
     await reg.save(agent_id, spec, by=me.email, note=body.note or "", base=read)
     await reg.set_template(agent_id, template_id=body.template_id, protection=body.protection)
     return ok(await _view(rt, agent_id))
+
+
+async def _checked_model_settings(rt: Runtime, alias: str, wanted: dict[str, float | int | str]) -> Json:
+    """`wanted` when every knob is one the alias's model takes, in its range; else 422 `model_setting_invalid` naming
+    the first knob it breaks. The models service fits each call again, since the alias can later move models."""
+    if not wanted:
+        return {}
+    if not alias:
+        raise Unprocessable("Model settings apply to the agent's model alias; pick one first.", code="no_model_alias")
+    assert rt.model_aliases is not None
+    held = await rt.model_aliases.knobs(alias)
+    if (why := model_setting_problem(wanted, cast(Json, held["knobs"]))) is not None:
+        raise Unprocessable(why, code="model_setting_invalid", details={"alias": alias})
+    return dict(wanted)
 
 
 async def _check_knowledge(rt: Runtime, wanted: list[str], held: list[str]) -> None:
@@ -692,7 +720,12 @@ async def list_versions(rt: Rt, _: Reader, __: Tx, agent_id: str) -> JSONRespons
                 "savedAt": v.saved_at,
                 "savedBy": v.saved_by,
                 **({"publishedAt": v.published_at, "publishedBy": v.published_by} if v.published_at else {}),
-                **({"reviewId": v.review_id} if v.review_id else {}),
+                # A version waiting in Reviews names its open request, so the page can offer Withdraw.
+                **(
+                    {"reviewId": review}
+                    if (review := pending.id if pending and int(pending.version) == n else v.review_id)
+                    else {}
+                ),
             }
         )
     return ok(out)

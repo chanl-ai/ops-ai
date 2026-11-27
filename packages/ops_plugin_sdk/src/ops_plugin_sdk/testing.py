@@ -187,8 +187,9 @@ def knowledge_contract(
     change: Callable[[], str],
     delete: Callable[[], str],
 ) -> list[str]:
-    """What a knowledge-source plugin must do for kb-service to sync it, run against its fake system: list every item,
-    fetch one with its content, answer `unchanged` for a version tag that still matches, find an item `change` changed
+    """What a knowledge-source plugin must do for kb-service (and Files) to read it, run against its fake system:
+    find places to pick (through its scopes tool, when it has one), list every item page by page, fetch one with its
+    content and access list, answer `unchanged` for a version tag that still matches, find an item `change` changed
     (through its changes tool, or by listing since the watermark), and find an item `delete` removed (through its
     deleted tool, or by its absence from a full listing). `change` and `delete` act on the fake and return the item's
     id. The answer is the list of problems; empty means the plugin passes."""
@@ -196,7 +197,16 @@ def knowledge_contract(
     if found is None:
         return [f"{plugin.manifest.id} offers no knowledge source {source}"]
     given: dict[str, JsonValue] = {"source": dict(values)} if values is not None else {}
-    items, last, problems = _list_all(plugin, found.list, given, settings, fake)
+    problems: list[str] = []
+    if found.scopes is not None:
+        places = call(plugin, found.scopes, given, settings, fake)
+        rows = cast(dict[str, JsonValue], places).get("scopes") if isinstance(places, dict) else None
+        if not isinstance(rows, list) or not rows:
+            problems.append(f"{found.scopes} found no places to pick")
+        elif not all(isinstance(r, dict) and cast(dict[str, JsonValue], r).get("id") for r in rows):
+            problems.append(f"{found.scopes} gave a place without an id")
+    items, last, listed = _list_all(plugin, found.list, given, settings, fake)
+    problems += listed
     if not items:
         return [*problems, f"{found.list} listed nothing to check"]
     first = items[0]

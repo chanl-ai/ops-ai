@@ -1,4 +1,4 @@
-import type { DefinitionDiff, DefinitionPublished, DefinitionPublishRequest, DefinitionValidation, DefinitionView, DiffSide, WorkflowPublishPreview, WorkingCopySaved, EngineDefinition, EngineNodeType, EngineOption, EngineRun, EngineRunDetail, EngineRunInput, EngineRunStarted, EngineRunsParams, OptionSource, StartWorkflowInput } from '@/lib/types/engine';
+import type { DefinitionDiff, DefinitionSample, DefinitionPublished, DefinitionPublishRequest, DefinitionValidation, DefinitionView, DiffSide, WorkflowPublishPreview, WorkingCopySaved, EngineDefinition, EngineNodeType, EngineOption, EngineRun, EngineRunDetail, EngineRunInput, EngineRunStarted, EngineRunsParams, OptionSource, StartWorkflowInput } from '@/lib/types/engine';
 import type { ListResult } from '@/lib/types/query';
 
 /** The workflow runner: node types, v2 definitions and runs. */
@@ -22,6 +22,8 @@ export interface EngineApi {
   requestPublish(workflowId: string, input: { version?: number; note: string; baseVersion?: number; baseDigest?: string }): Promise<DefinitionPublishRequest>;
   /** Stops (true) or restarts live runs of the live version; 409 before a version is live. */
   setPaused(workflowId: string, paused: boolean): Promise<DefinitionView>;
+  /** What `step` receives: each earlier step's fields with the acting team's last run values, from the working copy. */
+  sample(workflowId: string, step: string): Promise<DefinitionSample>;
   /** Choices for a node form field with an option source. */
   options(source: Exclude<OptionSource, 'steps'>): Promise<EngineOption[]>;
   /** Deletes every version of a workflow that has never run; 409 once it has runs, 404 when there is none. */

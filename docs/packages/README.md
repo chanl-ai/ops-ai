@@ -11,6 +11,7 @@ page of their own.
 |---|---|
 | [Sign-in library](ops_signin/overview.md) | The protocols behind password, OIDC and SAML sign-in; the platform service is its one consumer |
 | [Email library](ops_email/overview.md) | Mail in and out behind two protocols, with the provider picked by settings |
+| [Source reading](ops_sources/overview.md) | One loop that reads a source through its tools: every page of changes since a saved place, paced fetches, gone-twice |
 | [Knowledge ingestion](ops_ingest/overview.md) | Parsing, splitting, metadata mapping, dedupe and versions, and source rules for knowledge bases |
 | [Logging](ops_service_kit/logging.md) | One JSON object per line on stdout from every Python service |
 | [Use case runner](usecase-runner/overview.md) | Runs the use cases that prove each feature, by layer |

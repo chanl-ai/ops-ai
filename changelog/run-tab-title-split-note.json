@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "Run tabs name the workflow",
+  "description": "The browser tab of a run page now names the workflow, and after Split skills the page says the skill keeps its own parts."
+  ,"tag": "fix"
+}

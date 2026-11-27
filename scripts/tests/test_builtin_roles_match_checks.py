@@ -42,6 +42,7 @@ from ops_agents.api.routers.memories import require_memory_access
 from ops_documents.app import who as documents_who
 from ops_files.app import storage_admin
 from ops_files.app import who as files_who
+from ops_files.watch_routes import watch_manager
 from ops_identity import Principal
 from ops_kb.app import who as kb_who
 from ops_kb.service import KnowledgeService
@@ -277,6 +278,11 @@ def files_storage(p: Principal) -> Scope | None:
     return yes(passes(lambda: storage_admin(p)))
 
 
+# A watched folder is added, changed, checked and deleted with watches.manage.
+def files_watches(p: Principal) -> Scope | None:
+    return yes(passes(lambda: watch_manager(p)))
+
+
 # documents-service: a person extracts with documents.run and keeps types and corrects fields with documents.edit.
 def documents_check(action: str) -> Verdict:
     def verdict(p: Principal) -> Scope | None:
@@ -369,11 +375,24 @@ def c122_cancel(p: Principal) -> Scope | None:
 
 
 TODAY: dict[tuple[str, str], Verdict] = {
-    # The workspace area is Owner's alone: no membership role reads or changes it.
+    # The workspace and install areas are Owner's alone: no membership role reads or changes them.
     **{
         (area, "view"): open_to_members
         for area in AREAS
-        if area not in ("settings", "audit", "activity", "mcp", "webhooks", "usage", "chat", "memory", "workspace")
+        if area
+        not in (
+            "settings",
+            "audit",
+            "activity",
+            "mcp",
+            "webhooks",
+            "usage",
+            "chat",
+            "memory",
+            "workspace",
+            "watches",
+            "install",
+        )
     },
     ("chat", "view"): chat_owner,
     ("memory", "edit"): memory_editor,
@@ -419,6 +438,7 @@ TODAY: dict[tuple[str, str], Verdict] = {
     ("files", "create"): open_to_members,
     ("files", "delete"): open_to_members,
     ("files", "manage"): files_legal_hold,
+    ("watches", "manage"): files_watches,
     **{("documents", action): documents_check(action) for action in ("view", "edit", "run")},
     ("settings", "view"): files_storage,
     ("settings", "manage"): files_storage,

@@ -34,7 +34,7 @@ services' response time with a script driving; a person reading and thinking add
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | James opens the skills list | New skill is offered |
+| 1 | James opens the skills list | New skill is offered; Import is not, until skill import is served |
 | 2 | New skill: name, use when, Create | The skill page opens on the text editor |
 | 3 | Select all, write the SOP with one guard | The guard line is in the text |
 | 4 | Save the draft | The save state reads saved |
