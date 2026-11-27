@@ -47,7 +47,7 @@ Run: `make usecase-test UC=uc-950 LAYER=api`.
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | Push `architecture-review.pdf` (a text page, then a picture-only page) and read `GET /v1/items/{id}/text`; ask the base what sends work to the Intake service | Page 1 is read by text, page 2 by a model; page 2's one block is the model's description with a whole-page box; a citation in the first three is at page 2 |
+| 1 | Push `architecture-review.pdf` (a text page, then a picture-only page) and read `GET /v1/items/{id}/text` page by page (`?page=2` for the second); ask the base what sends work to the Intake service | Page 1 is read by text, page 2 by a model; page 2's one block is the model's description with a whole-page box; a citation in the first three is at page 2 |
 | 2 | Look at page 1's paragraph | It has one box per line, all on page 1 |
 | 3 | Push `decision-note.docx` and read its text | Four sections: Decision, What we did not choose, Who does what, Open risks; no page boxes |
 | 4 | Push a 22-page picture deck and read its text | Pages 1 to 20 read by a model, 21 and 22 not read, one note: "Pages 21 to 22 were not read. Not described: this file reached its limit of 20 pages read by a model." |

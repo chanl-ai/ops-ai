@@ -100,13 +100,13 @@ def next_reading(queued: Sequence[ReadingRow], running_teams: Sequence[str]) -> 
 
 def answer_of(row: ReadingRow, file_id: str, pages: Sequence[Page] | None = None) -> Json:
     """What a caller reads: the reading's status and progress, then, once done, the file's facts and its pages."""
-    mode, _, language = row.key.partition(":")
+    settings = key_parts(row.key)[0]
     out: Json = {
         "fileId": file_id,
         "digest": row.digest,
         "status": row.status,
         "readerVersion": row.version,
-        "settings": {"ocr": mode, "language": language},
+        "settings": {"ocr": settings.ocr, "language": settings.language},
         "pagesTotal": row.pages_total,
         "pagesDone": row.pages_done,
     }

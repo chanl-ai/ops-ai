@@ -89,7 +89,12 @@ def text_of(k: Any, item: str) -> dict[str, Any]:
     deadline = time.monotonic() + 180
     while data(k.get(f"/v1/items/{item}"))["status"] not in ("indexed", "failed") and time.monotonic() < deadline:
         time.sleep(1)
-    return data(k.get(f"/v1/items/{item}/text"))
+    first = data(k.get(f"/v1/items/{item}/text"))
+    if not first["paged"]:
+        return first
+    # The text comes one page at a time, as the console turns pages; the rest are asked for and joined here.
+    rest = [data(k.get(f"/v1/items/{item}/text", params={"page": n})) for n in range(2, len(first["pages"]) + 1)]
+    return {**first, "sections": [s for t in (first, *rest) for s in t["sections"]]}
 
 
 def blocks(text: dict[str, Any]) -> list[dict[str, Any]]:

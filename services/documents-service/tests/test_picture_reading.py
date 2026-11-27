@@ -194,6 +194,7 @@ async def test_a_refusal_that_passes_is_read_again_on_the_next_ask(make: Make) -
         busy = await read_all(s, c, fid)
         later = await read_all(s, c, fid)
     assert busy["status"] == "done" and busy["pages"][1]["unreadReason"] == "Not described: the model was busy."
+    assert busy["settings"] == {"ocr": "off", "language": "eng"}, "the answer names its settings, not its key"
     assert later["pages"][1]["source"] == "model" and len(model.calls) == 2, later["pages"][1]
 
 
