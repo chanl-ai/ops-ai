@@ -560,7 +560,9 @@ class Readings:
             redone.append((after, left))
             waits |= {wait} if wait and left is not None else set()
         changed = any(page.source == "model" for page, _ in redone)
-        await self.store.retried(row, redone, code=retry_code(waits), at=self.clock(), changed=changed)
+        await self.store.retried(
+            row, redone, code=retry_code(waits), at=self.clock(), described=described if changed else None
+        )
 
     async def _described_so_far(self, row: ReadingRow) -> int:
         """Pages of this reading a model already described, so a reading resumed after a restart keeps its limit."""

@@ -14,7 +14,9 @@ from reportlab.lib.pagesizes import LETTER
 from reportlab.pdfgen.canvas import Canvas
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_contracts import readings as readings_contract
 from ops_identity.fastapi import DEV_TEAM
+from ops_ingest.reading import READER_VERSION
 from ops_kb.files import KnowledgeFiles
 
 from .conftest import kb_client
@@ -104,11 +106,23 @@ async def test_a_page_described_on_a_retry_reaches_search(engine: AsyncEngine, t
         src, kb = await base_with(client, ("review.pdf", review_pdf()))
         await client.post(f"/v1/sources/{src['id']}/sync")
         item = data(await client.get(f"/v1/sources/{src['id']}/items"))["data"][0]
-        # documents-service describes page 2 on a retry and says so again.
+        # documents-service describes page 2 on a retry and says so again, as its own event for that reading.
         readings.described, readings.kept = {2: DIAGRAM}, {}
-        payload = {"fileId": item["fileId"], "redescribed": True}
-        event = {"name": "reading.finished", "key": "reading.finished:retry", "teamId": DEV_TEAM, "payload": payload}
-        sent = await client.post("/v1/events", json=event, headers=documents(tenant))
+
+        async def finished(key: str) -> int:
+            said = {"fileId": item["fileId"], "readerVersion": READER_VERSION, "settingsKey": key, "redescribed": True}
+            name = readings_contract.FINISHED
+            at = readings_contract.event_key(
+                name, digest=item["digest"], reader_version=READER_VERSION, settings_key=key, file_id=item["fileId"],
+                described=1,
+            )  # fmt: skip
+            event = {"name": name, "key": at, "teamId": DEV_TEAM, "payload": said}
+            sent = await client.post("/v1/events", json=event, headers=documents(tenant))
+            return int(sent.json()["data"]["items"])
+
+        mine = f"auto:eng:p-{src['sensitivity']}"
+        settled = [await finished(f"auto:fra:p-{src['sensitivity']}"), await finished(mine), await finished(mine)]
         answer = await ask(client, kb["id"], "How do the mobile app and the event queue connect?")
-    assert item["status"] == "indexed" and sent.json()["data"]["items"] == 1, sent.text
+    # Another reading of the file settles nothing; the item's own once; the same event again nothing more.
+    assert item["status"] == "indexed" and settled == [0, 1, 0], settled
     assert any(c.get("page") == 2 for c in answer["citations"]), answer

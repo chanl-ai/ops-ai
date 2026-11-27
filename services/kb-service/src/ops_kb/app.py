@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 from typing import Annotated, Literal, cast
 
@@ -168,6 +168,14 @@ async def knowledge_reader(p: CurrentTenantCaller) -> Who:
 KnowledgeReader = Annotated[Who, Depends(knowledge_reader)]
 Page = Annotated[int, Query(ge=1)]
 PageSize = Annotated[int, Query(alias="pageSize", ge=1, le=100)]
+
+
+def _redescribed(payload: Mapping[str, JsonValue]) -> tuple[str, str] | None:
+    """The reader version and settings key of a reading a retry described more of, from its reading.finished."""
+    version, key = payload.get("readerVersion"), payload.get("settingsKey")
+    if payload.get("redescribed") is not True or not isinstance(version, str) or not isinstance(key, str):
+        return None
+    return version, key
 
 
 def agents_usage(settings: Settings) -> AgentsUsage:
@@ -369,7 +377,7 @@ def create_kb_app(
                 settled = await service.finish_reading(
                     Who(caller.tenant_id, "documents-service", body.team_id),
                     file_id,
-                    redescribed=body.payload.get("redescribed") is True,
+                    redescribed=_redescribed(body.payload),
                 )
         out = {"name": body.name, "key": body.key, "status": "handled" if handled else "unhandled", "items": settled}
         return ok(out, 202)

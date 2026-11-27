@@ -348,11 +348,18 @@ class ReadingsStore(Store):
         return described, [(page, int(retries)) for page, retries in pages if retries is not None]
 
     async def retried(
-        self, row: ReadingRow, pages: list[tuple[Page, int | None]], *, code: str | None, at: datetime, changed: bool
+        self,
+        row: ReadingRow,
+        pages: list[tuple[Page, int | None]],
+        *,
+        code: str | None,
+        at: datetime,
+        described: int | None,
     ) -> None:
         """The pages described again, the reading's mark kept while one still waits, and `reading.finished` sent again
         with `redescribed` when a page now has text, so kb-service indexes its already indexed items from the file
-        again; all in one transaction."""
+        again under its own key (`described`: the pages a model has described, None when this retry described none); all
+        in one transaction."""
         t = documents_readings
         async with self.tx() as c:
             for page, retries in pages:
@@ -365,9 +372,11 @@ class ReadingsStore(Store):
                 .where(self._where(t, row.team, row.digest, row.version, row.key))
                 .values(error_code=code, finished_at=at)
             )
-            if changed:
+            if described is not None:
                 said: Json = {"status": "done", "pages": row.pages_total, "redescribed": True}
-                await self._events(c, row.team, row.digest, row.version, row.key, name=FINISHED_EVENT, said=said)
+                await self._events(
+                    c, row.team, row.digest, row.version, row.key, name=FINISHED_EVENT, said=said, described=described
+                )
 
     async def put_done(
         self,
@@ -435,7 +444,16 @@ class ReadingsStore(Store):
             await self._events(c, row.team, row.digest, row.version, row.key, name=name, said=said)
 
     async def _events(
-        self, c: AsyncConnection, team: str, digest: str, version: str, key: str, *, name: str, said: Json
+        self,
+        c: AsyncConnection,
+        team: str,
+        digest: str,
+        version: str,
+        key: str,
+        *,
+        name: str,
+        said: Json,
+        described: int | None = None,
     ) -> None:
         f = documents_reading_files
         tenant = isolation.tenant()
@@ -451,7 +469,8 @@ class ReadingsStore(Store):
             await add(
                 c, service_outbox, tenant_id=tenant, team_id=team, name=name,
                 key=readings_contract.event_key(
-                    name, digest=digest, reader_version=version, settings_key=stored_key(key), file_id=file_id
+                    name, digest=digest, reader_version=version, settings_key=stored_key(key), file_id=file_id,
+                    described=described,
                 ),
                 payload=payload,
             )  # fmt: skip

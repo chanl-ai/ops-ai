@@ -231,10 +231,14 @@ async def test_a_retry_describes_only_the_refused_page_and_serves_the_reading_me
     assert [p["source"] for p in got["pages"]] == ["model", "model"] and got["pages"][1]["unreadReason"] is None
     mine = service_outbox.c.tenant_id == s.tenant
     events = await tenant_outbox(
-        engine, s.tenant, sa.select(service_outbox.c.name, service_outbox.c.payload).where(mine)
+        engine,
+        s.tenant,
+        sa.select(service_outbox.c.name, service_outbox.c.event_key, service_outbox.c.payload).where(mine),
     )
-    finished = [e["payload"].get("redescribed") for e in events if e["name"] == "reading.finished"]
-    assert finished == [None, True], "the retry tells kb-service to index the file's items again"
+    finished = [e for e in events if e["name"] == "reading.finished"]
+    assert [e["payload"].get("redescribed") for e in finished] == [None, True], "the retry tells kb to index again"
+    first, retry = (e["event_key"] for e in finished)
+    assert retry == f"{first}:m2", "the retry is its own event, under the count of pages a model described"
 
 
 @pytest.mark.parametrize(

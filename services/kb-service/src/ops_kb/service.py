@@ -310,6 +310,13 @@ class Who:
             require_provisioner(self.caller, "knowledge")
 
 
+def _read_under(item: ItemRow, source: SourceRow, version: str, key: str) -> bool:
+    """Whether the item was indexed from the reading `version` and settings `key` name: its OCR and language (an
+    item's `read_with`) and the picture level its source asks at, the part a retry describes pages under."""
+    ocr, language, *pictures = key.split(":")
+    return item.read_with == f"{version}:{ocr}:{language}" and pictures[:1] == [f"p-{source.sensitivity}"]
+
+
 def _iso(v: datetime | None) -> str | None:
     return v.astimezone(UTC).isoformat() if v else None
 
@@ -1917,11 +1924,12 @@ class KnowledgeService:
             "created_at": datetime.now(UTC), **origin.extra,
         }  # fmt: skip
 
-    async def finish_reading(self, who: Who, file_id: str, *, redescribed: bool = False) -> int:
+    async def finish_reading(self, who: Who, file_id: str, *, redescribed: tuple[str, str] | None = None) -> int:
         """Indexes the source items waiting on this file's reading, once documents-service has it (its
         reading.finished event, or the knowledge schedule asking again); the number of items it settled. With
-        `redescribed` (a retry described a page the first reading could not) items already indexed from the file are
-        indexed again, so the new page reaches search."""
+        `redescribed` (the reader version and settings key of a reading a retry described more of) the items already
+        indexed from that reading are indexed again, so the new page reaches search; an item whose text did not change
+        (the same event delivered twice) settles nothing."""
         settled = 0
         statuses = ("reading", "indexed") if redescribed else ("reading",)
         for item in await self.store.reading_items(who.tenant_id, file_id=file_id, statuses=statuses):
@@ -1929,12 +1937,14 @@ class KnowledgeService:
             if not found_sources:
                 continue
             source = found_sources[0]
+            if item.status == "indexed" and not (redescribed and _read_under(item, source, *redescribed)):
+                continue
             found = Stored(item.file_id, item.path, item.mime, item.size, item.digest, False)
             # A fetched item keeps the system's id as its key and its own title; a file's title comes from its reading.
             origin = Origin(item.path, item.title) if source.type == "tool" else None
-            rebuild = item.status == "indexed"
-            done = await self._read_file(who, source, item, name=item.path, found=found, rebuild=rebuild, origin=origin)
-            if done.status != "reading":
+            # An indexed item reads as a new version only when its text changed, so the same event twice keeps it.
+            done = await self._read_file(who, source, item, name=item.path, found=found, rebuild=False, origin=origin)
+            if done.status != "reading" and not (item.status == "indexed" and done.unchanged):
                 settled += 1
                 if done.status == "indexed":
                     await self.settle_run(who, source, "success", activate=True)
