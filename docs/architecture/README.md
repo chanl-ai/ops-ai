@@ -9,7 +9,7 @@ one AI gateway. This page is the map: the services, one request from start to fi
 
 ## The services
 
-![Callers reach agents-service; every tool and model call leaves through tools-service and models-service; files and documents are separate services](../diagrams/component-map.svg)
+![Callers reach agents-service; every tool and model call leaves through tools-service and models-service; files and documents are separate services](https://opsai.chanl.ai/docs/diagrams/component-map.svg)
 
 <!-- site: cards -->
 | Service | Port | What it owns | Status |

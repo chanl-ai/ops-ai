@@ -8,6 +8,8 @@ docs-verify: ## Docs live in mapped docs/ folders; folder READMEs are briefs
 	node scripts/check-public-paths.mjs --self-test
 	node scripts/check-public-paths.mjs
 	python3 scripts/scrub_board_paths.py
+	@# A docs-only change skips CI's checks job, so the image rule runs here too (make checks has it as md-images).
+	python3 scripts/check_md_images.py
 	python3 scripts/agent_skills.py --check
 	python3 scripts/wf_builder_examples.py --check
 	@# It reads the examples' YAML, so it runs on the workspace's Python, which has PyYAML; a bare runner's python3 does not.
