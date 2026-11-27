@@ -19,7 +19,7 @@ from strands.agent.conversation_manager import NullConversationManager
 from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
 from strands.models.openai import OpenAIModel
 from strands.tools.executors import SequentialToolExecutor
-from strands.types._events import ToolResultEvent
+from strands.types._events import ToolResultEvent, ToolStreamEvent
 from strands.types._snapshot import Snapshot
 from strands.types.exceptions import EventLoopException, ModelThrottledException
 from strands.types.tools import AgentTool, ToolContext, ToolGenerator, ToolSpec, ToolUse
@@ -167,6 +167,9 @@ class _KernelTool(AgentTool):
             run.held = UnofferedTool(self.spec.name)
             yield _result(call_id, False, "Not run.")
             return
+        # Strands holds the tool until this event is read, so the kernel records the call as running before its body
+        # updates it: a call shown only after it ran would reach the chat as two ends.
+        yield ToolStreamEvent(tool_use, "started")
         try:
             said = await self.spec.call(ctx, arguments)
         except LoopPause as e:
