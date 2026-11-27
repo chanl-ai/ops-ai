@@ -165,7 +165,7 @@ human step inside a loop would hold the whole notice until every person was deci
 
 ### Intake
 
-![Court order intake: mailbox, parse, classify, trusted sender, extract debtors, already seen, for each debtor identify the customer and start a case; every exit goes to a person or closes with a label](images/levy-intake.png)
+![Court order intake: mailbox, parse, classify, trusted sender, extract debtors, already seen, for each debtor identify the customer and start a case; every exit goes to a person or closes with a label](https://opsai.chanl.ai/docs/design/workflows/images/levy-intake.png)
 
 Every exit is a node, not an exception. Only a trusted, new order reaches extraction and the bank.
 
@@ -193,7 +193,7 @@ step that listens for the last case to close.
 
 ### The case
 
-![Court order case: started by intake, prepare the case with an agent and bank tools, a person decides hold or flag, place the hold as a governed write, confirm to the registry, end](images/levy-case.png)
+![Court order case: started by intake, prepare the case with an agent and bank tools, a person decides hold or flag, place the hold as a governed write, confirm to the registry, end](https://opsai.chanl.ai/docs/design/workflows/images/levy-case.png)
 
 Prepare the case notes any other open court order on the customer and recommends an amount per account when funds are short
 or spread across accounts. The Hold option takes a list of account and amount pairs, and the review carries the
@@ -271,7 +271,7 @@ model ledger already use it. The design answered option D's three objections:
 | Fork from a step is hard | A fork never edits a checkpoint. It is a new run with the source run's rows copied as pinned rows for every node before the chosen one. The wrapper returns pinned outputs without executing, so the new graph walks from the trigger to the chosen node. This works through joins, where updating LangGraph state "as a node" cannot name several predecessors |
 | Checkpoint growth remains | State holds small envelopes and references, not payloads; large outputs live in the journal row. Checkpoints are deleted at run end. Retention is set per deployment |
 
-![The runtime: the console and the API only enqueue commands and tail events; N worker processes run each compiled graph, writing the journal, events, checkpoints and leases in PostgreSQL, and call tools-service, the agent kernel and Reviews](images/runner-runtime.png)
+![The runtime: the console and the API only enqueue commands and tail events; N worker processes run each compiled graph, writing the journal, events, checkpoints and leases in PostgreSQL, and call tools-service, the agent kernel and Reviews](https://opsai.chanl.ai/docs/design/workflows/images/runner-runtime.png)
 
 The compiled form of each element, the resilience rules per effects class, scale, the console and versioning are in
 [workflow runner](../../architecture/workflow-runner.md).

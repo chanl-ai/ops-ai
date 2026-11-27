@@ -30,7 +30,7 @@ then an agent reads the handbook, and finally a person approves the credit.
 5. **A person approves the credit** in **Human Tasks**, seeing the dispute, the agent's assessment, the accounts and the
    case. Approving adds a note to the case, "Provisional credit approved by" the approver, and the run ends at Credited.
 
-![The Card dispute intake workflow on the canvas, from Dispute received through the cardholder lookup, the agent's check and the case to the approval, with the failure ends below](../../media/workflow-light.png)
+![The Card dispute intake workflow on the canvas, from Dispute received through the cardholder lookup, the agent's check and the case to the approval, with the failure ends below](https://opsai.chanl.ai/docs/media/workflow-light.png)
 
 ## Try it
 
@@ -45,7 +45,7 @@ approve their own run.
 | Approve | **Human Tasks**, the provisional credit task | The dispute, the assessment and the accounts are shown. Choose **Approve** and give a reason |
 | Read the record | The case | The run ends at Credited, and the case holds the credit and the decision |
 
-![Riley Chen opens the Human Task for a 482.10 CAD provisional credit, reads where the amount came from, approves it, and the run ends at Credited](../../media/task.gif)
+![Riley Chen opens the Human Task for a 482.10 CAD provisional credit, reads where the amount came from, approves it, and the run ends at Credited](https://opsai.chanl.ai/docs/media/task.gif)
 
 ## Run it from code
 
