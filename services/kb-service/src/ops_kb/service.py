@@ -2789,8 +2789,9 @@ class KnowledgeService:
         why = next((x for x in log if x.startswith(f"{name}:")), "")
         if item is None or "not scanned" in why:
             # Stored, but the run did not read it: files-service holds a new file unreadable until its scan says clean
-            # (production scans every file), so a new version is not searchable yet either and the earlier one still
-            # answers; or a rule or the same content under another name left it out.
+            # (production scans every file), so a new version is not searchable yet either: the earlier item still
+            # answers from the index, though Files holds neither file until the scan; or a rule or the same content
+            # under another name left it out.
             if "not scanned" in why:
                 raise Conflict(
                     f"{name} is stored but not scanned clean yet, so it is not searchable; it is read on the next sync "

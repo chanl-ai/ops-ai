@@ -151,13 +151,15 @@ async def test_an_item_written_before_its_scan_is_kept_and_held_in_files_once_a_
         assert len(first) == 1, "the source keeps the file it was sent before the scan"
         assert fake.files[first[0]]["referenceCount"] == 1, "the sync after the scan holds it in Files"
         second = await write("Raised within 90 days.")
+        listed = [i["path"] for i in data(await client.get(f"/v1/sources/{src['id']}/items"))["data"]]
+    assert listed == ["chargeback-window.md"], "one item per name, answering through the new version's scan"
     assert len(second) == 1 and second != first, second
     assert (fake.files[first[0]]["referenceCount"], fake.files[second[0]]["referenceCount"]) == (0, 1)
 
 
 async def test_a_new_version_of_one_name_keeps_the_file_another_name_holds(engine: AsyncEngine, tenant: str) -> None:
-    """Two names with the same content share one file in Files; a new version of one must not let go of the file
-    the other still reads."""
+    """Two names with the same content share one file in Files, and the name that indexed it keeps it; a new version
+    of the other name must not let go of the file the first still reads."""
     fake = FakeFilesService()
     scanner = fake.client(service="scanner", scopes=["files:decide"])
     async with kb_client(engine, tenant, files=FilesServiceIntake(fake.client())) as client:
@@ -169,7 +171,7 @@ async def test_a_new_version_of_one_name_keeps_the_file_another_name_holds(engin
         for name, text in (
             ("window", "Raised within 120 days."),
             ("deadline", "Raised within 120 days."),
-            ("window", "Raised within 90 days."),
+            ("deadline", "Raised within 90 days."),
         ):
             await client.post(
                 f"/v1/sources/{src['id']}/items", json={"name": name, "title": "Chargeback window", "text": text}
@@ -179,8 +181,10 @@ async def test_a_new_version_of_one_name_keeps_the_file_another_name_holds(engin
                     await scanner.report_scan(tenant, fid, status="clean", engine="clamav")
             data(await client.post(f"/v1/sources/{src['id']}/sync"))
         held = data(await client.get(f"/v1/sources/{src['id']}"))["config"]["fileIds"]
+        paths = [i["path"] for i in data(await client.get(f"/v1/sources/{src['id']}/items"))["data"]]
     shared = next(fid for fid in fake.files if fake.blobs[fid] and b"120" in fake.blobs[fid])
     assert shared in held and fake.files[shared]["referenceCount"] == 1, (held, fake.files)
+    assert "window.md" in paths, paths
 
 
 async def test_start_up_waits_for_files_service_about_its_setting_not_a_probe_timeout_per_try() -> None:

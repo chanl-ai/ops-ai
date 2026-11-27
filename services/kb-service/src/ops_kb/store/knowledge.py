@@ -1561,11 +1561,14 @@ class KnowledgeStore(Store):
             key = (kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
             row = await self._files_of(c, key)
             # A file uploaded under a name the source already holds is that document's next version: it takes the
-            # earlier file's place, so a sync reads one file per document.
+            # earlier file's place, so a sync reads one file per document. The same content under a second name is
+            # the same file, and it keeps the name that holds it, so a new version of the second name never takes
+            # the first name's file away.
             known: dict[str, str] = dict(row.file_names or {})
             replaced = {f for f, n in known.items() if n == name and f != file_id}
             ids = [f for f in row.file_ids if f not in replaced]
-            names = {f: n for f, n in known.items() if f not in replaced} | {file_id: name}
+            names = {f: n for f, n in known.items() if f not in replaced}
+            names.setdefault(file_id, name)
             await c.execute(
                 sa.update(kb_sources)
                 .where(*key)
