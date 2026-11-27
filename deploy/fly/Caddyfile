@@ -1,6 +1,6 @@
 # One public origin: the console at /, each browser-facing service at /api/<service>/. The services bind 127.0.0.1 on
 # Fly, so this is the only way in; platform-service's internal port (8711) and OPA are not routed, and of models-service
-# only the account's provider key routes are (Settings > Model providers): its completions stay internal.
+# only the account's settings routes are (Settings > Model providers and Model aliases): its completions stay internal.
 # Each upstream defaults to its port on this machine; OPS_UPSTREAM_<SERVICE> names another (compose's service names,
 # deploy/compose/app.yaml).
 {
@@ -62,7 +62,10 @@
 			import wait_for_upstream
 		}
 	}
-	handle /api/models/v1/provider-keys* {
+	# Only the account's own settings routes: provider keys, connections, their types and the aliases. completions,
+	# embeddings, admit, calls, keys and chat-model stay internal, so this is a list and not the whole prefix.
+	@models_settings path /api/models/v1/provider-keys* /api/models/v1/models/providers* /api/models/v1/models/provider-types* /api/models/v1/models/aliases*
+	handle @models_settings {
 		uri strip_prefix /api/models
 		reverse_proxy {$OPS_UPSTREAM_MODELS:127.0.0.1:8730} {
 			import wait_for_upstream

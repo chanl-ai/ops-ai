@@ -84,4 +84,8 @@ if [ "$full" = true ] || grep -vqE '(\.md$|^docs/)' <<<"$changed" \
 if [ "$full" = true ]; then echo "mssql=true"; else
   echo "mssql=$(flag '^(services/|packages/|deploy/database/)')"
 fi
+# store=true when the diff touches a service's store, any migrations folder, ops_store or the database scripts: where SQL
+# Server breaks and PostgreSQL does not. ci.yml runs store-mssql on a pull request for it (mssql && (heavy || store)); any
+# other service change, and a full plan on its own, wait for the merge queue. ci_local.py's MSSQL_PATHS is the same rule.
+echo "store=$(flag '^services/[^/]+/(.+/)?store/|(^|/)migrations/|^packages/ops_store/|^deploy/database/')"
 if [ "${#jobs_json[@]}" -eq 0 ]; then echo "service_jobs=[]"; else echo "service_jobs=[$(IFS=,; echo "${jobs_json[*]}")]"; fi
