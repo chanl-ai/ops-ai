@@ -70,7 +70,11 @@ async def test_models_service_not_answering_in_time_is_its_own_code() -> None:
 
 
 async def test_ingestion_text_cut_off_at_its_limit_is_refused_not_kept_as_half_an_answer(models: Models) -> None:
+    limits: list[object] = []
+
     def handle(request: httpx.Request) -> httpx.Response:
+        sent = json.loads(request.content)
+        limits.append((sent.get("max_completion_tokens"), sent.get("max_tokens")))
         return httpx.Response(200, json=_reply({"content": "1. Can I claim after"}, "length"))
 
     async for rig in provider_rig(models, handle):
@@ -81,5 +85,6 @@ async def test_ingestion_text_cut_off_at_its_limit_is_refused_not_kept_as_half_a
             await asyncio.to_thread(ingest.complete, "Write three questions.", alias=rig.alias, max_tokens=40)
         assert refused.value.code == "reply_cut_off"
         assert (ingest.calls, ingest.input_tokens) == (1, 900), "a billed reply is counted though it is refused"
+        assert limits == [(40, None)], "ingestion sends its limit in the same field as a structured call"
         return
     raise AssertionError("no rig")

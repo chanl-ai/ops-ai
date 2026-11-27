@@ -273,7 +273,7 @@ class IngestModel:
                     **({"X-Run-Id": self.run_id} if self.run_id else {}),
                     **({"X-Run-Spend-Cap": self.run_cap} if self.run_id and self.run_cap else {}),
                 },
-                json=_chat_body(alias, [{"role": "user", "content": prompt}], max_tokens=max_tokens),
+                json=_chat_body(alias, [{"role": "user", "content": prompt}], max_completion_tokens=max_tokens),
             )
         except httpx.HTTPError as e:
             raise _unreached(e) from e
