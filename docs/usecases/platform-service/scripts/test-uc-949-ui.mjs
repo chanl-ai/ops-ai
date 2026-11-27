@@ -1,4 +1,4 @@
-// uc-751, ui layer: docs/usecases/platform-service/a-new-workspace-chats-and-writes.md, steps 3, 4 and 11. The run's own
+// uc-949, ui layer: docs/usecases/platform-service/a-new-workspace-chats-and-writes.md, steps 3, 4 and 11. The run's own
 // demo stack (platform sign-in, models-service, the fake OpenAI). The account admin (Sam Adeyemi, admin of the Security
 // team) connects a model provider on Settings > Models > Connections in three steps (provider, its fields, the key test)
 // at 1440 and at 390 wide, then Approvals shows the makers' ask-first switch off.
@@ -6,7 +6,7 @@ import { mkdirSync } from 'node:fs';
 
 import { FAKE_OPENAI_KEY, MODELS_PORT, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-const SHOTS = evidenceDir('751', 'screens');
+const SHOTS = evidenceDir('949', 'screens');
 const EMAIL = 's.adeyemi@harborpine.example';
 const PASSWORD = 'northfield-demo';
 const TAG = Math.random().toString(36).slice(2, 6);
