@@ -382,6 +382,15 @@ export const agentsOperations = {
     ],
     "stream": false
   },
+  "agents_list_loops": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/loops",
+    "pathParams": [],
+    "query": [],
+    "stream": false
+  },
   "agents_list_model_alias_uses": {
     "body": null,
     "headers": [],
@@ -2069,6 +2078,18 @@ export const agentsOperations = {
     "method": "POST",
     "path": "/v1/threads:route-to-people",
     "pathParams": [],
+    "query": [],
+    "stream": false
+  },
+  "threads_run_trace": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/threads/{thread_id}/runs/{run_id}/trace",
+    "pathParams": [
+      "thread_id",
+      "run_id"
+    ],
     "query": [],
     "stream": false
   },

@@ -344,6 +344,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agents/loops": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Loops
+         * @description The loop kinds an agent can run, each with its settings form as JSON Schema, and whether this release runs it.
+         *     The same list for every caller: no record is read.
+         */
+        get: operations["agents_list_loops"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents/spec/validate": {
         parameters: {
             query?: never;
@@ -734,7 +755,8 @@ export interface paths {
         };
         /**
          * Read Spec
-         * @description The agent as a spec document: the newest version, or `version`. The CLI writes it as YAML.
+         * @description The agent as a spec document: the newest version, or `version`, read in one request transaction. The CLI
+         *     writes it as YAML.
          */
         get: operations["agents_read_spec"];
         /**
@@ -3199,6 +3221,28 @@ export interface paths {
          *     holds none while it streams, and each poll reads the log afresh as the worker writes it.
          */
         get: operations["threads_reattach"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/threads/{thread_id}/runs/{run_id}/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run Trace
+         * @description The run's steps read back from its event log: modes, plans, tool calls, pauses and each turn's model, in order.
+         *     Not found for a run of a thread the caller may not read (`may_read_thread`). One request transaction: the run
+         *     has ended or is read as it stood.
+         */
+        get: operations["threads_run_trace"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7521,6 +7565,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[RunTrace] */
+        Envelope_RunTrace_: {
+            data: components["schemas"]["RunTrace"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[SavedCases] */
         Envelope_SavedCases_: {
             data: components["schemas"]["SavedCases"];
@@ -7963,6 +8016,16 @@ export interface components {
         Envelope_list_KnowledgeUsage__: {
             /** Data */
             data: components["schemas"]["KnowledgeUsage"][];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[list[LoopKindOut]] */
+        Envelope_list_LoopKindOut__: {
+            /** Data */
+            data: components["schemas"]["LoopKindOut"][];
             /**
              * Success
              * @constant
@@ -9299,6 +9362,30 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * LoopKindOut
+         * @description One loop kind an agent can run, with its own settings as JSON Schema; the console draws the form from it.
+         */
+        LoopKindOut: {
+            /** Available */
+            available: boolean;
+            /** Description */
+            description: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Requires */
+            requires: ("agents" | "sandbox" | "workflow" | "rubric")[];
+            /** Settingsschema */
+            settingsSchema: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Unavailablereason */
+            unavailableReason?: string | null;
+            /** Whentouse */
+            whenToUse: string;
+        };
         /** MailboxIn */
         MailboxIn: {
             /** Address */
@@ -9524,6 +9611,23 @@ export interface components {
             toVersion: number;
             /** Waitingat */
             waitingAt: string[];
+        };
+        /** ModeStep */
+        ModeStep: {
+            /**
+             * Atstep
+             * @default 0
+             */
+            atStep: number;
+            /** Fixed */
+            fixed: boolean;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "direct" | "plan" | "helpers" | "sandbox";
+            /** Reason */
+            reason: string;
         };
         /**
          * ModelAlias
@@ -11030,6 +11134,26 @@ export interface components {
             lines: components["schemas"]["StoryLine"][];
             /** Reads */
             reads: components["schemas"]["StoryRead"][];
+        };
+        /**
+         * RunTrace
+         * @description One run's steps, read back from the thread's event log: what ran, in order, and the modes it used.
+         */
+        RunTrace: {
+            /** Agentid */
+            agentId?: string | null;
+            /** Loop */
+            loop?: string | null;
+            /** Modes */
+            modes: components["schemas"]["ModeStep"][];
+            /** Runid */
+            runId: string;
+            /** Steps */
+            steps: components["schemas"]["TraceStep"][];
+            /** Stopreason */
+            stopReason?: string | null;
+            /** Threadid */
+            threadId: string;
         };
         /** RunWaiting */
         RunWaiting: {
@@ -13464,6 +13588,34 @@ export interface components {
             count: number;
             /** Name */
             name: string;
+        };
+        /** TraceStep */
+        TraceStep: {
+            /** Callid */
+            callId?: string | null;
+            /** Detail */
+            detail?: {
+                [key: string]: unknown;
+            } | null;
+            /** Durationms */
+            durationMs?: number | null;
+            /** Index */
+            index: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "model" | "tool" | "mode" | "plan" | "agent_asked" | "handoff" | "interrupt" | "guardrail";
+            /** Model */
+            model?: string | null;
+            /** Startedat */
+            startedAt: string;
+            /** Status */
+            status?: string | null;
+            /** Title */
+            title: string;
+            /** Tool */
+            tool?: string | null;
         };
         /** TryPath */
         TryPath: {
@@ -16267,6 +16419,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_Agent_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_list_loops: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_LoopKindOut__"];
                 };
             };
             /** @description Invalid request */
@@ -33074,6 +33327,110 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                     "text/event-stream": string;
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    threads_run_trace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                thread_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RunTrace_"];
                 };
             };
             /** @description Invalid request */

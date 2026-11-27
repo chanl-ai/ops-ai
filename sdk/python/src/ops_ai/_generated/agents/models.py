@@ -1158,6 +1158,17 @@ class LoadedSkill(TypedDict, closed=True):
     version: int
 
 
+class LoopKindOut(TypedDict, closed=True):
+    available: bool
+    description: str
+    kind: str
+    name: str
+    requires: list[Literal["agents", "sandbox", "workflow", "rubric"]]
+    settingsSchema: dict[str, JsonValue]
+    unavailableReason: NotRequired[str | None]
+    whenToUse: str
+
+
 class MailboxIn(TypedDict, closed=True):
     address: str
     folder: NotRequired[str]
@@ -1256,6 +1267,13 @@ class Migrated(TypedDict, closed=True):
     threadId: str
     toVersion: int
     waitingAt: list[str]
+
+
+class ModeStep(TypedDict, closed=True):
+    atStep: NotRequired[int]
+    fixed: bool
+    mode: Literal["direct", "plan", "helpers", "sandbox"]
+    reason: str
 
 
 class ModelAlias(TypedDict, closed=True):
@@ -2602,6 +2620,28 @@ class ToolsNotAdded(TypedDict, closed=True):
     name: str
 
 
+class TraceStep(TypedDict, closed=True):
+    callId: NotRequired[str | None]
+    detail: NotRequired[dict[str, Any] | None]
+    durationMs: NotRequired[int | None]
+    index: int
+    kind: Literal[
+        "model",
+        "tool",
+        "mode",
+        "plan",
+        "agent_asked",
+        "handoff",
+        "interrupt",
+        "guardrail",
+    ]
+    model: NotRequired[str | None]
+    startedAt: str
+    status: NotRequired[str | None]
+    title: str
+    tool: NotRequired[str | None]
+
+
 class TryStep(TypedDict, closed=True):
     access: NotRequired[str | None]
     accounts: NotRequired[dict[str, str]]
@@ -3641,6 +3681,11 @@ class EnvelopeListKnowledgeUsage(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListLoopKindOut(TypedDict, closed=True):
+    data: list[LoopKindOut]
+    success: Literal[True]
+
+
 class EnvelopeListMailboxView(TypedDict, closed=True):
     data: list[MailboxView]
     success: Literal[True]
@@ -4088,6 +4133,16 @@ class RunRow(TypedDict, closed=True):
     waiting: RunWaiting | None
     workflowId: str
     workflowName: NotRequired[str | None]
+
+
+class RunTrace(TypedDict, closed=True):
+    agentId: NotRequired[str | None]
+    loop: NotRequired[str | None]
+    modes: list[ModeStep]
+    runId: str
+    steps: list[TraceStep]
+    stopReason: NotRequired[str | None]
+    threadId: str
 
 
 class SavedCase(TypedDict, closed=True):
@@ -4789,6 +4844,11 @@ class EnvelopeRunList(TypedDict, closed=True):
 
 class EnvelopeRunRow(TypedDict, closed=True):
     data: RunRow
+    success: Literal[True]
+
+
+class EnvelopeRunTrace(TypedDict, closed=True):
+    data: RunTrace
     success: Literal[True]
 
 

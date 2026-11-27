@@ -298,6 +298,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
+    "agents_list_loops": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agents/loops",
+        "pathParams": [],
+        "query": [],
+        "stream": False,
+    },
     "agents_list_model_alias_uses": {
         "body": None,
         "headers": [],
@@ -1621,6 +1630,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "threads_run_trace": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/threads/{thread_id}/runs/{run_id}/trace",
+        "pathParams": ["thread_id", "run_id"],
+        "query": [],
+        "stream": False,
+    },
     "threads_stream_run": {
         "body": "json",
         "headers": [],
@@ -2372,6 +2390,10 @@ class Operations:
     def agents_create_agent(self, body: AgentInput, *, x_acting_for: str | None = None) -> Agent:
         "Create Agent"
         return self._t.call(SERVICE, OPERATIONS["agents_create_agent"], {}, {}, {"x-acting-for": x_acting_for}, body)  # type: ignore[no-any-return]
+
+    def agents_list_loops(self) -> list[LoopKindOut]:
+        "List Loops"
+        return self._t.call(SERVICE, OPERATIONS["agents_list_loops"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     def agents_validate_spec(self, body: SpecIn) -> SpecCheck:
         "Validate Spec"
@@ -3550,6 +3572,12 @@ class Operations:
             None,
         )  # type: ignore[no-any-return]
 
+    def threads_run_trace(self, thread_id: str, run_id: str) -> RunTrace:
+        "Run Trace"
+        return self._t.call(
+            SERVICE, OPERATIONS["threads_run_trace"], {"thread_id": thread_id, "run_id": run_id}, {}, {}, None
+        )  # type: ignore[no-any-return]
+
     def threads_thread_state(self, thread_id: str) -> ThreadState:
         "Thread State"
         return self._t.call(SERVICE, OPERATIONS["threads_thread_state"], {"thread_id": thread_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -4222,6 +4250,10 @@ class AsyncOperations:
         return await self._t.call(
             SERVICE, OPERATIONS["agents_create_agent"], {}, {}, {"x-acting-for": x_acting_for}, body
         )  # type: ignore[no-any-return]
+
+    async def agents_list_loops(self) -> list[LoopKindOut]:
+        "List Loops"
+        return await self._t.call(SERVICE, OPERATIONS["agents_list_loops"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def agents_validate_spec(self, body: SpecIn) -> SpecCheck:
         "Validate Spec"
@@ -5430,6 +5462,12 @@ class AsyncOperations:
             {"after": after, "follow": follow},
             {},
             None,
+        )  # type: ignore[no-any-return]
+
+    async def threads_run_trace(self, thread_id: str, run_id: str) -> RunTrace:
+        "Run Trace"
+        return await self._t.call(
+            SERVICE, OPERATIONS["threads_run_trace"], {"thread_id": thread_id, "run_id": run_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
     async def threads_thread_state(self, thread_id: str) -> ThreadState:
