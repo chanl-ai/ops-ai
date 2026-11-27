@@ -1233,7 +1233,8 @@ def _model_settings(req: TurnRequest) -> ModelSettings | None:
     The agent version's saved knobs go in the request body under their knob names; models-service turns each into
     the field its provider reads and fits it to the alias's model (`ops_models.catalog`), so no knob is named here.
     A caller's temperature within the agent's limits wins over the saved one. The older `thinking` pattern applies
-    only when the version saved neither a thinking budget nor an effort."""
+    only when the version saved neither a thinking budget nor an effort; it is sent as the gateway's
+    `reasoning_effort`, which both loops carry (Pydantic AI drops `thinking` for an alias it does not know)."""
     sent = ModelSettings()
     knobs: dict[str, float | int | str] = dict(req.settings.model_settings)
     if req.settings.temperature is not None:
@@ -1242,6 +1243,7 @@ def _model_settings(req: TurnRequest) -> ModelSettings | None:
             knobs["temperature"] = req.settings.temperature
     if req.settings.thinking in ("low", "medium", "high") and not {"thinking_budget", "reasoning_effort"} & set(knobs):
         sent["thinking"] = req.settings.thinking
+        knobs["reasoning_effort"] = req.settings.thinking
     if not req.settings.parallel_reads:
         sent["parallel_tool_calls"] = False
     if knobs:
