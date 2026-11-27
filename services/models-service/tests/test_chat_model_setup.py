@@ -139,11 +139,12 @@ async def test_a_fresh_chat_alias_is_priced_and_an_unpriced_model_is_refused(rig
     refused = await rig.client.put("/v1/models/chat-model", json=unknown)
     assert refused.status_code == 422 and refused.json()["error"]["code"] == "price_required", refused.text
     assert (await rig.client.get(f"/v1/models/aliases/{rig.aliases[0]}/versions", headers=SERVICE)).status_code == 404
-    known = {"provider": "openai", "model": "gpt-5.4-mini", "keyName": "MAIN"}
+    # gpt-4.1-mini is deprecated on models.dev and still served: the catalog keeps it so a first run can pick it.
+    known = {"provider": "openai", "model": "gpt-4.1-mini", "keyName": "MAIN"}
     assert (await rig.client.put("/v1/models/chat-model", json=known)).status_code == 200
     for alias in rig.aliases:
         now = (await rig.client.get(f"/v1/models/aliases/{alias}/versions", headers=SERVICE)).json()["data"]["data"][-1]
-        listed = Catalog.load().model("openai", "gpt-5.4-mini")
+        listed = Catalog.load().model("openai", "gpt-4.1-mini")
         assert listed is not None
         assert (float(now["inputPerMillion"]), float(now["outputPerMillion"])) == (
             listed.input_per_million,
