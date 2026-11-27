@@ -106,9 +106,7 @@ agents revision `0099_review_asker_is_person` does not render as offline SQL (`t
 
 ## Known traps
 
-- A route the console calls but `fly/Caddyfile` does not list falls through to the console and answers 404, on every
-  target that shares the file. models-service routes only its settings paths, so a new console call on it needs its
-  pattern in `@models_settings`. `scripts/check_gateway_routes.py` (in `make checks`) fails the missing route.
+- A route the console calls but `fly/Caddyfile` does not list falls through to the console and answers 404 on every target that shares the file => models-service routes only its settings paths, so a new console call on it needs its pattern in `@models_settings`. `scripts/check_gateway_routes.py` (in `make checks`) fails the missing route.
 
 ## Generated files
 

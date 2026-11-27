@@ -59,6 +59,11 @@ because the route returns it is fixed in the service, never in the hook or compo
 | `src/lib/types/` | Shared types |
 | `scripts/` | `check-standards.mjs` with its baselines, `bake-workflow-positions.ts` (`pnpm bake:workflows`) |
 
+## Known traps
+
+- A link built from stored or model-written data => pass it through `safeHref` or `consolePath` (`src/lib/safe-href.ts`); CodeQL does not recognise them as a sanitizer and may still flag the sink, so write no second link check to quiet it and say so on the pull request
+- `next dev` exits on an agent-detection security nudge when `AI_AGENT`, `CLAUDECODE` or `CLAUDE_CODE_ENTRYPOINT` are set => unset them for the dev server
+
 ## Reference docs
 
 | Topic | Doc |

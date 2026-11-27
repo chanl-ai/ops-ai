@@ -31,11 +31,11 @@ Colours come from theme tokens only.
 
 ## The canvas and the step list
 
-![The step list open and searched for "review", showing Human review; controls top right, checks bottom left, minimap bottom right](images/canvas-adding-light.png)
+![The step list open and searched for "review", showing Human review; controls top right, checks bottom left, minimap bottom right](https://opsai.chanl.ai/docs/design/workflows/images/canvas-adding-light.png)
 
-![A ten-step wire hold review, fitted in the page with the step list collapsed](images/canvas-large-light.png)
+![A ten-step wire hold review, fitted in the page with the step list collapsed](https://opsai.chanl.ai/docs/design/workflows/images/canvas-large-light.png)
 
-![The same workflow in fullscreen (F)](images/canvas-fullscreen-light.png)
+![The same workflow in fullscreen (F)](https://opsai.chanl.ai/docs/design/workflows/images/canvas-fullscreen-light.png)
 
 ## Step and trigger sheets
 
@@ -43,29 +43,29 @@ A step's sheet shows its type, its group and its effects class, then the fields 
 from earlier steps' outputs with a picker. The trigger's sheet adds how a run starts (from an app, from an agent that
 has the workflow as a tool, or a test run from the editor) and the run input with its schema.
 
-![The Agent step's sheet: a published agent picked by name and version, a prompt, and inputs mapped from step outputs](images/canvas-step-light.png)
+![The Agent step's sheet: a published agent picked by name and version, a prompt, and inputs mapped from step outputs](https://opsai.chanl.ai/docs/design/workflows/images/canvas-step-light.png)
 
-![The trigger's sheet: how a run starts and the run input it must send](images/canvas-trigger-light.png)
+![The trigger's sheet: how a run starts and the run input it must send](https://opsai.chanl.ai/docs/design/workflows/images/canvas-trigger-light.png)
 
 ## Checks
 
 The server checks the definition on every change. A step the check refuses is marked on the canvas and in its sheet,
 and Save version is disabled until it is fixed. The checks list names each finding and the step it belongs to.
 
-![A Call a tool step with no operation set: the sheet says the step stops the workflow from saving](images/canvas-error-light.png)
+![A Call a tool step with no operation set: the sheet says the step stops the workflow from saving](https://opsai.chanl.ai/docs/design/workflows/images/canvas-error-light.png)
 
-![The checks list open: one error, naming the step](images/canvas-error-checks-light.png)
+![The checks list open: one error, naming the step](https://opsai.chanl.ai/docs/design/workflows/images/canvas-error-checks-light.png)
 
 ## Other states
 
 | State | Screen |
 |---|---|
-| A new workflow, with the step list open and a prompt to start with a trigger | ![New workflow](images/canvas-empty-light.png) |
-| Keyboard shortcuts | ![Shortcuts](images/canvas-shortcuts-light.png) |
-| Dark theme | ![Dark](images/canvas-large-dark.png) |
-| Step sheet, dark theme | ![Step sheet dark](images/canvas-step-dark.png) |
-| 400 px: opens on the trigger at a readable zoom | ![Phone](images/canvas-phone.png) |
-| 400 px: the step sheet takes the screen | ![Phone step](images/canvas-phone-step.png) |
+| A new workflow, with the step list open and a prompt to start with a trigger | ![New workflow](https://opsai.chanl.ai/docs/design/workflows/images/canvas-empty-light.png) |
+| Keyboard shortcuts | ![Shortcuts](https://opsai.chanl.ai/docs/design/workflows/images/canvas-shortcuts-light.png) |
+| Dark theme | ![Dark](https://opsai.chanl.ai/docs/design/workflows/images/canvas-large-dark.png) |
+| Step sheet, dark theme | ![Step sheet dark](https://opsai.chanl.ai/docs/design/workflows/images/canvas-step-dark.png) |
+| 400 px: opens on the trigger at a readable zoom | ![Phone](https://opsai.chanl.ai/docs/design/workflows/images/canvas-phone.png) |
+| 400 px: the step sheet takes the screen | ![Phone step](https://opsai.chanl.ai/docs/design/workflows/images/canvas-phone-step.png) |
 
 | Shortcut | Action |
 |---|---|

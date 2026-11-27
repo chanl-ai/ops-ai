@@ -51,8 +51,8 @@ REQUIRED = {
     "access-exceptions", "access-exceptions-commits", "access-exceptions-self-test", "portable-store",
     "portable-store-commits", "config-literals", "config-literals-commits", "typed-boundaries", "isolation-markings",
     "isolation-sites", "store-inventory", "roles-matrix", "sbom", "k8s-base", "lint-imports", "sdk-drift",
-    "changelog-entries", "console-standards", "downgrades", "token-lifetime", "cross-service", "standards",
-    "service-standards", "service-standards-self-test", "typecheck-packages", "typecheck-models-service",
+    "changelog-entries", "console-standards", "known-traps", "downgrades", "token-lifetime", "cross-service",
+    "standards", "service-standards", "service-standards-self-test", "typecheck-packages", "typecheck-models-service",
     "typecheck-documents-service", "typecheck-files-service", "typecheck-kb-service", "typecheck-agents-service",
 }  # fmt: skip
 

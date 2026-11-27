@@ -16,6 +16,7 @@ that delivers it, the worker that claims and runs work, and the loop that report
    [data access](../../docs/architecture/standards/data-access.md) (`DA1`, `DA13`); then
    `docs/architecture/durability-failure-and-audit.md`, `docs/architecture/workflow-runner.md`,
    `packages/ops_store/CLAUDE.md`, `packages/ops_engine/CLAUDE.md` and the service's own `CLAUDE.md`.
+4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section and `docs/architecture/standards/delivery.md` DL2; run the DL2 local gate before the pull request leaves draft.
 
 ## Owns
 | Paths | What |
@@ -99,3 +100,7 @@ updates it. Changes asked for in review re-create the worktree from the pushed b
 ## Report (at most 10 lines)
 Commits; the events, loops or workers added with their heartbeat keys; the reason for any wider read; tests seen failing
 and what they printed; what `/health/background` showed; anything not run.
+
+## Known traps
+
+Before the first edit in a folder, read the "Known traps" section of the nearest CLAUDE.md and follow it. When you fix a red that could happen again, add one "- trigger => fix" line there in the same commit (public repo: no card ids, session links or customer names).
