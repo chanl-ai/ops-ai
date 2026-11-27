@@ -10,7 +10,8 @@
  */
 export type QueryMode = 'semantic' | 'meaning' | 'keyword' | 'hybrid' | 'table_lookup' | 'as_of';
 
-export type RewriteMode = 'off' | 'rewrite' | 'expand';
+// What kb-service runs before the search (query_steps.REWRITE_MODES); expanding into several phrasings is not built.
+export type RewriteMode = 'off' | 'rewrite';
 
 export type FilterOp = 'is' | 'is_not' | 'one_of' | 'before' | 'after' | 'exists';
 
@@ -91,7 +92,7 @@ export interface ResolvedFilter {
 
 export interface RetrievalTrace {
   question: string;
-  queries: { text: string; kind: 'original' | 'rewritten' | 'expanded' }[];
+  queries: { text: string; kind: 'original' | 'rewritten' }[];
   mode: QueryMode;
   hybridWeight: number;
   rerank: boolean;
