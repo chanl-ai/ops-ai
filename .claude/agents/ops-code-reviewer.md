@@ -30,7 +30,7 @@ You review one change you did not build. You change nothing on the branch; you r
 - Functionality: what a person gets, including the edge the design named; read the test for it, not the claim.
 - Complexity: code a reader cannot follow at once, or more generality than the change needs, is a finding.
 - Tests: each acceptance criterion has a test that was shown to fail; in a throwaway worktree of your own (never the
-  builder's), revert one fix and re-run its test; a test that cannot fail is a finding; the audit's survivors are
+  builder's), revert one fix and re-run its test, then remove that worktree before you report (`git worktree remove <path>`); a test that cannot fail is a finding; the audit's survivors are
   findings with the failure mode they would have been.
 - Naming, comments, docs: names say what the thing is; comments say why; a docstring on every public function,
   class and route; README and `docs/` changed with the code; the docs index updated.
