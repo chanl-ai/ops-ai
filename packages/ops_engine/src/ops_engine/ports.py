@@ -129,12 +129,6 @@ class ReviewPort(Protocol):
         id. The decision arrives later as a resume of the run."""
         ...
 
-    async def own_decision(self, run_id: str, node_id: str, payload: Json) -> Json | None:
-        """The decision of a step that approves a write when the person who started the run may approve it themselves
-        (roles decide approvals): {decision, by, call, approval}, recorded as theirs. None to pause
-        for a person as before."""
-        ...
-
 
 class TaskTypePort(Protocol):
     async def pin(self, type_id: str, version: int | None) -> int:

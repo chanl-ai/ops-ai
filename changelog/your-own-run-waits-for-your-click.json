@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-26",
+  "title": "Your own workflow runs wait for your Approve click",
+  "description": "A review step in a workflow you started now waits in Human Tasks for an Approve click, even when you may decide it yourself, so no write runs without someone seeing it. You can approve your own run with that click where your team allows it, and with the two-person rule on a second person decides.",
+  "tag": "improved"
+}

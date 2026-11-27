@@ -31,7 +31,6 @@ class NewRun(TypedDict):
     input: Json
     created_by: str
     started_via: NotRequired[str | None]
-    started_by_approver: NotRequired[bool]
     after_seconds: NotRequired[float]
 
 
