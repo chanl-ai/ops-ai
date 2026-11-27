@@ -483,7 +483,7 @@ def _paused_on_strands(history: bytes) -> bool:
     return isinstance(data, dict) and cast(Json, data).get("loop") == "strands"
 
 
-def _endpoint(model: Any) -> contract.ModelEndpoint:
+def model_endpoint(model: Any) -> contract.ModelEndpoint:
     """Where the Strands loop sends this turn's model calls: the model's own endpoint when it names one (the
     budgeted gateway model), else the OpenAI-compatible client of the model it wraps."""
     named = getattr(model, "loop_endpoint", None)
@@ -1731,7 +1731,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             if on_strands:
                 from . import strands_loop  # noqa: PLC0415 - the library is large; imported only when a turn runs on it
 
-                endpoint = _endpoint(model)
+                endpoint = model_endpoint(model)
                 limits_now = limits
                 resumed = req.resume
                 try:
