@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_documents.store import metadata as documents_metadata
 from ops_service_kit.settings import Settings
-from ops_store.schema import offline_dialect_opts
+from ops_store.schema import offline_dialect_opts, serialize_migrations
 
 # One entry per module that owns tables.
 METADATA: list[sa.MetaData] = [documents_metadata]
@@ -42,6 +42,7 @@ def run_offline() -> None:
 def _run(connection: Connection) -> None:
     _configure(connection=connection)
     with context.begin_transaction():
+        serialize_migrations(connection)
         context.run_migrations()
 
 
