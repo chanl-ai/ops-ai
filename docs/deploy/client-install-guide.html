@@ -184,11 +184,16 @@ footer { max-width: 78rem; margin: 3rem auto 0; padding-top: 1.25rem; border-top
 <header class="masthead">
   <a class="brand" href="https://chanl.ai"><svg class="brand-mark" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(-90 12 12)"><path d="M5.636 5.636a9 9 0 1 0 12.728 12.728a9 9 0 0 0 -12.728 -12.728z"/><path d="M16.243 7.757a6 6 0 0 0 -8.486 0"/></g></svg><span><b>Ops AI</b> by Chanl AI · Architecture and install guide</span></a>
   <h1>Ops AI architecture and installation guide</h1>
-  <p class="lede">This guide is for the architects, DBAs, security reviewers and operators of a team that runs Ops AI on its own
-infrastructure. It says what each part does, how work moves through them, where data is kept and how it is kept apart,
-how the platform is secured, how to deploy and run it, and which parts are built today and which are still to come.</p>
-  <p class="lede">Each status in this guide is read from the code of the release it ships with. <span class="b b-ok">Built</span> means it runs and is tested;
-<span class="b b-part">Partial</span> means some of it runs and the rest is named; <span class="b b-plan">Planned</span> means designed and not yet in the code.</p>
+  <p class="lede">Running Ops AI on your own infrastructure raises questions from several people. The architect asks what runs where. The
+DBA asks what touches the database. The security reviewer asks how access is kept apart, and the operator asks how to
+install, upgrade and back it up. This guide answers each of them in one place. It is written for the architects, DBAs,
+security reviewers and operators of a team that runs Ops AI itself. It says what each part does, how work moves through
+them, where data is kept and how it is kept apart, how the platform is secured, how to deploy and run it, and which
+parts are built today and which are still to come.</p>
+  <p class="lede">Every status in this guide is read from the code of the release it ships with. <span class="b b-ok">Built</span> means the feature runs and is
+tested. <span class="b b-part">Partial</span> means some of it runs and the rest is named. <span class="b b-plan">Planned</span> means it is designed and not yet in the code.
+Start with the <a href="overview.md">Overview</a> if you are new, or go straight to <a href="deployment-options.md">Choose a deployment</a> if
+you are ready to plan an install.</p>
   <div class="status-strip" aria-label="At a glance">
     <span class="pill ok">Runs on PostgreSQL 15 or newer</span>
     <span class="pill ok">Install with one script: <code>git clone</code>, then <code>./install.sh</code></span>
@@ -1474,13 +1479,19 @@ production. Each release&#39;s automated use cases run on it, so testing makes n
 
 <section id="deployment-options" aria-labelledby="deployment-options-h">
 <h2 id="deployment-options-h"><span class="n">12</span>Choose a deployment</h2>
-<p>Pick how Ops AI runs before you install it: on one machine or a cluster, with or without internet access, and one
-organisation per install. The same images run in every layout; what changes is how they start, how secrets reach them
-and where file bytes are kept. PostgreSQL is always yours, outside the containers.</p>
+<p>Before anyone installs Ops AI, your team has to decide where it runs. An architecture review asks the same
+questions each time: one machine or a cluster, whether the machines can reach the internet, how many organisations share
+an install, which ports open, and how big the database must be. This page answers them. The same images run in every
+layout. What changes is how they start, how secrets reach them and where file bytes are kept. PostgreSQL is always yours
+and runs outside the containers.</p>
+<p>Settle it before you install, because the layout decides how secrets reach the containers and where file bytes live. To
+decide, find your situation in the first table, then read the network and sizing sections for what your platform team
+needs to approve.</p>
+<h3 id="deployment-options-where-it-can-run">Where it can run</h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Option</th><th>Use it when</th><th>Status</th></tr></thead>
 <tbody>
-<tr><td><a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/install.md">The install script</a></td><td>One Linux machine with Docker. The script installs, checks, upgrades, backs up and restores. A second machine with the same install is a standby you restore a backup onto</td><td><span class="b b-ok">Built</span> proven on one machine</td></tr>
+<tr><td><a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/install.md">The install script</a></td><td>One Linux machine with Docker. The script installs, checks, upgrades, backs up and restores. A second machine with the same install is a standby you restore a backup onto</td><td><span class="b b-ok">Built</span> proven on a CI runner and on one machine, not yet on a client&#39;s server</td></tr>
 <tr><td><a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/compose.md">Docker Compose by hand</a></td><td>One machine, where you run each step yourself</td><td><span class="b b-ok">Built</span> proven on one machine</td></tr>
 <tr><td><a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/kubernetes.md">Kubernetes</a></td><td>Your platform team runs a cluster. Plain Kustomize: a base and an overlay per environment</td><td><span class="b b-ok">Built</span> proven on a local kind cluster, not yet on a managed cloud cluster</td></tr>
 <tr><td><a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/release-package.md">Release package</a></td><td>The machines have no internet access</td><td><span class="b b-ok">Built</span> proven on a machine holding only the package</td></tr>
@@ -1509,49 +1520,51 @@ and where file bytes are kept. PostgreSQL is always yours, outside the container
 <tr><td>Outbound</td><td>Ops AI</td><td>S3 or Azure Blob, when configured</td><td>443</td><td>File bytes</td></tr>
 <tr><td>Outbound</td><td>the host</td><td><code>ghcr.io</code> (or your own registry), unless images are loaded from the offline image file</td><td>443</td><td>Install and upgrade only</td></tr>
 </tbody></table></div>
-<p>Nothing else needs to leave your network. Put TLS in front of the proxy: the containers speak plain HTTP to each other
-on the private network.</p>
+<p>Nothing else needs to leave your network. Put TLS in front of the proxy, because the containers speak plain HTTP to each
+other on the private network.</p>
 <h3 id="deployment-options-sizing">Sizing</h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Part</th><th>Starting point</th><th>Notes</th></tr></thead>
 <tbody>
-<tr><td>One machine for Compose</td><td>4 vCPUs, 8 GB memory, 60 GB disk to start; any current 64-bit Linux on x86-64 or ARM64 with Docker Engine 24 or newer and Compose 2.22 or newer. The install script&#39;s preflight wants at least 4 GB of memory for the containers and 15 GB of free disk</td><td>In the release&#39;s install proof all containers together used about 2 GB of memory at rest. Images take about 1.2 GB of disk</td></tr>
-<tr><td>PostgreSQL</td><td>15 or newer; on Azure Database for PostgreSQL Flexible Server, 16 or newer. General Purpose, 2 vCores, 8 GB memory, 64 GB storage to start</td><td>Database size grows with open work and with history until retention jobs exist. No extensions are needed</td></tr>
-<tr><td>Kubernetes requests</td><td>50m CPU each; memory 256 MiB, 512 MiB for agents, worker, documents and console, 128 MiB for the proxy (requests equal limits)</td><td>One replica each. files and kb keep bytes on a 1 GiB ReadWriteOnce volume each, so they run one replica; raise the size for real use</td></tr>
-<tr><td>Workflow throughput</td><td>Each worker process runs 4 runs at once and polls every half second</td><td>Add worker processes to add capacity; a run waiting for a person holds no worker</td></tr>
+<tr><td>One machine for Compose</td><td>4 vCPUs, 8 GB memory and 60 GB of disk to start. Any current 64-bit Linux on x86-64 or ARM64 with Docker Engine 24 or newer and Compose 2.22 or newer. The install script&#39;s preflight wants at least 4 GB of memory for the containers and 15 GB of free disk</td><td>In the release&#39;s install proof all containers together used about 2 GB of memory at rest. Images take about 1.2 GB of disk</td></tr>
+<tr><td>PostgreSQL</td><td>15 or newer; on Azure Database for PostgreSQL Flexible Server, 16 or newer. General Purpose, 2 vCores, 8 GB memory, 64 GB storage to start</td><td>Database size grows with open work and with history until retention jobs exist. The <code>vector</code> extension (pgvector 0.5 or newer) must be available, and no other extension is needed</td></tr>
+<tr><td>Kubernetes requests</td><td>50m CPU each. Memory is 256 MiB by default, 512 MiB for agents, worker, documents and console, 1 GiB for the code-tools runner and 128 MiB for the proxy. Memory limits equal the requests, and no CPU limit is set</td><td>One replica each. The files and knowledge services keep bytes on a 1 GiB ReadWriteOnce volume each, so they run one replica. Raise the size for real use</td></tr>
+<tr><td>Workflow throughput</td><td>Each worker process runs 4 runs at once and polls every half second</td><td>Add worker processes to add capacity. A run waiting for a person holds no worker</td></tr>
 <tr><td>File storage</td><td>The size of the documents and attachments you keep, for as long as their retention class says</td><td>Move to S3 or Azure Blob for large volumes and WORM retention</td></tr>
 </tbody></table></div>
-<p>Load figures for many concurrent runs are still to be measured and published; size against a pilot of your own
-workload and watch the work queue and database load (<a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/monitoring.md#what-to-watch">What to watch</a>).</p>
+<p>Load figures for many concurrent runs are still to be measured and published. Size against a pilot of your own
+workload, and watch the work queue and database load (<a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/monitoring.md#what-to-watch">What to watch</a>).</p>
 </section>
 
 <section id="install" aria-labelledby="install-h">
 <h2 id="install-h"><span class="n">13</span>Install</h2>
-<p>Install Ops AI for a team on your own infrastructure. On one machine, the install script does every step and checks the
-result; on a cluster, or when you run each step yourself, the same images start from Compose or Kubernetes files.
-Version 1.2.0 is the current release, and its images are published at <code>ghcr.io/chanl-ai/ops-ai</code>.</p>
-<div class="note info"><p>To try Ops AI on a laptop rather than install it for a team, use the <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/quickstart.md">Quickstart</a>: it runs from a
+<p>Putting Ops AI on your own infrastructure involves a machine, a name, a database and a model, and each has to be ready
+before the first command runs. This page lists what to have in hand, then points to the way that fits your setup. On
+one machine, the install script does every step and checks the result. On a cluster, or when you run each step
+yourself, the same images start from Compose or Kubernetes files. Version 1.2.0 is the current release, and its images
+are published at <code>ghcr.io/chanl-ai/ops-ai</code>.</p>
+<div class="note info"><p>To try Ops AI on a laptop rather than install it for a team, use the <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/quickstart.md">Quickstart</a>. It runs from a
 clone with a test model and a sample team.</p>
 </div>
-<h3 id="install-before-you-start">Before you start</h3>
+<h3 id="install-what-to-have-ready">What to have ready</h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Item</th><th>What you need</th><th>Details</th></tr></thead>
 <tbody>
-<tr><td>A host</td><td>One Linux machine with Docker Engine 24 or newer, Docker Compose 2.22 or newer, curl and tar, 4 GB of memory for the containers and 15 GB of free disk</td><td><a href="#deployment-options-sizing">Sizing</a></td></tr>
+<tr><td>A host</td><td>One Linux machine with Docker Engine 24 or newer, Docker Compose 2.22 or newer, <code>curl</code> and <code>tar</code>, 4 GB of memory for the containers and 15 GB of free disk</td><td><a href="#deployment-options-sizing">Sizing</a></td></tr>
 <tr><td>A DNS name and TLS</td><td>A name such as <code>ops.example.com</code> on your load balancer or reverse proxy, forwarding to the port the script asks for</td><td><a href="#deployment-options-the-network">The network</a></td></tr>
-<tr><td>PostgreSQL</td><td>For a trial, the script&#39;s built-in database. For real use, your own PostgreSQL 15 or newer: either a login that may change the schema, or DBA mode, where your DBA applies the scripts the install writes</td><td><a href="#data-and-database">Data and database</a></td></tr>
-<tr><td>A model endpoint</td><td>Any OpenAI-compatible endpoint and its key; the built-in test model will do for a first look</td><td><a href="#models">Models</a></td></tr>
+<tr><td>PostgreSQL</td><td>For a trial, the script&#39;s built-in database. For real use, your own PostgreSQL 15 or newer with the <code>vector</code> extension: either a login that may change the schema, or DBA mode, where your DBA applies the scripts the install writes</td><td><a href="#data-and-database">Data and database</a></td></tr>
+<tr><td>A model endpoint</td><td>Any OpenAI-compatible endpoint and its key. The built-in test model will do for a first look</td><td><a href="#models">Models</a></td></tr>
 <tr><td>The first admin</td><td>A name and email address for the person who signs in first and invites everyone else</td><td></td></tr>
 <tr><td>Sign-in and outbound hosts</td><td>Your identity provider&#39;s OIDC or SAML details, and the hosts Ops AI will call, for the Security admin to set after the install</td><td><a href="#security-and-governance">Security and governance</a></td></tr>
 </tbody></table></div>
-<h3 id="install-install">Install</h3>
+<h3 id="install-run-the-install-script">Run the install script</h3>
+<p>Clone the release you want and run the script from the clone. The script installs the version of the tag you cloned.
+On a clone without a release tag it falls back to the version in the repository&#39;s version file, which can be older
+than the code you cloned.</p>
 <div class="cmd"><pre><code>git clone --branch v1.2.0 https://github.com/chanl-ai/ops-ai.git
 cd ops-ai
 ./install.sh</code></pre></div>
-<p>The script installs the version of the tag you cloned. The machine needs Docker Engine 24 or newer, Docker Compose
-2.22 or newer, curl, tar, 4 GB of memory for the containers and 15 GB of free disk; Python is not needed. A preflight
-names anything missing and stops before it changes anything.</p>
-<p>It asks these questions. Each has a default, a flag, and a key for an answers file.</p>
+<p>The script asks the questions below. Each has a default, a flag and a key for an answers file.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Question</th><th>Default</th><th>Flag</th><th>Answers key</th></tr></thead>
 <tbody>
@@ -1566,24 +1579,48 @@ names anything missing and stops before it changes anything.</p>
 <tr><td>Model</td><td><code>test</code>: the built-in test model, which calls no provider</td><td><code>--model &lt;OpenAI-compatible base URL&gt;/v1</code> with <code>--model-name</code> and <code>--model-key-file</code></td><td><code>MODEL</code>, <code>MODEL_NAME</code>, <code>MODEL_API_KEY</code></td></tr>
 <tr><td>Image version</td><td>The tag you cloned</td><td><code>--version</code></td><td><code>VERSION</code></td></tr>
 </tbody></table></div>
-<p>To run it unattended, put the answers in a file, one <code>KEY=value</code> per line, and add <code>--yes</code>. Flags win over the file.</p>
+<p>A few more flags change how the script behaves.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Flag</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>--model-input-price</code>, <code>--model-output-price</code></td><td>The price per million tokens, which the cost log uses. Both default to 0</td></tr>
+<tr><td><code>--model-budget</code></td><td>The spending cap on each model key. Default 100</td></tr>
+<tr><td><code>--dba-timeout &lt;seconds&gt;</code></td><td>How long an unattended run waits for your DBA. Default 3600</td></tr>
+<tr><td><code>--env-file &lt;file&gt;</code></td><td>Where the settings file lives. Default <code>./ops-ai.env</code></td></tr>
+<tr><td><code>--build</code></td><td>Builds the images from the clone instead of pulling them. The clone must be a git checkout</td></tr>
+<tr><td><code>--offline &lt;images.tar.gz&gt;</code></td><td>Loads the images from a <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/release-package.md">release package</a> instead of pulling them</td></tr>
+</tbody></table></div>
+<p>To run without questions, put the answers in a file, one <code>KEY=value</code> per line, and add <code>--yes</code>. A flag overrides the
+same key in the file. Without a terminal the script behaves as if you had passed <code>--yes</code>.</p>
 <div class="cmd"><pre><code>./install.sh --answers install-answers.env --yes</code></pre></div>
-<p>When it finishes it prints the address and how to sign in as the first admin.</p>
-<h3 id="install-what-it-does">What it does</h3>
+<p>For your own database, give a connection string such as <code>postgresql://ops_admin:&lt;password&gt;@db.example.com:5432/ops?sslmode=require</code>.
+The script turns <code>sslmode=</code> into the form the services use.</p>
+<h3 id="install-what-the-script-does">What the script does</h3>
 <ol class="steps">
-<li><strong>Gets the images</strong> for linux/amd64 or linux/arm64 from <code>ghcr.io/chanl-ai/ops-ai</code>. <code>--offline &lt;images.tar.gz&gt;</code>
-loads them from a <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/release-package.md">release package</a> instead, for a machine with no registry access.</li>
-<li><strong>Writes the settings file</strong> <code>ops-ai.env</code>, readable only by its owner, and generates every key into it. No secret is
-printed.</li>
-<li><strong>Waits for your DBA</strong> in <code>dba</code> mode: it writes the database scripts and each login&#39;s password to <code>./dba/</code>, prints
+<li><strong>Gets the images</strong> for linux/amd64 or linux/arm64 from <code>ghcr.io/chanl-ai/ops-ai</code>. With <code>--offline</code>, it loads them
+from a release package&#39;s image file instead.</li>
+<li><strong>Writes the settings file</strong> <code>ops-ai.env</code>, readable only by its owner, and generates every key into it. The script
+prints no secret.</li>
+<li><strong>Waits for your DBA</strong> in <code>dba</code> mode. It writes the database scripts and each login&#39;s password to <code>./dba/</code>, prints
 the three <code>psql</code> commands to run, and checks the schema before it goes on (<a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/database.md">Database</a>).</li>
 <li><strong>Starts everything</strong> and waits for each health check. A model key you give is stored in Ops AI&#39;s credential
-store, never in <code>ops-ai.env</code>.</li>
+store, and <code>ops-ai.env</code> never holds it.</li>
 <li><strong>Checks the install</strong>: health through the published port, the sign-in page, a sign-in as the first admin, and one
-read from every service.</li>
+read from each service.</li>
 </ol>
-<p>Running <code>./install.sh</code> again on a working install checks it and changes nothing. It never replaces existing keys,
-because the secrets key in <code>ops-ai.env</code> unlocks every stored credential.</p>
+<h3 id="install-what-success-looks-like">What success looks like</h3>
+<p>The script ends by printing the address, the first admin&#39;s email and where the password is:</p>
+<div class="cmd"><pre><code>Ops AI 1.2.0 is running.
+
+  Open:      http://localhost:8890   (on this machine: http://localhost:8890)
+  Sign in:   admin@example.com
+  Password:  the one you gave, or the generated one: see OPS_BOOTSTRAP_ADMIN_PASSWORD in ops-ai.env</code></pre></div>
+<p>Open the address and sign in. Change the password, then delete the <code>OPS_BOOTSTRAP_ADMIN_PASSWORD</code> line from
+<code>ops-ai.env</code>. Keep <code>ops-ai.env</code> with your backups, because its secrets key unlocks every stored credential.</p>
+<p>Running <code>./install.sh</code> again on a working install checks it and changes nothing. The script never replaces existing keys.</p>
+<p>If a check fails, the script exits with an error and the failing line. <code>./install.sh logs</code> shows what the containers
+said. The agents check fails until a model is connected, which the script does for you, so a failure there usually
+means the model endpoint or its key.</p>
 <h3 id="install-the-other-commands">The other commands</h3>
 <p>Run them from the folder the install ran in.</p>
 <div class="table-wrap"><table>
@@ -1594,53 +1631,76 @@ because the secrets key in <code>ops-ai.env</code> unlocks every stored credenti
 <tr><td><code>./install.sh backup [--out DIR]</code></td><td>One archive of the database, the stored files and <code>ops-ai.env</code> (<a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/backup-and-restore.md">Back up and restore</a>)</td></tr>
 <tr><td><code>./install.sh restore &lt;file&gt;</code></td><td>Puts a backup back and checks (<a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/backup-and-restore.md">Back up and restore</a>)</td></tr>
 <tr><td><code>./install.sh upgrade [--version V]</code></td><td>Backs up, moves to version V, checks, and rolls back on a failed check (<a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/upgrade.md">Upgrade</a>)</td></tr>
-<tr><td><code>./install.sh uninstall</code></td><td>Asks, then removes the containers; asks again before deleting the data. Keeps <code>ops-ai.env</code></td></tr>
+<tr><td><code>./install.sh uninstall</code></td><td>Asks, then removes the containers, and asks again before deleting the data. Keeps <code>ops-ai.env</code>. With <code>--yes</code>, add <code>--delete-data</code> to delete the data too</td></tr>
 </tbody></table></div>
 <p>In <code>dba</code> mode, <code>backup</code>, <code>restore</code> and <code>upgrade</code> need a database admin login that may dump the database, in a file:
 <code>--admin-url-file &lt;file&gt;</code> holding <code>postgresql://admin:password@host:5432/db</code>. The services&#39; own logins cannot dump it.</p>
+<h3 id="install-apply-a-changed-setting">Apply a changed setting</h3>
+<p>Running <code>./install.sh</code> again does not apply an edit to <code>ops-ai.env</code>, because it finds the install healthy and stops
+after the check. To apply an edit, run Compose on the same files the script uses. The command below fits an install
+with the built-in database and the test model. Leave out <code>-f deploy/compose/try.yaml</code> and both profiles when you use
+your own database and a real model, and add <code>-f deploy/compose/dba.yaml</code> for <code>dba</code> mode.</p>
+<div class="cmd"><pre><code>docker compose -p ops-ai -f deploy/compose/app.yaml -f deploy/compose/try.yaml \
+  --profile postgres --profile fake-model --env-file ops-ai.env up -d</code></pre></div>
+<p>Use the project name you chose, which <code>./install.sh status</code> prints.</p>
 <h3 id="install-turn-on-a-feature-flag">Turn on a feature flag</h3>
 <p>A feature that is not yet released to every install ships behind a flag and is off. To turn one on, list it in
-<code>ops-ai.env</code> and run <code>./install.sh</code> again to apply the change.</p>
+<code>ops-ai.env</code> and <a href="#install-apply-a-changed-setting">apply the setting</a>.</p>
 <div class="cmd"><pre><code>OPS_FLAGS=mcp_gateway,tool_search</code></pre></div>
 <div class="table-wrap"><table>
 <thead><tr><th>Flag</th><th>Turns on</th></tr></thead>
 <tbody>
-<tr><td><code>mcp_gateway</code></td><td>The MCP address outside assistants (Claude, Cursor, Copilot) use to reach a team&#39;s tools, and the console&#39;s MCP channel</td></tr>
+<tr><td><code>mcp_gateway</code></td><td>The MCP address that outside assistants (Claude, Cursor, Copilot) use to reach a team&#39;s tools, and the console&#39;s MCP channel</td></tr>
 <tr><td><code>tool_search</code></td><td>Agents with many tools search for the one they need</td></tr>
 <tr><td><code>plugin_updates</code></td><td>Each team keeps the plugin version it took and reviews an upgrade before its tools change</td></tr>
 <tr><td><code>area_tabs</code></td><td>The console shows one area at a time, picked from the top bar</td></tr>
 </tbody></table></div>
-<p>A name Ops AI does not know stops every service at start with the list of known flags, so a typo never reads as off.</p>
+<p>A name Ops AI does not know stops every service at start and lists the known flags, so a typo cannot pass for a flag
+that is off.</p>
 <h3 id="install-set-the-embedding-model">Set the embedding model</h3>
-<p>Knowledge search by meaning uses one embedding model per install, set in <code>ops-ai.env</code>.</p>
+<p>Knowledge search by meaning needs one embedding model for the whole install. Two settings in <code>ops-ai.env</code> name it.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
 <tbody>
-<tr><td><code>OPS_EMBEDDING_ALIAS</code></td><td><code>bank-embed</code></td><td>The model alias of kind embedding; bind it to your provider&#39;s embedding model the way <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/compose.md#connect-a-model">Connect a model</a> binds a chat model</td></tr>
-<tr><td><code>OPS_EMBEDDING_WIDTH</code></td><td><code>1536</code></td><td>The vector width. Above 1,998 every service refuses to start, since no vector index holds it</td></tr>
+<tr><td><code>OPS_EMBEDDING_ALIAS</code></td><td><code>bank-embed</code></td><td>The model alias of kind embedding that knowledge is embedded with</td></tr>
+<tr><td><code>OPS_EMBEDDING_WIDTH</code></td><td><code>1536</code></td><td>The vector width. Above 1,998 every service refuses to start, because no vector index holds more</td></tr>
 </tbody></table></div>
-<p>Changing either one embeds the stored knowledge again; no source is read again. Without an embedding model, search runs
-on keywords alone and says so in each result. Your own PostgreSQL needs the <code>vector</code> extension (pgvector 0.5 or newer)
-offered; the built-in database has it.</p>
+<p>Three things must be true before search by meaning works.</p>
+<ul>
+<li>An alias of kind embedding exists under that name and points at your provider&#39;s embedding model. The script&#39;s connect
+step, and the console&#39;s <strong>Aliases</strong> page, create chat aliases only. An embedding alias is created through the models
+service&#39;s API with <code>&quot;kind&quot;: &quot;embedding&quot;</code>.</li>
+<li>The knowledge service has its own model key, <code>OPS_MODELS_KEY_KB</code>. The script issues keys for agents and documents
+only. Issue this one with <code>connect_model.py --key-id purpose:kb</code>, as in <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/compose.md#connect-a-model">Connect a model</a>.</li>
+<li>Your PostgreSQL offers the <code>vector</code> extension (pgvector 0.5 or newer). The built-in database has it.</li>
+</ul>
+<p>Until they are true, search runs on keywords alone and says so in each result. Changing either setting later embeds the
+stored knowledge again, without reading any source again.</p>
 <h3 id="install-install-from-a-company-registry">Install from a company registry</h3>
-<p>When the machine reaches only your own registry, mirror the images there and point the script at it:</p>
+<p>When the machine reaches only your own registry, mirror the images there and point the script at it.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th>What it moves</th><th>Default</th></tr></thead>
 <tbody>
 <tr><td><code>OPS_IMAGE_REGISTRY</code>, in the shell that runs the script</td><td>Where the Ops AI images are pulled from</td><td><code>ghcr.io/chanl-ai/ops-ai</code></td></tr>
-<tr><td><code>OPS_BASE_IMAGE_PREFIX</code>, in <code>ops-ai.env</code></td><td>A registry prefix ending in <code>/</code> for third-party images, such as PostgreSQL and the policy engine</td><td>Docker Hub</td></tr>
+<tr><td><code>OPS_BASE_IMAGE_PREFIX</code>, in <code>ops-ai.env</code></td><td>A registry prefix ending in <code>/</code> for third-party images such as the trial PostgreSQL</td><td>Docker Hub</td></tr>
 </tbody></table></div>
 <p>A machine with no registry at all uses <code>--offline</code> with a release package&#39;s image file.</p>
 <h3 id="install-limits">Limits</h3>
 <ul>
-<li>Proven on Docker Desktop for macOS; a run on a Linux server is not yet recorded.</li>
-<li>An upgrade across two releases that change the schema has not run yet: 1.0.0 is the first release.</li>
+<li>With <code>--offline</code>, the script still pulls <code>pgvector/pgvector:pg17</code> when you choose the built-in database. Backup and
+restore pull <code>alpine</code>, and backup and restore against your own database pull <code>postgres:17-alpine</code>, from Docker Hub.
+None of these follow <code>OPS_IMAGE_REGISTRY</code> or <code>OPS_BASE_IMAGE_PREFIX</code>, so a machine with no Docker Hub access cannot back
+up through the script.</li>
+<li><code>--build</code> builds every image except the one that runs code tools. Start such an install with images from a registry or
+a release package until that is fixed.</li>
+<li>The script upgrades one install at a time and does not manage a standby. A second machine with the same install is a
+standby you restore a backup onto (<a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/backup-and-restore.md">Back up and restore</a>).</li>
 </ul>
 <h3 id="install-other-ways-to-install">Other ways to install</h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Way</th><th>Use it when</th></tr></thead>
 <tbody>
-<tr><td><a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/compose.md">Docker Compose by hand</a></td><td>You run each step yourself on one machine</td></tr>
+<tr><td><a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/compose.md">Docker Compose by hand</a></td><td>You run each step yourself on one machine. The DBA&#39;s scripts are in <a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/database.md">Database</a></td></tr>
 <tr><td><a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/kubernetes.md">Kubernetes</a></td><td>Your platform team runs a cluster</td></tr>
 <tr><td><a href="https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/release-package.md">Release package</a></td><td>The machines have no internet access</td></tr>
 </tbody></table></div>
@@ -1893,15 +1953,21 @@ everything again.</p>
 
 <section id="azure-sql" aria-labelledby="azure-sql-h">
 <h2 id="azure-sql-h"><span class="n">16</span>Azure SQL</h2>
-<div class="note warn"><p>A full install of Ops AI on Azure SQL Database or SQL Server is not yet proven. Install on PostgreSQL today; Azure
+<p>If your organisation runs SQL Server or Azure SQL and does not run PostgreSQL, you need to know now whether Ops AI can
+use it. Today it cannot run on either. This page says how far the work has got, so your DBA can review the schema in
+parallel with the rest.</p>
+<div class="note warn"><p>A full install of Ops AI on Azure SQL Database or SQL Server has not been proven. Install on PostgreSQL today. Azure
 Database for PostgreSQL Flexible Server is supported. The SQL Server scripts are ready for your DBA to review now, so
 the review can run in parallel with the remaining work.</p>
 </div>
 <p>Azure SQL Database and SQL Server 2025 are the second database Ops AI is built for. Each service reaches the database
-only through its own store, and the places where the two databases differ (locking, queue claims, inserts that update
-an existing row, the clock, the tenant of a transaction) sit in one layer, so the services above the stores do not
+only through its own store. The places where the two databases differ sit in one shared layer: locking, queue claims,
+inserts that update an existing row, the clock, and the tenant of a transaction. The services above the stores do not
 change. On every change, continuous integration runs the store, service kit and identity suites, and each service&#39;s
-store and isolation tests, on SQL Server 2025 beside PostgreSQL, and fails when a SQL Server case is skipped.</p>
+store and isolation tests, on SQL Server 2025 beside PostgreSQL, and it fails when a SQL Server case is skipped.</p>
+<p>Ops AI&#39;s own test machine has also applied the SQL Server scripts to a SQL Server 2025 instance with <code>sqlcmd</code>, the way a
+DBA would, and compared the result with the store models and the tenant policies. That check runs from a source clone
+and is not part of a release.</p>
 <h3 id="azure-sql-ready-for-review">Ready for review</h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Item</th><th>What it holds</th><th>Status</th></tr></thead>
@@ -1915,10 +1981,18 @@ store and isolation tests, on SQL Server 2025 beside PostgreSQL, and fails when 
 <tr><td>Upgrade scripts</td><td>Generated per release pair the same way as for PostgreSQL, each step guarded by the version it starts from</td><td><span class="b b-ok">Built</span></td></tr>
 <tr><td>How the scripts are kept right</td><td>Compiled from each service&#39;s table definitions, which tests hold equal to what the PostgreSQL migrations build, and compared on every change with reviewed copies</td><td><span class="b b-ok">Built</span></td></tr>
 </tbody></table></div>
-<p>Your DBA runs them with <code>sqlcmd -b</code>, which stops at the first error:</p>
-<div class="cmd"><pre><code>sqlcmd -b -d master -i roles.sql -v database=ops ops_migrator_password=&lt;...&gt; ops_agents_runtime_password=&lt;...&gt;
-sqlcmd -b -U ops_migrator -d ops -i bundle.sql
-sqlcmd -b -U ops_migrator -d ops -i grants.sql</code></pre></div>
+<p>Your DBA runs them with <code>sqlcmd -b -I</code>. The <code>-b</code> option stops at the first error. The <code>-I</code> option turns on quoted
+identifiers, which the bundle&#39;s filtered indexes need, because <code>sqlcmd</code> leaves them off. <code>roles.sql</code> takes a password
+variable for <code>ops_migrator</code> and one for each of the seven runtime logins (<code>ops_platform_runtime</code>, <code>ops_agents_runtime</code>,
+<code>ops_tools_runtime</code>, <code>ops_models_runtime</code>, <code>ops_kb_runtime</code>, <code>ops_files_runtime</code> and <code>ops_documents_runtime</code>).</p>
+<div class="cmd"><pre><code>sqlcmd -S &lt;server&gt; -U &lt;admin&gt; -b -I -d master -i roles.sql -v database=ops ops_migrator_password=&lt;...&gt; \
+  ops_platform_runtime_password=&lt;...&gt; ops_agents_runtime_password=&lt;...&gt; ops_tools_runtime_password=&lt;...&gt; \
+  ops_models_runtime_password=&lt;...&gt; ops_kb_runtime_password=&lt;...&gt; ops_files_runtime_password=&lt;...&gt; \
+  ops_documents_runtime_password=&lt;...&gt;
+sqlcmd -S &lt;server&gt; -U ops_migrator -b -I -d ops -i bundle.sql
+sqlcmd -S &lt;server&gt; -U ops_migrator -b -I -d ops -i grants.sql</code></pre></div>
+<p>What a DBA should expect to see after these three scripts is the schema, the logins and the tenant policies, and nothing
+else: the services do not run on it yet.</p>
 <h3 id="azure-sql-still-to-come">Still to come</h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Item</th><th>Why it matters</th><th>Status</th></tr></thead>
@@ -1930,7 +2004,7 @@ sqlcmd -b -U ops_migrator -d ops -i grants.sql</code></pre></div>
 <tr><td>The worker&#39;s queue claim and the timer poller</td><td>The claim happens before the tenant is known, which SQL Server&#39;s block predicate refuses; the timer poller starts only on PostgreSQL</td><td><span class="b b-plan">Planned</span></td></tr>
 <tr><td>Tenant policies for the tools, models, knowledge, files and documents tables</td><td>The same gap as on PostgreSQL (<a href="#data-and-database-tenants-and-teams">Tenants and teams</a>)</td><td><span class="b b-plan">Planned</span></td></tr>
 <tr><td>Signing in to the database with Microsoft Entra ID or a managed identity</td><td>The scripts use SQL logins</td><td><span class="b b-plan">Planned</span></td></tr>
-<tr><td>A drift check against a live SQL Server</td><td>Available for PostgreSQL only</td><td><span class="b b-plan">Planned</span></td></tr>
+<tr><td>A drift check against a live SQL Server</td><td>The packaged check (<code>make db-drift</code>) works for PostgreSQL only. On SQL Server the comparison runs from the test image</td><td><span class="b b-plan">Planned</span></td></tr>
 </tbody></table></div>
 </section>
 

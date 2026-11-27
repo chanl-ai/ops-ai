@@ -9,26 +9,32 @@ Status: current. How to install, run and maintain Ops AI on your own machines. T
 <!-- The steps below are included from docs/deploy/install.md, the install script's guide, when the page and
 INSTALL.md are built; edit them there. -->
 
-Install Ops AI for a team on your own infrastructure. On one machine, the install script does every step and checks the
-result; on a cluster, or when you run each step yourself, the same images start from Compose or Kubernetes files.
-Version 1.2.0 is the current release, and its images are published at `ghcr.io/chanl-ai/ops-ai`.
+Putting Ops AI on your own infrastructure involves a machine, a name, a database and a model, and each has to be ready
+before the first command runs. This page lists what to have in hand, then points to the way that fits your setup. On
+one machine, the install script does every step and checks the result. On a cluster, or when you run each step
+yourself, the same images start from Compose or Kubernetes files. Version 1.2.0 is the current release, and its images
+are published at `ghcr.io/chanl-ai/ops-ai`.
 
 > [!NOTE]
-> To try Ops AI on a laptop rather than install it for a team, use the [Quickstart](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/quickstart.md): it runs from a
+> To try Ops AI on a laptop rather than install it for a team, use the [Quickstart](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/quickstart.md). It runs from a
 > clone with a test model and a sample team.
 
-### Before you start
+### What to have ready
 
 | Item | What you need | Details |
 |---|---|---|
-| A host | One Linux machine with Docker Engine 24 or newer, Docker Compose 2.22 or newer, curl and tar, 4 GB of memory for the containers and 15 GB of free disk | [Sizing](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/deployment-options.md#sizing) |
+| A host | One Linux machine with Docker Engine 24 or newer, Docker Compose 2.22 or newer, `curl` and `tar`, 4 GB of memory for the containers and 15 GB of free disk | [Sizing](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/deployment-options.md#sizing) |
 | A DNS name and TLS | A name such as `ops.example.com` on your load balancer or reverse proxy, forwarding to the port the script asks for | [The network](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/deployment-options.md#the-network) |
-| PostgreSQL | For a trial, the script's built-in database. For real use, your own PostgreSQL 15 or newer: either a login that may change the schema, or DBA mode, where your DBA applies the scripts the install writes | [Data and database](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/data-and-database.md) |
-| A model endpoint | Any OpenAI-compatible endpoint and its key; the built-in test model will do for a first look | [Models](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/models.md) |
+| PostgreSQL | For a trial, the script's built-in database. For real use, your own PostgreSQL 15 or newer with the `vector` extension: either a login that may change the schema, or DBA mode, where your DBA applies the scripts the install writes | [Data and database](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/data-and-database.md) |
+| A model endpoint | Any OpenAI-compatible endpoint and its key. The built-in test model will do for a first look | [Models](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/models.md) |
 | The first admin | A name and email address for the person who signs in first and invites everyone else | |
 | Sign-in and outbound hosts | Your identity provider's OIDC or SAML details, and the hosts Ops AI will call, for the Security admin to set after the install | [Security and governance](https://github.com/chanl-ai/ops-ai/blob/main/docs/guide/security-and-governance.md) |
 
-### Install
+### Run the install script
+
+Clone the release you want and run the script from the clone. The script installs the version of the tag you cloned.
+On a clone without a release tag it falls back to the version in the repository's version file, which can be older
+than the code you cloned.
 
 ```bash
 git clone --branch v1.2.0 https://github.com/chanl-ai/ops-ai.git
@@ -36,11 +42,7 @@ cd ops-ai
 ./install.sh
 ```
 
-The script installs the version of the tag you cloned. The machine needs Docker Engine 24 or newer, Docker Compose
-2.22 or newer, curl, tar, 4 GB of memory for the containers and 15 GB of free disk; Python is not needed. A preflight
-names anything missing and stops before it changes anything.
-
-It asks these questions. Each has a default, a flag, and a key for an answers file.
+The script asks the questions below. Each has a default, a flag and a key for an answers file.
 
 | Question | Default | Flag | Answers key |
 |---|---|---|---|
@@ -55,30 +57,61 @@ It asks these questions. Each has a default, a flag, and a key for an answers fi
 | Model | `test`: the built-in test model, which calls no provider | `--model <OpenAI-compatible base URL>/v1` with `--model-name` and `--model-key-file` | `MODEL`, `MODEL_NAME`, `MODEL_API_KEY` |
 | Image version | The tag you cloned | `--version` | `VERSION` |
 
-To run it unattended, put the answers in a file, one `KEY=value` per line, and add `--yes`. Flags win over the file.
+A few more flags change how the script behaves.
+
+| Flag | What it does |
+|---|---|
+| `--model-input-price`, `--model-output-price` | The price per million tokens, which the cost log uses. Both default to 0 |
+| `--model-budget` | The spending cap on each model key. Default 100 |
+| `--dba-timeout <seconds>` | How long an unattended run waits for your DBA. Default 3600 |
+| `--env-file <file>` | Where the settings file lives. Default `./ops-ai.env` |
+| `--build` | Builds the images from the clone instead of pulling them. The clone must be a git checkout |
+| `--offline <images.tar.gz>` | Loads the images from a [release package](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/release-package.md) instead of pulling them |
+
+To run without questions, put the answers in a file, one `KEY=value` per line, and add `--yes`. A flag overrides the
+same key in the file. Without a terminal the script behaves as if you had passed `--yes`.
 
 ```bash
 ./install.sh --answers install-answers.env --yes
 ```
 
-When it finishes it prints the address and how to sign in as the first admin.
+For your own database, give a connection string such as `postgresql://ops_admin:<password>@db.example.com:5432/ops?sslmode=require`.
+The script turns `sslmode=` into the form the services use.
 
-### What it does
+### What the script does
 
 <!-- site: steps -->
-1. **Gets the images** for linux/amd64 or linux/arm64 from `ghcr.io/chanl-ai/ops-ai`. `--offline <images.tar.gz>`
-   loads them from a [release package](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/release-package.md) instead, for a machine with no registry access.
-2. **Writes the settings file** `ops-ai.env`, readable only by its owner, and generates every key into it. No secret is
-   printed.
-3. **Waits for your DBA** in `dba` mode: it writes the database scripts and each login's password to `./dba/`, prints
+1. **Gets the images** for linux/amd64 or linux/arm64 from `ghcr.io/chanl-ai/ops-ai`. With `--offline`, it loads them
+   from a release package's image file instead.
+2. **Writes the settings file** `ops-ai.env`, readable only by its owner, and generates every key into it. The script
+   prints no secret.
+3. **Waits for your DBA** in `dba` mode. It writes the database scripts and each login's password to `./dba/`, prints
    the three `psql` commands to run, and checks the schema before it goes on ([Database](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/database.md)).
 4. **Starts everything** and waits for each health check. A model key you give is stored in Ops AI's credential
-   store, never in `ops-ai.env`.
+   store, and `ops-ai.env` never holds it.
 5. **Checks the install**: health through the published port, the sign-in page, a sign-in as the first admin, and one
-   read from every service.
+   read from each service.
 
-Running `./install.sh` again on a working install checks it and changes nothing. It never replaces existing keys,
-because the secrets key in `ops-ai.env` unlocks every stored credential.
+### What success looks like
+
+The script ends by printing the address, the first admin's email and where the password is:
+
+```text
+Ops AI 1.2.0 is running.
+
+  Open:      http://localhost:8890   (on this machine: http://localhost:8890)
+  Sign in:   admin@example.com
+  Password:  the one you gave, or the generated one: see OPS_BOOTSTRAP_ADMIN_PASSWORD in ops-ai.env
+```
+
+Open the address and sign in. Change the password, then delete the `OPS_BOOTSTRAP_ADMIN_PASSWORD` line from
+`ops-ai.env`. Keep `ops-ai.env` with your backups, because its secrets key unlocks every stored credential.
+
+Running `./install.sh` again on a working install checks it and changes nothing. The script never replaces existing keys.
+
+If a check fails, the script exits with an error and the failing line. `./install.sh logs` shows what the containers
+said. The agents check fails until a model is connected, which the script does for you, so a failure there usually
+means the model endpoint or its key.
 
 ### The other commands
 
@@ -91,15 +124,29 @@ Run them from the folder the install ran in.
 | `./install.sh backup [--out DIR]` | One archive of the database, the stored files and `ops-ai.env` ([Back up and restore](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/backup-and-restore.md)) |
 | `./install.sh restore <file>` | Puts a backup back and checks ([Back up and restore](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/backup-and-restore.md)) |
 | `./install.sh upgrade [--version V]` | Backs up, moves to version V, checks, and rolls back on a failed check ([Upgrade](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/upgrade.md)) |
-| `./install.sh uninstall` | Asks, then removes the containers; asks again before deleting the data. Keeps `ops-ai.env` |
+| `./install.sh uninstall` | Asks, then removes the containers, and asks again before deleting the data. Keeps `ops-ai.env`. With `--yes`, add `--delete-data` to delete the data too |
 
 In `dba` mode, `backup`, `restore` and `upgrade` need a database admin login that may dump the database, in a file:
 `--admin-url-file <file>` holding `postgresql://admin:password@host:5432/db`. The services' own logins cannot dump it.
 
+### Apply a changed setting
+
+Running `./install.sh` again does not apply an edit to `ops-ai.env`, because it finds the install healthy and stops
+after the check. To apply an edit, run Compose on the same files the script uses. The command below fits an install
+with the built-in database and the test model. Leave out `-f deploy/compose/try.yaml` and both profiles when you use
+your own database and a real model, and add `-f deploy/compose/dba.yaml` for `dba` mode.
+
+```bash
+docker compose -p ops-ai -f deploy/compose/app.yaml -f deploy/compose/try.yaml \
+  --profile postgres --profile fake-model --env-file ops-ai.env up -d
+```
+
+Use the project name you chose, which `./install.sh status` prints.
+
 ### Turn on a feature flag
 
 A feature that is not yet released to every install ships behind a flag and is off. To turn one on, list it in
-`ops-ai.env` and run `./install.sh` again to apply the change.
+`ops-ai.env` and [apply the setting](#apply-a-changed-setting).
 
 ```bash
 OPS_FLAGS=mcp_gateway,tool_search
@@ -107,47 +154,62 @@ OPS_FLAGS=mcp_gateway,tool_search
 
 | Flag | Turns on |
 |---|---|
-| `mcp_gateway` | The MCP address outside assistants (Claude, Cursor, Copilot) use to reach a team's tools, and the console's MCP channel |
+| `mcp_gateway` | The MCP address that outside assistants (Claude, Cursor, Copilot) use to reach a team's tools, and the console's MCP channel |
 | `tool_search` | Agents with many tools search for the one they need |
 | `plugin_updates` | Each team keeps the plugin version it took and reviews an upgrade before its tools change |
 | `area_tabs` | The console shows one area at a time, picked from the top bar |
 
-A name Ops AI does not know stops every service at start with the list of known flags, so a typo never reads as off.
+A name Ops AI does not know stops every service at start and lists the known flags, so a typo cannot pass for a flag
+that is off.
 
 ### Set the embedding model
 
-Knowledge search by meaning uses one embedding model per install, set in `ops-ai.env`.
+Knowledge search by meaning needs one embedding model for the whole install. Two settings in `ops-ai.env` name it.
 
 | Setting | Default | What it does |
 |---|---|---|
-| `OPS_EMBEDDING_ALIAS` | `bank-embed` | The model alias of kind embedding; bind it to your provider's embedding model the way [Connect a model](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/compose.md#connect-a-model) binds a chat model |
-| `OPS_EMBEDDING_WIDTH` | `1536` | The vector width. Above 1,998 every service refuses to start, since no vector index holds it |
+| `OPS_EMBEDDING_ALIAS` | `bank-embed` | The model alias of kind embedding that knowledge is embedded with |
+| `OPS_EMBEDDING_WIDTH` | `1536` | The vector width. Above 1,998 every service refuses to start, because no vector index holds more |
 
-Changing either one embeds the stored knowledge again; no source is read again. Without an embedding model, search runs
-on keywords alone and says so in each result. Your own PostgreSQL needs the `vector` extension (pgvector 0.5 or newer)
-offered; the built-in database has it.
+Three things must be true before search by meaning works.
+
+- An alias of kind embedding exists under that name and points at your provider's embedding model. The script's connect
+  step, and the console's **Aliases** page, create chat aliases only. An embedding alias is created through the models
+  service's API with `"kind": "embedding"`.
+- The knowledge service has its own model key, `OPS_MODELS_KEY_KB`. The script issues keys for agents and documents
+  only. Issue this one with `connect_model.py --key-id purpose:kb`, as in [Connect a model](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/compose.md#connect-a-model).
+- Your PostgreSQL offers the `vector` extension (pgvector 0.5 or newer). The built-in database has it.
+
+Until they are true, search runs on keywords alone and says so in each result. Changing either setting later embeds the
+stored knowledge again, without reading any source again.
 
 ### Install from a company registry
 
-When the machine reaches only your own registry, mirror the images there and point the script at it:
+When the machine reaches only your own registry, mirror the images there and point the script at it.
 
 | Setting | What it moves | Default |
 |---|---|---|
 | `OPS_IMAGE_REGISTRY`, in the shell that runs the script | Where the Ops AI images are pulled from | `ghcr.io/chanl-ai/ops-ai` |
-| `OPS_BASE_IMAGE_PREFIX`, in `ops-ai.env` | A registry prefix ending in `/` for third-party images, such as PostgreSQL and the policy engine | Docker Hub |
+| `OPS_BASE_IMAGE_PREFIX`, in `ops-ai.env` | A registry prefix ending in `/` for third-party images such as the trial PostgreSQL | Docker Hub |
 
 A machine with no registry at all uses `--offline` with a release package's image file.
 
 ### Limits
 
-- Proven on Docker Desktop for macOS; a run on a Linux server is not yet recorded.
-- An upgrade across two releases that change the schema has not run yet: 1.0.0 is the first release.
+- With `--offline`, the script still pulls `pgvector/pgvector:pg17` when you choose the built-in database. Backup and
+  restore pull `alpine`, and backup and restore against your own database pull `postgres:17-alpine`, from Docker Hub.
+  None of these follow `OPS_IMAGE_REGISTRY` or `OPS_BASE_IMAGE_PREFIX`, so a machine with no Docker Hub access cannot back
+  up through the script.
+- `--build` builds every image except the one that runs code tools. Start such an install with images from a registry or
+  a release package until that is fixed.
+- The script upgrades one install at a time and does not manage a standby. A second machine with the same install is a
+  standby you restore a backup onto ([Back up and restore](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/backup-and-restore.md)).
 
 ### Other ways to install
 
 | Way | Use it when |
 |---|---|
-| [Docker Compose by hand](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/compose.md) | You run each step yourself on one machine |
+| [Docker Compose by hand](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/compose.md) | You run each step yourself on one machine. The DBA's scripts are in [Database](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/database.md) |
 | [Kubernetes](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/kubernetes.md) | Your platform team runs a cluster |
 | [Release package](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/release-package.md) | The machines have no internet access |
 
