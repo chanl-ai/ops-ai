@@ -187,7 +187,7 @@ Any plugin can carry templates beside its tools.
 | `opsai.sample-team` | What `make sample-team` installs | Dev and self-hosted, never cloud production | No |
 | Vendor plugins | Their own templates beside their tools | Built-in ones (`builtin-plugins/`) on for every new team; others as any plugin | Yes, for the four built kinds |
 
-Which packs are on is each team's binding row, read by one rule (`team_on`,
+Which packs are on is each team's binding row, read by one rule (`plugin_on_for_team`,
 `services/tools-service/src/ops_tools/plugins/host.py`). Every way a team is made, the create route and seeding (the
 install's first team, the dev seed) included, writes the `team.created` event; on it tools-service stores an enabled
 row for each built-in plugin (`turn_on_builtins`, `platform_events.py`). A team with no row has the plugin off: its
