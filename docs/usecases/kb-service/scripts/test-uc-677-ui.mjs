@@ -56,6 +56,13 @@ await withUiStack(
       const header = await page.getByRole('columnheader', { name: 'Reranked' }).count();
       const firstRow = await page.getByTestId('search-trace').first().locator('tbody tr').first().innerText();
       check('8 the Playground says it reranked and shows the Reranked column, Wire fees first at 9 of 10', /Reranked 2 on default/.test(said) && header === 1 && /Wire fees/.test(firstRow) && /9 of 10/.test(firstRow), { said, header, firstRow });
+      // At phone width the score the order follows sits inside the screen, not past the table's edge.
+      await page.setViewportSize({ width: 390, height: 844 });
+      const head = page.getByRole('columnheader', { name: 'Reranked' });
+      await head.waitFor({ timeout: 60_000 });
+      const box = await head.boundingBox();
+      check('9 at 390 wide the Reranked column shows without scrolling sideways', !!box && box.x >= 0 && box.x + box.width <= 390, box);
+      await page.setViewportSize({ width: 1440, height: 900 });
       await page.waitForTimeout(1200);
       const clipMs = Date.now() - started;
       const state = await context.storageState();
