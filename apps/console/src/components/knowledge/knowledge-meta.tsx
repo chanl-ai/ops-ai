@@ -228,7 +228,7 @@ export const SCHEDULE_KIND_LABEL: Record<Schedule['kind'], string> = { manual: '
 export const TRIGGER_LABEL: Record<RunTrigger, string> = { manual: 'Sync now', schedule: 'Schedule', full: 'Full resync', retry: 'Retry failed', settings: 'Settings changed' };
 export const triggerLabel = (t: string) => TRIGGER_LABEL[t as RunTrigger] ?? t;
 
-export const ERROR_CLASS_LABEL: Record<ErrorClass, string> = { parse: 'Parse', fetch: 'Fetch', permission: 'Permission', too_large: 'Too large', rate_limited: 'Rate limited' };
+export const ERROR_CLASS_LABEL: Record<ErrorClass, string> = { parse: 'Parse', fetch: 'Fetch', permission: 'Permission', too_large: 'Too large', rate_limited: 'Rate limited', scan: 'Virus scan' };
 
 /** The step of a run an error happened at. */
 const STEP_LABEL: Record<string, string> = { list: 'List', get: 'Fetch', store: 'Store', parse: 'Read' };

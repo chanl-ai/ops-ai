@@ -125,7 +125,7 @@ export type SourceRow = Narrow<Reply<'sources_list_sources'>['data'][number], So
 
 /** `held`: missing metadata a reading knowledge base requires, so it is stored but not searchable. */
 export type ItemStatus = 'indexed' | 'pending' | 'processing' | 'failed' | 'partial' | 'excluded' | 'deleted' | 'held';
-export type ErrorClass = 'parse' | 'fetch' | 'permission' | 'too_large' | 'rate_limited';
+export type ErrorClass = 'parse' | 'fetch' | 'permission' | 'too_large' | 'rate_limited' | 'scan';
 
 export interface Chunk {
   index: number;

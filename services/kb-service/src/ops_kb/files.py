@@ -45,6 +45,15 @@ class Stored:
     deduplicated: bool
 
 
+class FileRejected(FileNotScanned):
+    """The scan refused the file (infected, or the scan failed), so it is never read unless Files clears it; it carries
+    what Files says of the file, so a sync can mark the document that version belongs to."""
+
+    def __init__(self, stored: Stored, verdict: str) -> None:
+        super().__init__(stored.file_id)
+        self.stored, self.verdict = stored, verdict
+
+
 class FileIntake(Protocol):
     async def put(
         self, tenant: str, team: str, data: bytes, *, name: str, mime: str, actor: str, purpose: Purpose = ...
@@ -128,9 +137,12 @@ class FilesServiceIntake:
             raise FileMissing(file_id) from e
         except (FilesRefused, httpx.HTTPError) as e:
             raise _unavailable(e, "read this source's files") from e
+        stored = Stored(info.id, info.name, info.mime, info.size, info.digest, False)
+        if info.scan.status in ("infected", "failed"):
+            raise FileRejected(stored, info.scan.status)
         if info.scan.status != "clean":
             raise FileNotScanned(file_id)
-        return Stored(info.id, info.name, info.mime, info.size, info.digest, False)
+        return stored
 
     async def use(self, tenant: str, team: str, file_id: str, *, source_id: str, source_name: str) -> str:
         # The reference keeps the file in Files while the source reads it; attaching the same source again is a no-op.
@@ -145,8 +157,11 @@ class FilesServiceIntake:
         return info.name
 
     async def release(self, tenant: str, team: str, file_id: str, *, source_id: str) -> None:
-        with contextlib.suppress(FileNotFound):
-            await self._client.detach(tenant, team, file_id, type="source", ref_id=source_id)
+        try:
+            with contextlib.suppress(FileNotFound):
+                await self._client.detach(tenant, team, file_id, type="source", ref_id=source_id)
+        except (FilesRefused, httpx.HTTPError) as e:
+            raise _unavailable(e, "let go of the file") from e
 
 
 class _Storage(BaseModel):
@@ -248,8 +263,8 @@ class KnowledgeFiles:
         return rec.stored
 
     async def use(self, tenant: str, team: str, file_id: str, *, source_id: str, source_name: str) -> str:
-        # No scan and no references in this store: a file of the team is always readable.
-        return (await self.read(tenant, team, file_id))[0]
+        # No scan and no references in this store: a file of the team is always readable, and its record names it.
+        return (await self.describe(tenant, team, file_id)).name
 
     async def release(self, tenant: str, team: str, file_id: str, *, source_id: str) -> None:
         return None

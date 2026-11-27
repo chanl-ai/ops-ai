@@ -49,7 +49,7 @@ from ops_store.schedule import last_slot, next_run
 from .agents import AgentDirectory, Usage
 from .ai import AiClients, ai_run, spent_on
 from .embedding import Embedder, EmbedFailed, embed_pending
-from .files import FileIntake, FileMissing, FileNotScanned, Stored
+from .files import FileIntake, FileMissing, FileNotScanned, FileRejected, Stored
 from .origin import Origin, source_team
 from .query_steps import (
     RERANK_POOL,
@@ -416,6 +416,16 @@ PRECEDENCE = [
 ]
 
 
+# A refused newer version's note on an indexed item, kept after any other warning so it can be taken off alone.
+SCAN_NOTE = "A newer version was not read:"
+
+
+def _without_scan_note(warning: str | None) -> str | None:
+    if not warning or SCAN_NOTE not in warning:
+        return warning
+    return warning[: warning.index(SCAN_NOTE)].strip() or None
+
+
 class Lease:
     """A source's sync lease held by one run: renewed every third of LEASE until released, so it outlives no stopped
     process and expires under no running one; released only by its own holder."""
@@ -432,6 +442,14 @@ class Lease:
                 self.lost = True
                 logger.warning("kb_lease_lost", source=self.source_id)
                 return
+
+    async def holds(self) -> bool:
+        """Whether this run still holds the lease, asked of the store, not only of the last renewal."""
+        if not self.lost and not await self.store.renew(
+            self.tenant, self.source_id, owner=self.owner, seconds=LEASE.total_seconds()
+        ):
+            self.lost = True
+        return not self.lost
 
     async def _stop(self) -> None:
         self._task.cancel()
@@ -1176,9 +1194,21 @@ class KnowledgeService:
         return scopes_of(places, following)
 
     async def remove_source(self, who: Who, source_id: str) -> None:
-        await self._changeable_source(who, source_id, "delete")
-        if not await self.store.remove_source(who.tenant_id, source_id):
-            raise NotFound("No source with that id.")
+        """Lets go of every file the source held in Files, its versions and its items' files, then removes it, under
+        its lease so no sync takes a reference meanwhile. A release Files refuses keeps the source and answers 503, so
+        the caller retries and no file stays undeletable in Files for a source that is gone."""
+        s = await self._changeable_source(who, source_id, "delete")
+        lease = await self.take_lease(who.tenant_id, source_id)
+        if lease is None:
+            raise Conflict(f"{s.name} is syncing or rebuilding now; wait for that run to end.", code="sync_running")
+        try:
+            s = await self._source_row(who, source_id)
+            items = await self.store.items(who.tenant_id, source_ids=[source_id])
+            await self._let_go(who, s, {f for f in {*s.file_ids, *(i.file_id for i in items)} if f}, strict=True)
+            if not await self.store.remove_source(who.tenant_id, source_id):
+                raise NotFound("No source with that id.")
+        finally:
+            await lease.release()
 
     # ── Files and sync ───────────────────────────────────────────────────
 
@@ -1196,9 +1226,10 @@ class KnowledgeService:
 
     async def upload(self, who: Who, source_id: str, data: bytes, *, name: str, mime: str) -> Uploaded:
         """Stores bytes kb-service writes itself (a page, a pushed item, the demo seed) and adds them to the source
-        under `name`; the file it replaces under that name is let go, so Files keeps no version nothing reads. The new
-        file is held in Files now when its scan is already clean, otherwise by the first sync that finds it clean: Files
-        refuses a reference on a file it has not scanned. People add files through Files and `add_files`."""
+        as `name`'s newest version. The sync that indexes it takes its Files reference and lets go of the version it
+        replaces (`_sync`), so the earlier version stays held through this one's scan. `name` in the answer is the name
+        the source holds the file under: another name's, when that name already holds the same content. People add
+        files through Files and `add_files`."""
         s = await self._changeable_source(who, source_id)
         if not data:
             raise ValidationFailed("The file is empty.")
@@ -1208,29 +1239,30 @@ class KnowledgeService:
             stored = await self.files.put(who.tenant_id, source_team(s), data, name=name, mime=mime, actor=who.email)
         except ValueError as e:
             raise ValidationFailed(str(e), code="file_not_ready") from e
-        replaced = await self.store.add_file(who.tenant_id, source_id, stored.file_id, name)
-        with contextlib.suppress(FileNotScanned):
-            await self.files.use(who.tenant_id, source_team(s), stored.file_id, source_id=s.id, source_name=s.name)
-        await self._let_go(who, s, replaced)
+        held = await self.store.add_file(who.tenant_id, source_id, stored.file_id, name)
         return {
             "fileId": stored.file_id,
-            # The name it was uploaded under, which the source indexes it by; the stored blob may carry an earlier one.
-            "name": name,
+            # The name the source indexes it by; the stored blob may carry an earlier one.
+            "name": held,
             "mime": stored.mime,
             "size": stored.size,
             "digest": stored.digest,
             "deduplicated": stored.deduplicated,
         }
 
-    async def _let_go(self, who: Who, s: SourceRow, file_ids: set[str]) -> None:
-        """Releases the source's reference on files a write took out of it. A file still in the source under another
-        name is never among them, as the source records one name per file. A release Files refuses is logged: the
-        source no longer reads the file, and Files lists it as unreferenced."""
+    async def _let_go(self, who: Who, s: SourceRow, file_ids: set[str], *, strict: bool = False) -> None:
+        """Releases the source's reference on files it no longer reads: versions a sync replaced, or every file of a
+        removed source. A release Files refuses is logged: the source no longer reads the file, and Files keeps it
+        until someone deletes it there. `strict` raises after trying them all, so a removal keeps its source."""
+        refused: ServiceUnavailable | None = None
         for file_id in sorted(file_ids):
             try:
                 await self.files.release(who.tenant_id, source_team(s), file_id, source_id=s.id)
-            except ServiceUnavailable:
+            except ServiceUnavailable as e:
                 logger.warning("kb_file_release_failed", source=s.id, file=file_id)
+                refused = e
+        if strict and refused is not None:
+            raise refused
 
     async def _use_file(self, who: Who, s: SourceRow, file_id: str) -> tuple[str, str]:
         try:
@@ -1255,12 +1287,11 @@ class KnowledgeService:
             for f in dict.fromkeys(file_ids):
                 used.append(await self._use_file(who, s, f))
         except Exception:
-            for file_id, _ in used:
-                if file_id not in held:
-                    await self.files.release(who.tenant_id, source_team(s), file_id, source_id=source_id)
+            # Every reference taken is let go, a refused release only logged, so the caller learns the first refusal.
+            await self._let_go(who, s, {f for f, _ in used if f not in held})
             raise
         for file_id, name in used:
-            await self._let_go(who, s, await self.store.add_file(who.tenant_id, source_id, file_id, name))
+            await self.store.add_file(who.tenant_id, source_id, file_id, name)
         return [{"fileId": f, "name": n} for f, n in used]
 
     async def sync(self, who: Who, source_id: str, *, full: bool = False, retry: bool = False) -> RunView:
@@ -1299,8 +1330,11 @@ class KnowledgeService:
         if lease is None:
             raise Conflict(f"{s.name} is syncing or rebuilding now; wait for that run to end.", code="sync_running")
         try:
+            # Read again under the lease: a sync takes and lets go of the source's Files references, so it works from
+            # the files the source holds now, not from a row read before another write or sync changed them.
+            s = await self._source_row(who, source_id)
             with ai_run(self.ai_clients, who.tenant_id, ceiling=self.settings_of(s).ai_ceiling):
-                return await self._sync(who, s, full=full, retry=retry, trigger=trigger, only=only)
+                return await self._sync(who, s, lease, full=full, retry=retry, trigger=trigger, only=only)
         finally:
             await lease.release()
 
@@ -1493,6 +1527,7 @@ class KnowledgeService:
         self,
         who: Who,
         s: SourceRow,
+        lease: Lease,
         *,
         full: bool,
         retry: bool,
@@ -1514,10 +1549,13 @@ class KnowledgeService:
         counts = {"listed": 0, "unchanged": 0, "upserted": 0, "deleted": 0, "failed": 0, "skipped": 0, "excluded": 0}
         errors: list[RunError] = []
         log: list[str] = []
-        # Each document is read from the last file uploaded under its name; an earlier file under the same name (left
-        # by uploads before add_file replaced them) is dropped from the source, so it is neither indexed nor pending.
+        # Each document is read from the newest file under its name that its scan has settled; a newer one still being
+        # scanned waits, and the earlier version keeps answering and stays held in Files. Once the newest is read, the
+        # earlier files of its name are let go and dropped, here and nowhere else, under the sync's lease.
         latest: dict[str, Stored] = {}
-        superseded: set[str] = set()
+        # A newest version its scan refused, with the verdict: the document says so and nothing of it is read.
+        refused: dict[str, str] = {}
+        superseded: dict[str, set[str]] = {}
         uploaded: dict[str, str] = s.file_names or {}
         counts["reading"] = 0
         for file_id in s.file_ids if only is None else [f for f in s.file_ids if uploaded.get(f) == only]:
@@ -1528,6 +1566,12 @@ class KnowledgeService:
                 counts["failed"] += 1
                 log.append(f"{file_id}: the file is no longer in storage")
                 continue
+            except FileRejected as e:
+                name = uploaded.get(file_id) or e.stored.name
+                if name in latest:
+                    superseded.setdefault(name, set()).add(latest[name].file_id)
+                latest[name], refused[name] = e.stored, e.verdict
+                continue
             except FileNotScanned:
                 # Stays pending on the source; the next sync after the scan reads it.
                 counts["listed"] += 1
@@ -1536,19 +1580,35 @@ class KnowledgeService:
                 continue
             # Indexed under the name it was uploaded under in this source (kb_0005), not the blob's first name.
             name = uploaded.get(file_id) or found.name
-            if (known := items.get(name)) is None or known.digest != found.digest:
-                # A file written before its scan is held in Files from the first sync that finds it clean; a file
-                # gone since the describe fails its read below, which says so.
-                with contextlib.suppress(FileMissing, FileNotScanned):
-                    await self.files.use(who.tenant_id, source_team(s), file_id, source_id=s.id, source_name=s.name)
             if name in latest:
-                superseded.add(latest[name].file_id)
+                superseded.setdefault(name, set()).add(latest[name].file_id)
             latest[name] = found
-        await self.store.drop_files(who.tenant_id, source_id, superseded)
+            refused.pop(name, None)
         excluded: list[str] = []
+        # The names whose newest version is indexed, so their earlier files are let go after the loop.
+        settled: set[str] = set()
         for name, found in latest.items():
+            if lease.lost:
+                break
             counts["listed"] += 1
             existing = items.get(name)
+            if (verdict := refused.get(name)) is not None:
+                # The earlier version, if any, stays held: nothing newer was read in its place.
+                superseded.pop(name, None)
+                counts["failed"] += 1
+                log.append(f"{name}: its scan found it {verdict}, so it is not read")
+                why = ("scan", f"The scan found this version {verdict}, so it was not read; send a clean copy.")
+                if existing is not None and existing.status not in ("failed", "reading"):
+                    # The indexed version keeps answering; the item and the run say the newer one was refused.
+                    errors.append({"itemId": existing.id, "itemTitle": existing.title, "phase": "parse",
+                                   "errorClass": why[0], "message": why[1]})  # fmt: skip
+                    note = f"{SCAN_NOTE} its scan found it {verdict}. Send a clean copy."
+                    kept = _without_scan_note(existing.warning)
+                    if existing.warning != (both := f"{kept} {note}" if kept else note):
+                        await self.store.update_item(who.tenant_id, existing.id, {"warning": both})
+                elif not (existing and existing.status == "failed" and existing.digest == found.digest):
+                    errors.append(parse_error(await self._failed(who, s, existing, name=name, found=found, error=why)))
+                continue
             facts = ItemFacts(path=name, title=name, mime=found.mime, modified=started, size=found.size)
             if not (decision := evaluate_rules(settings.rules, facts)).included:
                 counts["excluded"] += 1
@@ -1557,17 +1617,36 @@ class KnowledgeService:
                     excluded.append(existing.id)
                 continue
             # files-service's digest, the key documents-service keeps the file's reading under.
-            same = existing is not None and existing.digest == found.digest and existing.status != "reading"
+            # A version its scan refused was never read, so once Files clears it, it is read like a new one.
+            unread = existing is not None and (existing.status == "reading" or existing.error_class == "scan")
+            same = existing is not None and existing.digest == found.digest and not unread
             stale = existing is not None and self.built_under_other_settings(s, existing)
             if same and existing is not None and not (stale or full or (retry and existing.status == "failed")):
                 counts["unchanged"] += 1
+                settled.add(name)
+                if (kept := _without_scan_note(existing.warning)) != existing.warning:
+                    # The refused newer version is no longer the newest: its note goes, any other warning stays.
+                    await self.store.update_item(who.tenant_id, existing.id, {"warning": kept})
                 continue
             if not same and any(d == found.digest and other != name for other, d in digests.items()):
-                # The same content under another name in this source: indexed once.
+                # The same content under another name in this source: indexed once, so this name's earlier file stays.
+                superseded.pop(name, None)
                 counts["skipped"] += 1
                 log.append(f"{name}: the same content is already indexed in this source")
                 continue
+            # The reference is taken as the file is read, under the lease that also lets go of replaced files, so two
+            # writes of one name cannot leave a file held that a sync let go of. A file gone since the describe fails
+            # its read below, which says so. A rebuild of the same content keeps the reference its first read took.
+            if not same:
+                with contextlib.suppress(FileMissing, FileNotScanned):
+                    await self.files.use(
+                        who.tenant_id, source_team(s), found.file_id, source_id=s.id, source_name=s.name
+                    )
             item = await self._read_file(who, s, existing, name=name, found=found, rebuild=same)
+            if item.status not in ("failed", "reading"):
+                # Indexed: the earlier version no longer answers. A read still going or failed keeps it until a sync
+                # finds this version unchanged.
+                settled.add(name)
             digests[name] = item.digest
             if item.status == "failed":
                 counts["failed"] += 1
@@ -1577,8 +1656,26 @@ class KnowledgeService:
                 log.append(f"{name}: being read (scanned pages take a while); it is indexed when the reading ends")
             else:
                 counts["upserted"] += 1
+        if not await lease.holds():
+            return await self._stopped_run(
+                who, s, started=started, trigger=trigger or ("full" if full else "retry" if retry else "manual"),
+                counts=counts, errors=errors, log=log,
+            )  # fmt: skip
         # An item a rule now excludes leaves search with its pieces; the file stays in the source.
         counts["deleted"] += await self.store.remove_items(who.tenant_id, excluded)
+        # A file replaced by a version this run read is no longer read by anything: out of the source, out of Files.
+        # Dropped under the source's row lock, and only while this run still holds the lease and each name's newest
+        # file is still the one it read: a write during the run (earlier content sent again) leaves its file be.
+        replaced = {f for name, files in superseded.items() if name in settled for f in files}
+        read = {name: latest[name].file_id for name in settled}
+        dropped = await self.store.drop_files(who.tenant_id, source_id, replaced, owner=lease.owner, newest=read)
+        if dropped is None:
+            lease.lost = True
+            return await self._stopped_run(
+                who, s, started=started, trigger=trigger or ("full" if full else "retry" if retry else "manual"),
+                counts=counts, errors=errors, log=log,
+            )  # fmt: skip
+        await self._let_go(who, s, dropped)
         status = (
             "failed" if counts["failed"] and not counts["upserted"] else "partial" if counts["failed"] else "success"
         )
@@ -1598,6 +1695,36 @@ class KnowledgeService:
             "started_at": started,
             "duration_sec": round((datetime.now(UTC) - started).total_seconds(), 2),
             "status": status,
+            "counts": counts,
+            "errors": errors,
+            "log": log,
+            "started_by": who.email,
+        }
+        await self.store.add_run(run)
+        return _run(run_row(run))
+
+    async def _stopped_run(
+        self,
+        who: Who,
+        s: SourceRow,
+        *,
+        started: datetime,
+        trigger: str,
+        counts: dict[str, int],
+        errors: list[RunError],
+        log: list[str],
+    ) -> RunView:
+        """The record of a sync that lost its source's lease: it removed and let go of nothing, and leaves the
+        source's state to the run that holds the lease now."""
+        log.append("Stopped: another run took this source's lease, so this one removed and let go of nothing.")
+        run: RunWrite = {
+            "tenant_id": who.tenant_id,
+            "id": new_id("run"),
+            "source_id": s.id,
+            "trigger": trigger,
+            "started_at": started,
+            "duration_sec": round((datetime.now(UTC) - started).total_seconds(), 2),
+            "status": "cancelled",
             "counts": counts,
             "errors": errors,
             "log": log,
@@ -2778,9 +2905,18 @@ class KnowledgeService:
             (x for x in await self.store.items(who.tenant_id, source_ids=[source_id]) if x.path == name), None
         )
         stored_file = await self.upload(who, source_id, data, name=name, mime=mime)
+        if stored_file["name"] != name:
+            # The source holds this content as another item already; this name keeps the file it had.
+            raise ValidationFailed(
+                f"{name} is stored but was not indexed: the same content is already indexed in this source as "
+                f"{stored_file['name']}.",
+                code="item_not_indexed",
+            )
         same = before is not None and before.digest == stored_file["digest"] and before.status == "indexed"
         log: list[str] = []
-        if not same:
+        # The indexed content sent again after a refused newer version is the newest again: the sync takes the note
+        # off and lets go of the refused file.
+        if not same or (before is not None and SCAN_NOTE in (before.warning or "")):
             # The same run as a sync, reading only this item: the source's other items are as they were.
             run = await self._held_sync(who, await self._source_row(who, source_id), full=False, retry=False, only=name)
             log = [str(x) for x in cast(list[object], run.get("log") or [])]
@@ -2789,16 +2925,15 @@ class KnowledgeService:
         why = next((x for x in log if x.startswith(f"{name}:")), "")
         if item is None or "not scanned" in why:
             # Stored, but the run did not read it: files-service holds a new file unreadable until its scan says clean
-            # (production scans every file), so a new version is not searchable yet either: the earlier item still
-            # answers from the index, though Files holds neither file until the scan; or a rule or the same content
-            # under another name left it out.
+            # (production scans every file), so a new version is not searchable yet either and the earlier one, still
+            # held in Files, answers; or a rule left it out. A version its scan refused is an item marked failed.
             if "not scanned" in why:
                 raise Conflict(
                     f"{name} is stored but not scanned clean yet, so it is not searchable; it is read on the next sync "
                     "after the scan, or send it again then.",
                     code="file_not_ready",
                 )
-            # A rule of the source or the same content under another name: what was sent, so the caller's to change.
+            # A rule of the source: what was sent, so the caller's to change.
             raise ValidationFailed(
                 f"{name} is stored but was not indexed: {why or 'the run made no item for it'}.",
                 code="item_not_indexed",
@@ -2836,7 +2971,7 @@ class KnowledgeService:
             source_id = str(created["id"])
         try:
             added = await self.add_files(who, source_id, file_ids)
-        except (UnknownFile, Conflict):
+        except (UnknownFile, Conflict, ServiceUnavailable):
             # Files records a reference against the source, so it is made before the check; a refused first add must
             # not leave the base an empty documents source.
             if made:

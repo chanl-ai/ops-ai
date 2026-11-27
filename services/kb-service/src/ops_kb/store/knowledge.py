@@ -1554,27 +1554,22 @@ class KnowledgeStore(Store):
         q = sa.select(kb_sources.c.file_ids, kb_sources.c.file_names).where(*key, team_visible(kb_sources))
         return (await c.execute(q)).one()
 
-    async def add_file(self, tenant: str, source_id: str, file_id: str, name: str) -> set[str]:
-        """Adds the file under `name` and returns the files it took the place of, read in the same transaction, so a
-        caller lets go of exactly what this write removed and two writes of one name never both keep the same file."""
+    async def add_file(self, tenant: str, source_id: str, file_id: str, name: str) -> str:
+        """Adds the file under `name` as that document's newest version and returns the name the source holds it
+        under. An earlier file of the same name stays until the sync that indexes this one lets go of it, so Files
+        keeps the version that still answers through this one's scan. The same content under another name is the
+        same file: it keeps the name that holds it, and the caller learns that name."""
         async with self.tx() as c:
             key = (kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
             row = await self._files_of(c, key)
-            # A file uploaded under a name the source already holds is that document's next version: it takes the
-            # earlier file's place, so a sync reads one file per document. The same content under a second name is
-            # the same file, and it keeps the name that holds it, so a new version of the second name never takes
-            # the first name's file away.
-            known: dict[str, str] = dict(row.file_names or {})
-            replaced = {f for f, n in known.items() if n == name and f != file_id}
-            ids = [f for f in row.file_ids if f not in replaced]
-            names = {f: n for f, n in known.items() if f not in replaced}
-            names.setdefault(file_id, name)
-            await c.execute(
-                sa.update(kb_sources)
-                .where(*key)
-                .values(file_ids=ids if file_id in ids else [*ids, file_id], file_names=names)
-            )
-            return replaced
+            names: dict[str, str] = dict(row.file_names or {})
+            held = names.setdefault(file_id, name)
+            ids = [f for f in row.file_ids if f != file_id]
+            # A file sent again under its own name is that name's newest version again; under another name it keeps
+            # its place, so the other name's newest version stays its newest.
+            ids = [*ids, file_id] if held == name or file_id not in row.file_ids else list(row.file_ids)
+            await c.execute(sa.update(kb_sources).where(*key).values(file_ids=ids, file_names=names))
+            return held
 
     async def swap_files(self, tenant: str, source_id: str, moved: dict[str, str]) -> None:
         """Points a source at files copied to another store, keeping each file's place and uploaded name."""
@@ -1587,20 +1582,42 @@ class KnowledgeStore(Store):
             names = {moved.get(f, f): n for f, n in given.items()}
             await c.execute(sa.update(kb_sources).where(*key).values(file_ids=ids, file_names=names))
 
-    async def drop_files(self, tenant: str, source_id: str, file_ids: set[str]) -> None:
-        """Removes files from a source; the stored blobs stay, other sources may hold them."""
+    async def drop_files(
+        self,
+        tenant: str,
+        source_id: str,
+        file_ids: set[str],
+        *,
+        owner: str | None = None,
+        newest: dict[str, str] | None = None,
+    ) -> set[str] | None:
+        """Removes files from a source and returns those removed; the stored blobs stay, other sources may hold them.
+        With `owner`, nothing is removed (None) unless that run still holds the source's lease. With `newest` (each
+        name's file a sync read), a file is removed only while that name's newest file is still the one read, so a
+        version written during the sync is never dropped by it."""
         if not file_ids:
-            return
+            return set()
         async with self.tx() as c:
             key = (kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
             row = await self._files_of(c, key)
-            kept: list[str] = [f for f in row.file_ids if f not in file_ids]
+            if owner is not None:
+                holder = (await c.execute(sa.select(kb_sources.c.lease_owner).where(*key))).scalar_one_or_none()
+                if holder != owner:
+                    return None
             names: dict[str, str] = row.file_names or {}
+            now = {names.get(f): f for f in row.file_ids}  # each name's newest: the last of its files
+            gone = {
+                f
+                for f in file_ids
+                if newest is None or ((n := names.get(f)) in newest and now.get(n) == newest[n] and f != newest[n])
+            }
+            kept: list[str] = [f for f in row.file_ids if f not in gone]
             await c.execute(
                 sa.update(kb_sources)
                 .where(*key)
                 .values(file_ids=kept, file_names={f: n for f, n in names.items() if f in kept})
             )
+            return gone & set(row.file_ids) if newest is not None else gone
 
     async def refreshed(self, tenant: str, kb_ids: list[str]) -> None:
         if not kb_ids:

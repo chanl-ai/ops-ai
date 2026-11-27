@@ -246,6 +246,7 @@ def test_a_search_term_cannot_leave_its_string_in_each_query_language(
         ("cql_string", '\\"a\\"{{q}}\\"b\\"', "is a cql_string and goes inside one double-quoted string"),
         ("kql_phrase", "{{q}}", "is a kql_phrase and goes inside one double-quoted string"),
         ("odata_string", "name eq ''{{q}}''", "is a odata_string and goes inside one single-quoted string"),
+        ("odata_string", "name eq '{{q}}", "is a odata_string and goes inside one single-quoted string"),
     ],
 )
 def test_a_search_term_outside_its_quotes_is_refused(tmp_path: Path, fmt: str, bare: str, said: str) -> None:
@@ -273,3 +274,18 @@ def test_a_query_format_on_an_input_sent_in_the_body_is_refused(tmp_path: Path) 
 """
     said = "q has a query format but no query takes it"
     assert any(said in p for p in problems(tmp_path, tool)), problems(tmp_path, tool)
+
+
+def test_a_quote_of_the_other_kind_inside_a_string_does_not_end_it(tmp_path: Path) -> None:
+    """A double quote inside a single-quoted literal is text; counting it refused a term that sits in its string."""
+    tool = """
+  - name: search_items
+    access: read
+    input:
+      q: { type: string, format: jql_string }
+    request:
+      method: GET
+      path: /search
+      query: { jql: 'summary ~ ''"'' AND text ~ "{{q}}"' }
+"""
+    assert not [p for p in problems(tmp_path, tool) if "{{q}}" in p], problems(tmp_path, tool)
