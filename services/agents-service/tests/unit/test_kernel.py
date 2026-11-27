@@ -23,9 +23,10 @@ from ops_agent_kernel.types import (
     TurnRequest,
     TurnResult,
 )
+from ops_agents.graphs.common import interrupt_from_state, interrupt_to_state
 from ops_service_kit.http import Json
 from ops_service_kit.ids import input_hash
-from tests.conftest import looping_model, model_on, scripted_model
+from tests.conftest import looping_model, model_on, scripted, scripted_model
 
 HOLD = ToolGrant(
     "place_wire_hold",
@@ -412,3 +413,36 @@ async def test_an_agent_searches_only_its_own_knowledge_bases_unless_it_may_sear
     assert no_bases.calls == [], "an agent with no bases never reaches the tool"
     team = await searched([], [], all_team=True)
     assert [a.get("allTeamKnowledgeBases") for _, a, _, _ in team.calls] == [True]
+
+
+def counted(said: list[list[Json]]) -> Model:
+    """The conftest script, with each request's messages kept in `said`."""
+
+    def script(messages: list[Json], tools: list[Json]) -> Answer:
+        said.append(messages)
+        return scripted(messages, tools)
+
+    return model_on(script)
+
+
+def on_strands(model: Model, tools: RecordingTools) -> KernelPorts:
+    return KernelPorts(model=model, tools=tools, knowledge=FixedKnowledge([]), loop="strands")
+
+
+async def test_on_strands_a_resume_in_a_fresh_kernel_repeats_no_model_call() -> None:
+    before: list[list[Json]] = []
+    paused_tools = RecordingTools()
+    req = TurnRequest("t1", "th1", SETTINGS, [HOLD], user_turn="Hold wire W-88213")
+    _, first = await run(req, on_strands(counted(before), paused_tools))
+    assert first.interrupt is not None and len(before) == 1, first
+    assert paused_tools.calls == [], "the write ran before a person approved it"
+    # What another server reads: the checkpoint's JSON, with new ports, a new transport and new tools.
+    stored = interrupt_from_state(json.loads(json.dumps(interrupt_to_state(first.interrupt))))
+    after: list[list[Json]] = []
+    tools = RecordingTools()
+    resume = Resume(stored, "approved", approval_token="tok")
+    _, result = await run(TurnRequest("t2", "th1", SETTINGS, [HOLD], resume=resume), on_strands(counted(after), tools))
+    assert result.status == "completed", result
+    assert [(tool, token) for tool, _, _, token in tools.calls] == [("place_wire_hold", "tok")]
+    assert len(after) == 1, f"the resume asked the model {len(after)} times"
+    assert any(m.get("role") == "tool" for m in after[0]), "the resume asked the model the paused step again"
