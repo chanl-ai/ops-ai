@@ -9,8 +9,8 @@ Approved build: console at `7eae5211`, route `/preview/human-tasks?layout=a` on 
 
 | Screen | 1280 px | 400 px |
 |---|---|---|
-| The queue grouped by case beside the open task: the evidence with its read fields boxed, the decision panel with the facts, the choices and Decide | [queue-and-task-1280](queue-and-task-1280.png) | [queue-400](queue-400.png), [task-400](task-400.png) |
-| Confirm it's you before a decision that moves money | [confirm-1280](confirm-1280.png) | |
+| The queue grouped by case beside the open task: the evidence with its read fields boxed, the decision panel with the facts, the choices and Decide | [queue-and-task-1280](https://opsai.chanl.ai/docs/console/approved/human-tasks/queue-and-task-1280.png) | [queue-400](https://opsai.chanl.ai/docs/console/approved/human-tasks/queue-400.png), [task-400](https://opsai.chanl.ai/docs/console/approved/human-tasks/task-400.png) |
+| Confirm it's you before a decision that moves money | [confirm-1280](https://opsai.chanl.ai/docs/console/approved/human-tasks/confirm-1280.png) | |
 
 Not built from the mock, by decision: Undo after a decision, Ask for more information, and
 per-person tabs on one notice.
