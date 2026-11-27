@@ -1304,9 +1304,9 @@ async def action_send(call: NodeCall) -> Outcome:
         return Outcome("error", {"error": "Send read no recipient.", "code": "no_recipient"})
     arguments: Json = {"to": to, "subject": subject, "body": body}
     # Sent without an approval, whoever started the run: the gateway applies the team's approval rules (send_reply's
-    # declared wait holds while the workspace keeps makers' asks on) and its send check. A reply they hold is refused,
-    # so the step leaves by its error way out; a reply that needs a person's yes is a send_reply tool step after a
-    # review step.
+    # declared wait holds while the workspace keeps makers' asks on, services/tools-service/src/ops_tools/modules/
+    # policy.py:138) and its send check. A reply they hold is refused, so the step leaves by its error way out; a reply
+    # that needs a person's yes is a send_reply tool step after a review step.
     result = await call.ports.tools.call("send_reply", arguments, call.key, call.generation, None)
     if result.ok:
         out: Json = {}

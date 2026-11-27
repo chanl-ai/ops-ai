@@ -1,5 +1,6 @@
 """The leftover node types, by failure mode: a missing path, a list that is not a list, an empty retrieve,
-a send with no recipient, a repeat that hits its cap, and an ask that times out at once."""
+a send with no recipient, a held send that would go out unapproved, a repeat that hits its cap, and an ask that
+times out at once."""
 
 from __future__ import annotations
 
@@ -109,6 +110,31 @@ async def test_send_replies_on_the_inbound_channel_and_needs_a_recipient() -> No
     assert sent.port == "sent" and sent.out["status"] == "sent"
     missing = await action_send(call("ops.action.send", {"body": "Thanks"}))
     assert missing.port == "error" and missing.out["code"] == "no_recipient"
+
+
+class HeldTools(FakeTools):
+    """The gateway holding the reply under the team's approval rules: refused, as a call with no approval is."""
+
+    tokens: list[str | None]
+
+    async def call(
+        self, operation: str, input: dict[str, Any], key: str, generation: int | None, token: str | None
+    ) -> ToolResult:
+        self.tokens = [*getattr(self, "tokens", []), token]
+        return ToolResult(False, refused=True, reason="approval_required")
+
+
+async def test_a_held_reply_leaves_by_error_and_sends_no_approval() -> None:
+    tools = HeldTools()
+    held = await action_send(
+        call(
+            "ops.action.send",
+            {"body": "Thanks"},
+            ports=EnginePorts(tools=tools, reviews=cast(Any, None)),  # type: ignore[arg-type]
+            run_input={"from": "a@b.test", "subject": "Hi"},
+        )
+    )
+    assert (held.port, held.out["code"], tools.tokens) == ("error", "send_failed", [None])
 
 
 async def test_repeat_done_then_exhausted() -> None:
