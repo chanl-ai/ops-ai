@@ -9,8 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, cast
 
-from pydantic_ai.models import Model
-
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import BUILTIN_LIMIT, run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
@@ -62,7 +61,7 @@ def calls_made(messages: list[Json]) -> int:
     return sum(len(cast(list[Json], m.get("tool_calls") or [])) for m in messages if m.get("role") == "assistant")
 
 
-def eager(pick: Callable[[Any, Any], tuple[str, dict[str, Any]] | None]) -> Model:
+def eager(pick: Callable[[Any, Any], tuple[str, dict[str, Any]] | None]) -> ModelEndpoint:
     """A model that calls whatever `pick(offered names, messages)` returns while it is offered, else answers, and
     answers once told to; one that ignores the instruction is the step-limit case (tests/api/test_turn_limits.py)."""
 
@@ -76,7 +75,7 @@ def eager(pick: Callable[[Any, Any], tuple[str, dict[str, Any]] | None]) -> Mode
     return model_on(script)
 
 
-async def run(req: TurnRequest, model: Model, tools: Tools) -> TurnResult:
+async def run(req: TurnRequest, model: ModelEndpoint, tools: Tools) -> TurnResult:
     events = [e async for e in run_turn(req, KernelPorts(model=model, tools=tools, knowledge=NoKnowledge()))]
     last = events[-1]
     assert isinstance(last, TurnFinished)

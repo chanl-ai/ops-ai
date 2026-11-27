@@ -276,10 +276,16 @@ def model_steps(messages: list[Json]) -> int:
 SCRIPTED_URL = "http://models.scripted"
 
 
-def model_on(script: Script) -> ModelEndpoint:
+def wired(script: Script, *, chunk: int = 7) -> tuple[ModelEndpoint, ScriptedModel]:
+    """The kernel's model with `script` answering at the HTTP edge, and the transport, which keeps each request."""
+    wire = ScriptedModel(script, chunk=chunk)
+    http = httpx2.AsyncClient(transport=wire)
+    return ModelsServiceModels(SCRIPTED_URL, "mk_scripted", http_client=http).model_for("scripted"), wire
+
+
+def model_on(script: Script, *, chunk: int = 7) -> ModelEndpoint:
     """The kernel's model with `script` answering at the HTTP edge (ops_agent_kernel.testing.ScriptedModel)."""
-    http = httpx2.AsyncClient(transport=ScriptedModel(script))
-    return ModelsServiceModels(SCRIPTED_URL, "mk_scripted", http_client=http).model_for("scripted")
+    return wired(script, chunk=chunk)[0]
 
 
 def scripted_model() -> ModelEndpoint:

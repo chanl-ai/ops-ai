@@ -9,9 +9,8 @@ from typing import Any, cast
 
 import httpx
 from openai import AsyncOpenAI
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openai import OpenAIProvider
 
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.events import TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts
@@ -47,7 +46,7 @@ async def test_saved_model_settings_reach_the_request_models_service_receives() 
         api_key="mk",
         http_client=cast(Any, httpx.AsyncClient(transport=httpx.MockTransport(gateway))),
     )
-    model = OpenAIChatModel("bank-standard", provider=OpenAIProvider(openai_client=client))
+    model = ModelEndpoint(client, "bank-standard")
     ports = KernelPorts(model=model, tools=Systems(), knowledge=NoKnowledge())
     req = TurnRequest("t1", "th1", settings, [], user_turn="When does the branch open?")
     events = [e async for e in run_turn(req, ports)]

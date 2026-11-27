@@ -7,18 +7,16 @@ table."""
 
 from __future__ import annotations
 
-import json
-from collections.abc import AsyncIterator
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
 from httpx import AsyncClient
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
-from pydantic_ai.models import Model
-from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
-from tests.wire_model import on_wire
+from ops_agent_kernel.contract import ModelEndpoint
+from ops_agent_kernel.testing import Answer, Structured
+from ops_service_kit.http import Json
+from tests.conftest import asked, model_on
 
 from ..saves import save_agent
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
@@ -174,29 +172,17 @@ async def test_hold_until_checked_is_versioned_and_reaches_the_served_definition
         assert "holdUntilChecked" not in off["versions"][0]["config"], off["versions"][0]
 
 
-def _blocking_model() -> Model:
+def _blocking_model() -> ModelEndpoint:
     """Blocks a question about shares at the question check and answers anything else."""
 
-    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        last = messages[-1]
-        prompt = (
-            " ".join(str(p.content) for p in last.parts if isinstance(p, UserPromptPart))
-            if isinstance(last, ModelRequest)
-            else ""
-        )
+    def script(messages: list[Json], tools: list[Json]) -> Answer:
+        prompt = asked(messages)
         if prompt.startswith("Blocked topics:"):
             topic = "investment advice" if "shares" in prompt.split("Message:", 1)[-1] else "none"
-            return ModelResponse(parts=[ToolCallPart("final_result", {"topic": topic, "reason": "test"})])
-        return ModelResponse(parts=[TextPart("The wire fee is 25.00.")])
+            return Structured({"topic": topic, "reason": "test"})
+        return "The wire fee is 25.00."
 
-    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
-        for part in respond(messages, info).parts:
-            if isinstance(part, TextPart):
-                yield part.content
-            elif isinstance(part, ToolCallPart):
-                yield {0: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
-
-    return on_wire(FunctionModel(respond, stream_function=stream))
+    return model_on(script)
 
 
 async def test_a_test_turn_refused_on_its_question_names_the_rule_and_claims_no_steps(tmp_path: Path) -> None:

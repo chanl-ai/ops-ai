@@ -6,9 +6,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
-
 from ops_agent_kernel.ports import KernelPorts
+from ops_agent_kernel.testing import Reply, ToolCall
 from ops_agent_kernel.types import TurnRequest
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.activities.gateway import GatewayToolExecutor
@@ -24,7 +23,7 @@ SIGNED = {"whose": "team", "login": "ops@harborpine.example", "app": "Salesforce
 
 async def test_a_team_login_call_carries_who_acted_to_the_chat_card() -> None:
     seen: list[Any] = []
-    steps = [ModelResponse(parts=[ToolCallPart("salesforce_query", {})]), ModelResponse(parts=[TextPart("New.")])]
+    steps = [Reply(tool_calls=[ToolCall("salesforce_query", {})]), "New."]
     answer = {"ok": True, "output": RECORDS[0], "view": None, "signedIn": SIGNED}
     tools = GatewayToolExecutor(Gateway(answer), None)  # type: ignore[arg-type]
     req = TurnRequest("t1", "th1", SETTINGS, [QUERY], user_turn="status of case 00044818")

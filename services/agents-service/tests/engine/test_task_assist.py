@@ -5,7 +5,6 @@ have; a failing model call holds or fails the task; the call reads run data the 
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack
 from datetime import UTC, datetime, timedelta
@@ -15,10 +14,9 @@ from uuid import uuid4
 
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
-from pydantic_ai.messages import ModelMessage, ModelResponse
-from pydantic_ai.models.function import AgentInfo, FunctionModel
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from ops_agent_kernel.testing import Answer, Structured
 from ops_agents.api import engine_reviews
 from ops_agents.api.engine_agents import StepRules
 from ops_agents.api.engine_host import RunReviews, assisted_reviews
@@ -30,12 +28,11 @@ from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
 from ops_engine.ports import AgentResult, PromptRequest
 from ops_engine.store import DefinitionStore
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
-from tests.conftest import structured
 from tests.engine.test_worker import CountingTools, drain, worker
 from tests.run_rows import write_run
 from tests.unit.test_agent_step_port import _prompt_port, _streamed  # pyright: ignore[reportPrivateUsage]
-from tests.wire_model import on_wire
 
 FLOW = parse(
     {
@@ -63,7 +60,7 @@ FLOW = parse(
         ],
     }
 )
-HELP = {
+HELP: Json = {
     "question": "Should a levy case open for Marcus Bell?",
     "summary": "A 3,250.00 levy from Nova Scotia Supreme Court.",
     "doubtful": ["amount"],
@@ -199,8 +196,8 @@ async def test_the_workers_assist_runs_whatever_the_ai_step_rules_say(engine: As
     """The worker's assist borrowed the AI step port, whose rules refuse a call that names no run, so every
     assist failed as ai_steps_off. Built as the worker builds it, under AI step rules that refuse everything."""
 
-    def answer(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        return structured(info, HELP)
+    def answer(messages: list[Json], tools: list[Json]) -> Answer:
+        return Structured(HELP)
 
     agents = _prompt_port(_streamed(answer))
     agents.rules = DenyAll()
@@ -216,14 +213,14 @@ async def test_a_stopping_worker_waits_for_the_assist_it_is_writing(engine: Asyn
     """The assist ran in an untracked task, so a worker stopping mid-call lost it and the task stayed pending.
     Built as the worker builds it; the model answers only after the stop has begun."""
 
-    def answer(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        return structured(info, HELP)
+    def answer(messages: list[Json], tools: list[Json]) -> Answer:
+        return Structured(HELP)
 
-    async def slow(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str]:
+    async def slow(messages: list[Json], tools: list[Json]) -> Answer:
         await asyncio.sleep(0.3)
-        yield json.dumps(HELP)
+        return answer(messages, tools)
 
-    agents = _prompt_port(on_wire(FunctionModel(answer, stream_function=slow)))
+    agents = _prompt_port(_streamed(slow))
     async with AsyncExitStack() as stack:
         reviews = assisted_reviews(stack, engine, agents, Policies(True))
         tenant, run_id, rt = await _paused(engine, Prompts(HELP), on=True, settle=False, reviews=reviews)

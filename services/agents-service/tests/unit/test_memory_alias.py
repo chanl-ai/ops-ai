@@ -7,9 +7,9 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from pydantic_ai.models import Model
 
 from ops_agent_kernel import aliases
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.ports import KernelPorts
 from ops_agent_kernel.testing import Reply, Structured
 from ops_agents.api.memory import MEMORY_ALIAS, extractor_for
@@ -20,11 +20,11 @@ from tests.unit.test_guardrails_kernel import NoKnowledge, NoTools
 SCHEMA: Json = {"type": "object", "properties": {"memories": {"type": "array"}}, "required": ["memories"]}
 
 
-def answering(value: str) -> Model:
+def answering(value: str) -> ModelEndpoint:
     return model_on(lambda messages, tools: Structured({"memories": [{"value": value}]}))
 
 
-def failing(refused: Reply) -> Model:
+def failing(refused: Reply) -> ModelEndpoint:
     return model_on(lambda messages, tools: refused)
 
 
@@ -35,7 +35,7 @@ class Source:
     def __init__(self, memory: Reply | None = None) -> None:
         self.memory = memory
 
-    def model_for(self, alias: str) -> Model:
+    def model_for(self, alias: str) -> ModelEndpoint:
         if alias != MEMORY_ALIAS:
             return answering("turn")
         return answering("fast") if self.memory is None else failing(self.memory)

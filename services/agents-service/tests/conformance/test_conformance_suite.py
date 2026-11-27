@@ -21,8 +21,8 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from pydantic import SecretStr
-from pydantic_ai.models import Model
 
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.testing import Answer
 from ops_agents.activities import gateway as gw
 from ops_agents.api.app import create_app
@@ -55,7 +55,7 @@ class Counter:
 
     calls: int = 0
 
-    def model(self) -> Model:
+    def model(self) -> ModelEndpoint:
         def turn(messages: list[Json], tools: list[Json]) -> Answer:
             self.calls += 1
             return scripted(messages, tools)

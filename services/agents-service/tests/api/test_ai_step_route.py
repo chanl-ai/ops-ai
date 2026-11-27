@@ -9,11 +9,10 @@ from typing import Any, ClassVar, cast
 
 import pytest
 from httpx import AsyncClient
-from pydantic_ai.messages import ModelMessage, ModelResponse
-from pydantic_ai.models.function import AgentInfo
 
+from ops_agent_kernel.testing import Answer, Structured
 from ops_documents_client import DocumentsClient
-from tests.conftest import structured
+from ops_service_kit.http import Json
 from tests.engine.test_lifecycle_rights import BUILDER, VIEWER, person
 from tests.unit.test_agent_step_port import _streamed  # pyright: ignore[reportPrivateUsage]
 
@@ -30,8 +29,8 @@ class Policies:
         return self.values.get(key, {})
 
 
-def answer(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-    return structured(info, {"category": "refund", "confidence": 0.9, "reason": "Wants the fee back."})
+def answer(messages: list[Json], tools: list[Json]) -> Answer:
+    return Structured({"category": "refund", "confidence": 0.9, "reason": "Wants the fee back."})
 
 
 @pytest.fixture
@@ -97,9 +96,9 @@ class Documents:
         return None
 
 
-def amount(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+def amount(messages: list[Json], tools: list[Json]) -> Answer:
     # Matches the answer schema only when it names the type's fields, that is, when the route looked them up.
-    return structured(info, {"amount": 3250.0})
+    return Structured({"amount": 3250.0})
 
 
 async def test_a_document_types_fields_are_read_as_the_callers_team(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -126,9 +125,9 @@ async def test_a_team_past_its_calls_a_minute_is_refused_before_the_model(monkey
     monkeypatch.setattr(ai_steps, "calls", RateLimit())
     asked: list[int] = []
 
-    def counted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    def counted(messages: list[Json], tools: list[Json]) -> Answer:
         asked.append(1)
-        return answer(messages, info)
+        return answer(messages, tools)
 
     async with role_app(_streamed(counted)) as client:
         policies(client, {"aiSteps": {"team_ops": True, "team_risk": True}})
