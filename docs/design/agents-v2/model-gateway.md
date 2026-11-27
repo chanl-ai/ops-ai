@@ -70,7 +70,7 @@ Rules, in the order the gate applies them (extending the order at `app.py:1299`)
 The request hash is SHA-256 over the canonical JSON of the request body with `stream`, `user` and `metadata` removed and
 keys sorted. A re-run must send the same bytes for the hash to match. Today's ledger strips five fields because the
 current library adds volatile ids (`services/agents-service/src/ops_agents/api/model_ledger.py:49`). Whether Strands
-adds any is checked in trial 1, which resumes a turn twice and compares hashes at the stub. If it does, the gateway
+adds any is checked in experiment 1, which resumes a turn twice and compares hashes at the stub. If it does, the gateway
 keeps a strip list in `OPS_MODELS_REPLAY_STRIP_FIELDS` and the hash leaves those fields out.
 
 ### Refusals
@@ -266,7 +266,7 @@ sequenceDiagram
 | Setting | Default | Meaning |
 |---|---|---|
 | `OPS_MODELS_REPLAY_HOURS` | `168` | Life of a replay row (default, 2026-11-26). A retry after expiry pays for the call again; nothing is sent twice |
-| `OPS_MODELS_REPLAY_STRIP_FIELDS` | empty | Extra request fields left out of the replay hash, filled only if trial 1 shows the loop library's resumed request differs from the first |
+| `OPS_MODELS_REPLAY_STRIP_FIELDS` | empty | Extra request fields left out of the replay hash, filled only if experiment 1 shows the loop library's resumed request differs from the first |
 | `OPS_MODELS_RESERVATION_SECONDS` | `300` | Life of an unsettled reservation |
 | `OPS_MODELS_RESERVE_OUTPUT_TOKENS` | `1024` | Output tokens assumed when the request sets no `max_tokens` |
 | `OPS_MODELS_CHECK_CALLS_PER_KEY` | `6` | Calls of purpose `check` or `judge` admitted past a spent budget per replay key |
@@ -326,5 +326,5 @@ copied; workspaces are reseeded.
 
 | # | Open point | Settled by |
 |---|---|---|
-| 1 | Whether a streamed answer can be recorded and replayed as a stream without the loop noticing a difference | Trial 3, part b: replay a streamed call and compare the loop's events |
-| 3 | Whether per-tenant model-key shares (`app.py:1310`) and budgets should be shown as one figure on the usage page | Console design, not a trial |
+| 1 | Whether a streamed answer can be recorded and replayed as a stream without the loop noticing a difference | Experiment 3, part b: replay a streamed call and compare the loop's events |
+| 3 | Whether per-tenant model-key shares (`app.py:1310`) and budgets should be shown as one figure on the usage page | Console design, not an experiment |

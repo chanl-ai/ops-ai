@@ -1,7 +1,7 @@
-"""Trial 1 of docs/design/agents-v2/trials.md: pause for approval in process A, resume in a fresh process B.
+"""Experiment 1 of docs/design/agents-v2/experiments.md: pause for approval in process A, resume in a fresh process B.
 
-Usage: python trial1.py pause STATEFILE [--two]   |   python trial1.py resume STATEFILE approved|rejected
-       python trial1.py helper-pause STATEFILE    |   python trial1.py helper-resume STATEFILE
+Usage: python experiment1.py pause STATEFILE [--two]   |   python experiment1.py resume STATEFILE approved|rejected
+       python experiment1.py helper-pause STATEFILE    |   python experiment1.py helper-resume STATEFILE
 """
 
 import hashlib
@@ -180,21 +180,21 @@ class HelperHook(HookProvider):
         if event.tool_use["name"] != "ask_helper":
             return
         tid = event.tool_use["toolUseId"]
-        h = agent("HELPER")
         saved = HELPER_SNAPS.get(tid)
-        if saved is None:
-            r = h(event.tool_use["input"]["question"])
-        else:
+        if saved is not None:
+            # Resumed: the outer interrupt already holds its answer, so `interrupt` returns it without raising. The
+            # helper is rebuilt from its saved state and answered; it makes no model call it made before the pause.
+            ans = event.interrupt("helper_pause")
+            h = agent("HELPER")
             h.load_snapshot(Snapshot.from_dict(saved["snap"]))
-            r = h(responses(saved["interrupts"], saved["answer"]))
-        if r.stop_reason == "interrupt":
-            ints = [i.to_dict() for i in r.interrupts]
-            snap = h.take_snapshot(preset="session").to_dict()
-            ans = event.interrupt("helper_pause", reason={"helper_snap": snap, "helper_interrupts": ints})
-            # resumed: load helper state from the reason we stored, answer it, run it to the end
-            h2 = agent("HELPER")
-            h2.load_snapshot(Snapshot.from_dict(snap))
-            r = h2(responses(ints, ans))
+            r = h(responses(saved["interrupts"], ans))
+        else:
+            h = agent("HELPER")
+            r = h(event.tool_use["input"]["question"])
+            if r.stop_reason == "interrupt":
+                ints = [i.to_dict() for i in r.interrupts]
+                HELPER_SNAPS[tid] = {"snap": h.take_snapshot(preset="session").to_dict(), "interrupts": ints}
+                event.interrupt("helper_pause", reason={"helper_interrupts": ints})
         event.cancel_tool = False
         result_text = str(r)
         event.selected_tool = None
@@ -256,10 +256,11 @@ def main():
         o = outer()
         r = o("go")
         ints = [i.to_dict() for i in r.interrupts or []]
-        n = save(path, o, {"interrupts": ints})
+        n = save(path, o, {"interrupts": ints, "helpers": HELPER_SNAPS})
         print(json.dumps({"stop": r.stop_reason, "interrupts": [i["name"] for i in ints], "bytes": n, "log": LOG}))
     elif mode == "helper-resume":
         d = load(path)
+        HELPER_SNAPS.update(d["helpers"])
         o = outer()
         o.load_snapshot(Snapshot.from_dict(d["snap"]))
         r = o(responses(d["interrupts"], "approved"))

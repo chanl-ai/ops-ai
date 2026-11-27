@@ -14,7 +14,7 @@ different server.
 |---|---|
 | One contract between the runtime and any agent loop | No module outside one subpackage imports the loop library; a lint contract fails if one does |
 | Every protection and kernel feature we have today works on Strands | The ported kernel suite passes on the scripted model with Pydantic AI removed from the lock file |
-| A paused reply resumes on another server | Trial 1 in [trials](trials.md), then the acceptance test `pause-other-server` below |
+| A paused reply resumes on another server | Experiment 1 in [experiments](experiments.md), then the acceptance test `pause-other-server` below |
 | New loop features switch on | Stop a reply, retry and fall back, hooks, large-result offload, images, traces |
 
 ## What it owns and what it must not own
@@ -452,25 +452,25 @@ class HookPolicy:
 
 ### Mapping Strands onto the contract
 
-Strands names below are as read on its user guide on 2026-11-26; each is confirmed by a trial before code depends on it.
+Strands names below are as read on its user guide on 2026-11-26; each is confirmed by an experiment before code depends on it.
 
 | Contract moment | Strands mechanism | Source | Confirmed by |
 |---|---|---|---|
-| Build one agent per turn | `Agent(model=..., tools=..., system_prompt=..., hooks=..., conversation_manager=..., retry_strategy=..., trace_attributes=...)`; the docs recommend one agent per task | [agent loop](https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/) | Trial 1 |
-| Reach the model | Its OpenAI-compatible provider pointed at `ModelEndpoint.base_url` with our headers. Constructor argument names are **unverified** | [model providers](https://strandsagents.com/docs/user-guide/sdk/model-providers/) | Trial 3 |
-| `before_tool`, refuse | `BeforeToolCallEvent` with `cancel_tool` | [hooks](https://strandsagents.com/docs/user-guide/sdk/agents/hooks/) | Trial 2 |
-| `before_tool`, pause | An interrupt raised from the hook; the run returns with stop reason `interrupt` and `result.interrupts` | [interrupts](https://strandsagents.com/docs/user-guide/sdk/interrupts/) | Trial 1 |
-| `before_tool`, answered | The hook cancels the tool and supplies the result. Whether a cancelled tool can carry a successful result is **unverified** | hooks page | Trial 2, part a |
-| `after_tool` | `AfterToolCallEvent`, whose `result` can be replaced | hooks page | Trial 2 |
-| `before_model`: the volatile tail and the offered tool list | Middleware on the model stage, input phase, replacing the context. Whether the tool list can be narrowed per call is **unverified** | [middleware](https://strandsagents.com/docs/user-guide/sdk/agents/middleware/) | Trial 2 |
-| `after_model`: guide or retry | `AfterModelCallEvent` with `retry`, or an intervention returning `Guide` | [interventions](https://strandsagents.com/docs/user-guide/sdk/agents/interventions/) | Trial 2 |
-| Steps limit | `limits={"turns": n}`; stop reason `limit_turns`. It is checked at the top of each loop step, so one step can overshoot | agent loop page | Trial 3 |
-| Stop a reply | `cancel_signal` passed to the call, polled about every 50 ms; stop reason `cancelled`; a cancelled run cannot resume | [lifecycle controls](https://strandsagents.com/docs/user-guide/sdk/agents/lifecycle-controls/) | Trial 3 |
-| Retry a failed model call | `ModelRetryStrategy` with a custom `is_retryable` | [retry strategies](https://strandsagents.com/docs/user-guide/sdk/agents/retry-strategies/) | Trial 3 |
-| Fall back to a second model | `ModelRouter` with `FallbackStrategy` and `max_switches=1`, both candidates on our gateway | [model routing](https://strandsagents.com/docs/user-guide/sdk/model-providers/model-routing/) | Trial 3 |
-| Save and load state | `agent.take_snapshot(preset="session")`, `Snapshot.to_dict()`, `agent.load_snapshot(...)` | [snapshots](https://strandsagents.com/docs/user-guide/sdk/agents/snapshots/) | Trial 1 |
-| Long conversations | `SummarizingConversationManager`; its summary calls go through the same endpoint with purpose `summary` | [conversation management](https://strandsagents.com/docs/user-guide/sdk/agents/conversation-management/) | Trial 3 |
-| Traces | OpenTelemetry spans per agent, cycle, model call and tool, stamped from `trace_attributes` | [traces](https://strandsagents.com/docs/user-guide/sdk/observability-evaluation/traces/) | Trial 3 |
+| Build one agent per turn | `Agent(model=..., tools=..., system_prompt=..., hooks=..., conversation_manager=..., retry_strategy=..., trace_attributes=...)`; the docs recommend one agent per task | [agent loop](https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/) | Experiment 1 |
+| Reach the model | Its OpenAI-compatible provider pointed at `ModelEndpoint.base_url` with our headers. Constructor argument names are **unverified** | [model providers](https://strandsagents.com/docs/user-guide/sdk/model-providers/) | Experiment 3 |
+| `before_tool`, refuse | `BeforeToolCallEvent` with `cancel_tool` | [hooks](https://strandsagents.com/docs/user-guide/sdk/agents/hooks/) | Experiment 2 |
+| `before_tool`, pause | An interrupt raised from the hook; the run returns with stop reason `interrupt` and `result.interrupts` | [interrupts](https://strandsagents.com/docs/user-guide/sdk/interrupts/) | Experiment 1 |
+| `before_tool`, answered | The hook cancels the tool and supplies the result. Whether a cancelled tool can carry a successful result is **unverified** | hooks page | Experiment 2, part a |
+| `after_tool` | `AfterToolCallEvent`, whose `result` can be replaced | hooks page | Experiment 2 |
+| `before_model`: the volatile tail and the offered tool list | Middleware on the model stage, input phase, replacing the context. Whether the tool list can be narrowed per call is **unverified** | [middleware](https://strandsagents.com/docs/user-guide/sdk/agents/middleware/) | Experiment 2 |
+| `after_model`: guide or retry | `AfterModelCallEvent` with `retry`, or an intervention returning `Guide` | [interventions](https://strandsagents.com/docs/user-guide/sdk/agents/interventions/) | Experiment 2 |
+| Steps limit | `limits={"turns": n}`; stop reason `limit_turns`. It is checked at the top of each loop step, so one step can overshoot | agent loop page | Experiment 3 |
+| Stop a reply | `cancel_signal` passed to the call, polled about every 50 ms; stop reason `cancelled`; a cancelled run cannot resume | [lifecycle controls](https://strandsagents.com/docs/user-guide/sdk/agents/lifecycle-controls/) | Experiment 3 |
+| Retry a failed model call | `ModelRetryStrategy` with a custom `is_retryable` | [retry strategies](https://strandsagents.com/docs/user-guide/sdk/agents/retry-strategies/) | Experiment 3 |
+| Fall back to a second model | `ModelRouter` with `FallbackStrategy` and `max_switches=1`, both candidates on our gateway | [model routing](https://strandsagents.com/docs/user-guide/sdk/model-providers/model-routing/) | Experiment 3 |
+| Save and load state | `agent.take_snapshot(preset="session")`, `Snapshot.to_dict()`, `agent.load_snapshot(...)` | [snapshots](https://strandsagents.com/docs/user-guide/sdk/agents/snapshots/) | Experiment 1 |
+| Long conversations | `SummarizingConversationManager`; its summary calls go through the same endpoint with purpose `summary` | [conversation management](https://strandsagents.com/docs/user-guide/sdk/agents/conversation-management/) | Experiment 3 |
+| Traces | OpenTelemetry spans per agent, cycle, model call and tool, stamped from `trace_attributes` | [traces](https://strandsagents.com/docs/user-guide/sdk/observability-evaluation/traces/) | Experiment 3 |
 
 Strands features we switch off, each because it would bypass a gateway or a store of ours:
 
@@ -493,7 +493,7 @@ Strands sees only a tool or a seam call.
 | Typed final answer | `TurnRequest.output_schema`, validated with `jsonschema` (`types.py:358`) | A kernel tool `answer` whose input schema is the spec's schema. The turn ends when it is called with valid input; invalid input returns the errors to the model, twice at most, then `schema_error` | The spec carries JSON Schema; Strands' structured output takes a Pydantic model class ([structured output](https://strandsagents.com/docs/user-guide/sdk/agents/structured-output/)) |
 | Run limits with a named stop reason | `max_steps`, `max_tool_calls`, `max_builtin_calls` (`types.py:152` to `:160`) | Steps through Strands `limits`; tool-call and built-in caps counted in `before_tool`, which is exact | The caps are counted per tool class, which Strands does not do |
 | Stable-first prompt order | `context.py`, `prompt_writer.head` and `tail` | `system_stable` is the head; the tail is added in `before_model` and never saved to history | Cache hits depend on the head being byte-identical across turns |
-| Tool search | `search.search` and a threshold (`types.py:166`) | A kernel tool `search_tools`; `before_model` offers the found tools. If narrowing per call fails trial 2, every granted tool is registered and search only ranks | Search must find only granted tools |
+| Tool search | `search.search` and a threshold (`types.py:166`) | A kernel tool `search_tools`; `before_model` offers the found tools. If narrowing per call fails experiment 2, every granted tool is registered and search only ranks | Search must find only granted tools |
 | Skills | `skills.py`, `load_skill` | Unchanged: an index in the prompt and the `load_skill` kernel tool | Ours have reviewed versions, parts and per-turn caps; Strands' skills plugin loads from a file path |
 | Step-by-step procedures | `steps.py`, `step_tools.py`, `expr.py` | `steps.barred` is asked in `before_tool`; the rule check runs in `after_tool`; holds are taken there | No library has steps with a check after each |
 | Rich results | `present.py`, `kinds.py`, `layout.py` | Unchanged: the `present` kernel tool | Ours only |
@@ -558,7 +558,7 @@ not attach a Strands session manager to a single agent.
 | Option | Verdict | Reason |
 |---|---|---|
 | A. `LoopState` inside our checkpoint (chosen) | Chosen | One store and one writer. The lease's fencing number already rejects a stale writer. Tenant isolation is the checkpoint table's |
-| B. A Strands session manager on a custom storage backend in our database | Fallback if `load_snapshot` cannot restore a pending interrupt (trial 1) | A second store beside the checkpoint that must be kept in step with it. Strands documents no lock and one writer per session ([session management](https://strandsagents.com/docs/user-guide/sdk/agents/session-management/)) |
+| B. A Strands session manager on a custom storage backend in our database | Fallback if `load_snapshot` cannot restore a pending interrupt (experiment 1) | A second store beside the checkpoint that must be kept in step with it. Strands documents no lock and one writer per session ([session management](https://strandsagents.com/docs/user-guide/sdk/agents/session-management/)) |
 
 What `LoopState.data` holds: the dictionary from `Snapshot.to_dict()` (messages, agent state, conversation manager
 state, interrupt state), serialised as JSON and compressed. Rules:
@@ -723,10 +723,10 @@ Failure modes first. Each is one test through `run_turn` on the scripted model u
 
 ## Open points
 
-| # | Open point | Trial that settles it |
+| # | Open point | Experiment that settles it |
 |---|---|---|
-| 1 | Whether `load_snapshot` on a fresh agent restores a pending interrupt so that an `interruptResponse` resumes it | Trial 1 |
-| 2 | Whether Strands' context offloader can store large tool results through a storage object of ours, or whether the kernel's 200-row shaping (`services/agents-service/src/ops_agents/activities/shaper.py:30`) stays | Trial 3, part c |
-| 3 | Whether the tool list offered to the model can be narrowed per model call | Trial 2, part d |
-| 4 | The exact constructor arguments of Strands' OpenAI-compatible provider for a base URL, headers and an injected HTTP client | Trial 3, part a |
-| 5 | Whether images can be passed to the model through the gateway, which records an image count today (`services/models-service/src/ops_models/store/tables.py:157`) | Trial 3, part e |
+| 1 | Whether `load_snapshot` on a fresh agent restores a pending interrupt so that an `interruptResponse` resumes it | Experiment 1 |
+| 2 | Whether Strands' context offloader can store large tool results through a storage object of ours, or whether the kernel's 200-row shaping (`services/agents-service/src/ops_agents/activities/shaper.py:30`) stays | Experiment 3, part c |
+| 3 | Whether the tool list offered to the model can be narrowed per model call | Experiment 2, part d |
+| 4 | The exact constructor arguments of Strands' OpenAI-compatible provider for a base URL, headers and an injected HTTP client | Experiment 3, part a |
+| 5 | Whether images can be passed to the model through the gateway, which records an image count today (`services/models-service/src/ops_models/store/tables.py:157`) | Experiment 3, part e |

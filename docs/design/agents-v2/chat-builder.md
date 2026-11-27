@@ -228,6 +228,6 @@ sequenceDiagram
 
 | # | Open point | Settled by |
 |---|---|---|
-| 1 | Which model alias drafts well enough to meet the 9-of-10 measure, and at what cost per draft | Trial 3, part f: the ten seeded descriptions on two aliases, counted by validation passes and by accepted sections |
+| 1 | Which model alias drafts well enough to meet the 9-of-10 measure, and at what cost per draft | Experiment 3, part f: the ten seeded descriptions on two aliases, counted by validation passes and by accepted sections |
 | 2 | Whether the builder should also draft hook policies for a security admin to review | Later release; a hook policy is a security record and has its own review |
 | 3 | Whether a draft in progress should survive a reload | After the first builders use it; a server-side draft would need a table and a retention rule |

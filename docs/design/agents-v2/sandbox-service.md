@@ -16,7 +16,7 @@ a sandbox without ever holding a connection to it. Each place a sandbox can run 
 |---|---|
 | One sandbox per conversation, started on first use | A conversation that never runs code creates no sandbox row and no computer |
 | Files live as long as the conversation and follow it to any server | After a pause and a restart of every process, the next command sees the same files; the crash test passes on all three backends |
-| No network by default; two lists must allow a host | A request to an unlisted host is refused and recorded; trial 5 proves it on Sprites |
+| No network by default; two lists must allow a host | A request to an unlisted host is refused and recorded; experiment 5 proves it on Sprites |
 | Secrets never enter the sandbox | A script calls a system with a placeholder; the real value appears nowhere inside, in the model's input or in logs |
 | Every command is a logged tool call | The run trace lists commands and network requests in order with the agent's other calls |
 | Backends are swappable | The same acceptance suite runs against Sprites, Docker and Kubernetes |
@@ -53,7 +53,7 @@ registered unless the spec has a sandbox.
 A held call pauses the turn in one place: the kernel's `before_tool` seam, before the tool's body runs. Each Strands
 sandbox tool call maps to one `sandbox.<operation>` call, and the seam asks the tool gateway to decide it
 (`POST /v1/calls/decide`). `needs_review` pauses the turn there; the body, and so `GatewaySandbox`, runs only after
-the decision. Trial 6 checks that the mapping from a tool's input to one operation is exact for the file editor's
+the decision. Experiment 6 checks that the mapping from a tool's input to one operation is exact for the file editor's
 commands.
 
 | Whose turn | Sandbox id | Notes |
@@ -69,15 +69,15 @@ The agent's process never talks to a sandbox directly. This keeps the five prote
 | Part | Licence and status, with source | Verdict |
 |---|---|---|
 | Strands sandbox interface and its shell, file editor and Python tools | The Python SDK repository states Apache-2.0 ([repository](https://github.com/strands-agents/sdk-python), read 2026-11-26). Whether the three tools ship in the same package is **unverified** | Adopted, as the plug the owner decided on |
-| Strands SSH sandbox | Same repository. It spawns a new `ssh` process per command, needs key authentication, and its option allow-list blocks `ProxyCommand` unless an unsafe flag is set ([available sandboxes](https://strandsagents.com/docs/user-guide/sdk/sandbox/available-sandboxes/)) | Not in the request path: it would put a key in the agent's process and skip the gateway. Trial 6 checks whether it is useful inside the Sprites backend |
+| Strands SSH sandbox | Same repository. It spawns a new `ssh` process per command, needs key authentication, and its option allow-list blocks `ProxyCommand` unless an unsafe flag is set ([available sandboxes](https://strandsagents.com/docs/user-guide/sdk/sandbox/available-sandboxes/)) | Not in the request path: it would put a key in the agent's process and skip the gateway. Experiment 6 checks whether it is useful inside the Sprites backend |
 | Strands Docker sandbox | Runs `docker exec` into a container someone else started (same page) | Not used directly; our Docker backend owns creation, limits and removal, which that class does not |
 | OpenHands agent server | The OpenHands repository states MIT and says the agent server lives in a separate SDK repository ([repository](https://github.com/OpenHands/OpenHands), read 2026-11-26). That second repository's licence is **unverified** | Not adopted in 1.5.0. It is a second agent-facing API inside the box; our six operations already cover what the Strands tools need. Re-evaluated if a coding agent is added later |
-| Anthropic sandbox-runtime | Apache-2.0, described by its authors as a beta research preview; restricts files and network per process with bubblewrap on Linux ([repository](https://github.com/anthropics/sandbox-runtime), read 2026-11-26) | Candidate second wall inside the plain Docker mode, where no gVisor exists. Trial 8 decides. Not relied on as the only wall |
+| Anthropic sandbox-runtime | Apache-2.0, described by its authors as a beta research preview; restricts files and network per process with bubblewrap on Linux ([repository](https://github.com/anthropics/sandbox-runtime), read 2026-11-26) | Candidate second wall inside the plain Docker mode, where no gVisor exists. Experiment 8 decides. Not relied on as the only wall |
 | A small tool-server process inside the box | Ours | Adopted as a thin client: the `ops` library in each image. How its calls leave the box is specified under [Calling a tool from inside the box](#calling-a-tool-from-inside-the-box). A tool-server wrapper over it is added when an in-box agent needs one |
-| A ready-made inspecting proxy for the exit gate | mitmproxy and Envoy both do TLS inspection; licences and fit are **unverified** | Evaluated in trials 0 and 7 before any proxy of ours is written. Ours is written only if neither can apply the two lists, the per-sandbox token and the grant check |
+| A ready-made inspecting proxy for the exit gate | mitmproxy and Envoy both do TLS inspection; licences and fit are **unverified** | Evaluated in experiments 0 and 7 before any proxy of ours is written. Ours is written only if neither can apply the two lists, the per-sandbox token and the grant check |
 | Community forks under AGPL | One archived sandbox product has an AGPL-3.0 community fork | Ruled out: no AGPL code |
 
-Licences marked unverified are checked in trial 0 before a dependency is added (SC4).
+Licences marked unverified are checked in experiment 0 before a dependency is added (SC4).
 
 ## The life of a sandbox
 
@@ -503,7 +503,7 @@ Run against each backend; a backend that cannot pass a row is not offered for a 
 | Package | Add | Change | Delete |
 |---|---|---|---|
 | `services/sandbox-service` (new, `ops_sandbox`, port 8780) | `api/` (routes), `app/` (`lifecycle.py`, `files.py`, `function_runs.py`, `idle.py`), `domain/` (`paths.py`, `limits.py`, `manifest.py`), `store/`, `backends/` (`port.py`, `sprites.py`, `docker.py`, `kubernetes.py`, `wasm.py`), `migrations/`, `openapi.json`, `CLAUDE.md`, `README.md` | | |
-| `services/tools-service` | `src/ops_tools/sandbox_tools.py` (the `sandbox` module), `exit_gate/` (`proxy.py` and `inspect.py`, or the adapter around the proxy chosen in trial 7; `grants.py`; `inbox_calls.py` for `tools.ops.internal`), `store/sandbox_grants.py`, a migration | `egress.py` (a host tag `packages`; a narrower list per call), `code_runs.py` (accept a sandbox token; point function runs at the sandbox service), `app.py` | |
+| `services/tools-service` | `src/ops_tools/sandbox_tools.py` (the `sandbox` module), `exit_gate/` (`proxy.py` and `inspect.py`, or the adapter around the proxy chosen in experiment 7; `grants.py`; `inbox_calls.py` for `tools.ops.internal`), `store/sandbox_grants.py`, a migration | `egress.py` (a host tag `packages`; a narrower list per call), `code_runs.py` (accept a sandbox token; point function runs at the sandbox service), `app.py` | |
 | `packages/ops_agent_kernel` | `strands_loop/gateway_sandbox.py` | `strands_loop/driver.py` binds the three tools when the request has a sandbox grant | |
 | `services/agents-service` | `api/routers/thread_sandbox.py` (the public routes), `app/thread_sandbox.py` (save after a turn, delete with the thread, attachments into the inbox) | `graphs/agent_wrapper.py`, `api/chat_attachments.py` | |
 | `deploy` | `images/sandbox/python-data/`, `images/sandbox/python-ops/`, the in-box helper script, compose and Kubernetes entries for the service and the gate | `deploy/fly`, `deploy/compose`, `deploy/k8s` | Runner entries |
@@ -512,9 +512,9 @@ Run against each backend; a backend that cannot pass a row is not offered for a 
 
 ## Open points
 
-| # | Open point | Trial that settles it |
+| # | Open point | Experiment that settles it |
 |---|---|---|
-| 1 | Whether the WebAssembly engine stays as the engine for one-shot functions. It starts in milliseconds; a fresh computer per function call takes one to two seconds on Sprites by its own figures | Trial 9: function start time on each backend; keep WebAssembly unless p95 is at most 300 ms |
-| 2 | Whether the gate can inspect and add a secret for the systems customers use, how many pin certificates, and whether mitmproxy or Envoy can serve as the gate | Trials 0 and 7 |
-| 3 | Whether Strands' three tools can be bound to our sandbox object and wrapped as kernel tools without losing their streaming output, and whether each tool call maps to exactly one operation the seam can decide | Trial 6, parts b and c |
-| 5 | How large the warm pool must be for a 2-second first command | Trial 9 |
+| 1 | Whether the WebAssembly engine stays as the engine for one-shot functions. It starts in milliseconds; a fresh computer per function call takes one to two seconds on Sprites by its own figures | Experiment 9: function start time on each backend; keep WebAssembly unless p95 is at most 300 ms |
+| 2 | Whether the gate can inspect and add a secret for the systems customers use, how many pin certificates, and whether mitmproxy or Envoy can serve as the gate | Experiments 0 and 7 |
+| 3 | Whether Strands' three tools can be bound to our sandbox object and wrapped as kernel tools without losing their streaming output, and whether each tool call maps to exactly one operation the seam can decide | Experiment 6, parts b and c |
+| 5 | How large the warm pool must be for a 2-second first command | Experiment 9 |

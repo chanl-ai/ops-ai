@@ -11,9 +11,9 @@ workflow engine stays ours and stays on both databases; no outside workflow prod
 
 | Goal | Measure |
 |---|---|
-| A waiting run continues after an upgrade that changed how saved state is laid out | Trial 11 |
+| A waiting run continues after an upgrade that changed how saved state is laid out | Experiment 11 |
 | A run has one spending limit across every step, member and helper | A run with a budget stops starting model calls once the budget is spent; the limit is held at the model gateway |
-| An agent step can pause for approval and continue the same turn | Trial 13; the step no longer fails when a write needs approval |
+| An agent step can pause for approval and continue the same turn | Experiment 13; the step no longer fails when a write needs approval |
 | Every engine statement runs on SQL Server | The portable-store check's baseline has no engine line left |
 
 ## What it owns and what it must not own
@@ -192,8 +192,8 @@ sequenceDiagram
 
 ## Open points
 
-| # | Open point | Trial |
+| # | Open point | Experiment |
 |---|---|---|
-| 1 | Whether replay through the compiled graph reproduces the position for joins, loops and child runs | Trial 11 |
-| 2 | Whether conditional updates hold under load on SQL Server without deadlocks | Trial 14 |
+| 1 | Whether replay through the compiled graph reproduces the position for joins, loops and child runs | Experiment 11 |
+| 2 | Whether conditional updates hold under load on SQL Server without deadlocks | Experiment 14 |
 | 3 | Whether a run budget should also cap tool calls that cost money, such as search queries | Owner, after 1.5.0 usage numbers exist |

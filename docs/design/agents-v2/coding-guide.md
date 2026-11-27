@@ -40,7 +40,7 @@ The specification is [runtime contract and Strands loop](runtime-contract-and-st
 | The library never reaches the network | Its model client is given the `ModelEndpoint` of the model gateway and nothing else. Its own tool-server client, session managers, retry sleeps, telemetry exporters and hosted tools are off | A test with a transport that fails any request not addressed to the scripted gateway |
 | Pause state is opaque outside the adapter | `LoopState.data` is bytes plus a schema number. Only the adapter reads it. It is stored by our checkpointer as every checkpoint is: a tenant-scoped row, with no added encryption | A resume test in which the state is passed through a second process |
 | A second loop is a second adapter | Another loop implements `LoopDriver` in its own folder with its own import contract. `KernelPorts.loop` selects it from a setting our engineers control; it is not in the spec file | The contract test suite runs against every registered driver |
-| Version pin | The library is pinned to a minor range in `packages/ops_agent_kernel/pyproject.toml`. An upgrade is its own pull request that runs the contract suite and trials 1 to 3's scripts | SC4 |
+| Version pin | The library is pinned to a minor range in `packages/ops_agent_kernel/pyproject.toml`. An upgrade is its own pull request that runs the contract suite and experiments 1 to 3's scripts | SC4 |
 | Scripted model | Tests use `ops_agent_kernel.testing.ScriptedModel`, which answers the gateway's completion route from a Python function. Tests never patch the library | TS6, TS8 |
 
 Order of the switch, so the suite is never red for a reason nobody can read:

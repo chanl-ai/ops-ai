@@ -1,7 +1,7 @@
 # Sandbox backend: Fly Sprites
 
 Status: proposed design, written 2026-11-26. Nothing on this page is built. Release 1.5.0. Facts about Sprites are from
-its public documentation read on 2026-11-26; anything not on a page read is marked unverified and has a trial.
+its public documentation read on 2026-11-26; anything not on a page read is marked unverified and has an experiment.
 
 Our hosted service runs each conversation's sandbox on a Fly Sprite: a small virtual machine with its own disk that
 sleeps when idle and wakes in about a second. This page says how the sandbox service drives one, what Sprites gives us
@@ -13,8 +13,8 @@ earlier design page ruled hosted sandboxes out, and this decision replaces that 
 | Goal | Measure |
 |---|---|
 | One Sprite per conversation, used only through the sandbox service | The backend passes the shared acceptance suite in [sandbox service](sandbox-service.md) |
-| No network except our exit gate | Trial 5, part a |
-| Files restored after a long sleep, and after the Sprite is gone | Trial 5, part b, and trial 10, step 3 |
+| No network except our exit gate | Experiment 5, part a |
+| Files restored after a long sleep, and after the Sprite is gone | Experiment 5, part b, and experiment 10, step 3 |
 
 ## What it owns and what it must not own
 
@@ -34,8 +34,8 @@ earlier design page ruled hosted sandboxes out, and this decision replaces that 
 | 8 virtual CPUs fixed, memory managed by the platform, 100 GB of disk | lifecycle page | Our smaller sizes must be enforced inside the Sprite; see Limits |
 | Outbound network is unrestricted by default. A policy is a list of allow and deny rules by domain, set from outside through the API and read-only inside. An empty rule list means unrestricted. Under a policy, connections to raw addresses are blocked unless the address came from an allowed domain, and private addresses are always blocked | [networking](https://docs.fly.io/sprites/concepts/networking.md) | The default is the opposite of ours. A policy allowing only the exit gate's host is set at creation and checked by a probe before any command |
 | A checkpoint captures the filesystem only; whether one can be restored into another Sprite is not stated | [checkpoints](https://docs.fly.io/sprites/concepts/checkpoints.md) | Checkpoints are not the save mechanism. They are used only as a rollback point before a risky command, if at all |
-| An HTTP API covers Sprites, exec, exec over WebSocket, filesystem, network policy, resources policy and services | [documentation index](https://docs.fly.io/llms.txt), [OpenAPI document](https://docs.fly.io/sprites/api/openapi.json) | The backend uses the HTTP API with one organisation token. Paths and bodies are **unverified** until the OpenAPI document is read in trial 5 |
-| A TCP port, including SSH, is reachable through the command-line proxy or a WebSocket proxy | networking page | Relevant to trial 6 only |
+| An HTTP API covers Sprites, exec, exec over WebSocket, filesystem, network policy, resources policy and services | [documentation index](https://docs.fly.io/llms.txt), [OpenAPI document](https://docs.fly.io/sprites/api/openapi.json) | The backend uses the HTTP API with one organisation token. Paths and bodies are **unverified** until the OpenAPI document is read in experiment 5 |
+| A TCP port, including SSH, is reachable through the command-line proxy or a WebSocket proxy | networking page | Relevant to experiment 6 only |
 
 ## Interfaces
 
@@ -72,14 +72,14 @@ A Sprite does not start from a container image of ours. An image name maps to a 
 (`deploy/images/sandbox/<image>/sprite-setup.sh`) that installs the same package set the Docker image has, from the
 tenant-independent package mirror, through the exit gate. Setup runs once per Sprite and its end is recorded in the
 Sprite's disk as a marker with the image's version. How long setup takes, and whether a prepared Sprite can be cloned
-to skip it, is trial 5, part d.
+to skip it, is experiment 5, part d.
 
 ### Limits
 
 | Our limit | How it is held on a Sprite | Status |
 |---|---|---|
 | Command time | The in-box helper stops the command | Ours |
-| Memory and processor per size | The helper runs each command in a control group with the size's limits. Whether a Sprite's user may create one, and whether the resources policy endpoint can do it from outside, are **unverified** | Trial 5, part c |
+| Memory and processor per size | The helper runs each command in a control group with the size's limits. Whether a Sprite's user may create one, and whether the resources policy endpoint can do it from outside, are **unverified** | Experiment 5, part c |
 | Disk | The helper refuses a save when `/workspace` exceeds the size's disk limit and reports usage after every command | Ours; a soft limit between commands |
 | Idle | The platform's own idle sleep | Platform |
 
@@ -156,9 +156,9 @@ sequenceDiagram
 
 | Concern | Rule |
 |---|---|
-| The exit gate must be reachable from a Sprite | Private addresses are always blocked under a policy, so the gate listens on a public address. A bearer token alone would be readable by a script and usable from anywhere, so the gate requires two things: a client certificate issued for that sandbox, written into the Sprite at creation and valid only while its row exists, and the per-command gate token. Whether a Sprite has a stable outbound address the gate could check instead is **unverified** (trial 5, part a) |
+| The exit gate must be reachable from a Sprite | Private addresses are always blocked under a policy, so the gate listens on a public address. A bearer token alone would be readable by a script and usable from anywhere, so the gate requires two things: a client certificate issued for that sandbox, written into the Sprite at creation and valid only while its row exists, and the per-command gate token. Whether a Sprite has a stable outbound address the gate could check instead is **unverified** (experiment 5, part a) |
 | A tool that ignores the proxy settings | It cannot resolve any host but the gate's, so it fails. Nothing leaves |
-| The allow-list is by domain name | Whether a connection to the gate's host name can be turned toward another address is covered by the probe in trial 5; the gate's client certificate and token checks are the second wall |
+| The allow-list is by domain name | Whether a connection to the gate's host name can be turned toward another address is covered by the probe in experiment 5; the gate's client certificate and token checks are the second wall |
 | The organisation token | Held only by the sandbox service. It can create and delete Sprites, so the service's own access is limited to that token's organisation, which holds nothing else |
 | Data location | A Sprite's disk is in the provider's storage. Hosted tenants accept that; an enterprise install uses Docker or Kubernetes in its own cloud |
 | Cost | Compute while active; storage for bytes written. A paused conversation costs its bytes in the Sprite and in our copy. The reconcile deletes orphans |
@@ -190,10 +190,10 @@ they need a provider account; CI runs them against Docker.
 
 ## Open points
 
-| # | Open point | Trial |
+| # | Open point | Experiment |
 |---|---|---|
-| 1 | Whether an allow-only rule list denies everything else, and whether the policy survives sleep | Trial 5, parts a and b |
-| 2 | How to hold memory and processor per size | Trial 5, part c |
-| 3 | Setup time for an image, and whether a prepared Sprite or a checkpoint can seed a new one | Trial 5, part d |
-| 4 | Whether Strands' SSH sandbox can drive a Sprite, and whether that is worth using | Trial 6 |
+| 1 | Whether an allow-only rule list denies everything else, and whether the policy survives sleep | Experiment 5, parts a and b |
+| 2 | How to hold memory and processor per size | Experiment 5, part c |
+| 3 | Setup time for an image, and whether a prepared Sprite or a checkpoint can seed a new one | Experiment 5, part d |
+| 4 | Whether Strands' SSH sandbox can drive a Sprite, and whether that is worth using | Experiment 6 |
 | 5 | The provider's terms for running tenants' code, and regions. Decided on 2026-11-26: the backend is built now and this check does not block it | Checked with the provider before hosted tenants are onboarded |

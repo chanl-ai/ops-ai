@@ -1,27 +1,33 @@
-# Trials for agents version 2
+# Experiments for agents version 2
 
-Status: proposed design, written 2026-11-26. No trial has been run; trials 0 and 1 were started and stopped on 2026-11-26 (see Results). Each result is written into this page when its trial
-ends.
+Status: proposed design, written 2026-11-26. Experiment 1 ran on 2026-11-26; the others have not run (see Results).
+Each result is written into this page when its experiment ends.
 
-A trial is a short experiment that answers one question the specs could not settle from documentation. Each has a plan
-someone can run in a day or two, one line that says what passing means, the build step that waits for it, and what we
-do if it fails. Fifteen trials are listed in the order they should run. Trial 0 gates every release, trials 1 to 4 belong to
-1.4.0, trials 5 to 10 to 1.5.0 and trials 11 to 14 to 1.6.0. Trial code is thrown away: it lives on a branch named for the trial and is not
-merged.
+Each experiment is a throwaway script that answers one question the specs could not settle from documentation: does a
+library or service behave the way the design assumes. It runs in a day or less, has one line that says what passing
+means, names the build step that waits for it, and says what we do if it fails.
 
-## How a trial is run
+Why experiments come before the build: a build step that rests on an unchecked library behaviour can be written in full
+and then turn out impossible. An experiment checks that behaviour with a short script and no product code, so the build
+starts only on what has been seen to work. Experiment code is not merged into the product; the script stays under
+`scripts/experiments/` so the result can be run again.
+
+Fifteen experiments are listed in the order they should run. Experiment 0 gates every release, experiments 1 to 4
+belong to 1.4.0, experiments 5 to 10 to 1.5.0 and experiments 11 to 14 to 1.6.0.
+
+## How an experiment is run
 
 | Rule | Detail |
 |---|---|
-| Where | A scratch branch and a scratch folder outside the product's packages. No product code changes |
-| Model | The scripted model unless the trial says "real model"; real-model parts use a development key through the model gateway |
-| Result | One paragraph under the trial on this page: the date, pass or fail, the numbers, and the versions of the libraries used |
-| A fail | The fallback column is taken, and the spec that named the trial is updated in the same pull request |
-| Library facts | Every fact a trial confirms replaces an "unverified" mark in the specs, with the version it was confirmed on |
+| Where | A script under `scripts/experiments/`, outside the product's packages. No product code changes |
+| Model | The scripted model unless the experiment says "real model"; real-model parts use a development key through the model gateway |
+| Result | One paragraph under the experiment on this page: the date, pass or fail, the numbers, and the versions of the libraries used |
+| A fail | The fallback column is taken, and the spec that named the experiment is updated in the same pull request |
+| Library facts | Every fact an experiment confirms replaces an "unverified" mark in the specs, with the version it was confirmed on |
 
 ## Order
 
-| # | Trial | Gates | Release |
+| # | Experiment | Gates | Release |
 |---|---|---|---|
 | 0 | Licences and status of every new dependency, the exit gate's candidate proxies and the HTML-to-text library among them | Adding any dependency | all |
 | 1 | A paused turn saved and resumed on another server, a helper's nested pause included, and the replay hash of a resumed request | The Strands driver's pause design; the one pause seam; replay | 1.4.0 |
@@ -36,13 +42,13 @@ merged.
 | 10 | Save, sleep and wake with 1 GB of files | The save design and its limits | 1.5.0 |
 | 11 | A waiting run across an upgrade | Rebuild from the journal | 1.6.0 |
 | 12 | A crash in the middle of a team, on both databases | Engine-driven hand-overs and cycles | 1.6.0 |
-| 13 | An agent step paused for approval | The agent port's pause and resume in 1.6.0 lane D. Its step 4 gates the notifiers, lane F. The pause and resume of a turn, a helper's included, moved into trial 1 in 1.4.0; this trial keeps the engine's side | 1.6.0 |
+| 13 | An agent step paused for approval | The agent port's pause and resume in 1.6.0 lane D. Its step 4 gates the notifiers, lane F. The pause and resume of a turn, a helper's included, moved into experiment 1 in 1.4.0; this experiment keeps the engine's side | 1.6.0 |
 | 14 | The engine on SQL Server under load | Removing the engine's lines from the portable baseline | 1.6.0 |
 
-Trials 1, 2 and 3 can run in parallel after trial 0. Trials 5 to 10 can run in parallel. Trials 11 to 14 can run in
-parallel; 13 needs trial 1's result.
+Experiments 1, 2 and 3 can run in parallel after experiment 0. Experiments 5 to 10 can run in parallel. Experiments 11 to 14 can run in
+parallel; 13 needs experiment 1's result.
 
-## Trial 0: licences and status
+## Experiment 0: licences and status
 
 Question: may we depend on each part, and is it maintained?
 
@@ -61,7 +67,7 @@ Question: may we depend on each part, and is it maintained?
 | A YAML parser for the TypeScript SDK | Not chosen | Licence and size |
 | Brave Search, the one search adapter shipped | Chosen as the default | The provider's terms for a self-installed product where each tenant brings its own key |
 | The Kubernetes project's sandbox resource | Unverified | Status and licence; not adopted unless mature |
-| mitmproxy, Envoy | Candidates for the exit gate; licences **unverified** | Licence, and whether an add-on or filter can apply our lists, token and grants (trial 7) |
+| mitmproxy, Envoy | Candidates for the exit gate; licences **unverified** | Licence, and whether an add-on or filter can apply our lists, token and grants (experiment 7) |
 | An HTML-to-text library for `web.fetch` | Not chosen | Licence, size and upkeep; one is chosen here |
 | Fly Sprites | A hosted service, not a dependency | Terms for running tenants' code and regions. This check does not block the Sprites lane |
 
@@ -71,7 +77,7 @@ in its install tree, and has had a release in the last six months.
 Fail: the part is not added. The specs name a fallback for each: our own loop driver stays possible behind the contract;
 the sandbox needs none of the optional parts.
 
-## Trial 1: a paused turn saved and resumed on another server
+## Experiment 1: a paused turn saved and resumed on another server
 
 Question: can a Strands agent that paused for an approval be rebuilt in a fresh process from bytes we stored, and
 continue?
@@ -99,7 +105,7 @@ Fallback: if a pending interrupt is not restored, the kernel rebuilds the agent 
 the interrupt itself (`LoopDriver.rebuild`), or uses a Strands session manager on a storage backend of ours. Both are
 described in the runtime contract.
 
-## Trial 2: step-hold rules on Strands hooks
+## Experiment 2: step-hold rules on Strands hooks
 
 Question: can our before-and-after rules run on Strands' hooks with the same effect they have today?
 
@@ -121,7 +127,7 @@ Fallback: for a failing part, the seam is implemented by wrapping the tool or th
 using the hook. For part d, every granted tool is registered and tool search only ranks them; the runtime contract
 already allows this.
 
-## Trial 3: event stream mapping, and six smaller checks
+## Experiment 3: event stream mapping, and six smaller checks
 
 Question: does the library's event stream carry everything our chat stream shows, in an order we can map?
 
@@ -148,7 +154,7 @@ Fallback: a missing event is produced by the kernel from the seams. If replayed 
 answer as one piece and the chat shows it at once on a resumed turn. If part d fails, automatic mode ships with plan
 and helpers triggered by rules (a write requested, or more than three tools named) instead of by the model's choice.
 
-## Trial 4: a swarm paused for days
+## Experiment 4: a swarm paused for days
 
 Question: can Strands' multi-agent swarm pause in the middle, be stored by us, and resume in another process?
 
@@ -162,11 +168,11 @@ Question: can Strands' multi-agent swarm pause in the middle, be stored by us, a
 Pass: step 3 holds without a session manager that writes outside our database, and step 4 shows per-agent headers.
 
 Gates: nothing. It was decided on 2026-11-26 that our workflow engine moves hand-overs, with each agent as its own
-turn. The trial is for information and can be skipped.
+turn. The experiment is for information and can be skipped.
 
 Fallback: none needed.
 
-## Trial 5: a Sprite's network allow-list and restore after sleep
+## Experiment 5: a Sprite's network allow-list and restore after sleep
 
 Question: can a Sprite be sealed to one host, and are its files there after it sleeps?
 
@@ -188,7 +194,7 @@ Fallback: if the allow-list cannot seal a Sprite, hosted tenants run on the Kube
 Sprites is dropped. If memory cannot be capped, hosted sandboxes offer one size. If setup is slow, a pool of prepared
 Sprites is kept per image.
 
-## Trial 6: the SSH sandbox driving a Sprite, and Strands' tools on our sandbox
+## Experiment 6: the SSH sandbox driving a Sprite, and Strands' tools on our sandbox
 
 Question: is Strands' SSH sandbox a usable way to reach a Sprite, and do Strands' shell, file and Python tools work on a
 sandbox object of ours?
@@ -210,7 +216,7 @@ case, one operation each. A turn never pauses inside a tool's body.
 Fallback: if the tools cannot be bound to our object, the kernel defines its own three tools with the same names and
 inputs and calls the tool gateway directly. Part a failing changes nothing: the Sprites backend uses the HTTP API.
 
-## Trial 7: adding a secret at the exit gate
+## Experiment 7: adding a secret at the exit gate
 
 Question: can a proxy of ours add a credential to a sandbox's outgoing request without the sandbox seeing it?
 
@@ -233,7 +239,7 @@ Gates: the exit gate, the always-on approval of requests that change data, and t
 Fallback: secrets are not offered inside sandboxes; a script that needs a credentialed system calls a gateway tool from
 inside the box instead (`ops.call`), which already keeps the secret outside.
 
-## Trial 8: isolation level per install
+## Experiment 8: isolation level per install
 
 Question: which wall does each kind of install get by default?
 
@@ -252,7 +258,7 @@ Gates: the defaults in the Docker and Kubernetes backend specs, and the install 
 Fallback: where gVisor cannot be installed, a Kubernetes install uses Kata on nodes that support it; a Docker install
 stays on the locked-down level and is documented as single-firm only.
 
-## Trial 9: start time and the warm pool
+## Experiment 9: start time and the warm pool
 
 Question: how long does a person wait for the first command, and does a short function need its own engine?
 
@@ -269,7 +275,7 @@ Gates: `OPS_SANDBOX_WARM_POOL`'s default, and whether the WebAssembly engine sta
 Fallback: WebAssembly stays for one-shot functions unless a backend runs one within 300 ms at the 95th percentile. A
 slow first command is shown as "Starting the workspace" in chat.
 
-## Trial 10: save, sleep and wake with 1 GB of files
+## Experiment 10: save, sleep and wake with 1 GB of files
 
 Question: is copying changed files to storage after each turn fast enough?
 
@@ -287,7 +293,7 @@ Gates: the canonical-copy design in the sandbox service.
 Fallback: saves run in the background after the reply is sent, and a turn that resumes before a save finishes waits for
 it. If restore is too slow, large workspaces restore files on first read.
 
-## Trial 11: a waiting run across an upgrade
+## Experiment 11: a waiting run across an upgrade
 
 Question: can a run's position be rebuilt from its journal?
 
@@ -304,7 +310,7 @@ Gates: change 1 in workflow durability.
 Fallback: saved positions are migrated by an upgrade step per build instead, and the reconciler keeps reporting what it
 cannot migrate.
 
-## Trial 12: a crash in the middle of a team, on both databases
+## Experiment 12: a crash in the middle of a team, on both databases
 
 Question: do engine-driven hand-overs and cycles survive a worker dying?
 
@@ -322,13 +328,13 @@ Gates: the canvas team design.
 Fallback: a cycle is compiled as a loop step that owns its members, which the engine already supports, and the canvas
 draws it the same way.
 
-## Trial 13: an agent step paused for approval
+## Experiment 13: an agent step paused for approval
 
 Question: can a workflow's agent step pause in mid-turn and continue the same turn after a person decides?
 
 | Step | Action |
 |---|---|
-| 1 | With trial 1's code, return the pause from the agent port, record waiting on the run, store the loop state |
+| 1 | With experiment 1's code, return the pause from the agent port, record waiting on the run, store the loop state |
 | 2 | Stop every process. Approve. Resume the step with the stored state |
 | 3 | Confirm the write is sent once and earlier model answers are replayed, not charged |
 | 4 | Send the approval by a signed link's confirm page and by an email reply; note what an attacker would need to forge each |
@@ -340,7 +346,7 @@ Gates: change 3 in workflow durability, and the email and Teams answer design.
 Fallback: the step ends with its own port "needs approval" and a following review step re-runs the agent with the
 decision. That costs a second turn but needs no saved loop state.
 
-## Trial 14: the engine on SQL Server under load
+## Experiment 14: the engine on SQL Server under load
 
 Question: do the replaced statements hold without deadlocks?
 
@@ -358,12 +364,12 @@ Fallback: the statement that deadlocks keeps a SQL Server-specific form inside `
 
 ## Results
 
-| Trial | Date | Result |
+| Experiment | Date | Result |
 |---|---|---|
 | 0 | 2026-11-26 | Not run. No licence file, release date or advisory was checked |
-| 1 | 2026-11-26 | Passed steps 2 to 6, 8 and 9 on `strands-agents` 1.67.0 with the script `scripts/trials/strands_pause_resume.py`. Step 7 (size at 20 and 60 messages) not measured. Details below |
+| 1 | 2026-11-26 | Passed steps 2 to 6, 8 and 9 on `strands-agents` 1.67.0 with the script `scripts/experiments/strands_pause_resume.py`. Step 7 (size at 20 and 60 messages) not measured. Details below |
 
-Trial 1, run. Each resume is a fresh interpreter that loads the snapshot from a file written by the pausing one. The
+Experiment 1, run. Each resume is a fresh interpreter that loads the snapshot from a file written by the pausing one. The
 model is a scripted OpenAI-compatible gateway on an `httpx.MockTransport`, given to `OpenAIModel(client=...)`.
 
 | Step | Seen |
@@ -374,14 +380,11 @@ model is a scripted OpenAI-compatible gateway on an `httpx.MockTransport`, given
 | 6, rejected | The hook sets `cancel_tool`; the write never ran and the model received the refusal |
 | 6, two pending | Two writes in one step give two interrupts; one resume with both answers ran both writes once each |
 | 6, ten loads | The snapshot size stayed at 2,291 bytes across ten load and take cycles |
-| 8 | The helper's write ran once and `ask_helper`'s body never ran; the outer hook supplied the helper's reply through `selected_tool`. On resume the hook runs again from the start, so a helper must load its saved state before calling the model: in the script it did not, and its first request was sent a second time (the same hash, which a replay key would serve at no cost). The driver keeps each helper's state in `LoopState`, keyed by tool-use id, and loads it first |
+| 8 | The helper's write ran once, `ask_helper`'s body never ran, and no request was sent twice. The outer hook supplied the helper's reply through `selected_tool`. On resume the hook runs again from the start: it finds the helper's saved state by tool-use id, gets the answer from `event.interrupt`, which returns it without raising, loads the helper and answers it. The helper's state is kept in our saved state beside the outer snapshot, which is where the driver keeps it in `LoopState` |
 | 9 | Two resumes from one snapshot sent byte-identical requests, after leaving out `stream`, `user`, `metadata` and `stream_options`. `OPS_MODELS_REPLAY_STRIP_FIELDS` stays empty |
 
-Trial 1, state when stopped. A scripted OpenAI-compatible stub and the shared agents and hooks were drafted and never
-executed, so they were not committed. No database schema was created and no process was left running.
-
 Facts read from the source of `strands-agents` 1.67.0 on Python 3.12.6. They were read, not exercised, so the
-"unverified" marks in the specs stay until the trial runs:
+"unverified" marks in the specs stay until the experiment runs:
 
 | Fact | Where |
 |---|---|

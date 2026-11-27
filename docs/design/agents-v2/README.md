@@ -5,7 +5,7 @@ Status: proposed design, written 2026-11-26. Nothing in this folder is built. Th
 
 Version 2 of agents lets a builder describe an agent in one file and get the features of the best agent libraries
 without writing a loop: plans, helpers, a sealed workspace for running code, typed answers and teams. Five protections
-stay as they are today. This folder holds one build spec per part, a coding guide and the trials that must pass before
+stay as they are today. This folder holds one build spec per part, a coding guide and the experiments that must pass before
 parts of the build start. An engineer who has read only this folder should be able to build each part.
 
 ## Mission
@@ -49,11 +49,11 @@ parts of the build start. An engineer who has read only this folder should be ab
 | [SDK](sdk.md), [CLI](cli.md) | Methods and commands in both languages | all |
 | [Console screens](console-screens.md) | Nine screens, their states and components | all |
 | [Coding guide](coding-guide.md) | Where code goes, how each protection is enforced and tested, what never to do | all |
-| [Trials](trials.md) | Fifteen experiments, each with a pass line, what it gates and a fallback | all |
+| [Experiments](experiments.md) | Fifteen experiments, each with a pass line, what it gates and a fallback | all |
 
 Every component page has the same sections: purpose; what it owns and must not own; interfaces; data model; flows with
 failure paths; settings; security, cost and limits; acceptance criteria as failure modes; use cases per layer; files to
-add, change and delete; open points with the trial that settles each.
+add, change and delete; open points with the experiment that settles each.
 
 ## Release split
 
@@ -65,24 +65,24 @@ add, change and delete; open points with the trial that settles each.
 
 ## Build order and lanes
 
-Each lane is one branch and one builder; lanes in the same row run in parallel. A lane starts when the trials and lanes
+Each lane is one branch and one builder; lanes in the same row run in parallel. A lane starts when the experiments and lanes
 it names are done.
 
 ### 1.4.0
 
 | Order | Lane | Builds | Needs |
 |---|---|---|---|
-| 0 | Trials 0 to 3. Trial 1 is the pause trial: a turn and a helper's nested turn paused, saved and resumed in a fresh process | | |
+| 0 | Experiments 0 to 3. Experiment 1 is the pause experiment: a turn and a helper's nested turn paused, saved and resumed in a fresh process | | |
 | 1 | A. Scripted model seam | The scripted model; kernel tests moved onto it under the current loop | |
 | 1 | B. Gateway budgets | Budget tables and routes with kind, id form and creator; reservations of cost, calls and tokens; replay; purposes; the budget and replay-key requirement per key kind; cached tokens | |
 | 1 | M. Approval mint and decide | `POST /v1/calls/decide` and `POST /v1/approvals` in the tool gateway; the agents service asks for tokens and loses the review key | |
 | 1 | N. Hook policies | The table, routes, permission and Policies tab | |
 | 1 | C. Spec model | The schema, the spec model, validation rules, storage, the spec routes | |
-| 2 | D. Contract and driver | `LoopDriver`, `LoopSeams`, the current loop wrapped as a driver, then the Strands driver; the one pause seam; cancel by a flag on the run row | A, M, trials 1 and 2 |
+| 2 | D. Contract and driver | `LoopDriver`, `LoopSeams`, the current loop wrapped as a driver, then the Strands driver; the one pause seam; cancel by a flag on the run row | A, M, experiments 1 and 2 |
 | 2 | E. Agents ledger removal | The agents service sends budget headers and drops its own ledger | B |
-| 3 | F. Feature port | The 13 features on the seams, hook policy evaluation, both drivers green, then the old driver deleted | D, E, N, trial 1 |
+| 3 | F. Feature port | The 13 features on the seams, hook policy evaluation, both drivers green, then the old driver deleted | D, E, N, experiment 1 |
 | 3 | G. SDK and CLI for the spec | `apply`, `export`, `validate`, `diff` | C |
-| 4 | H. Automatic mode and loop kinds | Mode naming from the `why` argument, plan-before-write, helpers with nested pauses, hand-overs with a loop state per agent, shared notes, questions and plan reviews, the loops route, the new stream frames. `long_running` waits for 1.5.0 | F, trial 3 |
+| 4 | H. Automatic mode and loop kinds | Mode naming from the `why` argument, plan-before-write, helpers with nested pauses, hand-overs with a loop state per agent, shared notes, questions and plan reviews, the loops route, the new stream frames. `long_running` waits for 1.5.0 | F, experiment 3 |
 | 4 | I. Evals | New checks, background runs, the gate by digest | F, C |
 | 5 | J. Chat builder | Draft and try routes | H, C |
 | 5 | K. Console | Agent tabs on the spec, the Loop tab, chat blocks, the trace | H, G |
@@ -92,29 +92,29 @@ it names are done.
 
 | Order | Lane | Builds | Needs |
 |---|---|---|---|
-| 0 | Trials 5 to 10 | | Trial 0 |
-| 1 | A. Sandbox service core | Tables, lifecycle, files and manifests, the backend port, the Docker backend, images | Trials 8 and 10 |
-| 1 | B. Exit gate | The proxy adopted or written per trial 7, inspection of every host, the two lists, per-command tokens, grants, the in-box tool calls, the call log rows | Trials 0 and 7 |
+| 0 | Experiments 5 to 10 | | Experiment 0 |
+| 1 | A. Sandbox service core | Tables, lifecycle, files and manifests, the backend port, the Docker backend, images | Experiments 8 and 10 |
+| 1 | B. Exit gate | The proxy adopted or written per experiment 7, inspection of every host, the two lists, per-command tokens, grants, the in-box tool calls, the call log rows | Experiments 0 and 7 |
 | 1 | C. Tool-server client additions | Output-schema validation, list changes, questions, progress, resources, on the `mcp` package's client where it fits | |
-| 2 | D. Sandbox tools | The `sandbox` module in the tool gateway; `GatewaySandbox` in the kernel; the sandbox mode; the `long_running` kind and its job table | A, B, trial 6 |
-| 2 | E. Kubernetes backend | | A, trial 8 |
-| 2 | F. Sprites backend | | A, trial 5 |
+| 2 | D. Sandbox tools | The `sandbox` module in the tool gateway; `GatewaySandbox` in the kernel; the sandbox mode; the `long_running` kind and its job table | A, B, experiment 6 |
+| 2 | E. Kubernetes backend | | A, experiment 8 |
+| 2 | F. Sprites backend | | A, experiment 5 |
 | 2 | G. Web tools | Search and fetch | B |
 | 3 | H. Thread sandbox routes, SDK, CLI | | D |
-| 3 | I. Function runner move | Function runs on the sandbox service; the old service deleted | A, trial 9 |
+| 3 | I. Function runner move | Function runs on the sandbox service; the old service deleted | A, experiment 9 |
 | 4 | J. Console | The Sandbox tab, the Files panel, commands in chat and the trace | H |
 
 ### 1.6.0
 
 | Order | Lane | Builds | Needs |
 |---|---|---|---|
-| 0 | Trials 11 to 14; the team mocks redrawn and copied into `mocks/` | | |
-| 1 | A. Engine durability | Rebuild from the journal; the SQL Server statements | Trials 11, 14 |
+| 0 | Experiments 11 to 14; the team mocks redrawn and copied into `mocks/` | | |
+| 1 | A. Engine durability | Rebuild from the journal; the SQL Server statements | Experiments 11, 14 |
 | 1 | B. Run budgets | Run, step and group budgets; `X-Run-Spend-Cap` removed | 1.4.0 lane B |
 | 1 | C. Tasks | The tasks routes, kinds, roles, `thenAsk`, escalation on the engine | |
-| 2 | D. Agent step pause | The port's pause and resume, turn states | A, trial 13 |
-| 2 | E. Connections and groups | Kinds, checks, hand-over ports, ask as a child step, the check loop, group limits, notes | A, trial 12 |
-| 2 | F. Notifiers | Email and Teams (one connection per tenant), signed links, the confirm page | C, trial 13 |
+| 2 | D. Agent step pause | The port's pause and resume, turn states | A, experiment 13 |
+| 2 | E. Connections and groups | Kinds, checks, hand-over ports, ask as a child step, the check loop, group limits, notes | A, experiment 12 |
+| 2 | F. Notifiers | Email and Teams (one connection per tenant), signed links, the confirm page | C, experiment 13 |
 | 3 | G. Undo steps | | E |
 | 3 | H. Team tests | | E, C |
 | 3 | I. SDK and CLI | | C, E |
@@ -129,7 +129,7 @@ it names are done.
 | 1.6.0 | A team of two agents and one role is drawn on the canvas, run, answered from the inbox and from email, and its turns and notes read at all four layers. A worker killed mid-team leaves one succeeded journal row per turn on both databases. A waiting run continues across an engine build change. The portable baseline has no engine line. A missed deadline moves a task to the next role |
 
 Each release also needs: `make openapi` and `make sdk-verify` clean; the docs for each changed service updated in the
-same pull requests; the trials it depends on recorded in [trials](trials.md).
+same pull requests; the experiments it depends on recorded in [experiments](experiments.md).
 
 ## Where these specs depart from the design inputs
 
@@ -139,7 +139,7 @@ led to the changes below. Each is specified on the page named.
 | Input said | These specs say | Reason | Page |
 |---|---|---|---|
 | A Team step holds its members, kind and hand-over map | Members are steps on the canvas; hand-overs, questions and checks are kinds of line; a group frame holds the limits. The Team step is the folded view of a group | A direction given on 2026-11-26: the team should be visible as connected agents, not one level down. It also needs no new engine port and no new journal table | Teams and human tasks |
-| Strands' swarm and graph run teams and hand-overs | The runtime and the engine move the work between agents; each agent's turn is its own Strands run | Pausing a library swarm for days is documented only through session managers that write outside our database. Per-turn runs keep budgets, approvals and saved state where they already are. Decided on 2026-11-26; trial 4 is for information only | Automatic mode; Teams |
+| Strands' swarm and graph run teams and hand-overs | The runtime and the engine move the work between agents; each agent's turn is its own Strands run | Pausing a library swarm for days is documented only through session managers that write outside our database. Per-turn runs keep budgets, approvals and saved state where they already are. Decided on 2026-11-26; experiment 4 is for information only | Automatic mode; Teams |
 | The library's session manager can hold a paused run | Our checkpoint holds an opaque loop state | One store and one lease, on both databases | Runtime contract |
 | Hosted sandboxes were ruled out on one design page | Fly Sprites is the hosted backend | The later decision replaces that line | Sprites backend |
 | A sandbox's files persist with its computer | A copy in the team's storage after every turn is the truth on every backend; a backend's own disk is a fast path | Resume on another server must work on Docker and Kubernetes too, and one deletion rule must cover all three | Sandbox service |
@@ -152,7 +152,7 @@ led to the changes below. Each is specified on the page named.
 
 | # | Point | Outcome | Status |
 |---|---|---|---|
-| 1 | Who moves a hand-over between agents | Our workflow engine and runtime, not a Strands swarm. Trial 4 is for information only | Decided |
+| 1 | Who moves a hand-over between agents | Our workflow engine and runtime, not a Strands swarm. Experiment 4 is for information only | Decided |
 | 2 | Where sandbox approvals are set | At network grants and at writes to saved files, not by reading command text | Decided |
 | 3 | Answering outside the console | A person can answer from email or Teams. An approval opens a page where they sign in first | Decided |
 | 4 | Sprites | Build on Sprites now. Its terms and regions are checked later and stay an open point, not a blocker | Decided |
@@ -169,4 +169,4 @@ is a point from the review of 2026-11-26 that these specs do not adopt, with the
 
 ## Open points
 
-Each component page lists its own. The trials that settle them are in [trials](trials.md), in running order.
+Each component page lists its own. The experiments that settle them are in [experiments](experiments.md), in running order.

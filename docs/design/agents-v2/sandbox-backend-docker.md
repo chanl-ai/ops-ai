@@ -12,7 +12,7 @@ developer's laptop use.
 | Goal | Measure |
 |---|---|
 | A sandbox per conversation as a container the service creates, limits and removes | The shared acceptance suite in [sandbox service](sandbox-service.md) passes in CI |
-| A container that cannot reach the host, other containers or the network | Rows 1 and 2 of that suite, and trial 8 |
+| A container that cannot reach the host, other containers or the network | Rows 1 and 2 of that suite, and experiment 8 |
 | An honest statement of the wall's strength | The service reports its isolation level, and a shared install refuses to start on the weak one |
 
 ## What it owns and what it must not own
@@ -75,11 +75,11 @@ capabilities = BackendCapabilities(
 
 gVisor is Apache-2.0 and its `runsc` runtime integrates with Docker, per its
 [repository](https://github.com/google/gvisor) (read 2026-11-26). How a rootless engine and volume size limits behave
-per storage driver was not read from a source for this page and is **unverified** until trial 8.
+per storage driver was not read from a source for this page and is **unverified** until experiment 8.
 
 Anthropic's sandbox-runtime is a candidate inner wall for the second level: it limits files and network per command
 with bubblewrap. It needs unprivileged user namespaces inside the container, which the locked-down settings above may
-not allow. Trial 8 settles whether it is added.
+not allow. Experiment 8 settles whether it is added.
 
 ## Data model
 
@@ -181,8 +181,8 @@ The sandbox service's use cases run against this backend in CI and on a develope
 
 ## Open points
 
-| # | Open point | Trial |
+| # | Open point | Experiment |
 |---|---|---|
-| 1 | Whether a rootless engine or a dedicated host is the default layout in the compose file. Trial 8 gates the Docker default in lane A | Trial 8, with the install guide's owner |
-| 2 | Whether sandbox-runtime works inside the locked-down container and is worth its added moving parts | Trial 8 |
-| 3 | The slowdown of file-heavy work under gVisor | Trial 8: a slow file-heavy job must finish within twice its normal time |
+| 1 | Whether a rootless engine or a dedicated host is the default layout in the compose file. Experiment 8 gates the Docker default in lane A | Experiment 8, with the install guide's owner |
+| 2 | Whether sandbox-runtime works inside the locked-down container and is worth its added moving parts | Experiment 8 |
+| 3 | The slowdown of file-heavy work under gVisor | Experiment 8: a slow file-heavy job must finish within twice its normal time |

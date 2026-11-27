@@ -430,6 +430,6 @@ Default, 2026-11-26: the three team mocks are redrawn for this design before the
 
 | # | Open point | Settled by |
 |---|---|---|
-| 2 | Whether `ask` should be allowed to nest more than one level | After trial 12; one level matches today's rule for agents asking agents |
-| 4 | Whether an email reply can be trusted for an answer on the sender checks alone | A security review, with trial 13's notes |
-| 5 | Whether the compiled graph's cycle support holds under a crash in the middle of a cycle | Trial 12 |
+| 2 | Whether `ask` should be allowed to nest more than one level | After experiment 12; one level matches today's rule for agents asking agents |
+| 4 | Whether an email reply can be trusted for an answer on the sender checks alone | A security review, with experiment 13's notes |
+| 5 | Whether the compiled graph's cycle support holds under a crash in the middle of a cycle | Experiment 12 |

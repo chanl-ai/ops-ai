@@ -78,9 +78,9 @@ Rules:
 | Untrusted content | Search snippets and page text reach the model inside labelled data blocks, as retrieved passages do. They are never instructions |
 | Citations | Each result and fetched page is numbered like a knowledge passage, so the answer can cite it and the chat shows the source |
 | robots | `web.fetch` sends a fixed user agent and honours a site's robots rules for that agent, read with the standard library's `urllib.robotparser` |
-| Text extraction | An existing HTML-to-text library, chosen and licence-checked in trial 0; no extractor of ours is written |
+| Text extraction | An existing HTML-to-text library, chosen and licence-checked in experiment 0; no extractor of ours is written |
 | Caching | A fetched page is cached per tenant for `OPS_TOOLS_WEB_CACHE_SECONDS`; a cached answer is marked `cached` on the call record, as reads are today |
-| Search provider | A connection of kind `search` with an adapter per provider, in the plugin form the gateway already uses. The provider is a setting, `OPS_TOOLS_WEB_SEARCH_PROVIDER`, and one adapter ships: Brave Search (default, 2026-11-26; its terms are checked in trial 0). Nothing is on until a tenant adds its own key. An install with none lists `web.search` as "not set up" |
+| Search provider | A connection of kind `search` with an adapter per provider, in the plugin form the gateway already uses. The provider is a setting, `OPS_TOOLS_WEB_SEARCH_PROVIDER`, and one adapter ships: Brave Search (default, 2026-11-26; its terms are checked in experiment 0). Nothing is on until a tenant adds its own key. An install with none lists `web.search` as "not set up" |
 | Hosted provider tools | A model provider's own web search tool is never switched on: it runs on the provider's servers, outside the gateway |
 
 ## What the sandbox needs from the gateway

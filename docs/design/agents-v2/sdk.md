@@ -227,5 +227,5 @@ The `sdk` layer of each component's use cases runs these methods in both languag
 
 | # | Open point | Settled by |
 |---|---|---|
-| 1 | Whether the TypeScript package should ship a YAML parser or accept JSON and objects only | Owner; the draft assumes a small parser dependency, with its licence checked in trial 0 |
+| 1 | Whether the TypeScript package should ship a YAML parser or accept JSON and objects only | Owner; the draft assumes a small parser dependency, with its licence checked in experiment 0 |
 | 2 | Whether a typed builder for specs in code (a fluent API) is wanted beside the file | Not in these releases; the file is the one form |
