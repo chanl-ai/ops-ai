@@ -335,34 +335,34 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-627 | tools-service | A team connects Salesforce at its company address and its agents query that org | api, ui | draft needs-plugins owner=ops-release until=2026-12-26 |
 | uc-628 | tools-service | An admin turns an app on in one window and everyone can use it | api, ui | draft needs-plugins owner=ops-release until=2026-12-26 |
 | uc-629 | files-service | A file's page shows its preview or says why not | ui | draft |
-| uc-668 | tools-service | An advisor's meeting log saves the opportunity and its note together, or neither | api | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-671 | tools-service | Connectors for people: one row per app, an app off for the team, a per-chat connector set | api, ui | current needs-plugins owner=ops-release until=2026-12-26 |
+| uc-668 | tools-service | An advisor's meeting log saves the opportunity and its note together, or neither | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-671 | tools-service | Connectors for people: one row per app, an app off for the team, a per-chat connector set | api, ui | current needs-plugins owner=ops-release until=2026-12-12 |
 | uc-672 | documents-service | A scan, a half scan and a filled form are each read once by documents-service and cited from a knowledge base by the OCR'd page | api, sdk | passing |
 | uc-673 | agents-service | A scanned file attached in chat is read with OCR and reaches the agent whole | api, ui | passing |
-| uc-674 | tools-service | An app's page shows one state and its next action | ui | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-675 | kb-service | A website source keeps a knowledge base current, and answers cite it | api, sdk | passing needs-plugins owner=ops-release until=2026-12-26 |
+| uc-674 | tools-service | An app's page shows one state and its next action | ui | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-675 | kb-service | A website source keeps a knowledge base current, and answers cite it | api, sdk | passing needs-plugins owner=ops-release until=2026-12-12 |
 | uc-676 | kb-service | Push knowledge from another system | api, sdk, cli, ui | passing |
 | uc-677 | kb-service | Turn on rerank and query rewrite | api, sdk, cli, ui | passing |
-| uc-678 | kb-service | Take in SharePoint libraries and Confluence spaces | api, sdk, cli, ui | passing needs-plugins owner=ops-release until=2026-12-26 |
-| uc-691 | tools-service | A second live org signs in at its own address and a call naming it reaches it | api | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-692 | tools-service | A second account of an app that is not Salesforce signs in at its own server | api | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-693 | tools-service | Every account row says what it points at, also for an app that declares nothing and a custom app | api | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-694 | tools-service | A call naming another person's own account or another team's account is refused | api | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-695 | agents-service | A workflow step that names an account runs in that account | api | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-696 | agents-service | An agent runs in the account it names, and a step it starts runs in the step's | api | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-697 | agents-service | A chat uses the account picked for it, and a new chat starts on the default | ui | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-698 | tools-service | A call naming an account that no longer exists is refused, never sent to the default | api | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-699 | tools-service | Two accounts of one app in one team never share a name | api | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-700 | tools-service | A test run that names a live account uses the test account or is refused | api | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-701 | agents-service | Renaming an account changes no published version, and the next publish names the dead name | api | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-702 | tools-service | A person adds a second account of their own at their own address and makes it their default | api, cli | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-703 | tools-service | Add account is on the Accounts tab for whoever manages apps, and never for a member | ui | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-704 | agents-service | The model is told the account each app uses and cannot switch it in words | api | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-705 | tools-service | Callers from before several accounts keep working | api, sdk | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-706 | tools-service | A package app runs on the chosen org and never on one without the package | api | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-707 | agents-service | An account a workflow or agent names is not deleted until nothing names it | api, ui | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-708 | agents-service | An expired sign-in on an account a step, agent or chat names waits for a new sign-in and never uses another account | api | current needs-plugins owner=ops-release until=2026-12-26 |
-| uc-709 | tools-service | Changing who signs in to each person makes calls act as the person, and schedules keep the shared login | api | current needs-plugins owner=ops-release until=2026-12-26 |
+| uc-678 | kb-service | Take in SharePoint libraries and Confluence spaces | api, sdk, cli, ui | passing needs-plugins owner=ops-release until=2026-12-12 |
+| uc-691 | tools-service | A second live org signs in at its own address and a call naming it reaches it | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-692 | tools-service | A second account of an app that is not Salesforce signs in at its own server | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-693 | tools-service | Every account row says what it points at, also for an app that declares nothing and a custom app | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-694 | tools-service | A call naming another person's own account or another team's account is refused | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-695 | agents-service | A workflow step that names an account runs in that account | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-696 | agents-service | An agent runs in the account it names, and a step it starts runs in the step's | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-697 | agents-service | A chat uses the account picked for it, and a new chat starts on the default | ui | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-698 | tools-service | A call naming an account that no longer exists is refused, never sent to the default | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-699 | tools-service | Two accounts of one app in one team never share a name | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-700 | tools-service | A test run that names a live account uses the test account or is refused | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-701 | agents-service | Renaming an account changes no published version, and the next publish names the dead name | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-702 | tools-service | A person adds a second account of their own at their own address and makes it their default | api, cli | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-703 | tools-service | Add account is on the Accounts tab for whoever manages apps, and never for a member | ui | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-704 | agents-service | The model is told the account each app uses and cannot switch it in words | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-705 | tools-service | Callers from before several accounts keep working | api, sdk | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-706 | tools-service | A package app runs on the chosen org and never on one without the package | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-707 | agents-service | An account a workflow or agent names is not deleted until nothing names it | api, ui | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-708 | agents-service | An expired sign-in on an account a step, agent or chat names waits for a new sign-in and never uses another account | api | current needs-plugins owner=ops-release until=2026-12-12 |
+| uc-709 | tools-service | Changing who signs in to each person makes calls act as the person, and schedules keep the shared login | api | current needs-plugins owner=ops-release until=2026-12-12 |
 | uc-710 | console | A new row shows right after it is added, whatever page or search the list is on | ui | passing |
 | uc-720 | models-service | A refused model call in chat says what went wrong with the provider and what to do, worded for an admin or a member | ui | passing |
 | uc-721 | tools-service | A connected app writes at once: every tool on and writes run without asking until a team admin turns asking on, per team or per app; a turned-off tool says how to turn it on | api, sdk | passing |

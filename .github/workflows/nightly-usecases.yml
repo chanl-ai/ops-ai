@@ -71,6 +71,11 @@ jobs:
           node: "true"
           browser: "true"
           infra: "true"
+      - name: Clone the plugins repository beside the checkout
+        # needs-plugins use cases read it through OPS_PLUGINS_REPO (docs/usecases/README.md); the repository is public.
+        run: |
+          git clone --depth 1 https://github.com/chanl-ai/ops-ai-plugins "$RUNNER_TEMP/ops-ai-plugins"
+          echo "OPS_PLUGINS_REPO=$RUNNER_TEMP/ops-ai-plugins" >> "$GITHUB_ENV"
       - name: Install the OCR engine
         # uc-250, 672 and 673 read a scanned page with tesseract (ops_ingest reading/images.py); the runner image has none.
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends tesseract-ocr
@@ -79,7 +84,7 @@ jobs:
           SHARD: ${{ matrix.shard }}/8
         run: |
           scripts/ensure-sdk-ts-built.sh
-          mapfile -t ids < <(python3 scripts/ci_usecases.py all --shard "$SHARD")
+          mapfile -t ids < <(python3 scripts/ci_usecases.py all --with-plugins --shard "$SHARD")
           # --no-gate: the job records failures in its result file and the report job below turns them into the issue.
           python3 scripts/ci_usecases.py run --shard 1/1 --no-gate --out "$RUNNER_TEMP/shard.json" "${ids[@]}"
       - if: always()

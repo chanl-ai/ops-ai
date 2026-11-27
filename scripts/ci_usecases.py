@@ -56,12 +56,14 @@ def manual(registry: str) -> list[str]:
     return ids
 
 
-def runnable(registry: str) -> list[str]:
+def runnable(registry: str, plugins: bool = False) -> list[str]:
     """Ids of the registry rows with at least one layer and a status other than the ones above, in id order."""
+    # The nightly clones ops-ai-plugins beside the checkout, so it also runs the needs-plugins rows (`plugins`).
+    skip = tuple(w for w in NOT_RUN if not (plugins and w == "needs-plugins"))
     ids = []
     for line in registry.splitlines():
         m = ROW.match(line)
-        if m and m.group(2) and not any(w in m.group(3).lower().split() for w in NOT_RUN):
+        if m and m.group(2) and not any(w in m.group(3).lower().split() for w in skip):
             ids.append(m.group(1))
     # Numbered ids first in number order, then the named ones (uc-workflows-1) in name order.
     return sorted(ids, key=lambda s: (0, int(s.split("-")[1]), "") if s.split("-")[1].isdigit() else (1, 0, s))
@@ -196,7 +198,9 @@ def self_test() -> int:
         cap(["uc-1", "uc-2", "uc-3"], 5) == (["uc-1", "uc-2", "uc-3"], ""),
         cap(["uc-1", "uc-2", "uc-3"], 2)[0] == [] and "nightly" in cap(["uc-1", "uc-2", "uc-3"], 2)[1],
         runnable("| uc-5 | s | A | api | current needs-plugins owner=a |\n| uc-6 | s | A | api | current |\n")
-        == ["uc-6"],  # a need status leaves the shards; the check script makes it carry an owner and a date
+        == ["uc-6"]
+        and runnable("| uc-5 | s | A | api | current needs-plugins owner=a |\n", plugins=True)
+        == ["uc-5"],  # a need status leaves the shards; the check script makes it carry an owner and a date
         manual(
             "| uc-5 | s | A | sdk | manual owner=a |\n| uc-6 | s | A | sdk | current |\n| uc-7 | s | A |  | manual |\n"
         )
@@ -278,6 +282,9 @@ def main(argv: list[str]) -> int:
     p.add_argument("--head", default="HEAD")
     a = sub.add_parser("all")
     a.add_argument("--shard", default="1/1")
+    a.add_argument(
+        "--with-plugins", action="store_true", help="include needs-plugins rows (the nightly has the plugins checkout)"
+    )
     sub.add_parser("manual")
     r = sub.add_parser("run")
     r.add_argument("--shard", default="1/1")
@@ -308,7 +315,8 @@ def main(argv: list[str]) -> int:
         print("\n".join(manual(REGISTRY.read_text(encoding="utf-8"))))
         return 0
     if args.cmd == "all":
-        print("\n".join(shard(known, args.shard)))
+        both = runnable(REGISTRY.read_text(encoding="utf-8"), plugins=args.with_plugins)
+        print("\n".join(shard(both, args.shard)))
         return 0
     if args.cmd == "report":
         files = sorted(Path(args.dir).glob("**/shard.json"))
