@@ -33,6 +33,9 @@ CUT_OFF = "reply_cut_off"
 DECLINED = "reply_declined"
 FILTERED = "reply_filtered"
 EMPTY = "reply_empty"
+# Every such ending: a caller that can go on without the answer (skip one piece, send a file to a person) catches these
+# and still stops on an outage.
+ENDINGS = frozenset({CUT_OFF, DECLINED, FILTERED, EMPTY})
 # How much of a model's refusal an error keeps.
 REFUSAL_CHARS = 300
 # models-service's model routes; only this client posts to them (rule SC1, `standards.check_model_calls`).

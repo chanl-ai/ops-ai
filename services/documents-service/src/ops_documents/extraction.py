@@ -49,7 +49,7 @@ from ops_service_kit import narrow
 from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
-from ops_service_kit.model_calls import ModelCallError, ModelCalls
+from ops_service_kit.model_calls import ENDINGS, ModelCallError, ModelCalls
 from ops_service_kit.model_calls import Usage as CallUsage
 from ops_service_kit.narrow import Malformed, a_list, an_object, entries, required
 from ops_service_kit.settings import Settings
@@ -620,9 +620,15 @@ class Extractor:
         schema = classify.schema(ids)
         user = classify.prompt(types, pages.texts)
         run = f"cls_{uuid.uuid4().hex[:16]}"
-        answer = await self.models.structured(
-            classify.SYSTEM, user, schema, run=run, step="classify", tenant=who.tenant_id
-        )
+        try:
+            answer = await self.models.structured(
+                classify.SYSTEM, user, schema, run=run, step="classify", tenant=who.tenant_id
+            )
+        except ModelCallError as e:
+            # A reply that held no answer names no type, so the file goes to a person; an outage still fails.
+            if e.code not in ENDINGS:
+                raise
+            return classify.classification({"reason": REFUSALS[e.code][1]}, types, floor)
         if prompt.schema_errors(answer, schema):
             return classify.classification({"reason": "The model's answer named no listed type."}, types, floor)
         # The schema check above proves an object.
