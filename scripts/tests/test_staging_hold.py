@@ -132,3 +132,17 @@ def test_a_branch_with_commits_the_deployed_commit_lacks_still_freezes(tmp_path:
 def test_a_head_that_cannot_be_read_keeps_the_freeze(tmp_path: Path) -> None:
     out = freeze(repo(tmp_path), "release/9.9.9").stdout
     assert "pin=staging is frozen for release/9.9.9\n" in out and "notice=" not in out
+
+
+def test_a_branch_merged_into_main_does_not_freeze_before_the_merge_back(tmp_path: Path) -> None:
+    # A release goes into main first; develop holds its commits only after the merge-back pull request lands. Staging
+    # returns to develop when main holds the branch, so the merge-back itself is not what unfreezes it.
+    r = repo(tmp_path)
+    branch_at(r, "release/1.3.0", False)
+    git = ["git", "-C", str(r)]
+    head = subprocess.run(
+        [*git, "rev-parse", "refs/remotes/origin/release/1.3.0"], capture_output=True, text=True, check=True
+    )
+    subprocess.run([*git, "update-ref", "refs/remotes/origin/main", head.stdout.strip()], check=True)
+    out = freeze(r, "release/1.3.0").stdout
+    assert "notice=release/1.3.0 is merged into main, freeze ignored" in out and "\npin=\n" in out

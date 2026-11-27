@@ -1,0 +1,32 @@
+# A push made with the workflow token starts no workflow run, so a commit a workflow adds to a pull request would never
+# get its own ci-ok. This sets git up to push over the write deploy key instead (PUSH_URL and GIT_SSH_COMMAND for the
+# later steps), trusting only GitHub's published host keys. With no key, PUSH_URL is `origin` (the token) and a warning
+# says that no checks will start on what is pushed.
+name: push-key
+description: Push over the write deploy key so the pushed commit starts its own checks
+inputs:
+  key:
+    description: The deploy key's private half (secrets.RELEASE_MAIN_DEPLOY_KEY); empty falls back to the token
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        DEPLOY_KEY: ${{ inputs.key }}
+        REPO: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        if [ -z "$DEPLOY_KEY" ]; then
+          echo "::warning title=No deploy key::Pushing with the workflow token: GitHub starts no checks on these commits."
+          echo "PUSH_URL=origin" >> "$GITHUB_ENV"; exit 0
+        fi
+        ssh_dir=$RUNNER_TEMP/push-key-ssh
+        mkdir -p "$ssh_dir" && chmod 700 "$ssh_dir"
+        printf '%s\n' "$DEPLOY_KEY" > "$ssh_dir/key" && chmod 600 "$ssh_dir/key"
+        curl -fsS https://api.github.com/meta | jq -r '.ssh_keys[] | "github.com " + .' > "$ssh_dir/known_hosts"
+        echo "GIT_SSH_COMMAND=ssh -i $ssh_dir/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$ssh_dir/known_hosts -o StrictHostKeyChecking=yes" >> "$GITHUB_ENV"
+        echo "PUSH_URL=git@github.com:$REPO.git" >> "$GITHUB_ENV"
