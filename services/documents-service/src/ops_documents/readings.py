@@ -22,6 +22,7 @@ from datetime import UTC, datetime
 from ops_documents.errors import FileMissingError, FileNotReadyError
 from ops_documents.files import Files, Who
 from ops_documents.pending import Pending
+from ops_documents.picture_reading import PictureReading, wants_picture
 from ops_documents.store.readings import PENDING, ReadingRow, ReadingsStore
 from ops_files_client import FileInfo
 from ops_ingest.reading import (
@@ -99,14 +100,18 @@ def _identity(row: ReadingRow) -> tuple[str, ...]:
     return (row.tenant_id, row.team, row.digest, row.version, row.key)
 
 
-def _read_now(data: bytes, file: FileInfo, settings: ReadingSettings) -> Reading | None:
-    """The whole reading when the file is small enough and needs no OCR, else None (it is queued instead)."""
+def _read_now(data: bytes, file: FileInfo, settings: ReadingSettings, *, pictures: bool = False) -> Reading | None:
+    """The whole reading when the file is small enough and needs no OCR, else None (it is queued instead). With
+    picture reading on, a file with a page a model could describe is queued too, since a model call does not belong
+    inside the request."""
     with open_file(data, filename=file.name, mime_type=file.mime, settings=settings) as reader:
         count = reader.facts.page_count
         if count > SYNC_PAGES or any(reader.needs_ocr(n) for n in range(1, count + 1)):
             return None
         started = time.perf_counter()
         pages = [reader.page(n) for n in range(1, count + 1)]
+        if pictures and any(wants_picture(p, reader.facts.mime_type) for p in pages):
+            return None
         took = round((time.perf_counter() - started) * 1000)
         return Reading(settings=settings, facts=reader.facts, pages=pages, duration_ms=took)
 
@@ -118,6 +123,8 @@ class Readings:
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
     slots: int = SLOTS
     page_timeout_s: float = PAGE_TIMEOUT_S
+    # Describes pages that came out with no text; None reads text and OCR only.
+    pictures: PictureReading | None = None
     _queued: list[ReadingRow] = field(default_factory=list[ReadingRow])
     _running: dict[tuple[str, ...], str] = field(default_factory=dict[tuple[str, ...], str])
     _pending: Pending = field(default_factory=Pending)
@@ -141,7 +148,7 @@ class Readings:
         if file.size <= SYNC_BYTES:
             data = await self.files.read(who, file)
             try:
-                made = await asyncio.to_thread(_read_now, data, file, settings)
+                made = await asyncio.to_thread(_read_now, data, file, settings, pictures=self.pictures is not None)
             except ReadingError as e:
                 async with isolation.request_transaction():
                     failed = await self._failed_now(who, file, settings, e)
@@ -317,6 +324,8 @@ class Readings:
             reader = await asyncio.to_thread(self._open, stack, data, file, settings)
             total = reader.facts.page_count
             await self.store.opened(row, pages_total=total, facts=reader.facts.model_dump(mode="json", by_alias=True))
+            described = await self._described_so_far(row)
+            allowed: bool | None = None
             for number in range(row.pages_done + 1, total + 1):
                 try:
                     page = await asyncio.wait_for(asyncio.to_thread(reader.page, number), self.page_timeout_s)
@@ -330,6 +339,14 @@ class Readings:
                     stack.close()
                     stack = ExitStack()
                     reader = await asyncio.to_thread(self._open, stack, data, file, settings)
+                if self.pictures is not None and wants_picture(page, reader.facts.mime_type):
+                    if allowed is None:
+                        allowed = await self.pictures.allowed(row.tenant_id, row.team)
+                    page = await self.pictures.describe(
+                        page, data=data, mime=reader.facts.mime_type, used=described, allowed=allowed,
+                        tenant=row.tenant_id, run=f"reading:{row.digest[:24]}",
+                    )  # fmt: skip
+                    described += page.source == "model"
                 await self.store.save_page(row, number, page.model_dump(mode="json", by_alias=True))
             took = round((time.perf_counter() - started) * 1000)
             done = await self.store.get(row.team, row.digest, row.version, row.key)
@@ -348,6 +365,13 @@ class Readings:
             raise
         finally:
             stack.close()
+
+    async def _described_so_far(self, row: ReadingRow) -> int:
+        """Pages of this reading a model already described, so a reading resumed after a restart keeps its limit."""
+        if self.pictures is None or row.pages_done == 0:
+            return 0
+        pages = await self.store.pages(row.team, row.digest, row.version, row.key)
+        return sum(p.source == "model" for p in pages)
 
     @staticmethod
     def _open(stack: ExitStack, data: bytes, file: FileInfo, settings: ReadingSettings) -> FileReader:

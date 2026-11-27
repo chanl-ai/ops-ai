@@ -122,7 +122,7 @@
     "fileId": "fil_0001",
     "pagesDone": 0,
     "pagesTotal": null,
-    "readerVersion": "reading-4",
+    "readerVersion": "reading-5",
     "settings": {
       "language": "eng",
       "ocr": "auto"
@@ -157,7 +157,7 @@
     "fileId": "fil_0002",
     "pagesDone": 0,
     "pagesTotal": null,
-    "readerVersion": "reading-4",
+    "readerVersion": "reading-5",
     "settings": {
       "language": "eng",
       "ocr": "auto"

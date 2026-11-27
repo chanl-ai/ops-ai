@@ -1,0 +1,148 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 chanl-ai
+"""Picture reading: a page that came out of reading with no text (a diagram, a chart, a photo of a whiteboard) is drawn
+and shown once to a model that can see, and its description becomes the page's text, marked as read by a model so
+nobody takes it for the author's words. The description is stored with the reading, so it is cited like any page and
+never asked for again for the same bytes.
+
+Gates, in order, before any picture leaves: the file's limit of pages read by a model, then the team's pageImages
+policy (read once per reading; a policy that cannot be read counts as off), then models-service's own clearance and
+daily limit on documents-service's key. A gate that says no leaves that page unread with the reason in plain words;
+the reading still finishes. Calls go through the one model client (`ops_service_kit.model_calls`)."""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Protocol, cast
+
+from ops_extract import page_images
+from ops_ingest.reading import Block, Page
+from ops_service_kit.logging import get_logger
+from ops_service_kit.model_calls import ModelCallError, ModelCalls
+
+if TYPE_CHECKING:
+    from ops_documents.extraction import Extractor
+
+log = get_logger("ops_documents.picture_reading")
+
+# The most pages of one file a model describes. A deck of forty picture slides is the realistic worst case; the
+# design's estimate is $0.05 to $0.30 for 20 pages.
+PICTURE_PAGES_PER_FILE = 20
+# A page with fewer characters than this after reading counts as having no text.
+EMPTY_BELOW_CHARS = 20
+STEP = "read:vision"
+DRAWABLE = ("application/pdf", *page_images.IMAGE_MIMES)
+
+SYSTEM = (
+    "You read one page of a document from its picture. First write out every word you can see on it. Then describe "
+    "any diagram, chart or picture in plain sentences: what the parts are and how they connect or compare. Say only "
+    "what the picture shows; never guess who wrote it or who owns it."
+)
+SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"text": {"type": "string"}, "description": {"type": "string"}},
+    "required": ["text", "description"],
+    "additionalProperties": False,
+}
+
+# models-service's refusals as the page's reason; any other failure reads as the model being unreachable.
+REASONS = {
+    "key_budget_exhausted": "today's limit for reading pictures was reached",
+    "tenant_budget_exhausted": "today's limit for reading pictures was reached",
+    "images_not_cleared": "the model is not cleared to see page pictures",
+    "sensitivity_not_cleared": "the model is not cleared for this file's sensitivity",
+    "rate_limited": "the model was busy",
+}
+POLICY_OFF = "this team does not send page pictures to a model"
+
+
+class SeeingModel(Protocol):
+    """`ops_service_kit.model_calls.ModelCalls`, the one client on documents-service's model key."""
+
+    async def structured(
+        self,
+        system: str,
+        user: str,
+        schema: dict[str, Any],
+        *,
+        tenant: str,
+        step: str,
+        run: str | None = None,
+        parts: Sequence[dict[str, Any]] = (),
+    ) -> Any: ...
+
+
+class PageImagePolicy(Protocol):
+    async def allowed(self, tenant: str, team: str) -> bool: ...
+
+
+def wants_picture(page: Page, mime: str) -> bool:
+    """A page that a picture could add text to: read from no text layer, with next to no text, in a format the
+    service can draw."""
+    return mime in DRAWABLE and page.source in ("none", "ocr") and len(page.text.strip()) < EMPTY_BELOW_CHARS
+
+
+@dataclass
+class PictureReading:
+    models: SeeingModel
+    policy: PageImagePolicy | None
+    per_file: int = PICTURE_PAGES_PER_FILE
+
+    async def allowed(self, tenant: str, team: str) -> bool:
+        if self.policy is None:
+            return False
+        try:
+            return await self.policy.allowed(tenant, team)
+        except Exception as e:  # a policy that cannot be read must never send a page
+            log.warning("pageImages policy unread; no page picture is sent", extra={"error": str(e)})
+            return False
+
+    async def describe(
+        self, page: Page, *, data: bytes, mime: str, used: int, allowed: bool, tenant: str, run: str
+    ) -> Page:
+        """The page with its description, or unchanged but for the reason it was not described."""
+        if used >= self.per_file:
+            return _not_described(page, f"this file reached its limit of {self.per_file} pages read by a model")
+        if not allowed:
+            return _not_described(page, POLICY_OFF)
+        drawn = await asyncio.to_thread(page_images.render, data, mime, [page.number])
+        if page.number not in drawn:
+            return _not_described(page, "the page could not be drawn")
+        part = page_images.whole(page.number, drawn[page.number]).part()
+        try:
+            answer = await self.models.structured(
+                SYSTEM, f"Page {page.number} of the document.", SCHEMA, tenant=tenant, step=STEP, run=run, parts=[part]
+            )
+        except ModelCallError as e:
+            log.info("picture_not_described", extra={"code": e.code, "page": page.number})
+            return _not_described(page, REASONS.get(e.code, "the model could not be reached"))
+        said = cast(dict[str, Any], answer) if isinstance(answer, dict) else {}
+        words, description = str(said.get("text") or "").strip(), str(said.get("description") or "").strip()
+        text = "\n\n".join(t for t in (words, description) if t)
+        if not text:
+            return _not_described(page, "the model found nothing to describe")
+        block = Block(id=f"p{page.number}.m0", kind="paragraph", text=text, box=[0.0, 0.0, 1.0, 1.0], read_by="model")
+        return page.model_copy(
+            update={"source": "model", "text": text, "blocks": [block], "unread_reason": None, "words": []}
+        )
+
+
+def _not_described(page: Page, why: str) -> Page:
+    reason = f"Not described: {why}."
+    if page.source == "none":
+        return page.model_copy(update={"unread_reason": reason})
+    return page.model_copy(update={"warnings": [*page.warnings, reason]})
+
+
+def picture_reading(extractor: Extractor) -> PictureReading | None:
+    """On extraction's own model key and the team's pageImages policy; None (pictures stay unread) when this process
+    has no model key."""
+    # Imported here: extraction imports readings, which imports this module.
+    from ops_documents.extraction import ModelsService  # noqa: PLC0415
+
+    models = extractor.models
+    if not isinstance(models, ModelsService):
+        return None
+    return PictureReading(ModelCalls(models.http, models.key, models.alias), extractor.page_image_policy)

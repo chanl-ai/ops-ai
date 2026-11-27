@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-26",
+  "title": "Knowledge reads diagrams, scans and Word notes properly",
+  "description": "A PDF page that is only a picture, such as an architecture diagram, is now described by a model that can see and cited like any other page, up to 20 such pages per file. Word notes written with bold lines instead of heading styles now keep their sections.",
+  "tag": "improved"
+}

@@ -336,7 +336,7 @@ class LayoutPage(Out):
     # Points; None for formats with no pages (DOCX, HTML).
     width: float | None
     height: float | None
-    source: Literal["text", "ocr", "mixed", "none"]
+    source: Literal["text", "ocr", "mixed", "model", "none"]
 
 
 class LayoutCell(Out):
@@ -471,7 +471,7 @@ class ReadingBlock(Out):
     cells: list[ReadingCell] = Field(default_factory=list[ReadingCell])
     caption: str | None = None
     sheet: str | None = None
-    read_by: Literal["text", "ocr"] = "text"
+    read_by: Literal["text", "ocr", "model"] = "text"
     furniture: bool = False
     main: bool = False
 
@@ -500,7 +500,7 @@ class ReadingPage(Out):
     number: int
     width: float | None = None
     height: float | None = None
-    source: Literal["text", "ocr", "mixed", "none"]
+    source: Literal["text", "ocr", "mixed", "model", "none"]
     image_share: float = 0.0
     text: str = ""
     blocks: list[ReadingBlock] = Field(default_factory=list[ReadingBlock])

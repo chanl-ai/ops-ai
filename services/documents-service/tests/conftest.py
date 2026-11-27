@@ -182,10 +182,11 @@ def make(engine: AsyncEngine, tenant: str) -> Make:
         type_uses: Any = None,
         *,
         background: Sequence[Callable[[], Coroutine[Any, Any, None]]] = (),
+        pictures: Any = None,
     ) -> Service:
         fake = FakeFilesService()
         files = Files(fake.client(service="documents", scopes=["files:view", "files:edit"]))
-        readings = Readings(files, ReadingsStore(engine))
+        readings = Readings(files, ReadingsStore(engine), pictures=pictures)
         extractor = Extractor(files, ExtractionsStore(engine), models, floors, readings=readings)
         types = DocumentTypes(DocumentTypesStore(engine), files, extractor, prices)
         extractor.types = types

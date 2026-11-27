@@ -2602,6 +2602,7 @@
               "text",
               "ocr",
               "mixed",
+              "model",
               "none"
             ],
             "title": "Source",
@@ -2890,7 +2891,8 @@
             "default": "text",
             "enum": [
               "text",
-              "ocr"
+              "ocr",
+              "model"
             ],
             "title": "Readby",
             "type": "string"
@@ -3188,6 +3190,7 @@
               "text",
               "ocr",
               "mixed",
+              "model",
               "none"
             ],
             "title": "Source",
