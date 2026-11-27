@@ -208,14 +208,16 @@ input's value, checked and written in by its format. An input a query template u
 | `sosl_term` | Text | SOSL's reserved characters escaped, so a term cannot close `FIND {...}` and add a clause |
 | `jql_string` | Text | For Jira: a backslash and a double quote escaped with a backslash; the template writes the double quotes (`text ~ "{{q}}"`) |
 | `cql_string` | Text | For Confluence, escaped as `jql_string`; between double quotes |
-| `kql_phrase` | Text | For Microsoft Search and SharePoint: a double quote becomes a space, since KQL has no escape inside a phrase; between double quotes, where `AND`, `OR` and `author:` are read as words |
+| `kql_phrase` | Text | For Microsoft Search and SharePoint: a double quote becomes a space, since KQL has no escape inside a phrase, and a single quote is doubled, so `O'Brien` stays inside SharePoint's `querytext='"{{q}}"'`; between double quotes, where `AND`, `OR` and `author:` are read as words |
 | `odata_string` | Text | For Microsoft Graph and Dynamics `$filter`: a single quote doubled; between single quotes (`name eq '{{q}}'`) |
 | `salesforce_id` | 15 or 18 letters and digits | As given |
 | `date-time` | A date and time, any offset | UTC, `2026-10-01T09:00:00Z` |
 | `date` | A date | `2026-10-01` |
 
-Every quoted format must sit between its quotes in the template; `opsai plugin validate` refuses one that does not. A
-plugin written in Python that builds one of these queries itself calls the same function: `soql_string`,
+Every quoted format must sit inside one quoted string of its kind in the template; `opsai plugin validate` refuses
+`{{q}}` bare, between two strings (`"a"{{q}}"b"`) or after an escaped quote (`''{{q}}''`). Formats apply only in
+`request.query`: a body or form sends an input as it is, so validate refuses a text format on an input no query uses.
+A plugin written in Python that builds one of these queries itself calls the same function: `soql_string`,
 `jql_string`, `cql_string`, `kql_phrase` or `odata_string` from `ops_plugin_sdk.formats`.
 
 An enum's values are written as the manifest gives them, and may hold only letters, digits, space, `_`, `-` and `.`.

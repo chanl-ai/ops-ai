@@ -47,8 +47,9 @@ def cql_string(text: str) -> str:
 def kql_phrase(text: str) -> str:
     """A term for a double-quoted KQL phrase (Microsoft, "Keyword Query Language (KQL) syntax reference"). KQL has no
     escape for a quote inside a phrase, so a double quote becomes a space; inside the phrase AND, OR, NEAR and
-    property:value are read as words."""
-    return CONTROL.sub(" ", text).replace('"', " ")
+    property:value are read as words. SharePoint's search REST API takes the phrase inside a single-quoted
+    querytext='...' literal, so a single quote is doubled there, as that literal requires."""
+    return CONTROL.sub(" ", text).replace('"', " ").replace("'", "''")
 
 
 def odata_string(text: str) -> str:

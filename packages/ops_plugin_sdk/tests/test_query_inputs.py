@@ -14,7 +14,8 @@ import pytest
 from test_validate import MANIFEST, plugin
 
 from ops_plugin_sdk.formats import InputRefused, check, render
-from ops_plugin_sdk.manifest import InputField
+from ops_plugin_sdk.manifest import InputField, Request, Tool
+from ops_plugin_sdk.paging import arguments
 from ops_plugin_sdk.validate import validate
 
 PAGED = """
@@ -140,7 +141,9 @@ def test_a_query_slot_given_only_a_pattern_is_refused(tmp_path: Path) -> None:
 
 def test_a_soql_string_outside_its_quotes_is_refused(tmp_path: Path) -> None:
     bad = PAGED.replace("Subject = '{{subject}}'", "Subject = {{subject}}")
-    assert any("{{subject}} is a soql_string and goes between single quotes" in p for p in problems(tmp_path, bad))
+    assert any(
+        "{{subject}} is a soql_string and goes inside one single-quoted string" in p for p in problems(tmp_path, bad)
+    )
 
 
 def test_an_enum_value_that_could_change_a_query_is_refused(tmp_path: Path) -> None:
@@ -216,8 +219,10 @@ def test_nested_inputs_past_three_levels_or_fifty_items_are_refused(tmp_path: Pa
         # JQL and CQL: a double-quoted string; a quote or backslash in the term is escaped with a backslash.
         ("jql_string", 'text ~ "{{q}}"', 'x" OR project = HR', 'text ~ "x\\" OR project = HR"'),
         ("cql_string", 'text ~ "{{q}}"', 'x\\" OR space = HR', 'text ~ "x\\\\\\" OR space = HR"'),
-        # KQL: a quoted phrase has no escape for its quote, so a quote in the term becomes a space.
+        # KQL: a quoted phrase has no escape for its quote, so a quote in the term becomes a space; inside
+        # SharePoint's single-quoted querytext an apostrophe is doubled.
         ("kql_phrase", '"{{q}}"', 'x" OR author:"Ana', '"x  OR author: Ana"'),
+        ("kql_phrase", "'\"{{q}}\"'", "O'Brien' AND x", "'\"O''Brien'' AND x\"'"),
         # OData: a single-quoted string; a quote in it is doubled.
         ("odata_string", "name eq '{{q}}'", "x' or 1 eq 1 or name eq '", "name eq 'x'' or 1 eq 1 or name eq '''"),
     ],
@@ -225,17 +230,22 @@ def test_nested_inputs_past_three_levels_or_fifty_items_are_refused(tmp_path: Pa
 def test_a_search_term_cannot_leave_its_string_in_each_query_language(
     fmt: str, template: str, attack: str, sent: str
 ) -> None:
-    term = field(type="string", format=fmt)
-    assert template.replace("{{q}}", render(term, check(term, attack, "q"))) == sent
+    tool = Tool(
+        name="search_items",
+        access="read",
+        input={"q": field(type="string", format=fmt)},
+        request=Request(method="GET", path="/search", query={"query": template}),
+    )
+    assert arguments(tool, {"q": attack}, None) == {"query": sent}
 
 
 @pytest.mark.parametrize(
     ("fmt", "bare", "said"),
     [
-        ("jql_string", "text ~ {{q}}", "is a jql_string and goes between double quotes"),
-        ("cql_string", "text ~ {{q}}", "is a cql_string and goes between double quotes"),
-        ("kql_phrase", "{{q}}", "is a kql_phrase and goes between double quotes"),
-        ("odata_string", "name eq {{q}}", "is a odata_string and goes between single quotes"),
+        ("jql_string", "text ~ {{q}}", "is a jql_string and goes inside one double-quoted string"),
+        ("cql_string", '\\"a\\"{{q}}\\"b\\"', "is a cql_string and goes inside one double-quoted string"),
+        ("kql_phrase", "{{q}}", "is a kql_phrase and goes inside one double-quoted string"),
+        ("odata_string", "name eq ''{{q}}''", "is a odata_string and goes inside one single-quoted string"),
     ],
 )
 def test_a_search_term_outside_its_quotes_is_refused(tmp_path: Path, fmt: str, bare: str, said: str) -> None:
@@ -249,4 +259,17 @@ def test_a_search_term_outside_its_quotes_is_refused(tmp_path: Path, fmt: str, b
       path: /search
       query: {{ q: "{bare}" }}
 """
+    assert any(said in p for p in problems(tmp_path, tool)), problems(tmp_path, tool)
+
+
+def test_a_query_format_on_an_input_sent_in_the_body_is_refused(tmp_path: Path) -> None:
+    """A body or form sends an input as it is, so its format escaped nothing and the manifest read as safe."""
+    tool = """
+  - name: search_items
+    access: read
+    input:
+      q: { type: string, format: jql_string }
+    request: { method: POST, path: /search, body: '{"jql": "{{q}}"}' }
+"""
+    said = "q has a query format but no query takes it"
     assert any(said in p for p in problems(tmp_path, tool)), problems(tmp_path, tool)
