@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { ExternalLink, Loader2, Plug, RefreshCw, Unlink } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -146,7 +146,7 @@ export function KbSourcesTab({ kb, canBuild }: { kb: KnowledgeBaseDetail; canBui
         accessorFn: (r) => r.source.health?.state ?? 'never',
         filterFn: facetFilterFn,
         // Sorted by the last good sync, newest first by default; a source never synced well sorts last.
-        sortingFn: (a, b) => (a.original.source.health?.lastGoodSyncAt ?? '').localeCompare(b.original.source.health?.lastGoodSyncAt ?? ''),
+        sortFn: (a, b) => (a.original.source.health?.lastGoodSyncAt ?? '').localeCompare(b.original.source.health?.lastGoodSyncAt ?? ''),
         header: ({ column }) => <DataTableColumnHeader column={column} title="Health" />,
         cell: ({ row }) => (
           <div className="flex flex-col">

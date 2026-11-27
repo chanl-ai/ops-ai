@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { AlertTriangle, Bot, CalendarClock, CalendarDays, ClipboardCheck, Route, Scale, ShieldAlert } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -87,7 +87,7 @@ const columns: ColumnDef<Row>[] = [
     accessorKey: 'tier',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Risk tier" />,
     cell: ({ row }) => <RiskBadge risk={row.original.tier} />,
-    sortingFn: (a, b) => TIER_ORDER[a.original.tier] - TIER_ORDER[b.original.tier],
+    sortFn: (a, b) => TIER_ORDER[a.original.tier] - TIER_ORDER[b.original.tier],
     filterFn: facetFilterFn,
   },
   {

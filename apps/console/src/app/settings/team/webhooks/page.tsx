@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { Pause, Play, Plus, Trash2, Webhook as WebhookIcon } from 'lucide-react';
 import { toast } from 'sonner';
 

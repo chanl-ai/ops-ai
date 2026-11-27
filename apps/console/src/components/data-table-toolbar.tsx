@@ -1,6 +1,7 @@
 'use client';
 
-import { Table } from '@tanstack/react-table';
+import type { RowData } from '@tanstack/react-table';
+import type { LegacyReactTable as Table } from '@tanstack/react-table/legacy';
 import { X } from 'lucide-react';
 import Link from 'next/link';
 
@@ -34,14 +35,14 @@ export interface DateRangeFilter {
 }
 
 /** Bulk action configuration */
-export interface BulkAction<TData> {
+export interface BulkAction<TData extends RowData> {
   label: string;
   icon?: React.ComponentType<{ className?: string }>;
   onClick: (selectedRows: TData[]) => void;
   variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
 }
 
-interface DataTableToolbarProps<TData> {
+interface DataTableToolbarProps<TData extends RowData> {
   table: Table<TData>;
   searchColumn?: string;
   searchPlaceholder?: string;
@@ -68,7 +69,7 @@ interface DataTableToolbarProps<TData> {
   prependFilters?: React.ReactNode;
 }
 
-export function DataTableToolbar<TData>({
+export function DataTableToolbar<TData extends RowData>({
   table,
   searchColumn = 'title',
   searchPlaceholder = 'Filter...',

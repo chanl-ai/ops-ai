@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 
 import { Badge } from '@/components/ui/badge';
 import { DataTableColumnHeader } from '@/components/data-table-column-header';

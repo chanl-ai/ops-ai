@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { Activity, ExternalLink, KeyRound, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
 import { toast } from 'sonner';
 

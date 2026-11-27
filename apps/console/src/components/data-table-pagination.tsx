@@ -1,4 +1,5 @@
-import { Table } from '@tanstack/react-table';
+import type { RowData } from '@tanstack/react-table';
+import type { LegacyReactTable as Table } from '@tanstack/react-table/legacy';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -30,7 +31,7 @@ export interface ServerPaginationProps {
   onPageSizeChange: (pageSize: number) => void;
 }
 
-interface DataTablePaginationProps<TData> {
+interface DataTablePaginationProps<TData extends RowData> {
   table: Table<TData>;
   /**
    * Server-side pagination props. When provided, the component uses these values
@@ -41,7 +42,7 @@ interface DataTablePaginationProps<TData> {
   noun?: string;
 }
 
-export function DataTablePagination<TData>({
+export function DataTablePagination<TData extends RowData>({
   table,
   serverPagination,
   noun = 'row',

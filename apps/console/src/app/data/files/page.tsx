@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import type { DateRange } from 'react-day-picker';
 import { ArrowRight, CalendarClock, Clock, Files, FolderOpen, Play, Scale, ShieldX, Trash2, Unlink, Upload } from 'lucide-react';
 import { toast } from 'sonner';

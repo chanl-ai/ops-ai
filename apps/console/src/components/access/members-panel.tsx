@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { MailPlus, Unlink, UserCog, Users, UserX } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';

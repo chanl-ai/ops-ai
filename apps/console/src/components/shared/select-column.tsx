@@ -1,6 +1,7 @@
 'use client';
 
-import type { ColumnDef } from '@tanstack/react-table';
+import type { RowData } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
@@ -19,12 +20,12 @@ function SelectBox({ className, ...props }: React.ComponentProps<typeof Checkbox
 }
 
 /** Row-selection column for DataTableWithViews; checking a row never opens it. */
-export function selectColumn<T>(label: (row: T) => string, canSelect: (row: T) => boolean = () => true): ColumnDef<T> {
+export function selectColumn<T extends RowData>(label: (row: T) => string, canSelect: (row: T) => boolean = () => true): ColumnDef<T> {
   return {
     id: 'select',
     // Select all takes only the rows that can be picked; the table's own toggle would take every row on the page.
     header: ({ table }) => {
-      const rows = table.getPaginationRowModel().rows.filter((r) => canSelect(r.original));
+      const rows = table.getPaginatedRowModel().rows.filter((r) => canSelect(r.original));
       const all = rows.length > 0 && rows.every((r) => r.getIsSelected());
       return (
         <SelectBox

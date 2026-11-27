@@ -6,7 +6,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { ArrowDownRight, ArrowUpRight, BookOpen, CalendarClock, Check, CircleDashed, CircleX, Copy, ExternalLink, FileText, Loader2, Mail, MapPin, Phone, Search, Star } from 'lucide-react';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, LabelList, Line, LineChart, XAxis, YAxis } from 'recharts';
 
