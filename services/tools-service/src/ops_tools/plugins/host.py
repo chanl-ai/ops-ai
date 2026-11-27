@@ -368,6 +368,13 @@ def input_field(name: str, f: InputField, *, paged: bool = False) -> FieldRow:
     return out
 
 
+def team_on(binding: PluginBinding | None) -> bool:
+    """Whether a plugin is on for the team that holds `binding`: the one rule, read by every caller. A team with no
+    row has it off, built in or not; every way a team is made (the team.created event, which seeding and the create
+    route both write) stores enabled rows for the built-in plugins, so no reader falls back to on."""
+    return binding is not None and binding.enabled
+
+
 def tools_added(m: Manifest, binding: PluginBinding | None) -> set[str] | None:
     """The operations the team added, by operation name; None while the binding keeps every tool added (one made
     before the catalog, or no binding). Stored as the binding's `tools_on`, by tool name."""
@@ -789,12 +796,10 @@ class PluginHost:
 
     async def off_reason(self, tenant_id: str, team_id: str | None, plugin: Plugin) -> str | None:
         """Why the installed plugin is off for the team, or None when it is on (its binding row is enabled): the one
-        place that decides whether a plugin's tools run for a team. A team with no row has it off, built in or not; a
-        new team gets enabled rows for the built-in plugins from `turn_on_builtins`."""
+        place that decides whether a plugin's tools run for a team, by `team_on`."""
         if team_id is None:
             return f"{plugin.manifest.title} is turned on per team; this call names no team."
-        b = await self.bindings.get(tenant_id, team_id, plugin.manifest.id)
-        if b is None or not b.enabled:
+        if not team_on(await self.bindings.get(tenant_id, team_id, plugin.manifest.id)):
             return f"{plugin.manifest.title} is off for this team; a team admin turns it on."
         return None
 

@@ -116,6 +116,7 @@ from .plugins.host import (
     same_place,
     shown_value,
     sign_in_values,
+    team_on,
     tools_added,
 )
 from .plugins.routes import PluginAccounts, TeamPluginIn, not_offered
@@ -851,8 +852,7 @@ class Apps:
                         "mayManage": may,
                         "managedClient": platform,
                         "plugin": {
-                            # On only with an enabled binding row, as PluginHost.off_reason decides.
-                            "teamOn": b.enabled if b is not None else False,
+                            "teamOn": team_on(b),
                             "platformApp": platform,
                             "kinds": list(m.connection.kinds),
                             "signIn": list(m.connection.sign_in),
@@ -880,7 +880,7 @@ class Apps:
             # A plugin the team turned on that the install no longer holds keeps its card, so the team sees why its
             # tools stopped instead of finding its account listed as a custom app.
             for pid, b in sorted(bindings.items()):
-                if pid in self.plugins.plugins or not b.enabled:
+                if pid in self.plugins.plugins or not team_on(b):
                     continue
                 conn = by_id.get(str(b.connection_id or ""))
                 row = next((md for md in modules if plugin_id_of(md) == pid), None)
