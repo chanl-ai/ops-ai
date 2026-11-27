@@ -123,14 +123,19 @@ class PictureReading:
     clock: Callable[[], float] = time.monotonic
     _kept: dict[tuple[str, str], tuple[float, bool]] = field(default_factory=dict[tuple[str, str], tuple[float, bool]])
 
-    async def allowed(self, tenant: str, team: str) -> bool | None:
+    async def allowed(self, tenant: str, team: str, *, fresh: bool = False) -> bool | None:
         """Whether the team sends page pictures; None when its policy cannot be read, which never counts as off, so a
-        failed read neither sends a page nor makes a second reading."""
+        failed read neither sends a page nor makes a second reading. `fresh` skips the kept answer: a new reading is
+        made on the policy as it is now, so turning it on applies to the next file at once."""
+        return (await self.answer(tenant, team, fresh=fresh))[0]
+
+    async def answer(self, tenant: str, team: str, *, fresh: bool = False) -> tuple[bool | None, bool]:
+        """`allowed`, and whether the answer was the kept one rather than read now."""
         if self.policy is None:
-            return False
+            return False, False
         kept = self._kept.get((tenant, team))
-        if kept is not None and self.clock() - kept[0] < POLICY_FRESH_S:
-            return kept[1]
+        if not fresh and kept is not None and self.clock() - kept[0] < POLICY_FRESH_S:
+            return kept[1], True
         try:
             found = await self.policy.read(tenant, team)
         except Exception as e:
@@ -138,7 +143,7 @@ class PictureReading:
             found = None
         if found is not None:
             self._kept[(tenant, team)] = (self.clock(), found)
-        return found
+        return found, False
 
     async def describe(
         self, page: Page, *, data: bytes, mime: str, used: int, sensitivity: str | None, tenant: str, run: str

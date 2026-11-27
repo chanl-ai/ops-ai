@@ -187,9 +187,12 @@ async def test_turning_the_policy_on_reads_a_file_read_while_it_was_off(make: Ma
         off = await read_all(s, c, fid)
         calls_off = len(model.calls)
         policy.on = True
+        other = await s.stored(pdf("text", "picture"), name="deck.pdf", mime="application/pdf")
+        new = await read_all(s, c, other)
         pictures.clock = lambda: 1e12  # past the time the policy is kept
         on = await read_all(s, c, fid)
     assert off["pages"][1]["source"] == "none" and calls_off == 0, off["pages"][1]
+    assert new["pages"][1]["source"] == "model", "a new reading is made on the policy as it is now, not as kept"
     assert on["pages"][1]["source"] == "model", "a reading made with pictures off is not served once they are on"
 
 

@@ -175,20 +175,28 @@ class Readings:
         file = await self.files.readable(who, file_id)
         digest = self._digest(file)
         level = None if pictures is None else stricter(file.sensitivity, pictures)
-        key = await self._key(who, settings, level)
+        key, kept = await self._key_kept(who, settings, level)
+        # A stored reading is found on the kept policy; one about to be made asks the policy again (`fresh`).
+        for fresh in (False, True):
+            if key is None:
+                return 200, await self._without_policy(who, file, settings, level)
+            # Gate: the file's link and its stored reading in one transaction, closed before the bytes are read.
+            async with isolation.request_transaction():
+                await self.store.link(file.id, who.team, digest, self.clock())
+                row = await self.store.get(who.team, digest, READER_VERSION, key)
+                done = row is not None and row.status == "done"
+                pages = await self.store.pages(who.team, digest, READER_VERSION, key) if done else None
+            if row is not None and pages is not None:
+                await self._retry_if_due(who, file, row)
+                return 200, answer_of(row, file_id, pages)
+            if row is not None and row.status in PENDING:
+                return 202, answer_of(row, file_id)
+            live = key if fresh or not kept else await self._key(who, settings, level, fresh=True)
+            if live == key:
+                break
+            key = live
         if key is None:
             return 200, await self._without_policy(who, file, settings, level)
-        # Gate: the file's link and its stored reading in one transaction, closed before the bytes are read.
-        async with isolation.request_transaction():
-            await self.store.link(file.id, who.team, digest, self.clock())
-            row = await self.store.get(who.team, digest, READER_VERSION, key)
-            done = row is not None and row.status == "done"
-            pages = await self.store.pages(who.team, digest, READER_VERSION, key) if done else None
-        if row is not None and pages is not None:
-            await self._retry_if_due(who, file, row)
-            return 200, answer_of(row, file_id, pages)
-        if row is not None and row.status in PENDING:
-            return 202, answer_of(row, file_id)
         if file.size <= SYNC_BYTES:
             data = await self.files.read(who, file)
             try:
@@ -276,12 +284,18 @@ class Readings:
             raise FileNotReadyError(f"{file.id} has no content digest yet")
         return file.digest
 
-    async def _key(self, who: Who, settings: ReadingSettings, level: str | None) -> str | None:
+    async def _key(self, who: Who, settings: ReadingSettings, level: str | None, *, fresh: bool = False) -> str | None:
         """The reading's key; None when pictures were asked for and the team's policy cannot be read."""
+        return (await self._key_kept(who, settings, level, fresh=fresh))[0]
+
+    async def _key_kept(
+        self, who: Who, settings: ReadingSettings, level: str | None, *, fresh: bool = False
+    ) -> tuple[str | None, bool]:
+        """`_key`, and whether it rests on the policy as kept rather than read now."""
         if level is None or self.pictures is None:
-            return settings.key
-        allowed = await self.pictures.allowed(who.tenant_id, who.team)
-        return None if allowed is None else reading_key(settings, level, allowed)
+            return settings.key, False
+        allowed, kept = await self.pictures.answer(who.tenant_id, who.team, fresh=fresh)
+        return (None if allowed is None else reading_key(settings, level, allowed)), kept
 
     async def _without_policy(
         self, who: Who, file: FileInfo, settings: ReadingSettings, level: str | None, *, page: int | None = None
