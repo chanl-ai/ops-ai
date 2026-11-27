@@ -25,6 +25,19 @@ const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', '.source', '.venv', 
 // Delivery plans are internal working notes, not documentation.
 export const SITE_EXCLUDE = ['docs/media/', 'docs/plan/'];
 
+// Every image under docs/ is published at /docs/<its path under docs/> (scripts/copy-images.mjs), and markdown in the
+// repository names it by that absolute URL so GitHub, npm and any other reader load it from the site. The live site
+// builds from main, so a URL resolves there once the commit that added its image is released.
+export const IMAGE_HOSTS = ['opsai.chanl.ai'];
+export const IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp)$/i;
+
+/** https://<image host>/docs/<p> -> docs/<p>, or undefined for any other URL. */
+export function siteImagePath(url) {
+  const m = url.match(/^https:\/\/([^/]+)\/docs\/([^?#]+)$/);
+  if (!m || !IMAGE_HOSTS.includes(m[1]) || !IMAGE_EXT.test(m[2])) return undefined;
+  return `docs/${decodeURI(m[2])}`;
+}
+
 /** The repository root: two folders above the docs app. */
 export function repoRoot() {
   const fromCwd = path.resolve(process.cwd(), '../..');
