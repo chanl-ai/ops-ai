@@ -59,8 +59,10 @@ GRANT = ToolGrant(
                 },
             },
             "replan": {"type": "boolean"},
+            # Names the turn's plan mode (modes.py); the person sees it in the trace, the model never reads it back.
+            "why": {"type": "string", "maxLength": 200, "description": "In one sentence, why this ask needs a plan"},
         },
-        "required": ["title", "steps"],
+        "required": ["title", "steps", "why"],
     },
 )
 

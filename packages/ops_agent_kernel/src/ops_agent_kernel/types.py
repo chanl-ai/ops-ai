@@ -14,6 +14,38 @@ from ops_service_kit.http import Json
 
 # `workflow`: the tool starts a published workflow, whose own review steps are the gate (workflows-as-tools.md).
 Access = Literal["read", "write", "workflow"]
+LoopKind = Literal["auto", "single", "plan_execute", "supervisor", "swarm", "workflow", "evaluator", "long_running"]
+ModeName = Literal["direct", "plan", "helpers", "sandbox"]
+
+
+@dataclass(frozen=True)
+class LoopSettings:
+    """How the agent's turn runs: the spec's `loop` (automatic-mode-and-loop-kinds.md, "Interfaces"). Each kind is
+    given a fixed set of the kernel's tools (loop_kinds.py); its own settings sit beside the shared ones."""
+
+    kind: LoopKind = "auto"
+    replans: int = 2
+    show_plan: bool = True
+    review_plan: bool = False
+    max_handoffs: int = 4
+    workflow: str | None = None
+    workflow_input: dict[str, str] = field(default_factory=dict[str, str])
+    # The quality bar: the final answer is judged against `rubric` and sent back at most `max_rounds` times.
+    rubric: str | None = None
+    judge_alias: str = "judge"
+    max_rounds: int = 2
+    # Whether the spec has a sandbox; release 1.5.0 gives it the workspace tools.
+    sandbox: bool = False
+
+
+@dataclass(frozen=True)
+class ModeStep:
+    """One mode a turn used, named at its first use: `fixed` when the loop kind is not `auto`, so the builder set it."""
+
+    mode: ModeName
+    reason: str
+    at_step: int
+    fixed: bool
 
 
 class PlanStep(TypedDict):
@@ -356,6 +388,7 @@ class TurnRequest:
     # A JSON Schema the turn's answer must match (a workflow's agent step): the model returns structured output
     # through the call, validated against it, on `TurnResult.output`; a mismatch finishes with `schema_error`.
     output_schema: Json | None = None
+    loop: LoopSettings = field(default_factory=LoopSettings)
 
 
 @dataclass
@@ -445,3 +478,9 @@ class TurnResult:
     # The skill with steps this conversation is running and the ones that ended, after this turn, whichever way the
     # turn ended. None when the agent has no skill with steps and the request carried no record.
     run: SkillRunState | None = None
+    # The modes the turn used, in the order each was first named (modes.py).
+    modes: list[ModeStep] = field(default_factory=list[ModeStep])
+    # Calls refused this turn because no plan was shown first; counted once per turn.
+    plan_required: bool = False
+    # Whether the answer met the loop's quality bar; None when the loop sets none.
+    bar_met: bool | None = None

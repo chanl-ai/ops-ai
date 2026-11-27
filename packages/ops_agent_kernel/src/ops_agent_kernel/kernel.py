@@ -11,7 +11,7 @@ import asyncio
 import json
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal, cast
 
 from jsonschema import Draft202012Validator
@@ -26,6 +26,8 @@ from . import (
     contract,
     guard,
     judge,
+    loop_kinds,
+    modes,
     pii,
     present,
     prompt_writer,
@@ -42,6 +44,8 @@ from .events import (
     CitationsReady,
     Interrupted,
     KernelEvent,
+    ModeChanged,
+    PlanChanged,
     SkillRunChanged,
     StatusChanged,
     TextDelta,
@@ -60,6 +64,7 @@ from .types import (
     GuardrailRef,
     Interrupt,
     LoadedSkill,
+    ModeName,
     Passage,
     PendingCall,
     Plan,
@@ -189,6 +194,14 @@ class _TurnState:
     # added to the turn's usage where it finishes.
     judge_model: contract.ModelEndpoint | None = None
     judge_spent: TokenUsage = field(default_factory=TokenUsage)
+    # The modes the turn named (modes.py), and whether a change was refused for want of a plan.
+    modes: modes.Modes = field(default_factory=lambda: modes.Modes(fixed=False))
+    plan_required: bool = False
+
+    def mode(self, name: ModeName, reason: str) -> None:
+        """Names `name` at its first use this turn; its event goes out with the call's result."""
+        if (named := self.modes.first(name, reason, max(self.step, 1))) is not None:
+            self.events.append(ModeChanged(named.mode, named.reason, named.fixed, named.at_step))
 
     def drop_carried(self) -> None:
         """A skill loaded or started in this reply takes the place of the ones carried from earlier replies: one
@@ -613,6 +626,8 @@ def _plan(state: _TurnState) -> contract.LoopTool:
             return {"error": why}
         assert new is not None
         state.plan, state.plan_call = new, rec.tool_call_id
+        state.mode("plan", modes.reason_of(arguments))
+        state.events.append(PlanChanged(new, 1))
         said = planner.answer(new)
         rec.status, rec.output, rec.view = "ok", said, {"part": planner.part(new)}
         return said
@@ -810,6 +825,9 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
             rec = state.record(tool_call_id, grant.name, arguments)
             rec.status, rec.output = "error", {"error": why}
             return {"error": why}
+        if modes.is_helper(grant) or modes.is_workspace(grant):
+            state.mode("helpers" if modes.is_helper(grant) else "sandbox", modes.reason_of(arguments))
+            arguments = {k: v for k, v in arguments.items() if k != "why"}
         # Where the running skill stood when this call started, when it is that step's tool: its result is checked
         # for that step only, so a result that arrives after the step moved changes nothing.
         at = state.position() if steps.target(state.run) == grant.name else None
@@ -922,6 +940,7 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
         call,
         offered,
         gated=grant.gated,
+        # A change refused for want of a plan is not asked about: its body says what to do first.
         barred=lambda: state.barred(grant.name),
     )
 
@@ -1129,6 +1148,13 @@ STEP_LIMIT_REACHED = "I reached the step limit for one reply before I could answ
 CUT_SHORT_TOOLS = "\n\n(Reply cut short: the agent reached the most tool calls it may make in one reply.)"
 CUT_SHORT_STEPS = "\n\n(Reply cut short: the agent reached its step limit for one reply.)"
 BUDGET_REACHED = "This conversation reached its budget before I could answer."
+BAR_RETRY = "Your answer does not meet the bar it is checked against: {reason} Answer again, using only what you found."
+
+
+def _added(a: TokenUsage, b: TokenUsage) -> TokenUsage:
+    return TokenUsage(a.input_tokens + b.input_tokens, a.output_tokens + b.output_tokens, a.requests + b.requests)
+
+
 CUT_SHORT_BUDGET = "\n\n(Reply cut short: the conversation reached its budget.)"
 # The one request a reply may still make at its budget, with no tool offered (ports.BudgetReachedError).
 CLOSING_PROMPT = (
@@ -1222,6 +1248,8 @@ async def run_turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[Kernel
     """Streams one turn's events, ending with exactly one `TurnFinished`. With the agent's redactPii on, what
     the turn shows and returns has personal data masked (pii.py); what the model reads, and the history a pause keeps,
     are not."""
+    # The loop kind decides which of the spec's tools the turn holds (loop_kinds.py), once, before anything reads them.
+    req = replace(req, tools=loop_kinds.offered(req.loop, req.tools))
     if not req.settings.redact_pii:
         async for event in _turn(req, ports):
             yield event
@@ -1262,19 +1290,18 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     # Many tools: each is deferred and the kernel's deferred `search_tools` reveals the ones the model finds.
     above = req.settings.tool_search_above
     searching = builtins and above is not None and len(req.tools) > above
+    plans = builtins and loop_kinds.has_plan(req.loop)
     state = _TurnState(
         req=req,
         grants={
             **{t.name: t for t in req.tools},
-            **(
-                {present.NAME: present.grant(req.settings), search.NAME: search.SEARCH, planner.NAME: planner.GRANT}
-                if builtins
-                else {}
-            ),
+            **({present.NAME: present.grant(req.settings), search.NAME: search.SEARCH} if builtins else {}),
+            **({planner.NAME: planner.GRANT} if plans else {}),
         },
+        modes=modes.Modes(fixed=req.loop.kind != "auto"),
     )
     tools = [_tool(state, ports, g, deferred=searching) for g in sorted(req.tools, key=lambda t: t.name)] + (
-        [_present(state), _plan(state), _found(state, searching)] if builtins else []
+        [_present(state), *([_plan(state)] if plans else []), _found(state, searching)] if builtins else []
     )
     if searching and req.resume:
         state.revealed = _revealed(req.resume.interrupt.history)
@@ -1401,6 +1428,8 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                 guardrails_checked=[ref(g) for g in dict.fromkeys(checked)],
                 guardrails_off=[ref(g) for g in req.settings.guardrails_off],
                 run=state.run.model_copy(deep=True) if state.tracks else None,
+                modes=list(state.modes.steps),
+                plan_required=state.plan_required,
                 **extra,
             )
         )
@@ -1544,6 +1573,8 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                     if isinstance(step, contract.StepStarted):
                         if (ticked := _tick_plan(state)) is not None:
                             yield ticked
+                        if state.step == 1 and not req.resume and (named := state.modes.direct(1)) is not None:
+                            yield ModeChanged(named.mode, named.reason, named.fixed, named.at_step)
                         state.step += 1
                     elif isinstance(step, contract.TextChunk):
                         if not writing:
@@ -1571,7 +1602,11 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                     elif isinstance(step, contract.LoopPaused):
                         output = step
                         all_messages = step.messages
+                        if not req.resume and (named := state.modes.direct(1)) is not None:
+                            yield ModeChanged(named.mode, named.reason, named.fixed, named.at_step)
                     else:
+                        if not req.resume and (named := state.modes.direct(1)) is not None:
+                            yield ModeChanged(named.mode, named.reason, named.fixed, named.at_step)
                         output = json.loads(step.text) if req.output_schema is not None else step.text
                         all_messages = step.messages
                         usage = TokenUsage(step.input_tokens, step.output_tokens, step.requests)
@@ -1690,6 +1725,36 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     if (held := _plan_left(state, "waiting for you", answered=bool(state.text.strip()))) is not None:
         # The turn ends with steps left (a Connect card, a question): the next turn goes on from this step.
         yield held
+    bar_met: bool | None = None
+    if req.loop.rubric and req.output_schema is None and state.text.strip():
+        # The quality bar: the judge reads the answer against the rubric; a fail sends its reason back for another
+        # answer, at most max_rounds times, then the last answer is returned marked as not meeting the bar.
+        rounds, bar_met = 0, False
+        judge_model = state.judge_model or model
+        while True:
+            verdict = await judge.verdict(judge_model, req.loop.rubric, state.text)
+            state.judge_spent = _added(state.judge_spent, verdict.usage)
+            if verdict.passed:
+                bar_met = True
+                break
+            if rounds >= req.loop.max_rounds:
+                break
+            rounds += 1
+            try:
+                again = await structured.ask(
+                    model,
+                    system=instructions(),
+                    messages=_chat(all_messages),
+                    prompt=BAR_RETRY.format(reason=verdict.reason),
+                    purpose="check",
+                )
+            except Exception:  # a retry that fails leaves the last answer, still marked as below the bar
+                break
+            usage = _added(usage, again.usage)
+            if again.text and state.shown_text:
+                yield _replace(state, again.text)
+            elif again.text:
+                state.text = again.text
     if req.settings.end_check and req.output_schema is None and state.text.strip():
         # Checked before any guardrail, so a corrected answer is the one the guardrail checks.
         corrected, spent = await _end_check(state, model, instructions(), all_messages, len(passages))
@@ -1783,6 +1848,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     done = finish(
         "completed",
         "final",
+        bar_met=bar_met,
         no_answer=withheld_by_base or bool(asked and req.user_turn and not passages and not state.order),
         **shaped,
         **({"guardrail": noted} if noted is not None else {}),
