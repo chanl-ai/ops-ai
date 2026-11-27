@@ -276,8 +276,9 @@ RUNTIME = "ops_agents_runtime"
 
 async def test_a_tenants_transaction_is_refused_what_the_tenant_role_lacks(engine: AsyncEngine) -> None:
     """An append-only log is never changed or emptied, a case is never deleted, a trigger event is settled but what
-    fired it is never rewritten, and heartbeats are the system user's alone: as ops_runtime_tenant on PostgreSQL and
-    the runtime user on SQL Server (deploy/database/mssql.py RUNTIME_GRANTS)."""
+    fired it is never rewritten (the schedule clock's own delete is granted), and heartbeats are the system user's
+    alone: as ops_runtime_tenant on PostgreSQL and the runtime user on SQL Server
+    (deploy/database/mssql.py RUNTIME_GRANTS)."""
     tenant = _tag("t_a")
     statements = {
         "update case_events": case_events.update().values(kind="x").where(case_events.c.tenant_id == tenant),
@@ -289,7 +290,6 @@ async def test_a_tenants_transaction_is_refused_what_the_tenant_role_lacks(engin
         "update trigger_events.subject": trigger_events.update()
         .values(subject="x")
         .where(trigger_events.c.tenant_id == tenant),
-        "delete trigger_events": trigger_events.delete().where(trigger_events.c.tenant_id == tenant),
         "delete background_heartbeats": background_heartbeats.delete(),
     }
     for name, statement in statements.items():
@@ -304,6 +304,17 @@ async def test_a_tenants_transaction_is_refused_what_the_tenant_role_lacks(engin
                 if mssql:
                     await c.execute(sa.text("REVERT"))
         assert "permission" in str(e.value).lower() and "denied" in str(e.value).lower(), name
+    if engine.dialect.name == "postgresql":
+        # The clock may delete its own trigger rows; an email row survives the same delete.
+        row = {"team_id": "team_a", "workflow_id": "w", "event_key": "k", "sender": "", "subject": "", "detail": "{}"}
+        row |= {"received_at": "n", "outcome": "ran", "recorded_at": "n"}
+        with isolation.scope(tenant, "team_a"):
+            async with isolation.isolated_tx(engine, role=TENANT_ROLE) as c:
+                for n, source in enumerate(("email:desk@bank.example", "schedule:start")):
+                    await c.execute(trigger_events.insert().values(id=f"{tenant}{n}", source=source, **row))
+                removed = await c.execute(trigger_events.delete().where(trigger_events.c.tenant_id == tenant))
+                left = (await c.execute(sa.select(trigger_events.c.source))).scalars().all()
+        assert (removed.rowcount, list(left)) == (1, ["email:desk@bank.example"])
 
 
 def _filtered(url: str) -> set[str]:

@@ -31,7 +31,7 @@ function accountOf(page: Obj): string {
   return String(page.connection.id);
 }
 
-const call = (raw: Raw, service: 'tools' | 'agents' | 'documents' | 'kb' | 'platform', id: string, args: Obj = {}): Promise<any> =>
+const call = (raw: Raw, service: 'tools' | 'agents' | 'documents' | 'kb' | 'platform' | 'files', id: string, args: Obj = {}): Promise<any> =>
   (raw[service] as unknown as Record<string, (a: Obj) => Promise<any>>)[id]!(args);
 
 const at = (app: string, account: string) => ({ app_id: app, account_id: account });
@@ -468,5 +468,61 @@ export class Usage {
   async list(query: Record<string, unknown> = {}): Promise<Obj[]> {
     const found = await call(this.raw, 'tools', 'executions_list_executions', { query });
     return Array.isArray(found) ? found : (found?.data ?? []);
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * The team's watched folders (Files > Watched folders): an app's folders a team copies into Files, one entry per
+ * source file with a version per change. Adding, changing, checking and deleting one needs watches.manage (Admin and
+ * Builder); every member reads them. The Python SDK has the same noun (`ops.files.watches`).
+ */
+export class Watches {
+  constructor(private readonly raw: Raw) {}
+
+  list(query: Obj = {}): Promise<Obj[]> {
+    return everyPage((q) => call(this.raw, 'files', 'watches_list_watches', { query: q }), query);
+  }
+
+  get(watchId: string): Promise<Obj> {
+    return call(this.raw, 'files', 'watches_get_watch', { path: { watch_id: watchId } });
+  }
+
+  /** Watches the folders `values` names (as the source's picker saves them); nothing is copied until a check. */
+  add(name: string, { plugin, source, values, connectionId }: { plugin: string; source: string; values: Obj; connectionId?: string }): Promise<Obj> {
+    const body: Obj = { name, plugin, source, values, ...(connectionId ? { connectionId } : {}) };
+    return call(this.raw, 'files', 'watches_create_watch', { body });
+  }
+
+  /** Renames the watch or changes its folders; new folders are listed whole on the next check. */
+  change(watchId: string, { name, values }: { name?: string; values?: Obj }): Promise<Obj> {
+    const body: Obj = { ...(name !== undefined ? { name } : {}), ...(values !== undefined ? { values } : {}) };
+    return call(this.raw, 'files', 'watches_change_watch', { path: { watch_id: watchId }, body });
+  }
+
+  /** Stops watching; the files already brought in stay in Files. */
+  async delete(watchId: string): Promise<void> {
+    await call(this.raw, 'files', 'watches_delete_watch', { path: { watch_id: watchId } });
+  }
+
+  /**
+   * Check now. With `wait` (seconds), waits for the check to end and answers the watch with its last check; otherwise
+   * answers at once. A check already running is refused with `already_checking`.
+   */
+  async check(watchId: string, { wait = 0 }: { wait?: number } = {}): Promise<Obj> {
+    await call(this.raw, 'files', 'watches_check_watch', { path: { watch_id: watchId } });
+    const deadline = Date.now() + wait * 1000;
+    let watch = await this.get(watchId);
+    while (wait && watch.checking && Date.now() < deadline) {
+      await sleep(1000);
+      watch = await this.get(watchId);
+    }
+    return watch;
+  }
+
+  /** What the checks found after event `after`, oldest first; `nextAfter` asks for the next page. */
+  events(watchId: string, { after = 0, limit = 100 }: { after?: number; limit?: number } = {}): Promise<Obj> {
+    return call(this.raw, 'files', 'watches_watch_events', { path: { watch_id: watchId }, query: { after, limit } });
   }
 }

@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "Run pages show the workflow's name",
+  "description": "A run's title shows the workflow's name from the first moment, and a run that ended without a value says so instead of showing an empty Result card.",
+  "tag": "fix"
+}

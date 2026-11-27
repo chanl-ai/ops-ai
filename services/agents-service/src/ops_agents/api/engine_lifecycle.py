@@ -28,6 +28,7 @@ from ops_service_kit.http import Json
 from ..store.agent_registry import PublishRequestRow
 from ..store.engine import EngineTransactions
 from ..store.mailboxes import MailboxStore
+from ..store.schedules import WorkflowSchedules
 from ..store.tenancy import current_team
 from . import ai_steps_gate
 from .account_names import require_team_accounts, step_names
@@ -38,6 +39,7 @@ from .email_trigger import EMAIL_TRIGGER, require_binding
 from .publish_policy import decide, team_document
 from .review_sla import sla_hours
 from .routers.tool_catalog import directory_tools, known_tools
+from .schedule_clock import required_beyond_due
 
 KIND = "engine"
 REGISTRY = default_registry()
@@ -209,7 +211,8 @@ async def blockers(
         d = parse(definition)
     except InvalidDefinitionError as e:
         check: Json = {"node": None, "level": "error", "code": "invalid_definition", "message": str(e)}
-        return [Blocker(check, Unprocessable(str(e), code="definition_checks", details={"checks": [check]}))]
+        # The blockers found so far stay: an open review is still the first thing in the way.
+        return [*out, Blocker(check, Unprocessable(str(e), code="definition_checks", details={"checks": [check]}))]
     if checks := validate(d, REGISTRY):
         failing = Unprocessable(
             f"The workflow has {len(checks)} failing checks.",
@@ -233,6 +236,16 @@ async def blockers(
         out.append(
             Blocker({"node": node, "level": "error", "code": e.code, "message": e.message, "field": "mailbox"}, e)
         )
+    # A saved schedule outlives versions: a version whose scheduled trigger needs more than dueAt would fail every tick.
+    for saved in await WorkflowSchedules(rt.db).for_workflow(row.workflow_id):
+        if field := required_beyond_due(definition, saved.trigger_step):
+            e = Unprocessable(
+                f"This workflow runs on a schedule, which sends only dueAt, and the trigger now requires {field}.",
+                code="schedule_input_required",
+                details={"field": field},
+            )
+            check = {"node": saved.trigger_step, "level": "error", "code": e.code, "message": e.message, "field": field}
+            out.append(Blocker(check, e))
     try:
         await require_team_accounts(rt, team, step_names(definition))
     except Unprocessable as e:
@@ -288,7 +301,7 @@ async def request_publish(
     team = current_team() or (row.team_id or "")
     if reads is None:
         reads = await policy_reads(rt)
-    req = await open_publish(rt, workflow_id, row, current, by=me.email, team=team, note=note, document=reads.document)
+    req = await open_publish(rt, workflow_id, row, current, by=me.actor, team=team, note=note, document=reads.document)
     return review_view(req, name=row.name, slug="", sla_hours=reads.sla_hours)
 
 

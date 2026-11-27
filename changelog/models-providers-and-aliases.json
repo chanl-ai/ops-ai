@@ -1,0 +1,1 @@
+{"date": "2026-11-25", "title": "Connect more model providers and tune each agent's model", "description": "Admins can connect OpenAI, Anthropic, Google Gemini, Amazon Bedrock or any OpenAI-compatible address and name models for builders. An agent's model settings now offer only what its model supports, with the model's defaults, and its chats use them.", "tag": "new"}

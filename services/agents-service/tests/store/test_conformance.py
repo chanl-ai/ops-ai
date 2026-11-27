@@ -9,6 +9,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_agents.store import leases
 from ops_agents.store.leases import LeaseHeldError, Leases, check_fence, thread_leases
 from ops_agents.store.tenancy import TENANT_ROLE
 from ops_agents.store.timers import TimerStore, timers
@@ -16,7 +17,7 @@ from ops_checkpointer import LeaseSupersededError
 from ops_service_kit.settings import Settings
 from ops_store import Backend, Guarantee
 from ops_store.backends import backends
-from ops_store.conformance import engine_for, lease_suite, timer_claim_suite
+from ops_store.conformance import LeaseClock, engine_for, lease_suite, timer_claim_suite
 
 
 class LeasePortAdapter:
@@ -72,10 +73,15 @@ async def backend(request: pytest.FixtureRequest) -> AsyncIterator[tuple[Backend
     await engine.dispose()
 
 
-async def test_leases_conform(backend: tuple[Backend, AsyncEngine]) -> None:
+async def test_leases_conform(backend: tuple[Backend, AsyncEngine], monkeypatch: pytest.MonkeyPatch) -> None:
     b, engine = backend
 
-    async def make() -> LeasePortAdapter:
+    async def make(clock: LeaseClock) -> LeasePortAdapter:
+        # Leases reads the database's clock through db_now; the suite's frozen clock stands in for it.
+        def frozen(_engine: AsyncEngine) -> object:
+            return clock.sql()
+
+        monkeypatch.setattr(leases, "db_now", frozen)
         return LeasePortAdapter(engine)
 
     await lease_suite(b, make)

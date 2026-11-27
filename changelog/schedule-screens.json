@@ -1,0 +1,6 @@
+{
+  "date": "2026-11-24",
+  "title": "Set a workflow's schedule from its trigger",
+  "description": "The Schedule trigger's sheet now has the schedule form: how often, the days and hours, and a time zone you can search, with the next three runs shown before you save. An agent's Channels tab can also put the agent on a schedule.",
+  "tag": "new"
+}

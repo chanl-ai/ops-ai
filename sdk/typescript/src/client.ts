@@ -27,7 +27,7 @@ import { Chat } from './chat.js';
 import { savedOptions } from './profile.js';
 import { Templates } from './templates.js';
 import { Workflows } from './workflows.js';
-import { Accounts, Apps, Credentials, Egress, Me, Policies, Resources, Secrets, Tools, Usage } from './words.js';
+import { Accounts, Apps, Credentials, Egress, Me, Policies, Resources, Secrets, Tools, Usage, Watches } from './words.js';
 
 type PathOf<O> = O extends { parameters: { path: infer P } } ? P : never;
 type QueryOf<O> = O extends { parameters: { query?: infer Q } } ? Q : never;
@@ -281,8 +281,12 @@ export class Tasks extends Resource {
 }
 
 export class Files extends Resource {
+  /** The team's watched folders (Files > Watched folders). */
+  readonly watches: Watches;
+
   constructor(t: Transport, private readonly raw: Raw) {
     super(t, NOUNS.files);
+    this.watches = new Watches(raw);
   }
 
   /** Uploads bytes the way the console does: a ticket, the bytes, then complete. */

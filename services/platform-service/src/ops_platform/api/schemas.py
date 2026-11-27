@@ -590,6 +590,9 @@ class TeamPermissions(Out):
     team_id: str
     team_name: str
     permissions: list[EffectivePermission]
+    # The Security-team cells the person's roles hold in this team's own grid: granted only where a route holds the
+    # cell in the acting team (the agent instruction sections' settings.manage), never on a Security-only screen.
+    held_in_team: list[EffectivePermission]
 
 
 class RoleRef(Out):

@@ -3,6 +3,7 @@
 import * as React from 'react';
 
 import { DialogShell } from '@/components/shared/dialog-shell';
+import { ListCell } from '@/components/shared/table-cells';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -99,7 +100,7 @@ export function VersionsPanel({ versions }: { versions: ModuleVersion[] }) {
                   {v.publishedAt ? shortDate(v.publishedAt) : 'Not yet'}
                   <div>{v.publishedBy}</div>
                 </TableCell>
-                <TableCell className="text-sm">{v.pinnedBy.length ? v.pinnedBy.map((w) => w.name).join(', ') : <span className="text-xs text-muted-foreground">None</span>}</TableCell>
+                <TableCell className="text-sm"><ListCell values={v.pinnedBy.map((w) => w.name)} empty="None" label="Pinned by" /></TableCell>
                 <TableCell className="text-xs whitespace-nowrap">
                   {v.reachability.map((r) => (
                     <div key={r.environment} className={r.ok ? 'text-muted-foreground' : 'font-medium text-destructive-text'}>

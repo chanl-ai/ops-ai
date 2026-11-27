@@ -130,6 +130,15 @@ def mappings(value: Any) -> Iterator[str]:
             yield from mappings(v)
 
 
+def named_by(parameters: Mapping[str, JsonValue]) -> list[tuple[str, str]]:
+    """Each node a parameter names by id, with the parameter that names it."""
+    out = [(k, str(parameters[k])) for k in ("approves", "approvedBy") if parameters.get(k)]
+    for o in cast(JsonList, parameters.get("options") or []):
+        if isinstance(o, dict) and isinstance(call := o.get("call"), dict):
+            out.append(("options", str(call.get("node"))))
+    return out
+
+
 def named_nodes(parameters: Mapping[str, JsonValue]) -> list[str]:
     """Nodes a parameter names by id: the write a review approves, the review that approves a write."""
     out = [str(parameters[k]) for k in ("approves", "approvedBy") if parameters.get(k)]
@@ -172,7 +181,32 @@ def _ancestors(d: WorkflowDefinition, node_id: str) -> set[str]:
     return found
 
 
-def _approval_order(d: WorkflowDefinition, known: set[str]) -> list[Json]:
+def ancestors(d: WorkflowDefinition, node_id: str) -> set[str]:
+    """Every step a run may have finished before `node_id` starts: the steps whose output it can read."""
+    return _ancestors(d, node_id)
+
+
+def step_name(d: WorkflowDefinition, registry: TypeRegistry, node_id: str) -> str:
+    """A step as a builder reads it: the name they gave it, else its type's name, else its id for a step the
+    definition does not hold."""
+    n = d.node(node_id)
+    if n is None:
+        return node_id
+    if n.name:
+        return n.name
+    t = registry.find(n.type, n.type_version)
+    return t.label if t is not None else node_id
+
+
+def _way_out(port: str) -> str:
+    """A port name in words: `notFound` reads "Not found"."""
+    if not port:
+        return "unnamed"
+    words = re.sub(r"(?<!^)([A-Z])", r" \1", port).replace("_", " ").lower()
+    return words[:1].upper() + words[1:]
+
+
+def _approval_order(d: WorkflowDefinition, known: set[str], registry: TypeRegistry) -> list[Json]:
     """A review approves a write's call as it stands when the review opens, so everything the write's input reads must
     have run before the review, and the review must run before the write. Otherwise a value read as nothing would be
     approved, and the token bound to it."""
@@ -190,16 +224,23 @@ def _approval_order(d: WorkflowDefinition, known: set[str]) -> list[Json]:
             if target is None or target_id not in known:
                 continue
             if n.id not in _ancestors(d, target_id):
-                out.append(_check(n.id, "approval_order", f"{n.id} approves {target_id}, which does not follow it."))
+                reviewer_name, write_name = step_name(d, registry, n.id), step_name(d, registry, target_id)
+                msg = f"{reviewer_name} approves {write_name}, which does not follow it."
+                out.append(_check(n.id, "approval_order", msg))
             for path in mappings(target.parameters.get("input") or {}):
                 ref = referenced_node(path)
                 if ref is not None and ref not in before:
-                    msg = f"{target_id} reads {path}, which has not run when {n.id} opens, so it cannot be approved."
+                    msg = (
+                        f"{step_name(d, registry, target_id)} reads a value from a step that has not run when "
+                        f"{step_name(d, registry, n.id)} opens, so it cannot be approved."
+                    )
                     out.append(_check(n.id, "approval_order", msg))
     for n in d.nodes:
         reviewer = n.parameters.get("approvedBy")
         if reviewer and str(reviewer) in known and str(reviewer) not in _ancestors(d, n.id):
-            out.append(_check(n.id, "approval_order", f"{n.id} is approved by {reviewer}, which does not precede it."))
+            reviewer_name = step_name(d, registry, str(reviewer))
+            msg = f"{step_name(d, registry, n.id)} is approved by {reviewer_name}, which does not come before it."
+            out.append(_check(n.id, "approval_order", msg))
     return out
 
 
@@ -244,14 +285,15 @@ def _unmarked_file_inputs(d: WorkflowDefinition, registry: TypeRegistry) -> list
                     continue
                 title = str(json_object(field).get("title") or name) if isinstance(field, dict) else name
                 msg = (
-                    f"{n.id} reads {title} as a file, so the trigger's input must declare {name} a file field "
-                    '(format "file"); otherwise the start form asks for a file id in a text box.'
+                    f"{step_name(d, registry, n.id)} reads {title} as a file, so the trigger's input form must mark "
+                    f"{name} "
+                    "as a file; otherwise the start form asks for a file id in a text box."
                 )
                 out.append(_check(trigger.id, "file_input_unmarked", msg, "inputSchema"))
     return out
 
 
-def _invalid_input_schemas(d: WorkflowDefinition) -> list[Json]:
+def _invalid_input_schemas(d: WorkflowDefinition, registry: TypeRegistry) -> list[Json]:
     """`input_schema_invalid`: a trigger's `inputSchema` that is not JSON Schema (a `type` JSON Schema does not have,
     `required` that is not a list). A run's input is held to this schema when it starts, so one that cannot be read
     would refuse every start."""
@@ -264,13 +306,16 @@ def _invalid_input_schemas(d: WorkflowDefinition) -> list[Json]:
             cast(Any, jsonschema.Draft202012Validator).check_schema(schema)
         except jsonschema.SchemaError as e:
             where = ".".join(str(p) for p in e.absolute_path) or "the schema"
-            msg = f"The input schema is not valid JSON Schema at {where}: {e.message}."
+            msg = f"The input form of {step_name(d, registry, n.id)} cannot be read ({where}): {e.message}."
             out.append(_check(n.id, "input_schema_invalid", msg, "inputSchema"))
     return out
 
 
-def _check(node: str | None, code: str, message: str, field: str | None = None) -> Json:
-    return {"node": node, "level": "error", "code": code, "message": message, "field": field}
+def _check(node: str | None, code: str, message: str, field: str | None = None, port: str | None = None) -> Json:
+    """A check; `port` names the way out or in a connection check is about, so a caller never reads it from the
+    message."""
+    check: Json = {"node": node, "level": "error", "code": code, "message": message, "field": field}
+    return {**check, "port": port} if port is not None else check
 
 
 # What a JSON type is called in a parameter check, for people who never read the schema.
@@ -285,23 +330,69 @@ _TYPE_WORDS = {
 }
 
 
+def _form_labels(err: Any, field: str | None, ui: Mapping[str, JsonValue]) -> tuple[list[str], Json]:
+    """Where in the form an error is, in the labels the form shows (`Conditions`, `row 2`), and the fields of the entry
+    it is in. A list entry reads as its row; a name a person typed (a formula's, a field's) stays as typed."""
+    fields = cast(Json, ui.get("fields") or {})
+    spec = cast(Json, fields.get(field) or {}) if field else {}
+    parts = [str(spec.get("label") or field or "A setting")]
+    item = spec.get("item")
+    entry = cast(Json, cast(Json, item).get("fields") or {}) if isinstance(item, dict) else {}
+    for step in list(cast(list[object], err.path))[1:]:
+        if isinstance(step, int):
+            parts.append(f"row {step + 1}")
+            continue
+        sub = cast(Json, entry.get(str(step)) or {})
+        parts.append(str(sub.get("label") or step))
+        nested = sub.get("item")
+        entry = cast(Json, cast(Json, nested).get("fields") or {}) if isinstance(nested, dict) else {}
+    return parts, entry
+
+
 def _plain(err: Any, field: str | None, ui: Mapping[str, JsonValue]) -> str:
-    """A schema error as the step's form names it: the field's label, then what it must be, in words. A nested value
-    keeps its path after the label; a rule with no plain wording keeps the validator's message."""
-    fields = ui.get("fields")
-    spec = fields.get(field) if field and isinstance(fields, dict) else None
-    label = str(spec["label"]) if isinstance(spec, dict) and spec.get("label") else field or "A setting"
-    inner = ".".join(str(p) for p in list(cast(list[object], err.path))[1:])
-    where = f"{label} ({inner})" if inner else label
+    """A schema error as the step's form names it: the setting's label (with its row), then what it must be, in words.
+    A setting's schema may say its own problem in `x-problem`; no validator text reaches a builder."""
+    parts, entry = _form_labels(err, field, ui)
     rule, value = str(err.validator), cast(object, err.validator_value)
-    if rule == "required" and not err.path:
-        return f"{where} is required."
+    schema = cast(Json, err.schema)
+    # A value inside a setting that has no form of its own (a field list kept as text) names itself by its `title`.
+    if rule != "required" and len(parts) > 1 and isinstance(schema.get("title"), str):
+        parts[-1] = str(schema["title"])
+    where = ", ".join(parts)
+    if rule == "required":
+        if not err.path:
+            return f"{where} is required."
+        instance = err.instance
+        missing = [k for k in cast(list[str], value) if not isinstance(instance, dict) or k not in instance]
+        name = missing[0] if missing else "A value"
+        label = str(cast(Json, entry.get(name) or {}).get("label") or name)
+        return f"{where}, {label} needs a value."
+    if said := schema.get("x-problem"):
+        return f"{where} {said}."
     if rule == "type":
         wanted = cast(list[object], value) if isinstance(value, list) else [value]
         return f"{where} must be {' or '.join(_TYPE_WORDS.get(str(w), str(w)) for w in wanted)}."
     if rule == "enum" and isinstance(value, list):
-        return f"{where} must be one of {', '.join(map(str, cast(list[object], value)))}."
-    return f"{where}: {err.message}"
+        one_of = schema.get("oneOf")
+        titled = [json_object(o) for o in one_of] if isinstance(one_of, list) else []
+        words = {str(o["const"]): str(o["title"]) for o in titled if "const" in o and "title" in o}
+        return f"{where} must be one of {', '.join(words.get(str(v), str(v)) for v in cast(list[object], value))}."
+    if rule == "minLength":
+        return f"{where} cannot be empty." if value == 1 else f"{where} needs at least {value} characters."
+    if rule == "maxLength":
+        return f"{where} is too long: at most {value} characters."
+    if rule in ("minimum", "maximum"):
+        return f"{where} must be at {'least' if rule == 'minimum' else 'most'} {value}."
+    if rule in ("exclusiveMinimum", "exclusiveMaximum"):
+        return f"{where} must be {'more' if rule == 'exclusiveMinimum' else 'less'} than {value}."
+    if rule in ("minItems", "maxItems"):
+        kind = "at least" if rule == "minItems" else "at most"
+        return f"{where} needs {kind} {value} {'entry' if value == 1 else 'entries'}."
+    if rule == "additionalProperties":
+        return f"{where} has a setting this step does not know."
+    if rule == "pattern":
+        return f"{where} is not in a form this step accepts."
+    return f"{where} has a value this step does not accept."
 
 
 def _parameter(err: Any) -> str | None:
@@ -341,7 +432,11 @@ def advise(d: WorkflowDefinition, registry: TypeRegistry) -> list[Json]:
             if not meets:
                 continue
             warned.add(n.id)
-            msg = f"{n.id} is reached by several branches from {source[0]}, so it runs once per branch; join them."
+            msg = (
+                f"{step_name(d, registry, n.id)} is reached by several branches from "
+                f"{step_name(d, registry, source[0])}, "
+                "so it runs once per branch; join them."
+            )
             out.append({**_check(n.id, "fork_without_join", msg), "level": "warning"})
     return out
 
@@ -367,7 +462,7 @@ def validate(d: WorkflowDefinition, registry: TypeRegistry) -> list[Json]:
     checks: list[Json] = []
     ids = [n.id for n in d.nodes]
     for dup in sorted({i for i in ids if ids.count(i) > 1}):
-        checks.append(_check(dup, "duplicate_node", f"Two nodes are named {dup}."))
+        checks.append(_check(dup, "duplicate_node", "Two steps share one id; delete one of them."))
     known = set(ids)
     out_ports: dict[str, list[str]] = {}
     in_ports: dict[str, list[str]] = {}
@@ -377,15 +472,18 @@ def validate(d: WorkflowDefinition, registry: TypeRegistry) -> list[Json]:
         if t is None:
             versions = registry.versions(n.type)
             if versions:
-                msg = f"{n.type} has no version {n.type_version}; registered: {', '.join(map(str, versions))}."
+                msg = f"{step_name(d, registry, n.id)} uses a version of its step type that is not installed."
                 checks.append(_check(n.id, "unknown_type_version", msg))
             else:
-                checks.append(_check(n.id, "unknown_type", f"No node type {n.type} is registered."))
+                checks.append(
+                    _check(n.id, "unknown_type", f"The step type of {step_name(d, registry, n.id)} is not installed.")
+                )
             continue
         out_ports[n.id] = t.output_ports(n.parameters)
         named = out_ports[n.id]
-        if repeated := sorted({p for p in named if named.count(p) > 1}):
-            checks.append(_check(n.id, "duplicate_port", f"Each way out has its own name: {', '.join(repeated)}."))
+        if repeated := sorted({p for p in named if p and named.count(p) > 1}):
+            msg = f"{step_name(d, registry, n.id)} has two ways out with the same name: {', '.join(repeated)}."
+            checks.append(_check(n.id, "duplicate_port", msg, t.outputs_from, port=repeated[0]))
         in_ports[n.id] = [p.name for p in t.inputs]
         if t.group == "trigger":
             triggers.append(n.id)
@@ -393,49 +491,69 @@ def validate(d: WorkflowDefinition, registry: TypeRegistry) -> list[Json]:
             cast(Any, jsonschema.Draft202012Validator(dict(t.parameters))).iter_errors(n.parameters),
             key=lambda e: str(e.path),
         )
+        # A wrong choice fails both its `enum` and its `oneOf` titles; the person reads one problem.
+        wrong_choice = {tuple(e.absolute_path) for e in errors if e.validator == "enum"}
         for err in errors:
+            if err.validator == "oneOf" and tuple(err.absolute_path) in wrong_choice:
+                continue
             field = _parameter(err)
-            checks.append(_check(n.id, "invalid_parameter", _plain(err, field, t.ui), field))
-        for ref in named_nodes(n.parameters):
+            msg = f"{step_name(d, registry, n.id)}: {_plain(err, field, t.ui)}"
+            checks.append(_check(n.id, "invalid_parameter", msg, field))
+        for param, ref in named_by(n.parameters):
             if ref not in known:
-                checks.append(
-                    _check(n.id, "unknown_reference", f"{n.id} names node {ref}, which is not in this workflow.")
-                )
-        for path in mappings(n.parameters):
-            ref = referenced_node(path)
-            if ref is not None and ref not in known:
-                checks.append(
-                    _check(n.id, "unknown_reference", f"{path} reads node {ref}, which is not in this workflow.")
-                )
+                msg = f"{step_name(d, registry, n.id)} names a step that is no longer in this workflow."
+                checks.append(_check(n.id, "unknown_reference", msg, param))
         for path in _loop_paths_outside(n.parameters):
-            msg = f"{path} reads a list item, which only the input of a step with For each has."
-            checks.append(_check(n.id, "item_outside_loop", msg))
+            param = next((k for k, v in n.parameters.items() if path in set(mappings(v))), None)
+            msg = f"{step_name(d, registry, n.id)} reads a list item, which only the input of a step with For each has."
+            checks.append(_check(n.id, "item_outside_loop", msg, param))
+        for param, value in n.parameters.items():
+            for path in mappings(value):
+                ref = referenced_node(path)
+                if ref is not None and ref not in known:
+                    msg = f"{step_name(d, registry, n.id)} reads a field of a step that is no longer in this workflow."
+                    checks.append(_check(n.id, "unknown_reference", msg, param))
     if not triggers:
-        checks.append(_check(None, "no_trigger", "A workflow starts at one trigger node; this one has none."))
+        checks.append(_check(None, "no_trigger", "A workflow starts at one trigger; this one has none."))
     elif len(triggers) > 1:
-        checks.append(_check(None, "many_triggers", f"A workflow has one trigger; found {', '.join(triggers)}."))
+        checks.append(
+            _check(
+                None,
+                "many_triggers",
+                f"A workflow has one trigger; found {len(triggers)}: "
+                f"{', '.join(step_name(d, registry, i) for i in triggers)}.",
+            )
+        )
     for c in d.connections:
         s, t_ = c.source, c.target
         if s.node not in known:
-            checks.append(_check(None, "unknown_node", f"A connection starts at {s.node}, which is not a node."))
+            checks.append(_check(None, "unknown_node", "A connection starts at a step that is not in this workflow."))
         elif s.node in out_ports and s.port not in out_ports[s.node]:
-            checks.append(_check(s.node, "unknown_port", f"{s.node} has no out port {s.port}."))
+            msg = f"A connection leaves {step_name(d, registry, s.node)} by a way out it does not have."
+            checks.append(_check(s.node, "unknown_port", msg, port=s.port))
         if t_.node not in known:
-            checks.append(_check(None, "unknown_node", f"A connection ends at {t_.node}, which is not a node."))
+            checks.append(_check(None, "unknown_node", "A connection ends at a step that is not in this workflow."))
         elif t_.node in in_ports and t_.port not in in_ports[t_.node]:
-            checks.append(_check(t_.node, "unknown_port", f"{t_.node} has no in port {t_.port}."))
+            msg = f"A connection enters {step_name(d, registry, t_.node)} by a way in it does not have."
+            checks.append(_check(t_.node, "unknown_port", msg, port=t_.port))
     for node_id, ports in out_ports.items():
         for port in ports:
             if not d.targets(node_id, port):
-                checks.append(_check(node_id, "unconnected_port", f"Out port {port} of {node_id} leads nowhere."))
-    checks.extend(_approval_order(d, known))
+                who = step_name(d, registry, node_id)
+                alone = len(ports) == 1
+                msg = f"Nothing follows {who}." if alone else f"Nothing follows the {_way_out(port)} way out of {who}."
+                checks.append(_check(node_id, "unconnected_port", msg, port=port))
+    checks.extend(_approval_order(d, known, registry))
     checks.extend(_unmarked_file_inputs(d, registry))
-    checks.extend(_invalid_input_schemas(d))
+    checks.extend(_invalid_input_schemas(d, registry))
     for n in d.nodes:
         t = registry.find(n.type, n.type_version)
         sources = {c.source.node for c in d.connections if c.target.node == n.id}
         if t is not None and t.deferred and len(sources) < 2:
-            msg = f"{n.id} joins branches, so it needs a connection from at least two steps; it has {len(sources)}."
+            msg = (
+                f"{step_name(d, registry, n.id)} joins branches, so it needs connections from at least two steps; "
+                f"it has {len(sources)}."
+            )
             checks.append(_check(n.id, "join_needs_branches", msg))
     if len(triggers) == 1:
         reached = {triggers[0]}
@@ -448,5 +566,11 @@ def validate(d: WorkflowDefinition, registry: TypeRegistry) -> list[Json]:
                     frontier.append(c.target.node)
         for n in d.nodes:
             if n.id not in reached:
-                checks.append(_check(n.id, "unreachable", f"No path from {triggers[0]} reaches {n.id}."))
+                checks.append(
+                    _check(
+                        n.id,
+                        "unreachable",
+                        f"Nothing leads from {step_name(d, registry, triggers[0])} to {step_name(d, registry, n.id)}.",
+                    )
+                )
     return checks

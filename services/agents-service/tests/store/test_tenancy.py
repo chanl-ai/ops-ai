@@ -152,10 +152,13 @@ def test_only_the_two_loops_reach_past_rls() -> None:
         # store/agent_registry.py: the start-up serving reload reads every tenant's published agent pointers, then
         # each tenant's specs under its own (api/agent_registry.py serve_published).
         "store/agent_registry.py",
+        # store/schedules.py: the schedule clock lists the tenants holding a schedule, then works each under its own.
+        "store/schedules.py",
     }
-    # Memories.tenants() lists tenants past RLS for the retention loop alone, which then works each under its own.
+    # Memories.tenants() and WorkflowSchedules.tenants() list tenants past RLS for one loop each (the retention sweep,
+    # the schedule clock), which then works each under its own.
     tenants_users = {p.relative_to(SRC).as_posix() for p in SRC.rglob("*.py") if ".tenants()" in p.read_text()}
-    assert tenants_users == {"api/memory_retention.py"}
+    assert tenants_users == {"api/memory_retention.py", "api/schedule_clock.py"}
     tasks_users = {p.relative_to(SRC).as_posix() for p in SRC.rglob("*.py") if "as_thread_tenant" in p.read_text()} - {
         "api/tenant_tasks.py"
     }
