@@ -11,7 +11,7 @@ const viewable = (mime: string) => mime === 'application/pdf' || mime.startsWith
 /**
  * The file's pages, drawn by the shared document viewer with each field's box over the text it was read from.
  */
-export function FileViewer({ file, boxes, selected, onSelect }: { file: FileDetail; boxes?: ViewerBox[]; selected?: string | null; onSelect?: (key: string) => void }) {
+export function FileViewer({ file, boxes, selected, onSelect, page }: { file: FileDetail; boxes?: ViewerBox[]; selected?: string | null; onSelect?: (key: string) => void; page?: number }) {
   const clean = file.scan.status === 'clean';
   const preview = useFilePreviewUrl(file.id, clean && viewable(file.mime));
   const frame = 'h-[min(78vh,960px)] w-full rounded-lg border bg-muted/30';
@@ -24,5 +24,5 @@ export function FileViewer({ file, boxes, selected, onSelect }: { file: FileDeta
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
       </div>
     );
-  return <DocumentViewer url={preview.url} mime={file.mime} boxes={boxes} selected={selected} onSelect={onSelect} className={frame} />;
+  return <DocumentViewer url={preview.url} mime={file.mime} boxes={boxes} selected={selected} onSelect={onSelect} page={page} className={frame} />;
 }

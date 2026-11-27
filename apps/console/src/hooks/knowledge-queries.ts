@@ -38,6 +38,7 @@ export const kk = {
   tombstones: (id: string) => ['knowledge', 'source', id, 'tombstones'] as const,
   aiEstimate: (id: string) => ['knowledge', 'source', id, 'ai-estimate'] as const,
   item: (id: string) => ['knowledge', 'item', id] as const,
+  itemText: (id: string) => ['knowledge', 'item', id, 'text'] as const,
   lookups: ['knowledge', 'lookups'] as const,
   sourceKinds: ['knowledge', 'source-kinds'] as const,
 };
@@ -77,6 +78,14 @@ export const useItemPieces = (id: string | undefined, search: string, enabled: b
   );
 export const useItem = (id: string | null) =>
   useTeamQuery({ queryKey: kk.item(id ?? ''), queryFn: () => api.knowledge.items.get(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'processing') });
+/** What was read from an item's file, by section with page places, for the document view; asked again while the file is still being read. */
+export const useItemText = (id: string) =>
+  useTeamQuery({
+    queryKey: kk.itemText(id),
+    queryFn: () => sdk((ops) => ops.raw.kb.items_get_item_text({ path: { item_id: id } })),
+    enabled: !!id,
+    refetchInterval: (q) => pollWhile(q.state.data?.status === 'reading'),
+  });
 export const useSourceKinds = (enabled = true) => useTeamQuery({ queryKey: kk.sourceKinds, queryFn: api.knowledge.sourceKinds, enabled, staleTime: 60_000 });
 /** What a website or app source with `config` would take in, before it exists; asked only while the settings are valid. */
 /** What a plugin source's picker offers for `input` (a search, or what a picked parent holds). */

@@ -31,6 +31,7 @@ export function DocumentViewer({
   boxes = [],
   selected,
   onSelect,
+  page,
   className,
 }: {
   url: string;
@@ -38,6 +39,8 @@ export function DocumentViewer({
   boxes?: ViewerBox[];
   selected?: string | null;
   onSelect?: (key: string) => void;
+  /** Shows only this page (1-based), for a viewer with a page stepper; every page in one column when left out. */
+  page?: number;
   className?: string;
 }) {
   const [pages, setPages] = React.useState<{ src: string; width: number; height: number }[] | null>(null);
@@ -99,7 +102,7 @@ export function DocumentViewer({
     );
   return (
     <div ref={holder} className={cn('flex flex-col gap-3 overflow-auto rounded-lg border bg-muted/30 p-3', className)} data-testid="document-viewer">
-      {pages.map((p, i) => (
+      {pages.map((p, i) => (page && page !== i + 1 ? null : (
         <div key={i} className="relative w-full overflow-hidden rounded-sm bg-white shadow-xs" style={{ aspectRatio: `${p.width} / ${p.height}` }} data-testid={`viewer-page-${i + 1}`}>
           {/* eslint-disable-next-line @next/next/no-img-element -- a rendered page held in memory */}
           <img src={p.src} alt={`Page ${i + 1}`} className="absolute inset-0 size-full" />
@@ -122,7 +125,7 @@ export function DocumentViewer({
               />
             ))}
         </div>
-      ))}
+      )))}
     </div>
   );
 }

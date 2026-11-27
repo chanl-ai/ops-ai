@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { AlertTriangle, BadgeCheck, Copy, ExternalLink, History, MinusCircle, PauseCircle, Search, UserRound } from 'lucide-react';
+import Link from 'next/link';
+import { AlertTriangle, BadgeCheck, BookOpen, Copy, ExternalLink, History, MinusCircle, PauseCircle, Search, UserRound } from 'lucide-react';
 
 import { FileDownloadButton } from '@/components/files/file-actions';
 import { DetailSheet, type DetailSheetNavigation } from '@/components/shared/detail-sheet';
@@ -27,7 +28,9 @@ import { PRESET_LABEL, STRATEGY_LABEL } from '@/components/sources/ingest-meta';
 
 import { ERROR_CLASS_LABEL, FreshnessBadge, ItemStatusBadge, MimeIcon, SensitivityBadge } from './knowledge-meta';
 
-const READ_BY: Record<string, string> = { text: 'Text', ocr: 'OCR', mixed: 'Mixed: text and OCR' };
+export const READ_BY: Record<string, string> = { text: 'Text', ocr: 'OCR', mixed: 'Mixed: text and OCR', model: 'Read by a model' };
+/** The document view of an item, opened at `page` when a citation names one. */
+export const documentHref = (id: string, page?: number) => `/data/knowledge/documents/${id}${page ? `?page=${page}` : ''}`;
 const BLOCK_WORD: Record<string, [string, string]> = { title: ['title', 'titles'], heading: ['heading', 'headings'], paragraph: ['paragraph', 'paragraphs'], table: ['table', 'tables'], list: ['list', 'lists'], image: ['image', 'images'] };
 
 /** A page's kept blocks in words, such as "1 title, 2 headings, 6 paragraphs". */
@@ -127,6 +130,11 @@ export function DocumentSheet({
         footerActions={
           item && (
             <>
+              <Button size="sm" variant="outline" asChild>
+                <Link href={documentHref(item.id, page)}>
+                  <BookOpen className="size-3.5" /> Open document
+                </Link>
+              </Button>
               {item.fileId && <FileDownloadButton fileId={item.fileId} name={item.path.split('/').pop() ?? item.title} label="Download original" />}
               <Button size="sm" variant="outline" disabled={busy} onClick={() => onVerify(!item.verified)}>
                 <BadgeCheck className="size-3.5" /> {item.verified ? 'Remove verification' : 'Mark verified'}
