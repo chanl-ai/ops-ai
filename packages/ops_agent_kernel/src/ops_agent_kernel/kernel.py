@@ -1482,8 +1482,8 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     # call with no tools (memory extraction, a workflow's AI step) answers with its schema's JSON only, so it is offered
     # nothing to call.
     builtins = bool(req.tools) or req.output_schema is None
-    # Many tools: each is deferred and pydantic-ai's tool search (search.strategy) reveals the ones the model finds;
-    # its `search_tools` replaces the kernel's own, so that one is not added.
+    # Many tools: each is deferred and a search reveals the ones the model finds; on Pydantic AI its tool search
+    # (search.strategy) replaces the kernel's `search_tools`, on Strands the kernel's deferred search does.
     above = req.settings.tool_search_above
     # A paused turn resumes on the loop that paused it; a new one on the ports' loop.
     on_strands = (
