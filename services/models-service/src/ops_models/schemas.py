@@ -4,6 +4,8 @@ are its callers. Routes build their JSON by hand; `ops_service_kit.contract` che
 
 from __future__ import annotations
 
+from datetime import datetime
+from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import Field
@@ -169,6 +171,50 @@ class CallPage(ListResult[CallOut]):
 class Admission(Out):
     admitted: bool
     remaining: str
+
+
+BudgetKind = Literal["thread", "run", "step", "group", "eval", "draft"]
+
+
+class BudgetIn(In):
+    """A budget's caps, set by the service that owns its conversation or run. A null cap is no cap; a repeat with other
+    caps moves them and never the spend. Kind, parent, team and creator are kept from the first PUT."""
+
+    kind: BudgetKind
+    # A step or group budget names its run budget.
+    parent_id: str | None = Field(default=None, max_length=200)
+    team_id: str = Field(min_length=1, max_length=64)
+    # The module that creates it (`api/budgets.py`), for an operator reading the table.
+    created_by: str = Field(min_length=1, max_length=80)
+    max_cost_usd: Decimal | None = Field(default=None, ge=0, max_digits=18, decimal_places=6)
+    max_calls: int | None = Field(default=None, ge=1)
+    max_tokens: int | None = Field(default=None, ge=1)
+    expires_at: datetime | None = None
+
+
+class BudgetOut(Out):
+    """A budget's caps, what was spent against them and what calls in flight hold. `exhausted` names the first cap
+    the spend has reached."""
+
+    id: str
+    kind: BudgetKind
+    parent_id: str | None
+    team_id: str
+    created_by: str
+    max_cost_usd: Decimal | None
+    max_calls: int | None
+    max_tokens: int | None
+    spent_cost_usd: Decimal
+    spent_calls: int
+    spent_tokens: int
+    reserved_cost_usd: Decimal
+    reserved_tokens: int
+    exhausted: Literal["cost", "calls", "tokens"] | None
+    updated_at: datetime
+
+
+class BudgetQuery(In):
+    ids: list[str] = Field(min_length=1, max_length=200)
 
 
 class ChatCompletionRequest(Passthrough):

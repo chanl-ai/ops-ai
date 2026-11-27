@@ -73,6 +73,13 @@ CODES: dict[str, Code] = {
     "key_not_registered": Code("refused", False, "The assistant has no model key yet."),
     "invalid_key": Code("refused", False, "The assistant's model key was not accepted."),
     "tenant_budget_exhausted": Code("refused", False, "The team's budget for the assistant is spent for now."),
+    # A conversation's or run's budget in models-service: the check calls past it are capped per reply, and a caller
+    # that names a budget wrongly or not at all is a bug in the caller, never retried.
+    "check_cap_reached": Code("refused", False, "This reply used all the checks its budget allows."),
+    "budget_not_found": Code("input", False, "The assistant's budget for this was not set up."),
+    "budget_header_invalid": Code("input", False, "The assistant named its budget in a form that was not accepted."),
+    "budget_required": Code("input", False, "The assistant called its model without a budget."),
+    "replay_key_required": Code("input", False, "The assistant called its model without a replay key."),
     "images_not_cleared": Code("refused", False, "This assistant may not read images or files."),
     "provider_key_missing": Code("refused", False, "The assistant's model provider is not set up yet."),
     "provider_auth_failed": Code("refused", False, "The assistant's model provider refused its key."),

@@ -407,6 +407,22 @@ class Settings(BaseSettings):
     models_provider_registry_extra: Path | None = None
     # How long a rotated model key's previous secret keeps working, so callers can pick up the new one.
     model_key_overlap_seconds: int = 900
+    # models-service budgets and the replay record (docs/design/agents-v2/model-gateway.md, "Settings").
+    # Hours a recorded answer can be replayed; a retry after that pays for the call again.
+    models_replay_hours: int = Field(default=168, ge=1)
+    # Request fields left out of the replay hash besides stream, user, metadata and stream_options.
+    models_replay_strip_fields: list[str] = Field(default_factory=list[str])
+    # Life of a reservation whose call never settled.
+    models_reservation_seconds: int = Field(default=300, ge=1)
+    # Output tokens a reservation assumes when the request sets no max_tokens.
+    models_reserve_output_tokens: int = Field(default=1024, ge=1)
+    # Calls of purpose check or judge admitted past a spent budget, per replay key.
+    models_check_calls_per_key: int = Field(default=6, ge=0)
+    # max_tokens forced on a call of purpose closing.
+    models_closing_max_tokens: int = Field(default=600, ge=1)
+    # Refuse a model key of kind agent, workflow or purpose that sends no X-Budget-Id (422 budget_required). Off
+    # until every caller sends the budget headers.
+    models_require_budget: bool = False
     # platform-service: the identity issuer. The public port serves sign-in and the key set; the internal port serves
     # API-key introspection and is never exposed by the public host.
     platform_url: str | None = None
@@ -541,6 +557,8 @@ class Settings(BaseSettings):
                 "secrets_egress:manage",
                 # audit:create: its relay writes a schedule's save and clear to the account's audit log.
                 "audit:create",
+                # models:budgets: it creates a conversation's or run's budget in models-service before the first call.
+                "models:budgets",
             ],
             # deployments:view: it reads a mailbox's reply sender when a send_reply names the mailbox.
             # settings:view: a tool module publish reads the team's publishReview live.

@@ -84,6 +84,8 @@ def seed_team(app: FastAPI, client: httpx.AsyncClient, models: Models) -> SeedTe
             assert made.status_code == 201, made.text
         assert (await http.put(f"/v1/provider-keys/{name}", json={"value": KEY})).status_code == 200
         _, secret = await on_app.key(budget="100")
+        budget = {"kind": "thread", "teamId": "team_budget", "createdBy": "tests", "maxCalls": 100}
+        assert (await http.put(f"/v1/models/budgets/{name}", json=budget, headers=SERVICE)).status_code == 200
         for i in range(n):
             tag = f"{name}-{n}-{i}"
             conn = {"name": tag, "type": "openai-compatible", "baseUrl": "http://up/v1"}
@@ -95,7 +97,9 @@ def seed_team(app: FastAPI, client: httpx.AsyncClient, models: Models) -> SeedTe
             await on_app.key()
             assert (await on_app.complete(secret)).status_code == 200
             assert (await http.put(f"/v1/provider-keys/{tag}", json={"value": KEY})).status_code == 200
-        return Seeded(headers={}, ids={"name": name, "provider_id": "prov_scripted"}, service_headers=SERVICE)
+        return Seeded(
+            headers={}, ids={"name": name, "provider_id": "prov_scripted", "budget_id": name}, service_headers=SERVICE
+        )
 
     return seed
 
