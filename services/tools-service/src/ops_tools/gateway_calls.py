@@ -27,7 +27,7 @@ from .environments import TEST
 from .executor import ConsoleRan, ConsoleRefused, Executor, Trial, invalid_fields
 from .limits import amount_refusal
 from .modules.directory import Sees
-from .modules.policy import WriteApprovals, asker_refusal
+from .modules.policy import MAKERS_ASK_UNSET, WriteApprovals, asker_refusal
 from .modules.review_events import SYSTEM_TOOLS
 from .opa import OpaClient
 from .registry import Resolved, ToolRegistry
@@ -551,7 +551,12 @@ class GatewayCalls:
             levels = await self.approvals.levels(caller.tenant_id, caller.team_id)
             if levels[0] is None:
                 # Whether this write needs an approval cannot be known, so it never runs; reads are unaffected.
-                reason = "The team's approval rules could not be read, so this write was not run. Try again shortly."
+                reason = (
+                    "Your team has not set whether writes an app or template marks ask first wait for approval, so "
+                    "this write was not run. An admin sets it in Settings, Approvals."
+                    if levels[1].get(MAKERS_ASK_UNSET)
+                    else "The team's approval rules could not be read, so this write was not run. Try again shortly."
+                )
                 row.update(decision="deny", reasons=[reason])
                 await self.log.record(
                     **row, outcome="refused", latency_ms=elapsed(), error={"code": RULES_UNAVAILABLE, "message": reason}

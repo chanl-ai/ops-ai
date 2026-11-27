@@ -59,8 +59,8 @@ REQUESTERS = ("Maya Okafor", "Priya Shah", "Anika Singh")
 WORKFLOW_TOOLS = ("send_reply", "open_case", "send_acknowledgement", "read_file", "read_document", "search_knowledge")
 # The mail sends: a reply is declared to wait for a reviewer, a maker's ask that holds while the workspace keeps
 # makers' asks on (appChanges makersAsk) and is dropped for a team's call when it turns them off
-# (services/tools-service/src/ops_tools/modules/policy.py:138); a call naming no team keeps it (policy.py:92). An
-# acknowledgement leaves at once.
+# (`WriteApprovals.answer` in services/tools-service/src/ops_tools/modules/policy.py); a call naming no team keeps it
+# (`WriteApprovals.levels`). An acknowledgement leaves at once.
 SENDS = {
     "send_reply": ("Email a reply to a customer.", True),
     "send_acknowledgement": ("Email an automatic acknowledgement to the sender of a message; no approval.", False),

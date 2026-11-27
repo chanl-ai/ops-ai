@@ -88,10 +88,11 @@ export default function ApprovalsPage() {
       twoPersonRule: !mayDecide,
       testAccountsNeverAsk: saved.testAccountsNeverAsk !== false,
       testRunsAsk: saved.testRunsAsk !== false,
-      // Unset means a maker's ask-first holds; a new workspace stores false for the whole workspace.
-      makersAsk: saved.makersAsk !== false,
+      // A new workspace stores it; not stored, the gateway refuses the team's writes until an admin saves on or off.
+      makersAsk: saved.makersAsk === true,
     },
   });
+  const makersUnset = !!changes && typeof saved.makersAsk !== 'boolean';
   const ask = form.watch('ask');
   const answer = form.watch('answer');
   const [overrides, setOverrides] = React.useState<Record<string, Entry>>(savedByApp);
@@ -231,16 +232,23 @@ export default function ApprovalsPage() {
             requiredRole="admin"
             onSave={saveMakers}
             saving={set.isPending}
-            dirty={form.formState.dirtyFields.makersAsk === true}
+            dirty={form.formState.dirtyFields.makersAsk === true || makersUnset}
           >
             <Controller
               control={form.control}
               name="makersAsk"
               render={({ field }) => (
-                <label className="flex items-center gap-3 text-sm">
-                  <Switch checked={field.value} onCheckedChange={field.onChange} disabled={locked} aria-label={MAKERS} data-testid="approvals-makers-switch" />
-                  {field.value ? 'On: they wait for approval' : 'Off: they run unless the switch above asks'}
-                </label>
+                <div className="flex flex-col gap-2">
+                  <label className="flex items-center gap-3 text-sm">
+                    <Switch checked={field.value} onCheckedChange={field.onChange} disabled={locked} aria-label={MAKERS} data-testid="approvals-makers-switch" />
+                    {field.value ? 'On: they wait for approval' : 'Off: they run unless the switch above asks'}
+                  </label>
+                  {makersUnset && (
+                    <p className="text-sm text-destructive" data-testid="approvals-makers-unset">
+                      Not set: this team’s app changes are refused until you choose on or off and save.
+                    </p>
+                  )}
+                </div>
               )}
             />
           </SettingCard>

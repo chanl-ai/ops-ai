@@ -24,7 +24,7 @@ from ops_store.dialect import insert_ignore, upsert
 from ops_store.outbox import add as add_event
 from ops_store.store import Store
 
-from .policies import store_makers_ask, write_new_workspace_policies
+from .policies import PolicyStore, write_new_workspace_policies
 from .roles import bump_version, ensure_builtin_roles, ensure_owner, mirror_membership, seed_owner
 from .tables import members, platform_outbox, role_assignments, teams, tenants, users
 from .tenancy import SEED_ID_CHECK, TenantDb
@@ -67,8 +67,7 @@ async def write_seed(
         made_tenant = await c.execute(insert_ignore(c, tenants, first, keys=["id"]))
         seeded: list[dict[str, Any]] = data.get("teams") or []
         if made_tenant.rowcount == 1:
-            await write_new_workspace_policies(c, tenant_id, at=now)
-        await store_makers_ask(c, tenant_id, at=now)
+            await write_new_workspace_policies(PolicyStore(db), c, tenant_id)
         if security_team in {str(t["id"]) for t in seeded}:
             # The workspace's record names its Security team; a workspace that already names one keeps it.
             await c.execute(

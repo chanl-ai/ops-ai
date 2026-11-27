@@ -10,14 +10,13 @@ import sqlalchemy as sa
 from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from ops_access import BY_KEY, POLICIES, below_floor, check_value
+from ops_access import ANY_TEAM, BY_KEY, POLICIES, below_floor, check_value
 from ops_access.platform_events import POLICY_CHANGED
 from ops_access.policies import PUBLISH_AREAS
 from ops_service_kit.http import Json, Out
 from ops_service_kit.ids import now_iso
 from ops_service_kit.narrow import json_object
 from ops_store import Guarantee
-from ops_store.dialect import insert_ignore
 from ops_store.outbox import add as add_event
 from ops_store.rows import rows
 
@@ -68,53 +67,69 @@ class PolicyStore(TenantDb):
         if key in OLD_KEYS:
             key, value = await self._from_old_key(tenant_id, key, value, team_id)
             value = check_value(key, value)
+        async with self.tenant_tx(tenant_id) as c:
+            return await self.set_in(c, tenant_id, key, value, by=by, request_id=request_id, team_id=team_id)
+
+    async def set_in(
+        self,
+        c: AsyncConnection,
+        tenant_id: str,
+        key: str,
+        value: Any,
+        *,
+        by: str,
+        request_id: str,
+        team_id: str | None = None,
+    ) -> tuple[Any, Any]:
+        """`set` on the caller's transaction, for a value checked already: a workspace's first values are written in
+        the transaction that inserts its tenant row, with the same audit entry, version bump and change event."""
         spec = BY_KEY[key]
         at = now_iso()
-        async with self.tenant_tx(tenant_id) as c:
-            row = (await c.execute(sa.select(policies.c.value).where(policies.c.key == key))).first()
-            whole = row.value if row else spec.default
-            after_of_team: Any = None
-            if spec.per_team and key in ("requesterMayDecide", "appChanges", "appChangesByApp"):
-                # Read in this transaction, so a floor set at the same moment is never missed.
-                floor = (await c.execute(sa.select(policies.c.value).where(policies.c.key == "approvalsFloor"))).first()
-                if (why := below_floor(key, value, floor.value if floor else None)) is not None:
-                    raise BelowFloorError(why)
-            if spec.per_team:
-                whole = _by_team(whole, stored=row is not None)
-            if spec.per_team:
-                before = dict(whole).get(team_id)
-                value = {**dict(whole), str(team_id): value}
-                after_of_team = value[str(team_id)]
-            else:
-                before = whole
-            if row is None:
-                await c.execute(
-                    policies.insert().values(tenant_id=tenant_id, key=key, value=value, updated_by=by, updated_at=at)
-                )
-            else:
-                await c.execute(
-                    policies.update().where(policies.c.key == key).values(value=value, updated_by=by, updated_at=at)
-                )
-            if key in ("appChanges", "appChangesByApp"):
-                await self._derive_old_keys(c, tenant_id, str(team_id), by, at)
-                # Agents-service keeps each team's tool list, which carries every write's answer, for up to 30 s: it
-                # drops that list when it hears this, so the change applies at once.
-                await add_event(
-                    c, platform_outbox, tenant_id=tenant_id, team_id=str(team_id), name=POLICY_CHANGED,
-                    key=f"{key}:{request_id}:{at}", payload={"key": key}, actor=by,
-                )  # fmt: skip
-            await bump_version(c, tenant_id)
-            await record(
-                c,
-                tenant_id=tenant_id,
-                team_id=team_id if spec.per_team else None,
-                actor=by,
-                action="policy.set",
-                target_kind="policy",
-                target_id=key,
-                request_id=request_id,
-                detail={"before": before, "after": after_of_team if spec.per_team else value},
+        row = (await c.execute(sa.select(policies.c.value).where(policies.c.key == key))).first()
+        whole = row.value if row else spec.default
+        after_of_team: Any = None
+        if spec.per_team and key in ("requesterMayDecide", "appChanges", "appChangesByApp"):
+            # Read in this transaction, so a floor set at the same moment is never missed.
+            floor = (await c.execute(sa.select(policies.c.value).where(policies.c.key == "approvalsFloor"))).first()
+            if (why := below_floor(key, value, floor.value if floor else None)) is not None:
+                raise BelowFloorError(why)
+        if spec.per_team:
+            whole = _by_team(whole, stored=row is not None)
+        if spec.per_team:
+            before = dict(whole).get(team_id)
+            value = {**dict(whole), str(team_id): value}
+            after_of_team = value[str(team_id)]
+        else:
+            before = whole
+        if row is None:
+            await c.execute(
+                policies.insert().values(tenant_id=tenant_id, key=key, value=value, updated_by=by, updated_at=at)
             )
+        else:
+            await c.execute(
+                policies.update().where(policies.c.key == key).values(value=value, updated_by=by, updated_at=at)
+            )
+        if key in ("appChanges", "appChangesByApp"):
+            await self._derive_old_keys(c, tenant_id, str(team_id), by, at)
+            # Agents-service keeps each team's tool list, which carries every write's answer, for up to 30 s: it
+            # drops that list when it hears this, so the change applies at once.
+            await add_event(
+                c, platform_outbox, tenant_id=tenant_id, team_id=str(team_id), name=POLICY_CHANGED,
+                key=f"{key}:{request_id}:{at}", payload={"key": key}, actor=by,
+            )  # fmt: skip
+        await bump_version(c, tenant_id)
+        await record(
+            c,
+            tenant_id=tenant_id,
+            # The workspace's own part (`*`) names no team, and an audit entry's team must be one.
+            team_id=team_id if spec.per_team and team_id != ANY_TEAM else None,
+            actor=by,
+            action="policy.set",
+            target_kind="policy",
+            target_id=key,
+            request_id=request_id,
+            detail={"before": before, "after": after_of_team if spec.per_team else value},
+        )
         return before, (after_of_team if spec.per_team else value)
 
     async def _team_part(self, tenant_id: str, key: str, team_id: str | None) -> dict[str, JsonValue]:
@@ -190,9 +205,10 @@ def _by_team(whole: Any, *, stored: bool) -> Any:
 def new_workspace_values() -> PolicyValues:
     """What a workspace starts with when it is created: publishes go live at once, an app may call any public address,
     and a write its plugin or seed marked ask-first runs unless the team asks. Per-team values sit under `*`, the
-    workspace's own part, so a team added later starts the same. Written as the workspace's own rows, so a workspace
-    created before reads the catalogue default it always read; an admin turns each back on in Settings. Step-up needs
-    no row: the catalogue has it off."""
+    workspace's own part, so a team added later starts the same. Written only when the workspace is created: one made
+    before reads the catalogue default for the first two, and stores no makers' ask, which tools-service refuses
+    (approval_rules_unavailable) until an admin saves it in Settings, Approvals. Step-up needs no row: the catalogue
+    has it off."""
     return {
         "publishReview": {"*": dict.fromkeys(PUBLISH_AREAS, "never")},
         "egressNewHosts": "any_public",
@@ -200,49 +216,20 @@ def new_workspace_values() -> PolicyValues:
     }
 
 
-async def write_new_workspace_policies(c: AsyncConnection, tenant_id: str, *, at: str) -> None:
-    """Inside the transaction that inserted the tenant row, and only then, so a later seed run never overwrites what an
-    admin set since."""
+NEW_WORKSPACE = "workspace"
+
+
+async def write_new_workspace_policies(store: PolicyStore, c: AsyncConnection, tenant_id: str) -> None:
+    """Inside the transaction that inserted the tenant row, and only then, so a later seed run or boot never writes
+    over what an admin set since. Each value goes through `set_in`, as an admin's save would, so it is checked and
+    audited and the workspace's version moves."""
     for key, wanted in new_workspace_values().items():
-        # A per-team value is checked one team's part at a time, as a save through `set` checks it.
-        value = (
-            {team: check_value(key, part) for team, part in json_object(wanted).items()}
-            if BY_KEY[key].per_team
-            else check_value(key, wanted)
-        )
-        row = {"tenant_id": tenant_id, "key": key, "value": value, "updated_by": "workspace", "updated_at": at}
-        await c.execute(insert_ignore(c, policies, row, keys=["tenant_id", "key"]))
-
-
-async def store_makers_ask(c: AsyncConnection, tenant_id: str, *, at: str) -> None:
-    """appChanges makersAsk under the workspace's own part (`*`), stored off where it is missing, on every seed run:
-    tools-service refuses a write whose workspace stores none (approval_rules_unavailable) rather than guessing it. A
-    value someone saved stays. A workspace made before new workspaces stored it is fixed by its next seed run."""
-    row = (
-        await c.execute(
-            sa.select(policies.c.value).where(policies.c.tenant_id == tenant_id, policies.c.key == "appChanges")
-        )
-    ).first()
-    held = json_object(row.value) if row else {}
-    own = json_object(held.get("*"))
-    if isinstance(own.get("makersAsk"), bool):
-        return
-    value = {**held, "*": check_value("appChanges", {**own, "makersAsk": False})}
-    if row:
-        await c.execute(
-            policies.update()
-            .where(policies.c.tenant_id == tenant_id, policies.c.key == "appChanges")
-            .values(value=value, updated_by="workspace", updated_at=at)
-        )
-    else:
-        row_in = {
-            "tenant_id": tenant_id,
-            "key": "appChanges",
-            "value": value,
-            "updated_by": "workspace",
-            "updated_at": at,
-        }
-        await c.execute(insert_ignore(c, policies, row_in, keys=["tenant_id", "key"]))
+        if BY_KEY[key].per_team:
+            for team, part in json_object(wanted).items():
+                value = check_value(key, part)
+                await store.set_in(c, tenant_id, key, value, by=NEW_WORKSPACE, request_id=NEW_WORKSPACE, team_id=team)
+        else:
+            await store.set_in(c, tenant_id, key, check_value(key, wanted), by=NEW_WORKSPACE, request_id=NEW_WORKSPACE)
 
 
 async def values_in(c: AsyncConnection) -> PolicyValues:

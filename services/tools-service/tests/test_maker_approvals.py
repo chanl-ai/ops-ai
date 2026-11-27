@@ -1,17 +1,22 @@
 """Writes whose maker asks first (a plugin manifest's or a seed's requires_approval), by failure mode: a new workspace,
 whose appChanges says makers' asks are off, still waiting on them; an admin's own answer on a tool being dropped with
-them; a team added later in that workspace not getting the workspace's value; and a workspace that stores no makers' ask
-read as on or off. platform-service is a fake here."""
+them; a team added later in that workspace not getting the workspace's value; and a team whose workspace stores no
+makers' ask read as on or off instead of refused with the fix. platform-service is a fake here."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any, cast
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_identity import dev_service_signer, mint_service_token
 from ops_tools.modules.policy import WriteApprovals
-from ops_tools.store.modules import Module
+from ops_tools.modules.seed import load
+from ops_tools.store.modules import Module, ModuleStore
 
+from .conftest import build_app, opa_client
 from .service_clients import fake_service
 
 PLUGIN = {"id": "mod_sf", "template_id": "plugin:salesforce", "operations": [
@@ -77,12 +82,34 @@ async def test_a_caller_naming_no_team_takes_the_workspaces_waits_and_none_of_it
     }
 
 
-async def test_a_workspace_that_stores_no_makers_ask_has_its_rules_unread() -> None:
+async def test_a_team_whose_workspace_stores_no_makers_ask_is_refused_with_the_fix(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]
+) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         key = request.url.path.rsplit("/", 1)[-1]
         value = {"*": {"ask": False}, "team_ops": {"ask": False}} if key == "appChanges" else {}
         return httpx.Response(200, json={"success": True, "data": {"key": key, "value": value}})
 
     policy = WriteApprovals(fake_service(handler, "platform", ["settings:view"]))
-    # Unread, for a team and for a caller naming none: the gateway refuses the write (approval_rules_unavailable).
-    assert [(await policy.levels("t", team))[0] for team in ("team_ops", None)] == [None, None]
+    # A caller naming no team keeps every maker's ask, so it needs no value.
+    assert (await policy.levels("t", None))[0] == {"ask": False}
+    await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
+    token = mint_service_token(
+        dev_service_signer(), service="agents", audience="tools", tenant_id=tenant, scopes=["tools:view"],
+        team_id="team_ops",
+    )  # fmt: skip
+    async with opa_client() as opa:
+        app = build_app(engine, seed, tenant, opa=opa, write_approvals=policy)
+        async with (
+            app.router.lifespan_context(app),
+            httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tools") as client,
+        ):
+            body = {
+                "tool": "open_case",
+                "input": {"subject": "Card stopped"},
+                "key": "unset-1",
+                "runContext": {"act": "test"},
+            }
+            r = await client.post("/v1/calls", json=body, headers={"Authorization": f"Bearer {token}"})
+    assert (r.status_code, r.json()["error"]["code"]) == (503, "approval_rules_unavailable"), r.text
+    assert "Settings, Approvals" in r.json()["error"]["details"]["reasons"][0], r.text

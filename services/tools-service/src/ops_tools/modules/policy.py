@@ -58,6 +58,9 @@ log = get_logger("ops_tools.approvals")
 FLOOR = "_approvalsFloor"
 # appChanges switches whose off value lets a write run that would otherwise wait.
 LOOSENING = frozenset({"makersAsk", "testRunsAsk"})
+# Marks unread rules whose cause is a makers' ask the workspace never stored, so the refusal names the fix. No app id
+# or `tool:` key starts with an underscore, so the marker never matches an app's entry.
+MAKERS_ASK_UNSET = "_makersAskUnset"
 
 
 class WriteApprovals:
@@ -79,11 +82,12 @@ class WriteApprovals:
             # `*` is the workspace's own value (a new workspace's makersAsk off); a team's saved part wins over it.
             workspace = dict(held.get("*") or {})
             part = dict(held.get(team_id) or {}) if team_id else {}
-            if not isinstance(part.get("makersAsk", workspace.get("makersAsk")), bool):
-                # Every workspace stores makersAsk (a new one at creation, an older one on its next seed run): a
-                # missing value is an unread rule, so the write is refused rather than reading it as on or off.
+            if team_id and not isinstance(part.get("makersAsk", workspace.get("makersAsk")), bool):
+                # A new workspace stores makersAsk; one that does not has an unset rule, which is never read as on or
+                # off: the write is refused until an admin saves it. A caller naming no team keeps every maker's ask
+                # (below), so it needs no value.
                 log.warning("approvals.rules_incomplete", tenant_id=tenant_id, missing="appChanges.makersAsk")
-                return None, {}
+                return None, {MAKERS_ASK_UNSET: True}
             if team_id:
                 of_team = {**workspace, **part}
             else:

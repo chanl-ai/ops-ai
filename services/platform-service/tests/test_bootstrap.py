@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import httpx
 import pytest
+import sqlalchemy as sa
 from pydantic import SecretStr
 
 from ops_access.policies import PUBLISH_AREAS, publish_mode
@@ -16,6 +17,7 @@ from ops_platform.bootstrap import FirstAdmin, bootstrap
 from ops_platform.keys import dev_signer
 from ops_platform.store.identity import IdentityStore
 from ops_platform.store.seeding import write_seed
+from ops_platform.store.tables import audit_entries, policies
 from ops_platform.store.tenancy import TenantDb
 from ops_service_kit.ids import new_id
 from ops_service_kit.settings import Settings
@@ -120,16 +122,55 @@ async def test_a_new_workspace_publishes_without_review_and_calls_any_public_add
     assert await policy_value(production, headers, "stepUp") is False
 
 
+async def test_a_new_workspace_stores_its_makers_ask_through_a_save_with_an_audit_entry(database_url: str) -> None:
+    admin = first_admin()
+    await bootstrap(database_url, admin, iterations=1000)
+    async with TenantDb.open(database_url).tenant_tx(admin.tenant_id) as c:
+        rows = await c.execute(
+            sa.select(audit_entries.c.actor, audit_entries.c.detail).where(
+                audit_entries.c.action == "policy.set", audit_entries.c.target_id == "appChanges"
+            )
+        )
+        saved = [(r.actor, r.detail["after"]["makersAsk"]) for r in rows]
+    assert saved == [("workspace", False)], saved
+
+
+async def rerun(database_url: str, admin: FirstAdmin) -> None:
+    """What every release and dev restart runs on a workspace that already exists."""
+    assert await bootstrap(database_url, admin, iterations=1000) == "unchanged"
+    await write_seed(
+        TenantDb.open(database_url),
+        {"tenant": {"id": admin.tenant_id, "name": "x", "allowedDomains": []}, "teams": [], "people": []},
+        security_team=admin.team_id,
+    )
+
+
+async def test_a_workspace_that_stores_no_makers_ask_gets_none_written_by_a_later_run(database_url: str) -> None:
+    """An older workspace stays unset, so tools-service refuses its writes with the fix instead of loosening them."""
+    admin = first_admin()
+    await bootstrap(database_url, admin, iterations=1000)
+    db = TenantDb.open(database_url)
+    async with db.tenant_tx(admin.tenant_id) as c:
+        # As a workspace made before new ones stored makers' asks: its team saved the switch, nothing else.
+        older = {admin.team_id: {"ask": False, "answer": "person"}}
+        await c.execute(policies.update().where(policies.c.key == "appChanges").values(value=older))
+    await rerun(database_url, admin)
+    async with db.tenant_tx(admin.tenant_id) as c:
+        held = (await c.execute(sa.select(policies.c.value).where(policies.c.key == "appChanges"))).scalar_one()
+    assert held == older, held
+
+
 async def test_a_later_run_keeps_what_an_admin_turned_back_on(production: httpx.AsyncClient, database_url: str) -> None:
     admin = first_admin()
     await bootstrap(database_url, admin, iterations=1000)
     headers = await admin_headers(production, admin)
     put = await production.put("/v1/policies/egressNewHosts", json={"value": "ask_security"}, headers=headers)
     assert put.status_code == 200, put.text
-    # A run on a workspace that already exists (the dev seed on every restart) writes no setting.
-    await write_seed(
-        TenantDb.open(database_url),
-        {"tenant": {"id": admin.tenant_id, "name": "x", "allowedDomains": []}, "teams": [], "people": []},
-        security_team=admin.team_id,
-    )
+    asks = {"ask": True, "answer": "person", "reviewerRole": None, "testAccountsNeverAsk": True, "testRunsAsk": True}
+    put = await production.put("/v1/policies/appChanges", json={"value": {**asks, "makersAsk": True}}, headers=headers)
+    assert put.status_code == 200, put.text
+    changes = await policy_value(production, headers, "appChanges")
+    # A boot and a seed run on a workspace that already exists write no setting.
+    await rerun(database_url, admin)
     assert await policy_value(production, headers, "egressNewHosts") == "ask_security"
+    assert await policy_value(production, headers, "appChanges") == changes
