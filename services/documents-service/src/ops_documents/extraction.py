@@ -69,6 +69,7 @@ REFUSALS = {
     "key_budget_exhausted": ("budget_exhausted", SPENT),
     "tenant_budget_exhausted": ("budget_exhausted", SPENT),
     "rate_limited": ("model_rate_limited", "The model is busy; try again in a minute."),
+    "models_answer_unreadable": ("model_answer_unreadable", "The model's answer could not be read; try again."),
 }
 READS = ("fields", "propose")
 PROPOSE_PAGES = 5
@@ -176,17 +177,23 @@ class ModelsService:
         usage: Usage | None = None,
         images: Sequence[page_images.PageImage] = (),
     ) -> JsonValue:
-        calls = ModelCalls(self.http, self.key, self.alias)
         spent = usage if usage is not None else Usage()
-        # The tenant spends from its own share of this key, so one tenant cannot drain the others.
-        ask = partial(calls.structured, system, user, cast(dict[str, Any], schema), tenant=tenant, step=step, run=run)
+
+        def ask(alias: str) -> partial[Any]:
+            # The tenant spends from its own share of this key, so one tenant cannot drain the others.
+            calls = ModelCalls(self.http, self.key, alias)
+            return partial(calls.structured, system, user, cast(dict[str, Any], schema), tenant=tenant, step=step,
+                           run=run, usage=spent)  # fmt: skip
+
         try:
-            answer = await ask(parts=[i.part() for i in images], usage=spent)
+            answer = await ask(self.alias)(parts=[i.part() for i in images])
         except ModelCallError as e:
             if not images or e.code != "images_not_cleared":
                 raise
-            spent.image_refused = f"The model alias {e.alias or self.alias} is not cleared for page images."
-            return cast(JsonValue, await ask(usage=spent))
+            refused = e.alias or self.alias
+            spent.image_refused = f"The model alias {refused} is not cleared for page images."
+            # Asked again on the alias that refused, so an unbound alias is not looked up a second time.
+            return cast(JsonValue, await ask(refused)())
         if images:
             pages: JsonList = [*sorted({i.page for i in images})]
             spent.image_calls.append({"step": step, "pages": pages, "images": len(images), "alias": spent.alias})
@@ -1042,7 +1049,8 @@ class Extractor:
                 )  # fmt: skip
             except ModelCallError:
                 answer = None
-            # An answer that is not an object fails the read, as it always has.
+            # A re-read the model cannot answer keeps the first read's values and their rule failures; an answer
+            # that is not an object fails the read.
             said: Json = {k: v for k, v in an_object(answer or {}, "the re-read's answer").items() if k in failures}
             if answer is not None and not prompt.schema_errors(said, schema):
                 _, again = result.scored(
