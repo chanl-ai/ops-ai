@@ -80,6 +80,16 @@ Reference: [make/CLAUDE.md](../../make/CLAUDE.md).
   catalogue and local executors, so this service does not yet stand alone.
 - The gateway's tests are in `../agents-service/tests/gateway` until that import is gone.
 
+## Known traps
+
+- A plugin tool refused before anything is sent => the refusal names its side (read or write); an unnamed side is read as may-have-run and never resent
+- A new caller of the gateway => register its service in the gateway policy, or every call ends "caller identity is not registered"
+- A team key's tool call => audit it as the team, not as a person
+- A new discovery reply field => update the import presets test as well as the reply pin
+- A People read => name its team and a typed result, and give it a budgets row
+- A new `GET` route => add its row to `budgets.toml`, and open no second transaction in its session check; `tests/test_statement_budget.py` fails any route without a row
+- A store change (tables, repositories, migrations, queries) pushed after `make ci-local` alone => ci-local lists `store-mssql` as skipped, so run `deploy/database/mssql_remote.sh test services/tools-service -q <tests>` before the push
+
 ## Reference docs
 
 | Doc | Covers |
