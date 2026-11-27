@@ -2,11 +2,24 @@
 
 Status: current.
 
-A workflow is a fixed set of steps: the same input takes the same path every time. You write it as a file, check it,
-publish it and start runs. These examples build one refund workflow that branches on an amount, waits for a person's
-decision, and then asks an agent a question from a step.
+A refund request for $20 and one for $120 should not follow the same path. The small one goes through, and the large
+one needs a person's decision. If that rule lives in someone's head or in an agent's instructions, nobody can show a
+reviewer where it is written, and it can change without anyone noticing.
 
-Connect first: see [Before you start](README.md#before-you-start).
+A workflow writes the rule down as a fixed set of steps, so the same input takes the same path every time. Without one,
+you cannot prove that a large refund was ever checked by a person. These examples build one refund workflow that
+branches on an amount, waits for a person's decision, and asks an agent a question from a step.
+
+## The plan
+
+<!-- site: steps -->
+1. **Write the workflow as a file** and check it before you save it.
+2. **Publish it and start a run**, in test mode first.
+3. **Let a second person decide** the large refund, so the run carries on down the path they choose.
+4. **Ask an agent** from one step when the work needs judgement.
+5. **Read the trace** of any run to see the path it took.
+
+Connect first: see [Connect once, then copy any example](README.md#connect-once-then-copy-any-example).
 
 ## What each surface can do
 
@@ -18,12 +31,12 @@ Connect first: see [Before you start](README.md#before-you-start).
 | Read what a run did | built | built | built |
 | Replay or fork a past run | upcoming | upcoming | upcoming |
 
-## Check, publish and run a workflow
+## Write the refund rule and run it
 
-**The problem.** Refund requests should follow one rule: a small refund goes through, a large one waits for a person.
+Refund requests should follow one rule: a small refund goes through, a large one waits for a person.
 You want that rule written down, checked before it is used, and run the same way every time.
 
-**When to use it.** Use a workflow when the steps are known in advance and a reviewer must be able to read them. Use
+Use a workflow when the steps are known in advance and a reviewer must be able to read them. Use
 an agent when the steps depend on the conversation.
 
 The workflow is a list of steps (`nodes`) and the lines between them (`connections`). Each connection leaves a step
@@ -146,12 +159,12 @@ version that is already live is refused with `not_a_draft`. On a changed file it
 published version until you publish again. `opsai workflows types` lists every step type with its ports and
 parameters.
 
-## Wait for a person and decide
+## Hold a large refund for a person's decision
 
-**The problem.** A large refund needs a person's yes. The run should stop, show that person the facts, and carry on
+A large refund needs a person's yes. The run should stop, show that person the facts, and carry on
 down the path they choose.
 
-**When to use it.** Use a review step before anything a person must answer for. The person who started the run
+Use a review step before anything a person must answer for. The person who started the run
 cannot decide its review, so the examples decide as a second person.
 
 ```python
@@ -193,12 +206,12 @@ The run carries on in the background after the decision, so `opsai runs show` ma
 offers, here `approve` or `reject`, and the run leaves the review step by the port with that name. The reviewer signs
 in under their own saved profile.
 
-## Ask an agent from a step
+## Let an agent answer one step
 
-**The problem.** One step needs judgement, such as answering a customer's question, and the rest of the workflow
+One step needs judgement, such as answering a customer's question, and the rest of the workflow
 should stay fixed.
 
-**When to use it.** Use an agent step when a published agent already does the job. The workflow gets the agent's
+Use an agent step when a published agent already does the job. The workflow gets the agent's
 final answer, and takes the `error` port if the agent fails.
 
 ```yaml title="returns-answer.yaml"
@@ -278,14 +291,14 @@ run = await ops.workflows.run('returns_answer', { input: { question: 'Can I retu
 console.log(run.status, run.outcome);
 ```
 
-The agent must be published, here the one from [Agent examples](agents.md#create-and-publish-an-agent). It works
+The agent must be published, here the one from [Agent examples](agents.md#put-an-agent-your-team-can-chat-with-into-a-file). It works
 the other way too: an agent that is granted `workflow:<id>` as a tool can start a published workflow from a chat.
 
-## Read what a run did
+## See which path a run took
 
-**The problem.** A run ended with an outcome you did not expect, and you need to see which path it took.
+A run ended with an outcome you did not expect, and you need to see which path it took.
 
-**When to use it.** Use it after any run. The trace lists each step the run reached, how it ended and the port it
+Use it after any run. The trace lists each step the run reached, how it ended and the port it
 left by.
 
 ```python
@@ -306,12 +319,12 @@ opsai workflows trace "$RUN"
 opsai workflows inspect "$RUN"
 ```
 
-## Fix a refused workflow or run
+## Understand why a file or a run was refused
 
-**The problem.** A file with a mistake, or a run with a missing value, should fail with a message that says what to
+A file with a mistake, or a run with a missing value, should fail with a message that says what to
 change.
 
-**When to use it.** Check a file before you save it, and catch a refused start in code that takes input from
+Check a file before you save it, and catch a refused start in code that takes input from
 elsewhere.
 
 ```python
@@ -341,7 +354,12 @@ except BadRequest as refused:
 | You publish a version that is already live | The request is refused with `not_a_draft` | Nothing to do: that version is the one running |
 | A live run of an unpublished workflow | The start is refused with `not_live` | Publish first, or run in test mode |
 
-## Next steps
+## What success looks like
+
+The $20 refund ends as `auto_approved`. The $120 refund stops with the status `waiting` and a task, and ends as
+`approved` after a second person decides it. The trace of each run lists the steps it reached and the port it left by.
+
+## What to do next
 
 - [Workflows](../workflows.md): the lifecycle, start surfaces and the full list of example folders.
 - [Workflow example coverage](../workflow-example-coverage.md): every step type and the example that teaches it.

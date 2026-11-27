@@ -2,12 +2,22 @@
 
 Status: current.
 
-A skill is a reusable procedure, written once and attached to any agent that should follow it. It has a line that
-says when to use it and the instructions to follow. These examples write a skill, attach it to an agent, and pick it
-for one reply.
+Three of your agents handle returns, and each one carries its own copy of the return procedure. When the policy
+changes, you edit three sets of instructions, and sooner or later one of them is missed. A skill is the fix: a
+procedure you write once, with a line that says when it applies, and attach to every agent that should follow it.
 
-Connect first: see [Before you start](README.md#before-you-start). The examples use the agent from
-[Agent examples](agents.md#create-and-publish-an-agent).
+Without skills, the agents drift apart, and a reviewer cannot read the procedure in one place or see which version
+each agent follows. These examples write a skill, attach it to an agent and pick it for one reply.
+
+## The plan
+
+<!-- site: steps -->
+1. **Write and publish the skill.** Give it a name, a line saying when it applies, and the procedure.
+2. **Attach it to an agent**, pinned to a version, and publish the agent again.
+3. **Pick it for one reply** when a person already knows which procedure they want.
+
+Connect first: see [Connect once, then copy any example](README.md#connect-once-then-copy-any-example). The examples
+use the agent from [Agent examples](agents.md#put-an-agent-your-team-can-chat-with-into-a-file).
 
 ## What each surface can do
 
@@ -23,12 +33,12 @@ Connect first: see [Before you start](README.md#before-you-start). The examples 
 "By API operation name" means the SDK has no short verb for the task yet. You call the operation under `ops.raw`,
 with the name the API reference gives it.
 
-## Write and publish a skill
+## Write the return procedure once
 
-**The problem.** Several agents should handle a return the same way. Copying the procedure into each agent's
+Several agents should handle a return the same way. Copying the procedure into each agent's
 instructions means fixing it in several places later.
 
-**When to use it.** Use a skill for any procedure more than one agent follows, or one you want to version and review
+Use a skill for any procedure more than one agent follows, or one you want to version and review
 on its own.
 
 ```python
@@ -93,11 +103,11 @@ opsai skills show "$SKILL"
 | `toolIds`, `knowledgeBases` | Tools and knowledge bases the skill needs |
 | `refusal` | What the agent says when the skill tells it to refuse |
 
-## Attach the skill to an agent
+## Hand the procedure to an agent
 
-**The problem.** A published skill does nothing until an agent holds it.
+A published skill does nothing until an agent holds it.
 
-**When to use it.** Attach after the skill is published. The agent keeps the version you attach, so a later version
+Attach after the skill is published. The agent keeps the version you attach, so a later version
 of the skill reaches the agent only when you attach that version. Attaching changes the agent's draft, so publish
 the agent again.
 
@@ -127,12 +137,12 @@ console.log(held.limits);
 The answer lists the skills the agent holds and the limits: how many skills an agent may hold, how many it may load
 in one reply, and how much text they may add.
 
-## Pick a skill for one reply
+## Start a known procedure from the chat
 
-**The problem.** The agent loads a skill when it judges that the request matches. Sometimes the person already knows
+The agent loads a skill when it judges that the request matches. Sometimes the person already knows
 which procedure they want and should not depend on that judgement.
 
-**When to use it.** Use it to start a known procedure, and to pass the values it needs. The pick applies to that one
+Use it to start a known procedure, and to pass the values it needs. The pick applies to that one
 reply.
 
 ```python
@@ -158,7 +168,7 @@ opsai chat say --agent "Returns helper" --skill "$SKILL" --input order_number=11
 Each reply records the skills it used. `how` is `picked` when a person chose the skill, and the record keeps the
 skill's version and the inputs it was given.
 
-## Upcoming: skill verbs
+## Upcoming: manage skills with their own verbs
 
 > [!NOTE]
 > **Upcoming.** This section is merged and is not in the current release (v1.0.0). The verbs were run against
@@ -194,7 +204,13 @@ opsai skills references <id> --search refund
 | `export` | Print a stored skill as a file `apply` reads |
 | `references` | Search what the skill's text may mention: tools, knowledge bases, other skills, agents and workflows |
 
-## Next steps
+## What success looks like
+
+The skill is published at version 1, and the agent holds it at that version. When you pick the skill in a chat, the
+reply records which skill and version ran and the inputs it was given, so a reviewer can see which procedure produced
+an answer.
+
+## What to do next
 
 - [Step-by-step skills](step-by-step-skills.md): numbered steps with checks, exits and sub-skills. Upcoming.
 - [Agent examples](agents.md): the agent these skills attach to.

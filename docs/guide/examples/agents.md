@@ -2,11 +2,25 @@
 
 Status: current.
 
-An agent answers people in a chat, inside the instructions, knowledge and tools you give it. These examples take one
-agent from a first draft to a published agent that answers from a knowledge base, may call a tool, and is scored with
-test cases.
+Your team asks the same questions every day, and the answers sit in policy documents that few people read. You want
+an agent that answers them in a chat, from your own documents, and that a second person has reviewed before anyone
+relies on it.
 
-Connect first: see [Before you start](README.md#before-you-start). Each example carries on from the one before it.
+If you build that agent by hand in the console and never write it down, the next change is a guess: nobody can say what
+changed, and nobody can repeat it in another team. These examples keep the agent as a file or a few lines of code, so a
+change is reviewed like any other change.
+
+## The plan
+
+<!-- site: steps -->
+1. **Create and publish the agent.** One file or a few lines of code, then a publish request.
+2. **Chat with it**, and keep the conversation going with a follow-up.
+3. **Give it your documents**, so its answers cite the page they came from.
+4. **Grant it a tool**, if it needs to look something up or open a case.
+5. **Test the draft and score it** before a change reaches anyone.
+
+Connect first: see [Connect once, then copy any example](README.md#connect-once-then-copy-any-example). Each example
+carries on from the one before it.
 
 ## What each surface can do
 
@@ -22,12 +36,12 @@ Connect first: see [Before you start](README.md#before-you-start). Each example 
 | Score with cases | built | upcoming | upcoming |
 | Write the agent as a brief, check what blocks a publish, add what the brief mentions | upcoming | upcoming | upcoming |
 
-## Create and publish an agent
+## Put an agent your team can chat with into a file
 
-**The problem.** You want an agent your team can chat with, kept as a file or a few lines of code so a change is
+You want an agent your team can chat with, kept as a file or a few lines of code so a change is
 reviewed like any other change.
 
-**When to use it.** Every agent starts here. An agent has a draft and a published version. People chat with the
+Every agent starts here. An agent has a draft and a published version. People chat with the
 published version, so a change reaches them only after you publish it.
 
 Python. `apply` creates the agent, or updates the draft of the agent that already has this name.
@@ -90,12 +104,12 @@ opsai agents publish "$AGENT" --note "First version"
 `validate` checks that a file has a name and a role before anything is sent. The publish request comes back with its
 status. It is `approved` when no reviewer is needed.
 
-## Chat and keep the conversation
+## Ask a question and follow up in the same conversation
 
-**The problem.** You want to ask the published agent a question from a script, then ask a follow-up in the same
+You want to ask the published agent a question from a script, then ask a follow-up in the same
 conversation.
 
-**When to use it.** Use it for a quick check after a publish, and for any program that talks to an agent on a
+Use it for a quick check after a publish, and for any program that talks to an agent on a
 person's behalf.
 
 ```python
@@ -138,12 +152,12 @@ What `ops.agents.chat` returns in Python:
 In TypeScript, read the reply from `ops.chat.say` as shown. `ops.agents.chat` also exists there, and its `reply` field
 holds only the last piece of the streamed text.
 
-## Answer from a knowledge base
+## Make the agent answer from your policy pages
 
-**The problem.** The agent should answer from your policy pages and show which page it used. Policy text does not
+The agent should answer from your policy pages and show which page it used. Policy text does not
 belong in the instructions, where nobody can see what the answer came from.
 
-**When to use it.** Use it when answers must come from text your team owns and updates.
+Use it when answers must come from text your team owns and updates.
 
 ```python
 base = ops.knowledge.add_base("Store policies", owner="returns.lead@example.com")
@@ -195,12 +209,12 @@ opsai agents chat "$AGENT" --message "How long do I have to return an item?"
 A knowledge base needs an owner: the person who answers for what it serves. Saving a page under a title that already
 exists saves a new version of that page.
 
-## Grant a tool
+## Let the agent open a case
 
-**The problem.** The agent should be able to act, for example open a case, and only with tools your team has
+The agent should be able to act, for example open a case, and only with tools your team has
 published.
 
-**When to use it.** Use it when a reply needs live data or needs to change something. A grant is a change to the
+Use it when a reply needs live data or needs to change something. A grant is a change to the
 draft, so publish again for it to take effect.
 
 ```python
@@ -228,11 +242,11 @@ opsai agents publish "$AGENT" --note "May open a case"
 (`workflow:<id>`). `grant_tools` adds to the tools the agent already holds. When your team's policy makes writes wait
 for approval, a tool that changes something pauses the reply until a person approves the call.
 
-## Test a draft
+## Try a change before anyone sees it
 
-**The problem.** You changed the draft and want to see how it answers before the change reaches anyone.
+You changed the draft and want to see how it answers before the change reaches anyone.
 
-**When to use it.** Use it between `apply` and `publish`.
+Use it between `apply` and `publish`.
 
 ```python
 tried = ops.agents.test(agent["id"], "Can I return a gift?")
@@ -251,12 +265,12 @@ opsai agents test "$AGENT" --message "Can I return a gift?"
 The answer holds the reply and what produced it: the model, whether knowledge was searched, the tool calls, the
 skills and guardrails that applied, and the time it took.
 
-## Run in the background
+## Start a long reply and read it later
 
-**The problem.** A long reply should not hold your program up. You want to start the agent, go on, and read the
+A long reply should not hold your program up. You want to start the agent, go on, and read the
 conversation later.
 
-**When to use it.** Use `wait` for a script that needs the reply, `stream` when you want every event, and `background`
+Use `wait` for a script that needs the reply, `stream` when you want every event, and `background`
 when your program has other work to do while the agent replies.
 
 ```python
@@ -282,11 +296,11 @@ A background run is carried by the program that started it. Keep that program ru
 thread: a script that exits straight after the call loses the run, and so does the command line, which exits as soon
 as it has printed the ids. Runs that carry on without the caller are upcoming.
 
-## Score with cases
+## Check that a change keeps your answers right
 
-**The problem.** You want to know that a change did not break the answers you care about.
+You want to know that a change did not break the answers you care about.
 
-**When to use it.** Use it before publishing a change to instructions, knowledge or tools. Each case is an input and
+Use it before publishing a change to instructions, knowledge or tools. Each case is an input and
 the checks its reply must pass.
 
 ```python
@@ -311,16 +325,27 @@ for result in scored["results"]:
 The summary counts the cases that passed, the total, and regressions: cases the published version passes and the
 draft fails.
 
-## Upcoming: write the agent as a brief
+## What success looks like
+
+You have an agent id, a published version that answers from your documents with the page it used, and a draft you can
+change and test without anyone else seeing it. Any teammate can pick the agent in the console's chat.
+
+## What skipping the checks costs
+
+An agent that is published without a test turn or a scored case reaches your team with whatever the last edit
+produced. A wrong answer about a payoff period or a return window is found by a customer, and nothing records which
+change caused it.
+
+## Upcoming: write what the agent is for, and what it must never do
 
 > [!NOTE]
 > **Upcoming.** This section is merged and is not in the current release (v1.0.0). Its examples were run against
 > the merged code.
 
-**The problem.** One long block of instructions mixes what the agent is for, how it should answer and what it must
+One long block of instructions mixes what the agent is for, how it should answer and what it must
 never do. A reviewer cannot tell which line is a hard rule.
 
-**When to use it.** Use a brief for a new agent. The platform writes the agent's instructions from the brief, and
+Use a brief for a new agent. The platform writes the agent's instructions from the brief, and
 sends the never rules to the model again before every reply. An agent saved without a brief keeps working from its
 instructions as before.
 
@@ -433,7 +458,7 @@ In TypeScript these are `ops.agents.eval(id)`, `evalCases`, `addEvalCases`, `eva
 | `add_reference` returns an empty `added` | The agent already held it, and no new draft was saved |
 | The publish request is `pending` | A brief with never rules is approved by a second person before it goes live |
 
-## Next steps
+## What to do next
 
 - [Skill examples](skills.md): give the agent a reusable procedure.
 - [Workflow examples](workflows.md): call this agent from a workflow step.

@@ -1,23 +1,28 @@
 # Step-by-step skills
 
-Status: upcoming (merged, in the next release). Skills with numbered steps are merged to develop and run on staging;
-they are not in the current release (v1.0.0). The examples on this page were run against the merged code.
+Status: upcoming.
 
 > [!NOTE]
-> **Upcoming.** Everything on this page is merged and is not in the current release (v1.0.0). For what works today,
-> see [Skill examples](skills.md).
+> **Upcoming.** Everything on this page is merged to develop and runs on staging, but it is not in the current release
+> (v1.0.0). The examples were run against the merged code. For what works today, see [Skill examples](skills.md).
 
-A skill today is a block of instructions the agent reads and follows as it sees fit. A step-by-step skill is a
-numbered procedure. The agent works on one step at a time, a check decides whether the step is done, and the skill
-ends with a named exit.
+Some procedures must happen in order, every time. An agent looks up the charge, confirms the amount with the person,
+and only then refunds. If you write that order as free text in a skill, the agent reads it as guidance and may skip a
+step. If you write it as a workflow, the order holds, but the conversation with the person is lost.
 
-## The problem
+A step-by-step skill keeps both. The agent works on one step at a time in the chat, a check decides whether the step
+is done before the next one starts, and the skill ends with a named exit that a reviewer can read afterwards. Without
+it, a team that needs a fixed order has to choose between an agent that may skip a step and a workflow with no chat.
 
-Some procedures must happen in order, every time: look up the charge, confirm the amount with the person, then
-refund. Written as free text, the order is a request the model may skip. Written as a workflow, the procedure loses
-the conversation. A step-by-step skill keeps the conversation and makes the order and the checks part of the skill.
+## The plan
 
-## When to use it
+<!-- site: steps -->
+1. **Write the steps**, each with what the agent does, the check that must hold, and what happens when it does not.
+2. **Name the exits**, so every run ends in a state a reviewer can read.
+3. **Give the skill to an agent** and follow the steps in a chat.
+4. **Read the record** of which step ran, which check passed and which exit ended the skill.
+
+## Which to use
 
 | Use | When |
 |---|---|
@@ -379,7 +384,13 @@ the request opened, with the hints on the new text's lines. Each published versi
 (`requestedBy`), who approved it (`approvedBy`, empty when the team's publish policy let it go live without a review)
 and who made it live (`publishedBy`); `opsai skills versions <id>` lists all three.
 
-## Next steps
+## What success looks like
+
+The agent works through the steps in order. Each step that has a check waits for it, a failed check retries, goes back or
+leaves by a named exit, and the end of the run records the exit. A person who reads the conversation afterwards can see
+which steps ran and why the skill ended.
+
+## What to do next
 
 - [Skill examples](skills.md): what skills do today.
 - [Workflow examples](workflows.md): fixed steps with a person's approval, built today.
