@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity.fastapi import DEV_TEAM
 from ops_kb.agents import StaticAgents
-from ops_kb.files import KnowledgeFiles
+from ops_kb.files import FilesServiceIntake, KnowledgeFiles
 from ops_kb.search import HybridRetriever
 from ops_kb.seed import seed_demo
 from ops_kb.service import KnowledgeService, Who
@@ -25,6 +25,7 @@ from ops_kb.store import KnowledgeStore
 from ops_store import isolation
 
 from .conftest import kb_client
+from .files_fake import FakeFilesService
 from .readings_fake import LocalReadings
 
 
@@ -212,3 +213,23 @@ async def test_a_start_on_a_new_file_store_uploads_the_demo_files_again(
     for s in sources:
         assert len(s.file_ids) == 1, s
         await after.files.read(tenant, "team_ops", s.file_ids[0])
+
+
+async def test_a_dev_start_on_a_scanning_file_store_seeds_the_bases_and_keeps_their_files(
+    engine: AsyncEngine, tenant: str, tmp_path: Path
+) -> None:
+    """With files-service scanning (hook mode) the demo files are pending when the seed writes them; the seed must
+    still make both bases, each source keeping its file for the sync after the scan."""
+    fake = FakeFilesService()
+    files = FilesServiceIntake(fake.client())
+    service = KnowledgeService(
+        KnowledgeStore(engine),
+        files,
+        HybridRetriever(engine),
+        StaticAgents(),
+        readings=LocalReadings(KnowledgeFiles(tmp_path)),
+    )
+    with seeding(tenant):
+        assert await seed_demo(service, tenant) == ["kb_retail_products", "kb_branch_operations"]
+        sources = await service.store.sources(tenant)
+    assert sources and all(len(s.file_ids) == 1 for s in sources), sources

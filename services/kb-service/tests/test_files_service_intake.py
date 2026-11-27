@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 import time
 from pathlib import Path
-from typing import Any
 
 from pydantic import HttpUrl
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -118,20 +117,19 @@ async def test_an_item_written_before_its_scan_is_refused_as_not_ready_then_read
         assert data(await client.post(f"/v1/knowledge-bases/{kb['id']}/pages", json=page), 201)["title"] == "Vault"
 
 
-async def test_a_pushed_item_holds_its_file_in_files_and_lets_go_of_the_version_it_replaced(
+async def test_an_item_written_before_its_scan_is_kept_and_held_in_files_once_a_sync_finds_it_clean(
     engine: AsyncEngine, tenant: str
 ) -> None:
-    """A written item's file had no reference in Files, so Files listed it as unreferenced and a person could delete it
-    from under the base; a new version left the old file stored with nothing reading it."""
+    """Files refuses a reference on a file it has not scanned, so taking one before recording the file left the source
+    without it. The source records the file at once (409, read on the next sync), the first sync after the scan holds
+    it in Files, and a new version lets go of the file it replaced."""
     fake = FakeFilesService()
     scanner = fake.client(service="scanner", scopes=["files:decide"])
 
-    async def put(client: Any, source_id: str, item: dict[str, str]) -> dict[str, Any]:
-        await client.post(f"/v1/sources/{source_id}/items", json=item)  # stored, then held until its scan
+    async def scanned() -> None:
         for fid, f in fake.files.items():
             if f["scan"]["status"] == "pending":
                 await scanner.report_scan(tenant, fid, status="clean", engine="clamav")
-        return data(await client.post(f"/v1/sources/{source_id}/items", json=item))
 
     async with kb_client(engine, tenant, files=FilesServiceIntake(fake.client())) as client:
         kb = data(
@@ -140,13 +138,49 @@ async def test_a_pushed_item_holds_its_file_in_files_and_lets_go_of_the_version_
         )
         src = data(await client.post("/v1/sources", json={"type": "push", "name": "Rules", "kbIds": [kb["id"]]}), 201)
         item = {"name": "chargeback-window", "title": "Chargeback window", "text": "Raised within 120 days."}
-        first = await put(client, src["id"], item)
-        second = await put(client, src["id"], {**item, "text": "Raised within 90 days."})
+
+        async def write(text: str) -> list[str]:
+            early = await client.post(f"/v1/sources/{src['id']}/items", json={**item, "text": text})
+            assert (early.status_code, early.json()["error"]["code"]) == (409, "file_not_ready"), early.text
+            held = data(await client.get(f"/v1/sources/{src['id']}"))["config"]["fileIds"]
+            await scanned()
+            data(await client.post(f"/v1/sources/{src['id']}/sync"))
+            return held
+
+        first = await write("Raised within 120 days.")
+        assert len(first) == 1, "the source keeps the file it was sent before the scan"
+        assert fake.files[first[0]]["referenceCount"] == 1, "the sync after the scan holds it in Files"
+        second = await write("Raised within 90 days.")
+    assert len(second) == 1 and second != first, second
+    assert (fake.files[first[0]]["referenceCount"], fake.files[second[0]]["referenceCount"]) == (0, 1)
+
+
+async def test_a_new_version_of_one_name_keeps_the_file_another_name_holds(engine: AsyncEngine, tenant: str) -> None:
+    """Two names with the same content share one file in Files; a new version of one must not let go of the file
+    the other still reads."""
+    fake = FakeFilesService()
+    scanner = fake.client(service="scanner", scopes=["files:decide"])
+    async with kb_client(engine, tenant, files=FilesServiceIntake(fake.client())) as client:
+        kb = data(
+            await client.post("/v1/knowledge-bases", json={"name": "Disputes", "owner": "james@harborpine.example"}),
+            201,
+        )
+        src = data(await client.post("/v1/sources", json={"type": "push", "name": "Rules", "kbIds": [kb["id"]]}), 201)
+        for name, text in (
+            ("window", "Raised within 120 days."),
+            ("deadline", "Raised within 120 days."),
+            ("window", "Raised within 90 days."),
+        ):
+            await client.post(
+                f"/v1/sources/{src['id']}/items", json={"name": name, "title": "Chargeback window", "text": text}
+            )
+            for fid, f in fake.files.items():
+                if f["scan"]["status"] == "pending":
+                    await scanner.report_scan(tenant, fid, status="clean", engine="clamav")
+            data(await client.post(f"/v1/sources/{src['id']}/sync"))
         held = data(await client.get(f"/v1/sources/{src['id']}"))["config"]["fileIds"]
-    assert (first["outcome"], second["outcome"], len(held)) == ("created", "updated", 1), (first, second, held)
-    old = next(fid for fid in fake.files if fid not in held)
-    assert fake.files[held[0]]["referenceCount"] == 1, "the item's file is held by its source in Files"
-    assert fake.files[old]["referenceCount"] == 0, "the replaced version is let go"
+    shared = next(fid for fid in fake.files if fake.blobs[fid] and b"120" in fake.blobs[fid])
+    assert shared in held and fake.files[shared]["referenceCount"] == 1, (held, fake.files)
 
 
 async def test_start_up_waits_for_files_service_about_its_setting_not_a_probe_timeout_per_try() -> None:

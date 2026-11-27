@@ -1196,8 +1196,9 @@ class KnowledgeService:
 
     async def upload(self, who: Who, source_id: str, data: bytes, *, name: str, mime: str) -> Uploaded:
         """Stores bytes kb-service writes itself (a page, a pushed item, the demo seed) and adds them to the source
-        under `name`, holding the file in Files as `add_files` does; the file it replaces under that name is let go, so
-        Files keeps no version nothing reads. People add files through Files and `add_files`."""
+        under `name`; the file it replaces under that name is let go, so Files keeps no version nothing reads. The new
+        file is held in Files now when its scan is already clean, otherwise by the first sync that finds it clean: Files
+        refuses a reference on a file it has not scanned. People add files through Files and `add_files`."""
         s = await self._changeable_source(who, source_id)
         if not data:
             raise ValidationFailed("The file is empty.")
@@ -1207,11 +1208,10 @@ class KnowledgeService:
             stored = await self.files.put(who.tenant_id, source_team(s), data, name=name, mime=mime, actor=who.email)
         except ValueError as e:
             raise ValidationFailed(str(e), code="file_not_ready") from e
-        await self._use_file(who, s, stored.file_id)
-        replaced = [f for f, n in (s.file_names or {}).items() if n == name and f != stored.file_id]
-        await self.store.add_file(who.tenant_id, source_id, stored.file_id, name)
-        for file_id in replaced:
-            await self.files.release(who.tenant_id, source_team(s), file_id, source_id=source_id)
+        replaced = await self.store.add_file(who.tenant_id, source_id, stored.file_id, name)
+        with contextlib.suppress(FileNotScanned):
+            await self.files.use(who.tenant_id, source_team(s), stored.file_id, source_id=s.id, source_name=s.name)
+        await self._let_go(who, s, replaced)
         return {
             "fileId": stored.file_id,
             # The name it was uploaded under, which the source indexes it by; the stored blob may carry an earlier one.
@@ -1221,6 +1221,16 @@ class KnowledgeService:
             "digest": stored.digest,
             "deduplicated": stored.deduplicated,
         }
+
+    async def _let_go(self, who: Who, s: SourceRow, file_ids: set[str]) -> None:
+        """Releases the source's reference on files a write took out of it. A file still in the source under another
+        name is never among them, as the source records one name per file. A release Files refuses is logged: the
+        source no longer reads the file, and Files lists it as unreferenced."""
+        for file_id in sorted(file_ids):
+            try:
+                await self.files.release(who.tenant_id, source_team(s), file_id, source_id=s.id)
+            except ServiceUnavailable:
+                logger.warning("kb_file_release_failed", source=s.id, file=file_id)
 
     async def _use_file(self, who: Who, s: SourceRow, file_id: str) -> tuple[str, str]:
         try:
@@ -1250,7 +1260,7 @@ class KnowledgeService:
                     await self.files.release(who.tenant_id, source_team(s), file_id, source_id=source_id)
             raise
         for file_id, name in used:
-            await self.store.add_file(who.tenant_id, source_id, file_id, name)
+            await self._let_go(who, s, await self.store.add_file(who.tenant_id, source_id, file_id, name))
         return [{"fileId": f, "name": n} for f, n in used]
 
     async def sync(self, who: Who, source_id: str, *, full: bool = False, retry: bool = False) -> RunView:
@@ -1526,6 +1536,11 @@ class KnowledgeService:
                 continue
             # Indexed under the name it was uploaded under in this source (kb_0005), not the blob's first name.
             name = uploaded.get(file_id) or found.name
+            if (known := items.get(name)) is None or known.digest != found.digest:
+                # A file written before its scan is held in Files from the first sync that finds it clean; a file
+                # gone since the describe fails its read below, which says so.
+                with contextlib.suppress(FileMissing, FileNotScanned):
+                    await self.files.use(who.tenant_id, source_team(s), file_id, source_id=s.id, source_name=s.name)
             if name in latest:
                 superseded.add(latest[name].file_id)
             latest[name] = found
@@ -2771,10 +2786,11 @@ class KnowledgeService:
             log = [str(x) for x in cast(list[object], run.get("log") or [])]
         found = (await self.store.sources(who.tenant_id, [source_id]))[0]
         item = next((x for x in await self.store.items(who.tenant_id, source_ids=[source_id]) if x.path == name), None)
-        if item is None:
-            # Stored, but the run made no item: files-service holds a new file unreadable until its scan says clean
-            # (production scans every file), or a rule or the same content under another name left it out.
-            why = next((x for x in log if x.startswith(f"{name}:")), "")
+        why = next((x for x in log if x.startswith(f"{name}:")), "")
+        if item is None or "not scanned" in why:
+            # Stored, but the run did not read it: files-service holds a new file unreadable until its scan says clean
+            # (production scans every file), so a new version is not searchable yet either and the earlier one still
+            # answers; or a rule or the same content under another name left it out.
             if "not scanned" in why:
                 raise Conflict(
                     f"{name} is stored but not scanned clean yet, so it is not searchable; it is read on the next sync "

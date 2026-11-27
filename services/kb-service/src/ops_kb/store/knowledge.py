@@ -1554,7 +1554,9 @@ class KnowledgeStore(Store):
         q = sa.select(kb_sources.c.file_ids, kb_sources.c.file_names).where(*key, team_visible(kb_sources))
         return (await c.execute(q)).one()
 
-    async def add_file(self, tenant: str, source_id: str, file_id: str, name: str) -> None:
+    async def add_file(self, tenant: str, source_id: str, file_id: str, name: str) -> set[str]:
+        """Adds the file under `name` and returns the files it took the place of, read in the same transaction, so a
+        caller lets go of exactly what this write removed and two writes of one name never both keep the same file."""
         async with self.tx() as c:
             key = (kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
             row = await self._files_of(c, key)
@@ -1569,6 +1571,7 @@ class KnowledgeStore(Store):
                 .where(*key)
                 .values(file_ids=ids if file_id in ids else [*ids, file_id], file_names=names)
             )
+            return replaced
 
     async def swap_files(self, tenant: str, source_id: str, moved: dict[str, str]) -> None:
         """Points a source at files copied to another store, keeping each file's place and uploaded name."""
