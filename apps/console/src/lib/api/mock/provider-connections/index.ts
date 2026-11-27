@@ -77,7 +77,7 @@ const TYPES: ProviderTypeInfo[] = [
   },
 ];
 
-const CATALOG: CatalogModel[] = [
+export const CATALOG: CatalogModel[] = [
   { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', context: 200000, output: 64000, reasoning: true, images: true, inputPerMillion: 3, outputPerMillion: 15, knobs: ['temperature', 'top_p', 'top_k', 'max_tokens', 'thinking_budget'] },
   { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', context: 200000, output: 64000, reasoning: true, images: true, inputPerMillion: 1, outputPerMillion: 5, knobs: ['temperature', 'top_p', 'top_k', 'max_tokens', 'thinking_budget'] },
   { id: 'gpt-4.1-mini', name: 'GPT-4.1 mini', context: 1000000, output: 32768, reasoning: false, images: true, inputPerMillion: 0.4, outputPerMillion: 1.6, knobs: ['temperature', 'top_p', 'max_tokens'] },

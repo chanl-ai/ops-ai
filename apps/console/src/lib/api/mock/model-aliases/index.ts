@@ -4,6 +4,7 @@ import { ApiError } from '../../contract';
 import type { ModelAliasesApi } from '../../model-aliases-contract';
 import { knobProblems } from '@/lib/model-forms';
 import { list } from '../runtime';
+import { CATALOG } from '../provider-connections';
 
 // Sample aliases of a bank, an insurer and a plant: the connection ids are those of the mock's connections.
 const SEED: ModelAliasRow[] = [
@@ -44,6 +45,21 @@ export function mockSettingProblem(rows: ModelAliasRow[], alias: string, setting
   if (bad) throw new ApiError(`${bad[0]}: ${bad[1]}`, 422, undefined, 'model_setting_invalid', { alias });
 }
 
+/** A version's price as models-service sets it: both or neither; neither takes the catalog's; zero only for a model the
+ * catalog lists as free, since a zero price lets every budget pass. */
+export function mockPrice(input: { modelId: string; inputPerMillion?: number; outputPerMillion?: number }): { inputPerMillion: string; outputPerMillion: string } {
+  const given = [input.inputPerMillion, input.outputPerMillion];
+  if ((given[0] === undefined) !== (given[1] === undefined)) throw new ApiError('Give both the input and the output price per million tokens, or neither for the catalog\'s.', 422, undefined, 'price_incomplete');
+  const listed = CATALOG.find((m) => m.id === input.modelId);
+  const free = listed?.inputPerMillion === 0 && listed?.outputPerMillion === 0;
+  if (given[0] !== undefined && given[1] !== undefined) {
+    if (given[0] || given[1] || free) return { inputPerMillion: String(given[0]), outputPerMillion: String(given[1]) };
+    throw new ApiError(`A price of zero lets every budget pass, and the model catalog does not list ${input.modelId} as free; give its input and output price per million tokens.`, 422, undefined, 'price_required');
+  }
+  if (listed?.inputPerMillion != null && listed?.outputPerMillion != null) return { inputPerMillion: String(listed.inputPerMillion), outputPerMillion: String(listed.outputPerMillion) };
+  throw new ApiError(`${input.modelId} has no price in the model catalog; give its input and output price per million tokens.`, 422, undefined, 'price_required');
+}
+
 /** Sample aliases for a console with no models-service; nothing outlives a reload. */
 export function createMockModelAliases(): ModelAliasesApi & { rows: () => ModelAliasRow[] } {
   let rows = structuredClone(SEED);
@@ -52,14 +68,15 @@ export function createMockModelAliases(): ModelAliasesApi & { rows: () => ModelA
     list: async (p) => list(rows, p, { text: (a) => `${a.name} ${a.modelId}`, value: () => '', facetKeys: [], id: (a) => a.name }, 'normal'),
     create: async (input) => {
       if (rows.some((r) => r.name === input.name)) throw new ApiError(`An alias named ${input.name} exists.`, 409, undefined, 'alias_exists');
-      rows = [...rows, { name: input.name, version: 1, kind: 'chat', providerId: input.providerId, modelId: input.modelId, clearedSensitivity: input.clearedSensitivity, inputPerMillion: String(input.inputPerMillion ?? 0), outputPerMillion: String(input.outputPerMillion ?? 0), status: 'current' }].sort((a, b) => a.name.localeCompare(b.name));
+      rows = [...rows, { name: input.name, version: 1, kind: 'chat', providerId: input.providerId, modelId: input.modelId, clearedSensitivity: input.clearedSensitivity, ...mockPrice(input), status: 'current' }].sort((a, b) => a.name.localeCompare(b.name));
       return { name: input.name, version: 1 };
     },
     newVersion: async (name, input) => {
       const was = rows.find((r) => r.name === name);
       if (!was) throw new ApiError(`No alias ${name}.`, 404, undefined, 'alias_not_found');
+      const price = mockPrice(input);
       const version = was.version + 1;
-      rows = rows.map((r) => (r.name === name ? { ...r, version, providerId: input.providerId, modelId: input.modelId, clearedSensitivity: input.clearedSensitivity, inputPerMillion: String(input.inputPerMillion ?? 0), outputPerMillion: String(input.outputPerMillion ?? 0) } : r));
+      rows = rows.map((r) => (r.name === name ? { ...r, version, providerId: input.providerId, modelId: input.modelId, clearedSensitivity: input.clearedSensitivity, ...price } : r));
       return { name, version };
     },
   };

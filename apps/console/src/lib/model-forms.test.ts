@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { without } from './schema-values.ts';
-import { aliasWriteAccess, usedByLabel, connectionBody, knobProblems, settingsForAlias } from './model-forms.ts';
+import { aliasSaveErrors, aliasWriteAccess, usedByLabel, connectionBody, knobProblems, settingsForAlias } from './model-forms.ts';
 import type { KnobSchema, ProviderTypeInfo } from './types/models.ts';
 
 const secret = { type: 'string', 'x-secret': true } as const;
@@ -76,4 +76,14 @@ test('an unknown used-by count shows a dash, a known one its agents', () => {
   assert.equal(usedByLabel(undefined), '–');
   assert.equal(usedByLabel(0), '0 agents');
   assert.equal(usedByLabel(1), '1 agent');
+});
+
+test('an alias save refusal lands on the field its code names, never on a word in the message', () => {
+  const missing = { message: 'No alias price-bot.', code: 'alias_not_found' };
+  assert.deepEqual(aliasSaveErrors(missing, true), { submit: missing.message });
+  const taken = { message: 'Alias price-bot exists; add a version instead.', code: 'alias_exists' };
+  assert.deepEqual(aliasSaveErrors(taken, false), { name: taken.message });
+  for (const code of ['price_required', 'price_incomplete']) {
+    assert.deepEqual(aliasSaveErrors({ message: 'needs a price', code }, true), { inputPerMillion: 'needs a price' });
+  }
 });

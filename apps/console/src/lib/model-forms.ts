@@ -95,6 +95,14 @@ export function aliasNameProblem(name: string): string | undefined {
 }
 
 /** A price the person typed: empty means none (0), anything else a number of at least 0. */
+/** Where a refused alias save shows: by the error's code, since a message names the alias, and an alias may be called
+ * "price-bot" or "named-x". A taken name goes on the name field of a new alias; a price refusal on the price field. */
+export function aliasSaveErrors(e: { message: string; code?: string }, editing: boolean): { name?: string; inputPerMillion?: string; submit?: string } {
+  if (e.code === 'alias_exists' && !editing) return { name: e.message };
+  if (e.code === 'price_required' || e.code === 'price_incomplete') return { inputPerMillion: e.message };
+  return { submit: e.message };
+}
+
 export function priceProblem(value: string): string | undefined {
   if (!value.trim()) return undefined;
   const n = Number(value);

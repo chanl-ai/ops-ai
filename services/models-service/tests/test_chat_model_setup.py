@@ -205,3 +205,14 @@ async def test_a_zero_priced_chat_alias_takes_the_given_price_or_is_refused(rig:
             2,
             8,
         )
+
+
+async def test_a_body_price_replaces_the_price_a_same_model_alias_holds(rig: Rig) -> None:
+    first = {"provider": "openai", "model": "gpt-4.1-mini", "keyName": "MAIN"}
+    assert (await rig.client.put("/v1/models/chat-model", json=first)).status_code == 200
+    rate = {"inputPerMillion": "2.5", "outputPerMillion": "10"}
+    assert (await rig.client.put("/v1/models/chat-model", json={**first, **rate})).status_code == 200
+    url = f"/v1/models/aliases/{rig.aliases[0]}/versions"
+    held = (await rig.client.get(url, headers=SERVICE)).json()["data"]["data"][-1]
+    priced = (held["modelId"], float(held["inputPerMillion"]), float(held["outputPerMillion"]))
+    assert priced == ("gpt-4.1-mini", 2.5, 10.0)
