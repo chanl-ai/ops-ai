@@ -7,7 +7,10 @@ openapi: 3.1.0
 info:
   title: Ops AI agents version 2 (draft)
   version: 0.1.0-draft
-  description: New and changed public routes of releases 1.4.0, 1.5.0 and 1.6.0. Each operation's x-release names its release.
+  description: >-
+    New and changed public routes of releases 1.4.0, 1.5.0 and 1.6.0. Each operation's x-release names its release.
+    A subset: routes for service callers (calls/decide, approvals), the Teams callback and the single-policy and
+    publish routes of hook policies are listed on the API page only.
 servers:
   - url: https://ops.example.com
 tags:

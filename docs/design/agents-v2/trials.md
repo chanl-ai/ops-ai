@@ -36,7 +36,7 @@ merged.
 | 10 | Save, sleep and wake with 1 GB of files | The save design and its limits | 1.5.0 |
 | 11 | A waiting run across an upgrade | Rebuild from the journal | 1.6.0 |
 | 12 | A crash in the middle of a team, on both databases | Engine-driven hand-overs and cycles | 1.6.0 |
-| 13 | An agent step paused for approval | The agent port's pause and resume in 1.6.0 lane D. The approval pause itself is proven by trial 1 in 1.4.0, so lane F of 1.4.0 does not wait for this trial | 1.6.0 |
+| 13 | An agent step paused for approval | The agent port's pause and resume in 1.6.0 lane D. Its step 4 gates the notifiers, lane F. The pause and resume of a turn, a helper's included, moved into trial 1 in 1.4.0; this trial keeps the engine's side | 1.6.0 |
 | 14 | The engine on SQL Server under load | Removing the engine's lines from the portable baseline | 1.6.0 |
 
 Trials 1, 2 and 3 can run in parallel after trial 0. Trials 5 to 10 can run in parallel. Trials 11 to 14 can run in
@@ -86,7 +86,7 @@ continue?
 | 6 | Repeat with "rejected", with two tool calls pending in one step, and with the snapshot loaded 10 times in a row (size must not grow) |
 | 7 | Measure the snapshot's size after 5, 20 and 60 messages |
 | 8 | A helper's pause: the outer agent's `before_tool` hook for an `ask helper` tool runs a second agent whose own write raises an interrupt. The hook raises the outer interrupt carrying the helper's snapshot. In process B, resume: the hook runs again for the same call, loads the helper's snapshot, resumes it, and supplies its reply as the tool's result. Confirm the helper's write runs once and the outer tool's body never runs |
-| 9 | At a stub gateway, record the body of the model request before the pause and of the same step's request after resume. Hash both with the fields of `model_ledger.py:49` removed and compare |
+| 9 | At a stub gateway, record the body of the model request before the pause, then resume twice from the same snapshot and record the same step's request each time. Hash all three with the fields of `model_ledger.py:49` removed and compare |
 
 Pass: steps 5, 6 and 8 hold on the pinned version, a 60-message snapshot is under 2 MB, and step 9's hashes are equal
 or differ only in fields that can be listed in `OPS_MODELS_REPLAY_STRIP_FIELDS`.

@@ -119,7 +119,7 @@ class SourceRef(ServiceShape):
     fetched_at: str | None = None
 ```
 
-Routes added in 1.4.0, both for service callers only:
+Routes for service callers only. The first two are release 1.4.0 and the third is 1.5.0:
 
 | Method | Path | Body | Returns | Purpose |
 |---|---|---|---|---|
@@ -263,6 +263,6 @@ sequenceDiagram
 
 | # | Open point | Settled by |
 |---|---|---|
-| 4 | Whether the tool gateway should stop importing the agents service's catalogue and local executor (`registry.py:15`, `tools.py:11`), so that it no longer installs the loop library | A later release; nothing here depends on it |
 | 2 | Whether `web.fetch` should render pages that need scripts | Not in 1.5.0. Browser use is the one feature left out of the plan |
 | 3 | Whether a tool server's OAuth sign-in can reuse the connection kinds unchanged | A spike against one public server that requires OAuth, before the lane starts |
+| 4 | Whether the tool gateway should stop importing the agents service's catalogue and local executor (`registry.py:15`, `tools.py:11`), so that it no longer installs the loop library | A later release; nothing here depends on it |

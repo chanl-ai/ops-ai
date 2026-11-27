@@ -72,7 +72,7 @@ it names are done.
 
 | Order | Lane | Builds | Needs |
 |---|---|---|---|
-| 0 | Trials 0 to 3 | | |
+| 0 | Trials 0 to 3. Trial 1 is the pause trial: a turn and a helper's nested turn paused, saved and resumed in a fresh process | | |
 | 1 | A. Scripted model seam | The scripted model; kernel tests moved onto it under the current loop | |
 | 1 | B. Gateway budgets | Budget tables and routes with kind, id form and creator; reservations of cost, calls and tokens; replay; purposes; the budget and replay-key requirement per key kind; cached tokens | |
 | 1 | M. Approval mint and decide | `POST /v1/calls/decide` and `POST /v1/approvals` in the tool gateway; the agents service asks for tokens and loses the review key | |
@@ -80,7 +80,7 @@ it names are done.
 | 1 | C. Spec model | The schema, the spec model, validation rules, storage, the spec routes | |
 | 2 | D. Contract and driver | `LoopDriver`, `LoopSeams`, the current loop wrapped as a driver, then the Strands driver; the one pause seam; cancel by a flag on the run row | A, M, trials 1 and 2 |
 | 2 | E. Agents ledger removal | The agents service sends budget headers and drops its own ledger | B |
-| 3 | F. Feature port | The 13 features on the seams, hook policy evaluation, both drivers green, then the old driver deleted | D, E, N, trial 1 (the pause trial, moved into this release) |
+| 3 | F. Feature port | The 13 features on the seams, hook policy evaluation, both drivers green, then the old driver deleted | D, E, N, trial 1 |
 | 3 | G. SDK and CLI for the spec | `apply`, `export`, `validate`, `diff` | C |
 | 4 | H. Automatic mode and loop kinds | Mode naming from the `why` argument, plan-before-write, helpers with nested pauses, hand-overs with a loop state per agent, shared notes, questions and plan reviews, the loops route, the new stream frames. `long_running` waits for 1.5.0 | F, trial 3 |
 | 4 | I. Evals | New checks, background runs, the gate by digest | F, C |
@@ -114,7 +114,7 @@ it names are done.
 | 1 | C. Tasks | The tasks routes, kinds, roles, `thenAsk`, escalation on the engine | |
 | 2 | D. Agent step pause | The port's pause and resume, turn states | A, trial 13 |
 | 2 | E. Connections and groups | Kinds, checks, hand-over ports, ask as a child step, the check loop, group limits, notes | A, trial 12 |
-| 2 | F. Notifiers | Email and Teams (one connection per tenant), signed links, the confirm page | C |
+| 2 | F. Notifiers | Email and Teams (one connection per tenant), signed links, the confirm page | C, trial 13 |
 | 3 | G. Undo steps | | E |
 | 3 | H. Team tests | | E, C |
 | 3 | I. SDK and CLI | | C, E |

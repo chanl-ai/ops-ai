@@ -165,7 +165,10 @@ class TurnResult:                      # types.py:397, plus:
     notes_added: list[str] = ()
 ```
 
-The types named above, with every field:
+The types named above, with every field. `Plan`, `LoadedSkill` and `TokenUsage` exist
+today in the kernel's `types.py` (`:28`, `:35`, `:387`), `ToolCaches` in `tool_cache.py:63` and `SkillRunState` in the
+contracts package, all unchanged; `ModeStep` and `LoopSettings` are on the
+[automatic mode](automatic-mode-and-loop-kinds.md#interfaces) page; `ToolOutcome` moves to the contracts package.
 
 ```python
 @dataclass(frozen=True)
@@ -230,8 +233,16 @@ class MemberOption:
     when: str = ""
 
 @dataclass(frozen=True)
+class Note:
+    by: str                            # an agent id or a user id
+    by_kind: Literal["agent", "person"]
+    by_name: str
+    at: datetime
+    text: str                          # at most 2,000 characters
+
+@dataclass(frozen=True)
 class NotesGrant:
-    notes: list[Note]                  # what the agent reads: {by, by_kind, by_name, at, text}
+    notes: list[Note]                  # what the agent reads
     may_write: bool
 ```
 
@@ -413,7 +424,7 @@ class HookPolicy:
     version: int
     name: str
     moment: Literal["before_model", "after_model", "before_tool", "after_tool"]
-    when: str                          # an expression in the language step procedures use (`expr.py`); "" always matches
+    when: str                          # an expression in the kernel's expression language (`packages/ops_agent_kernel/src/ops_agent_kernel/expr.py`); "" always matches
     action: Literal["refuse_tool", "require_approval", "mask_result", "guide", "retry_answer"]
     text: str = ""                     # refuse_tool, guide, retry_answer: what the model is told
     fields: list[str] = ()             # mask_result: JSON paths in the tool's result to mask
