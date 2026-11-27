@@ -212,6 +212,7 @@ def build(
                 ),
                 state.get("skill_turn"),
             ),
+            loop=a.loop_settings(),
             tools=[*await asked(state, _switched_on(await agent_grants(deps, a), effective)), *offers],
             transcript=transcript,
             carried_skills=carried,
@@ -316,6 +317,7 @@ def build(
                 ),
                 state.get("skill_turn"),
             ),
+            loop=a.loop_settings(),
             tools=[*await asked(state, _switched_on(await agent_grants(deps, a), effective), now), *offers],
             # The same bases as the turn it resumes, so a search after the approval keeps to them.
             kb_ids=_granted(state, _kb_grants(a, deps.model_alias, effective)),

@@ -23,9 +23,11 @@ from ops_agents.activities.catalog import AgentDefinition, Catalog, Fragment, Gu
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import json_object
 from ops_store import isolation
 
 from ..app import agent_brief
+from ..domain.agent_spec import DOCUMENT_KEY
 from ..store.agent_registry import (
     AgentRegistry,
     AgentRow,
@@ -243,6 +245,7 @@ def definition_of(agent_id: str, version: int, spec: Json) -> AgentDefinition:
     patterns = agent_brief.patterns_of(spec)
     widget_settings = s.get("widgets") or {}
     caps = s.get("guardrails") or {}
+    document = json_object(json_object(spec.get(DOCUMENT_KEY)).get("written"))
     return AgentDefinition(
         id=agent_id,
         name=s["name"],
@@ -274,6 +277,8 @@ def definition_of(agent_id: str, version: int, spec: Json) -> AgentDefinition:
         thinking=None if patterns.thinking == "default" else patterns.thinking,
         parallel_reads=patterns.parallel_reads,
         model_settings=model_settings_of(spec),
+        loop=json_object(document.get("loop")),
+        sandbox=document.get("sandbox") is not None,
     )
 
 
