@@ -276,7 +276,14 @@ def _prepare(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[byte
     if BASE_URL:
         _deployed_guard()
         return None
-    return subprocess.run(argv, **kwargs)
+    done = subprocess.run(argv, **{**kwargs, "check": False})
+    if kwargs.get("check") and done.returncode:
+        # A captured migrate would otherwise fail with only its exit status, hiding why.
+        for out in (done.stdout, done.stderr):
+            if out:
+                sys.stderr.write(out.decode(errors="replace") if isinstance(out, bytes) else str(out))
+        raise subprocess.CalledProcessError(done.returncode, argv, done.stdout, done.stderr)
+    return done
 
 
 @contextmanager
