@@ -357,6 +357,70 @@ async def test_a_sync_that_lost_its_lease_lets_go_of_nothing(engine: AsyncEngine
     assert old in held and fake.files[old]["referenceCount"] == 1, (held, fake.files)
 
 
+async def test_a_sync_that_lost_its_lease_is_recorded_as_stopped(engine: AsyncEngine, tenant: str) -> None:
+    """A sync that lost its lease stopped reading but still removed excluded items and recorded success."""
+    fake = _ScannedAtOnce()
+    intake = _MidSync(fake.client())
+    async with kb_client(engine, tenant, files=intake) as client:
+        src = await push_source(client)
+        first = {"name": "window", "title": "W", "text": "Raised within 120 days."}
+        data(await client.post(f"/v1/sources/{src}/items", json=first))
+
+        async def taken() -> None:
+            async with engine.begin() as c:
+                await c.execute(sa.update(kb_sources).where(kb_sources.c.id == src).values(lease_owner="lease_other"))
+
+        intake.during = taken
+        await client.post(f"/v1/sources/{src}/items", json={**first, "text": "Raised within 90 days."})
+        runs = data(await client.get(f"/v1/sources/{src}/runs"))["data"]
+    assert runs[0]["status"] == "cancelled" and any("lease" in x for x in runs[0]["log"]), runs[0]
+
+
+async def test_earlier_content_sent_again_after_a_refused_version_clears_the_scan_note(
+    engine: AsyncEngine, tenant: str
+) -> None:
+    """The note that a newer version was refused stayed on the item after the earlier content was sent again."""
+    fake = FakeFilesService()
+    async with kb_client(engine, tenant, files=FilesServiceIntake(fake.client())) as client:
+        src = await push_source(client)
+        body = {"name": "window", "title": "Window", "text": "Raised within 120 days."}
+        for text, verdict in (("Raised within 120 days.", "clean"), ("Raised within 90 days.", "infected")):
+            await client.post(f"/v1/sources/{src}/items", json={**body, "text": text})
+            await scan_all(fake, tenant, verdict)
+            data(await client.post(f"/v1/sources/{src}/sync"))
+        assert "infected" in (data(await client.get(f"/v1/sources/{src}/items"))["data"][0].get("warning") or "")
+        again = data(await client.post(f"/v1/sources/{src}/items", json=body))["item"]
+    assert again["status"] == "indexed" and "infected" not in (again.get("warning") or ""), again
+
+
+class _NoRelease(FakeFilesService):
+    """A Files that refuses every release of a reference."""
+
+    def handle(self, request: httpx.Request) -> httpx.Response:
+        if request.method == "DELETE" and "/references/" in request.url.path:
+            return httpx.Response(503, json={"success": False, "error": {"code": "unavailable", "message": "down"}})
+        return super().handle(request)
+
+
+async def test_a_refused_add_reports_its_own_refusal_and_leaves_no_documents_source(
+    engine: AsyncEngine, tenant: str
+) -> None:
+    """A release Files refused during the rollback of a refused add replaced the refusal with a 503, stopped the
+    rollback, and left the base an empty documents source."""
+    fake = _NoRelease()
+    files = fake.client()
+    async with kb_client(engine, tenant, files=FilesServiceIntake(files)) as client:
+        kb = data(
+            await client.post("/v1/knowledge-bases", json={"name": "Disputes", "owner": "james@harborpine.example"}),
+            201,
+        )
+        fid = await stored(fake, files, tenant, "rates.pdf", RATES)
+        r = await client.post(f"/v1/knowledge-bases/{kb['id']}/documents", json={"fileIds": [fid, "fil_none"]})
+        sources = data(await client.get("/v1/sources"))["data"]
+    assert r.status_code == 404 and r.json()["error"]["code"] != "files_unavailable", r.text
+    assert not [x for x in sources if kb["id"] in (x.get("kbIds") or [])], sources
+
+
 async def test_a_source_whose_files_cannot_be_released_is_kept_to_retry(engine: AsyncEngine, tenant: str) -> None:
     """Removing a source deleted its row and then released its files, so a release Files refused left a file held
     for a source that no longer existed. The source stays, the caller can retry, and the retry lets go of all."""

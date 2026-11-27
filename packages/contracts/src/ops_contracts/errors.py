@@ -113,6 +113,8 @@ CODES: dict[str, Code] = {
     # Our own limit: the caller waits the Retry-After it names.
     "too_many_requests": Code("refused", True, "Too many requests right now. Please try again shortly."),
     "unavailable": Code("upstream", True, "A service this needs could not be reached. Please try again."),
+    # kb-service when files-service refuses or cannot be reached; nothing was changed.
+    "files_unavailable": Code("upstream", True, "The file store could not be reached. Please try again."),
     "internal": Code("internal", False, _TRY_AGAIN),
 }
 

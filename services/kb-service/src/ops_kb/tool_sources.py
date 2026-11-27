@@ -525,8 +525,8 @@ async def _put(
 async def release_snapshots(service: KnowledgeService, who: Who, s: SourceRow, file_ids: list[str]) -> None:
     """Lets go of snapshots no item of the source uses any more; files-service keeps each for its retention days."""
     held = {i.file_id for i in await service.store.items(who.tenant_id, source_ids=[str(s.id)])}
-    for file_id in dict.fromkeys(f for f in file_ids if f and f not in held):
-        await service.files.release(who.tenant_id, source_team(s), file_id, source_id=str(s.id))
+    # A refused release is logged and the sync carries on: its items were already written.
+    await service._let_go(who, s, {f for f in file_ids if f and f not in held})  # pyright: ignore[reportPrivateUsage]
 
 
 # What a kept item says once its source has removed it.
