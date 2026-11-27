@@ -1,6 +1,6 @@
 # Trials for agents version 2
 
-Status: proposed design, written 2026-11-26. No trial has been run. Each result is written into this page when its trial
+Status: proposed design, written 2026-11-26. No trial has been run; trials 0 and 1 were started and stopped on 2026-11-26 (see Results). Each result is written into this page when its trial
 ends.
 
 A trial is a short experiment that answers one question the specs could not settle from documentation. Each has a plan
@@ -358,4 +358,20 @@ Fallback: the statement that deadlocks keeps a SQL Server-specific form inside `
 
 ## Results
 
-None yet.
+| Trial | Date | Result |
+|---|---|---|
+| 0 | 2026-11-26 | Not run. No licence file, release date or advisory was checked |
+| 1 | 2026-11-26 | Not run: stopped before the first execution. No pass or fail against the pass line |
+
+Trial 1, state when stopped. A scripted OpenAI-compatible stub and the shared agents and hooks were drafted and never
+executed, so they were not committed. No database schema was created and no process was left running.
+
+Facts read from the source of `strands-agents` 1.67.0 on Python 3.12.6. They were read, not exercised, so the
+"unverified" marks in the specs stay until the trial runs:
+
+| Fact | Where |
+|---|---|
+| The `session` snapshot preset includes `interrupt_state`, and that state serialises the pending interrupts and a `pending_tool_execution` (the assistant message with the tool calls, and the results already completed) | `strands/types/_snapshot.py:36`, `strands/interrupt.py` (`_InterruptState.to_dict`) |
+| `load_snapshot` rebuilds the interrupt state with `_InterruptState.from_dict`, which restores the pending execution only when the state is activated | `strands/agent/agent.py:2314`, `strands/interrupt.py` |
+| A `before_tool` hook's `cancel_tool` puts its text into a tool result with error status. A hook can set `selected_tool` to supply a different tool for the same call | `strands/hooks/events.py:221` |
+| A `before_tool` interrupt id is built from the tool-use id and the interrupt's name, so it is the same in any process | `strands/hooks/events.py` (`_interrupt_id`) |
