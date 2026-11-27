@@ -357,8 +357,9 @@ async def test_an_agent_interrupt_survives_a_restart_and_resumes_the_same_call(g
         assert a.model.calls - before == 1  # only the closing answer; the approved call is not asked for again
 
 
-# 12a. Agent activity retried after a crash repeats model or tool calls.
-async def crash_after_the_resume_turn(adapter: Adapter, monkeypatch: pytest.MonkeyPatch) -> tuple[str, int]:
+# 12a. Agent activity retried after a crash repeats tool calls. A repeated model call is answered from models-service's
+# replay record (tests/engine/test_model_replay.py).
+async def crash_after_the_resume_turn(adapter: Adapter, monkeypatch: pytest.MonkeyPatch) -> str:
     """The worker dies after the resumed kernel turn has run the approved tool, before the node's checkpoint.
     E2's sweeper continues the thread, so the resume node runs again from its start."""
     tid = await wire_waiting(adapter)
@@ -373,28 +374,20 @@ async def crash_after_the_resume_turn(adapter: Adapter, monkeypatch: pytest.Monk
         return result
 
     monkeypatch.setattr("ops_agents.graphs.agent_wrapper.kernel_turn", turn_then_die)
-    before = adapter.model.calls
     await second_approval(adapter, tid)
     assert (await adapter.last_run(tid))["status"] == "error"
     assert await recover(adapter.rt, tid, (await adapter.runs(tid))[-1]["runId"]) is not None
-    return tid, adapter.model.calls - before
+    return tid
 
 
 async def test_an_agent_retry_after_a_crash_repeats_no_tool_call(
     adapter: Adapter, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    tid, _ = await crash_after_the_resume_turn(adapter, monkeypatch)
+    tid = await crash_after_the_resume_turn(adapter, monkeypatch)
     assert [(t, o) for t, _, o in await adapter.effects(tid)] == [
         ("place_wire_hold", "ok"),
         ("place_wire_hold", "replayed"),
     ]
-
-
-async def test_an_agent_retry_after_a_crash_repeats_no_model_call(
-    adapter: Adapter, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, model_calls = await crash_after_the_resume_turn(adapter, monkeypatch)
-    assert model_calls == 1
 
 
 # 13. R9 cancels an in-flight write.

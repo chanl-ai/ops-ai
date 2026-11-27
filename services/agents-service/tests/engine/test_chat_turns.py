@@ -130,7 +130,7 @@ async def die_mid_reply(a: Proc, monkeypatch: pytest.MonkeyPatch, thread_id: str
         if event == "model_call":
             raise Killed
 
-    monkeypatch.setattr("ops_agents.api.model_ledger.emit", killed)
+    monkeypatch.setattr("ops_agents.api.budgets.emit", killed)
     with contextlib.suppress(Killed, BaseExceptionGroup):
         await a.client.post(
             f"/chat/threads/{thread_id}/messages",

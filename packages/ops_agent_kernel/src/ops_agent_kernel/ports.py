@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
-from contextlib import contextmanager
-from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from pydantic_ai.models import Model
+from pydantic_ai.settings import ModelSettings
 
 from ops_contracts.chat import SignedIn
 from ops_service_kit.http import Json
@@ -41,30 +39,21 @@ class ToolExecutor(Protocol):
 
 class BudgetReachedError(Exception):
     """Raised by the model port in place of a model call the turn's budget no longer covers. The kernel ends the
-    reply: `closing` says whether it may first make one more call, with no tools, to answer from what it has."""
+    reply, first asking for one closing answer with no tools (purpose "closing"), which the gateway admits once per
+    replay key; a refused closing call ends the reply with the budget notice alone."""
 
-    def __init__(self, *, closing: bool) -> None:
+    def __init__(self) -> None:
         super().__init__("The budget this reply spends from is spent.")
-        self.closing = closing
 
 
-# Set while the kernel finishes a reply already under way: the closing answer at the budget, and the checks and
-# corrections of an answer already written. A model port that refuses calls at a budget lets these through.
-_FINISHING: ContextVar[bool] = ContextVar("ops_kernel_finishing", default=False)
+# Sent on every model call: what the call is for. The models gateway admits a "closing" call once per replay key past
+# a spent budget, and "check" or "judge" calls up to its cap; a "turn" call is refused there.
+PURPOSE_HEADER = "X-Call-Purpose"
 
 
-@contextmanager
-def finishing() -> Generator[None]:
-    """Never held across a yield of the turn's event stream: it wraps single awaited calls."""
-    token = _FINISHING.set(True)
-    try:
-        yield
-    finally:
-        _FINISHING.reset(token)
-
-
-def is_finishing() -> bool:
-    return _FINISHING.get()
+def purpose(name: str) -> ModelSettings:
+    """Settings that mark one model call's purpose, passed as `model_settings` to the run that makes it."""
+    return {"extra_headers": {PURPOSE_HEADER: name}}
 
 
 class ModelSource(Protocol):

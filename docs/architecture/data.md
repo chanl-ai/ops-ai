@@ -50,7 +50,6 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.leases` | `Leases` | CAS, CLOCK, LOCK | `thread_leases` |
 | agents-service | `ops_agents.store.mailboxes` | `MailboxStore` | CAS | `mailboxes` |
 | agents-service | `ops_agents.store.memories` | `Memories` | TRANSACTION | `agent_memories`, `memory_audit`, `message_memory_use` |
-| agents-service | `ops_agents.store.model_calls` | `ModelCallLedger` | CAS | `model_call_records`, `model_call_records_unattributed` |
 | agents-service | `ops_agents.store.outbox` | none: no repository class | | `agents_outbox` |
 | agents-service | `ops_agents.store.pin_users` | `PinUsers` | none | none |
 | agents-service | `ops_agents.store.poll_cursors` | `PollCursors` | none | `poll_cursors` |
@@ -68,7 +67,6 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.tool_copies` | `ToolCopies` | CAS, TRANSACTION | `tool_catalog`, `tool_catalog_operations`, `tool_team_state` |
 | agents-service | `ops_agents.store.trigger_events` | `TriggerEvents` | none | `trigger_events` |
 | agents-service | `ops_agents.store.typed_records` | `VersionedRecords` | CAS, TRANSACTION | none |
-| agents-service | `ops_agents.store.usage` | `UsageLedger` | TRANSACTION | `thread_budgets`, `thread_budgets_unattributed` |
 | agents-service | `ops_agents.store.widget_deployments` | `WidgetDeployments` | CAS | `widget_deployments` |
 | agents-service | `ops_agents.store.widget_keys` | none: no repository class | | `widget_mint_key_audit`, `widget_mint_keys` |
 | agents-service | `ops_agents.store.widget_picker` | `WidgetPicker` | none | none |

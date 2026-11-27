@@ -20,6 +20,7 @@ from ops_service_kit.http import Json
 
 from .aliases import preferred
 from .ports import BudgetReachedError, ModelSource
+from .ports import purpose as call_purpose
 from .types import Guardrail
 
 NONE = "none"
@@ -71,8 +72,9 @@ def _labels(rules: list[Guardrail]) -> list[tuple[str, Guardrail, str, str | Non
     return list(out.values())
 
 
-async def check(model: Model, rules: list[Guardrail], text: str) -> Hit | None:
-    """The pinned rule `text` falls under, or None when it touches no blocked topic."""
+async def check(model: Model, rules: list[Guardrail], text: str, *, purpose: str = "check") -> Hit | None:
+    """The pinned rule `text` falls under, or None when it touches no blocked topic. `purpose` is "turn" for the
+    check of the person's question, which a spent budget refuses, and "check" for an answer already written."""
     labels = _labels(rules)
     schema = _schema([label for label, _, _, _ in labels])
     agent = Agent[None, Any](
@@ -86,7 +88,7 @@ async def check(model: Model, rules: list[Guardrail], text: str) -> Hit | None:
     # topic's scope is listed beside it, for its own rule only.
     listed = "\n".join(f"- {label}: {scope}" if scope else f"- {label}" for label, _, _, scope in labels)
     try:
-        result = await agent.run(f"Blocked topics:\n{listed}\n\nMessage:\n{text}")
+        result = await agent.run(f"Blocked topics:\n{listed}\n\nMessage:\n{text}", model_settings=call_purpose(purpose))
     except BudgetReachedError:
         raise  # the turn's budget is spent: the turn ends for that reason, which is not an outage of the check
     except Exception as e:  # any failure of the call is a check that did not run

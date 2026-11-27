@@ -23,7 +23,7 @@ from ops_store.database import Database
 from ..store.channels import ChannelStore
 from ..store.graphs import GraphStore
 from ..store.leases import Leases
-from ..store.usage import UsageLedger
+from .budgets import GatewayBudgets
 from .model_aliases import ModelAliases
 from .timer_port import PollingScheduler, TimerScheduler
 from .usage import AdmitAll, KeyAdmission
@@ -64,8 +64,9 @@ class Runtime:
     knowledge_bases: KnowledgeBases | None = None
     # Told when a timer is armed or cancelled; the poller, the default, reads the timers table instead.
     timer_scheduler: TimerScheduler = field(default_factory=PollingScheduler)
-    # Usage rows and thread budgets (E12); set with the graphs.
-    usage: UsageLedger | None = None
+    # The thread budgets kept by the model gateway (api/budgets.py); None without models-service, when no budget
+    # holds. Set with the graphs.
+    usage: GatewayBudgets | None = None
     # Whether a key may open a new thread; the models service's ledger answers once it exists.
     keys: KeyAdmission = field(default_factory=AdmitAll)
     # Compiles the one-node graph of a published agent; set with the graphs. The registry calls it on publish.

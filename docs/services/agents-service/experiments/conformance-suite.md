@@ -21,7 +21,7 @@ OPA. No real model calls. Every passing test was seen to fail with its guard rem
 | fencing | `test_a_paused_worker_cannot_write_after_takeover` | the checkpointer's fence check | A worker paused past its lease cannot write a checkpoint or the thread status after takeover |
 | timers | `test_a_timer_due_during_a_run_fires_once_after_it_or_is_cancelled` | `sync_timers` after the deciding run | A timer due mid-run is `busy`, then fires once (`fired`, then `duplicate`), or is `cancelled` if the run decided |
 
-Both earlier gaps are closed: R9 (`ops_agents/api/routing.py`, `POST /v1/threads/{id}/route-to-people` and `POST /v1/threads:route-to-people`) and a model-call ledger (`ops_agents/api/model_ledger.py`, table `model_calls`).
+Both earlier gaps are closed: R9 (`ops_agents/api/routing.py`, `POST /v1/threads/{id}/route-to-people` and `POST /v1/threads:route-to-people`) and model-call replay, now held by models-service under each call's replay key (`ops_agents/api/budgets.py`).
 
 ## Gotchas
 

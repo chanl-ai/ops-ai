@@ -67,7 +67,7 @@ from .events import (
     ToolOutput,
     TurnFinished,
 )
-from .ports import BudgetReachedError, KernelPorts, KnowledgeUnavailableError, finishing
+from .ports import BudgetReachedError, KernelPorts, KnowledgeUnavailableError, purpose
 from .types import (
     BaseAnswer,
     CitationRef,
@@ -450,14 +450,16 @@ async def _closing_answer(
     Empty when the request fails, or when a guardrail stops the answer or cannot check it: an unchecked answer is
     never sent."""
     try:
-        with finishing():
-            closer = Agent[None, str](model, deps_type=type(None), output_type=str, instructions=system_prompt)
-            said = await closer.run(
-                CLOSING_PROMPT, message_history=exchanged, usage_limits=UsageLimits(request_limit=1)
-            )
-            text = said.output.strip()
-            if text and rules and await guard.check(guard_model, rules, text) is not None:
-                return ""
+        closer = Agent[None, str](model, deps_type=type(None), output_type=str, instructions=system_prompt)
+        said = await closer.run(
+            CLOSING_PROMPT,
+            message_history=exchanged,
+            usage_limits=UsageLimits(request_limit=1),
+            model_settings=purpose("closing"),
+        )
+        text = said.output.strip()
+        if text and rules and await guard.check(guard_model, rules, text) is not None:
+            return ""
     except Exception:  # the reply then ends with the budget notice alone
         return ""
     return text
@@ -1073,7 +1075,7 @@ CUT_SHORT_TOOLS = "\n\n(Reply cut short: the agent reached the most tool calls i
 CUT_SHORT_STEPS = "\n\n(Reply cut short: the agent reached its step limit for one reply.)"
 BUDGET_REACHED = "This conversation reached its budget before I could answer."
 CUT_SHORT_BUDGET = "\n\n(Reply cut short: the conversation reached its budget.)"
-# The one request a reply may still make at its budget, with no tool offered (ports.BudgetReachedError.closing).
+# The one request a reply may still make at its budget, with no tool offered (ports.BudgetReachedError).
 CLOSING_PROMPT = (
     "The budget for this conversation is spent, so you can make no more tool calls. Answer now, in text, from what "
     "you already have, and say plainly what you could not finish."
@@ -1136,12 +1138,12 @@ async def _end_check(
         return None, TokenUsage()
     try:
         fixer = Agent[None, str](model, deps_type=type(None), output_type=str, instructions=system_prompt)
-        with finishing():
-            again = await fixer.run(
-                answer_check.correction_prompt(found),
-                message_history=history,
-                usage_limits=UsageLimits(request_limit=1),
-            )
+        again = await fixer.run(
+            answer_check.correction_prompt(found),
+            message_history=history,
+            usage_limits=UsageLimits(request_limit=1),
+            model_settings=purpose("check"),
+        )
     except Exception:  # a correction that fails leaves the answer as written
         return None, TokenUsage()
     u = again.usage
@@ -1367,7 +1369,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     if rules and req.user_turn and not req.resume:
         # A question about a blocked topic gets the guardrail's message; the answering model is never called.
         try:
-            hit = await guard.check(guard_model, rules, req.user_turn)
+            hit = await guard.check(guard_model, rules, req.user_turn, purpose="turn")
         except BudgetReachedError:
             # Nothing is written yet, so there is nothing to close on.
             state.text = BUDGET_REACHED
@@ -1571,13 +1573,13 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             yield TextDelta(STEP_LIMIT_REACHED)
         yield finish("completed", "final", error=None)
         return
-    except BudgetReachedError as e:
+    except BudgetReachedError:
         if (cleared := _withhold(state, guarded)) is not None:
             yield cleared
         for closed in _close_open(state, NOT_RUN["budget_reached"]):
             yield closed
         closing = ""
-        if e.closing and req.output_schema is None:
+        if req.output_schema is None:
             exchanged: list[ModelMessage] = events.all_messages() if events is not None else history
             closing = await _closing_answer(model, guard_model, rules, instructions(), exchanged)
         said = closing if closing else (CUT_SHORT_BUDGET if state.text else BUDGET_REACHED)
@@ -1706,8 +1708,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             if streaming:
                 yield StatusChanged("checking")
             try:
-                with finishing():
-                    hit = await guard.check(guard_model, rules, state.text)
+                hit = await guard.check(guard_model, rules, state.text)
             except guard.GuardrailUnavailable as e:
                 yield _replace(state, GUARDRAIL_UNAVAILABLE, guardrail=True)
                 yield finish("failed", "guardrail_unavailable", error=str(e), error_code="guardrail_unavailable")
@@ -1718,13 +1719,13 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                 corrected = ""
                 try:
                     fixer = Agent[None, str](model, deps_type=type(None), output_type=str, instructions=instructions())
-                    with finishing():
-                        again = await fixer.run(
-                            f"Your answer touched a blocked topic ({hit.topic}). Answer the question again without "
-                            "it, using only what you already found.",
-                            message_history=all_messages,
-                            usage_limits=UsageLimits(request_limit=1),
-                        )
+                    again = await fixer.run(
+                        f"Your answer touched a blocked topic ({hit.topic}). Answer the question again without "
+                        "it, using only what you already found.",
+                        message_history=all_messages,
+                        usage_limits=UsageLimits(request_limit=1),
+                        model_settings=purpose("check"),
+                    )
                     corrected = again.output.strip()
                 except Exception:  # a correction that fails leaves only the refusal as safe to send
                     corrected = ""
@@ -1733,8 +1734,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                     # A re-check that cannot run fails the turn closed, as the first check does, rather than passing
                     # for a hit.
                     try:
-                        with finishing():
-                            still = await guard.check(guard_model, rules, corrected)
+                        still = await guard.check(guard_model, rules, corrected)
                     except guard.GuardrailUnavailable as e:
                         yield _replace(state, GUARDRAIL_UNAVAILABLE, guardrail=True)
                         yield finish(

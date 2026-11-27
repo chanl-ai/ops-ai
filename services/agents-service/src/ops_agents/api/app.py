@@ -37,7 +37,6 @@ from ops_agents.graphs.registry import build_graphs
 from ops_documents_client import DocumentsClient
 from ops_files_client import FilesClient
 from ops_identity import Auth, ServiceClient, install_auth
-from ops_metering import PriceTable
 from ops_service_kit.http import operation_id
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
@@ -52,13 +51,13 @@ from ..store.graphs import GraphStore
 from ..store.leases import Leases
 from ..store.mailboxes import MailboxRow, MailboxStore
 from ..store.tenancy import LOCAL_TENANT, SEED, current_team, current_tenant
-from ..store.usage import UsageLedger
 from . import agent_registry, engine_seed, guardrails, skills, workflow_registry
 from .acting_for import CallPeople, acting_for_tokens
 from .agent_calls import AgentCalls
 from .api_key_copy import key_changed_handler
 from .approval_renewal import ApprovalRenewal
 from .apps_line import AppsLine
+from .budgets import BudgetedModel, BudgetedSource, gateway_budgets
 from .chat_attachments import ChatAttachmentReader
 from .child_runs import ChildRuns
 from .deps import Runtime
@@ -70,7 +69,6 @@ from .memory import MemoryReads
 from .memory_retention import PlatformRetention, expire_forever
 from .metering import CountingModels
 from .model_aliases import HttpModelAliases, StaticModelAliases
-from .model_ledger import LedgerModel, LedgerSource
 from .ops_tools import OpsReads, catch_up_assistants, team_created_handlers
 from .people_names import PlatformPeopleNames
 from .platform_policies import PlatformPolicies
@@ -312,15 +310,19 @@ async def open_runtime(
     inner = GatewayToolExecutor(gateway_client, directory) if gateway_client else LocalToolExecutor(catalog)
     tools = WordedTools(inner)
     replies: ReplySender = GatewayReplySender(gateway_client) if gateway_client else LocalReplySender()
-    # Every model call of a graph run is one record: the budget sums them, a crashed node's re-run replays them
-    # (store/model_calls.py, api/model_ledger.py).
-    usage = UsageLedger(db, PriceTable.parse(settings.prices))
+    # models-service answers which aliases an agent may name; without it only the runtime's own alias is known.
+    models_http = models_client or (
+        httpx.AsyncClient(base_url=settings.models_url, timeout=10) if settings.models_url else None
+    )
+    # Through models-service each call names its budget and replay key, and the gateway admits, replays and records it
+    # (api/budgets.py). Without it no budget holds.
+    budgets = gateway_budgets(settings, models_http, db) if through_models is not None and models_http else None
     kernel_model = (
-        LedgerModel(model, usage, settings.model_alias, call_headers=through_models is not None)
+        BudgetedModel(model, budgets, settings.model_alias, headers=through_models is not None)
         if model is not None
         else None
     )
-    per_alias = LedgerSource(through_models, usage) if through_models is not None else None
+    per_alias = BudgetedSource(through_models, budgets) if through_models is not None else None
     kb_http = kb_client or (httpx.AsyncClient(base_url=settings.kb_url, timeout=10) if settings.kb_url else None)
     if knowledge is None:
         knowledge = KbService(required_client(settings, kb_http, "kb")) if kb_http is not None else NoKnowledgeService()
@@ -330,10 +332,6 @@ async def open_runtime(
         else None
     )
 
-    # models-service answers which aliases an agent may name; without it only the runtime's own alias is known.
-    models_http = models_client or (
-        httpx.AsyncClient(base_url=settings.models_url, timeout=10) if settings.models_url else None
-    )
     # The review deadline policy (reviewSlaHours) lives in platform-service; with no platform URL the default holds.
     policies_http = httpx.AsyncClient(base_url=settings.platform_url, timeout=10) if settings.platform_url else None
 
@@ -388,9 +386,9 @@ async def open_runtime(
         if ports is not None and model is not None:
             # LangGraph's checkpoint tables live on the same database as the chat tables.
             saver = checkpointer or await stack.enter_async_context(open_checkpointer(settings.database_url))
-            rt.usage = usage
+            rt.usage = budgets
             models = MeteredModels(
-                CountingModels(graph_models or PydanticAiModels(model)), rt.usage, settings.model_alias
+                CountingModels(graph_models or PydanticAiModels(kernel_model or model)), rt.usage, settings.model_alias
             )
             channels = ChannelStore(db)
             rt.channels = channels

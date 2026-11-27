@@ -9,29 +9,21 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import Any, cast
 
 import httpx
 import httpx2
 import pytest
 from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph import START, StateGraph
 from pydantic import SecretStr
-from pydantic_ai.messages import ModelMessage, ModelRequest, TextPart, UserPromptPart
-from pydantic_ai.models import ModelRequestParameters
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from ops_agent_kernel.models import ModelsServiceModels
 from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
-from ops_agents.api.model_ledger import LedgerSource
 from ops_agents.store.base import metadata
-from ops_agents.store.model_calls import ModelCallLedger
-from ops_agents.store.usage import UsageLedger
 from ops_engine.store import metadata as engine_metadata
 from ops_identity.fastapi import DEV_TENANT
-from ops_metering import PriceTable
 from ops_service_kit.settings import Settings
 from tests.api.test_chat import new_thread, send
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
@@ -88,9 +80,20 @@ class FakeModelsService:
 
 
 def _aliases() -> httpx.AsyncClient:
+    """models-service's alias list; a budget it holds none of is a 404, a budget put
+    is taken, and its call log is empty."""
     rows = [{"name": "bank-standard", "kind": "chat"}, {"name": "bank-reasoning", "kind": "chat"}]
-    answer = httpx.Response(200, json={"success": True, "data": rows})
-    return httpx.AsyncClient(transport=httpx.MockTransport(lambda _: answer), base_url="http://models")
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.path.startswith("/v1/models/budgets/"):
+            if request.method == "PUT":
+                return httpx.Response(200, json={"success": True, "data": {}})
+            return httpx.Response(404, json={"success": False, "error": {"code": "not_found", "status": 404}})
+        if request.url.path == "/v1/models/calls":
+            return httpx.Response(200, json={"success": True, "data": {"data": [], "pagination": {"hasNext": False}}})
+        return httpx.Response(200, json={"success": True, "data": rows})
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://models")
 
 
 @pytest.fixture
@@ -142,23 +145,21 @@ async def test_an_agents_turn_runs_on_its_alias_with_this_services_key(
     assert sent.headers["x-tenant-id"] == DEV_TENANT
 
 
-async def test_a_graph_runs_record_and_models_service_name_the_same_alias_and_request(
+async def test_a_graph_turns_calls_name_its_alias_its_threads_budget_and_a_replay_key(
     stack: tuple[AsyncClient, Runtime, FakeModelsService],
 ) -> None:
-    client, rt, models = stack
+    client, _rt, models = stack
     thread = await new_thread(client)
     await send(client, thread["id"], {"content": "What is the daily wire limit for a personal account?"})
-    assert rt.graph_store is not None
-    rows = [r for r in await ModelCallLedger(rt.graph_store.engine).calls(thread["id"]) if r.kind == "model"]
-    # The fake's answer cites none of the thread's passages, so the end check adds one correction call on the same
-    # alias and in the same run.
-    assert len(rows) == 2 and {r.model_alias for r in rows} == {"bank-standard"}, rows
     # The graph turn's requests; the memory extraction after the turn runs outside the graph, with no thread.
     sent = [r for r in models.requests if "x-thread-id" in r.headers]
+    # The fake's answer cites none of the thread's passages, so the end check adds one correction call.
+    assert len(sent) == 2, sent
     assert {json.loads(r.content)["model"] for r in sent} == {"bank-standard"}
     assert {r.headers["x-thread-id"] for r in sent} == {thread["id"]}
-    assert {r.headers["x-request-hash"] for r in sent} == {r.request_hash for r in rows}
-    assert {r.headers["x-run-id"] for r in sent} == {rows[0].run_id}
+    # The gateway holds the conversation's budget and answers a re-run of the same task from its record.
+    assert {r.headers["x-budget-id"] for r in sent} == {f"thread:{thread['id']}"}
+    assert all(r.headers["x-replay-key"].startswith(f"turn:{thread['id']}:") for r in sent), sent
     assert {r.headers["x-tenant-id"] for r in sent} == {DEV_TENANT}
 
 
@@ -254,37 +255,6 @@ async def test_a_body_that_is_not_models_services_envelope_is_never_shown(
     message = tested.json()["error"]["message"]
     assert leak not in message and "html" not in message, message
     assert message.startswith("The model call was refused"), message
-
-
-class _Out(TypedDict, total=False):
-    replies: list[str]
-
-
-@pytest.mark.usefixtures("local_tenant")  # a run records its calls under its tenant, as a request or loop sets
-async def test_a_rerun_of_the_same_task_is_answered_from_the_record_not_models_service(tmp_path: Path) -> None:
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'db.sqlite'}")
-    async with engine.begin() as c:
-        await c.run_sync(metadata.create_all)
-        await c.run_sync(engine_metadata.create_all)
-    models = FakeModelsService()
-    source = LedgerSource(
-        ModelsServiceModels("http://models", KEY, http_client=models.client()),
-        UsageLedger(engine, PriceTable.parse(Settings().prices)),
-    )
-    model = source.model_for("bank-standard")
-
-    async def answer(state: _Out) -> dict[str, Any]:
-        # The same request twice in one task: what a node's re-run after a crash sends.
-        request: list[ModelMessage] = [ModelRequest(parts=[UserPromptPart("What is the wire limit?")])]
-        replies = [await model.request(request, None, ModelRequestParameters()) for _ in range(2)]
-        return {"replies": [str(r.parts[0].content) for r in replies if isinstance(r.parts[0], TextPart)]}
-
-    g = StateGraph(_Out)
-    g.add_node("answer", answer)
-    g.add_edge(START, "answer")
-    out = await g.compile().ainvoke({"replies": []}, {"configurable": {"thread_id": "th_replay", "run_id": "run_1"}})
-    assert out["replies"] == ["Answered on bank-standard."] * 2
-    assert len(models.requests) == 1, "the second answer came from the record"
 
 
 async def test_without_a_models_key_turns_stay_on_the_direct_model(tmp_path: Path) -> None:

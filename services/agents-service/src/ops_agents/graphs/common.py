@@ -334,8 +334,8 @@ def emit(event: str, node: str, data: Any = None) -> None:
 async def kernel_turn(
     node: str, req: TurnRequest, ports: KernelPorts, meter: Meter | None = None, alias: str = "-"
 ) -> TurnResult:
-    """Runs one kernel turn, streaming its text and tool events from this node, metered as one call (E12)."""
-    return await metered(meter, alias, "turn", lambda: _kernel_turn(node, req, ports), record=False)
+    """Runs one kernel turn, streaming its text and tool events from this node, once its budget is not spent (E12)."""
+    return await metered(meter, lambda: _kernel_turn(node, req, ports))
 
 
 def _call_data(c: ToolCallRecord) -> Json:

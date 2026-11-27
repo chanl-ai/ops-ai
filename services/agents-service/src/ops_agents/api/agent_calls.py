@@ -13,9 +13,9 @@ Each call carries a chain record (`ops_contracts.chain.ChainRecord`), kept on th
 runs for, the thread it started on, the agents on it and how deep it may go. The record decides who may be asked next,
 for the offer and for the call: never an agent already on the path, never past its depth (one today, so a specialist
 asks no one). A specialist
-has no budget of its own: its model calls count against the thread the chain started on (store/usage.py), each one
-checked before it runs (api/model_ledger.py). A specialist stopped at that budget returns what it has written, and the
-asking agent reads `budget_reached`.
+has no budget of its own: its model calls name the budget of the thread the chain started on, which the model gateway
+admits each against (api/budgets.py). A specialist stopped at that budget returns what it has written, with no
+closing call of its own, and the asking agent reads `budget_reached`.
 """
 
 from __future__ import annotations

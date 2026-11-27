@@ -1055,9 +1055,7 @@
    "globs": [
     "services/agents-service/src/ops_agents/api/usage.py",
     "services/agents-service/src/ops_agents/api/metering.py",
-    "services/agents-service/src/ops_agents/store/usage.py",
-    "services/agents-service/src/ops_agents/store/model_calls.py",
-    "services/agents-service/src/ops_agents/api/model_ledger.py"
+    "services/agents-service/src/ops_agents/api/budgets.py"
    ],
    "usecases": [],
    "gap": "no use case yet"

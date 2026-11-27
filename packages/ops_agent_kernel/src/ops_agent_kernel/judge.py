@@ -20,7 +20,7 @@ from pydantic_ai.output import StructuredDict
 from ops_service_kit.http import Json
 
 from .aliases import preferred
-from .ports import BudgetReachedError, ModelSource
+from .ports import BudgetReachedError, ModelSource, purpose
 from .types import TokenUsage
 
 JUDGE_ALIAS = "judge"
@@ -67,7 +67,7 @@ async def verdict(model: Model, check: str, evidence: str) -> Verdict:
         retries=0,
     )
     try:
-        result = await agent.run(prompt(check, evidence))
+        result = await agent.run(prompt(check, evidence), model_settings=purpose("judge"))
     except BudgetReachedError:
         raise  # the run's budget is spent, which is not a judge that failed
     except Exception as e:  # any failure of the call is a judge that did not answer

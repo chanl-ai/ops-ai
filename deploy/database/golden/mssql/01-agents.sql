@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 20261124_2313_agent_instruction
+-- agents-service, stamped at 20261126_2300_drop_model_ledger
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -883,51 +883,6 @@ CREATE TABLE message_memory_use (
 	CONSTRAINT pk_message_memory_use PRIMARY KEY (tenant_id, message_id, memory_id)
 );
 GO
-CREATE TABLE model_call_records (
-	id VARCHAR(64) NOT NULL, 
-	thread_id VARCHAR(64) NOT NULL, 
-	run_id VARCHAR(64) NULL, 
-	step VARCHAR(120) NOT NULL, 
-	task VARCHAR(200) NULL, 
-	kind VARCHAR(40) NOT NULL, 
-	model_alias VARCHAR(120) NOT NULL, 
-	calls INTEGER NOT NULL, 
-	input_tokens BIGINT NOT NULL, 
-	output_tokens BIGINT NOT NULL, 
-	cost_micros BIGINT NOT NULL, 
-	latency_ms INTEGER NULL, 
-	request_hash VARCHAR(64) NULL, 
-	response NVARCHAR(max) NULL, 
-	created_at VARCHAR(40) NOT NULL, 
-	reserved_until VARCHAR(40) NULL, 
-	tenant_id VARCHAR(64) NOT NULL, 
-	CONSTRAINT model_call_records_pkey PRIMARY KEY (id)
-);
-GO
-CREATE INDEX ix_model_call_records_thread_id ON model_call_records (thread_id);
-GO
-CREATE UNIQUE INDEX uq_model_call_replay ON model_call_records (thread_id, task, request_hash) WHERE task IS NOT NULL AND request_hash IS NOT NULL;
-GO
-CREATE TABLE model_call_records_unattributed (
-	id VARCHAR(64) NOT NULL, 
-	thread_id VARCHAR(64) NOT NULL, 
-	run_id VARCHAR(64) NULL, 
-	step VARCHAR(120) NOT NULL, 
-	task VARCHAR(200) NULL, 
-	kind VARCHAR(40) NOT NULL, 
-	model_alias VARCHAR(120) NOT NULL, 
-	calls INTEGER NOT NULL, 
-	input_tokens BIGINT NOT NULL, 
-	output_tokens BIGINT NOT NULL, 
-	cost_micros BIGINT NOT NULL, 
-	latency_ms INTEGER NULL, 
-	request_hash VARCHAR(64) NULL, 
-	response NVARCHAR(max) NULL, 
-	created_at VARCHAR(40) NOT NULL, 
-	moved_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(), 
-	CONSTRAINT model_call_records_unattributed_pkey PRIMARY KEY (id)
-);
-GO
 CREATE TABLE agents_outbox (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -1089,26 +1044,6 @@ CREATE TABLE tool_team_state (
 );
 GO
 CREATE INDEX ix_tool_team_state_module ON tool_team_state (tenant_id, team_id, module_id);
-GO
-CREATE TABLE thread_budgets (
-	thread_id VARCHAR(64) NOT NULL, 
-	max_calls INTEGER NULL, 
-	max_tokens BIGINT NULL, 
-	max_cost_micros BIGINT NULL, 
-	updated_at VARCHAR(40) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL, 
-	CONSTRAINT thread_budgets_pkey PRIMARY KEY (thread_id)
-);
-GO
-CREATE TABLE thread_budgets_unattributed (
-	thread_id VARCHAR(64) NOT NULL, 
-	max_calls INTEGER NULL, 
-	max_tokens BIGINT NULL, 
-	max_cost_micros BIGINT NULL, 
-	updated_at VARCHAR(40) NOT NULL, 
-	moved_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(), 
-	CONSTRAINT thread_budgets_unattributed_pkey PRIMARY KEY (thread_id)
-);
 GO
 CREATE TABLE registry_widgets (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -1580,12 +1515,6 @@ CREATE SECURITY POLICY ops_security.message_memory_use_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.message_memory_use AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.model_call_records_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.model_call_records,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.model_call_records AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.model_call_records AFTER UPDATE
-    WITH (STATE = ON, SCHEMABINDING = ON);
-GO
 CREATE SECURITY POLICY ops_security.agents_outbox_tenant
     ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.agents_outbox,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.agents_outbox AFTER INSERT,
@@ -1650,12 +1579,6 @@ CREATE SECURITY POLICY ops_security.tool_team_state_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.tool_team_state,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.tool_team_state AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.tool_team_state AFTER UPDATE
-    WITH (STATE = ON, SCHEMABINDING = ON);
-GO
-CREATE SECURITY POLICY ops_security.thread_budgets_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.thread_budgets,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.thread_budgets AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.thread_budgets AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.registry_widgets_isolation
@@ -1731,5 +1654,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('20261124_2313_agent_instruction');
+INSERT INTO alembic_version (version_num) VALUES ('20261126_2300_drop_model_ledger');
 GO
