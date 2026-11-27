@@ -64,6 +64,16 @@ console's `FileUpload` component rather than `make api`. Reference: [make/CLAUDE
 | Settings are probed | A storage settings save writes, reads and deletes a small object on every new or changed target and is refused naming the purpose when the probe fails |
 | Credentials | Kept by name, sealed, never returned |
 
+## Known traps
+
+- A migration that makes SQL Server team functions => name the service's system user (`ops_files_system`) in them and in the grants
+- A new table the watch check reads in the background => grant it to the system user in `deploy/database/mssql.py` (`SYSTEM_USERS`), or every asked check is refused
+- A watch statement written in a helper => name the team where the isolation scans look (`team_visible` in the statement), or the scans go red
+- A size or version skip => key it on size and version tag together; an edit at the same size is otherwise neither fetched nor reported
+- A test that reads or writes `file_watches` => use a tenant connection; a bare connection sees nothing under row security
+- A new `GET` route => add its row to `budgets.toml`, and open no second transaction in its session check; `tests/test_statement_budget.py` fails any route without a row
+- A store change (tables, repositories, migrations, queries) pushed after `make ci-local` alone => ci-local lists `store-mssql` as skipped, so run `deploy/database/mssql_remote.sh test services/files-service -q <tests>` before the push
+
 ## Reference docs
 
 | Doc | Covers |
