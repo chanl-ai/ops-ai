@@ -1,0 +1,52 @@
+# Example agent spec: an IT helpdesk agent that hands the conversation to the right desk,
+# with a workspace for log files. Sample data. Validated against agent-spec-schema.yaml.
+apiVersion: ops.ai/v2
+name: IT helpdesk
+role: First line for staff IT requests. Fixes what it can and passes the rest to the right desk.
+model: chat-default
+instructions: |
+  Find out what is wrong in one or two questions. Check the runbooks before acting.
+  Never change group membership yourself; hand that to the access desk.
+loop:
+  kind: swarm
+  maxHandoffs: 4
+agents:
+  - { id: ag_access_requests, use: handoff }
+  - { id: ag_device_support, use: handoff }
+toolIds: [itsm.search_tickets, itsm.create_ticket, directory.get_user]
+collections: [kb_it_runbooks]
+sandbox:
+  image: python-ops
+  size: standard
+  limits:
+    commandMinutes: 5
+    idleMinutes: 10
+  network:
+    allow: [status.internal.example]
+  secrets:
+    - { name: itsm_api_token, hosts: [status.internal.example] }
+  approve: [delete_files, install_packages]
+  files:
+    - { path: lib/parse_syslog.py, from: ./parse_syslog.py }
+hooks:
+  beforeTool: [no_admin_group_changes]
+guardrails:
+  - { id: gr_no_password_sharing, version: 2 }
+limits:
+  budget: { defaultUsd: 0.30, ceilingUsd: 1.00 }
+evals:
+  gate: { passRate: 0.90 }
+  cases:
+    - name: Locked account goes to the access desk
+      say: I am locked out of my laptop.
+      expect:
+        handoff: ag_access_requests
+    - name: A log file is read in the workspace
+      say: Here is this morning's syslog from the print server. Why did the queue stop?
+      expect:
+        mode: [sandbox]
+    - name: Opening a ticket waits for a person
+      say: Open a ticket to replace the toner in the third floor printer.
+      expect:
+        calls: [itsm.create_ticket]
+        pausesFor: approval

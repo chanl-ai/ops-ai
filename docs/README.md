@@ -47,6 +47,26 @@ Each page opens with the problem it solves and says what is built. Images sit be
 | `design/research/node-sdk-and-forms.md` | Prior art: how workflow tools define nodes, settings forms, credentials, triggers and versions; a recommended Node SDK contract |
 | `design/research/forge-workflow-study.md` | A study of an open-source workflow engine on LangGraph, concern by concern |
 | `design/research/workflow-node-improvements.md` | Ten workflow node improvements compared across workflow products, with what is built since |
+| `design/agents-v2/runtime-contract-and-strands-loop.md` | Agents version 2: the contract between the runtime and the agent loop, Strands behind it, the event mapping, a pause saved and resumed on another server, and each kernel feature ported |
+| `design/agents-v2/model-gateway.md` | Agents version 2: the budget check and the model-call record moved into the model gateway, with cached tokens counted |
+| `design/agents-v2/agent-spec-file.md` | Agents version 2: the one versioned document that describes an agent, its fields, rules, schema and two worked examples |
+| `design/agents-v2/automatic-mode-and-loop-kinds.md` | Agents version 2: how an agent picks direct, plan, helpers or sandbox per request, the seven fixed loop kinds, and hand-overs |
+| `design/agents-v2/chat-builder.md` | Agents version 2: drafting a whole agent spec from a description, approved section by section |
+| `design/agents-v2/tool-gateway.md` | Agents version 2: the tool gateway's tool-server client additions, web search and page fetch |
+| `design/agents-v2/sandbox-service.md` | Agents version 2: one sandbox per conversation, files kept and restored, the exit gate, limits, approvals and the backend port |
+| `design/agents-v2/sandbox-backend-sprites.md` | Agents version 2: running sandboxes on Fly Sprites for hosted tenants |
+| `design/agents-v2/sandbox-backend-docker.md` | Agents version 2: running sandboxes as sealed Docker containers for a small install |
+| `design/agents-v2/sandbox-backend-kubernetes.md` | Agents version 2: running sandboxes as pods with gVisor or small virtual machines in an enterprise's cluster |
+| `design/agents-v2/workflow-teams-and-human-tasks.md` | Agents version 2: teams drawn on the workflow canvas as connected agents and roles, shared notes, human tasks and undo steps |
+| `design/agents-v2/workflow-durability.md` | Agents version 2: rebuilding a run from its journal, run budgets, an agent step that pauses, and the SQL Server statements left to port |
+| `design/agents-v2/evals.md` | Agents version 2: eval checks for the new agent behaviour, the publish gate and team tests |
+| `design/agents-v2/api.md` | Agents version 2: every route the three releases add, change or remove |
+| `design/agents-v2/sdk.md` | Agents version 2: the Python and TypeScript SDK methods and typed errors |
+| `design/agents-v2/cli.md` | Agents version 2: the command line's new commands and exit codes |
+| `design/agents-v2/console-screens.md` | Agents version 2: the nine console screens, their states and the component each region uses |
+| `design/agents-v2/coding-guide.md` | Agents version 2: where code goes, how each protection is enforced and tested, and what never to do |
+| `design/agents-v2/trials.md` | Agents version 2: fifteen experiments, each with a pass line, the build step it gates and a fallback |
+| `design/agents-v2/README.md` | Agents version 2: the mission, the map of specs, the release split, build order and done-when per release |
 
 ## How the docs site shows a page
 
