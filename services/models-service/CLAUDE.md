@@ -70,6 +70,14 @@ gets 401 there; aliases also answer an account admin. Reference:
 | Knobs | One rule, `catalog.fit`, on every completion: unsupported knobs left out, numbers clamped to the model's range. The runtime reads the catalog only from the committed snapshot |
 | Real calls | Tests and use cases use the scripted provider or the fake OpenAI; real calls are capped per experiment |
 
+## Known traps
+
+- A billed call whose settle fails twice => log the whole charge with a replay command; the call's row stays and one charge per call is tested
+- A migration that adds an index a later revision also adds => guard the create and the drop with exists checks; a database that ran the first lacks it going down
+- An alias write => it needs `install.manage`, held by Owner; a test acting as another role gets a refusal
+- A new `GET` route => add its row to `budgets.toml`, and open no second transaction in its session check; `tests/test_statement_budget.py` fails any route without a row
+- A store change (tables, repositories, migrations, queries) pushed after `make ci-local` alone => ci-local lists `store-mssql` as skipped, so run `deploy/database/mssql_remote.sh test services/models-service -q <tests>` before the push
+
 ## Reference docs
 
 | Doc | Covers |

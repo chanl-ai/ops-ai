@@ -18,6 +18,7 @@ secret, names no host outside its manifest, and runs only through tools-service.
    `docs/guide/plugins.md` (the manifest, paging, sign-in steps, writing a Python tool, check and test),
    `packages/ops_plugin_sdk/CLAUDE.md`, `docs/architecture/tool-lifecycle.md`, `docs/architecture/integrations.md`
    and `builtin-plugins/README.md`.
+4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section and `docs/architecture/standards/delivery.md` DL2; run the DL2 local gate before the pull request leaves draft.
 
 ## Owns
 | Paths | What |
