@@ -161,8 +161,14 @@ await withUiStack(
       const paused = await api('/v1/runs', { method: 'POST', body: JSON.stringify({ workflowId: id, input: { amount: 42 } }) });
       const pausedCode = (await paused.json()).error?.code;
       const stagePaused = await stage();
-      await page.getByTestId('definition-resume').click();
-      await page.getByTestId('definition-pause-confirm').click();
+      // The Pause dialog closes as the stage flips; a Resume pressed while it still holds the page is lost, so press it
+      // again until the Resume dialog (the same confirm button) opens.
+      await pauseConfirm.waitFor({ state: 'hidden', timeout: 30_000 });
+      for (let tries = 0; tries < 5 && !(await pauseConfirm.isVisible()); tries++) {
+        await page.getByTestId('definition-resume').click();
+        await pauseConfirm.waitFor({ timeout: 4_000 }).catch(() => undefined);
+      }
+      await pauseConfirm.click();
       await page.waitForFunction(() => document.querySelector('[data-testid="definition-stage"]')?.getAttribute('data-stage') === 'live', null, { timeout: 30_000 }).catch(() => undefined);
       check('9 paused, a live start is refused (409 workflow_paused); resumed, the version is live again', stagePaused === 'paused' && paused.status === 409 && pausedCode === 'workflow_paused' && (await stage()) === 'live', { stagePaused, status: paused.status, pausedCode, after: await stage() });
 
