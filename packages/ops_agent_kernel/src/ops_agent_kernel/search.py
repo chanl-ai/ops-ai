@@ -47,7 +47,22 @@ DEFERRED = (
 )
 
 
-def _ranked(entries: Sequence[tuple[str, str]], query: str) -> list[str]:
+# The deferred search's input and its words when nothing matched, as Pydantic AI's tool search has them.
+QUERIES_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "queries": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "List of search queries to match against tool names and descriptions.",
+        }
+    },
+    "required": ["queries"],
+}
+NO_MATCHES = "No matching tools found. The tools you need may not be available."
+
+
+def ranked(entries: Sequence[tuple[str, str]], query: str) -> list[str]:
     """Names of `entries` (name, description) sharing a word with `query`, most shared words first, at most LIMIT."""
     asked = _words(query)
     scored = [(len(asked & _words(f"{name} {description}")), name) for name, description in entries]
@@ -57,10 +72,10 @@ def _ranked(entries: Sequence[tuple[str, str]], query: str) -> list[str]:
 def search(tools: list[ToolGrant], query: str) -> list[dict[str, Any]]:
     """The offered tools sharing a word with `query`, most shared words first, at most LIMIT."""
     by_name = {t.name: t for t in tools}
-    hits = [by_name[n] for n in _ranked([(t.name, t.description) for t in tools], query)]
+    hits = [by_name[n] for n in ranked([(t.name, t.description) for t in tools], query)]
     return [{"name": t.name, "description": t.description, "inputSchema": t.input_schema} for t in hits]
 
 
 def strategy(_ctx: RunContext[Any], queries: Sequence[str], tools: Sequence[ToolDefinition]) -> list[str]:
     """pydantic-ai's tool search strategy over the deferred tools, with the same scoring as `search`."""
-    return _ranked([(t.name, t.description or "") for t in tools], " ".join(queries))
+    return ranked([(t.name, t.description or "") for t in tools], " ".join(queries))

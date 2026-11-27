@@ -178,6 +178,8 @@ class _TurnState:
     # Calls to the kernel's own tools this turn, against the agent's max_builtin_calls; set once one is refused.
     builtin_calls: int = 0
     builtins_refused: int | None = None
+    # Deferred tools a search found, offered from the next step on (the Strands loop's tool search).
+    revealed: set[str] = field(default_factory=set[str])
     # Passages: the knowledge block's, then each a tool returned (search_knowledge), numbered on from the block's, so
     # the reply cites either with [n] and the chat draws each as a citation.
     passages: list[Passage] = field(default_factory=list[Passage])
@@ -516,10 +518,10 @@ def _loop_tool(state: _TurnState, tool: Tool[None]) -> contract.LoopTool:
             raise contract.LoopPause(str(reason) if reason else None) from e
 
     async def offered(ctx: contract.CallContext) -> bool:
-        if prepare is None:
-            return True
-        found: Any = prepare(cast(Any, ctx), definition)
-        return (await found if inspect.isawaitable(found) else found) is not None
+        found: Any = definition if prepare is None else prepare(cast(Any, ctx), definition)
+        found = await found if inspect.isawaitable(found) else found
+        # A deferred tool is offered once a search has found it, unless its prepare sends it anyway (a step's own).
+        return found is not None and (not found.defer_loading or tool.name in state.revealed)
 
     return contract.LoopTool(
         tool.name,
@@ -918,6 +920,69 @@ def _search(state: _TurnState) -> Tool[None]:
     )
     tool.prepare = prepare
     return tool
+
+
+def _found(state: _TurnState, searching: bool) -> Tool[None]:
+    """The kernel's `search_tools`: over the deferred tools while the agent searches for its tools, else over the
+    tools this turn offers."""
+    return _deferred_search(state) if searching else _search(state)
+
+
+def _deferred_search(state: _TurnState) -> Tool[None]:
+    """`search_tools` while the agent's tools are deferred, on the Strands loop: Pydantic AI's tool search, run by the
+    kernel. The matches among the tools that may be called now are offered from the next step on."""
+
+    async def call(ctx: RunContext[None], **arguments: Any) -> Any:
+        rec = state.record(ctx.tool_call_id or f"call_{len(state.order)}", search.NAME, arguments)
+        if (over := state.charge_builtin(ctx.run_step)) is not None:
+            rec.status, rec.output = "error", {"error": over}
+            return {"error": over}
+        queries = [str(q) for q in cast(list[Any], arguments.get("queries") or [])]
+        callable_now = [(t.name, t.description) for t in state.req.tools if state.barred(t.name) is None]
+        names = search.ranked(callable_now, " ".join(queries))
+        state.revealed.update(names)
+        told: Json = {"discovered_tools": [{"name": n} for n in names]}
+        if not names:
+            told["message"] = search.NO_MATCHES
+        rec.status, rec.output = "ok", told
+        return told
+
+    async def prepare(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition | None:
+        return tool_def if state.free() and state.offered(ctx, builtin=True) else None
+
+    tool = Tool[None].from_schema(
+        cast(Callable[..., Awaitable[Any]], call),
+        search.NAME,
+        search.DEFERRED,
+        search.QUERIES_SCHEMA,
+        takes_ctx=True,
+    )
+    tool.prepare = prepare
+    return tool
+
+
+def _revealed(history: bytes) -> set[str]:
+    """The tools the searches of a paused Strands run found: every `discovered_tools` its messages carry."""
+    names: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for value in cast(dict[str, Any], node).values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in cast(list[Any], node):
+                walk(value)
+        elif isinstance(node, str) and "discovered_tools" in node:
+            try:
+                told: Any = json.loads(node)
+            except ValueError:
+                return
+            if isinstance(told, dict):
+                found = cast(list[Any], cast(Json, told).get("discovered_tools") or [])
+                names.update(str(cast(Json, m).get("name")) for m in found if isinstance(m, dict))
+
+    walk(json.loads(history))
+    return names
 
 
 def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: bool = False) -> Tool[None]:
@@ -1424,8 +1489,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         if req.resume
         else (ports.loop or contract.LOOP.default) == "strands"
     )
-    # Pydantic AI's deferred tool search has no Strands counterpart yet: on Strands every tool is sent with its schema.
-    searching = builtins and above is not None and len(req.tools) > above and not on_strands
+    searching = builtins and above is not None and len(req.tools) > above
     state = _TurnState(
         req=req,
         grants={
@@ -1438,8 +1502,12 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         },
     )
     tools = [_tool(state, ports, g, deferred=searching) for g in sorted(req.tools, key=lambda t: t.name)] + (
-        [_present(state), _plan(state), *([] if searching else [_search(state)])] if builtins else []
+        [_present(state), _plan(state), *([] if searching and not on_strands else [_found(state, searching)])]
+        if builtins
+        else []
     )
+    if searching and req.resume and on_strands:
+        state.revealed = _revealed(req.resume.interrupt.history)
     # Skills that run step by step are driven by their own tools, and the record of the one running is read before
     # anything can end the turn, so every way out returns it.
     state.stepped = step_tools.stepped(req.settings.skills) if builtins else []

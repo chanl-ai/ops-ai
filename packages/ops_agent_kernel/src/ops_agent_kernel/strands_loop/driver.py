@@ -232,7 +232,16 @@ class _Gate(HookProvider):
         run, use = self.run, event.tool_use
         spec = run.tools.get(use["name"])
         call_id = str(use["toolUseId"])
-        if spec is None or not spec.gated or spec.barred() is not None:
+        if spec is None:
+            # A name the run has no tool for (guessed, or a deferred one not found yet): recorded and told, as
+            # Pydantic AI tells a model an unknown tool name.
+            arguments = cast(Json, dict(use.get("input") or {}))
+            said = _unknown(str(use["name"]), run.offered)
+            run.events.append(ToolStarted(call_id, str(use["name"]), arguments))
+            run.events.append(ToolEnded(call_id, False, said))
+            event.cancel_tool = said
+            return
+        if not spec.gated or spec.barred() is not None:
             return
         arguments = cast(Json, dict(use.get("input") or {}))
         run.paused = (call_id, spec.name, arguments, None)
