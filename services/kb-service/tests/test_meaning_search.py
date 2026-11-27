@@ -7,6 +7,7 @@ source taken out of a base is still found by its vectors."""
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
@@ -18,13 +19,14 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from ops_kb.embedding import Backlog, embed_all
+from ops_kb.embedding import Backlog, ModelsEmbedder, embed_all
 from ops_kb.files import KnowledgeFiles
 from ops_kb.retrieval import Search
 from ops_kb.schedule import WITHDRAWN_KEPT
 from ops_kb.search import HybridRetriever
 from ops_kb.store import KnowledgeStore
 from ops_kb.store.vectors import PgVectorStore, VectorHit
+from ops_service_kit.model_calls import ModelCalls
 from ops_store import isolation
 from ops_store.dialect import vector_index_ddl
 
@@ -33,7 +35,7 @@ from .pdfs import policy_pdf
 from .readings_fake import LocalReadings
 from .test_bases_and_sources import data
 from .test_sync import file_source, upload
-from .vectors_fake import ConceptEmbedder
+from .vectors_fake import ConceptEmbedder, concept_vector
 
 SECTIONS = [
     (
@@ -282,3 +284,45 @@ async def test_a_slow_embedding_model_skips_the_meaning_lane_at_the_search_wait(
     found = await asyncio.wait_for(stack.search(kb["id"], "early repayment charge on my loan"), 5)
     assert found["lanes"]["skipped"] == [{"lane": "meaning", "reason": "embedding_unavailable: timeout"}], found
     assert sections(found)[:1] == ["Early repayment"]
+
+
+async def test_a_new_version_of_the_embedding_alias_embeds_every_unit_again(
+    engine: AsyncEngine, tenant: str, tmp_path: Path
+) -> None:
+    """An admin points the environment's embedding alias at another model (Settings, Models): the alias name is
+    unchanged, so vectors are keyed by the model that served them, not by the alias."""
+
+    served = {"model": "scripted/concept-embed"}
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        texts = [body["input"]] if isinstance(body["input"], str) else body["input"]
+        rows = [{"object": "embedding", "index": i, "embedding": concept_vector(t, 64)} for i, t in enumerate(texts)]
+        usage = {"prompt_tokens": sum(len(t.split()) for t in texts)}
+        return httpx.Response(200, json={"object": "list", "model": served["model"], "data": rows, "usage": usage})
+
+    with isolation.tenant_wide("test: whether the database has pgvector", tenant_id=tenant):
+        if not await PgVectorStore(engine).ready():
+            pytest.skip("This PostgreSQL has no pgvector; make db-move-image moves the local stack onto it.")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://models") as http:
+        embedder = ModelsEmbedder(ModelCalls(http, "kb-key"), "bank-embed", 64)
+        files = KnowledgeFiles(tmp_path)
+        readings = LocalReadings(files)
+        async with kb_client(engine, tenant, files=files, readings=readings, embedder=embedder) as client:
+            stack = Stack(client, embedder, readings)  # pyright: ignore[reportArgumentType]
+            store, vectors = KnowledgeStore(engine), PgVectorStore(engine)
+            _, kb = await stack.base()
+            await embed_all(store, vectors, embedder, Backlog())
+            assert sections(await stack.search(kb["id"], PARAPHRASE))[:1] == ["Early repayment"]
+            served["model"] = "scripted/concept-embed-2"
+            stale = await stack.search(kb["id"], PARAPHRASE)
+            assert stale["lanes"]["skipped"] == [{"lane": "meaning", "reason": "no_vectors"}], stale["lanes"]
+            reads = len(readings.reads)
+            assert await embed_all(store, vectors, embedder, Backlog()) > 0
+            assert len(readings.reads) == reads
+            again = await stack.search(kb["id"], PARAPHRASE)
+            assert again["lanes"]["ran"] == ["keyword", "meaning"] and sections(again)[:1] == ["Early repayment"]
+            embedding = data(await client.get(f"/v1/knowledge-bases/{kb['id']}"))["embedding"]
+            assert embedding["model"] == "scripted/concept-embed-2" and embedding["embedded"] == embedding["units"], (
+                embedding
+            )

@@ -276,7 +276,7 @@ Embedding settings, one model per environment:
 | `OPS_EMBEDDING_ALIAS` | `bank-embed` | Every unit embedded with it |
 | `OPS_EMBEDDING_WIDTH` | 1536 | Refused at start above 1,998 (`settings.py:39`, `:483-488`), the pgvector HNSW limit |
 
-A model or width change embeds every unit again and reads no file again. Units a sync could not embed are picked up
+A model or width change embeds every unit again and reads no file again, in the background. Vectors record the model that served them (models-service names it in each embeddings reply), so a new version of the alias pointing at another model counts as a change too. Units a sync could not embed are picked up
 by the `kb_embed` background process (`embedding.py:119`).
 
 Answers are written by the kernel. While a search runs, the kernel sends a `retrieving` status

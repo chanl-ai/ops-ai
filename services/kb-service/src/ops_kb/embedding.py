@@ -2,6 +2,11 @@
 through models-service with kb-service's own key (`kb:index` spends there), so the meaning lane can compare a question
 with each unit.
 
+Each vector records the model that served it, as models-service names it in each reply, not the alias: an admin can
+point the alias at another model (Settings, Models), and vectors of two models are not comparable. The embedder learns
+the serving model from every reply (and with one short call when it has made none yet), so the next pass or search
+sees the old vectors as stale.
+
 After a sync or rebuild settles, its tenant's units without a vector of the current model are embedded at once; a
 background beat embeds whatever is left (a model that was down, a model or width changed, which embeds every unit
 again and reads nothing again). Each batch is one request; a refusal stops the pass and the beat tries again."""
@@ -30,13 +35,17 @@ FIND_PENDING = "background process: the knowledge embedder reads each tenant's u
 
 
 class Embedder(Protocol):
-    """The environment's embedding model: its name and width, which every stored vector records."""
+    """The environment's embedding model: the model serving it and its width, which every stored vector records."""
 
     model: str
     width: int
 
     async def embed(self, texts: list[str], *, tenant: str) -> tuple[list[list[float]], int]:
         """One vector per text and the input tokens charged; raises EmbedFailed when the model cannot answer."""
+        ...
+
+    async def learn(self, *, tenant: str) -> None:
+        """Makes `model` the one serving now when no call has said yet; raises EmbedFailed when it cannot answer."""
         ...
 
 
@@ -48,18 +57,31 @@ class EmbedFailed(Exception):
         self.code = code
 
 
+# What the one call that learns the serving model embeds: a few tokens.
+PROBE = "embedding model check"
+
+
 @dataclass
 class ModelsEmbedder:
+    """The environment's alias through models-service. `model` is the model the last reply said served it; until a
+    call has answered it is empty, which no stored vector records."""
+
     calls: ModelCalls
-    model: str
+    alias: str
     width: int
+    model: str = ""
 
     async def embed(self, texts: list[str], *, tenant: str) -> tuple[list[list[float]], int]:
         try:
-            done = await self.calls.embed(texts, alias=self.model, width=self.width, tenant=tenant, step=EMBED_STEP)
+            done = await self.calls.embed(texts, alias=self.alias, width=self.width, tenant=tenant, step=EMBED_STEP)
         except ModelCallError as e:
             raise EmbedFailed(e.code, str(e)) from e
+        self.model = done.model
         return done.vectors, done.input_tokens
+
+    async def learn(self, *, tenant: str) -> None:
+        if not self.model:
+            await self.embed([PROBE], tenant=tenant)
 
 
 def unit_text(heading: str | None, text: str) -> str:
@@ -72,11 +94,14 @@ async def embed_pending(vectors: PgVectorStore, embedder: Embedder, tenant: str,
     EmbedFailed when the model refuses, keeping what earlier batches stored."""
     if not await vectors.ready():
         return 0
+    await embedder.learn(tenant=tenant)
     done = 0
     while done < limit:
         units = await vectors.pending(tenant, model=embedder.model, width=embedder.width, limit=BATCH)
         if not units:
             break
+        # A reply from another model than the one the units were listed for is stored under the model it names; the
+        # next listing then holds every unit that model has not embedded.
         found, _ = await embedder.embed([unit_text(u["heading"], u["text"]) for u in units], tenant=tenant)
         rows = [
             UnitVector(unit_id=u["id"], chunk_id=u["chunk_id"], item_id=u["item_id"], vector=v)

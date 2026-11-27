@@ -2283,6 +2283,9 @@ class KnowledgeService:
         """How many of the base's units have a vector of the environment's model; None without one."""
         if self.embedder is None or self.vectors is None or not await self.vectors.ready():
             return None
+        with contextlib.suppress(EmbedFailed):
+            # A model that is down leaves the count under the model last heard from (none yet: nothing embedded).
+            await self.embedder.learn(tenant=who.tenant_id)
         embedded, total = await self.vectors.coverage(
             who.tenant_id, [kb_id], model=self.embedder.model, width=self.embedder.width
         )

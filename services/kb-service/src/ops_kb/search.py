@@ -52,9 +52,17 @@ class HybridRetriever:
             return "no_embedding_model", [], 0
         if not await self.vectors.ready():
             return "no_vector_store", [], 0
+        try:
+            async with asyncio.timeout_at(deadline):
+                await embedder.learn(tenant=tenant)
+        except EmbedFailed as e:
+            return f"embedding_unavailable: {e.code}", [], 0
+        except TimeoutError:
+            return "embedding_unavailable: timeout", [], 0
         embedded, _ = await self.vectors.coverage(tenant, kb_ids, model=embedder.model, width=embedder.width)
         if embedded == 0:
             return "no_vectors", [], 0
+        before = embedder.model
         try:
             async with asyncio.timeout_at(deadline):
                 [vector], tokens = await embedder.embed([question], tenant=tenant)
@@ -62,6 +70,11 @@ class HybridRetriever:
             return f"embedding_unavailable: {e.code}", [], 0
         except TimeoutError:
             return "embedding_unavailable: timeout", [], 0
+        if embedder.model != before:
+            # The alias now serves another model: the stored vectors are of the old one and are never compared.
+            embedded, _ = await self.vectors.coverage(tenant, kb_ids, model=embedder.model, width=embedder.width)
+            if embedded == 0:
+                return "no_vectors", [], tokens
         rows = await self.vectors.nearest(
             tenant, kb_ids, vector, model=embedder.model, width=embedder.width, limit=how.limit, how=how
         )
