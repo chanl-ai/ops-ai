@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
@@ -24,6 +25,7 @@ from ops_agents.store.base import metadata
 from ops_engine.ports import AgentRequest, PromptRequest
 from ops_service_kit.http import Json
 from tests.conftest import SEED, structured
+from tests.wire_model import on_wire
 
 SCHEMA: dict[str, Any] = {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
 
@@ -67,7 +69,7 @@ async def test_a_turn_without_its_answer_takes_the_error_port_without_a_retry(lo
     port = KernelAgents(
         db,
         load_catalog(SEED),
-        KernelPorts(FunctionModel(answers), NoTools(), KnowledgeDown()),
+        KernelPorts(on_wire(FunctionModel(answers)), NoTools(), KnowledgeDown()),
         NoDirectory(),
         "default",  # type: ignore[arg-type]
     )
@@ -115,14 +117,14 @@ async def port_on(model: Any, tools: Any, *, spec: dict[str, Any] | None = None)
 
 async def test_the_steps_tool_cap_bounds_a_model_that_keeps_calling_tools(local_tenant: None) -> None:
     reads = Reads()
-    port, aid = await port_on(FunctionModel(keeps_reading, stream_function=stream_of(keeps_reading)), reads)
+    port, aid = await port_on(on_wire(FunctionModel(keeps_reading, stream_function=stream_of(keeps_reading))), reads)
     req = AgentRequest(agent_id=aid, message="Summarise", turn_id="r:s:1", output_schema=SCHEMA, max_tool_calls=2)
     result = await port.turn(req)
     assert (result.ok, result.code, reads.calls) == (False, "no_output", 2), (result, reads.calls)
 
 
 async def test_a_step_model_the_agent_does_not_allow_takes_the_error_port(local_tenant: None) -> None:
-    port, aid = await port_on(FunctionModel(answers), Reads())
+    port, aid = await port_on(on_wire(FunctionModel(answers)), Reads())
     req = AgentRequest(
         agent_id=aid, message="Summarise", turn_id="r:s:1", output_schema=SCHEMA, model_alias="not-allowed"
     )
@@ -131,7 +133,7 @@ async def test_a_step_model_the_agent_does_not_allow_takes_the_error_port(local_
     assert result.error and "not-allowed" in result.error
 
 
-def _streamed(reply: Any) -> FunctionModel:
+def _streamed(reply: Any) -> Model:
     """`reply` as a streamed model: the kernel streams every turn, a native structured answer as its JSON text."""
 
     async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
@@ -141,10 +143,10 @@ def _streamed(reply: Any) -> FunctionModel:
             elif isinstance(part, ToolCallPart):
                 yield {0: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
 
-    return FunctionModel(reply, stream_function=stream)
+    return on_wire(FunctionModel(reply, stream_function=stream))
 
 
-def _prompt_port(model: FunctionModel) -> KernelAgents:
+def _prompt_port(model: Model) -> KernelAgents:
     db = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
     return KernelAgents(
         db, load_catalog(SEED), KernelPorts(model, NoTools(), KnowledgeDown()), NoDirectory(), "default"

@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from ops_agent_kernel.events import CitationsReady, KernelEvent, TextDelta, TextReplaced, ToolOutput, TurnFinished
@@ -23,6 +24,7 @@ from ops_agent_kernel.pii import StreamMasker, mask
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.types import AgentSettings, Passage, PromptFragment, ToolGrant, TurnRequest
 from ops_pii import masked
+from tests.wire_model import on_wire
 
 READ = ToolGrant(
     "get_customer",
@@ -240,7 +242,7 @@ class Tools:
         return ToolOutcome(True, RECORD)
 
 
-def turn_model(seen: list[str]) -> FunctionModel:
+def turn_model(seen: list[str]) -> Model:
     """Reads the customer, then answers with what it read; `seen` keeps every tool result the model was given."""
 
     def reply(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -259,7 +261,7 @@ def turn_model(seen: list[str]) -> FunctionModel:
                 for i in range(0, len(part.content), 5):
                     yield part.content[i : i + 5]
 
-    return FunctionModel(reply, stream_function=stream)
+    return on_wire(FunctionModel(reply, stream_function=stream))
 
 
 async def turn(redact: bool) -> tuple[list[KernelEvent], list[str]]:
@@ -315,7 +317,9 @@ async def test_a_cited_passage_is_masked_where_people_see_it() -> None:
 
     settings = replace(AgentSettings("ag_x", 1, [PromptFragment("You help.")], "test-model"), redact_pii=True)
     req = TurnRequest("t2", "th2", settings, [], user_turn="Who is Ann?", kb_ids=["kb_1"])
-    ports = KernelPorts(model=FunctionModel(reply, stream_function=stream), tools=Tools(), knowledge=Knowledge())  # type: ignore[arg-type]
+    ports = KernelPorts(
+        model=on_wire(FunctionModel(reply, stream_function=stream)), tools=Tools(), knowledge=Knowledge()
+    )  # type: ignore[arg-type]
     events = [e async for e in run_turn(req, ports)]
     [ready] = [e for e in events if isinstance(e, CitationsReady)]
     finished = events[-1]

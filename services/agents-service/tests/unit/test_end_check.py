@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
+from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from ops_agent_kernel import answer_check
@@ -20,6 +21,7 @@ from ops_agent_kernel.events import KernelEvent, TextReplaced, TurnFinished
 from ops_agent_kernel.kernel import _replace, run_turn  # pyright: ignore[reportPrivateUsage]
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.types import AgentSettings, Passage, PromptFragment, ToolGrant, TurnRequest, TurnResult
+from tests.wire_model import on_wire
 
 CASES = ToolGrant(
     "find_cases", "ops", "Find cases", "read", {"type": "object", "properties": {"search": {"type": "string"}}}
@@ -69,7 +71,7 @@ class Writer:
             else self.first
         )
 
-    def model(self) -> FunctionModel:
+    def model(self) -> Model:
         def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             out = self._reply(messages)
             return ModelResponse(parts=[TextPart(out) if isinstance(out, str) else ToolCallPart(*out)])
@@ -83,7 +85,7 @@ class Writer:
             else:
                 yield {0: DeltaToolCall(name=out[0], json_args=json.dumps(out[1]))}
 
-        return FunctionModel(respond, stream_function=stream)
+        return on_wire(FunctionModel(respond, stream_function=stream))
 
 
 async def run(

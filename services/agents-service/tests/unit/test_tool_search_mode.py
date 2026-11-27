@@ -11,6 +11,7 @@ from dataclasses import replace
 from typing import Any
 
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.models import Model as WireModel
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from ops_agent_kernel.events import KernelEvent, TurnFinished
@@ -27,6 +28,7 @@ from ops_agent_kernel.types import (
 )
 from ops_agents.activities.catalog import load_catalog
 from tests.conftest import SEED as SEED_DIR
+from tests.wire_model import on_wire
 
 SCHEMA: dict[str, Any] = {"type": "object", "properties": {"customerId": {"type": "string"}}}
 # 40 tools from systems a bank, an insurer and a retailer connect, plus the one each test needs.
@@ -73,7 +75,7 @@ class Model:
         self.offered.append(sorted(t.name for t in info.function_tools))
         return self.steps[min(len(self.offered), len(self.steps)) - 1](messages)
 
-    def build(self) -> FunctionModel:
+    def build(self) -> WireModel:
         async def stream(
             messages: list[ModelMessage], info: AgentInfo
         ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
@@ -83,7 +85,7 @@ class Model:
                 elif isinstance(part, ToolCallPart):
                     yield {i: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
 
-        return FunctionModel(self.respond, stream_function=stream)
+        return on_wire(FunctionModel(self.respond, stream_function=stream))
 
 
 def call(tool: str, args: dict[str, Any]) -> Step:

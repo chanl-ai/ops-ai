@@ -12,6 +12,7 @@ from typing import Any
 import httpx2
 from openai import AsyncOpenAI
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -21,6 +22,7 @@ from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.types import AgentSettings, PromptFragment, TurnRequest, TurnResult
 from tests.unit.test_extract_records import fake_openai
+from tests.wire_model import on_wire
 
 SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -48,7 +50,7 @@ async def turn(model: Any, schema: dict[str, Any] | None = SCHEMA) -> TurnResult
     return events[-1].result  # type: ignore[attr-defined]
 
 
-def answering(*responses: ModelResponse) -> FunctionModel:
+def answering(*responses: ModelResponse) -> Model:
     """A model that returns `responses` in order, and records the output tools it was offered."""
     queue = list(responses)
     offered: list[str] = []
@@ -68,7 +70,7 @@ def answering(*responses: ModelResponse) -> FunctionModel:
             elif isinstance(part, ToolCallPart):
                 yield {i: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
 
-    model = FunctionModel(reply, stream_function=stream)
+    model = on_wire(FunctionModel(reply, stream_function=stream))
     model.offered = offered  # type: ignore[attr-defined]
     return model
 

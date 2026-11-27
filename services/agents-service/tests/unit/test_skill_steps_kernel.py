@@ -28,6 +28,7 @@ from pydantic_ai.messages import (
     ToolReturnPart,
     UserPromptPart,
 )
+from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from ops_agent_kernel import judge
@@ -49,6 +50,7 @@ from ops_agent_kernel.types import (
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.api.agent_registry import definition_of
 from tests.conftest import SEED
+from tests.wire_model import on_wire
 
 Call = tuple[str, dict[str, Any]]
 Action = str | Call | list[Call]
@@ -104,7 +106,7 @@ class Script:
             parts=[ToolCallPart(name, args, tool_call_id=f"c{step}_{i}") for i, (name, args) in enumerate(calls)]
         )
 
-    def build(self) -> FunctionModel:
+    def build(self) -> Model:
         async def stream(
             messages: list[ModelMessage], info: AgentInfo
         ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
@@ -118,7 +120,7 @@ class Script:
                         )
                     }
 
-        return FunctionModel(self.respond, stream_function=stream)
+        return on_wire(FunctionModel(self.respond, stream_function=stream))
 
 
 class Systems:
@@ -800,7 +802,7 @@ class Aliases:
 
         if alias == "m":
             return self.turn.build()
-        return FunctionModel(respond)
+        return on_wire(FunctionModel(respond))
 
 
 async def test_a_judged_steps_tokens_are_in_the_turns_usage_under_the_judge_alias() -> None:

@@ -15,7 +15,10 @@ from typing import Any, cast
 
 from httpx import AsyncClient
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
+from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+
+from tests.wire_model import on_wire
 
 from ..saves import save_agent
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
@@ -171,7 +174,7 @@ async def test_hold_until_checked_is_versioned_and_reaches_the_served_definition
         assert "holdUntilChecked" not in off["versions"][0]["config"], off["versions"][0]
 
 
-def _blocking_model() -> FunctionModel:
+def _blocking_model() -> Model:
     """Blocks a question about shares at the question check and answers anything else."""
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -193,7 +196,7 @@ def _blocking_model() -> FunctionModel:
             elif isinstance(part, ToolCallPart):
                 yield {0: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
 
-    return FunctionModel(respond, stream_function=stream)
+    return on_wire(FunctionModel(respond, stream_function=stream))
 
 
 async def test_a_test_turn_refused_on_its_question_names_the_rule_and_claims_no_steps(tmp_path: Path) -> None:

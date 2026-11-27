@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Sequence
 
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
+from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from ops_agent_kernel.events import TurnFinished
@@ -25,6 +26,7 @@ from ops_agent_kernel.types import (
     TurnResult,
 )
 from ops_service_kit.http import Json
+from tests.wire_model import on_wire
 
 FEES = Passage("doc_1", "Fee schedule", "Wires", "v2", "An outgoing wire costs 25.00.", "kb_fees")
 MESSAGE = "I could not find that in the fee schedule. A banker will call you back."
@@ -46,14 +48,14 @@ class Knowledge:
         return self.found
 
 
-def writer(text: str) -> FunctionModel:
+def writer(text: str) -> Model:
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         return ModelResponse(parts=[TextPart(text)])
 
     async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str]:
         yield text
 
-    return FunctionModel(respond, stream_function=stream)
+    return on_wire(FunctionModel(respond, stream_function=stream))
 
 
 async def turn(answer: str, base: BaseAnswer, passages: list[Passage], attached: Sequence[Passage] = ()) -> TurnResult:

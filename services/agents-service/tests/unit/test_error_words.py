@@ -21,6 +21,7 @@ from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.types import AgentSettings, Passage, PromptFragment, ToolGrant, TurnRequest
 from ops_agents.api.error_words import WORDS, WordedTools
 from ops_contracts import errors
+from tests.wire_model import on_wire
 
 QUERY = ToolGrant("salesforce_query", "Salesforce", "Query", "read", {"type": "object", "properties": {}})
 
@@ -105,7 +106,7 @@ async def test_through_the_kernel_the_model_reads_words_and_the_record_keeps_the
         else:
             yield {0: DeltaToolCall(name="salesforce_query", json_args="{}")}
 
-    model = FunctionModel(lambda m, _i: reply(m), stream_function=stream)
+    model = on_wire(FunctionModel(lambda m, _i: reply(m), stream_function=stream))
     port = WordedTools(Failing(ToolOutcome(False, refusal("NOT_SIGNED_IN", app="Salesforce"))))
     settings = AgentSettings("ag", 1, [PromptFragment("You are Ops Assistant.")], "m")
     req = TurnRequest("t1", "th1", settings, [QUERY], user_turn="List accounts")

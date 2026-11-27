@@ -9,6 +9,7 @@ from dataclasses import replace
 from typing import Any
 
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from ops_agent_kernel.events import TurnFinished
@@ -22,6 +23,7 @@ from ops_agents.api.read_caches import ChatReads
 from ops_agents.api.run_person import RUN_PERSON, RunPerson
 from ops_contracts.chat import ChatMessage
 from tests.conftest import SEED
+from tests.wire_model import on_wire
 
 SETTINGS = replace(
     AgentSettings("ag_ops", 1, [PromptFragment("You help the sales team.")], "test-model"), max_tool_calls=5
@@ -56,7 +58,7 @@ class OneChat:
         return self.cache
 
 
-def calling(*calls: tuple[str, dict[str, Any]], told: list[Any] | None = None) -> FunctionModel:
+def calling(*calls: tuple[str, dict[str, Any]], told: list[Any] | None = None) -> Model:
     """A model that makes `calls` one per step, then answers; what each call returned is added to `told`."""
 
     def step(messages: list[ModelMessage]) -> int:
@@ -80,10 +82,10 @@ def calling(*calls: tuple[str, dict[str, Any]], told: list[Any] | None = None) -
         elif isinstance(part, TextPart):
             yield part.content
 
-    return FunctionModel(respond, stream_function=stream)
+    return on_wire(FunctionModel(respond, stream_function=stream))
 
 
-async def turn(model: FunctionModel, tools: Tools, chat: OneChat, ask: str = "What is Acme's phone?") -> TurnResult:
+async def turn(model: Model, tools: Tools, chat: OneChat, ask: str = "What is Acme's phone?") -> TurnResult:
     req = TurnRequest("t", "r", SETTINGS, [READ, SAVE], user_turn=ask)
     ports = KernelPorts(model=model, tools=tools, knowledge=Empty(), tool_caches=chat)
     events = [e async for e in run_turn(req, ports)]

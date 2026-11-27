@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
@@ -17,6 +18,7 @@ from ops_agents.activities.gateway import GatewayToolExecutor
 from ops_agents.activities.shaper import shape_part
 from ops_service_kit.narrow import json_object
 from tests.unit.test_kernel import SETTINGS, FixedKnowledge, run
+from tests.wire_model import on_wire
 
 QUERY = ToolGrant("salesforce_query", "Salesforce", "Run a SOQL query", "read", {"type": "object", "properties": {}})
 RECORDS = [{"Id": "5003000000D8cuJAAR", "CaseNumber": "00044818", "Status": "New"}]
@@ -35,7 +37,7 @@ NOT_LINKED = {
 }
 
 
-def model(steps: list[ModelResponse], seen: list[Any]) -> FunctionModel:
+def model(steps: list[ModelResponse], seen: list[Any]) -> Model:
     """Answers each model call with the next step; records every tool result it was given."""
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -52,7 +54,7 @@ def model(steps: list[ModelResponse], seen: list[Any]) -> FunctionModel:
             elif isinstance(p, TextPart):
                 yield p.content
 
-    return FunctionModel(respond, stream_function=stream)
+    return on_wire(FunctionModel(respond, stream_function=stream))
 
 
 class Drawn:

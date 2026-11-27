@@ -21,10 +21,12 @@ from pydantic_ai.messages import (
     ToolCallPart,
     UserPromptPart,
 )
+from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from tests.conftest import sse_events, structured
 from tests.engine.test_lifecycle_rights import BUILDER, VIEWER
+from tests.wire_model import on_wire
 
 from ..saves import save_agent
 from .role_app import ok, role_app
@@ -39,7 +41,7 @@ class Recorder:
     def __init__(self) -> None:
         self.extractions = 0
 
-    def model(self) -> FunctionModel:
+    def model(self) -> Model:
         def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             first, last = messages[0], messages[-1]
             prompt = (
@@ -66,7 +68,7 @@ class Recorder:
                 elif isinstance(part, ToolCallPart):
                     yield {0: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
 
-        return FunctionModel(respond, stream_function=stream)
+        return on_wire(FunctionModel(respond, stream_function=stream))
 
 
 @pytest.fixture

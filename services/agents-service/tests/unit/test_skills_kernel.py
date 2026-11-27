@@ -18,6 +18,7 @@ from pydantic_ai.messages import (
     ToolReturnPart,
     UserPromptPart,
 )
+from pydantic_ai.models import Model as WireModel
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from ops_agent_kernel import skills as skillset
@@ -25,6 +26,7 @@ from ops_agent_kernel.events import SkillLoaded, TextReplaced, TurnFinished
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.types import AgentSettings, PromptFragment, Resume, Skill, ToolGrant, TurnRequest, TurnResult
+from tests.wire_model import on_wire
 
 HARDSHIP = Skill(
     "sk_1",
@@ -90,7 +92,7 @@ class Model:
             )
         return ModelResponse(parts=[TextPart(self.answer)])
 
-    def build(self) -> FunctionModel:
+    def build(self) -> WireModel:
         async def stream(
             messages: list[ModelMessage], info: AgentInfo
         ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
@@ -100,7 +102,7 @@ class Model:
                 elif isinstance(part, ToolCallPart):
                     yield {i: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
 
-        return FunctionModel(self.respond, stream_function=stream)
+        return on_wire(FunctionModel(self.respond, stream_function=stream))
 
 
 async def turn(model: Model, skills: list[Skill], *, max_tool_calls: int = 6) -> tuple[TurnResult, list[Any]]:
@@ -230,7 +232,7 @@ class Script:
             return ModelResponse(parts=[ToolCallPart(value, {})])
         return ModelResponse(parts=[TextPart(value)])
 
-    def build(self) -> FunctionModel:
+    def build(self) -> WireModel:
         async def stream(
             messages: list[ModelMessage], info: AgentInfo
         ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
@@ -240,7 +242,7 @@ class Script:
                 elif isinstance(part, ToolCallPart):
                     yield {i: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
 
-        return FunctionModel(self.respond, stream_function=stream)
+        return on_wire(FunctionModel(self.respond, stream_function=stream))
 
 
 async def _run(req: TurnRequest, model: Script, tools: Recording) -> tuple[TurnResult, list[Any]]:

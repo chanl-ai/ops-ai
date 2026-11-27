@@ -9,13 +9,14 @@ The scripted model, the systems and the skill builders are those of `test_skill_
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field, replace
 from typing import Any
 
 import pytest
-from pydantic_ai.messages import ModelMessage, ModelResponse
-from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.models import Model
+from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.profiles import ModelProfile
 
 from ops_agent_kernel.ports import ToolOutcome
@@ -821,9 +822,18 @@ class ThinkingScript(Script):
         self.thinking.append(info.model_request_parameters.thinking)
         return super().respond(messages, info)
 
-    def build(self) -> FunctionModel:
-        stream = super().build().stream_function
-        assert stream is not None
+    def build(self) -> Model:
+        # Off the wire: neither loop sends a thinking setting to the gateway, so only a FunctionModel that takes one
+        # sees it, and this test runs on Pydantic AI alone.
+        async def stream(
+            messages: list[ModelMessage], info: AgentInfo
+        ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
+            for i, part in enumerate(self.respond(messages, info).parts):
+                if isinstance(part, TextPart):
+                    yield part.content
+                elif isinstance(part, ToolCallPart):
+                    yield {i: DeltaToolCall(name=part.tool_name, json_args=part.args_as_json_str())}
+
         return FunctionModel(self.respond, stream_function=stream, profile=ModelProfile(supports_thinking=True))
 
 

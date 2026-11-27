@@ -12,6 +12,7 @@ from typing import Any, cast
 import pytest
 from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
+from pydantic_ai.models import Model as WireModel
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from ops_agent_kernel import aliases, guard
@@ -19,6 +20,7 @@ from ops_agent_kernel.events import KernelEvent, StatusChanged, TextDelta, TextR
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolOutcome
 from ops_agent_kernel.types import AgentSettings, Guardrail, PromptFragment, Skill, ToolGrant, TurnRequest, TurnResult
+from tests.wire_model import on_wire
 
 NO_ADVICE = Guardrail("gr_1", 2, "No investment advice", ("investment advice",), "I can't give investment advice.")
 # The same rule held until checked: the answer is never on screen before its check passes.
@@ -88,7 +90,7 @@ class Model:
             raise answer
         return ModelResponse(parts=[TextPart(answer)])
 
-    def build(self) -> FunctionModel:
+    def build(self) -> WireModel:
         async def stream(
             messages: list[ModelMessage], info: AgentInfo
         ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
@@ -100,7 +102,7 @@ class Model:
                 elif isinstance(part, ToolCallPart):
                     yield {i: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
 
-        return FunctionModel(self.respond, stream_function=stream)
+        return on_wire(FunctionModel(self.respond, stream_function=stream))
 
 
 def topic_when(words: str) -> Callable[[str], dict[str, str]]:
@@ -252,7 +254,7 @@ class Lookups:
         return ToolOutcome(True, {"found": True})
 
 
-def cut_short_model(raise_mid_answer: bool) -> FunctionModel:
+def cut_short_model(raise_mid_answer: bool) -> WireModel:
     """Classifies everything as none; answers on a blocked topic, then either calls a tool (so the step limit cuts
     the reply) or fails part-way through the answer."""
 
@@ -270,7 +272,7 @@ def cut_short_model(raise_mid_answer: bool) -> FunctionModel:
             raise RuntimeError("provider dropped the stream")
         yield {1: DeltaToolCall(name="lookup", json_args="{}")}
 
-    return FunctionModel(respond, stream_function=stream)
+    return on_wire(FunctionModel(respond, stream_function=stream))
 
 
 async def _cut_turn(raise_mid_answer: bool) -> tuple[TurnResult, str]:
@@ -340,7 +342,7 @@ class Source:
     def __init__(self, turn: Model, check: Model | Exception) -> None:
         self.turn, self.check = turn.build(), check
 
-    def model_for(self, alias: str) -> FunctionModel:
+    def model_for(self, alias: str) -> WireModel:
         if alias != guard.GUARD_ALIAS:
             return self.turn
         if isinstance(self.check, Model):
@@ -350,7 +352,7 @@ class Source:
         def fail(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             raise error
 
-        return FunctionModel(fail)
+        return on_wire(FunctionModel(fail))
 
 
 @pytest.fixture(autouse=True)
@@ -462,7 +464,7 @@ async def test_no_tool_call_cap_lets_a_long_turn_run() -> None:
         settings = AgentSettings("ag_x", 1, [PromptFragment("x")], "m", max_tool_calls=cap, max_steps=50)
         req = TurnRequest("t1", "r1", settings, [LOOKUP], user_turn="Look it all up")
         ports = KernelPorts(
-            model=FunctionModel(respond, stream_function=stream), tools=Counting(), knowledge=NoKnowledge()
+            model=on_wire(FunctionModel(respond, stream_function=stream)), tools=Counting(), knowledge=NoKnowledge()
         )
         events = [e async for e in run_turn(req, ports)]
         result = cast(TurnResult, events[-1].result)  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]

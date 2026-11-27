@@ -35,6 +35,7 @@ from tests.conftest import structured
 from tests.engine.test_worker import CountingTools, drain, worker
 from tests.run_rows import write_run
 from tests.unit.test_agent_step_port import _prompt_port, _streamed  # pyright: ignore[reportPrivateUsage]
+from tests.wire_model import on_wire
 
 FLOW = parse(
     {
@@ -222,7 +223,7 @@ async def test_a_stopping_worker_waits_for_the_assist_it_is_writing(engine: Asyn
         await asyncio.sleep(0.3)
         yield json.dumps(HELP)
 
-    agents = _prompt_port(FunctionModel(answer, stream_function=slow))
+    agents = _prompt_port(on_wire(FunctionModel(answer, stream_function=slow)))
     async with AsyncExitStack() as stack:
         reviews = assisted_reviews(stack, engine, agents, Policies(True))
         tenant, run_id, rt = await _paused(engine, Prompts(HELP), on=True, settle=False, reviews=reviews)

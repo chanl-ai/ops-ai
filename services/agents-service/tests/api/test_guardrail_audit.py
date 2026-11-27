@@ -12,10 +12,12 @@ from typing import Any
 import pytest
 from httpx import AsyncClient
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, UserPromptPart
+from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from tests.conftest import sse_events, structured
 from tests.engine.test_lifecycle_rights import ADMIN, person
+from tests.wire_model import on_wire
 
 from ..saves import save_agent
 from .role_app import ok, role_app
@@ -25,7 +27,7 @@ RULE = {"name": "No investment advice", "topics": ["investment advice"], "messag
 ANSWER = "Buy Harbor & Pine shares before Friday."
 
 
-def _withdrawing_model() -> FunctionModel:
+def _withdrawing_model() -> Model:
     """Answers with investment advice, which the after-answer check then finds; the question itself is clean."""
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -49,7 +51,7 @@ def _withdrawing_model() -> FunctionModel:
             elif isinstance(part, ToolCallPart):
                 yield {0: DeltaToolCall(name=part.tool_name, json_args=json.dumps(part.args))}
 
-    return FunctionModel(respond, stream_function=stream)
+    return on_wire(FunctionModel(respond, stream_function=stream))
 
 
 @pytest.fixture

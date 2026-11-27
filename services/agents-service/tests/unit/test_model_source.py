@@ -17,15 +17,16 @@ from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.models import ModelsServiceModels
 from ops_agent_kernel.ports import KernelPorts
 from ops_agent_kernel.types import AgentSettings, PromptFragment, TurnRequest
+from tests.wire_model import on_wire
 
 from .test_kernel import FixedKnowledge, RecordingTools
 
 
-def _says(text: str) -> FunctionModel:
+def _says(text: str) -> Model:
     async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str]:
         yield text
 
-    return FunctionModel(stream_function=stream)
+    return on_wire(FunctionModel(stream_function=stream))
 
 
 class Aliases:

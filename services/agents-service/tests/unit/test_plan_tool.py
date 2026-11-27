@@ -11,6 +11,7 @@ from dataclasses import replace
 from typing import Any
 
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.models import Model
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 
 from ops_agent_kernel import plan as planner
@@ -40,6 +41,7 @@ from ops_contracts.skill_run import SkillRunState
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.narrow import json_list, json_object
 from tests.conftest import SEED
+from tests.wire_model import on_wire
 
 READ = ToolGrant(
     "find_cases", "Ops AI", "Find cases", "read", {"type": "object", "properties": {"q": {"type": "string"}}}
@@ -81,7 +83,7 @@ class NoKnowledge:
         return []
 
 
-def scripted(*responses: list[Any] | str) -> tuple[FunctionModel, list[str]]:
+def scripted(*responses: list[Any] | str) -> tuple[Model, list[str]]:
     """A model that answers each request with the next response: a list of tool calls, or text. Records the system
     instructions it was sent."""
     queue = list(responses)
@@ -102,7 +104,7 @@ def scripted(*responses: list[Any] | str) -> tuple[FunctionModel, list[str]]:
         else:
             yield {i: DeltaToolCall(name=p.tool_name, json_args=json.dumps(p.args)) for i, p in enumerate(parts)}
 
-    return FunctionModel(respond, stream_function=stream), seen
+    return on_wire(FunctionModel(respond, stream_function=stream)), seen
 
 
 def rows(part: JsonValue) -> list[Json]:
@@ -114,14 +116,14 @@ def hint_title(part: JsonValue) -> JsonValue:
     return json_object(json_object(part)["hint"])["title"]
 
 
-async def run(model: FunctionModel, req: TurnRequest) -> tuple[TurnResult, list[Any]]:
+async def run(model: Model, req: TurnRequest) -> tuple[TurnResult, list[Any]]:
     events = [e async for e in run_turn(req, KernelPorts(model=model, tools=Reads(), knowledge=NoKnowledge()))]
     last = events[-1]
     assert isinstance(last, TurnFinished)
     return last.result, events
 
 
-async def plans(model: FunctionModel, req: TurnRequest) -> tuple[TurnResult, list[Json]]:
+async def plans(model: Model, req: TurnRequest) -> tuple[TurnResult, list[Json]]:
     """The turn's result and each plan part as it was drawn: an event's record changes after it is sent."""
     drawn: list[Json] = []
     result: TurnResult | None = None
