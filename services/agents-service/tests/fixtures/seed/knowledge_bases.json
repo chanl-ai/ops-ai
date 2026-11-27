@@ -3,5 +3,7 @@
   {"id": "kb_eng", "name": "Compliance"},
   {"id": "kb_support", "name": "Retail banking"},
   {"id": "kb_lending", "name": "Lending policy"},
-  {"id": "kb_legal", "name": "Cards & disputes"}
+  {"id": "kb_legal", "name": "Cards & disputes"},
+  {"id": "kb_retail_products", "name": "Retail products"},
+  {"id": "kb_branch_operations", "name": "Branch operations"}
 ]
