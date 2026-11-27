@@ -327,7 +327,14 @@ async def open_runtime(
     if knowledge is None:
         knowledge = KbService(required_client(settings, kb_http, "kb")) if kb_http is not None else NoKnowledgeService()
     ports = (
-        KernelPorts(model=kernel_model, tools=tools, knowledge=knowledge, models=per_alias, tool_caches=ChatReads())
+        KernelPorts(
+            model=kernel_model,
+            tools=tools,
+            knowledge=knowledge,
+            models=per_alias,
+            tool_caches=ChatReads(),
+            loop=settings.agents_loop,
+        )
         if kernel_model
         else None
     )

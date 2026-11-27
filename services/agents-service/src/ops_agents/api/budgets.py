@@ -36,6 +36,7 @@ from pydantic_ai.models import Model, ModelRequestParameters, StreamedResponse
 from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.settings import ModelSettings
 
+from ops_agent_kernel.contract import ModelEndpoint
 from ops_agent_kernel.ports import PURPOSE_HEADER, BudgetReachedError, ModelSource
 from ops_agents.graphs.common import emit
 from ops_agents.graphs.metering import STEP_KEY, call_site
@@ -274,6 +275,26 @@ class BudgetedModel(WrapperModel):
     async def _headed(self, settings: ModelSettings | None, site: _Site | None) -> ModelSettings | None:
         if not self.headers:
             return settings
+        headers = await self._named(_purpose(settings), site)
+        if not headers:
+            return settings
+        merged: ModelSettings = {**(settings or {})}
+        merged["extra_headers"] = {**(merged.get("extra_headers") or {}), **headers}
+        return merged
+
+    async def call_headers(self, purpose: str) -> dict[str, str]:
+        """The headers one call on the Strands loop names, computed in the task that makes it."""
+        return await self._named(purpose, _site())
+
+    def loop_endpoint(self) -> ModelEndpoint:
+        """Where the Strands loop sends this model's calls: the wrapped gateway client, with each call's headers."""
+        inner = self.wrapped
+        while isinstance(inner, WrapperModel):
+            inner = inner.wrapped
+        model_id = str(getattr(inner, "model_name", self.alias))
+        return ModelEndpoint(getattr(inner, "client", None), model_id, self.call_headers if self.headers else None)
+
+    async def _named(self, purpose: str, site: _Site | None) -> dict[str, str]:
         headers: dict[str, str] = {}
         with contextlib.suppress(isolation.NoTenantError):
             headers["X-Tenant-Id"] = isolation.tenant()
@@ -286,9 +307,7 @@ class BudgetedModel(WrapperModel):
             if site.thread_id is not None:
                 headers["X-Thread-Id"] = site.thread_id
                 if self.budgets is not None:
-                    if _purpose(settings) == "closing" and await self.budgets.chain_root(site.thread_id) != (
-                        site.thread_id
-                    ):
+                    if purpose == "closing" and await self.budgets.chain_root(site.thread_id) != (site.thread_id):
                         # A specialist returns what it has to the agent that asked it; only the chain's first thread
                         # closes the reply.
                         raise BudgetReachedError()
@@ -297,11 +316,7 @@ class BudgetedModel(WrapperModel):
                 budget_id = STEP_BUDGET.get()
         if budget_id is not None:
             headers[BUDGET_HEADER] = budget_id
-        if not headers:
-            return settings
-        merged: ModelSettings = {**(settings or {})}
-        merged["extra_headers"] = {**(merged.get("extra_headers") or {}), **headers}
-        return merged
+        return headers
 
     def _emit(self, site: _Site | None, response: ModelResponse, started: float) -> None:
         if site is None or site.thread_id is None:

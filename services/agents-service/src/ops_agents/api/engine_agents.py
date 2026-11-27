@@ -309,5 +309,6 @@ def kernel_agents(
         tools=executor,
         knowledge=knowledge,
         models=BudgetedSource(through, budgets) if through is not None else None,
+        loop=settings.agents_loop,
     )
     return KernelAgents(db, catalog, ports, directory, settings.model_alias, budgets=budgets)
