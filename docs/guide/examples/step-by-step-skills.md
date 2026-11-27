@@ -120,14 +120,14 @@ SKILL=$(opsai skills apply add-a-customer-note.yaml --json | jq -r .id)
 opsai skills publish "$SKILL" --note "First version"
 ```
 
-`create` needs `instructions`, which a skill with steps may leave empty. `opsai skills apply` creates the skill, or
-saves a new draft of the skill the file names by id, slug or name. The stored steps say who judges each check: `rule`
-or `model`.
+`create` needs `instructions`, but a skill with steps may leave them empty. `opsai skills apply` creates the skill, or
+saves a new draft of the skill the file names by id, slug or name. The stored steps say who judges each check, either
+`rule` or `model`.
 
 ## Write the skill as text
 
 The console's skill page and the `source` field of a draft save take the same skill as plain text, written like a
-prompt. Every line is an instruction to the agent. These things in it are also enforced:
+prompt. Every line is an instruction to the agent, and the lines in this table are also enforced:
 
 | You write | It becomes |
 |---|---|
@@ -155,9 +155,9 @@ else:
 Thank them.
 ```
 
-A procedure pasted from a document reads as it looks: `If …:`, `Otherwise:` and `Stop "…"` work like `if …:`,
-`else:` and `stop "…"`, a list marker (`•`, `-`, `1.`) is not read, and non-breaking or full-width spaces and Windows
-line endings count as ordinary ones. These rules keep a flat list a list:
+A procedure pasted from a document reads the way it looks. `If …:`, `Otherwise:` and `Stop "…"` work like `if …:`,
+`else:` and `stop "…"`. A list marker (`•`, `-`, `1.`) is not read. Non-breaking or full-width spaces and Windows
+line endings count as ordinary ones. The rules below keep a flat list reading as a list:
 
 | Line | Reads as |
 |---|---|
@@ -167,40 +167,48 @@ line endings count as ordinary ones. These rules keep a flat list a list:
 | `stop`, `Stop "Reason"` or `- Stop` at the top level, outside any path, with or without a reason | A plain line, with a hint to indent it under an `if` |
 | `stop "Reason"` under an `if` or `else` | An exit |
 
-So `2. If active:` followed by an indented `Open the claim` is a path, and the same lines written flat stay five
-steps the agent reads in order. In the console editor, click a mention to replace or remove it, tap a line with a wavy underline to
-read its hint (every hint is also listed under the text), and press Esc then Tab to leave the editor with the
-keyboard. A new skill opens with a short example of one mention line and one path.
+So `2. If active:` followed by an indented `Open the claim` is a path, while the same lines written flat stay five
+steps that the agent reads in order.
+
+In the console editor, you can click a mention to replace or remove it, and tap a line with a wavy underline to read
+its hint. Every hint is also listed under the text. To leave the editor with the keyboard, press Esc then Tab. A new
+skill opens with a short example of one mention line and one path.
 
 | Condition | How it is decided |
 |---|---|
 | Made of words the tool above returns (`found`, `not found`, `status is VIP`, `amount is more than 500`), or written as a rule (`result.balance > 0`) | Checked: a rule runs in code on the tool's result, labelled "checked" in the editor |
 | Anything else (`they want a refund`) | The agent decides from the conversation and says which way it went: `step_done` with `holds` true or false. The kernel refuses `step_done` on that step without it. Labelled "agent decides" |
 
-A path that is not taken is not a failure: it takes no hold and counts no attempt. A `stop` that a checked condition
-leads to is a guard, on either side of its `if` (`if not verified: stop …` and `if flagged: stop …` alike): it takes
-the hold, and a value that is missing takes the guarded path, as a failed check does. A `stop` an "agent decides"
-condition leads to ends the skill without a hold. A path that reaches the end before the last line still asks for the
-skill's results before it ends as done.
+A path that is not taken does not count as a failure. It takes no hold and counts no attempt.
 
-Nothing in the text stops a save. A line the reader cannot use is a hint on that line, and so is a tool that changes
-something on a path the agent decides (on either side of the `if`, at any depth under it); hints never stop a save or
-a publish, and the publish check lists them as warnings of kind `hint`. A team that turns on **Strict skill
+A `stop` that a checked condition leads to is a guard, whichever side of its `if` it sits on (`if not verified: stop …`
+and `if flagged: stop …` alike). A guard takes the hold, and a value that is missing takes the guarded path, as a
+failed check does. A `stop` that an "agent decides" condition leads to ends the skill without a hold. A path that
+reaches the end before the last line still asks for the skill's results before it ends as done.
+
+Nothing in the text stops a save. A line the reader cannot use gets a hint on that line. So does a tool that changes
+something on a path the agent decides, on either side of the `if` and at any depth under it. Hints never stop a save
+or a publish, and the publish check lists them as warnings of kind `hint`. A team that turns on **Strict skill
 publishing** (the `skillPublishStrict` setting on Governance › Policies) refuses that one hint at publish instead, as a
-`bad_check` problem on its line. A mention of something that no longer exists blocks a publish, with the line it is on
-(`position.field` `source`, `position.index` the line), and so does a text that makes more than 30 steps: none of its
-tools or paths could be enforced, so it is a `bad_step` problem on the 31st step's line. Each step's prompt carries
-only that step's lines, not the whole text. `POST /v1/skills/{id}/text` reads a text without saving it,
-by the same reader a save runs. A skill saved as a list
-of steps is shown as text by that reader and keeps its stored steps until its text is saved.
+`bad_check` problem on its line.
+
+These also block a publish:
+
+- A mention of something that no longer exists. The problem names the line it is on (`position.field` `source`,
+  `position.index` the line).
+- A text that makes more than 30 steps. None of its tools or paths could be enforced, so it is a `bad_step` problem on
+  the 31st step's line.
+
+Each step's prompt carries only that step's lines. `POST /v1/skills/{id}/text` reads a text without saving it, by the
+same reader a save runs. A skill saved as a list of steps is shown as text by that reader, and it keeps its stored
+steps until its text is saved.
 
 ## Give the skill to an agent and follow the steps
 
-**The problem.** The agent needs the skill, the tools its steps use and the skill its second step runs. Granting
-each one by hand is easy to get wrong.
-
-**When to use it.** Use `add_reference` to grant an agent a skill, a tool, a knowledge base, another agent or a
-workflow by its kind and id. A skill brings the tools and knowledge bases it names and the skills its steps run.
+The agent needs the skill, the tools its steps use and the skill its second step runs, and granting each one by hand
+invites mistakes. `add_reference` grants an agent a skill, a tool, a knowledge base, another agent or a workflow by
+its kind and id. When you grant a skill this way, it brings the tools and knowledge bases it names and the skills its
+steps run.
 
 ```python
 agent = ops.agents.apply({
@@ -259,8 +267,8 @@ opsai chat say --agent "$AGENT" --test --skill "$SKILL" --input customer_email=a
 ```
 
 The examples chat with the agent's newest version (`test`), so they do not wait for the publish request to be
-approved. Each reply carries the skill's record as `skillRun`: the skill that is running, the step it is on, each
-step's result so far, and the skills that ended. The next reply in the same conversation goes on from that step,
+approved. Each reply carries the skill's record as `skillRun`. The record holds the skill that is running, the step
+it is on, each step's result so far, and the skills that ended. The next reply in the same conversation goes on from that step,
 even when the person asks about something else in between. In the reply's `skills` list, `how` is `started` for a
 skill that runs step by step.
 
@@ -302,8 +310,9 @@ check: {text: The person confirmed the wording.}                       # a sente
 | Functions | `len`, `lower`, `contains`, `exists` |
 
 A missing field reads as `null`, and a comparison with `null` is false. A rule reads only its own step's result and
-the inputs, not the results of earlier steps. Which kind a check is gets decided when the skill is saved. A text that
-reads like a rule and is not a valid one is refused, so a typing mistake cannot turn a rule into a sentence.
+the inputs. It cannot see the results of earlier steps. Whether a check is a rule or a sentence is decided when the
+skill is saved. A text that reads like a rule and is not a valid one is refused, so a typing mistake cannot turn a
+rule into a sentence.
 
 ## Exits
 
@@ -314,7 +323,7 @@ lists, can end it at any step. A step sends the skill to an exit when its check 
 ifNot: {action: exit, exit: not_found}
 ```
 
-The exit and the values in `returns` are what the caller gets back: the agent, or the step of another skill that
+The caller gets back the exit and the values in `returns`. The caller is the agent, or the step of another skill that
 ran this one.
 
 ## How the agent moves through the steps
@@ -335,8 +344,8 @@ skill on the version it started with, even when a newer version is published mea
 
 ## Approvals
 
-A step's tool waits for approval the same way any tool does: when the tool needs a person's yes, the reply pauses
-until they decide. Two rules are added for steps.
+A step's tool waits for approval the same way any tool does. When the tool needs a person's approval, the reply
+pauses until they decide. Steps add two rules of their own.
 
 | What happens | What the skill does |
 |---|---|
@@ -380,14 +389,14 @@ confirming a caller. A rule on the step can read how the sub-skill ended:
 | A skill written as text runs a tool that changes something on a path the agent decides, in a team with Strict skill publishing on | On publish only; the draft saves. The error names the line |
 
 A skill's publish request shows its reviewer the text against the published version it replaces, kept as it was when
-the request opened, with the hints on the new text's lines. Each published version keeps who asked for the publish
+the request opened, with the hints on the new text's lines. Each published version records who asked for the publish
 (`requestedBy`), who approved it (`approvedBy`, empty when the team's publish policy let it go live without a review)
-and who made it live (`publishedBy`); `opsai skills versions <id>` lists all three.
+and who made it live (`publishedBy`). `opsai skills versions <id>` lists all three.
 
 ## What success looks like
 
-The agent works through the steps in order. Each step that has a check waits for it, a failed check retries, goes back or
-leaves by a named exit, and the end of the run records the exit. A person who reads the conversation afterwards can see
+The agent works through the steps in order. Each step that has a check waits for it. A failed check retries, goes
+back or leaves by a named exit, and the end of the run records the exit. A person who reads the conversation afterwards can see
 which steps ran and why the skill ended.
 
 ## What to do next

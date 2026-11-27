@@ -6,8 +6,9 @@ You have decided to build on Ops AI from code, and you want to see a working exa
 Each page here takes one task, such as publishing an agent or running a workflow, and shows it in Python, in
 TypeScript and on the command line, so you can copy the one that matches your stack and change the names.
 
-Without examples you piece the first call together from the API reference, then learn about the publish request and
-the approval step when the first run is refused. These pages show the whole path once, in the order you will meet it.
+Without an example, you would piece the first call together from the API reference, and you would likely learn about
+the publish request and the approval step only when your first run is refused. Each page walks through the whole path
+once, in the order you will meet it.
 
 ## Choose the task you want to code
 
@@ -25,10 +26,10 @@ the approval step when the first run is refused. These pages show the whole path
    package.
 2. **Connect it once.** See [Python SDK](../../sdk/python.md#connect) or
    [TypeScript SDK](../../sdk/typescript.md#connect).
-3. **Pick a team you keep for testing.** The examples create agents, skills, workflows and a knowledge base in the
-   team you are connected to.
+3. **Pick a team you keep for testing.** The examples create and publish agents, skills, workflows and a knowledge
+   base in the team you are connected to, so use a test team and not your live one.
 
-Every example starts from a connected client, and it acts as one person in one team:
+Every example starts from a connected client, which acts as one person in one team:
 
 ```python
 from ops_ai import OpsAI
@@ -46,8 +47,8 @@ const ops = new OpsAI();
 opsai agents list
 ```
 
-When the first example runs and prints an agent id, you are set up. If it is refused, the sign-in or the team is the
-usual cause, and the SDK page explains how to fix both.
+When the first example runs and prints an agent id, you are set up. If it is refused, the usual cause is the sign-in
+or the team, and the SDK page explains how to fix both.
 
 ## What the labels on the examples mean
 
@@ -58,6 +59,6 @@ usual cause, and the SDK page explains how to fix both.
 | Upcoming | The feature is not in the current release. The page describes how it will work, and the code has not been run against a release |
 | A reply is not shown | Replies depend on the model your deployment uses, so the examples print fields and leave the wording out |
 
-Publishing an agent, a skill or a workflow sends a publish request, and your team decides who may approve it. On a
-development stack requests are approved at once, so the examples go straight on to use what they published. On a
-team that requires a reviewer, wait for the approval before you run the step that uses the published version.
+Publishing an agent, a skill or a workflow sends a publish request, and your team's publish policy decides whether it needs a review. A first publish does. The person who asked for the publish cannot approve it. On a
+development stack, requests are approved at once, so the examples go straight on to use what they published. If your
+team requires a reviewer, wait for the approval before you run the step that uses the published version.

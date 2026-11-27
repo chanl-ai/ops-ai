@@ -4,7 +4,7 @@ Status: current.
 
 You have built agents with LangChain and LangGraph, the OpenAI Agents SDK or Strands Agents, and you are weighing
 Ops AI. This page maps each pattern you already use onto Ops AI. For every pattern it says what you wrote there, how you
-do it here, and which example to run. Anything that is not in the current release is marked Upcoming.
+do it here, and which example to run. Anything that is not in the current release is marked upcoming.
 
 The main difference is where the agent lives. In those frameworks an agent is an object in your program. In Ops AI an
 agent is a reviewed, versioned record on the platform, and your code creates it, publishes it and talks to it. Approvals,
@@ -58,12 +58,12 @@ Framework names on this page were read from each project's public documentation 
 | `Agent(tools=[...])`, then `Runner.run` | OpenAI Agents SDK |
 | `Agent(tools=[...])` | Strands |
 
-**The Ops AI way.** The agent is a file you apply and publish. Tools are not functions in your program: they are
-operations your team has published, and you grant them to the agent by id. Run
+The agent is a file you apply and publish. Its tools are operations your team has published, rather than functions
+in your program, and you grant them to the agent by id. Run
 [Put an agent your team can chat with into a file](agents.md#put-an-agent-your-team-can-chat-with-into-a-file), then [Let the agent open a case](agents.md#let-the-agent-open-a-case).
 
-**Upcoming.** A tool written as one function, with its inputs read from the code. Today a tool is a REST operation,
-an MCP tool or a plugin tool: see [Build your first tool](../build-your-first-tool.md).
+Writing a tool as one function, with its inputs read from the code, is upcoming. Today a tool is a REST operation,
+an MCP tool or a plugin tool, as [Build your first tool](../build-your-first-tool.md) explains.
 
 ## 2. Model and tool loop with limits
 
@@ -73,7 +73,7 @@ an MCP tool or a plugin tool: see [Build your first tool](../build-your-first-to
 | `max_turns` | OpenAI Agents SDK |
 | `limits={"turns": 5, ...}` | Strands |
 
-**The Ops AI way.** The platform runs the loop. Limits are settings on the agent, under `guardrails` in its file:
+The platform runs the loop for you, and the limits are settings on the agent, under `guardrails` in its file:
 `maxToolCallsPerTurn`, `maxModelCallsPerTurn`, `maxModelCallsPerConversation` and `maxCostPerConversation`. Set them
 in the file you apply in [Put an agent your team can chat with into a file](agents.md#put-an-agent-your-team-can-chat-with-into-a-file).
 
@@ -85,11 +85,11 @@ in the file you apply in [Put an agent your team can chat with into a file](agen
 | `output_type=Model` | OpenAI Agents SDK |
 | `structured_output_model=Model` | Strands |
 
-**The Ops AI way.** Ask for a shape where the answer is used. A workflow's agent step takes an `outputSchema` and
+Ask for a shape at the point where the answer is used. A workflow's agent step takes an `outputSchema` and
 gets an object that matches it, or leaves by its error port. The classify and extract steps are bound to a schema
 too. Start from [Let an agent answer one step](workflows.md#let-an-agent-answer-one-step).
 
-**Upcoming.** An output shape set on the agent itself, returned as a typed object from chat and run calls.
+Upcoming work adds an output shape set on the agent itself, so that chat and run calls return a typed object.
 
 ## 4. Routing and triage
 
@@ -99,9 +99,9 @@ too. Start from [Let an agent answer one step](workflows.md#let-an-agent-answer-
 | Structured output, then code picks the agent | OpenAI Agents SDK |
 | Conditional edges in `GraphBuilder` | Strands |
 
-**The Ops AI way.** In a workflow, a classify step sorts the request and a branch step sends it down a path. The
-branch in [Write the refund rule and run it](workflows.md#write-the-refund-rule-and-run-it) is the same idea on a
-number. In chat, the team's default agent is offered the specialists the person may use and picks one.
+In a workflow, a classify step sorts the request and a branch step sends it down a path. The
+branch in [Write the refund rule and run it](workflows.md#write-the-refund-rule-and-run-it) does the same thing with
+a number. In chat, the team's default agent is offered the specialists the person may use, and it picks one.
 
 ## 5. Handoffs
 
@@ -111,8 +111,8 @@ number. In chat, the team's default agent is offered the specialists the person 
 | `handoffs=[agent]` | OpenAI Agents SDK |
 | `handoff_to_agent` in a `Swarm` | Strands |
 
-**Upcoming.** A second agent that takes over the conversation and answers the person directly is not in the current
-release. Today a specialist answers one question and the first agent carries on: see
+A second agent that takes over the conversation and answers the person directly is upcoming, and is not in the
+current release. Today a specialist answers one question and the first agent carries on, as described under
 [Agents as tools](#6-agents-as-tools).
 
 ## 6. Agents as tools
@@ -123,12 +123,12 @@ release. Today a specialist answers one question and the first agent carries on:
 | `agent.as_tool(...)` | OpenAI Agents SDK |
 | `tools=[agent]`, `agent.as_tool()` | Strands |
 
-**The Ops AI way.** Grant a published agent to another agent as `agent:<id>`. The specialist answers with its own
+Grant a published agent to another agent as `agent:<id>`. The specialist answers with its own
 knowledge, tools, guardrails and approvals, for the same person. `tool_options` in
 [Let the agent open a case](agents.md#let-the-agent-open-a-case) lists the agents you may grant.
 
-**Upcoming.** Specialists that take typed inputs, keep their context between calls, and may ask a specialist of
-their own. Today a specialist gets one question as text and the chain is one level deep.
+Also upcoming are specialists that take typed inputs, keep their context between calls and may ask a specialist of
+their own. Today a specialist gets one question as text, and the chain is one level deep.
 
 ## 7. Swarm and graph of agents
 
@@ -138,12 +138,12 @@ their own. Today a specialist gets one question as text and the chain is one lev
 | Peer agents that list each other in `handoffs` | OpenAI Agents SDK |
 | `Swarm`, `GraphBuilder` | Strands |
 
-**The Ops AI way.** The workflow is the graph. Agent steps are nodes, with branches, joins, repeats, waits and child
-workflows around them, and every step is recorded. Start from
+A workflow takes the place of the graph. Agent steps are its nodes, with branches, joins, repeats, waits
+and child workflows around them, and every step is recorded. Start from
 [Let an agent answer one step](workflows.md#let-an-agent-answer-one-step).
 
-**Upcoming.** A team of agents that pass work between themselves with shared notes, where the model chooses the
-order.
+A team of agents that pass work between themselves with shared notes, where the model chooses the order, is
+upcoming.
 
 ## 8. Plan, then carry out
 
@@ -153,9 +153,9 @@ order.
 | Agents chained in your own code | OpenAI Agents SDK |
 | The `graph` tool | Strands |
 
-**The Ops AI way.** Every agent has a built-in plan: a short checklist the person sees in chat, ticked off as the
-agent works. You do not set it up. The plan belongs to one agent and does not start parallel workers. For work in
-parallel, use a workflow that starts a child run for each item.
+Every agent has a built-in plan: a short checklist the person sees in chat, ticked off as the agent works. You do not
+need to set it up. The plan belongs to one agent and does not start parallel workers. For work in parallel, use a
+workflow that starts a child run for each item.
 
 ## 9. Sequential and parallel workflows
 
@@ -165,7 +165,7 @@ parallel, use a workflow that starts a child run for each item.
 | Plain Python and `asyncio.gather` | OpenAI Agents SDK |
 | Plain Python or `GraphBuilder` | Strands |
 
-**The Ops AI way.** A workflow is a typed graph in a file: triggers, data steps, branches, joins, repeats, waits, AI
+A workflow is a typed graph in a file: triggers, data steps, branches, joins, repeats, waits, AI
 steps, human review, tool calls and child workflows. Run [Workflow examples](workflows.md), and see
 [Workflow example coverage](../workflow-example-coverage.md) for every step type.
 
@@ -177,10 +177,10 @@ steps, human review, tool calls and child workflows. Run [Workflow examples](wor
 | `needs_approval`, `RunState` | OpenAI Agents SDK |
 | `event.interrupt(...)` in a hook | Strands |
 
-**The Ops AI way.** You do not write the pause. A workflow's review step stops the run until a person decides: run
-[Hold a large refund for a person's decision](workflows.md#hold-a-large-refund-for-a-persons-decision). In chat, a tool that changes something
-pauses the reply until a person approves it, when your team's policy says writes wait. The person who asked cannot
-approve their own request.
+You do not write the pause. A workflow's review step stops the run until a person decides, as you can see
+by running [Hold a large refund for a person's decision](workflows.md#hold-a-large-refund-for-a-persons-decision). In
+chat, when your team's policy says that changes must wait for approval, a tool that changes something pauses the reply
+until a person approves it. The person who asked cannot approve their own request.
 
 ## 11. Conversation memory and sessions
 
@@ -190,8 +190,9 @@ approve their own request.
 | `session=SQLiteSession(...)` | OpenAI Agents SDK |
 | `session_manager=...` | Strands |
 
-**The Ops AI way.** Every chat is a stored thread. Pass the thread back to continue it: run
-[Ask a question and follow up in the same conversation](agents.md#ask-a-question-and-follow-up-in-the-same-conversation). You do not choose or run a store.
+Every chat is a stored thread, and you pass the thread back to continue it, as in
+[Ask a question and follow up in the same conversation](agents.md#ask-a-question-and-follow-up-in-the-same-conversation).
+You do not choose or run a store.
 
 ## 12. Long-term memory
 
@@ -201,9 +202,10 @@ approve their own request.
 | The `Memory()` capability of sandbox agents | OpenAI Agents SDK |
 | `MemoryManager(stores=[...])` | Strands |
 
-**The Ops AI way.** Memory is a setting on the agent, `memory` in its file. An agent remembers facts, preferences
-and past episodes for each person. The person can list, change and erase what is remembered, and a retention setting
-applies. The examples turn it off or leave the default; you do not write the saving and recalling.
+Memory is a setting on the agent, `memory` in its file. An agent remembers facts, preferences and past episodes for
+each person. The person can list, change and erase what is remembered, and a retention setting applies.
+The examples either turn memory off or leave the default. In both cases you do not write the code that saves and
+recalls what the agent remembers.
 
 ## 13. Guardrails
 
@@ -213,10 +215,10 @@ applies. The examples turn it off or leave the default; you do not write the sav
 | Input, output and tool guardrails | OpenAI Agents SDK |
 | Bedrock Guardrails, hooks | Strands |
 
-**The Ops AI way.** A guardrail is a published, versioned record that agents hold. The kind built today is blocked
+On the platform, a guardrail is a published, versioned record that agents hold. The kind built today is blocked
 topics, checked on the person's message and on the answer. Personal data is masked by a setting on the agent.
 
-**Upcoming.** More kinds of guardrail: required citations, a rule on the answer's shape, a rule on a tool's input,
+More kinds of guardrail are upcoming: required citations, a rule on the answer's shape, a rule on a tool's input,
 and a mode that records a hit without blocking.
 
 ## 14. Tracing
@@ -227,11 +229,11 @@ and a mode that records a hit without blocking.
 | Built-in tracing, `add_trace_processor` | OpenAI Agents SDK |
 | OpenTelemetry traces and metrics | Strands |
 
-**The Ops AI way.** Each workflow run keeps a record of every step: run
-[See which path a run took](workflows.md#see-which-path-a-run-took). An agent lists its recent runs, as in
+Each workflow run keeps a record of every step, as
+[See which path a run took](workflows.md#see-which-path-a-run-took) shows. An agent lists its recent runs, as in
 [Start a long reply and read it later](agents.md#start-a-long-reply-and-read-it-later), and every tool call and model call is logged.
 
-**Upcoming.** A trace of one agent reply as a tree, export over OpenTelemetry, and metrics.
+Still upcoming are a trace of one agent reply as a tree, export over OpenTelemetry, and metrics.
 
 ## 15. Evals
 
@@ -241,12 +243,12 @@ and a mode that records a hit without blocking.
 | Not named in its documentation | OpenAI Agents SDK |
 | `strands-agents-evals` | Strands |
 
-**The Ops AI way.** Give an agent a list of cases, each with checks on the reply: run
-[Check that a change keeps your answers right](agents.md#check-that-a-change-keeps-your-answers-right). Three checks are built: the reply holds a text, the agent called a
-tool, the agent refused. This runs from Python today.
+Give an agent a list of cases, each with checks on the reply, as in
+[Check that a change keeps your answers right](agents.md#check-that-a-change-keeps-your-answers-right). Three checks
+are built: the reply holds a text, the agent called a tool, and the agent refused. Today this runs from Python.
 
-**Upcoming.** Checks judged by a model, stored suites with a history of runs, a command line verb and a TypeScript
-method.
+Upcoming work adds checks judged by a model, stored suites with a history of runs, a command line verb and a
+TypeScript method.
 
 ## 16. Streaming
 
@@ -256,11 +258,11 @@ method.
 | `Runner.run_streamed` | OpenAI Agents SDK |
 | `stream_async()` | Strands |
 
-**The Ops AI way.** A chat reply streams its text, tool calls and citations as events. A workflow run streams its
-events too. See the modes in [Start a long reply and read it later](agents.md#start-a-long-reply-and-read-it-later), and `ops.chat.say` in
+A chat reply streams its text, tool calls and citations as events, and a workflow run streams its events
+too. See the modes in [Start a long reply and read it later](agents.md#start-a-long-reply-and-read-it-later), and `ops.chat.say` in
 [Start a known procedure from the chat](skills.md#start-a-known-procedure-from-the-chat), which returns a reply's events.
 
-**Upcoming.** Run modes on the TypeScript SDK. Today TypeScript reads a reply's events through `ops.chat`.
+The TypeScript SDK gets run modes in an upcoming release. Today TypeScript reads a reply's events through `ops.chat`.
 
 ## 17. MCP tools
 
@@ -270,11 +272,11 @@ events too. See the modes in [Start a long reply and read it later](agents.md#st
 | `MCPServerStreamableHttp`, `HostedMCPTool` | OpenAI Agents SDK |
 | `MCPClient` | Strands |
 
-**The Ops AI way.** An outside MCP server is added once as a tool source for the team. Its tools then pass through
+Add an outside MCP server once, as a tool source for the team. Its tools then pass through
 the same approvals, limits, masking and call log as every other tool, and you grant them to an agent like any tool:
 see [Let the agent open a case](agents.md#let-the-agent-open-a-case).
 
-**Upcoming.** Outside assistants calling a team's write tools over MCP in production. Today that direction serves
+Calling a team's write tools over MCP from outside assistants in production is upcoming. Today that direction serves
 read tools as test runs.
 
 ## 18. Runs that survive a restart
@@ -285,13 +287,12 @@ read tools as test runs.
 | Temporal, Restate, DBOS or Dapr around the SDK | OpenAI Agents SDK |
 | Session managers | Strands |
 
-**The Ops AI way.** Workflows are durable without extra setup: every step is recorded, a write is made once, and a
-run that waits for a person holds no worker. An agent's reply is saved when it pauses for an approval and continues
-after the decision.
+Workflows are durable without extra setup. Every step is recorded, a write is made once, and a run that waits for a
+person holds no worker. An agent's reply is saved when it pauses for an approval, and it continues after the decision.
 
-**Upcoming.** Agent replies that run on workers and survive a restart. Today a reply runs inside the request, and a
-background run from Python is lost if the calling program exits first. Replaying a workflow run, or starting again from one
-step, is upcoming too.
+Agent replies that run on workers and survive a restart are upcoming. Today a reply runs inside the request, and a
+background run from Python is lost if the calling program exits first. Replaying a workflow run, or starting again
+from one step, is upcoming too.
 
 ## 19. Scheduled agents
 
@@ -301,10 +302,10 @@ step, is upcoming too.
 | Your own scheduler calling `Runner.run` | OpenAI Agents SDK |
 | A timer on your host, such as Lambda | Strands |
 
-**The Ops AI way.** An agent or a workflow can be armed to run once at a due time, and the same key runs once:
+An agent or a workflow can be armed to run once at a due time, and the same key runs once. Use
 `ops.agents.schedule(id, message, due_at=...)` in Python, or a schedule trigger in a workflow.
 
-**Upcoming.** Repeating schedules.
+Repeating schedules are upcoming.
 
 ## 20. Deployment
 
@@ -314,11 +315,11 @@ step, is upcoming too.
 | A library inside your own service | OpenAI Agents SDK |
 | AgentCore, Lambda, containers | Strands |
 
-**The Ops AI way.** The platform is the server. One install hosts every agent, and publishing an agent makes it
+The platform acts as the server. One install hosts every agent, and publishing an agent makes it
 reachable from chat, the API, both SDKs, the command line, a workflow step and a team mailbox. See
 [Deployment options](../deployment-options.md).
 
-**Upcoming.** The SDKs on PyPI and npm, and a Helm chart. Today you install the SDKs from the repository.
+Releases of the SDKs on PyPI and npm and a Helm chart are upcoming. Today you install the SDKs from the repository.
 
 ## 21. Skills loaded when needed
 
@@ -328,10 +329,10 @@ reachable from chat, the API, both SDKs, the command line, a workflow step and a
 | Not named in its documentation | OpenAI Agents SDK |
 | SOPs turned into skill files | Strands |
 
-**The Ops AI way.** A skill is a published, versioned procedure that agents hold. It loads when a request matches
+A skill is a published, versioned procedure that agents hold. It loads when a request matches
 its use-when line, or in every reply. Run [Skill examples](skills.md).
 
-**Upcoming.** Skill verbs on the SDKs and the command line: see
+Skill verbs on the SDKs and the command line are upcoming, as described in
 [Upcoming: manage skills with their own verbs](skills.md#upcoming-manage-skills-with-their-own-verbs).
 
 ## 22. Procedures that run step by step
@@ -342,9 +343,10 @@ its use-when line, or in every reply. Run [Skill examples](skills.md).
 | Steps written in code around the runner | OpenAI Agents SDK |
 | Agent SOPs, steering | Strands |
 
-**Upcoming.** A skill with numbered steps, where the agent sees one step at a time, a rule worked out by code can
-check a step's result, and the skill ends with a named exit. Read [Step-by-step skills](step-by-step-skills.md).
-Until it ships, use a skill with written instructions for guidance, and a workflow where the order must hold.
+A skill with numbered steps is upcoming. In such a skill, the agent sees one step at a time, a rule worked out by
+code can check a step's result, and the skill ends with a named exit. Read
+[Step-by-step skills](step-by-step-skills.md) for the details. Until it ships, use a skill with written instructions
+where guidance is enough, and a workflow where the order must hold.
 
 ## Upcoming features
 

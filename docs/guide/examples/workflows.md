@@ -33,11 +33,11 @@ Connect first: see [Connect once, then copy any example](README.md#connect-once-
 
 ## Write the refund rule and run it
 
-Refund requests should follow one rule: a small refund goes through, a large one waits for a person.
-You want that rule written down, checked before it is used, and run the same way every time.
+Every refund request should follow one rule: a small refund goes through, and a large one waits for a person. A
+workflow lets you write that rule down, check it before it is used, and run it the same way every time.
 
-Use a workflow when the steps are known in advance and a reviewer must be able to read them. Use
-an agent when the steps depend on the conversation.
+Choose a workflow when the steps are known in advance and a reviewer must be able to read them. Choose an agent when
+the steps depend on the conversation.
 
 The workflow is a list of steps (`nodes`) and the lines between them (`connections`). Each connection leaves a step
 by a named port, such as `true` and `false` on a branch.
@@ -154,18 +154,18 @@ console.log(run.status, run.outcome);
 | `mode` | `test` is the default. `live` (`--live`) lets steps reach real systems, and needs a published workflow |
 | `wait` | Return when the run ends or stops at a task for a person. Left out, the call returns as soon as the run starts |
 
-The three surfaces do the same job, so run one of them. `apply` on an unchanged file changes nothing, and publishing a
-version that is already live is refused with `not_a_draft`. On a changed file it saves the next draft, and runs keep using the
-published version until you publish again. `opsai workflows types` lists every step type with its ports and
-parameters.
+The three surfaces do the same job, so you only need to run one of them. Running `apply` on an unchanged file changes
+nothing, and publishing a version that is already live is refused with `not_a_draft`. Running `apply` on a changed
+file saves the next draft, and runs keep using the published version until you publish again. To see every step type
+with its ports and parameters, run `opsai workflows types`.
 
 ## Hold a large refund for a person's decision
 
-A large refund needs a person's yes. The run should stop, show that person the facts, and carry on
-down the path they choose.
+A large refund needs a person's approval. The run should stop, show that person the facts, and carry on down the path
+they choose.
 
-Use a review step before anything a person must answer for. The person who started the run
-cannot decide its review, so the examples decide as a second person.
+Put a review step before anything a person must answer for. The person who started a run cannot decide its review, so
+the examples decide as a second person.
 
 ```python
 run = ops.workflows.run(
@@ -197,22 +197,23 @@ console.log(run.status, run.outcome);
 ```
 
 ```bash
-RUN=$(opsai workflows --json run refund_request --input '{"orderId": "1183", "amount": 120}' --wait | jq -r .id)
-opsai tasks decide "$RUN" approve --reason "The photo shows the damage." --profile reviewer
+OUT=$(opsai workflows --json run refund_request --input '{"orderId": "1183", "amount": 120}' --wait)
+RUN=$(jq -r .id <<<"$OUT")
+TASK=$(jq -r .taskId <<<"$OUT")
+opsai tasks decide "$TASK" approve --reason "The photo shows the damage." --profile reviewer
 opsai runs show "$RUN"
 ```
 
-The run carries on in the background after the decision, so `opsai runs show` may print `queued` for a moment. A run that stops at a review has the status `waiting` and names the task. The decision is one of the actions the task
+A run that stops at a review has the status `waiting` and names the task. The decision is one of the actions the task
 offers, here `approve` or `reject`, and the run leaves the review step by the port with that name. The reviewer signs
-in under their own saved profile.
+in under their own saved profile. After the decision, the run carries on in the background, so `opsai runs show` may
+print `queued` for a moment.
 
 ## Let an agent answer one step
 
-One step needs judgement, such as answering a customer's question, and the rest of the workflow
-should stay fixed.
-
-Use an agent step when a published agent already does the job. The workflow gets the agent's
-final answer, and takes the `error` port if the agent fails.
+When one step needs judgement, such as answering a customer's question, the rest of the workflow can stay fixed. If a
+published agent already does the job, use an agent step. The workflow gets the agent's final answer, and takes the
+`error` port if the agent fails.
 
 ```yaml title="returns-answer.yaml"
 schemaVersion: 2
@@ -291,15 +292,14 @@ run = await ops.workflows.run('returns_answer', { input: { question: 'Can I retu
 console.log(run.status, run.outcome);
 ```
 
-The agent must be published, here the one from [Agent examples](agents.md#put-an-agent-your-team-can-chat-with-into-a-file). It works
-the other way too: an agent that is granted `workflow:<id>` as a tool can start a published workflow from a chat.
+The agent must be published, here the one from [Agent examples](agents.md#put-an-agent-your-team-can-chat-with-into-a-file). The
+link works in the other direction too. An agent that is granted `workflow:<id>` as a tool can start a published
+workflow from a chat.
 
 ## See which path a run took
 
-A run ended with an outcome you did not expect, and you need to see which path it took.
-
-Use it after any run. The trace lists each step the run reached, how it ended and the port it
-left by.
+When a run ends with an outcome you did not expect, read its trace to see which path it took. You can trace any run.
+The trace lists each step the run reached, how the step ended and the port it left by.
 
 ```python
 traced = ops.workflows.trace(run["id"])
@@ -321,11 +321,8 @@ opsai workflows inspect "$RUN"
 
 ## Understand why a file or a run was refused
 
-A file with a mistake, or a run with a missing value, should fail with a message that says what to
-change.
-
-Check a file before you save it, and catch a refused start in code that takes input from
-elsewhere.
+A file with a mistake, or a run with a missing value, fails with a message that says what to change. Check each file
+before you save it, and catch a refused start in any code that takes its input from elsewhere.
 
 ```python
 from ops_ai import BadRequest
