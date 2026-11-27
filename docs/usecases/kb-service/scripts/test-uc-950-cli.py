@@ -26,6 +26,9 @@ def review() -> bytes:
     c.drawString(72, 720, "Claims intake review")
     c.setFont("Helvetica", 11)
     c.drawString(72, 690, "The event queue went live in three regions on 14 October.")
+    c.showPage()
+    c.setFont("Helvetica", 11)
+    c.drawString(72, 720, "Replay after an outage is tested every quarter.")
     c.save()
     return out.getvalue()
 
@@ -44,10 +47,11 @@ def main() -> None:
         argv = ["uv", "run", "--quiet", "--project", str(ROOT / "sdk" / "python"), "opsai", "kb", "text", item["id"]]
         ran = subprocess.run(argv, env=env, capture_output=True, text=True, check=False, timeout=300)
         check(
-            "6 opsai kb text prints the heading, then the paragraph with its page and who read it",
+            "6 opsai kb text prints the heading, then every page's paragraph with its page and who read it",
             ran.returncode == 0
             and "# Claims intake review" in ran.stdout
-            and "[p1 text] The event queue went live in three regions" in ran.stdout,
+            and "[p1 text] The event queue went live in three regions" in ran.stdout
+            and "[p2 text] Replay after an outage" in ran.stdout,
             {"out": ran.stdout[-600:], "err": ran.stderr[-400:]},
         )
     finish()
