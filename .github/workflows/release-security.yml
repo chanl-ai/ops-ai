@@ -36,8 +36,12 @@ jobs:
           # The same scanner image, by digest, as dependency-check.yml.
           OPS_OSV_IMAGE: ghcr.io/google/osv-scanner:v2.7.0@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0
         run: python3 scripts/deps_audit.py vulns
+      # The licence audit reads the installed packages (pnpm licenses, the workspace's Python), so it needs the install.
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
       - name: Licences
-        run: python3 scripts/deps_audit.py licenses
+        run: uv run python scripts/deps_audit.py licenses
 
   sbom:
     runs-on: ubuntu-24.04
