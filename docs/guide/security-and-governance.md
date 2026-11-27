@@ -2,32 +2,39 @@
 
 Status: current. Checked against the release's sign-in, gateway, policy and storage code.
 
-**Answer the risk review's questions from one place: who signed in, what they may do, what a write needs, where a call
-may go and what is kept as evidence.**
+When your risk review looks at an agent, it will want to know who signed in, what they were allowed to do, what an
+action that changes data needed before it ran, where a call was allowed to go and what was kept as evidence. This page
+shows you where each of those answers lives in Ops AI.
 
 ## The pilot works, then the risk review asks
 
-A card team's agent drafts dispute credits well. Then the reviewer asks who approved the credit, what the agent could
-reach, which hosts it called and where the record is. A claims team and a lender get the same questions. If the answers
-live in each agent's code, each new use case waits on a new review, and one unreviewed write to a customer's account can
-end the programme.
+Picture a card team whose agent drafts dispute credits well. Then the reviewer asks who approved the credit, what the
+agent could reach, which hosts it called and where the record is kept. A claims team and a lender will be asked the
+same questions. If the answers live in each agent's code, every new use case has to wait for its own review. Worse, a
+single unreviewed change to a customer's account can be enough to end the programme.
 
-Ops AI is built so that software can draft any change and only a person can let one through. The controls below are
-layered: who you are (sign-in), what you may do in a team (roles), what a single write needs (approvals), where a call
-may go (the gateways and the allow-list), and what is kept as evidence (audit).
+Ops AI is designed so that software can draft any change, but only a person can let it through. The controls build on
+one another:
 
-## The plan
+- Sign-in establishes who you are.
+- Roles set what you may do in a team.
+- Approvals decide what a single action that changes data needs before it runs.
+- The gateways and the allow-list control where a call may go.
+- The audit records keep the evidence.
+
+## Setting up the controls
 
 <!-- site: steps -->
-1. **Sign people in** with your identity provider, or a password where there is none.
-2. **Give each person a role per team.** The grid says what each role may do.
-3. **Choose which writes wait** for a person, and how many approvers they need.
-4. **Allow only the hosts your agents need.** The outbound list starts empty.
-5. **Hand the reviewer the evidence.** The audit log, the tool call log and the run journal answer who, what and when.
+1. **Sign people in** with your identity provider, or with a password if you have no provider.
+2. **Give each person a role in each team.** The role's grid says what that person may do.
+3. **Choose which actions wait** for a person, and how many approvers each one needs.
+4. **Allow only the hosts your agents need.** The outbound list starts empty, so nothing is reachable until you add a host.
+5. **Hand the reviewer the evidence.** Together, the audit log, the tool call log and the run journal show who did what, and when.
 
-## Try it
+## Check your own access
 
-See who you are and what your role may do, then find what a write needs.
+Start by seeing who you are signed in as and what your role allows, then look at which open tasks are waiting for a
+decision.
 
 ```bash
 opsai people me
@@ -35,8 +42,8 @@ opsai people roles
 opsai tasks list --view open
 ```
 
-In the console the same views are under **Govern › Access** (roles and tool access), **Govern › Policies** (approvals
-and the allow-list) and **Settings › Approvals**.
+In the console you will find the same views in three places. **Govern › Access** shows roles and tool access,
+**Govern › Policies** holds approvals and the allow-list, and **Settings › Approvals** holds the approval settings.
 
 ## Sign-in and SSO
 
@@ -50,15 +57,17 @@ and the allow-list) and **Settings › Approvals**.
 | Fresh sign-in for sensitive decisions (step-up) | A payment approval needs a sign-in less than five minutes old, by password or through the same identity provider; the decision keeps a fingerprint of it | Built |
 | Invites | An admin invites by email; the invite holds a hashed single-use token; a person who already has an account signs in first | Built |
 
-Sessions: platform-service signs a short-lived access token (Ed25519, 15 minutes) and renews it with a rotating
-refresh token for a session of 8 hours. A reused refresh token is refused and recorded in the audit log. Every service
-checks tokens itself against platform-service's published public keys.
+Once you are signed in, platform-service issues you a short-lived access token, signed with Ed25519 and valid for 15
+minutes. It renews that token with a rotating refresh token, so your session lasts 8 hours in total. If a refresh token
+is ever used a second time, it is refused and the attempt is recorded in the audit log. Every service checks tokens for
+itself against the public keys that platform-service publishes, rather than trusting another service's word.
 
 ## Roles
 
-A person holds a role in each team they belong to. A role is a grid of 19 areas (agents, workflows, tools, secrets and
-egress, files, documents, reviews, cases, settings, access, audit and others) by 8 actions (view, create, edit, publish,
-delete, run, decide, manage). Every check in every service goes through that grid; no code checks a role's name.
+Each person holds a role in every team they belong to. A role is a grid that crosses 19 areas (agents, workflows,
+tools, secrets and egress, files, documents, reviews, cases, settings, access, audit and others) with 8 actions (view,
+create, edit, publish, delete, run, decide, manage). Every permission check in every service reads that grid. Because
+no code looks at a role's name, what a role may do is always what its grid says.
 
 | Role | What it may do in the team |
 |---|---|
@@ -90,13 +99,13 @@ delete, run, decide, manage). Every check in every service goes through that gri
 
 ### Approval settings
 
-Every approval behaviour is a setting or a permission. The full list, with each setting's default, who changes it,
-where, and the code that owns it, is in [Roles and permissions › Approvals](../architecture/roles-and-permissions.md#approvals).
+Every way approvals behave is controlled by a setting or a permission. For the full list, with each setting's default,
+who can change it, where they change it and the code that owns it, see [Roles and permissions › Approvals](../architecture/roles-and-permissions.md#approvals).
 
 ## The tool gateway
 
-Every call to one of your systems, read or write, goes through the tools service. Agents and workflows hold no
-credentials and open no connections of their own.
+Every call to one of your systems, whether it reads data or changes it, goes through the tools service. Agents and
+workflows hold no credentials of their own and cannot open their own connections, so each call meets the same checks.
 
 ```mermaid
 flowchart TB
@@ -114,7 +123,8 @@ flowchart TB
   E -.->|refused| X
 ```
 
-*A refusal lists every condition that failed. An agent sees it as a tool error and can explain it to the person.*
+*When a call is refused, the refusal lists every condition that failed. The agent receives it as a tool error, so it
+can explain to the person what stopped the call.*
 
 | Control | What holds | Status |
 |---|---|---|
@@ -139,7 +149,7 @@ flowchart TB
 | Installation keys | One signing key per service, the sign-in token key, the approval key and the secrets key, generated at install. Each service receives only the keys it uses; each may be a file under `/run/secrets` | Built |
 | A hardware or cloud key manager for these keys | | Planned |
 
-Keep `OPS_SECRETS_KEY` with your backups: stored credentials cannot be read without it.
+Keep `OPS_SECRETS_KEY` with your backups. Without it, nobody can read the stored credentials.
 
 ## Data masking
 
@@ -152,21 +162,28 @@ Keep `OPS_SECRETS_KEY` with your backups: stored credentials cannot be read with
 
 ## Audit and evidence
 
-Saving or clearing a workflow's schedule is in the audit log with the old and new schedule in words.
+Ops AI records every security-relevant change and every call to an outside system. The records are:
 
-Every security-relevant change and every call to the outside is recorded: the audit log, the tool call log, the
-credential, allow-list, connection and storage audits, the run journal, each review decision and the model call log.
-Details and status are in [Data and database](data-and-database.md#the-audit-trail).
+- the audit log
+- the tool call log
+- the credential, allow-list, connection and storage audits
+- the run journal
+- each review decision
+- the model call log
 
-## What success looks like
+When someone saves or clears a workflow's schedule, the audit log shows the old and the new schedule written out in
+words. For the details of each record and its status, see [Data and database](data-and-database.md#the-audit-trail).
 
-A reviewer asks who approved a change and which hosts the agent reached, and the answer is a log row, not a search. A
-write waits for a named person on the exact input they saw. Nothing is reachable until a Security admin adds the host.
+## When the review goes well
 
-## What skipping it costs
+When a reviewer asks who approved a change and which hosts the agent reached, you can answer by pointing to a row in a
+log instead of searching through code. Each action that changes data waits for a named person, who approves the exact
+input they saw. No host is reachable until a Security admin adds it to the list.
 
-Without these controls, each agent is reviewed on its own, the first unreviewed write to a customer's account ends the
-pilot, and an auditor's question takes days of reading code.
+## Without these controls
+
+If you leave these controls out, each agent has to be reviewed on its own. A single unreviewed change to a customer's
+account could be enough to end the pilot, and answering an auditor's question could take days of reading code.
 
 ## Platform hardening
 
