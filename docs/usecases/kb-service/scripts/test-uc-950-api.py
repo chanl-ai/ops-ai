@@ -164,6 +164,16 @@ def main() -> None:
             {"read": read, "notes": deck["notes"]},
         )
 
+        secret = {"type": "push", "name": "Board papers", "kbIds": [base["id"]], "sensitivity": "restricted"}
+        board = data(k.post("/v1/sources", json=secret))
+        merger = text_of(k, push(k, board["id"], "merger-diagram.pdf", pdf([review_text, None]), "application/pdf"))
+        check(
+            "9 a restricted file's picture is not shown to a model cleared only to confidential, and the page says why",
+            [p["readBy"] for p in merger["pages"]] == ["text", "none"]
+            and merger["notes"] == ["Page 2 was not read. Not described: the model is not cleared for this file's sensitivity."],
+            {"pages": merger["pages"], "notes": merger["notes"]},
+        )
+
         other = k.get("/v1/items/itm_missing/text")
         check("5 a document the team does not have has no text to show", other.status_code == 404, other.text[:300])
     finish()

@@ -52,9 +52,11 @@ Run: `make usecase-test UC=uc-950 LAYER=api`.
 | 3 | Push `decision-note.docx` and read its text | Four sections: Decision, What we did not choose, Who does what, Open risks; no page boxes |
 | 4 | Push a 22-page picture deck and read its text | Pages 1 to 20 read by a model, 21 and 22 not read, one note: "Pages 21 to 22 were not read. Not described: this file reached its limit of 20 pages read by a model." |
 | 5 | Ask for an item the team does not have | 404 |
+| 9 | Push the same review into a restricted source; the alias is cleared only to confidential | Page 2 is not read, and its note says the model is not cleared for this file's sensitivity; no picture is sent |
 | 6 | `opsai kb text <item>` on a two-page PDF | The heading as `# Claims intake review`, then `[p1 text] The event queue went live…` and `[p2 text] Replay after an outage…`: every page, though the service answers one at a time |
 | 7 | Open `/data/knowledge/documents/{id}` and choose the first paragraph | The paragraph is pressed and its lines are highlighted on page 1 |
 | 8 | Choose a highlighted line on the page | Its paragraph is the one pressed |
+| 10 | Turn to page 2 | `Page 2 of 2`, and the text shows page 2's paragraph only |
 
 ## Acceptance layers
 

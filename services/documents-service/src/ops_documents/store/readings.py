@@ -119,13 +119,14 @@ class ReadingRow(Out):
     team: str
     actor: str
     duration_ms: int | None
+    finished_at: datetime | None = None
 
 
 _t = documents_readings.c
-# The columns a ReadingRow names: every other column (its times) is read by no caller.
+# The columns a ReadingRow names: of its times, only when it finished is read (a reading to retry waits on it).
 ROW = (
     _t.tenant_id, _t.file_digest, _t.reader_version, _t.settings_key, _t.status, _t.pages_total, _t.pages_done,
-    _t.facts, _t.error_code, _t.error, _t.attempts, _t.file_id, _t.team, _t.actor, _t.duration_ms,
+    _t.facts, _t.error_code, _t.error, _t.attempts, _t.file_id, _t.team, _t.actor, _t.duration_ms, _t.finished_at,
 )  # fmt: skip
 
 

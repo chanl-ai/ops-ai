@@ -17,7 +17,7 @@ import time
 from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from ops_documents.errors import FileMissingError, FileNotReadyError
 from ops_documents.files import Files, Who
@@ -66,8 +66,10 @@ def settings_of(ocr: str | bool | None, language: str | None = None) -> ReadingS
 # reading made while the team's policy was off, or for another sensitivity, is not served once that changes.
 PICTURES_OFF = "p-off"
 # Kept on a finished reading whose pictures were refused for a reason that passes (the model busy or out of reach,
-# today's limit): the reading is served, and the next ask reads it again.
+# today's limit): the reading is served as it is, and an ask once RETRY_AFTER has passed reads it again. The wait
+# keeps a refusal that lasts (a limit reached for the day) from re-reading the file on every ask.
 RETRY_PICTURES = "pictures_retry"
+RETRY_AFTER = timedelta(minutes=10)
 
 
 def reading_key(settings: ReadingSettings, pictures: str | None, allowed: bool) -> str:
@@ -168,7 +170,7 @@ class Readings:
         async with isolation.request_transaction():
             await self.store.link(file.id, who.team, digest, self.clock())
             row = await self.store.get(who.team, digest, READER_VERSION, key)
-            again = row is not None and row.status == "done" and row.error_code == RETRY_PICTURES
+            again = row is not None and row.status == "done" and self._retry_due(row)
             if row is not None and row.status == "done" and not again:
                 pages = await self.store.pages(who.team, digest, READER_VERSION, key)
                 return 200, answer_of(row, file_id, pages)
@@ -256,6 +258,14 @@ class Readings:
         if not file.digest:
             raise FileNotReadyError(f"{file.id} has no content digest yet")
         return file.digest
+
+    def _retry_due(self, row: ReadingRow) -> bool:
+        if row.error_code != RETRY_PICTURES:
+            return False
+        finished = row.finished_at
+        if finished is not None and finished.tzinfo is None:  # SQL Server hands the time back without its zone
+            finished = finished.replace(tzinfo=UTC)
+        return finished is None or self.clock() - finished >= RETRY_AFTER
 
     async def _key(self, who: Who, settings: ReadingSettings, pictures: str | None) -> str:
         if pictures is None or self.pictures is None:

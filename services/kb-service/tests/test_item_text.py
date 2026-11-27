@@ -74,6 +74,7 @@ async def test_item_text_has_sections_line_boxes_and_the_model_page_marked(
     described = [b for s in second["sections"] for b in s["blocks"] if b["readBy"] == "model"]
     assert len(described) == 1 and described[0]["page"] == 2 and described[0]["boxes"][0]["w"] == 1.0, described
     assert second["sections"][0]["headingPath"] == ["Claims intake review"], "headings carry over from earlier pages"
+    assert second["sections"][0]["page"] == 2, "a section running on is shown at the page asked for"
     assert past["page"] == 3 and past["sections"] == [], "a page past the last is the last"
     pages = {p["number"]: p for p in text["pages"]}
     assert pages[2]["readBy"] == "model" and pages[3]["unreadReason"], pages

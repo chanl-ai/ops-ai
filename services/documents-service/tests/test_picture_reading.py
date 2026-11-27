@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import io
 import shutil
+from datetime import timedelta
 from typing import Any
 
 import httpx
@@ -186,16 +187,28 @@ async def test_turning_the_policy_on_reads_a_file_read_while_it_was_off(make: Ma
     assert on["pages"][1]["source"] == "model", "a reading made with pictures off is not served once they are on"
 
 
-async def test_a_refusal_that_passes_is_read_again_on_the_next_ask(make: Make) -> None:
-    model = Seeing("rate_limited", times=1)
+async def test_a_refusal_that_passes_is_served_then_read_again_later(make: Make) -> None:
+    model = Seeing("rate_limited", times=2)
     s = make(Models(), Floor(), pictures=PictureReading(model, Policy()))
+    readings = s.extractor.readings
+    assert readings is not None
+    now = readings.clock()
     async with s.client as c:
         fid = await s.stored(pdf("text", "picture"), name="review.pdf", mime="application/pdf")
         busy = await read_all(s, c, fid)
+        soon = await c.post("/v1/documents/readings", json={"fileId": fid, **PICTURES}, headers=OPS)
+        await readings.drain()
+        calls_soon = len(model.calls)
+        readings.clock = lambda: now + timedelta(minutes=11)
         later = await read_all(s, c, fid)
+        calls_later = len(model.calls)
+        readings.clock = lambda: now + timedelta(minutes=22)
+        latest = await read_all(s, c, fid)
     assert busy["status"] == "done" and busy["pages"][1]["unreadReason"] == "Not described: the model was busy."
+    assert soon.status_code == 200 and calls_soon == 1, "a refusal is served as read, not re-read on each ask"
+    assert later["pages"][1]["source"] == "none" and calls_later == 2, "still refused: served again"
     assert busy["settings"] == {"ocr": "off", "language": "eng"}, "the answer names its settings, not its key"
-    assert later["pages"][1]["source"] == "model" and len(model.calls) == 2, later["pages"][1]
+    assert latest["pages"][1]["source"] == "model" and len(model.calls) == 3, latest["pages"][1]
 
 
 async def test_a_page_picture_goes_at_the_files_sensitivity_and_a_refusal_says_why(make: Make) -> None:

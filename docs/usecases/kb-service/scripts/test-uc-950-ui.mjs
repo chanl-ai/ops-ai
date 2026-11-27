@@ -17,13 +17,16 @@ function pdf() {
     ['F1', 11, 626, 'Page him if the queue is more than fifteen minutes behind.'],
   ];
   const text = lines.map(([f, s, y, t]) => `BT /${f} ${s} Tf 72 ${y} Td (${t}) Tj ET`).join('\n');
+  const next = 'BT /F1 11 Tf 72 720 Td (Replay after an outage is tested every quarter.) Tj ET';
   const objs = [
     '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Pages /Kids [3 0 R 7 0 R] /Count 2 >>',
     '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>',
     `<< /Length ${text.length} >>\nstream\n${text}\nendstream`,
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 8 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    `<< /Length ${next.length} >>\nstream\n${next}\nendstream`,
   ];
   let out = '%PDF-1.4\n';
   const at = [];
@@ -66,6 +69,11 @@ await withUiStack(
       const second = await paragraphs.nth(1).getAttribute('data-block');
       await page.locator(`[data-box-key="${second}"]`).first().click();
       check('8 choosing a line on the page presses its paragraph', (await paragraphs.nth(1).getAttribute('aria-pressed')) === 'true' && (await paragraphs.first().getAttribute('aria-pressed')) === 'false', { second });
+
+      await page.getByTestId('document-page-next').click();
+      await page.getByTestId('document-text').getByText('Replay after an outage').waitFor({ timeout: 60_000 });
+      const gone = await page.getByTestId('document-text').getByText('The event queue went live').count();
+      check('10 turning to page 2 shows page 2 and only its paragraph', (await page.getByText('Page 2 of 2').count()) === 1 && gone === 0, { url: page.url(), gone });
 
       await shootBothWidths(page, 'knowledge', 'uc-950-document-view', async () => {
         await page.goto(`${consoleUrl}/data/knowledge/documents/${item.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });

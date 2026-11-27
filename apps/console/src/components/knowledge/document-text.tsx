@@ -49,7 +49,7 @@ export function DocumentText({ text, selected, onSelect }: { text: ItemText; sel
           <AlertDescription>The words marked Read by a model were written by a model looking at the page. Check them against the page before you rely on them.</AlertDescription>
         </Alert>
       )}
-      {text.sections.length === 0 && text.status === 'done' && <p className="text-sm text-muted-foreground">No text was read from this document.</p>}
+      {text.sections.length === 0 && text.status === 'done' && <p className="text-sm text-muted-foreground">{text.paged ? `No text was read from page ${text.page}.` : 'No text was read from this document.'}</p>}
       {text.sections.map((s) => (
         <section key={s.id} className="flex flex-col gap-2" aria-label={s.headingPath.join(' > ') || 'Opening'}>
           <div className="flex items-start justify-between gap-3">

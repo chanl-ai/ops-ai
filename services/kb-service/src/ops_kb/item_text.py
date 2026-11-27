@@ -153,7 +153,8 @@ def item_text(
         for sec in (json_object(x) for x in sections):
             on = [b for b in json_list(sec.get("blocks")) if json_object(b).get("page") == shown]
             if on:
-                kept.append({**sec, "blocks": on})
+                # A section that runs on from an earlier page is shown at this one, under the same headings.
+                kept.append({**sec, "page": shown, "blocks": on})
         sections = kept
     return {
         **head,
