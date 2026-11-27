@@ -6,8 +6,12 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { check, chromium, consoleSignIn, evidenceDir, expectSampleData, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { PASSWORD, PRIYA } from '../../lib/workflow_ui.mjs';
+
+// ⌘K's search results come from the console's mock (no search service yet); this case reads only the palette's own
+// actions, which the page builds itself, so the sample read is expected here.
+expectSampleData('/build/channels');
 
 /** Opens ⌘K, searches, and returns the option labels it lists. */
 async function palette(page, query) {
@@ -53,7 +57,7 @@ async function walk(consoleUrl, step) {
 
 delete process.env.OPS_FLAGS;
 const off = await withUiStack((url) => walk(url, 'off'), { platform: true, tools: {} });
-check('1 with no flags, ⌘K offers neither Connect your assistant nor Copy MCP URL', !/Connect your assistant|Copy MCP URL/.test(off.seen.palette), off.seen.palette);
+check('1 with no flags, ⌘K offers no MCP links', !/MCP links/.test(off.seen.palette), off.seen.palette);
 check('1 with no flags, Channels has no MCP tab or card', off.seen.tab === 0 && off.seen.card === 0, off.seen);
 check('1 with no flags, the Connect channel menu does not name MCP as coming soon', !/MCP/.test(off.seen.soon), off.seen.soon);
 check('1 with no flags, /channels/mcp is not found', off.seen.notFound === 1, off.seen);
@@ -62,8 +66,8 @@ check('1 no page error', off.errors.length === 0, off.errors);
 
 process.env.OPS_FLAGS = 'mcp_gateway';
 const on = await withUiStack((url) => walk(url, 'on'), { platform: true, tools: {} });
-check('2 with mcp_gateway on, ⌘K offers Connect your assistant and Copy MCP URL', /Connect your assistant/.test(on.seen.palette) && /Copy MCP URL/.test(on.seen.palette), on.seen.palette);
-check('2 with mcp_gateway on, Channels has the MCP tab and card', on.seen.tab === 1 && on.seen.card === 1, on.seen);
+check('2 with mcp_gateway on, ⌘K offers MCP links', /MCP links/.test(on.seen.palette), on.seen.palette);
+check('2 with mcp_gateway on, Channels has the MCP tab and no gallery card (its links are listed on the tab)', on.seen.tab === 1 && on.seen.card === 0, on.seen);
 check('2 with mcp_gateway on, /channels/mcp opens the MCP channel', on.seen.notFound === 0, on.seen);
 check('2 with mcp_gateway on, Tools links to the MCP tab', on.seen.toolsLink === 1, on.seen);
 check('2 no page error', on.errors.length === 0, on.errors);
