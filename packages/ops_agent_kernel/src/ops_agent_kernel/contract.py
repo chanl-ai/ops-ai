@@ -78,10 +78,6 @@ class StepLimitReached(Exception):
     """The run would make more model requests than its step limit allows."""
 
 
-class UnofferedTool(Exception):
-    """The model called a tool that was not offered on its step (the last step offers none)."""
-
-
 class SchemaMismatch(Exception):
     """The final answer did not match the turn's output schema, after one more try."""
 

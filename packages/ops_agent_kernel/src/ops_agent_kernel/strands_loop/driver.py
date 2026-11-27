@@ -41,7 +41,6 @@ from ..contract import (
     TextChunk,
     ToolEnded,
     ToolStarted,
-    UnofferedTool,
 )
 from .state import PausedRun, decode, encode
 
@@ -64,6 +63,7 @@ class _Run:
         self.rejected: dict[str, str] = {}
         self.paused: tuple[str, str, Json, str | None] | None = None
         self.purpose = "turn"
+        self.offered: list[str] = []
 
     def raise_held(self) -> None:
         if self.held is not None:
@@ -111,6 +111,7 @@ class _GatewayModel(OpenAIModel):
         at = CallContext("", run.step)
         specs = cast(list[ToolSpec], tool_specs or [])
         offered = [s for s in specs if (t := run.tools.get(s["name"])) is not None and await t.offered(at)]
+        run.offered = [s["name"] for s in offered]
         headers = await self.endpoint.headers(run.purpose) if self.endpoint.headers is not None else {}
         self.call_headers = {PURPOSE_HEADER: run.purpose, **headers}
         started = time.perf_counter()
@@ -180,8 +181,11 @@ class _KernelTool(AgentTool):
             yield _result(call_id, False, run.rejected[call_id])
             return
         if not await self.spec.offered(ctx):
-            run.held = UnofferedTool(self.spec.name)
-            yield _result(call_id, False, "Not run.")
+            # As Pydantic AI tells a model that called a tool its step did not offer: the model is told what it may
+            # call and the run goes on, within its step limit.
+            said = _unknown(self.spec.name, run.offered)
+            run.events.append(ToolEnded(call_id, False, said))
+            yield _result(call_id, False, said)
             return
         # Strands holds the tool until this event is read, so the kernel records the call as running before its body
         # updates it: a call shown only after it ran would reach the chat as two ends.
@@ -202,6 +206,11 @@ class _KernelTool(AgentTool):
         ok = not (isinstance(said, dict) and set(cast(Json, said)) == {"error"})
         run.events.append(ToolEnded(call_id, ok, said))
         yield _result(call_id, True, said)
+
+
+def _unknown(name: str, offered: list[str]) -> str:
+    available = f"Available tools: {', '.join(repr(n) for n in sorted(offered))}" if offered else "No tools available."
+    return f"Unknown tool name: {name!r}. {available}"
 
 
 def _result(call_id: str, ok: bool, said: Any) -> ToolResultEvent:

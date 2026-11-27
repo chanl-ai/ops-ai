@@ -625,8 +625,6 @@ def _loop_raised(e: Exception, endpoint: contract.ModelEndpoint) -> Exception:
     """A loop's stop as the exception the turn's endings already handle."""
     if isinstance(e, contract.StepLimitReached):
         return UsageLimitExceeded(str(e))
-    if isinstance(e, contract.UnofferedTool):
-        return UnexpectedModelBehavior(f"Tool {e} was called on a step that offered it none.")
     if isinstance(e, contract.SchemaMismatch):
         return UnexpectedModelBehavior(str(e))
     if isinstance(e, contract.LoopRefused):
