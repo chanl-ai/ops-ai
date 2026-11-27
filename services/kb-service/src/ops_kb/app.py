@@ -627,10 +627,13 @@ def create_kb_app(
         return ok(await service.item_chunks(who, item_id, q))
 
     @items.get("/{item_id}/text", response_model=Envelope[ItemText])
-    async def get_item_text(item_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """What was read from the document's file, section by section, each paragraph with its lines' places on the
-        page, and why any page was not read: the text beside the original in the document view."""
-        return ok(await service.item_text(who, item_id))
+    async def get_item_text(  # pyright: ignore[reportUnusedFunction]
+        item_id: str, who: Caller, page: int | None = Query(None, ge=1)
+    ) -> JSONResponse:
+        """What was read from one page of the document's file (the first unless `page` is given; past the last page,
+        the last), section by section, each paragraph with its lines' places on the page, with every page's summary
+        and why any page was not read: the text beside the original in the document view."""
+        return ok(await service.item_text(who, item_id, page=page))
 
     @items.get("/{item_id}", response_model=Envelope[ItemWithDetail])
     async def get_item(item_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

@@ -84,7 +84,9 @@ export const kbOperations = {
     "pathParams": [
       "item_id"
     ],
-    "query": [],
+    "query": [
+      "page"
+    ],
     "stream": false
   },
   "items_list_item_chunks": {

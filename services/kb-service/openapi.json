@@ -2484,6 +2484,17 @@
             "title": "Notes",
             "type": "array"
           },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
           "paged": {
             "title": "Paged",
             "type": "boolean"
@@ -2529,6 +2540,7 @@
           "mimeType",
           "status",
           "paged",
+          "page",
           "readerVersion",
           "pages",
           "sections",
@@ -9324,7 +9336,7 @@
     },
     "/v1/items/{item_id}/text": {
       "get": {
-        "description": "What was read from the document's file, section by section, each paragraph with its lines' places on the\npage, and why any page was not read: the text beside the original in the document view.",
+        "description": "What was read from one page of the document's file (the first unless `page` is given; past the last page,\nthe last), section by section, each paragraph with its lines' places on the page, with every page's summary\nand why any page was not read: the text beside the original in the document view.",
         "operationId": "items_get_item_text",
         "parameters": [
           {
@@ -9334,6 +9346,23 @@
             "schema": {
               "title": "Item Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Page"
             }
           },
           {

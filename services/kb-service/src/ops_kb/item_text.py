@@ -79,9 +79,19 @@ def _notes(pages: list[Json]) -> list[str]:
     return [*unread, *kept]
 
 
-def item_text(item_id: str, file_id: str | None, mime: str | None, answer: Json | None, cleaning: Cleaning) -> Json:
-    """The `ItemText` reply for an item whose file's reading answered `answer` (None: no file, or no answer now)."""
-    head: Json = {"itemId": item_id, "fileId": file_id, "mimeType": mime, "readerVersion": None}
+def item_text(
+    item_id: str,
+    file_id: str | None,
+    mime: str | None,
+    answer: Json | None,
+    cleaning: Cleaning,
+    *,
+    page: int | None = None,
+) -> Json:
+    """The `ItemText` reply for an item whose file's reading answered `answer` (None: no file, or no answer now). A
+    paged file answers one page's sections at a time (`page`, clamped to the file's pages; the first when left out),
+    with headings carried from the pages before it; a file without pages answers all of its sections."""
+    head: Json = {"itemId": item_id, "fileId": file_id, "mimeType": mime, "readerVersion": None, "page": None}
     empty: Json = {**head, "paged": False, "pages": [], "sections": []}
     if file_id is None:
         return {**empty, "status": "none", "notes": [NO_FILE]}
@@ -136,11 +146,21 @@ def item_text(item_id: str, file_id: str | None, mime: str | None, answer: Json 
         }
         for p in pages
     ]
+    shown: int | None = None
+    if paged and pages:
+        shown = min(max(page or 1, 1), len(pages))
+        kept: JsonList = []
+        for sec in (json_object(x) for x in sections):
+            on = [b for b in json_list(sec.get("blocks")) if json_object(b).get("page") == shown]
+            if on:
+                kept.append({**sec, "blocks": on})
+        sections = kept
     return {
         **head,
         "readerVersion": answer.get("readerVersion"),
         "status": "done",
         "paged": paged,
+        "page": shown,
         "pages": out_pages,
         "sections": sections,
         "notes": [*_notes(pages)],

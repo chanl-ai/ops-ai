@@ -9,9 +9,15 @@ import type { ViewerBox } from '@/components/shared/document-viewer';
 import type { ItemText, ItemTextBlock } from '@/lib/types/knowledge';
 import { cn } from '@/lib/utils';
 
+/** A paragraph's opening words, for naming its highlight to a screen reader. */
+function opening(text: string): string {
+  const words = text.split(/\s+/).filter(Boolean);
+  return words.slice(0, 6).join(' ') + (words.length > 6 ? '…' : '');
+}
+
 /** Every block's places on its page, keyed by the block's id, so selecting a paragraph lights all its lines. */
 export function textBoxes(text: ItemText): ViewerBox[] {
-  return text.sections.flatMap((s) => s.blocks.flatMap((b) => b.boxes.map((x) => ({ key: b.id, ...x }))));
+  return text.sections.flatMap((s) => s.blocks.flatMap((b) => b.boxes.map((x) => ({ key: b.id, label: `Page ${x.page}: ${opening(b.text)}`, ...x }))));
 }
 
 /** The block with this id and the page it sits on, for selecting from a box on the page. */

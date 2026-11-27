@@ -38,7 +38,7 @@ export const kk = {
   tombstones: (id: string) => ['knowledge', 'source', id, 'tombstones'] as const,
   aiEstimate: (id: string) => ['knowledge', 'source', id, 'ai-estimate'] as const,
   item: (id: string) => ['knowledge', 'item', id] as const,
-  itemText: (id: string) => ['knowledge', 'item', id, 'text'] as const,
+  itemText: (id: string, page?: number) => ['knowledge', 'item', id, 'text', page ?? 1] as const,
   lookups: ['knowledge', 'lookups'] as const,
   sourceKinds: ['knowledge', 'source-kinds'] as const,
 };
@@ -79,10 +79,12 @@ export const useItemPieces = (id: string | undefined, search: string, enabled: b
 export const useItem = (id: string | null) =>
   useTeamQuery({ queryKey: kk.item(id ?? ''), queryFn: () => api.knowledge.items.get(id!), enabled: !!id, refetchInterval: (q) => pollWhile(q.state.data?.status === 'processing') });
 /** What was read from an item's file, by section with page places, for the document view; asked again while the file is still being read. */
-export const useItemText = (id: string) =>
+/** One page of what was read from the item's file; the page before stays shown while the next loads. */
+export const useItemText = (id: string, page = 1) =>
   useTeamQuery({
-    queryKey: kk.itemText(id),
-    queryFn: () => sdk((ops) => ops.raw.kb.items_get_item_text({ path: { item_id: id } })),
+    queryKey: kk.itemText(id, page),
+    queryFn: () => sdk((ops) => ops.raw.kb.items_get_item_text({ path: { item_id: id }, query: { page } })),
+    placeholderData: keepPreviousData,
     enabled: !!id,
     refetchInterval: (q) => pollWhile(q.state.data?.status === 'reading'),
   });

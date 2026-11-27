@@ -61,6 +61,8 @@ async def test_item_text_has_sections_line_boxes_and_the_model_page_marked(
         await client.post(f"/v1/sources/{src['id']}/sync")
         item = data(await client.get(f"/v1/sources/{src['id']}/items"))["data"][0]
         text: dict[str, Any] = data(await client.get(f"/v1/items/{item['id']}/text"))
+        second: dict[str, Any] = data(await client.get(f"/v1/items/{item['id']}/text", params={"page": 2}))
+        past: dict[str, Any] = data(await client.get(f"/v1/items/{item['id']}/text", params={"page": 99}))
         answer = await ask(client, kb["id"], "How do the mobile app and the event queue connect?")
     assert text["status"] == "done" and text["paged"] is True, text
     paths = [s["headingPath"] for s in text["sections"]]
@@ -68,10 +70,14 @@ async def test_item_text_has_sections_line_boxes_and_the_model_page_marked(
     paragraph = text["sections"][0]["blocks"][0]
     assert paragraph["kind"] == "paragraph" and "five minutes" in paragraph["text"], paragraph
     assert len(paragraph["boxes"]) == 2 and {b["page"] for b in paragraph["boxes"]} == {1}, "one box per line"
-    described = [b for s in text["sections"] for b in s["blocks"] if b["readBy"] == "model"]
+    assert text["page"] == 1 and all(b["page"] == 1 for s in text["sections"] for b in s["blocks"]), "one page a time"
+    described = [b for s in second["sections"] for b in s["blocks"] if b["readBy"] == "model"]
     assert len(described) == 1 and described[0]["page"] == 2 and described[0]["boxes"][0]["w"] == 1.0, described
+    assert second["sections"][0]["headingPath"] == ["Claims intake review"], "headings carry over from earlier pages"
+    assert past["page"] == 3 and past["sections"] == [], "a page past the last is the last"
     pages = {p["number"]: p for p in text["pages"]}
     assert pages[2]["readBy"] == "model" and pages[3]["unreadReason"], pages
+    assert text["notes"] == [f"Page 3 was not read. {pages[3]['unreadReason']}"], text["notes"]
     assert any(c["page"] == 2 for c in answer["citations"]), answer["citations"]
 
 

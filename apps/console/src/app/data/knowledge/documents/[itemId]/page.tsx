@@ -59,16 +59,21 @@ function Original({ fileId, text, page, onPage, selected, onSelect }: { fileId: 
  */
 export default function KnowledgeDocumentPage() {
   const { itemId } = useParams<{ itemId: string }>();
-  const asked = Number(useSearchParams().get('page')) || 1;
+  const asked = Math.max(1, Math.floor(Number(useSearchParams().get('page'))) || 1);
   const item = useItem(itemId);
-  const text = useItemText(itemId);
+  const [page, setPage] = React.useState(asked);
+  const text = useItemText(itemId, page);
   const verify = useVerifyItem();
   const canVerify = useCan('knowledge', 'edit') === true;
-  const [page, setPage] = React.useState(asked);
   const [selected, setSelected] = React.useState<string | null>(null);
   React.useEffect(() => {
     setPage(asked);
   }, [asked, itemId]);
+  // A page past the last (an old link, ?page=999) is answered as the last; follow it so the original matches.
+  const answered = text.data?.page;
+  React.useEffect(() => {
+    if (answered != null && answered !== page && !text.isPlaceholderData) setPage(answered);
+  }, [answered, page, text.isPlaceholderData]);
 
   if (item.isPending) return <PageLayout title="Document" backHref="/data/knowledge"><PageSkeleton tableRows={6} showToolbar={false} /></PageLayout>;
   if (item.isError)

@@ -79,7 +79,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/items/{item_id}/text",
         "pathParams": ["item_id"],
-        "query": [],
+        "query": ["page"],
         "stream": False,
     },
     "items_list_item_chunks": {
@@ -524,9 +524,9 @@ class Operations:
         "Set Item Owner"
         return self._t.call(SERVICE, OPERATIONS["items_set_item_owner"], {"item_id": item_id}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def items_get_item_text(self, item_id: str) -> ItemText:
+    def items_get_item_text(self, item_id: str, *, page: int | None = None) -> ItemText:
         "Get Item Text"
-        return self._t.call(SERVICE, OPERATIONS["items_get_item_text"], {"item_id": item_id}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["items_get_item_text"], {"item_id": item_id}, {"page": page}, {}, None)  # type: ignore[no-any-return]
 
     def items_verify_item(self, item_id: str, body: VerifyIn) -> Item:
         "Verify Item"
@@ -919,9 +919,11 @@ class AsyncOperations:
         "Set Item Owner"
         return await self._t.call(SERVICE, OPERATIONS["items_set_item_owner"], {"item_id": item_id}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def items_get_item_text(self, item_id: str) -> ItemText:
+    async def items_get_item_text(self, item_id: str, *, page: int | None = None) -> ItemText:
         "Get Item Text"
-        return await self._t.call(SERVICE, OPERATIONS["items_get_item_text"], {"item_id": item_id}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE, OPERATIONS["items_get_item_text"], {"item_id": item_id}, {"page": page}, {}, None
+        )  # type: ignore[no-any-return]
 
     async def items_verify_item(self, item_id: str, body: VerifyIn) -> Item:
         "Verify Item"

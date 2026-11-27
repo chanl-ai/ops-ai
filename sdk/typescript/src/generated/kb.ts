@@ -104,8 +104,9 @@ export interface paths {
         };
         /**
          * Get Item Text
-         * @description What was read from the document's file, section by section, each paragraph with its lines' places on the
-         *     page, and why any page was not read: the text beside the original in the document view.
+         * @description What was read from one page of the document's file (the first unless `page` is given; past the last page,
+         *     the last), section by section, each paragraph with its lines' places on the page, with every page's summary
+         *     and why any page was not read: the text beside the original in the document view.
          */
         get: operations["items_get_item_text"];
         put?: never;
@@ -1724,6 +1725,8 @@ export interface components {
             mimeType: string | null;
             /** Notes */
             notes: string[];
+            /** Page */
+            page: number | null;
             /** Paged */
             paged: boolean;
             /** Pages */
@@ -4041,7 +4044,9 @@ export interface operations {
     };
     items_get_item_text: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number | null;
+            };
             header?: never;
             path: {
                 item_id: string;

@@ -2894,7 +2894,7 @@ class KnowledgeService:
             )
         return ItemReading(reader_version=narrow.field(answer, "readerVersion", str), ocr=ocr, pages=out)
 
-    async def item_text(self, who: Who, item_id: str) -> Json:
+    async def item_text(self, who: Who, item_id: str, *, page: int | None = None) -> Json:
         """What was read from the item's file, section by section with each block's place on its page: the text half
         of the document view. The item is read in one transaction, then documents-service's reading with none open."""
         async with isolation.request_transaction():
@@ -2912,7 +2912,7 @@ class KnowledgeService:
                 )
             except (DocumentsRefused, ServiceUnreachable):
                 answer = None
-        return item_text(item_id, i.file_id or None, i.mime or None, answer, settings.cleaning)
+        return item_text(item_id, i.file_id or None, i.mime or None, answer, settings.cleaning, page=page)
 
     async def item_chunks(self, who: Who, item_id: str, params: ListParams) -> ListPage:
         """A page of the item's pieces, searched by text in SQL, each with what search matches it as: the pieces tab of

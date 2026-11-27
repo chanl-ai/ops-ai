@@ -15,6 +15,8 @@ export interface ViewerBox {
   h: number;
   /** A field to check draws in the warning colour. */
   check?: boolean;
+  /** What a screen reader says for the box, naming what it selects; the key and page when left out. */
+  label?: string;
 }
 
 type PdfPage = { getViewport(o: { scale: number }): { width: number; height: number }; render(o: { canvasContext: CanvasRenderingContext2D; viewport: unknown }): { promise: Promise<void> } };
@@ -112,7 +114,7 @@ export function DocumentViewer({
               <button
                 key={`${b.key}-${j}`}
                 type="button"
-                aria-label={`Select ${b.key}`}
+                aria-label={b.label ?? `Select ${b.key} on page ${b.page}`}
                 data-box-key={b.key}
                 data-selected={selected === b.key ? 'true' : 'false'}
                 onClick={() => onSelect?.(b.key)}

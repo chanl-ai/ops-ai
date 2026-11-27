@@ -744,7 +744,10 @@ class ItemText(Out):
     mime_type: str | None
     status: Literal["done", "reading", "none"]
     paged: bool
+    # The page whose sections are answered, for a paged file; None for a file without pages, whose sections all are.
+    page: int | None
     reader_version: str | None
+    # Every page's summary; only `page`'s sections are in `sections`.
     pages: list[TextPage]
     sections: list[TextSection]
     notes: list[str]

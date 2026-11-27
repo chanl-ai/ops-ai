@@ -1346,6 +1346,7 @@ class ItemText(TypedDict, closed=True):
     itemId: str
     mimeType: str | None
     notes: list[str]
+    page: int | None
     paged: bool
     pages: list[TextPage]
     readerVersion: str | None
