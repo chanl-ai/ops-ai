@@ -11,6 +11,8 @@ from langgraph.config import get_config, get_stream_writer
 
 from ops_agent_kernel.events import (
     CitationsReady,
+    ModeChanged,
+    PlanChanged,
     SkillLoaded,
     SkillRunChanged,
     StatusChanged,
@@ -394,6 +396,11 @@ async def _kernel_turn(node: str, req: TurnRequest, ports: KernelPorts) -> TurnR
                 emit("skill_loaded", node, {"skillId": sid, "version": v, "name": name, "matched": matched, **extra})
             case SkillRunChanged(run=run):
                 emit("skill_run", node, run.model_dump(mode="json", by_alias=True))
+            case ModeChanged(mode=mode, reason=reason, fixed=fixed, at_step=at_step):
+                # The run trace's mode steps are read back from these (api/run_trace.py).
+                emit("mode", node, {"mode": mode, "reason": reason, "fixed": fixed, "atStep": at_step})
+            case PlanChanged(plan=plan, revision=revision):
+                emit("plan", node, {"title": plan["title"], "steps": plan["steps"], "revision": revision})
             case TurnFinished(result=r):
                 result = r
                 # The record the next reply goes on from, whichever way the turn ended; an ended skill is kept too.
@@ -420,6 +427,8 @@ async def _kernel_turn(node: str, req: TurnRequest, ports: KernelPorts) -> TurnR
                         "errorCode": r.error_code,
                         # Which guardrails this turn checked and which the builder switched off.
                         "guardrails": {"checked": r.guardrails_checked, "off": r.guardrails_off},
+                        "modes": [{"mode": m.mode, "reason": m.reason, "fixed": m.fixed} for m in r.modes],
+                        **({"barMet": r.bar_met} if r.bar_met is not None else {}),
                         # The streamed text is replaced by the checked one when a guardrail rewrote the answer.
                         **({"guardrail": r.guardrail, "text": r.text} if r.guardrail else {}),
                     },

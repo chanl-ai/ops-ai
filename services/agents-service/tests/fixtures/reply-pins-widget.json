@@ -459,6 +459,12 @@
         "type": "text"
       },
       {
+        "fixed": false,
+        "mode": "direct",
+        "reason": "Answered without a plan, a helper or the workspace.",
+        "type": "mode"
+      },
+      {
         "citations": [
           {
             "documentId": "doc_wire_limits",

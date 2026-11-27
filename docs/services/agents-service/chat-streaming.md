@@ -1,6 +1,6 @@
 # Chat streaming
 
-Status: current, checked against the code on 2026-11-18.
+Status: current, checked against the code on 2026-11-27.
 
 A chat reply reaches the console as server-sent events from `POST /chat/threads/{id}/messages` with
 `Accept: text/event-stream`. Each frame is `data: <json>` followed by a blank line. The event types are
@@ -19,6 +19,7 @@ A chat reply reaches the console as server-sent events from `POST /chat/threads/
 | `text` | `delta` | Each piece of the answer as the model writes it |
 | `replace` | `text` | The answer streamed so far is replaced by `text` |
 | `citations` | `citations` | The passages the answer cites |
+| `mode` | `mode` (direct, plan, helpers, sandbox), `reason`, `fixed` | The first time the turn works a way: `direct` when the first model step ends with nothing else used, the others when the plan is accepted, a helper is first asked or the workspace is first used ([automatic mode](../../design/agents-v2/automatic-mode-and-loop-kinds.md)) |
 | `done` | `message` | The finished message, as a reload will show it |
 | `error` | `message`, `partial`, `code` | The turn failed; `partial` is what was built so far |
 
@@ -38,3 +39,11 @@ the admin role), and the console shows it under "Audit: what the guardrail took 
 
 Checks: `tests/api/test_guardrail_audit.py` (the record survives a reload; a builder never gets it), uc-229 ui (an
 admin sees it after a reload, a reviewer does not).
+
+## The run trace
+
+`GET /v1/threads/{thread_id}/runs/{run_id}/trace` reads the run's steps back from the thread event log
+(`api/run_trace.py`): modes, plans, tool calls, pauses and each turn's model, in the order they were written. Its
+`modes` are the run's `mode` events, so the trace and the stream cannot disagree. `GET /v1/agents/loops` lists the
+loop kinds with their settings forms; `workflow`, `swarm` and `long_running` are listed with `available: false` until
+they are built.

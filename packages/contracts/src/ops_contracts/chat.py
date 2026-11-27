@@ -683,6 +683,16 @@ class CitationsEvent(WireModel):
     citations: list[Citation]
 
 
+class ModeEvent(WireModel):
+    """The turn used a way of working for the first time: answered directly, planned, asked a helper or opened the
+    workspace (docs/design/agents-v2/automatic-mode-and-loop-kinds.md). `fixed` when the builder set the loop kind."""
+
+    type: Literal["mode"] = "mode"
+    mode: Literal["direct", "plan", "helpers", "sandbox"]
+    reason: str
+    fixed: bool
+
+
 class DoneEvent(WireModel):
     type: Literal["done"] = "done"
     message: ChatMessage
@@ -710,6 +720,7 @@ ChatStreamEvent = (
     | TextEvent
     | ReplaceEvent
     | CitationsEvent
+    | ModeEvent
     | DoneEvent
     | ErrorEvent
 )

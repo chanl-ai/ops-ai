@@ -14,12 +14,14 @@ from typing import Annotated, Literal, TypeAlias, cast
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
+from ops_agent_kernel import loop_kinds
 from ops_agents.activities.agent_limits import check_limits, limits_of
 from ops_agents.activities.knowledge import KnowledgeUnavailable
 from ops_agents.activities.tool_directory import ToolsUnavailable
 from ops_agents.app import agent_spec as checks
 from ops_agents.app.agent_spec import HelperFacts, Versions
 from ops_agents.domain import agent_spec as doc
+from ops_contracts.loops import LoopKindOut, Requirement
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, ServiceUnavailable, Unprocessable, ValidationFailed
 from ops_service_kit.http import Envelope, Json, JsonList
@@ -133,6 +135,26 @@ async def _view(rt: Runtime, me: Principal, agent_id: str, version: int | None =
         spec=doc.exported(v.spec, agent_id),
         can_edit=flags["canEdit"],
     )
+
+
+@router.get("/loops", response_model=Envelope[list[LoopKindOut]])
+async def list_loops(_me: Reader) -> JSONResponse:
+    """The loop kinds an agent can run, each with its settings form as JSON Schema, and whether this release runs it.
+    The same list for every caller: no record is read."""
+    out = [
+        LoopKindOut(
+            kind=k.kind,
+            name=k.name,
+            description=k.description,
+            when_to_use=k.when_to_use,
+            settings_schema=k.settings_schema,
+            requires=cast("list[Requirement]", list(k.requires)),
+            available=k.later is None,
+            unavailable_reason=k.later,
+        ).model_dump(mode="json", by_alias=True)
+        for k in loop_kinds.KINDS
+    ]
+    return ok(out)
 
 
 @router.get("/{agent_id}/spec", response_model=Envelope[SpecView])

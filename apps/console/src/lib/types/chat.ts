@@ -498,5 +498,7 @@ export type ChatStreamEvent =
    *  shown before it is kept as a `retracted` entry of the message's guardrailAudit, for a reader who may view the audit. */
   | { type: 'replace'; text: string }
   | { type: 'citations'; citations: Citation[] }
+  /** The first time the turn works a way (automatic mode): answered directly, planned, asked a helper or used the workspace. */
+  | { type: 'mode'; mode: 'direct' | 'plan' | 'helpers' | 'sandbox'; reason: string; fixed: boolean }
   | { type: 'done'; message: ChatMessage }
   | { type: 'error'; message: string; partial: ChatMessage; code?: string; kind?: ChatMessage['errorKind']; retryable?: boolean };

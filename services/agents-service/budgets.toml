@@ -117,6 +117,10 @@ query = { version = "1" }
 # The row, the version, and the skills, guardrails and widget it pins, each read once.
 queries = 5
 
+["GET /v1/agents/loops"]
+# A fixed catalogue: no record is read.
+queries = 0
+
 ["GET /v1/agents/{agent_id}/skills"]
 queries = 3
 
@@ -343,6 +347,10 @@ queries = 3
 
 # A stream holds no transaction while it is open: each read it makes opens and closes its own, so the count is
 # the reads of one pass with `follow=false`.
+["GET /v1/threads/{thread_id}/runs/{run_id}/trace"]
+# The thread, the run and its events, each read once.
+queries = 3
+
 ["GET /v1/threads/{thread_id}/runs/{run_id}/events"]
 queries = 3
 transactions = 3

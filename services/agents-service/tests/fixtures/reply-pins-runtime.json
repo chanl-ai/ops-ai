@@ -176,6 +176,12 @@
         "type": "text"
       },
       {
+        "fixed": false,
+        "mode": "direct",
+        "reason": "Answered without a plan, a helper or the workspace.",
+        "type": "mode"
+      },
+      {
         "citations": [
           {
             "documentId": "doc_wire_limits",
@@ -377,7 +383,7 @@
         "id": "<evt>",
         "node": null,
         "runId": "<run>",
-        "seq": 16,
+        "seq": 17,
         "threadId": "<th>",
         "type": "finished"
       },
@@ -419,7 +425,7 @@
         "id": "<evt>",
         "node": null,
         "runId": "<run>",
-        "seq": 14,
+        "seq": 15,
         "threadId": "<gth>",
         "type": "waiting_review"
       },
@@ -461,7 +467,7 @@
         "id": "<evt>",
         "node": null,
         "runId": "<run>",
-        "seq": 14,
+        "seq": 15,
         "threadId": "<gth>",
         "type": "waiting_review"
       }

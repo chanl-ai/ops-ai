@@ -39,6 +39,7 @@ from ops_contracts.chat import (
     LabelValue,
     LoadedSkill,
     MessageFeedback,
+    ModeEvent,
     PartEvent,
     RecordWidget,
     RememberedItem,
@@ -282,6 +283,9 @@ class AssistantBuilder:
                 saved = cast(list[Any], json_object(data).get("saved") or [])
                 m.remembered = [RememberedItem.model_validate(x) for x in saved] or None
                 return []
+            case "mode":
+                d = json_object(data)
+                return [ModeEvent.model_validate({k: d[k] for k in ("mode", "reason", "fixed")})]
             case "skill_loaded":
                 m.skills = [*(m.skills or []), LoadedSkill.model_validate(json_object(data))]
                 return []
