@@ -172,6 +172,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "agents_diff_spec": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/agents/{agent_id}/spec/diff",
+        "pathParams": ["agent_id"],
+        "query": [],
+        "stream": False,
+    },
     "agents_draft_agent_brief": {
         "body": "json",
         "headers": [],
@@ -421,6 +430,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "agents_read_spec": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/agents/{agent_id}/spec",
+        "pathParams": ["agent_id"],
+        "query": ["version"],
+        "stream": False,
+    },
     "agents_recent_runs": {
         "body": None,
         "headers": [],
@@ -520,6 +538,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "agents_save_spec": {
+        "body": "json",
+        "headers": [],
+        "method": "PUT",
+        "path": "/v1/agents/{agent_id}/spec",
+        "pathParams": ["agent_id"],
+        "query": [],
+        "stream": False,
+    },
     "agents_save_widget": {
         "body": "json",
         "headers": [],
@@ -607,6 +634,15 @@ OPERATIONS: dict[str, Operation] = {
         "method": "PATCH",
         "path": "/v1/guardrails/{guardrail_id}",
         "pathParams": ["guardrail_id"],
+        "query": [],
+        "stream": False,
+    },
+    "agents_validate_spec": {
+        "body": "json",
+        "headers": [],
+        "method": "POST",
+        "path": "/v1/agents/spec/validate",
+        "pathParams": [],
         "query": [],
         "stream": False,
     },
@@ -2337,6 +2373,10 @@ class Operations:
         "Create Agent"
         return self._t.call(SERVICE, OPERATIONS["agents_create_agent"], {}, {}, {"x-acting-for": x_acting_for}, body)  # type: ignore[no-any-return]
 
+    def agents_validate_spec(self, body: SpecIn) -> SpecCheck:
+        "Validate Spec"
+        return self._t.call(SERVICE, OPERATIONS["agents_validate_spec"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     def agents_get_agent(self, agent_id: str) -> Agent:
         "Get Agent"
         return self._t.call(SERVICE, OPERATIONS["agents_get_agent"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -2476,6 +2516,20 @@ class Operations:
         return self._t.call(
             SERVICE, OPERATIONS["agents_detach_skill"], {"agent_id": agent_id, "skill_id": skill_id}, {}, {}, None
         )  # type: ignore[no-any-return]
+
+    def agents_read_spec(self, agent_id: str, *, version: int | None = None) -> SpecView:
+        "Read Spec"
+        return self._t.call(
+            SERVICE, OPERATIONS["agents_read_spec"], {"agent_id": agent_id}, {"version": version}, {}, None
+        )  # type: ignore[no-any-return]
+
+    def agents_save_spec(self, agent_id: str, body: SpecSave) -> SpecView:
+        "Save Spec"
+        return self._t.call(SERVICE, OPERATIONS["agents_save_spec"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    def agents_diff_spec(self, agent_id: str, body: SpecDiffIn) -> SpecDiff:
+        "Diff Spec"
+        return self._t.call(SERVICE, OPERATIONS["agents_diff_spec"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def agents_test_agent(self, agent_id: str, body: OpsAgentsApiRoutersAgentsTestInput) -> AgentTestTurn:
         "Test Agent"
@@ -4169,6 +4223,10 @@ class AsyncOperations:
             SERVICE, OPERATIONS["agents_create_agent"], {}, {}, {"x-acting-for": x_acting_for}, body
         )  # type: ignore[no-any-return]
 
+    async def agents_validate_spec(self, body: SpecIn) -> SpecCheck:
+        "Validate Spec"
+        return await self._t.call(SERVICE, OPERATIONS["agents_validate_spec"], {}, {}, {}, body)  # type: ignore[no-any-return]
+
     async def agents_get_agent(self, agent_id: str) -> Agent:
         "Get Agent"
         return await self._t.call(SERVICE, OPERATIONS["agents_get_agent"], {"agent_id": agent_id}, {}, {}, None)  # type: ignore[no-any-return]
@@ -4312,6 +4370,20 @@ class AsyncOperations:
         return await self._t.call(
             SERVICE, OPERATIONS["agents_detach_skill"], {"agent_id": agent_id, "skill_id": skill_id}, {}, {}, None
         )  # type: ignore[no-any-return]
+
+    async def agents_read_spec(self, agent_id: str, *, version: int | None = None) -> SpecView:
+        "Read Spec"
+        return await self._t.call(
+            SERVICE, OPERATIONS["agents_read_spec"], {"agent_id": agent_id}, {"version": version}, {}, None
+        )  # type: ignore[no-any-return]
+
+    async def agents_save_spec(self, agent_id: str, body: SpecSave) -> SpecView:
+        "Save Spec"
+        return await self._t.call(SERVICE, OPERATIONS["agents_save_spec"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def agents_diff_spec(self, agent_id: str, body: SpecDiffIn) -> SpecDiff:
+        "Diff Spec"
+        return await self._t.call(SERVICE, OPERATIONS["agents_diff_spec"], {"agent_id": agent_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def agents_test_agent(self, agent_id: str, body: OpsAgentsApiRoutersAgentsTestInput) -> AgentTestTurn:
         "Test Agent"

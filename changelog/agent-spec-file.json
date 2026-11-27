@@ -1,0 +1,1 @@
+{"date": "2026-11-26", "title": "An agent can be kept as one file", "description": "Read an agent as one document, check it, see what applying it would change, and save it as the draft the agent page shows. A file that breaks a rule is refused with the place of each mistake, and nothing is saved.", "tag": "new"}

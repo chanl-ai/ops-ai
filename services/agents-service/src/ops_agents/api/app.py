@@ -103,6 +103,7 @@ from .routers import (
     tool_catalog,
     workflows,
 )
+from .routers import agent_spec as agent_spec_routes
 from .routers import ai_steps as ai_step_routes
 from .routers import assurance as assurance_routes
 from .routers import case_types as case_type_routes
@@ -564,6 +565,8 @@ def create_app(
     mount(embed_routes.bundle_router, "Widget", include_in_schema=False)
     mount(graphs.router, "Threads")
     mount(graph_list.router, "Graphs")
+    # Before the agents router, so `/v1/agents/spec/validate` is never read as an agent id.
+    mount(agent_spec_routes.router, "Agents")
     mount(agents.router, "Agents")
     # Before workflows.router: its /v1/workflows/{workflow_id} would take /v1/workflows/node-types as an id.
     mount(engine_routes.router, "Workflows")

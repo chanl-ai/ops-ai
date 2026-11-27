@@ -344,6 +344,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agents/spec/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate Spec
+         * @description Every rule a save checks, with nothing saved: `ok` and each problem with its JSON pointer. The team is the one
+         *     the request acts in.
+         */
+        post: operations["agents_validate_spec"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agents/{agent_id}": {
         parameters: {
             query?: never;
@@ -699,6 +720,52 @@ export interface paths {
         post?: never;
         /** Detach Skill */
         delete: operations["agents_detach_skill"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/spec": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Spec
+         * @description The agent as a spec document: the newest version, or `version`. The CLI writes it as YAML.
+         */
+        get: operations["agents_read_spec"];
+        /**
+         * Save Spec
+         * @description Saves the document as the agent's draft. 422 `spec_invalid` naming each broken rule, 409 `stale_base` when
+         *     `baseVersion` and `baseDigest` are not the newest copy, 503 `dependency_unavailable` when a lookup cannot answer;
+         *     nothing is saved in any of them.
+         */
+        put: operations["agents_save_spec"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agents/{agent_id}/spec/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Diff Spec
+         * @description What saving `spec` would change against the newest draft or the live version, as JSON pointer changes.
+         */
+        post: operations["agents_diff_spec"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -7526,6 +7593,33 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[SpecCheck] */
+        Envelope_SpecCheck_: {
+            data: components["schemas"]["SpecCheck"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[SpecDiff] */
+        Envelope_SpecDiff_: {
+            data: components["schemas"]["SpecDiff"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[SpecView] */
+        Envelope_SpecView_: {
+            data: components["schemas"]["SpecView"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[StepUpToken] */
         Envelope_StepUpToken_: {
             data: components["schemas"]["StepUpToken"];
@@ -12186,6 +12280,111 @@ export interface components {
              */
             type: "workflow" | "agent" | "channel" | "case" | "process" | "form";
         };
+        /** SpecChange */
+        SpecChange: {
+            after?: components["schemas"]["JsonValue"];
+            before?: components["schemas"]["JsonValue"];
+            /**
+             * Op
+             * @enum {string}
+             */
+            op: "add" | "remove" | "replace";
+            /** Path */
+            path: string;
+        };
+        /** SpecCheck */
+        SpecCheck: {
+            /** Ok */
+            ok: boolean;
+            /** Problems */
+            problems: components["schemas"]["SpecProblem"][];
+            summary?: components["schemas"]["SpecSummary"] | null;
+        };
+        /** SpecDiff */
+        SpecDiff: {
+            /**
+             * Against
+             * @enum {string}
+             */
+            against: "draft" | "live";
+            /** Changes */
+            changes: components["schemas"]["SpecChange"][];
+            /** Version */
+            version: number;
+        };
+        /** SpecDiffIn */
+        SpecDiffIn: {
+            /**
+             * Against
+             * @default draft
+             * @enum {string}
+             */
+            against: "draft" | "live";
+            /** Spec */
+            spec: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+        };
+        /** SpecIn */
+        SpecIn: {
+            /** Spec */
+            spec: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+        };
+        /** SpecProblem */
+        SpecProblem: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Path */
+            path: string;
+        };
+        /** SpecSave */
+        SpecSave: {
+            /** Basedigest */
+            baseDigest?: string | null;
+            /** Baseversion */
+            baseVersion?: number | null;
+            /** Note */
+            note?: string | null;
+            /** Spec */
+            spec: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+        };
+        /** SpecSummary */
+        SpecSummary: {
+            /** Evalcases */
+            evalCases: number;
+            /** Helpers */
+            helpers: number;
+            /** Loopkind */
+            loopKind: string;
+            /** Tools */
+            tools: number;
+        };
+        /** SpecView */
+        SpecView: {
+            /** Agentid */
+            agentId: string;
+            /** Canedit */
+            canEdit: boolean;
+            /** Digest */
+            digest: string;
+            /** Spec */
+            spec: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "published";
+            /** Version */
+            version: number;
+        };
         /** SsoStepUpInput */
         SsoStepUpInput: {
             /** Code */
@@ -16153,6 +16352,111 @@ export interface operations {
             };
         };
     };
+    agents_validate_spec: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SpecCheck_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     agents_get_agent: {
         parameters: {
             query?: never;
@@ -18395,6 +18699,325 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_AgentSkills_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_read_spec: {
+        parameters: {
+            query?: {
+                version?: number | null;
+            };
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SpecView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_save_spec: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecSave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SpecView_"];
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not allowed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflicts with the current state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Refused by a rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Over a budget or rate limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Degraded: no model, or the graph runtime did not start */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    agents_diff_spec: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecDiffIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SpecDiff_"];
                 };
             };
             /** @description Invalid request */

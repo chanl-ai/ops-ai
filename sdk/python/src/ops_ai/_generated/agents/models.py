@@ -2169,6 +2169,57 @@ class Source(TypedDict, closed=True):
     type: Literal["workflow", "agent", "channel", "case", "process", "form"]
 
 
+class SpecChange(TypedDict, closed=True):
+    after: NotRequired[JsonValue]
+    before: NotRequired[JsonValue]
+    op: Literal["add", "remove", "replace"]
+    path: str
+
+
+class SpecDiff(TypedDict, closed=True):
+    against: Literal["draft", "live"]
+    changes: list[SpecChange]
+    version: int
+
+
+class SpecDiffIn(TypedDict, closed=True):
+    against: NotRequired[Literal["draft", "live"]]
+    spec: dict[str, JsonValue]
+
+
+class SpecIn(TypedDict, closed=True):
+    spec: dict[str, JsonValue]
+
+
+class SpecProblem(TypedDict, closed=True):
+    code: str
+    message: str
+    path: str
+
+
+class SpecSave(TypedDict, closed=True):
+    baseDigest: NotRequired[str | None]
+    baseVersion: NotRequired[int | None]
+    note: NotRequired[str | None]
+    spec: dict[str, JsonValue]
+
+
+class SpecSummary(TypedDict, closed=True):
+    evalCases: int
+    helpers: int
+    loopKind: str
+    tools: int
+
+
+class SpecView(TypedDict, closed=True):
+    agentId: str
+    canEdit: bool
+    digest: str
+    spec: dict[str, JsonValue]
+    status: Literal["draft", "published"]
+    version: int
+
+
 class SsoStepUpInput(TypedDict, closed=True):
     code: str
 
@@ -3510,6 +3561,16 @@ class EnvelopeSkillRendered(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeSpecDiff(TypedDict, closed=True):
+    data: SpecDiff
+    success: Literal[True]
+
+
+class EnvelopeSpecView(TypedDict, closed=True):
+    data: SpecView
+    success: Literal[True]
+
+
 class EnvelopeStepUpToken(TypedDict, closed=True):
     data: StepUpToken
     success: Literal[True]
@@ -4160,6 +4221,12 @@ class SkillTextReading(TypedDict, closed=True):
     uses: SkillTextUses
 
 
+class SpecCheck(TypedDict, closed=True):
+    ok: bool
+    problems: list[SpecProblem]
+    summary: NotRequired[SpecSummary | None]
+
+
 class StepChangeView(TypedDict, closed=True):
     fields: list[FieldChangeView]
     id: str
@@ -4742,6 +4809,11 @@ class EnvelopeSkillOptions(TypedDict, closed=True):
 
 class EnvelopeSkillTextReading(TypedDict, closed=True):
     data: SkillTextReading
+    success: Literal[True]
+
+
+class EnvelopeSpecCheck(TypedDict, closed=True):
+    data: SpecCheck
     success: Literal[True]
 
 

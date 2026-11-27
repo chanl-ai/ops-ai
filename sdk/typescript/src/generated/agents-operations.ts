@@ -217,6 +217,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_diff_spec": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/agents/{agent_id}/spec/diff",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "agents_draft_agent_brief": {
     "body": "json",
     "headers": [],
@@ -532,6 +543,19 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_read_spec": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/agents/{agent_id}/spec",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [
+      "version"
+    ],
+    "stream": false
+  },
   "agents_recent_runs": {
     "body": null,
     "headers": [],
@@ -660,6 +684,17 @@ export const agentsOperations = {
     "query": [],
     "stream": false
   },
+  "agents_save_spec": {
+    "body": "json",
+    "headers": [],
+    "method": "PUT",
+    "path": "/v1/agents/{agent_id}/spec",
+    "pathParams": [
+      "agent_id"
+    ],
+    "query": [],
+    "stream": false
+  },
   "agents_save_widget": {
     "body": "json",
     "headers": [],
@@ -776,6 +811,15 @@ export const agentsOperations = {
     "pathParams": [
       "guardrail_id"
     ],
+    "query": [],
+    "stream": false
+  },
+  "agents_validate_spec": {
+    "body": "json",
+    "headers": [],
+    "method": "POST",
+    "path": "/v1/agents/spec/validate",
+    "pathParams": [],
     "query": [],
     "stream": false
   },

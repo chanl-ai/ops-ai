@@ -828,7 +828,14 @@ async def _publish_problems(rt: Runtime, row: AgentRow, version: int, spec: Json
     run as stored, and its evals (`eval_gate`). The check and the publish both read this list."""
     brief = cast(list[Json], agent_brief.publish_problems(spec))
     pins = cast(list[Json], await skill_pin_problems(rt, spec))
-    return [*brief, *pins, *await eval_gate.problems(rt, row, version)]
+    # The spec file's rules, read again now: a helper, skill or tool the draft named at its save may have gone since.
+    from .agent_spec import spec_problems  # noqa: PLC0415 - agent_spec imports this module's changeable
+
+    broken: list[Json] = [
+        {"kind": "spec_invalid", "message": f"{p.message} ({p.path or '/'}, {p.code})"}
+        for p in await spec_problems(rt, row, spec)
+    ]
+    return [*brief, *pins, *broken, *await eval_gate.problems(rt, row, version)]
 
 
 @router.get("/{agent_id}/prompt", response_model=Envelope[AgentPrompt])
