@@ -103,7 +103,11 @@ def test_a_request_models_bare_str_name_is_found_and_a_name_type_is_not() -> Non
 
 
 def test_a_model_call_posted_outside_the_one_client_is_found_and_the_workspace_has_none(tmp_path: Path) -> None:
-    own = 'async def ask(http):\n    return await http.post("/v1/models/chat/completions", json={})\n'
+    own = (
+        'async def ask(http):\n    return await http.post("/v1/models/chat/completions", json={})\n'
+        'async def built(http, base):\n    return await http.post(base + "/chat/completions", json={})\n'
+        'def client(base):\n    return f"{base}/v1/models"\n'
+    )
     found = _check(tmp_path, own)
-    assert [f.split(" ", 1)[1] for f in found] == ["rule SC1: a model call outside ops_service_kit.model_calls"]
+    assert [f.split(" ", 1)[1] for f in found] == ["rule SC1: a model call outside ops_service_kit.model_calls"] * 3
     assert standards.model_call_breaches(standards.source_roots()) == []

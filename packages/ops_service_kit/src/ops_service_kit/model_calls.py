@@ -35,6 +35,9 @@ FILTERED = "reply_filtered"
 EMPTY = "reply_empty"
 # How much of a model's refusal an error keeps.
 REFUSAL_CHARS = 300
+# models-service's model routes; only this client posts to them (rule SC1, `standards.check_model_calls`).
+CHAT_ROUTE = "/v1/models/chat/completions"
+EMBED_ROUTE = "/v1/models/embeddings"
 
 
 class ModelCallError(Exception):
@@ -198,7 +201,7 @@ class ModelCalls:
         for name in dict.fromkeys((self.alias, FALLBACK_ALIAS)):
             try:
                 r = await self.http.post(
-                    "/v1/models/chat/completions",
+                    CHAT_ROUTE,
                     headers=headers,
                     json=_chat_body(name, messages, tools=tools, tool_choice="required", **limit),
                 )
@@ -231,9 +234,7 @@ class ModelCalls:
         if width is not None:
             body["dimensions"] = width
         try:
-            r = await self.http.post(
-                "/v1/models/embeddings", headers=_headers(self.key, tenant, step, sensitivity), json=body
-            )
+            r = await self.http.post(EMBED_ROUTE, headers=_headers(self.key, tenant, step, sensitivity), json=body)
         except httpx.HTTPError as e:
             raise _unreached(e) from e
         if r.status_code >= 400:
@@ -263,7 +264,7 @@ class IngestModel:
     def complete(self, prompt: str, *, alias: str, max_tokens: int) -> str:
         try:
             r = self.http.post(
-                "/v1/models/chat/completions",
+                CHAT_ROUTE,
                 headers={
                     **_headers(self.key, self.tenant, self.step, self.sensitivity),
                     **({"X-Run-Id": self.run_id} if self.run_id else {}),

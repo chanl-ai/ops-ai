@@ -21,6 +21,8 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.routing import APIRoute, iter_route_contexts
 
+from .model_calls import CHAT_ROUTE, EMBED_ROUTE
+
 ROOT = Path(__file__).resolve().parents[4]
 LOG_METHODS = {"debug", "info", "warning", "error", "exception", "critical"}
 # What every module names its `get_logger(__name__)`.
@@ -116,27 +118,37 @@ def check_env(path: Path, tree: ast.AST, allowed: Path) -> list[str]:
     return out
 
 
-# models-service's model routes. Only the one client posts to them; models-service serves them.
-MODEL_ROUTES = ("/v1/models/chat/completions", "/v1/models/embeddings")
+# What names a model route, whole or built from a base: the routes' own ends, and the `/v1/models` base an OpenAI-style
+# client is pointed at.
+MODEL_ROUTES = (CHAT_ROUTE, EMBED_ROUTE)
+ROUTE_ENDS = (*MODEL_ROUTES, *(r.removeprefix("/v1/models") for r in MODEL_ROUTES), "/v1/models")
+# Modules that reach the model routes without the one client, each with its reason.
+MODEL_CALL_EXCEPTIONS = {
+    # The agent kernel's turns run on pydantic-ai, whose OpenAI client streams tool calls and takes a base URL, not a
+    # route; it is pointed at models-service with the service's model key, so the key, gate and call log still apply.
+    ("ops_agent_kernel", "models.py"): "pydantic-ai's OpenAI client streams the agent's turns",
+}
 
 
 def _owns_model_routes(path: Path) -> bool:
-    """The one client (`ops_service_kit.model_calls`), this check's own list, and models-service itself; by name, as
-    `is_logging_module`."""
+    """The one client (`ops_service_kit.model_calls`), this check, models-service itself and the listed exceptions;
+    by name, as `is_logging_module`."""
     kit = path.parent.name == "ops_service_kit" and path.name in {"model_calls.py", "standards.py"}
-    return kit or "ops_models" in path.parts
+    return kit or "ops_models" in path.parts or (path.parent.name, path.name) in MODEL_CALL_EXCEPTIONS
 
 
 def check_model_calls(path: Path, tree: ast.AST) -> list[str]:
     """SC1 (docs/architecture/standards/security.md): a service calls a model through `ops_service_kit.model_calls`,
     so every call carries the service's key, its refusal codes and its usage the same way; a module that names a
-    model route itself has its own copy of the call."""
+    model route itself, whole or as a piece joined to a base, has its own copy of the call."""
     if _owns_model_routes(path):
         return []
     return [
         f"{_at(path)}:{node.lineno} rule SC1: a model call outside ops_service_kit.model_calls"
         for node in ast.walk(tree)
-        if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.endswith(MODEL_ROUTES)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and node.value.rstrip("/").endswith(ROUTE_ENDS)
     ]
 
 

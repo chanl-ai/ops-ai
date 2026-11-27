@@ -164,6 +164,17 @@ async def test_a_reply_cut_off_at_its_limit_fails_the_read_with_its_reason_and_s
     assert limits == [1200], "the read's output limit reaches models-service, and a cut reply is not asked again"
 
 
+async def test_an_answer_in_a_shape_the_client_cannot_read_fails_the_read_in_words_a_person_can_act_on(
+    make: Make,
+) -> None:
+    unreadable = httpx.MockTransport(lambda _: httpx.Response(200, json={"choices": []}))
+    s = make(ModelsService(httpx.AsyncClient(base_url="http://models", transport=unreadable), "key"), Floor())
+    async with s.client as c:
+        body = (await read(c, await s.stored(NOTICE), fields=[{"key": "invoice", "type": "text"}])).json()["data"]
+    assert (body["status"], body["error"]["code"]) == ("failed", "model_answer_unreadable"), body
+    assert "Error" not in body["error"]["message"] and "try again" in body["error"]["message"], body
+
+
 async def test_an_unknown_read_and_a_bad_ceiling_are_refused(make: Make) -> None:
     s = make(Models(), Floor())
     async with s.client as c:
