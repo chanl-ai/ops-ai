@@ -1,12 +1,13 @@
 # Database
 
-Status: current for PostgreSQL, proven on a throwaway server. SQL Server 2025 and Azure SQL are partial: see
-[SQL Server and Azure SQL](#sql-server-and-azure-sql).
+Status: current for PostgreSQL.
 
-A production database is normally changed by a DBA, from reviewed scripts, in a change window. Software that creates
-its own tables with a powerful login at start-up does not fit that process. Ops AI supports the DBA's way. Every script
-is generated from the release and is never edited by hand. Each service runs on its own login, which cannot change the
-schema. This page covers installing, upgrading and checking the database on PostgreSQL.
+In most organisations, your DBA changes a production database from reviewed scripts during a change window. Software
+that creates its own tables at start-up with a powerful login does not fit that process, so Ops AI is built to work with
+it. Each script is generated from the release and checked against its checksums, so nobody needs to edit one by hand.
+Once the schema is in place, each service runs on its own login, and that login cannot change the schema. This page
+covers installing, upgrading and checking the database on PostgreSQL. These steps have been proven on a throwaway
+server. SQL Server 2025 and Azure SQL are partial: see [SQL Server and Azure SQL](#sql-server-and-azure-sql).
 
 ## Choose who applies the schema
 
@@ -16,7 +17,8 @@ schema. This page covers installing, upgrading and checking the database on Post
 | DBA | Your DBA, from the release's scripts | Production: the services never hold a login that may change the schema |
 
 The [install script](install.md) asks which one you want (`--db-mode auto` or `--db-mode dba`). In DBA mode it writes the
-scripts to `./dba/` and prints the three `psql` commands to run, then waits until the schema is current. The scripts
+scripts to `./dba/` and prints three `psql` commands to run, then waits until the schema is current. Its own
+`1-server.sql` takes the place of the `roles.sql` and `ALTER ROLE` steps below. The scripts
 also come from two other places.
 
 | Source | How to get the scripts |
@@ -35,15 +37,17 @@ address. Replace `ops` with another database name if you prefer.
 ```bash
 shasum -a 256 -c SHA256SUMS
 psql -v ON_ERROR_STOP=1 "postgresql://<admin>@<host>/postgres" -f roles.sql
-# Give every runtime login a password, one ALTER ROLE for each of the seven services:
-psql "postgresql://<admin>@<host>/postgres" -c "ALTER ROLE ops_agents_runtime PASSWORD '<password>'"
+# Give every runtime login a password, once for each of the seven services:
+for s in platform agents tools models kb files documents; do
+  psql "postgresql://<admin>@<host>/postgres" -c "ALTER ROLE ops_${s}_runtime PASSWORD '<password for $s>'"
+done
 psql "postgresql://<admin>@<host>/postgres" -c "GRANT ops_migrator TO CURRENT_USER" -c "CREATE DATABASE ops OWNER ops_migrator"
 psql -v ON_ERROR_STOP=1 "postgresql://<admin>@<host>/ops" -c "CREATE EXTENSION IF NOT EXISTS vector" \
   -c "SET ROLE ops_migrator" -f bundle.sql
 psql -v ON_ERROR_STOP=1 "postgresql://<admin>@<host>/ops" -c "SET ROLE ops_migrator" -f grants.sql
 ```
 
-The services are `platform`, `agents`, `tools`, `models`, `kb`, `files` and `documents`, so the login names run from
+Keep the seven passwords, because they go into the services' database settings. The login names run from
 `ops_platform_runtime` to `ops_documents_runtime`. Give each service its own login in its own database setting,
 `OPS_DATABASE_URL_<SERVICE>`, in the form `postgresql+asyncpg://ops_agents_runtime:<password>@<host>:5432/ops`. Add
 `?ssl=require` for a server that requires TLS.
@@ -57,7 +61,7 @@ schema owner.
 | `roles.sql` | Every role listed below, each guarded so the script can run again |
 | `bundle.sql` | The whole schema in dependency order: tables, constraints, indexes, row-level security and its policies |
 | `grants.sql` | Each service login's rights. Run it after every install and every upgrade |
-| One file per service | The same objects split by service, for review. Apply the bundle, not these |
+| One file per service | The same objects split by service, for review only. Apply the bundle instead |
 | `manifest.json`, `SHA256SUMS` | The release, each service's schema version, and every file's checksum |
 
 ## The logins
@@ -70,16 +74,16 @@ schema owner.
 
 ## Upgrade
 
-Two kinds of script move a database to a new release. Both check the version they start from and stop before any change
-when the database is somewhere else.
+You can move a database to a new release with either of two kinds of script. Both check the version the database is at
+before they start, and both stop before making any change if it is not the version they expect.
 
-**With the install script in DBA mode,** `./install.sh upgrade` writes one SQL file for each service that needs one to
-`./dba/upgrade-<from>-to-<to>/`, named `01-` onwards in the order to run them. It prints the `psql` command for each,
-then for `dba/postgres/grants.sql`, and waits until the schema is current. Your DBA runs each file as `ops_migrator`, in
-order.
+If you installed with the script in DBA mode, `./install.sh upgrade` writes one SQL file for each service that needs one
+to `./dba/upgrade-<from>-to-<to>/`. The files are numbered from `01-` in the order to run them. The script prints the
+`psql` command for each file and then for `dba/postgres/grants.sql`, and waits until the schema is current. Your DBA runs
+each file as `ops_migrator`, in order.
 
-**From a clone,** the guarded scripts of the release pair come from `make db-upgrade-sql FROM=<old tag> TO=<new tag>
-OUT=<folder>`. The folder holds `upgrade-roles.sql`, `upgrade.sql` and `downgrade.sql`.
+If you work from a clone, `make db-upgrade-sql FROM=<old tag> TO=<new tag> OUT=<folder>` writes the guarded scripts for
+that pair of releases. The folder holds `upgrade-roles.sql`, `upgrade.sql` and `downgrade.sql`.
 
 ```bash
 psql -v ON_ERROR_STOP=1 "postgresql://<admin>@<host>/ops" -f upgrade-roles.sql
@@ -109,7 +113,7 @@ make db-drift DATABASE=<live database URL> SERVER=<throwaway server URL>
 
 ## SQL Server and Azure SQL
 
-SQL Server 2025 and Azure SQL Database are partial. On every change, continuous integration runs the store, service kit
+Support for SQL Server 2025 and Azure SQL Database is partial. On every change, continuous integration runs the store, service kit
 and identity suites, and each service's store tests, on SQL Server 2025 beside PostgreSQL. A full install of Ops AI on
 SQL Server has not been proven, so install on PostgreSQL for now. [Azure SQL](../guide/azure-sql.md) lists what is ready
 for review and what is still to come.
@@ -129,7 +133,7 @@ sqlcmd -S <server> -U ops_migrator -b -I -d ops -i grants.sql
 
 ## Limits
 
-- Upgrades by DBA script start at version 1.0.0. A database from a dated release before 1.0.0 is upgraded by the schema
-  job, not by script.
+- The upgrade scripts refuse a step that crosses a data change that cannot be written as SQL, and they name it. For a
+  database that far behind, upgrade through the schema job.
 - The drift check runs from a source clone, and a packaged command is planned. It does not run against SQL Server.
 - Signing in to the database with Microsoft Entra ID or a managed identity is planned. The scripts use SQL logins.

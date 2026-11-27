@@ -1,13 +1,13 @@
 # Choose a deployment
 
-Status: current. Compose and Kubernetes layouts are proven by the release's install proofs, and the sizing figures are a
-starting point to measure against.
+Status: current.
 
 Before anyone installs Ops AI, your team has to decide where it runs. An architecture review asks the same
 questions each time: one machine or a cluster, whether the machines can reach the internet, how many organisations share
 an install, which ports open, and how big the database must be. This page answers them. The same images run in every
 layout. What changes is how they start, how secrets reach them and where file bytes are kept. PostgreSQL is always yours
-and runs outside the containers.
+and runs outside the containers. The Compose and Kubernetes layouts have both passed the release's install tests, and the
+sizing figures are a starting point to measure your own workload against.
 
 Settle it before you install, because the layout decides how secrets reach the containers and where file bytes live. To
 decide, find your situation in the first table, then read the network and sizing sections for what your platform team
@@ -52,7 +52,7 @@ flowchart TB
   SVC -.-> OBJ[("Object storage<br/>optional")]:::store
 ```
 
-*One inbound port, from your TLS terminator only. Every outbound connection is one you configure.*
+*Traffic reaches Ops AI through one inbound port, from your TLS terminator. Each outbound connection goes only to a system you configure.*
 
 | Direction | From | To | Port | Why |
 |---|---|---|---|---|
@@ -66,8 +66,8 @@ flowchart TB
 | Outbound | Ops AI | S3 or Azure Blob, when configured | 443 | File bytes |
 | Outbound | the host | `ghcr.io` (or your own registry), unless images are loaded from the offline image file | 443 | Install and upgrade only |
 
-Nothing else needs to leave your network. Put TLS in front of the proxy, because the containers speak plain HTTP to each
-other on the private network.
+The table lists every connection Ops AI makes, and your firewall needs no others. Place your TLS terminator in front of
+the proxy, because the containers talk to each other in plain HTTP on the private network.
 
 ## Sizing
 

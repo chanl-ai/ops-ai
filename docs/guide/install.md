@@ -5,8 +5,8 @@ Status: current.
 <!-- The steps below are included from docs/deploy/install.md, the install script's guide, when the page and
 INSTALL.md are built; edit them there. -->
 
-Putting Ops AI on your own infrastructure involves a machine, a name, a database and a model, and each has to be ready
-before the first command runs. This page lists what to have in hand, then points to the way that fits your setup. On
+Before you run the first command, you need six things ready: a machine, a DNS name, a database, a model, a first admin
+and your sign-in details. This page lists what to have in hand, then points to the way that fits your setup. On
 one machine, the install script does every step and checks the result. On a cluster, or when you run each step
 yourself, the same images start from Compose or Kubernetes files. Version 1.2.0 is the current release, and its images
 are published at `ghcr.io/chanl-ai/ops-ai`.

@@ -1,12 +1,13 @@
 # Install on Kubernetes
 
-Status: current. Proven on a local kind cluster, and not yet run on a managed cloud cluster.
+Status: current.
 
-When your platform team runs workloads on a cluster rather than on single machines, an install built around one
-machine's Docker does not fit. It cannot use your ingress, your Secrets or your pod policies. The Kubernetes install is
-plain Kustomize, so your team can read, patch and review everything that gets applied. It has a base with one folder per
-service, and an overlay you copy for each environment. The images are the ones Compose runs, and PostgreSQL stays
-outside the cluster.
+If your platform team runs its workloads on a Kubernetes cluster, an install built around one machine's Docker will not
+fit. It would bypass your ingress, your Secrets and your pod policies. The Kubernetes install uses Kustomize with
+nothing added on top, so your team can read, patch and review every manifest before it is applied. A base holds one
+folder for each service, and you copy an overlay for each environment. The images are the ones Compose runs, and
+PostgreSQL stays outside the cluster. The install has been proven on a local kind cluster and has not yet run on a
+managed cloud cluster.
 
 ## What you need before you start
 
@@ -21,9 +22,9 @@ outside the cluster.
 ## Install on your cluster
 
 <!-- site: steps -->
-1. **Install the database** with your DBA ([Database](database.md)). Keep the logins in a private file as
-   `ops_migrator=...` and `ops_<service>_runtime=...` lines, one for the migrator and one for each of the seven
-   services.
+1. **Install the database** with your DBA ([Database](database.md)). Keep the passwords in a private file, one
+   `name=password` line each: `ops_migrator=<password>`, `ops_platform_runtime=<password>`, and likewise for agents,
+   tools, models, kb, files and documents, eight lines in all.
 2. **Copy the example overlay** and set every `<...>` in it: the registry and the release tag, the address people open,
    and the database's address in `postgres-endpoint.yaml`. The registry images are tagged `1.2.0`, without the `v`.
 
@@ -52,7 +53,7 @@ outside the cluster.
      --input-price <n> --output-price <n> --budget <cap> --key-id purpose:agents   # again with purpose:documents
    ```
 
-   Save the provider's key in the console, under Settings › Models › Connections, with the name you gave `--key-ref`.
+   The agents pod is not ready yet, but `kubectl exec` works on a running pod. Save the provider's key in the console, under Settings › Models › Connections, with the name you gave `--key-ref`.
 
 5. **Route traffic** from your ingress or load balancer, with TLS, to the Service `proxy` on port 8080. Sign in as the
    first admin.
@@ -80,7 +81,7 @@ unready, because its health check fails until a model is connected.
 |---|---|---|
 | Images and tag | The overlay's `kustomization.yaml` | The registry and release to run |
 | Origin | The overlay | The address people open |
-| Database address | `postgres-endpoint.yaml` | An EndpointSlice for an IP address. For a host name, patch the Service to `ExternalName` and delete the file |
+| Database address | `postgres-endpoint.yaml` | A Kubernetes object that points the in-cluster name `postgres` at your database's IP address. For a host name instead, change the Service `postgres` to type `ExternalName` with that host name, and delete the file |
 | Volume size | The overlay | Raise the files and knowledge volumes above 1 GiB for real use |
 | `OPS_FORMS_TRUSTED_PROXIES` | The overlay | Which pod networks may set the client address for hosted forms. The base trusts the private ranges `10.0.0.0/8` and `172.16.0.0/12`, so narrow it if the cluster runs workloads you do not trust |
 | Plugins | The overlay | Mount a volume holding the plugins folder at `/plugins` in the tools and knowledge pods. The base mounts none |

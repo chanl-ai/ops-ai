@@ -9,8 +9,8 @@ Status: current. How to install, run and maintain Ops AI on your own machines. T
 <!-- The steps below are included from docs/deploy/install.md, the install script's guide, when the page and
 INSTALL.md are built; edit them there. -->
 
-Putting Ops AI on your own infrastructure involves a machine, a name, a database and a model, and each has to be ready
-before the first command runs. This page lists what to have in hand, then points to the way that fits your setup. On
+Before you run the first command, you need six things ready: a machine, a DNS name, a database, a model, a first admin
+and your sign-in details. This page lists what to have in hand, then points to the way that fits your setup. On
 one machine, the install script does every step and checks the result. On a cluster, or when you run each step
 yourself, the same images start from Compose or Kubernetes files. Version 1.2.0 is the current release, and its images
 are published at `ghcr.io/chanl-ai/ops-ai`.
@@ -51,7 +51,7 @@ The script asks the questions below. Each has a default, a flag and a key for an
 | Compose project name | `ops-ai` | `--project` | `PROJECT` |
 | Organisation name | My organisation | `--org` | `ORG_NAME` |
 | First admin's email and name | `admin@example.com`, First Admin | `--admin-email`, `--admin-name` | `ADMIN_EMAIL`, `ADMIN_NAME` |
-| First admin's password, 12 characters or more | Generated and kept in `ops-ai.env` | `--admin-password-file` | `ADMIN_PASSWORD` |
+| First admin's password, 12 characters or more | Generated and kept in `ops-ai.env` | `--admin-password-file <file>` (the answers key holds the password itself) | `ADMIN_PASSWORD` |
 | Database | `builtin`: a PostgreSQL 17 container, for a trial | `--database builtin` or `--database postgresql://user:pass@host:5432/db` | `DATABASE` |
 | Who applies the schema (your own PostgreSQL only) | `auto`: the install applies it with the login you gave | `--db-mode auto` or `--db-mode dba` | `DB_MODE` |
 | Model | `test`: the built-in test model, which calls no provider | `--model <OpenAI-compatible base URL>/v1` with `--model-name` and `--model-key-file` | `MODEL`, `MODEL_NAME`, `MODEL_API_KEY` |
@@ -86,20 +86,22 @@ The script turns `sslmode=` into the form the services use.
 2. **Writes the settings file** `ops-ai.env`, readable only by its owner, and generates every key into it. The script
    prints no secret.
 3. **Waits for your DBA** in `dba` mode. It writes the database scripts and each login's password to `./dba/`, prints
-   the three `psql` commands to run, and checks the schema before it goes on ([Database](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/database.md)).
+   three `psql` commands to run (its `1-server.sql` makes the roles and the database, then the bundle and the grants follow), and checks the schema before it goes on ([Database](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/database.md)).
 4. **Starts everything** and waits for each health check. A model key you give is stored in Ops AI's credential
-   store, and `ops-ai.env` never holds it.
+   store, and `ops-ai.env` does not hold it. An answers file holds `MODEL_API_KEY` in clear text, so delete that file after
+   the install.
 5. **Checks the install**: health through the published port, the sign-in page, a sign-in as the first admin, and one
    read from each service.
 
 ### What success looks like
 
-The script ends by printing the address, the first admin's email and where the password is:
+The script ends by printing the address, the first admin's email and where the password is. With a public URL, the first
+address is that URL and the second is the local one:
 
 ```text
 Ops AI 1.2.0 is running.
 
-  Open:      http://localhost:8890   (on this machine: http://localhost:8890)
+  Open:      https://ops.example.com   (on this machine: http://localhost:8890)
   Sign in:   admin@example.com
   Password:  the one you gave, or the generated one: see OPS_BOOTSTRAP_ADMIN_PASSWORD in ops-ai.env
 ```
@@ -107,11 +109,11 @@ Ops AI 1.2.0 is running.
 Open the address and sign in. Change the password, then delete the `OPS_BOOTSTRAP_ADMIN_PASSWORD` line from
 `ops-ai.env`. Keep `ops-ai.env` with your backups, because its secrets key unlocks every stored credential.
 
-Running `./install.sh` again on a working install checks it and changes nothing. The script never replaces existing keys.
-
-If a check fails, the script exits with an error and the failing line. `./install.sh logs` shows what the containers
-said. The agents check fails until a model is connected, which the script does for you, so a failure there usually
-means the model endpoint or its key.
+You can run `./install.sh` again on a working install at any time. It checks the install and changes nothing, and it
+leaves existing keys alone, because the secrets key in `ops-ai.env` unlocks every stored credential. If a check fails,
+the script exits with an error and prints the failing line, and `./install.sh logs` shows what the containers reported.
+The agents check cannot pass until a model is connected. The script connects one for you, so a failure there usually
+points to the model endpoint or its key.
 
 ### The other commands
 
@@ -126,8 +128,9 @@ Run them from the folder the install ran in.
 | `./install.sh upgrade [--version V]` | Backs up, moves to version V, checks, and rolls back on a failed check ([Upgrade](https://github.com/chanl-ai/ops-ai/blob/main/docs/deploy/upgrade.md)) |
 | `./install.sh uninstall` | Asks, then removes the containers, and asks again before deleting the data. Keeps `ops-ai.env`. With `--yes`, add `--delete-data` to delete the data too |
 
-In `dba` mode, `backup`, `restore` and `upgrade` need a database admin login that may dump the database, in a file:
-`--admin-url-file <file>` holding `postgresql://admin:password@host:5432/db`. The services' own logins cannot dump it.
+In `dba` mode, the `backup`, `restore` and `upgrade` commands need a database admin login that is allowed to dump the
+database, because the services' own logins cannot do so. Put a connection string such as
+`postgresql://admin:password@host:5432/db` in a file and pass it with `--admin-url-file <file>`.
 
 ### Apply a changed setting
 
@@ -159,8 +162,8 @@ OPS_FLAGS=mcp_gateway,tool_search
 | `plugin_updates` | Each team keeps the plugin version it took and reviews an upgrade before its tools change |
 | `area_tabs` | The console shows one area at a time, picked from the top bar |
 
-A name Ops AI does not know stops every service at start and lists the known flags, so a typo cannot pass for a flag
-that is off.
+If `OPS_FLAGS` contains a name that Ops AI does not recognise, every service stops at start and lists the flags it
+knows. A misspelt flag therefore shows up at once, instead of leaving you to think a feature is on when it is not.
 
 ### Set the embedding model
 
@@ -196,10 +199,10 @@ A machine with no registry at all uses `--offline` with a release package's imag
 
 ### Limits
 
-- With `--offline`, the script still pulls `pgvector/pgvector:pg17` when you choose the built-in database. Backup and
-  restore pull `alpine`, and backup and restore against your own database pull `postgres:17-alpine`, from Docker Hub.
-  None of these follow `OPS_IMAGE_REGISTRY` or `OPS_BASE_IMAGE_PREFIX`, so a machine with no Docker Hub access cannot back
-  up through the script.
+- Even with `--offline`, the script still pulls a few images from Docker Hub. It pulls `pgvector/pgvector:pg17` when you
+  choose the built-in database. Backup and restore pull `alpine`, and against your own database they also pull
+  `postgres:17-alpine`. None of these pulls follow `OPS_IMAGE_REGISTRY` or `OPS_BASE_IMAGE_PREFIX`, so on a machine that
+  cannot reach Docker Hub you cannot back up through the script.
 - `--build` builds every image except the one that runs code tools. Start such an install with images from a registry or
   a release package until that is fixed.
 - The script upgrades one install at a time and does not manage a standby. A second machine with the same install is a

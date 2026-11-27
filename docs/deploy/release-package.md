@@ -1,12 +1,13 @@
 # Install offline from a release package
 
-Status: current. Proven end to end on a machine that holds only the package, and not yet installed on a client's own
-machines.
+Status: current.
 
-Some machines cannot reach the internet, and some change processes forbid pulling images from a public registry. A
-release package is built for them. It is one download holding everything the install needs: the images, the Compose
-files, a settings template, the database scripts and an install guide. Nothing in it needs the source repository. Your
-DBA applies every schema change, so no container ever holds a login that can alter the database.
+Some of your machines may have no internet access, or your change process may not allow images to be pulled from a
+public registry. A release package is built for that situation. It is a single download with everything an install
+needs: the images, the Compose files, a settings template, the database scripts and an install guide. None of it
+depends on the source repository. Because your DBA applies every schema change from the package's scripts, the running
+containers never need a login that can alter the database. The package has been proven end to end on a machine that
+holds nothing else, and has not yet been installed on a client's own machines.
 
 ## What is in a package
 
@@ -46,8 +47,13 @@ Inside the folder:
    ```
 
 3. **Install the database** with your DBA, from `db/postgres/` ([Database](database.md)).
-4. **Start it** with the Compose files in DBA mode, and connect a model ([Docker Compose](compose.md)). `INSTALL.md` in
-   the package folder lists each command, so you can follow it without this site.
+4. **Start it.** Copy `ops-ai.env.example` to `ops-ai.env`, generate the keys and set the seven `OPS_DATABASE_URL_<SERVICE>`
+   lines as `INSTALL.md` describes, then run the following from the package folder. Connect a model as in
+   [Connect a model](compose.md#connect-a-model), using `compose/` wherever that page says `deploy/compose/`.
+
+   ```bash
+   docker compose -p ops-ai -f compose/app.yaml -f compose/dba.yaml --env-file ops-ai.env up -d
+   ```
 
 From a clone of the repository, the install script takes the image file instead of pulling:
 `./install.sh --offline ops-ai-<version>-images.tar.gz` ([Install with the script](install.md)).
@@ -66,9 +72,10 @@ clone of the repository:
 make release-package TAG=v1.2.0
 ```
 
-The build uses the tag alone, so uncommitted files never reach a package. It writes the three files above under
-`dist/`. When `TAG` is a release tag, the version in the file names is the tag as you typed it, `v1.2.0`, and the
-images in the package carry that same tag. The registry's images drop the `v`, so a registry install uses `1.2.0`.
+The build reads only what the tag contains, so files you have not committed cannot end up in a package. It writes the
+three files above under `dist/`. For a release tag, the file names carry the version exactly as you typed it, such as
+`v1.2.0`, and the images inside the package carry the same tag. The images in the registry drop the `v`, so an install
+from the registry uses `1.2.0`.
 
 ## Limits
 
@@ -79,5 +86,5 @@ images in the package carry that same tag. The registry's images drop the `v`, s
 - A package does not carry upgrade scripts for the database. For the move to a new release, your DBA gets them from a
   clone with `make db-upgrade-sql` ([Database](database.md#upgrade)).
 - Some console screens still name a sample bank. Taking the name from a setting is planned.
-- Installing against a real Azure Database for PostgreSQL server has not been recorded. The proof uses a server whose
-  admin has the same rights.
+- Installing against a real Azure Database for PostgreSQL server has not been recorded. The end-to-end test uses a
+  server whose admin has the same rights.

@@ -2,11 +2,11 @@
 
 Status: current.
 
-Some teams cannot run an install script on a production machine, because their change process wants every setting and
-every command reviewed first. Docker Compose gives you that: you write the settings file, start the containers
-yourself and choose each option. The [install script](install.md) runs these same steps for you. This page is for the
-case where you want to run them yourself, on one machine. The steps have run end to end on one machine and have not yet
-run on a client's servers.
+Your change process may require every setting and every command to be reviewed before anything runs on a production
+machine, which rules out an install script. Docker Compose lets you work that way. You write the settings file, choose
+each option and start the containers yourself, on one machine. The [install script](install.md) runs these same steps
+for you, so use this page when you want to run them by hand. The steps have run end to end on one machine and have not
+yet run on a client's servers.
 
 ## What you need before you start
 
@@ -20,7 +20,8 @@ run on a client's servers.
 ## Start Ops AI
 
 <!-- site: steps -->
-1. **Write the settings file** outside the repository folder, and generate the keys into it.
+1. **Write the settings file** outside the repository folder, and generate the keys into it. The command needs the
+   images, so on a machine with no registry access load them first ([release package](release-package.md), step 2).
 
    ```bash
    cp deploy/compose/app.env.example ~/ops-ai.env
@@ -28,8 +29,9 @@ run on a client's servers.
      /app/deploy/fly/generate_keys.py >> ~/ops-ai.env
    ```
 
-   The file lists every setting with a comment. Delete the empty key lines that the generated ones replace. Then set at
-   least these:
+   The folder name `fly` is historical, and the script only prints keys. The template already has a blank line for each
+   generated key, such as `OPS_PLATFORM_SIGNING_KEY=`. Delete each blank line whose key appears in the generated block, so
+   that no key appears twice. Then set at least these:
 
    - `OPS_PUBLIC_ORIGIN` and `OPS_PUBLIC_PORT`: the address people open and the one port the proxy publishes.
    - `OPS_IMAGE_PREFIX=ghcr.io/chanl-ai/ops-ai` and `OPS_IMAGE_TAG=1.2.0`.
@@ -53,8 +55,10 @@ run on a client's servers.
 
 ## Connect a model
 
-Agents cannot answer until a model is connected. The connect step binds the model alias `default` to your endpoint and
-prints a model key once. Run it for agents and for documents, put the two keys in the settings file, and start again.
+Agents cannot answer until a model is connected. Do this after the first `up -d`, because the command runs inside the
+agents container. It binds the model alias `default` to your endpoint and prints a model key once. Run the command
+below twice, once with `--key-id purpose:agents` and once with `purpose:documents`. Put both keys in the settings file
+as `OPS_MODELS_KEY_AGENTS` and `OPS_MODELS_KEY_DOCUMENTS`, then start again.
 
 ```bash
 $C run --rm -T --no-deps agents python /app/deploy/fly/connect_model.py --models-url http://models:8730 \
@@ -68,9 +72,9 @@ $C up -d
 Each run prints one line, `OPS_MODELS_KEY=<secret>`, and shows it only once. If a key with that id already exists, the
 script says so and prints nothing to copy.
 
-The provider's own key is saved in the console, under Settings › Models › Connections, with the name you gave
-`--key-ref`. Ops AI refuses a provider key in the settings file outside development. The agents service reports
-unhealthy until a model is connected.
+Save your provider's key in the console, under Settings › Models › Connections, using the name you gave `--key-ref`.
+Outside development, Ops AI refuses a provider key in the settings file. Until a model is connected, the agents service
+reports itself as unhealthy.
 
 A third key, `OPS_MODELS_KEY_KB`, lets the knowledge service embed documents for search by meaning. It also needs an
 embedding alias ([Set the embedding model](install.md#set-the-embedding-model)). Without them, search uses keywords.
