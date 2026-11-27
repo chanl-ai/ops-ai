@@ -253,23 +253,21 @@ export async function openHeldChatWrite(page, consoleUrl, thread) {
 }
 
 /**
- * Makes the next version from what the editor on `page` saved: waits for its working copy to read "Saved", makes the
- * version through `POST …/versions` as a builder would by publishing, and reloads the page so it edits on top of that
- * version. The editor saves itself and has no Save version button. Returns the version made (`created` false when the
- * copy equals a stored version).
+ * Waits for the editor on `page` to read "Saved" and reloads it, so a script that pressed keys on the canvas starts from
+ * what the platform kept. The editor saves itself into the working copy and has no Save version button; a version is
+ * made only by publishing. `workflowId` and `headers` are kept for callers that pass them.
  */
 export async function versionFromEditor(page, workflowId, headers) {
   const state = page.getByTestId('save-state');
   await state.getByText(/Saved/).waitFor({ timeout: 60_000 }).catch(async (e) => {
     throw new Error(`the working copy did not save: the header reads "${await state.innerText().catch(() => 'nothing')}" (${e.message.split('\n')[0]})`);
   });
-  const path = `${agents}/v1/workflows/definitions/${encodeURIComponent(workflowId)}`;
-  const base = (await (await fetch(path, { headers })).json()).data.saveBase;
-  const made = await (await fetch(`${path}/versions`, { method: 'POST', headers, body: JSON.stringify({ baseVersion: base.version, baseDigest: base.digest }) })).json();
+  // A version is made only by publishing (POST .../publish-requests); until then the edit lives in the working copy, which
+  // the reload below reads back, so there is nothing to POST here.
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator('[data-testid="definition-node"]').first().waitFor({ timeout: 120_000 });
   // The canvas fits itself once its steps are measured; a canvas key pressed before then is lost.
   await page.waitForFunction(() => document.querySelector('[data-testid="definition-node"]')?.getBoundingClientRect().width > 0, null, { timeout: 30_000 });
   await page.waitForTimeout(1_000);
-  return made.data;
+  return undefined;
 }

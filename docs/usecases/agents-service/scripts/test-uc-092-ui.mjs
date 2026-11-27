@@ -92,11 +92,12 @@ await withUiStack(
       const readStored = async () => (await (await api(`/v1/workflows/definitions/${id}`)).json()).data;
       const typed = (d) => d.workingCopy?.definition?.nodes?.find((n) => n.id === 'done')?.parameters;
       await until(async () => { const p = typed(await readStored()); return p?.outcome === 'refunded' && p?.output === '$.input.amount' ? p : undefined; }, 30);
-      const v2 = await versionFromEditor(page, id, { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
+      await versionFromEditor(page, id, { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' });
+      // Editing makes no version: the typed settings sit in the working copy over version 1, and publishing (step 6) makes version 2.
       const stored = await readStored();
-      const done = stored.definition.nodes.find((n) => n.id === 'done');
+      const done = typed(stored);
       await page.waitForFunction(() => document.querySelector('[data-testid="definition-stage"]')?.getAttribute('data-stage') === 'draft', null, { timeout: 30_000 }).catch(() => undefined);
-      check('4 Save stores the form as version 2, a draft, with the outcome and a path as output', v2?.version === 2 && stored.stage === 'draft' && done?.parameters?.outcome === 'refunded' && done?.parameters?.output === '$.input.amount', { v2, stage: stored.stage, done: done?.parameters });
+      check('4 Save keeps the form in the working copy over version 1, a draft, with the outcome and a path as output', stored.version === 1 && stored.stage === 'draft' && done?.outcome === 'refunded' && done?.output === '$.input.amount', { version: stored.version, stage: stored.stage, done });
 
       // 4. Non-vacuous half: a draft starts no live run, from the API or the editor.
       const early = await api('/v1/runs', { method: 'POST', body: JSON.stringify({ workflowId: id, input: { amount: 42 } }) });
