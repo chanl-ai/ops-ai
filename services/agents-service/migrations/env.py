@@ -37,7 +37,7 @@ from ops_agents.store import (
 )
 from ops_agents.store.graphs import metadata
 from ops_service_kit.settings import Settings
-from ops_store.schema import offline_dialect_opts, serialize_migrations
+from ops_store.schema import offline_dialect_opts
 
 URL = Settings().database_url
 
@@ -62,7 +62,6 @@ def run_offline() -> None:
 def _run(connection: Connection) -> None:
     context.configure(connection=connection, target_metadata=metadata, include_name=_ours)
     with context.begin_transaction():
-        serialize_migrations(connection)
         context.run_migrations()
 
 

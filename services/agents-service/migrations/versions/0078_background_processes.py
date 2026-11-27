@@ -17,7 +17,14 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import mssql
 
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, isolation_ddl, isolation_drop_ddl, mssql_predicates_ddl
+from ops_store.schema import (
+    TEAM_OWNED,
+    TENANT_SCOPED,
+    isolation_ddl,
+    isolation_drop_ddl,
+    mssql_predicates_ddl,
+    role_ddl,
+)
 
 revision = "0078_background_processes"
 down_revision = "0077_channels_and_memories_team"
@@ -77,9 +84,8 @@ def upgrade() -> None:
     if dialect not in ("postgresql", "mssql"):
         return
     if dialect == "postgresql":
-        op.execute(f"DO $$ BEGIN CREATE ROLE {TENANT_ROLE} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$")
-        bypass = f"CREATE ROLE {SYSTEM_ROLE} NOLOGIN BYPASSRLS"
-        op.execute(f"DO $$ BEGIN {bypass}; EXCEPTION WHEN duplicate_object THEN NULL; END $$")
+        op.execute(role_ddl(TENANT_ROLE))
+        op.execute(role_ddl(SYSTEM_ROLE, bypass=True))
         op.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON background_heartbeats TO {SYSTEM_ROLE}")
         op.execute(f"GRANT SELECT, INSERT, DELETE ON background_jobs TO {TENANT_ROLE}")
         op.execute(f"GRANT SELECT ON background_jobs TO {SYSTEM_ROLE}")

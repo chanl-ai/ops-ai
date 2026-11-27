@@ -183,20 +183,6 @@ def offline_dialect_opts(url: str) -> dict[str, bool]:
     return {"deprecate_large_types": True} if str(url).startswith("mssql") else {}
 
 
-# One lock for every service's migrations on a PostgreSQL cluster. Roles are cluster-wide, and two sessions creating the
-# same role at once raise a unique violation on pg_authid_rolname_index, which `EXCEPTION WHEN duplicate_object` in a
-# migration's role DDL does not catch. Holding this until the migration's transaction ends makes the second one wait,
-# then find the role already there.
-MIGRATION_LOCK_KEY = 7_218_040_113
-
-
-def serialize_migrations(connection: sa.Connection) -> None:
-    """Call first inside a migration run's transaction: on PostgreSQL, takes the cluster-wide migration lock until the
-    transaction ends. SQL Server has no cluster-wide roles, so it takes nothing."""
-    if connection.dialect.name == "postgresql":
-        connection.execute(sa.text("SELECT pg_advisory_xact_lock(:key)"), {"key": MIGRATION_LOCK_KEY})
-
-
 def mssql_drop_constraint_ddl(table: str, find: str) -> str:
     """SQL Server: drops the constraint on `table` that the scalar query `find` names, if it names one, as one batch.
     A constraint made without a name has a generated one, known only at run time. EXEC takes a variable or literals,
@@ -368,7 +354,9 @@ def role_ddl(name: str, *, bypass: bool = False) -> str:
     """PostgreSQL: a role with no login a migration grants tables to; `bypass` makes it a system role that row-level
     security does not apply to. Roles are cluster-wide, so one made by another database is left as it is."""
     attrs = "NOLOGIN BYPASSRLS" if bypass else "NOLOGIN"
-    return f"DO $$ BEGIN CREATE ROLE {name} {attrs}; EXCEPTION WHEN duplicate_object THEN NULL; END $$"
+    return (
+        f"DO $$ BEGIN CREATE ROLE {name} {attrs}; EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL; END $$"
+    )
 
 
 def member_ddl(role: str, login: str) -> str:

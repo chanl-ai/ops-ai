@@ -14,7 +14,7 @@ from sqlalchemy import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_service_kit.settings import Settings
-from ops_store.schema import offline_dialect_opts, serialize_migrations
+from ops_store.schema import offline_dialect_opts
 from ops_tools.store import metadata as gateway_metadata
 from ops_tools.store.modules import metadata as modules_metadata
 
@@ -42,7 +42,6 @@ def run_offline() -> None:
 def _run(connection: Connection) -> None:
     _configure(connection=connection)
     with context.begin_transaction():
-        serialize_migrations(connection)
         context.run_migrations()
 
 
