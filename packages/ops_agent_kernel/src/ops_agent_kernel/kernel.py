@@ -1264,7 +1264,9 @@ async def run_turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[Kernel
     the turn shows and returns has personal data masked (pii.py); what the model reads, and the history a pause keeps,
     are not."""
     # The loop kind decides which of the spec's tools the turn holds (loop_kinds.py), once, before anything reads them.
-    req = replace(req, tools=loop_kinds.offered(req.loop, req.tools))
+    req = replace(
+        req, tools=loop_kinds.offered(req.loop, req.tools), settings=loop_kinds.limits(req.loop, req.settings)
+    )
     if not req.settings.redact_pii:
         async for event in _turn(req, ports):
             yield event
@@ -1602,7 +1604,10 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
                     elif isinstance(step, contract.ToolStarted):
                         writing = False
                         # Read as the call starts, after the step's earlier calls ran: the body refuses it the same way.
-                        if (g := state.grants.get(step.name)) is not None and state.plan_first(g) is not None:
+                        # Skipped too when the body already refused it, as a plan may have landed since.
+                        if step.tool_call_id in state.unplanned or (
+                            (g := state.grants.get(step.name)) is not None and state.plan_first(g) is not None
+                        ):
                             state.unplanned.add(step.tool_call_id)
                             continue
                         rec = state.record(step.tool_call_id, step.name, step.arguments)

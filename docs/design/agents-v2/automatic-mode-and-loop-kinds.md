@@ -267,3 +267,14 @@ Settled on 2026-11-26: hand-overs are carried out by the runtime and the workflo
 |---|---|---|
 | 3 | Whether the model reliably supplies a useful `why` | Experiment 3, part d: 20 scripted and 20 real requests; a reason is useful when a reviewer can tell the mode from it without the transcript |
 | 4 | Whether a plan should also wait for the person (`reviewPlan`) by default for agents with write tools | Owner decision; default here is to show the plan and wait at the write |
+
+## Where the build departs from this page
+
+Status: current, 2026-11-27. These are the places where the 1.4.0 build differs from the interfaces above.
+
+| Item | This page | As built | Why |
+|---|---|---|---|
+| `max_steps`, `max_tool_calls`, `parallel_reads` | `LoopSettings` fields with defaults 12, 12 and true | `LoopSettings` fields that default to none (`packages/ops_agent_kernel/src/ops_agent_kernel/types.py`). When the spec's `loop` sets one, it replaces the agent's own limit for the turn (`loop_kinds.limits`). When it is not set, the agent's limits apply, with defaults 8, 6 and true | Each limit then has one value. Moving the defaults to 12 would change every agent's step and call budget, so it needs its own change |
+| A spec's `loop` cannot remove the call cap | `max_tool_calls: None` means no cap | No value in `loop` means "use the agent's"; the agent's own setting can still be no cap | One field cannot mean both "not set" and "no cap" |
+| Plan length | Not stated | 1 to 7 steps (`plan.py`) | A one-step change needs a plan too, because a change always shows its plan first |
+| Calls refused for want of a plan | Counted in `plan_required` | Counted, and also kept off the stream and the message's tool calls. Only the model reads the refusal | The person sees the plan, then the call it was made for, never a refused call in between |

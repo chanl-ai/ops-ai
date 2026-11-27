@@ -118,3 +118,19 @@ async def test_a_judge_that_always_fails_stops_after_max_rounds_and_says_the_bar
     )
     assert len(judged) == 3
     assert result.status == "completed" and result.bar_met is False
+
+
+async def test_a_call_limit_the_specs_loop_sets_caps_the_turn_in_place_of_the_agents() -> None:
+    lookup = ToolGrant("get_wire", "payments", "Read a wire", "read", {"type": "object"})
+
+    def two_reads(messages: list[Json], tools: list[Json]) -> Reply | str:
+        if trailing_tool_results(messages):
+            return "Done."
+        return Reply(tool_calls=[ToolCall("get_wire", {"id": "W-1"}), ToolCall("get_wire", {"id": "W-2"})])
+
+    tools = RecordingTools()
+    req = TurnRequest(
+        "t1", "th1", SETTINGS, [lookup], user_turn="Read W-1 and W-2", loop=LoopSettings(max_tool_calls=1)
+    )
+    await run(req, KernelPorts(model=model_on(two_reads), tools=tools, knowledge=FixedKnowledge([])))
+    assert [c[1]["id"] for c in tools.calls] == ["W-1"], tools.calls

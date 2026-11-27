@@ -247,6 +247,9 @@ class AgentDefinition(_Model):
         lp, d = self.loop, LoopSettings()
         return LoopSettings(
             kind=lp.get("kind") or d.kind,
+            max_steps=int(lp["maxSteps"]) if lp.get("maxSteps") is not None else None,
+            max_tool_calls=int(lp["maxToolCalls"]) if lp.get("maxToolCalls") is not None else None,
+            parallel_reads=bool(lp["parallelReads"]) if lp.get("parallelReads") is not None else None,
             replans=int(lp.get("replans", d.replans)),
             show_plan=bool(lp.get("showPlan", d.show_plan)),
             review_plan=bool(lp.get("reviewPlan", d.review_plan)),

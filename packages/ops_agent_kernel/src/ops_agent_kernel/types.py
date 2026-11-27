@@ -24,6 +24,11 @@ class LoopSettings:
     given a fixed set of the kernel's tools (loop_kinds.py); its own settings sit beside the shared ones."""
 
     kind: LoopKind = "auto"
+    # The loop's own limits, when the spec's `loop` sets them; None keeps the agent's (AgentSettings), so one limit has
+    # one value whichever place a builder wrote it.
+    max_steps: int | None = None
+    max_tool_calls: int | None = None
+    parallel_reads: bool | None = None
     replans: int = 2
     show_plan: bool = True
     review_plan: bool = False

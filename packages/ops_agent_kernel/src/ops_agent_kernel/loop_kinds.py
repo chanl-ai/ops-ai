@@ -10,7 +10,7 @@ from dataclasses import dataclass, replace
 from ops_service_kit.http import Json, JsonValue
 
 from . import modes
-from .types import LoopKind, LoopSettings, ToolGrant
+from .types import AgentSettings, LoopKind, LoopSettings, ToolGrant
 
 Requirement = str  # "agents", "sandbox", "workflow", "rubric"
 
@@ -27,12 +27,15 @@ class Kind:
     later: str | None = None
 
 
-def _schema(**props: JsonValue) -> Json:
-    return {"type": "object", "properties": dict(props), "additionalProperties": False}
-
-
 _INT: Json = {"type": "integer", "minimum": 0}
 _BOOL: Json = {"type": "boolean"}
+# The limits every kind shares (LoopSettings); left out, the agent's own apply.
+_SHARED: Json = {"maxSteps": {"type": "integer", "minimum": 1}, "maxToolCalls": _INT, "parallelReads": _BOOL}
+
+
+def _schema(**props: JsonValue) -> Json:
+    return {"type": "object", "properties": {**_SHARED, **props}, "additionalProperties": False}
+
 
 KINDS: tuple[Kind, ...] = (
     Kind(
@@ -109,6 +112,20 @@ def kind(name: str) -> Kind:
 def has_plan(loop: LoopSettings) -> bool:
     """Whether the kind's turn holds the plan tool."""
     return loop.kind in modes.PLANNING
+
+
+def limits(loop: LoopSettings, settings: AgentSettings) -> AgentSettings:
+    """The agent's step, call and parallel-read limits, with the ones the spec's `loop` sets in their place."""
+    set_ = {
+        k: v
+        for k, v in (
+            ("max_steps", loop.max_steps),
+            ("max_tool_calls", loop.max_tool_calls),
+            ("parallel_reads", loop.parallel_reads),
+        )
+        if v is not None
+    }
+    return replace(settings, **set_) if set_ else settings
 
 
 def offered(loop: LoopSettings, tools: list[ToolGrant]) -> list[ToolGrant]:
