@@ -1,5 +1,6 @@
 """The code rules every service holds, read from its source and its app: the environment is read in one module, every
-route authenticates, and nothing prints or builds its own logger (rules 4 to 6 of the engineering standards).
+route authenticates, nothing prints or builds its own logger (rules 4 to 6 of the engineering standards), and only the
+one model client posts to models-service's model routes (SC1).
 
   problems = standards.check(create_app(settings), settings_module="ops_service_kit.settings", authenticated=[...])
 
@@ -81,6 +82,7 @@ def check(
             out += check_env(path, tree, allowed)
             out += check_logging(path, tree)
             out += check_names(path, tree, baseline)
+            out += check_model_calls(path, tree)
     if check_routes(app, set(authenticated), PUBLIC_ROUTES | set(public), out) == 0:
         out.append("rule 5: no authenticated routes were found to check")
     return out
@@ -112,6 +114,40 @@ def check_env(path: Path, tree: ast.AST, allowed: Path) -> list[str]:
         if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("dotenv"):
             out.append(f"{_at(path)}:{node.lineno} rule 4: dotenv import")
     return out
+
+
+# models-service's model routes. Only the one client posts to them; models-service serves them.
+MODEL_ROUTES = ("/v1/models/chat/completions", "/v1/models/embeddings")
+
+
+def _owns_model_routes(path: Path) -> bool:
+    """The one client (`ops_service_kit.model_calls`), this check's own list, and models-service itself; by name, as
+    `is_logging_module`."""
+    kit = path.parent.name == "ops_service_kit" and path.name in {"model_calls.py", "standards.py"}
+    return kit or "ops_models" in path.parts
+
+
+def check_model_calls(path: Path, tree: ast.AST) -> list[str]:
+    """SC1 (docs/architecture/standards/security.md): a service calls a model through `ops_service_kit.model_calls`,
+    so every call carries the service's key, its refusal codes and its usage the same way; a module that names a
+    model route itself has its own copy of the call."""
+    if _owns_model_routes(path):
+        return []
+    return [
+        f"{_at(path)}:{node.lineno} rule SC1: a model call outside ops_service_kit.model_calls"
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.endswith(MODEL_ROUTES)
+    ]
+
+
+def model_call_breaches(roots: Sequence[Path]) -> list[str]:
+    """`check_model_calls` over every source file under `roots`."""
+    return [
+        found
+        for src in roots
+        for path in sorted(src.rglob("*.py"))
+        for found in check_model_calls(path, ast.parse(path.read_text(), filename=str(path)))
+    ]
 
 
 def check_names(path: Path, tree: ast.AST, baseline: set[str]) -> list[str]:
