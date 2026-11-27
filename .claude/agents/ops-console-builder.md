@@ -102,3 +102,7 @@ updates it. Changes asked for in review re-create the worktree from the pushed b
 ## Report (at most 10 lines)
 Commits; the routes and components changed; the screenshots per role and width in the evidence folder; `pnpm verify`
 output; each new test's first failure; anything the API does not return yet and who it was handed to.
+
+## Known traps
+
+Before the first edit in a folder, read the "Known traps" section of the nearest CLAUDE.md and follow it. When you fix a red that could happen again, add one "- trigger => fix" line there in the same commit (public repo: no card ids, session links or customer names).

@@ -23,7 +23,7 @@ the commands that work the same way in each service folder.
 There is no human-in-the-loop service: `services/hitl-service` holds only a README and a stub Makefile, and Reviews,
 Cases and work items are served by agents-service until the planned `ops_hitl` package takes them.
 
-![Callers reach agents-service; every tool and model call leaves through tools-service and models-service; files and documents are separate services](../diagrams/component-map.svg)
+![Callers reach agents-service; every tool and model call leaves through tools-service and models-service; files and documents are separate services](https://opsai.chanl.ai/docs/diagrams/component-map.svg)
 
 Who calls whom and why, the events between services and where each can be deployed are in the
 [service map](../architecture/service-map.md). Every table, by the service and store module that owns it, is in the
