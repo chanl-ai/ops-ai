@@ -24,7 +24,7 @@ test('a mention reads as one node with its kind and id, not as text', () => {
 
 test('literal markers that are not formatting stay as written', () => {
   const text = 'Call 1 * 2 and keep *** 123 **** as it is.';
-  assert.equal(roundTrip(text), text.replace(/\*/g, '\\*'));
+  assert.equal(roundTrip(text), 'Call 1 \\* 2 and keep \\*\\*\\* 123 \\*\\*\\*\\* as it is.');
 });
 
 test('a word that ends right before @tool:x is text, as the service reads it, and a mention after a space is a node', () => {
