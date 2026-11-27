@@ -54,7 +54,8 @@ def _boxes(page: int | None, block: Json) -> JsonList:
 
 
 def _notes(pages: list[Json]) -> list[str]:
-    """Unread pages in plain words, runs of pages with the same reason said once."""
+    """Unread pages in plain words, runs of pages with the same reason said once, then OCR pages whose picture was
+    not described, with why."""
     runs: list[tuple[int, int, str]] = []
     for p in pages:
         if p.get("source") != "none":
@@ -64,9 +65,18 @@ def _notes(pages: list[Json]) -> list[str]:
             runs[-1] = (runs[-1][0], number, reason)
         else:
             runs.append((number, number, reason))
-    return [
+    unread = [
         f"Page {a} was not read. {why}" if a == b else f"Pages {a} to {b} were not read. {why}" for a, b, why in runs
     ]
+    # A picture that could not be described on a page OCR read keeps the OCR words; the reason is a warning there.
+    kept = [
+        f"Page {narrow.field(p, 'number', int, 0)} has only the words OCR read. {w}"
+        for p in pages
+        if p.get("source") == "ocr"
+        for w in (str(x) for x in json_list(p.get("warnings")))
+        if w.startswith("Not described")
+    ]
+    return [*unread, *kept]
 
 
 def item_text(item_id: str, file_id: str | None, mime: str | None, answer: Json | None, cleaning: Cleaning) -> Json:
