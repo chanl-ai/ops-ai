@@ -129,7 +129,7 @@ def _query(tool: Tool, request: Request, where: str) -> list[Problem]:
                 out.append(Problem(where, said))
             if leaf.format in QUOTED:
                 quote = QUOTED[leaf.format][0]
-                if not _inside_string(template, m.start(), quote):
+                if not _inside_string(template, m.start(), m.end(), quote, nests=leaf.format in NESTED):
                     which = "single" if quote == "'" else "double"
                     said = f"{{{{{name}}}}} is a {leaf.format} and goes inside one {which}-quoted string ({param})"
                     out.append(Problem(where, said))
@@ -143,23 +143,52 @@ def _query(tool: Tool, request: Request, where: str) -> list[Problem]:
     return out
 
 
-def _inside_string(template: str, at: int, quote: str) -> bool:
-    """Whether position `at` lies inside a string opened by `quote`, read from the template's start: a doubled single
-    quote, or a backslash before a double quote, stays inside. Checking only the neighbouring characters let
-    `''{{q}}''` and `"a"{{q}}"b"` through with the term outside any string."""
-    inside, i = False, 0
-    while i < at:
-        ch = template[i]
-        if inside and quote == '"' and ch == "\\":
-            i += 2
+# A KQL phrase is a double-quoted string that SharePoint's querytext='...' wraps in a single-quoted literal; its escaper
+# handles both quotes (formats.kql_phrase), so it may sit in one inside the other.
+NESTED = frozenset({"kql_phrase"})
+
+
+def _strings(text: str) -> list[tuple[str, int, int | None]]:
+    """The quoted strings of a template, read from its start: each one's quote, where it opens and where it closes
+    (None when it never does). A quote of the other kind inside a string is text, a doubled single quote stays inside
+    its string, and a backslash takes the character after it."""
+    out: list[tuple[str, int, int | None]] = []
+    i = 0
+    while i < len(text):
+        quote = text[i]
+        if quote not in "'\"":
+            i += 1
             continue
-        if ch == quote:
-            if inside and quote == "'" and template[i + 1 : i + 2] == "'" and i + 1 < at:
+        opened, i, closed = i, i + 1, None
+        while i < len(text):
+            if text[i] == "\\":
                 i += 2
                 continue
-            inside = not inside
+            if text[i] == quote:
+                if quote == "'" and text[i + 1 : i + 2] == "'":
+                    i += 2
+                    continue
+                closed = i
+                break
+            i += 1
+        out.append((quote, opened, closed))
         i += 1
-    return inside
+    return out
+
+
+def _inside_string(template: str, start: int, end: int, quote: str, *, nests: bool = False) -> bool:
+    """Whether `template[start:end]` lies inside one string opened by `quote` that closes after it. With `nests`, that
+    string may itself sit inside a single-quoted one. Checking only the neighbouring characters let `''{{q}}''`,
+    `"a"{{q}}"b"` and an unclosed `'{{q}}` through with the term outside any string."""
+    for q, opened, closed in _strings(template):
+        if closed is None or not opened < start <= end <= closed:
+            continue
+        if q == quote:
+            return True
+        if nests and q == "'":
+            inner = template[opened + 1 : closed]
+            return _inside_string(inner, start - opened - 1, end - opened - 1, quote)
+    return False
 
 
 def _host_part(template: str) -> str:

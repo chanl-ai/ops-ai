@@ -215,10 +215,12 @@ input's value, checked and written in by its format. An input a query template u
 | `date` | A date | `2026-10-01` |
 
 Every quoted format must sit inside one quoted string of its kind in the template; `opsai plugin validate` refuses
-`{{q}}` bare, between two strings (`"a"{{q}}"b"`) or after an escaped quote (`''{{q}}''`). Formats apply only in
-`request.query`: a body or form sends an input as it is, so validate refuses a text format on an input no query uses.
-A plugin written in Python that builds one of these queries itself calls the same function: `soql_string`,
-`jql_string`, `cql_string`, `kql_phrase` or `odata_string` from `ops_plugin_sdk.formats`.
+`{{q}}` bare, between two strings (`"a"{{q}}"b"`), after an escaped quote (`''{{q}}''`) or in a string that never closes
+(`'{{q}}`). A quote of the other kind inside a string is text (`summary ~ '"' AND text ~ "{{q}}"` passes), and a
+`kql_phrase` may sit inside a single-quoted literal (`querytext='"{{q}}"'`). Formats apply only in `request.query`: a
+body or form sends an input as it is, so validate refuses a text format on an input no query uses. A plugin written in
+Python that builds one of these queries itself calls the same function: `soql_string`, `jql_string`, `cql_string`,
+`kql_phrase` or `odata_string` from `ops_plugin_sdk.formats`.
 
 An enum's values are written as the manifest gives them, and may hold only letters, digits, space, `_`, `-` and `.`.
 An array input renders its checked items joined by commas. Inputs nest as `type: object` with `properties` and
