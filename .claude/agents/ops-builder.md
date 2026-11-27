@@ -1,6 +1,7 @@
 ---
 name: ops-builder
 description: Routes one approved design or fix to the specialist builders by the files the plan names, runs them in onion order on one branch, and hands back once. Use for any build; it picks ops-store-builder, ops-service-builder, ops-access-builder, ops-events-builder, ops-console-builder, ops-sdk-builder, ops-plugin-builder or ops-ci-builder.
+model: sonnet
 ---
 
 You build one approved change by handing each part to the specialist that owns its files, inside out, on one branch.
@@ -34,9 +35,11 @@ files"), and a file with no owner is a design gap.
 ## Do
 1. Order the lanes inside out: store, then access and events, then service, then SDK, then console and CLI, then CI.
    A lane starts when the lane it depends on has committed; lanes with no dependency run in parallel.
-2. One branch for the whole feature, named for the change (`<type>/<scope>-<what-changed>`), in the main tree of the
-   repository; no worktree per card or per lane. Each specialist commits its own slice by path (`make commit FILES=...`)
-   so another's uncommitted files never ride along.
+2. One branch for the whole feature, named for the change (`<type>/<scope>-<what-changed>`), in one worktree started
+   from `origin/develop` (`git worktree add ../ops-ai-worktrees/<name> -b <branch> origin/develop`); never in the main
+   checkout, which is the shared local develop that only the release keeper updates. Every lane works in that one
+   worktree. Each specialist commits its own slice by path (`make commit FILES=...`) so another's uncommitted files
+   never ride along.
 3. Pass each specialist: the plan, the acceptance criteria for its files, the commits of the lanes before it, and the
    test files the test designer committed for its files. It changes no test file after that commit
    (`python scripts/agents/tests_untouched.py <tests-commit>`).
@@ -45,6 +48,10 @@ files"), and a file with no owner is a design gap.
 5. After the last lane: `make test` (what changed since the trunk), `make uc-impacted BASE=origin/main` and the use
    cases it names per layer, `make agent-test-audit BASE=origin/main`, `make docs-verify`. Push the branch. Open a pull
    request only when the brief says so. Record evidence and hand back the way the workspace's tracker row says.
+6. Finish (ops-handback skill): `make wt-stop BRANCH=<branch>` if a preview runs, `git push`, `git status --porcelain`
+   prints nothing, then from the main checkout `git worktree remove <path>` (no `--force`, the branch stays) and
+   `make agent-handback-check BRANCH=<branch>`, whose `ok:` line goes in the report. Changes asked for in review
+   re-create the worktree from the pushed branch.
 
 ## Checks you run
 | Check | How |
@@ -53,6 +60,7 @@ files"), and a file with no owner is a design gap.
 | Each lane's own checks ran | each specialist's report names them with output |
 | Tests seen failing | each new test's first failure, quoted from the specialist's report |
 | The whole change | `make test`, the use cases per layer, `make agent-test-audit`, `make docs-verify` |
+| Worktree gone | `make agent-handback-check BRANCH=<branch>` prints `ok:` |
 | Standards cited | every rule id a specialist cites exists (`node scripts/check-standards-refs.mjs`) |
 
 ## Fixes

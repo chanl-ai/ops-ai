@@ -6,7 +6,8 @@ asks to go live (`deployments.create`): both put a workflow to work with no pers
 cannot carry one, since its runs would have no team. Reading one needs the right to view the team's workflows; clearing
 one needs the save's rights and nothing else, so a schedule whose step is gone can still be cleared. The floor is
 checked at each save only: raising it leaves saved schedules running, and each is refused at its next save. The
-schedules table is tenant-scoped with the team as a plain column, because shared workflows have no team.
+schedules table is team-owned (store/schedules.py): these routes read the acting team's schedules, and a workflow no
+team owns has none, since a save on one is refused.
 
 The words and the next runs come from the server, so the panel, the lists and the CLI say the same thing."""
 

@@ -209,6 +209,18 @@ def test_a_pull_request_skips_the_slow_jobs_that_the_merge_queue_and_develop_run
         for event in ("merge_group", "push"):
             assert plan(tmp_path, changed, event=event)["heavy"] == "true"
     assert _runs("store-mssql", plan(tmp_path, "services/kb-service/src/ops_kb/app.py", event="merge_group"))
+    # A store or migration change runs store-mssql on a pull request; an api-only or docs change does not.
+    for changed in (
+        "services/kb-service/migrations/versions/kb_0042_x.py",
+        "services/kb-service/src/ops_kb/store/rows.py",
+        "packages/ops_store/src/ops_store/base.py",
+        "deploy/database/tests/test_x.py",
+    ):
+        pr = plan(tmp_path, changed, event="pull_request")
+        assert (pr["store"], _runs("store-mssql", pr)) == ("true", True), (changed, pr)
+    for changed in ("services/kb-service/src/ops_kb/app.py", "services/kb-service/tests/test_app.py", "docs/x.md"):
+        pr = plan(tmp_path, changed, event="pull_request")
+        assert (pr["store"], _runs("store-mssql", pr)) == ("false", False), (changed, pr)
     assert _runs("repo", plan(tmp_path, "make/env.mk", event="push"))
     # Labelled ci:full, a pull request still runs everything.
     assert _runs("repo", plan(tmp_path, "make/env.mk", event="pull_request", full="true"))

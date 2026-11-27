@@ -61,6 +61,7 @@ jobs:
       repo_pool: ${{ steps.plan.outputs.repo_pool }}
       code: ${{ steps.plan.outputs.code }}
       mssql: ${{ steps.plan.outputs.mssql }}
+      store: ${{ steps.plan.outputs.store }}
       heavy: ${{ steps.plan.outputs.heavy }}
       repo_jobs: ${{ steps.plan.outputs.repo_jobs }}
     steps:
@@ -267,9 +268,10 @@ jobs:
     # The store, kit and identity suites on SQL Server beside PostgreSQL: the tests that run on both databases skip
     # SQL Server unless OPS_MSSQL_SERVER and MSSQL_SA_PASSWORD are set (packages/ops_store/CLAUDE.md), so a run that
     # skips any of them fails here. The image is the pinned one deploy/fly/mssql/Dockerfile builds on.
-    # Not on a pull request: the merge queue and develop pushes run it (heavy).
+    # A pull request runs it only when the diff touches a store, a migration, ops_store or the database scripts (store);
+    # any other change waits for the merge queue and develop pushes (heavy).
     needs: plan
-    if: needs.plan.outputs.mssql == 'true' && needs.plan.outputs.heavy == 'true'
+    if: needs.plan.outputs.mssql == 'true' && (needs.plan.outputs.heavy == 'true' || needs.plan.outputs.store == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
@@ -315,7 +317,7 @@ jobs:
           # (ops_store.testing.sql_server_schema). The files that exercise stores, isolation and migrations only; the
           # provider, storage and route tests stay in the service job, on PostgreSQL.
           declare -A files=(
-            [agents-service]="tests/store/test_registry_policies.py tests/store/test_registry_policies_migration.py tests/store/test_registry_tenant_migration.py tests/store/test_registry_tenant_keys_migration.py tests/store/test_skill_list.py tests/store/test_threads_list.py tests/store/test_skill_step_tools_migration.py tests/store/test_stale_saves.py"
+            [agents-service]="tests/store/test_registry_policies.py tests/store/test_registry_policies_migration.py tests/store/test_registry_tenant_migration.py tests/store/test_registry_tenant_keys_migration.py tests/store/test_skill_list.py tests/store/test_threads_list.py tests/store/test_skill_step_tools_migration.py tests/store/test_stale_saves.py tests/store/test_schedule_teams_migration.py tests/store/test_workflow_schedules.py"
             [models-service]="tests/test_call_log_isolation_migration.py tests/test_call_log_rows_isolated.py tests/test_model_key_share_rows_isolated.py tests/test_provider_key_rows_isolated.py tests/test_alias_current_index.py tests/test_spend_caps.py tests/test_key_spend_race.py tests/test_spend_retention.py"
             [documents-service]="tests/test_isolation.py tests/test_template_copies.py"
             [files-service]="tests/test_isolation.py tests/test_store.py"
@@ -429,12 +431,70 @@ jobs:
           echo "maintainer review: $review"
           OPS_STANDARDS_BASE=$(git merge-base "$BASE_SHA" HEAD) OPS_STANDARDS_REVIEW="$review" make -s checks-history
 
+  usecases:
+    # Only the use cases the changed files affect (scripts/agents/usecase_map.json, the map `make usecase-pick` prints),
+    # on a pull request and on the merge queue's group alike, so a use case is never run on the owner's Mac. A failure
+    # config/quarantine.json covers is printed and does not fail the job; the nightly runs every use case
+    # (nightly-usecases.yml). A diff that affects more than ci_usecases.MAX_PICK use cases runs none here and prints why.
+    needs: plan
+    if: needs.plan.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        # PostgreSQL 17 with pgvector, which knowledge search by meaning needs (kb_0021).
+        image: pgvector/pgvector:pg17
+        env: { POSTGRES_USER: ops, POSTGRES_PASSWORD: ops, POSTGRES_DB: ops_runtime }
+        ports: ["5477:5432"]
+        options: --health-cmd "pg_isready -U ops -d ops_runtime" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Pick the use cases
+        id: pick
+        shell: bash
+        run: |
+          set -o pipefail
+          base=$(git merge-base "$BASE_SHA" HEAD)
+          ids=$(python3 scripts/ci_usecases.py pick --base "$base" | tr '\n' ' ' | xargs)
+          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+          echo "use cases: ${ids:-none}"
+      - if: steps.pick.outputs.ids != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .data/runner
+          key: runner-wasm-${{ hashFiles('packages/ops_service_kit/src/ops_service_kit/settings.py') }}
+      - if: steps.pick.outputs.ids != ''
+        uses: ./.github/actions/setup
+        with:
+          node: "true"
+          browser: "true"
+          infra: "true"
+      - if: steps.pick.outputs.ids != ''
+        name: Run them on the scripted model
+        env:
+          IDS: ${{ steps.pick.outputs.ids }}
+        run: |
+          scripts/ensure-sdk-ts-built.sh
+          # shellcheck disable=SC2086
+          python3 scripts/ci_usecases.py run --out "$RUNNER_TEMP/usecases.json" $IDS
+      - if: always() && steps.pick.outputs.ids != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: usecase-logs
+          path: |
+            .logs/usecases
+            ${{ runner.temp }}/usecases.json
+          if-no-files-found: ignore
+          retention-days: 7
+
   ci-ok:
     # The one required check: it always runs, waits for every other job, and fails when any of them failed or was
     # cancelled. A job the plan skipped counts as passed, so a narrow change is not held up by suites it did not touch.
     name: ci-ok
     if: always()
-    needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, maintainer-review]
+    needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, usecases, maintainer-review]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -448,7 +508,7 @@ jobs:
     # Every merge to develop, and every push to a release or hotfix branch, goes to staging once ci-ok passed for that
     # commit, so the owner tests the real combination. Pull requests and pushes to main never reach this job.
     # deploy-staging.yml holds the deploy, the freeze rules (a release or hotfix branch on origin, or STAGING_HOLD, skips
-    # a develop deploy with a notice), the checks, the rollback and the summary.
+    # a develop deploy and fails the job red), the checks, the rollback and the summary.
     needs: ci-ok
     if: ${{ !cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/heads/hotfix/')) && needs.ci-ok.result == 'success' }}
     permissions:

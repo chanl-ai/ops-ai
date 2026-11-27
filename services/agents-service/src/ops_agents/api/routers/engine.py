@@ -77,7 +77,6 @@ from ..agent_registry import ReviewView
 from ..agent_registry import registry as agent_registry
 from ..auth import (
     Principal,
-    approves_own_writes,
     caller,
     caller_of,
     key_scope,
@@ -1821,7 +1820,6 @@ async def start_engine_run(rt: Rt, me: Starter, body: EngineRunInput) -> JSONRes
         input=body.input,
         run_key=body.run_key,
         created_by=started_by(me),
-        started_by_approver=approves_own_writes(me),
         after_seconds=body.after_seconds,
     )
     return ok(started_view(run, created), status=202 if created else 200)

@@ -17,7 +17,7 @@ something print what they would do unless `DRY=0`.
 | 4. Version | Maintainer | `make release-version V=X.Y.Z` (preview), then `DRY=0`: one commit on the train that sets `deploy/release/version` and folds the changelog fragments into `changelog/releases/X.Y.Z.json`. `release-pr` refuses when the file says anything else |
 | 5. Open the PR | Maintainer | In a checkout at the train's head, `make release-pr V=X.Y.Z` (preview), then `DRY=0`: runs `make ci-local`, then opens `release/current` into `develop` titled `release: X.Y.Z into develop` |
 | 6. Queue | Owner | Queues the pull request after approving it. A push to it while queued drops it from the queue, so the train stays frozen until it lands. The queue merges with a merge commit |
-| 7. Tag | Automatic | `release-tag.yml` runs on the push to `develop`. When the merge subject, or the first body line of the merge commit, is `release: X.Y.Z into develop`, it tags that commit `vX.Y.Z` |
+| 7. Tag | Automatic | `release-tag.yml` runs after `ci.yml` finishes on a push to `develop`, and only when that run's staging deploy and click walk passed (or a person starts it with `walk_passed` set); `scripts/release-tag.sh` refuses to push on GitHub without `WALK_PASSED=1`. When the merge subject, or the first body line of the merge commit, is `release: X.Y.Z into develop`, it tags that commit `vX.Y.Z`; otherwise a `feat` merge is the next minor version, a `fix` or `perf` merge the next patch, and any other type gets no tag |
 | 8. Move main | Automatic | The same job runs `scripts/release-main.sh`: `git push origin <sha>:main`, which git refuses unless it is a fast-forward. With the deploy key the push passes; without it the job stops red and prints the owner's one command (below) |
 | 9. Publish | Automatic | The same job starts `sdk-publish.yml` and `release-images.yml` on the tag, since a tag pushed with the workflow token starts no workflow itself |
 | 10. Next train | Maintainer | `make release-cut` (preview), then `DRY=0`: fast-forwards `release/current` to `origin/develop`, or creates it when missing. It refuses when the train holds commits develop lacks |
@@ -115,13 +115,42 @@ anything that is not a fast-forward, and the script never forces.
 |---|---|---|
 | Pull request into `release/**`, push to `release/**` | None | `ci.yml` does not run |
 | Pull request into `develop` or `main`, merge queue entry | `ci.yml`, `codeql.yml` | The checks; the queue merges only on green. `scorecard.yml` runs only when the pull request changes workflows, Dockerfiles or `sdk/check.sh` |
-| Push to `develop` | `ci.yml`, then `deploy-staging.yml`; `release-tag.yml` | Checks, then a deploy to staging unless a numbered `release/X.Y.Z` or a `hotfix/*` branch exists or `STAGING_HOLD` is set. `release-tag.yml` tags a release merge and moves `main` |
+| Push to `develop` | `ci.yml`, then `deploy-staging.yml`; `release-tag.yml` after a green staging walk | Checks, then a deploy to staging unless a numbered `release/X.Y.Z` or a `hotfix/*` branch exists or `STAGING_HOLD` is set. `release-tag.yml` tags a release merge and moves `main` |
 | Push to `hotfix/**` | `ci.yml`, then `deploy-staging.yml` | Checks in full whatever changed, then deploys that branch with the click walk |
 | Tag `vX.Y.Z` | `sdk-publish.yml` | Builds, signs and attests both packages, and publishes a package only when its version is not on PyPI or npm yet. A published version cannot be reused, so raise the versions in `sdk/python/pyproject.toml` and `sdk/typescript/package.json` on the train. Without the repository variable `SDK_PUBLISH=1` and the `NPM_TOKEN` and `PYPI_TOKEN` secrets, every run is a dry run |
 | Tag `vX.Y.Z` | `release-images.yml` | Builds every image for linux/amd64 and linux/arm64 and pushes it to `ghcr.io/chanl-ai/ops-ai/<image>` |
 | `main` moves | The docs site on Vercel (`docs/deploy/docs-site.md`); `codeql.yml`, `scorecard.yml` | Builds `apps/docs`, skipped when none of `docs`, `services`, `apps/docs` and `pnpm-lock.yaml` changed; code scanning and the OpenSSF Scorecard |
 
 A move of `main` does not touch staging.
+
+## First run of the tag and nightly workflows
+
+GitHub starts a `workflow_run` or `schedule` workflow only from the copy on the default branch. While `main` holds the
+old push-triggered tag file and no `nightly-usecases.yml`, neither new workflow starts by itself, and the tag step does
+not run after a develop merge. Until the next move of `main` carries them:
+
+| Step | How |
+|---|---|
+| Get the files onto `main` | The next release pull request into `main` carries them; to start sooner, a pull request that changes only these workflow files into `main` |
+| Tag a develop commit meanwhile | After its staging walk passed, an admin runs `gh workflow run release-tag.yml --ref main -f ref=<sha> -f walk_passed=true`; the workflow runs from `main`'s copy, so this works only once the file is there. Before that, run `DRY=1 make release-tag REF=<sha>` and then `make release-tag REF=<sha>` by hand, with `BUMP=auto` for a queue merge |
+| Run the nightly once | `gh workflow run nightly-usecases.yml --ref develop` after the file is on `main` |
+
+A `walk_passed=true` dispatch counts only from a repository admin; a writer's dispatch is ignored with a warning.
+
+## The staging hold
+
+`STAGING_HOLD` (repository variable) keeps develop merges off staging while a release is under test. Its value is
+`X.Y.Z: reason`, for example `1.1.0: under test on staging`.
+
+| Case | Result |
+|---|---|
+| The hold is set and tag `vX.Y.Z` does not exist | The deploy is skipped and the `staging` job fails red, with the hold text in the error, so a green run always means deployed |
+| Tag `vX.Y.Z` exists | The hold is stale: it is ignored, the deploy goes on and a notice says to clear the variable |
+| The value has no `X.Y.Z:` prefix | Refused as invalid, the job fails red |
+| A numbered `release/X.Y.Z` or a `hotfix/*` branch exists on origin | Freezes develop merges the same way: the deploy is skipped and the job fails red with the branch names |
+| A hand-started run | Overrides the hold and the freeze, as before; the summary says so |
+
+A release or hotfix branch whose head is already an ancestor of the deployed commit protects nothing, so it does not freeze staging (a notice names it); a head the runner cannot read keeps the freeze. The rule is `scripts/staging_hold.py`, which `deploy-staging.yml` calls; `scripts/tests/test_staging_hold.py` proves it.
 
 ## Version tags
 
