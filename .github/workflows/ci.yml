@@ -5,7 +5,7 @@ name: ci
 on:
   pull_request:
     # labeled: adding ci:full starts a run of every job without a new push.
-    # ready_for_review: a draft is not held to develop's tip (job `ready`), so leaving draft checks it again.
+    # ready_for_review: leaving draft runs the jobs a draft skips.
     types: [opened, synchronize, reopened, labeled, ready_for_review]
     # A pull request into a release branch runs nothing: the release's own pull request to develop runs CI once
     # (docs/deploy/release.md).
@@ -22,13 +22,11 @@ on:
 permissions:
   contents: read
 
-# A newer push to a pull request cancels its older run. A run already going for develop, main or a release branch is
-# never cancelled (it may be deploying staging, and a deploy stopped halfway leaves the machine between two releases),
-# but a run still waiting for a runner is replaced by the next push to that branch: the group is the branch, so a burst
-# of merges queues one waiting run, not one per commit, and the next run plans from the last green commit
-# (scripts/ci-last-green.sh), so the replaced commit is checked with it. A merge queue entry has its own ref.
+# A newer push to a pull request cancels its older run. A push to develop or main never cancels one: that run may be
+# deploying staging, and a deploy stopped halfway leaves the machine between two releases. Its group holds the commit,
+# because a group with one slot also drops a queued run when a newer one queues, even with cancel-in-progress off.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -79,9 +77,16 @@ jobs:
           CI_FULL: ${{ contains(github.event.pull_request.title, '[ci full]') || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          # A push to develop or main is planned from the last commit whose run passed ci-ok, so a merge whose run was
-          # lost or failed is checked with the next one. With no such commit the plan is a full run.
-          if [ "$GITHUB_EVENT_NAME" = push ] && { [ "$GITHUB_REF" = refs/heads/develop ] || [ "$GITHUB_REF" = refs/heads/main ]; }; then
+          # The queue fast-forwards develop to the commit a merge_group run of this workflow tested, so a push to develop of
+          # a commit with a green merge_group run plans nothing (ci-ok and staging still run). Anything else pushed to
+          # develop, and main, is planned from the last commit whose run passed ci-ok, so a merge whose run was lost or
+          # failed is checked with the next one. With no such commit the plan is a full run.
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/develop ]; then
+            tested=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=merge_group&head_sha=$GITHUB_SHA&per_page=20" \
+              | scripts/ci-tested.sh "$GITHUB_SHA" || echo false)
+            if [ "$tested" = true ]; then export CI_TESTED=true; fi
+          fi
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "${CI_TESTED:-}" != true ] && { [ "$GITHUB_REF" = refs/heads/develop ] || [ "$GITHUB_REF" = refs/heads/main ]; }; then
             green=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=${GITHUB_REF#refs/heads/}&event=push&status=success&per_page=50" \
               | scripts/ci-last-green.sh "$GITHUB_SHA" || true)
             if [ -n "$green" ]; then BASE_SHA=$green; else export CI_FULL=true; fi
@@ -128,8 +133,8 @@ jobs:
           if git diff --name-only "$base" HEAD | grep -q '^packages/'; then uv run python scripts/check_tests_typecheck.py packages; fi
       - run: make -s checks
       - name: Script tests
-        # The slowest check here; a pull request leaves it to the merge queue (heavy is false on a pull request).
-        if: needs.plan.outputs.scripts == 'true' && needs.plan.outputs.heavy == 'true'
+        # The slowest check here; it runs whenever scripts/ or a workflow changed, so a pull request sees what the queue will.
+        if: needs.plan.outputs.scripts == 'true'
         run: uv run pytest -q -n auto --dist loadfile scripts/tests
 
   service:
@@ -575,10 +580,10 @@ jobs:
           git push -q "$PUSH_URL" "HEAD:refs/heads/$HEAD_REF"
 
   ready:
-    # Whether the merge queue may take this: every other job passed, CodeQL is green on the pull request's head, and
-    # the branch holds develop's tip (keep-current.yml merges develop in when it moves). A draft is not held to
-    # develop's tip. A queue group and a push are built on develop, and CodeQL reports on pull requests, so there
-    # only the jobs are judged. scripts/pr_flow.py ready; its --self-test is in make checks.
+    # Whether the merge queue may take this: every other job passed and CodeQL is green on the pull request's head. The
+    # queue tests the pull request on develop's tip, so how far behind develop it is does not matter. A queue group and
+    # a push are built on develop, and CodeQL reports on pull requests, so there only the jobs are judged.
+    # scripts/pr_flow.py ready; its --self-test is in make checks.
     name: ready
     if: always()
     needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, usecases, maintainer-review]
@@ -595,8 +600,6 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          # Empty for a draft, so its distance from develop is not judged.
-          BASE_REF: ${{ !github.event.pull_request.draft && github.base_ref || '' }}
         run: python3 scripts/pr_flow.py ready
 
   ci-ok:
