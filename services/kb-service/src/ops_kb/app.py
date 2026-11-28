@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
 from typing import Annotated, Literal, cast
 
@@ -72,6 +72,7 @@ from .schemas import (
     FileIdsIn,
     Item,
     ItemChunk,
+    ItemText,
     ItemWithDetail,
     KnowledgeBase,
     KnowledgeBaseDetail,
@@ -167,6 +168,14 @@ async def knowledge_reader(p: CurrentTenantCaller) -> Who:
 KnowledgeReader = Annotated[Who, Depends(knowledge_reader)]
 Page = Annotated[int, Query(ge=1)]
 PageSize = Annotated[int, Query(alias="pageSize", ge=1, le=100)]
+
+
+def _redescribed(payload: Mapping[str, JsonValue]) -> tuple[str, str] | None:
+    """The reader version and settings key of a reading a retry described more of, from its reading.finished."""
+    version, key = payload.get("readerVersion"), payload.get("settingsKey")
+    if payload.get("redescribed") is not True or not isinstance(version, str) or not isinstance(key, str):
+        return None
+    return version, key
 
 
 def agents_usage(settings: Settings) -> AgentsUsage:
@@ -366,7 +375,9 @@ def create_kb_app(
         if handled and file_id:
             with isolation.scope(caller.tenant_id, body.team_id):
                 settled = await service.finish_reading(
-                    Who(caller.tenant_id, "documents-service", body.team_id), file_id
+                    Who(caller.tenant_id, "documents-service", body.team_id),
+                    file_id,
+                    redescribed=_redescribed(body.payload),
                 )
         out = {"name": body.name, "key": body.key, "status": "handled" if handled else "unhandled", "items": settled}
         return ok(out, 202)
@@ -624,6 +635,15 @@ def create_kb_app(
     async def list_item_chunks(item_id: str, who: Caller, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """A page of the document's pieces in reading order; `search` matches a piece's text and section."""
         return ok(await service.item_chunks(who, item_id, q))
+
+    @items.get("/{item_id}/text", response_model=Envelope[ItemText])
+    async def get_item_text(  # pyright: ignore[reportUnusedFunction]
+        item_id: str, who: Caller, page: int | None = Query(None, ge=1)
+    ) -> JSONResponse:
+        """What was read from one page of the document's file (the first unless `page` is given; past the last page,
+        the last), section by section, each paragraph with its lines' places on the page, with every page's summary
+        and why any page was not read: the text beside the original in the document view."""
+        return ok(await service.item_text(who, item_id, page=page))
 
     @items.get("/{item_id}", response_model=Envelope[ItemWithDetail])
     async def get_item(item_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

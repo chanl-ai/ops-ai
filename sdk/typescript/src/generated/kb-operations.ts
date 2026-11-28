@@ -76,6 +76,19 @@ export const kbOperations = {
     "query": [],
     "stream": false
   },
+  "items_get_item_text": {
+    "body": null,
+    "headers": [],
+    "method": "GET",
+    "path": "/v1/items/{item_id}/text",
+    "pathParams": [
+      "item_id"
+    ],
+    "query": [
+      "page"
+    ],
+    "stream": false
+  },
   "items_list_item_chunks": {
     "body": null,
     "headers": [],

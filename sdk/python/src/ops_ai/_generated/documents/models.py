@@ -226,7 +226,7 @@ class LayoutIn(TypedDict, closed=True):
 class LayoutPage(TypedDict, closed=True):
     height: float | None
     number: int
-    source: Literal["text", "ocr", "mixed", "none"]
+    source: Literal["text", "ocr", "mixed", "model", "none"]
     width: float | None
 
 
@@ -284,6 +284,7 @@ class ReadingIn(TypedDict, closed=True):
     fileId: str
     language: NotRequired[str]
     ocr: NotRequired[Literal["off", "auto", "always"]]
+    pictureSensitivity: NotRequired[Literal["public", "internal", "confidential", "restricted"] | None]
 
 
 class ReadingLine(TypedDict, closed=True):
@@ -565,7 +566,7 @@ class ReadingBlock(TypedDict, closed=True):
     lines: NotRequired[list[ReadingLine]]
     main: NotRequired[bool]
     order: NotRequired[int]
-    readBy: NotRequired[Literal["text", "ocr"]]
+    readBy: NotRequired[Literal["text", "ocr", "model"]]
     sheet: NotRequired[str | None]
     text: str
 
@@ -578,7 +579,7 @@ class ReadingPage(TypedDict, closed=True):
     imageShare: NotRequired[float]
     number: int
     ocr: NotRequired[ReadingOcrQuality | None]
-    source: Literal["text", "ocr", "mixed", "none"]
+    source: Literal["text", "ocr", "mixed", "model", "none"]
     text: NotRequired[str]
     unreadReason: NotRequired[str | None]
     warnings: NotRequired[list[str]]
@@ -666,6 +667,7 @@ class FileReading(TypedDict, closed=True):
     pagesDone: int
     pagesTotal: int | None
     readerVersion: str
+    renditionId: NotRequired[str | None]
     settings: ReadingSettingsOut
     status: Literal["none", "queued", "reading", "done", "failed"]
 

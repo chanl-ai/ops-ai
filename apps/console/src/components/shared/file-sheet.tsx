@@ -20,6 +20,7 @@ import type { DownloadLink, FileDetail, FilePreview } from '@/lib/types/files';
 import { ActionBadge } from '@/components/logs/log-meta';
 import { FileDownloadButton } from '@/components/files/file-actions';
 import { BACKEND_LABEL, fileIcon, PURPOSE_LABEL, REF_LABEL, RetentionCell, ScanText, scanSummary, SensitivityBadge } from '@/components/files/file-meta';
+import { factLine } from '@/lib/fact-line';
 
 function Preview({ preview }: { preview: FilePreview }) {
   if (preview.kind === 'none') return <p className="text-sm text-muted-foreground">{preview.reason}</p>;
@@ -34,7 +35,7 @@ function Preview({ preview }: { preview: FilePreview }) {
   if (preview.kind === 'image')
     return (
       <div className="flex aspect-video max-h-56 items-center justify-center rounded-md border bg-[repeating-conic-gradient(var(--muted)_0%_25%,transparent_0%_50%)] bg-[length:16px_16px] text-xs text-muted-foreground">
-        {preview.description} · {preview.width} × {preview.height}
+        {factLine([preview.description, `${preview.width} × ${preview.height}`])}
       </div>
     );
   return (

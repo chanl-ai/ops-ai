@@ -21,8 +21,14 @@ class LocalReadings:
         # Each time a file's bytes were read, by file id: a second ask for a kept reading reads nothing.
         self.reads: list[str] = []
         self.kept: dict[tuple[str, str], dict[str, Any]] = {}
+        # Pages documents-service's picture reading describes, by page number: a page read with no text becomes the
+        # model's description, as documents-service stores it.
+        self.described: dict[int, str] = {}
 
-    async def reading(self, tenant: str, team: str, file_id: str, *, ocr: str) -> dict[str, Any]:
+    async def reading(
+        self, tenant: str, team: str, file_id: str, *, ocr: str, pictures: str | None = None
+    ) -> dict[str, Any]:
+        del pictures
         if self.down:
             raise ServiceUnreachable("documents-service did not answer")
         head = {"fileId": file_id, "readerVersion": "reading-1", "settings": {"ocr": ocr, "language": "eng"}}
@@ -37,12 +43,18 @@ class LocalReadings:
             made = read(data, filename=name, mime_type=mime, settings=ReadingSettings(ocr=ocr), ocr_engine=self.engine)  # pyright: ignore[reportArgumentType]
         except ReadingError as e:
             return {**head, "status": "failed", "error": {"code": e.code, "message": str(e)}}
+        pages = [p.model_dump(mode="json", by_alias=True) for p in made.pages]
+        for page in pages:
+            if page["source"] == "none" and (said := self.described.get(page["number"])):
+                block = {"id": f"p{page['number']}.m0", "kind": "paragraph", "text": said, "readBy": "model",
+                         "box": [0.0, 0.0, 1.0, 1.0], "order": 0}  # fmt: skip
+                page.update(source="model", text=said, blocks=[block], unreadReason=None)
         answer = {
             **head,
             "status": "done",
             "readerVersion": made.reader_version,
             "facts": made.facts.model_dump(mode="json", by_alias=True),
-            "pages": [p.model_dump(mode="json", by_alias=True) for p in made.pages],
+            "pages": pages,
         }
         self.kept[(file_id, ocr)] = answer
         return answer

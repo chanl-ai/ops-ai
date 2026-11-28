@@ -697,6 +697,64 @@ class ItemSettingsUsed(Out):
     current: bool
 
 
+class TextBox(Out):
+    """Where a block sits on its page, as fractions of the page from its top left (documents-service's boxes)."""
+
+    page: int
+    x: float
+    y: float
+    w: float
+    h: float
+
+
+class TextBlock(Out):
+    # The reading's block id, unique within the item (`p2.b3`).
+    id: str
+    kind: Literal["paragraph", "table"]
+    text: str
+    page: int | None
+    # text, ocr or model: a model's description of a picture is marked so nobody takes it for the author's words.
+    read_by: str
+    # One per line of a paragraph read from a page; the whole block's box for a table; none without a page.
+    boxes: list[TextBox]
+
+
+class TextSection(Out):
+    id: str
+    heading_path: list[str]
+    page: int | None
+    blocks: list[TextBlock]
+
+
+class TextPage(Out):
+    number: int
+    read_by: str
+    unread_reason: str | None = None
+    warnings: list[str]
+
+
+class ItemText(Out):
+    """What was read from an item's file, section by section after the source's cleaning, with each block's place on
+    its page, for the document view beside the original. `status` is done, reading (documents-service has not
+    finished), or none (the item has no file, or no reading can be had now); `notes` say in plain words what was not
+    read or could not be shown."""
+
+    item_id: str
+    file_id: str | None
+    mime_type: str | None
+    status: Literal["done", "reading", "none"]
+    paged: bool
+    # The page whose sections are answered, for a paged file; None for a file without pages, whose sections all are.
+    page: int | None
+    reader_version: str | None
+    # The PDF a Word file or deck was drawn into, shown in place of the file; None when the file is not drawn.
+    rendition_id: str | None
+    # Every page's summary; only `page`'s sections are in `sections`.
+    pages: list[TextPage]
+    sections: list[TextSection]
+    notes: list[str]
+
+
 class ItemWithDetail(Item):
     source_name: str
     source_type: str

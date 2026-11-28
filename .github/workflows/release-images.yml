@@ -62,7 +62,7 @@ jobs:
     env:
       PROOF: ${{ inputs.proof && 'true' || 'false' }}
       IMAGE_PREFIX: ${{ inputs.proof && 'localhost:5000/ops-ai' || 'ghcr.io/chanl-ai/ops-ai' }}
-      TARGETS: platform agents tools models kb files documents runner opa proxy console db-scripts
+      TARGETS: platform agents tools models kb files documents converter runner opa proxy console db-scripts
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

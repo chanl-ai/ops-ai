@@ -29,3 +29,4 @@ services:
   opa: { build: { <<: *image, target: opa } }
   console: { build: { <<: *image, target: console } }
   proxy: { build: { <<: *image, target: proxy } }
+  converter: { build: { <<: *image, target: converter } }

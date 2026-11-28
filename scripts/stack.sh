@@ -34,6 +34,7 @@ KB_PORT=${OPS_KB_PORT:-8740}
 FILES_PORT=${OPS_FILES_PORT:-8750}
 DOCUMENTS_PORT=${OPS_DOCUMENTS_PORT:-8760}
 RUNNER_PORT=${OPS_RUNNER_PORT:-8770}
+CONVERTER_PORT=${OPS_CONVERTER_PORT:-8780}
 PLATFORM_PORT=${OPS_PLATFORM_PORT:-8710}
 CONSOLE_PORT=${OPS_CONSOLE_PORT:-3016}
 EMBED_PORT=${OPS_EMBED_PORT:-3020}
@@ -106,6 +107,7 @@ auth_env() { [[ "$AUTH" == platform ]] && echo "env OPS_AUTH_MODE=platform OPS_P
 # The address the browser reaches a service at: this machine's port, or <OPS_PUBLIC_ORIGIN>/api/<name> when the console
 # is served through a proxy on one public address (a cloud box, deploy/fly/Caddyfile routes).
 api_url() { if [[ -n "${OPS_PUBLIC_ORIGIN:-}" ]]; then echo "$OPS_PUBLIC_ORIGIN/api/$1"; else echo "http://localhost:$2"; fi; }
+converter_env() { [[ "${CONVERTER:-}" == 1 ]] && echo "OPS_DOCUMENTS_CONVERTER_URL=http://127.0.0.1:$CONVERTER_PORT " || true; }
 console_auth() { [[ "$AUTH" == platform ]] && echo "NEXT_PUBLIC_AUTH_PROVIDER=platform NEXT_PUBLIC_OPS_PLATFORM_API_URL=$(api_url platform "$PLATFORM_PORT") " || true; }
 # The Feedback button shows only when this machine runs the ui-feedback collector at start.
 ui_feedback() { curl -sf -m 1 http://127.0.0.1:4790/health >/dev/null && echo 1 || echo 0; }
@@ -208,8 +210,9 @@ cmd_of() {
     # files-service delivers its service events (file.deleted, file.read_requested) to agents-service, and refuses to
     # start without tools-service's address, which its watched folders read apps through.
     files) echo "$(auth_env)env OPS_FILES_PORT=$FILES_PORT OPS_FILES_SCANNING=off OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT uv run --directory services/files-service python -m ops_files" ;;
+    # CONVERTER=1 points documents-service at the converter container (make converter-up) so Word files and decks get pages.
     # documents-service extracts on its own models-service key, whatever key the root .env hands agents.
-    documents) echo "$(auth_env)env OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_extract uv run --directory services/documents-service python -m ops_documents" ;;
+    documents) echo "$(auth_env)env $(converter_env)OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_extract uv run --directory services/documents-service python -m ops_documents" ;;
     console)
       # OPS_CONSOLE_MODE=prod (cloud boxes) serves a production build; see scripts/console-prod.sh. Local dev keeps next dev.
       if [[ "${OPS_CONSOLE_MODE:-dev}" == prod ]]; then CONSOLE_RUN="env NEXT_PUBLIC_OPS_DEMO_SIGNIN=1 bash scripts/console-prod.sh $CONSOLE_PORT"

@@ -123,6 +123,12 @@ kb-source: ## make kb-source SRC=src_… AS=james: one source
 kb-items: ## make kb-items SRC=src_… AS=james: a source's items
 	$(call need,SRC,SRC=src_…)
 	@$(OPS_CLI) kb $(OPS_AS) items $(SRC)
+kb-text: ## make kb-text ITEM=itm_… AS=james: what was read from a document's file, by section, with who read each part
+	$(call need,ITEM,ITEM=itm_…)
+	@$(OPS_CLI) kb $(OPS_AS) text $(ITEM)
+kb-sample-score: ## make kb-sample-score [OPS_PORT_OFFSET=] [AS=james]: the 40-document sample base loaded into a new knowledge base on the running stack and its 40 questions scored
+	@uv run --quiet --directory services/kb-service python experiments/sample_base/make_base.py $(CURDIR)/.run/sample-base
+	@uv run --quiet python services/kb-service/experiments/sample_base/score.py $(CURDIR)/.run/sample-base --as '$(or $(AS),james)'
 kb-add-file: ## make kb-add-file KB=kb_… FILE=path AS=james: upload a file into a knowledge base and sync it
 	$(call need,KB,KB=kb_…)
 	$(call need,FILE,FILE=docs/policy.pdf)

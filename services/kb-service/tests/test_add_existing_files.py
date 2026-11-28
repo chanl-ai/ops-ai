@@ -14,6 +14,7 @@ from ops_kb.files import FilesServiceIntake
 from .conftest import kb_client
 from .files_fake import FakeFilesService
 from .pdfs import HARDSHIP, RATES
+from .readings_fake import LocalReadings
 from .test_bases_and_sources import POLICIES, data
 from .test_sync import file_source
 
@@ -152,3 +153,40 @@ async def test_add_documents_finds_the_bases_documents_source_by_id_after_a_rena
         two = data(await client.post(f"/v1/knowledge-bases/{kb['id']}/documents", json={"fileIds": [second]}))
         detail = data(await client.get(f"/v1/knowledge-bases/{kb['id']}"))
     assert one["sourceId"] == two["sourceId"] and len(detail["sources"]) == 1, (one, two, detail["sources"])
+
+
+class Drawn(LocalReadings):
+    """documents-service drawing each file it reads into a PDF of the file's team, scanned clean."""
+
+    def __init__(self, intake: FilesServiceIntake, fake: FakeFilesService, files: FilesClient) -> None:
+        super().__init__(intake)
+        self.fake, self.files = fake, files
+        self.drawings: dict[str, str] = {}
+
+    async def reading(self, tenant: str, team: str, file_id: str, *, ocr: str, pictures: str | None = None) -> Any:
+        got = await super().reading(tenant, team, file_id, ocr=ocr, pictures=pictures)
+        if got.get("status") == "done":
+            if file_id not in self.drawings:
+                pdf = b"%PDF-1.4 drawing of " + file_id.encode()
+                self.drawings[file_id] = await stored(self.fake, self.files, tenant, f"{file_id}.pdf", pdf, team=team)
+            got = {**got, "renditionId": self.drawings[file_id]}
+        return got
+
+
+async def test_a_removed_source_lets_go_of_its_files_and_their_drawings(engine: AsyncEngine, tenant: str) -> None:
+    fake = FakeFilesService()
+    files = fake.client()
+    intake = FilesServiceIntake(files)
+    readings = Drawn(intake, fake, files)
+    async with kb_client(engine, tenant, files=intake, readings=readings) as client:
+        fid = await stored(fake, files, tenant, "rates.pdf", RATES)
+        first, second = await file_source(client), await file_source(client)
+        for src in (first, second):
+            data(await add(client, src["id"], fid))
+            data(await client.post(f"/v1/sources/{src['id']}/sync"))
+        drawing = readings.drawings[fid]
+        both = {("source", first["id"]), ("source", second["id"])}
+        assert fake.references[drawing] == both, "each source holds the drawing it shows"
+        assert (await client.delete(f"/v1/sources/{first['id']}")).status_code == 204
+    kept = {("source", second["id"])}
+    assert fake.references[fid] == kept and fake.references[drawing] == kept, fake.references

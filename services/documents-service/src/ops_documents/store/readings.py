@@ -13,12 +13,14 @@ queried (database portability D5)."""
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 import sqlalchemy as sa
-from pydantic import Field
+from pydantic import Field, model_validator
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -71,6 +73,10 @@ documents_readings = sa.Table(
     sa.Column("file_id", sa.String(64), nullable=False),
     sa.Column("actor", sa.String(320), nullable=False),
     sa.Column("duration_ms", sa.Integer),
+    # The whole settings key when it is longer than the key column holds (see stored_key); null otherwise.
+    sa.Column("settings_full", sa.String(200)),
+    # The files-service file the bytes were drawn into as a PDF (a Word file or deck read with the converter on).
+    sa.Column("rendition_id", sa.String(64)),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("started_at", sa.DateTime(timezone=True)),
     sa.Column("finished_at", sa.DateTime(timezone=True)),
@@ -85,6 +91,9 @@ documents_reading_pages = sa.Table(
     sa.Column("page", sa.Integer, primary_key=True),
     # ops_ingest.reading.Page as gzipped JSON: about five times smaller than the text.
     sa.Column("body", sa.LargeBinary, nullable=False),
+    # How often the page's picture was refused for a reason that passes (the model busy, today's limit), so it is
+    # described again later on its own; null once the page is settled (described, refused for good, or out of tries).
+    sa.Column("picture_retries", sa.Integer),
     info=TEAM_OWNED,
 )
 
@@ -101,13 +110,37 @@ documents_reading_files = sa.Table(
 )
 
 
+# A settings key longer than its column (a long language list with the picture suffix) is kept as a hash in the key
+# columns and whole in settings_full, so the key is still one value per reading and the row still names its settings.
+KEY_LENGTH = 64
+
+
+def stored_key(key: str) -> str:
+    return key if len(key) <= KEY_LENGTH else "h-" + hashlib.sha256(key.encode()).hexdigest()[: KEY_LENGTH - 2]
+
+
+def full_key(key: str) -> str | None:
+    return key if stored_key(key) != key else None
+
+
 class ReadingRow(Out):
-    """A reading's row, its key columns under shorter names."""
+    """A reading's row, its key columns under shorter names; `key` is always the whole settings key."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _whole_key(cls, data: object) -> object:
+        if not isinstance(data, Mapping):
+            return data
+        found: dict[str, object] = {str(k): v for k, v in cast(Mapping[object, object], data).items()}
+        if found.get("settings_full"):
+            found["settings_key"] = found["settings_full"]
+        return found
 
     tenant_id: str
     digest: str = Field(alias="file_digest")
     version: str = Field(alias="reader_version")
     key: str = Field(alias="settings_key")
+    full: str | None = Field(None, alias="settings_full")
     status: ReadingStatus
     pages_total: int | None
     pages_done: int
@@ -119,13 +152,15 @@ class ReadingRow(Out):
     team: str
     actor: str
     duration_ms: int | None
+    rendition_id: str | None = None
 
 
 _t = documents_readings.c
 # The columns a ReadingRow names: every other column (its times) is read by no caller.
 ROW = (
-    _t.tenant_id, _t.file_digest, _t.reader_version, _t.settings_key, _t.status, _t.pages_total, _t.pages_done,
-    _t.facts, _t.error_code, _t.error, _t.attempts, _t.file_id, _t.team, _t.actor, _t.duration_ms,
+    _t.tenant_id, _t.file_digest, _t.reader_version, _t.settings_key, _t.settings_full, _t.status, _t.pages_total,
+    _t.pages_done, _t.facts, _t.error_code, _t.error, _t.attempts, _t.file_id, _t.team, _t.actor, _t.duration_ms,
+    _t.rendition_id,
 )  # fmt: skip
 
 
@@ -151,7 +186,7 @@ class ReadingsStore(Store):
             t.c.team == team,
             t.c.file_digest == digest,
             t.c.reader_version == version,
-            t.c.settings_key == key,
+            t.c.settings_key == stored_key(key),
         )
 
     async def get(self, team: str, digest: str, version: str, key: str) -> ReadingRow | None:
@@ -159,6 +194,36 @@ class ReadingsStore(Store):
         async with self.tx() as c:
             query = sa.select(*ROW).where(self._where(t, team, digest, version, key), team_visible(t))
             return await one(c, query, ReadingRow)
+
+    async def rendition(self, team: str, digest: str) -> str | None:
+        """The PDF the team's bytes were already drawn into, under any reading of them: drawn once per digest."""
+        t = documents_readings
+        query = sa.select(t.c.rendition_id).where(
+            t.c.tenant_id == isolation.tenant(), t.c.team == team, t.c.file_digest == digest,
+            t.c.rendition_id.is_not(None), team_visible(t),
+        ).limit(1)  # fmt: skip
+        async with self.tx() as c:
+            return (await c.execute(query)).scalar_one_or_none()
+
+    async def set_rendition(self, row: ReadingRow, file_id: str | None, *, replacing: str | None = None) -> None:
+        """Names the PDF the reading's file was drawn into (None: none). `replacing` is a drawing Files deleted: every
+        reading of the team's bytes that named it names the new one."""
+        t = documents_readings
+        async with self.tx() as c:
+            await c.execute(
+                sa.update(t)
+                .where(self._where(t, row.team, row.digest, row.version, row.key))
+                .values(rendition_id=file_id)
+            )
+            if replacing is not None:
+                await c.execute(
+                    sa.update(t)
+                    .where(
+                        t.c.tenant_id == isolation.tenant(), t.c.team == row.team, t.c.file_digest == row.digest,
+                        t.c.rendition_id == replacing, team_visible(t),
+                    )
+                    .values(rendition_id=file_id)
+                )  # fmt: skip
 
     async def link(self, file_id: str, team: str, digest: str, at: datetime) -> None:
         """Records that the team's file holds these bytes; a file that changes content is linked to its new digest."""
@@ -182,7 +247,15 @@ class ReadingsStore(Store):
                 return  # linked by a request racing this one
 
     async def queue(
-        self, digest: str, version: str, key: str, *, file_id: str, team: str, actor: str, at: datetime
+        self,
+        digest: str,
+        version: str,
+        key: str,
+        *,
+        file_id: str,
+        team: str,
+        actor: str,
+        at: datetime,
     ) -> ReadingRow:
         """The team's reading queued, or the one already there; a failed reading asked for again is queued afresh."""
         t = documents_readings
@@ -191,7 +264,8 @@ class ReadingsStore(Store):
             "team": team,
             "file_digest": digest,
             "reader_version": version,
-            "settings_key": key,
+            "settings_key": stored_key(key),
+            "settings_full": full_key(key),
             "status": "queued",
             "pages_done": 0,
             "attempts": 0,
@@ -243,17 +317,28 @@ class ReadingsStore(Store):
                 .values(pages_total=pages_total, facts=json.dumps(facts))
             )
 
-    async def save_page(self, row: ReadingRow, number: int, page: Json) -> None:
+    async def save_page(self, row: ReadingRow, number: int, page: Json, *, retries: int | None = None) -> None:
         """One finished page, and the count of pages done; saving a page again (after a restart) replaces it."""
         t = documents_readings
         async with self.tx() as c:
-            await self._put_page(c, row.team, row.digest, row.version, row.key, number=number, page=page)
+            await self._put_page(
+                c, row.team, row.digest, row.version, row.key, number=number, page=page, retries=retries
+            )
             await c.execute(
                 sa.update(t).where(self._where(t, row.team, row.digest, row.version, row.key)).values(pages_done=number)
             )
 
     async def _put_page(
-        self, c: AsyncConnection, team: str, digest: str, version: str, key: str, *, number: int, page: Json
+        self,
+        c: AsyncConnection,
+        team: str,
+        digest: str,
+        version: str,
+        key: str,
+        *,
+        number: int,
+        page: Json,
+        retries: int | None = None,
     ) -> None:
         p = documents_reading_pages
         await c.execute(sa.delete(p).where(self._where(p, team, digest, version, key), p.c.page == number))
@@ -263,11 +348,69 @@ class ReadingsStore(Store):
                 team=team,
                 file_digest=digest,
                 reader_version=version,
-                settings_key=key,
+                settings_key=stored_key(key),
                 page=number,
                 body=_pack(page),
+                picture_retries=retries,
             )
         )
+
+    async def claim_retry(self, row: ReadingRow, *, code: str, at: datetime, due_before: datetime) -> bool:
+        """Takes a finished reading's picture retry once its wait is over: true for the one caller whose update moved
+        its finish time, so two processes asked at once do not both describe the pages again."""
+        t = documents_readings
+        due = sa.or_(t.c.finished_at.is_(None), t.c.finished_at <= due_before)
+        async with self.tx() as c:
+            done = await c.execute(
+                sa.update(t)
+                .where(self._where(t, row.team, row.digest, row.version, row.key), t.c.status == "done")
+                .where(t.c.error_code == code, due)
+                .values(finished_at=at)
+            )
+        return bool(done.rowcount)
+
+    async def pages_to_retry(self, row: ReadingRow) -> tuple[int, list[tuple[Page, int]]]:
+        """Pages a model described so far, and each page still to describe again with its refusals so far."""
+        p = documents_reading_pages
+        query = sa.select(p.c.body, p.c.picture_retries).where(
+            self._where(p, row.team, row.digest, row.version, row.key), team_visible(p)
+        )
+        async with self.tx() as c:
+            found = (await c.execute(query.order_by(p.c.page))).all()
+        pages = [(_unpack(body), retries) for body, retries in found]
+        described = sum(page.source == "model" for page, _ in pages)
+        return described, [(page, int(retries)) for page, retries in pages if retries is not None]
+
+    async def retried(
+        self,
+        row: ReadingRow,
+        pages: list[tuple[Page, int | None]],
+        *,
+        code: str | None,
+        at: datetime,
+        described: int | None,
+    ) -> None:
+        """The pages described again, the reading's mark kept while one still waits, and `reading.finished` sent again
+        with `redescribed` when a page now has text, so kb-service indexes its already indexed items from the file
+        again under its own key (`described`: the pages a model has described, None when this retry described none); all
+        in one transaction."""
+        t = documents_readings
+        async with self.tx() as c:
+            for page, retries in pages:
+                body = page.model_dump(mode="json", by_alias=True)
+                await self._put_page(
+                    c, row.team, row.digest, row.version, row.key, number=page.number, page=body, retries=retries
+                )
+            await c.execute(
+                sa.update(t)
+                .where(self._where(t, row.team, row.digest, row.version, row.key))
+                .values(error_code=code, finished_at=at)
+            )
+            if described is not None:
+                said: Json = {"status": "done", "pages": row.pages_total, "redescribed": True}
+                await self._events(
+                    c, row.team, row.digest, row.version, row.key, name=FINISHED_EVENT, said=said, described=described
+                )
 
     async def put_done(
         self,
@@ -293,7 +436,8 @@ class ReadingsStore(Store):
                     await c.execute(
                         sa.insert(t).values(
                             tenant_id=isolation.tenant(), team=team, file_digest=digest, reader_version=version,
-                            settings_key=key, status="done", pages_total=len(pages), pages_done=len(pages),
+                            settings_key=stored_key(key), settings_full=full_key(key), status="done",
+                            pages_total=len(pages), pages_done=len(pages),
                             facts=json.dumps(facts), attempts=1, file_id=file_id, actor=actor,
                             duration_ms=duration_ms, created_at=at, started_at=at, finished_at=at,
                         )
@@ -334,7 +478,16 @@ class ReadingsStore(Store):
             await self._events(c, row.team, row.digest, row.version, row.key, name=name, said=said)
 
     async def _events(
-        self, c: AsyncConnection, team: str, digest: str, version: str, key: str, *, name: str, said: Json
+        self,
+        c: AsyncConnection,
+        team: str,
+        digest: str,
+        version: str,
+        key: str,
+        *,
+        name: str,
+        said: Json,
+        described: int | None = None,
     ) -> None:
         f = documents_reading_files
         tenant = isolation.tenant()
@@ -350,7 +503,8 @@ class ReadingsStore(Store):
             await add(
                 c, service_outbox, tenant_id=tenant, team_id=team, name=name,
                 key=readings_contract.event_key(
-                    name, digest=digest, reader_version=version, settings_key=key, file_id=file_id
+                    name, digest=digest, reader_version=version, settings_key=stored_key(key), file_id=file_id,
+                    described=described,
                 ),
                 payload=payload,
             )  # fmt: skip

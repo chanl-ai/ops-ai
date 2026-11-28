@@ -18,7 +18,9 @@ from ops_documents.app import create_documents_app
 from ops_documents.document_types import default_document_types
 from ops_documents.extraction import default_extractor
 from ops_documents.files import Files
+from ops_documents.picture_reading import picture_reading
 from ops_documents.readings import Readings
+from ops_documents.renditions import HttpConverter, Renditions
 from ops_documents.store import ReadingsStore, documents_relay, engine_for
 from ops_documents.tools_client import plugin_templates
 from ops_files_client import FilesClient
@@ -35,8 +37,16 @@ MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 def build(settings: Settings) -> FastAPI:
     """The app on its database, files-service and models-service; building it opens no connection."""
     engine = engine_for(settings.database_url)
-    files = Files(FilesClient.from_settings(settings, service="documents", scopes=["files:view", "files:edit"]))
-    extractor = default_extractor(files, engine, settings, readings=Readings(files, ReadingsStore(engine)))
+    # files:create stores the PDF a Word file or deck is drawn into (ops_documents.renditions).
+    client = FilesClient.from_settings(
+        settings, service="documents", scopes=["files:view", "files:create", "files:edit"]
+    )
+    files = Files(client)
+    readings = Readings(files, ReadingsStore(engine))
+    if settings.documents_converter_url:
+        readings.renditions = Renditions(HttpConverter(settings.documents_converter_url), client)
+    extractor = default_extractor(files, engine, settings, readings=readings)
+    readings.pictures = picture_reading(extractor)
     types = default_document_types(files, engine, settings, extractor)
     background: list[Callable[[], Coroutine[Any, Any, None]]] = []
     # A correction's extraction.corrected reaches agents-service (required at start), which saves the corrected read on

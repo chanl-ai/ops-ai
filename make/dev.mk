@@ -1,6 +1,6 @@
 # The local stack: compose (PostgreSQL, OPA), migrations, then the agents service, tools service and console in the
 # background. scripts/stack.sh is the process manager: logs in .logs/<svc>.log, pids in .run/<svc>.pid.
-.PHONY: offset-guard port-list up sample-install down restart reset-db health logs ports demo-model sample-team sample-library sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
+.PHONY: offset-guard port-list converter-up converter-down up sample-install down restart reset-db health logs ports demo-model sample-team sample-library sample-teams demo-walk demo demo-salesforce demo-salesforce-templates demo-salesforce-walk
 
 ##@ Stack (one per machine)
 
@@ -13,6 +13,30 @@ DEMO_MODEL ?= $(if $(OPENAI_API_KEY),gpt-5-mini,fake)
 # provider connection, so DEMO_MODEL=fake puts all of them on the fake.
 DEMO_FAST_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-4.1-mini)
 DEMO_CHAT_MODEL ?= $(if $(filter fake,$(DEMO_MODEL)),fake,gpt-5-nano)
+
+# The converter worker (deploy/fly/Dockerfile target converter): one container per stack, named by the offset, image
+# built once. It sits on an internal network with no route out; a relay from the same image, on that network and the
+# default one, publishes 127.0.0.1:8780 + offset (8770 is the runner's). make up CONVERTER=1 points documents at it.
+CONVERTER_IMAGE ?= ops-ai/converter:dev
+CONVERTER_NAME := ops-converter-$(OPS_PORT_OFFSET)
+CONVERTER_NET := ops-converter-net-$(OPS_PORT_OFFSET)
+CONVERTER_LOCKDOWN := --read-only --cap-drop ALL --security-opt no-new-privileges --user 10001:10001 --pids-limit 256
+
+converter-up: ## Build the converter image once and run it with no network out, reached on 127.0.0.1:OPS_CONVERTER_PORT (8780 + offset) through a relay; make up CONVERTER=1 then gives documents-service pages for Word files and decks
+	@docker image inspect $(CONVERTER_IMAGE) >/dev/null 2>&1 || python3 $(ROOT)/scripts/at-most.py 1 heavy -- docker build --target converter -t $(CONVERTER_IMAGE) -f $(ROOT)/deploy/fly/Dockerfile $(ROOT)
+	@docker stop $(CONVERTER_NAME) $(CONVERTER_NAME)-relay >/dev/null 2>&1 || true
+	@docker network inspect $(CONVERTER_NET) >/dev/null 2>&1 || docker network create --internal $(CONVERTER_NET) >/dev/null
+	@docker run -d --rm --name $(CONVERTER_NAME) --network $(CONVERTER_NET) $(CONVERTER_LOCKDOWN) --memory 1g \
+		--tmpfs /tmp:size=512m,mode=1777 --tmpfs /home/ops:size=256m,uid=10001,gid=10001 $(CONVERTER_IMAGE) >/dev/null
+	@docker run -d --rm --name $(CONVERTER_NAME)-relay $(CONVERTER_LOCKDOWN) --memory 64m \
+		-p 127.0.0.1:$(OPS_CONVERTER_PORT):8770 $(CONVERTER_IMAGE) python /app/relay.py 8770 $(CONVERTER_NAME) 8770 >/dev/null
+	@docker network connect $(CONVERTER_NET) $(CONVERTER_NAME)-relay
+	@for i in $$(seq 1 30); do curl -sf -m 1 http://127.0.0.1:$(OPS_CONVERTER_PORT)/health >/dev/null && echo "converter up: http://127.0.0.1:$(OPS_CONVERTER_PORT)" && exit 0; sleep 1; done; echo "converter did not answer: docker logs $(CONVERTER_NAME)"; exit 1
+
+converter-down: ## Stop the converter container of this stack, its relay and its network
+	@docker stop $(CONVERTER_NAME) $(CONVERTER_NAME)-relay >/dev/null 2>&1 || true
+	@docker network rm $(CONVERTER_NET) >/dev/null 2>&1 || true
+	@echo "converter down"
 
 up: offset-guard db-up ## Compose, migrate every chain in place, then the services, the worker, models-service and the demo fakes; AUTH=platform signs in through platform-service; RESET=1 wipes the database first (as make reset-db); a new database gets the sample team (SAMPLE=0 skips); OPS_INFRA=external uses side containers and skips db-up/db-down; OPS_INFRA=shared (offset stacks) reuses the default stack's containers with its own database
 	@# Services started before their code last changed run old code: stopped here, started again after the schema step.

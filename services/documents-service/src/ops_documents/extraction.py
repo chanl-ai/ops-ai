@@ -251,17 +251,21 @@ class PlatformMasking:
 
 @dataclass
 class PlatformPageImages:
-    """The team's pageImages policy, read live from platform-service on each read that could send an image. A
-    policy that cannot be read counts as off: a failed read must never send a page."""
+    """The team's pageImages policy, read live from platform-service on each read that could send an image. For an
+    extraction a policy that cannot be read counts as off (`allowed`): a failed read must never send a page. A
+    reading tells the two apart (`read`), so a failed read does not make a second reading without pictures."""
 
     client: Callable[[str, str], ServiceClient]
 
     async def allowed(self, tenant: str, team: str) -> bool:
+        return await self.read(tenant, team) is True
+
+    async def read(self, tenant: str, team: str) -> bool | None:
         try:
             found = await self.client(tenant, team).get(f"/v1/policies/{PAGE_IMAGES_POLICY}")
         except (ServiceCallError, ServiceUnreachable) as e:
             log.warning("pageImages policy unread; no page image is sent", extra={"tenant": tenant, "error": str(e)})
-            return False
+            return None
         return team_on(an_object(found or {}, f"the {PAGE_IMAGES_POLICY} policy").get("value"), team)
 
 

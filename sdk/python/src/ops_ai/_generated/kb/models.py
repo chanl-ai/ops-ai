@@ -697,6 +697,21 @@ class SyncSettings(TypedDict, closed=True):
     staleAfterDays: int
 
 
+class TextBox(TypedDict, closed=True):
+    h: float
+    page: int
+    w: float
+    x: float
+    y: float
+
+
+class TextPage(TypedDict, closed=True):
+    number: int
+    readBy: str
+    unreadReason: NotRequired[str | None]
+    warnings: list[str]
+
+
 class TokenRange(TypedDict, closed=True):
     high: int
     low: int
@@ -1231,6 +1246,22 @@ class SourceRow(TypedDict, closed=True):
     waitingHosts: list[WaitingHost]
 
 
+class TextBlock(TypedDict, closed=True):
+    boxes: list[TextBox]
+    id: str
+    kind: Literal["paragraph", "table"]
+    page: int | None
+    readBy: str
+    text: str
+
+
+class TextSection(TypedDict, closed=True):
+    blocks: list[TextBlock]
+    headingPath: list[str]
+    id: str
+    page: int | None
+
+
 class ChangeList(TypedDict, closed=True):
     data: list[KnowledgeChange]
     facets: dict[str, dict[str, int]]
@@ -1308,6 +1339,20 @@ class ItemDetail(TypedDict, closed=True):
     content: str
     revisions: list[ItemRevision]
     versions: list[ItemVersion]
+
+
+class ItemText(TypedDict, closed=True):
+    fileId: str | None
+    itemId: str
+    mimeType: str | None
+    notes: list[str]
+    page: int | None
+    paged: bool
+    pages: list[TextPage]
+    readerVersion: str | None
+    renditionId: str | None
+    sections: list[TextSection]
+    status: Literal["done", "reading", "none"]
 
 
 class ItemWithDetail(TypedDict, closed=True):
@@ -1427,6 +1472,11 @@ class SourceKind(TypedDict, closed=True):
     source: NotRequired[str | None]
     title: str
     type: str
+
+
+class EnvelopeItemText(TypedDict, closed=True):
+    data: ItemText
+    success: Literal[True]
 
 
 class EnvelopeItemWithDetail(TypedDict, closed=True):

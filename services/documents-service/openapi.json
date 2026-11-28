@@ -2201,6 +2201,17 @@
             "title": "Readerversion",
             "type": "string"
           },
+          "renditionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renditionid"
+          },
           "settings": {
             "$ref": "#/components/schemas/ReadingSettingsOut"
           },
@@ -2602,6 +2613,7 @@
               "text",
               "ocr",
               "mixed",
+              "model",
               "none"
             ],
             "title": "Source",
@@ -2890,7 +2902,8 @@
             "default": "text",
             "enum": [
               "text",
-              "ocr"
+              "ocr",
+              "model"
             ],
             "title": "Readby",
             "type": "string"
@@ -3071,6 +3084,23 @@
             ],
             "title": "Ocr",
             "type": "string"
+          },
+          "pictureSensitivity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "public",
+                  "internal",
+                  "confidential",
+                  "restricted"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Picturesensitivity"
           }
         },
         "required": [
@@ -3188,6 +3218,7 @@
               "text",
               "ocr",
               "mixed",
+              "model",
               "none"
             ],
             "title": "Source",
@@ -8975,7 +9006,7 @@
     },
     "/v1/documents/readings/{file_id}": {
       "get": {
-        "description": "The reading as it is now, with every page or the one asked for once done; status none when never asked\nfor. A file the team cannot see is 404, whoever else holds its bytes.",
+        "description": "The reading as it is now, with every page or the one asked for once done; status none when never asked\nfor. A file the team cannot see is 404, whoever else holds its bytes. `pictureSensitivity` names the same\nreading the POST asked for.",
         "operationId": "documents_get_reading",
         "parameters": [
           {
@@ -9030,6 +9061,23 @@
                 }
               ],
               "title": "Page"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pictureSensitivity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(public|internal|confidential|restricted)$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Picturesensitivity"
             }
           },
           {

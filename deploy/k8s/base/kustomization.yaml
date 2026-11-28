@@ -15,6 +15,7 @@ resources:
   - kb/workload.yaml
   - files/workload.yaml
   - documents/workload.yaml
+  - converter/workload.yaml
   - opa/workload.yaml
   - console/workload.yaml
   - proxy/workload.yaml

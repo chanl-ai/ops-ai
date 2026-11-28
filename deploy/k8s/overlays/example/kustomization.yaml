@@ -16,6 +16,7 @@ images:
   - {name: ops-ai/kb, newName: <registry>/ops-ai/kb, newTag: <release>}
   - {name: ops-ai/files, newName: <registry>/ops-ai/files, newTag: <release>}
   - {name: ops-ai/documents, newName: <registry>/ops-ai/documents, newTag: <release>}
+  - {name: ops-ai/converter, newName: <registry>/ops-ai/converter, newTag: <release>}
   - {name: ops-ai/runner, newName: <registry>/ops-ai/runner, newTag: <release>}
   - {name: ops-ai/opa, newName: <registry>/ops-ai/opa, newTag: <release>}
   - {name: ops-ai/console, newName: <registry>/ops-ai/console, newTag: <release>}

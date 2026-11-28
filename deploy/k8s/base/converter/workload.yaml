@@ -1,0 +1,118 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: converter
+  labels:
+    app.kubernetes.io/name: converter
+    app.kubernetes.io/part-of: ops-ai
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: converter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: converter
+        app.kubernetes.io/part-of: ops-ai
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: converter
+        image: ops-ai/converter
+        imagePullPolicy: IfNotPresent
+        env: []
+        resources:
+          requests:
+            cpu: 50m
+            memory: 1Gi
+          limits:
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+        ports:
+        - containerPort: 8770
+          name: http
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8770
+          periodSeconds: 3
+          failureThreshold: 60
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8770
+          periodSeconds: 10
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8770
+          periodSeconds: 20
+          failureThreshold: 3
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: scratch-home-ops
+          mountPath: /home/ops
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 512Mi
+      - name: scratch-home-ops
+        emptyDir:
+          sizeLimit: 512Mi
+      automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: converter
+  labels:
+    app.kubernetes.io/name: converter
+    app.kubernetes.io/part-of: ops-ai
+spec:
+  selector:
+    app.kubernetes.io/name: converter
+  ports:
+  - name: http
+    port: 8770
+    targetPort: 8770
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: converter-isolated
+  labels:
+    app.kubernetes.io/name: converter
+    app.kubernetes.io/part-of: ops-ai
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: converter
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: documents
+    ports:
+    - protocol: TCP
+      port: 8770
+  egress: []

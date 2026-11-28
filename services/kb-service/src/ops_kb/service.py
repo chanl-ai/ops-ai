@@ -15,7 +15,7 @@ import contextlib
 import dataclasses
 import re
 import time
-from collections.abc import Coroutine, Iterable, Mapping
+from collections.abc import Coroutine, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, TypedDict, cast
@@ -32,6 +32,7 @@ from ops_ingest.rules import ItemFacts, evaluate_rules
 from ops_ingest.split import ai_step_allowed, document_digest
 from ops_ingest.strategies.faq import piece_digest
 from ops_ingest.text import approx_tokens
+from ops_kb.item_text import dropped_by, item_text
 from ops_service_kit import narrow
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Json, JsonValue, OptionsJSON, PageJSON, options_page, options_window
@@ -307,6 +308,13 @@ class Who:
         """Only the provisioning service sets `templateId` or `protection`; the seed, with no caller, may."""
         if self.caller is not None and (body.get("templateId") is not None or body.get("protection") is not None):
             require_provisioner(self.caller, "knowledge")
+
+
+def _read_under(item: ItemRow, source: SourceRow, version: str, key: str) -> bool:
+    """Whether the item was indexed from the reading `version` and settings `key` name: its OCR and language (an
+    item's `read_with`) and the picture level its source asks at, the part a retry describes pages under."""
+    ocr, language, *pictures = key.split(":")
+    return item.read_with == f"{version}:{ocr}:{language}" and pictures[:1] == [f"p-{source.sensitivity}"]
 
 
 def _iso(v: datetime | None) -> str | None:
@@ -1176,9 +1184,12 @@ class KnowledgeService:
         return scopes_of(places, following)
 
     async def remove_source(self, who: Who, source_id: str) -> None:
-        await self._changeable_source(who, source_id, "delete")
+        s = await self._changeable_source(who, source_id, "delete")
+        items = await self.store.items(who.tenant_id, source_ids=[source_id])
         if not await self.store.remove_source(who.tenant_id, source_id):
             raise NotFound("No source with that id.")
+        held = [*s.file_ids, *(f for i in items for f in (i.file_id, i.rendition_id))]
+        await self.let_go(who, s, held, everything=True)
 
     # ── Files and sync ───────────────────────────────────────────────────
 
@@ -1525,6 +1536,7 @@ class KnowledgeService:
                 superseded.add(latest[name].file_id)
             latest[name] = found
         await self.store.drop_files(who.tenant_id, source_id, superseded)
+        await self.let_go(who, s, [*superseded, *(i.rendition_id for i in items.values() if i.file_id in superseded)])
         excluded: list[str] = []
         for name, found in latest.items():
             counts["listed"] += 1
@@ -1828,7 +1840,9 @@ class KnowledgeService:
         try:
             ocr = self.settings_of(s).parsing.ocr
             answer = ReadingAnswer.model_validate(
-                await self.readings.reading(who.tenant_id, source_team(s), found.file_id, ocr=ocr)
+                await self.readings.reading(
+                    who.tenant_id, source_team(s), found.file_id, ocr=ocr, pictures=s.sensitivity
+                )
             )
         except DocumentsRefused as e:
             failed = ("parse", e.message)
@@ -1852,15 +1866,50 @@ class KnowledgeService:
         if cleaning.site_repeats:
             doc = without(doc, set(repeats_of(s)))
         if rebuild and existing is not None:
-            return await self._reindex(
+            settled = await self._reindex(
                 who, s, existing, name=name, doc=doc, read_with=read_with(answer), title_given=origin.title, lines=lines
             )
-        fetched: ItemFetched = {**origin.extra, "lines": lines}
-        return await self._index(
-            who, s, existing, file_id=found.file_id, name=name, mime=found.mime, doc=doc, size=found.size,
-            digest=found.digest, read_with=read_with(answer), path=origin.path, extra=fetched,
-            title_given=origin.title, allowed=origin.allowed,
-        )  # fmt: skip
+        else:
+            fetched: ItemFetched = {**origin.extra, "lines": lines}
+            settled = await self._index(
+                who, s, existing, file_id=found.file_id, name=name, mime=found.mime, doc=doc, size=found.size,
+                digest=found.digest, read_with=read_with(answer), path=origin.path, extra=fetched,
+                title_given=origin.title, allowed=origin.allowed,
+            )  # fmt: skip
+        await self._keep_rendition(who, s, existing, settled.id, answer.renditionId)
+        return settled
+
+    async def _keep_rendition(
+        self, who: Who, s: SourceRow, existing: ItemRow | None, item_id: str, rendition_id: str | None
+    ) -> None:
+        """Holds a Files reference on the PDF the item's file was drawn into, as the source, and lets go of the one
+        it showed before; a PDF Files no longer has, or has not cleared, is not named."""
+        before = existing.rendition_id if existing is not None else None
+        if rendition_id == before:
+            return
+        if rendition_id is not None:
+            try:
+                await self.files.use(
+                    who.tenant_id, source_team(s), rendition_id, source_id=s.id, source_name=s.name
+                )  # fmt: skip
+            except (FileMissing, FileNotScanned):
+                rendition_id = None
+        await self.store.update_item(who.tenant_id, item_id, {"rendition_id": rendition_id})
+        if before is not None:
+            await self.let_go(who, s, [before])
+
+    async def let_go(self, who: Who, s: SourceRow, file_ids: Sequence[str | None], *, everything: bool = False) -> None:
+        """Releases the source's Files references on `file_ids` (files and the PDFs they were drawn into) that no
+        item or file of the source still uses; `everything` releases them all, for a source being removed. Files
+        keeps a released snapshot or drawing for its retention days, then deletes it."""
+        held: set[str] = set()
+        if not everything:
+            left = await self.store.items(who.tenant_id, source_ids=[str(s.id)])
+            row = await self.store.sources(who.tenant_id, [str(s.id)])
+            held = {i.file_id for i in left} | {i.rendition_id for i in left if i.rendition_id}
+            held |= set(row[0].file_ids) if row else set()
+        for file_id in dict.fromkeys(f for f in file_ids if f and f not in held):
+            await self.files.release(who.tenant_id, source_team(s), file_id, source_id=str(s.id))
 
     async def _mark_reading(
         self, who: Who, s: SourceRow, existing: ItemRow | None, *, name: str, found: Stored, origin: Origin
@@ -1914,20 +1963,27 @@ class KnowledgeService:
             "created_at": datetime.now(UTC), **origin.extra,
         }  # fmt: skip
 
-    async def finish_reading(self, who: Who, file_id: str) -> int:
+    async def finish_reading(self, who: Who, file_id: str, *, redescribed: tuple[str, str] | None = None) -> int:
         """Indexes the source items waiting on this file's reading, once documents-service has it (its
-        reading.finished event, or the knowledge schedule asking again); the number of items it settled."""
+        reading.finished event, or the knowledge schedule asking again); the number of items it settled. With
+        `redescribed` (the reader version and settings key of a reading a retry described more of) the items already
+        indexed from that reading are indexed again, so the new page reaches search; an item whose text did not change
+        (the same event delivered twice) settles nothing."""
         settled = 0
-        for item in await self.store.reading_items(who.tenant_id, file_id=file_id):
+        statuses = ("reading", "indexed") if redescribed else ("reading",)
+        for item in await self.store.reading_items(who.tenant_id, file_id=file_id, statuses=statuses):
             found_sources = await self.store.sources(who.tenant_id, [item.source_id])
             if not found_sources:
                 continue
             source = found_sources[0]
+            if item.status == "indexed" and not (redescribed and _read_under(item, source, *redescribed)):
+                continue
             found = Stored(item.file_id, item.path, item.mime, item.size, item.digest, False)
             # A fetched item keeps the system's id as its key and its own title; a file's title comes from its reading.
             origin = Origin(item.path, item.title) if source.type == "tool" else None
+            # An indexed item reads as a new version only when its text changed, so the same event twice keeps it.
             done = await self._read_file(who, source, item, name=item.path, found=found, rebuild=False, origin=origin)
-            if done.status != "reading":
+            if done.status != "reading" and not (item.status == "indexed" and done.unchanged):
                 settled += 1
                 if done.status == "indexed":
                     await self.settle_run(who, source, "success", activate=True)
@@ -2423,7 +2479,9 @@ class KnowledgeService:
         try:
             ocr = self.settings_of(s).parsing.ocr
             answer = ReadingAnswer.model_validate(
-                await self.readings.reading(who.tenant_id, source_team(s), item.file_id, ocr=ocr)
+                await self.readings.reading(
+                    who.tenant_id, source_team(s), item.file_id, ocr=ocr, pictures=s.sensitivity
+                )
             )
         except (DocumentsRefused, ServiceUnreachable):
             return None
@@ -2856,20 +2914,16 @@ class KnowledgeService:
         settings = self.settings_of(s)
         ocr = settings.parsing.ocr
         try:
-            answer = await self.readings.reading(who.tenant_id, source_team(s), i.file_id, ocr=ocr)
+            answer = await self.readings.reading(
+                who.tenant_id, source_team(s), i.file_id, ocr=ocr, pictures=s.sensitivity
+            )
         except (DocumentsRefused, ServiceUnreachable):
             return None
         if answer.get("status") != "done":
             return None
-        cleaning = settings.cleaning
         pages = [json_object(p) for p in json_list(answer.get("pages"))]
         blocks_of = [[json_object(b) for b in json_list(p.get("blocks"))] for p in pages]
-        has_main = cleaning.main_content and any(b.get("main") for blocks in blocks_of for b in blocks)
-
-        def dropped(b: Json) -> bool:
-            if cleaning.furniture and b.get("furniture"):
-                return True
-            return has_main and not b.get("main") and b.get("kind") != "title"
+        dropped = dropped_by(settings.cleaning, pages)
 
         out: list[ReadingPage] = []
         for page, blocks in zip(pages, blocks_of, strict=True):
@@ -2893,6 +2947,26 @@ class KnowledgeService:
                 )
             )
         return ItemReading(reader_version=narrow.field(answer, "readerVersion", str), ocr=ocr, pages=out)
+
+    async def item_text(self, who: Who, item_id: str, *, page: int | None = None) -> Json:
+        """What was read from the item's file, section by section with each block's place on its page: the text half
+        of the document view. The item is read in one transaction, then documents-service's reading with none open."""
+        async with isolation.request_transaction():
+            found = await self.store.items(who.tenant_id, item_id=item_id)
+            if not found:
+                raise NotFound("No item with that id.")
+            i = found[0]
+            s = await self._source_row(who, i.source_id)
+        settings = self.settings_of(s)
+        answer: Json | None = None
+        if i.file_id and self.readings is not None:
+            try:
+                answer = await self.readings.reading(
+                    who.tenant_id, source_team(s), i.file_id, ocr=settings.parsing.ocr, pictures=s.sensitivity
+                )
+            except (DocumentsRefused, ServiceUnreachable):
+                answer = None
+        return item_text(item_id, i.file_id or None, i.mime or None, answer, settings.cleaning, page=page)
 
     async def item_chunks(self, who: Who, item_id: str, params: ListParams) -> ListPage:
         """A page of the item's pieces, searched by text in SQL, each with what search matches it as: the pieces tab of

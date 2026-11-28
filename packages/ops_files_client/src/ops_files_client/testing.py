@@ -38,6 +38,8 @@ class FakeFilesService:
     references: dict[str, set[tuple[str, str]]] = field(default_factory=dict[str, set[tuple[str, str]]])
     # A status every call answers with, standing in for a files-service that refuses kb-service's token.
     refuse: int | None = None
+    # Purposes a scanner clears the moment they are written; every other file waits for a scan result.
+    clean_on_write: tuple[str, ...] = ()
 
     def _info(self, f: dict[str, Any]) -> dict[str, Any]:
         return {k: v for k, v in f.items() if k != "tenant"}
@@ -63,7 +65,7 @@ class FakeFilesService:
             self.files[fid] = {
                 "id": fid, "tenant": tenant, "team": team, "name": p["name"], "mime": request.headers["Content-Type"],
                 "size": len(data), "digest": digest, "purpose": p["purpose"], "uploadedBy": p["uploadedBy"],
-                "scan": {"status": "pending"}, "referenceCount": 0,
+                "scan": {"status": "clean" if p["purpose"] in self.clean_on_write else "pending"}, "referenceCount": 0,
             }  # fmt: skip
             self.blobs[fid] = data
             return httpx.Response(201, json={"data": {"file": self._info(self.files[fid]), "deduplicated": False}})

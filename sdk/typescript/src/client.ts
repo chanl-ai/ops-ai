@@ -338,6 +338,11 @@ export class Knowledge extends Resource {
   push(sourceId: string, name: string, item: { title: string; text: string } & Record<string, unknown>) {
     return this.raw.kb.sources_put_item({ path: { source_id: sourceId }, body: { ...item, name } as never });
   }
+
+  /** What was read from one page of a document's file (the first unless `page` is given), by section, each paragraph with its places on the page, and every page's summary. */
+  text(itemId: string, page?: number) {
+    return this.raw.kb.items_get_item_text({ path: { item_id: itemId }, query: page ? { page } : {} });
+  }
 }
 
 export class OpsAI {

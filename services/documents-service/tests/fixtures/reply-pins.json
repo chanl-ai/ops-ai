@@ -91,7 +91,8 @@
     ],
     "pagesDone": 1,
     "pagesTotal": 1,
-    "readerVersion": "reading-4",
+    "readerVersion": "reading-6",
+    "renditionId": null,
     "settings": {
       "language": "eng",
       "ocr": "auto"
@@ -702,7 +703,8 @@
     ],
     "pagesDone": 1,
     "pagesTotal": 1,
-    "readerVersion": "reading-4",
+    "readerVersion": "reading-6",
+    "renditionId": null,
     "settings": {
       "language": "eng",
       "ocr": "auto"

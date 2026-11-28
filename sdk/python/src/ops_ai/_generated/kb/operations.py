@@ -73,6 +73,15 @@ OPERATIONS: dict[str, Operation] = {
         "query": [],
         "stream": False,
     },
+    "items_get_item_text": {
+        "body": None,
+        "headers": [],
+        "method": "GET",
+        "path": "/v1/items/{item_id}/text",
+        "pathParams": ["item_id"],
+        "query": ["page"],
+        "stream": False,
+    },
     "items_list_item_chunks": {
         "body": None,
         "headers": [],
@@ -515,6 +524,10 @@ class Operations:
         "Set Item Owner"
         return self._t.call(SERVICE, OPERATIONS["items_set_item_owner"], {"item_id": item_id}, {}, {}, body)  # type: ignore[no-any-return]
 
+    def items_get_item_text(self, item_id: str, *, page: int | None = None) -> ItemText:
+        "Get Item Text"
+        return self._t.call(SERVICE, OPERATIONS["items_get_item_text"], {"item_id": item_id}, {"page": page}, {}, None)  # type: ignore[no-any-return]
+
     def items_verify_item(self, item_id: str, body: VerifyIn) -> Item:
         "Verify Item"
         return self._t.call(SERVICE, OPERATIONS["items_verify_item"], {"item_id": item_id}, {}, {}, body)  # type: ignore[no-any-return]
@@ -905,6 +918,12 @@ class AsyncOperations:
     async def items_set_item_owner(self, item_id: str, body: OwnerIn) -> Item:
         "Set Item Owner"
         return await self._t.call(SERVICE, OPERATIONS["items_set_item_owner"], {"item_id": item_id}, {}, {}, body)  # type: ignore[no-any-return]
+
+    async def items_get_item_text(self, item_id: str, *, page: int | None = None) -> ItemText:
+        "Get Item Text"
+        return await self._t.call(
+            SERVICE, OPERATIONS["items_get_item_text"], {"item_id": item_id}, {"page": page}, {}, None
+        )  # type: ignore[no-any-return]
 
     async def items_verify_item(self, item_id: str, body: VerifyIn) -> Item:
         "Verify Item"

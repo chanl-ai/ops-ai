@@ -191,6 +191,25 @@ EXPOSE 8770
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 CMD ["python", "/app/deploy/images/healthcheck.py", "http://127.0.0.1:8770/health"]
 CMD ["python", "-m", "ops_runner"]
 
+# The converter worker: draws Word files and decks as PDF with LibreOffice (MPL-2.0) for documents-service. It opens
+# untrusted files, so it carries no service code or keys and runs with no network out (docs/deploy/converter.md).
+# Carlito and Caladea are metric-compatible with Calibri and Cambria, so a Word file keeps its line breaks and pages.
+FROM ${IMAGE_REGISTRY}python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df AS converter
+ARG APT_MIRROR=
+RUN if [ -n "$APT_MIRROR" ]; then sed -i "s|http://deb.debian.org|$APT_MIRROR|g; s|http://security.debian.org|$APT_MIRROR|g" /etc/apt/sources.list.d/debian.sources; fi \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends libreoffice-writer libreoffice-impress \
+      fonts-liberation fonts-dejavu-core fonts-crosextra-carlito fonts-crosextra-caladea fonts-noto-core \
+ && apt-get clean && find /var/lib/apt/lists -type f -delete
+RUN useradd --system --uid 10001 --home-dir /home/ops --create-home ops
+COPY deploy/images/converter/server.py deploy/images/converter/relay.py /app/
+USER 10001
+WORKDIR /app
+ENV OPS_CONVERTER_PORT=8770 OPS_CONVERTER_HOST=0.0.0.0
+EXPOSE 8770
+HEALTHCHECK --interval=15s --timeout=3s --start-period=5s CMD ["python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8770/health', timeout=2).status == 200 else 1)"]
+CMD ["python", "/app/server.py"]
+
 # tools-service's policy engine with its policy built in, so an install needs no copy of the repo.
 FROM opa-image AS opa
 COPY services/tools-service/policy /policy

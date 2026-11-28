@@ -223,7 +223,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/documents/readings/{file_id}",
         "pathParams": ["file_id"],
-        "query": ["ocr", "language", "page"],
+        "query": ["ocr", "language", "page", "pictureSensitivity"],
         "stream": False,
     },
     "documents_page_image": {
@@ -499,14 +499,20 @@ class Operations:
         return self._t.call(SERVICE, OPERATIONS["documents_ask_reading"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     def documents_get_reading(
-        self, file_id: str, *, ocr: str | None = None, language: str | None = None, page: int | None = None
+        self,
+        file_id: str,
+        *,
+        ocr: str | None = None,
+        language: str | None = None,
+        page: int | None = None,
+        picture_sensitivity: str | None = None,
     ) -> FileReading:
         "Get Reading"
         return self._t.call(
             SERVICE,
             OPERATIONS["documents_get_reading"],
             {"file_id": file_id},
-            {"ocr": ocr, "language": language, "page": page},
+            {"ocr": ocr, "language": language, "page": page, "pictureSensitivity": picture_sensitivity},
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -769,14 +775,20 @@ class AsyncOperations:
         return await self._t.call(SERVICE, OPERATIONS["documents_ask_reading"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def documents_get_reading(
-        self, file_id: str, *, ocr: str | None = None, language: str | None = None, page: int | None = None
+        self,
+        file_id: str,
+        *,
+        ocr: str | None = None,
+        language: str | None = None,
+        page: int | None = None,
+        picture_sensitivity: str | None = None,
     ) -> FileReading:
         "Get Reading"
         return await self._t.call(
             SERVICE,
             OPERATIONS["documents_get_reading"],
             {"file_id": file_id},
-            {"ocr": ocr, "language": language, "page": page},
+            {"ocr": ocr, "language": language, "page": page, "pictureSensitivity": picture_sensitivity},
             {},
             None,
         )  # type: ignore[no-any-return]

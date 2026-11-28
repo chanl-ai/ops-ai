@@ -30,6 +30,7 @@ from ops_documents.errors import (
     FileNotReadyError,
     IdempotencyConflictError,
     InvalidRequestError,
+    PolicyUnreadError,
     StateError,
 )
 from ops_documents.extraction import Extractor
@@ -61,6 +62,7 @@ from ops_documents.models import (
     TestRun,
 )
 from ops_documents.readings import Readings, settings_of
+from ops_documents.renditions import DRAWN
 from ops_documents.store import DocumentTypesStore, ExtractionsStore, NameTakenError, ReadingsStore, TemplateCopies
 from ops_documents.store.metadata import reachable
 from ops_documents.templates import templates_router
@@ -71,7 +73,7 @@ from ops_identity import Auth, CurrentCaller, Principal, install_auth
 from ops_identity.fastapi import Tx
 from ops_ingest.reading import OcrMode, ocr_installed
 from ops_service_kit.background import BackgroundHealthOut
-from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
+from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import (
     Envelope,
     ListResult,
@@ -115,6 +117,8 @@ def _status(e: DocumentsError) -> ApiError:
         return Conflict(message)
     if isinstance(e, InvalidRequestError):
         return ValidationFailed(message)
+    if isinstance(e, PolicyUnreadError):
+        return ServiceUnavailable(message, code="policy_unread")
     return ApiError(message)
 
 
@@ -323,21 +327,28 @@ def create_documents_app(
         """The file's reading: every page's text in reading order, blocks with boxes, words with confidence, form
         fields and OCR quality. Answered at once when it is stored, or when the file is small (5 pages and 5 MB) with no
         page to OCR; otherwise 202 with its status, and reading.finished or reading.failed when it ends."""
-        status, answer = await readings.ask(who, body.file_id, settings_of(body.ocr, body.language))
+        status, answer = await readings.ask(
+            who, body.file_id, settings_of(body.ocr, body.language), pictures=body.picture_sensitivity
+        )
         return ok(answer, status)
 
     @docs.get("/readings/{file_id}", response_model=Envelope[FileReading], dependencies=[service_scope("view")])
     async def get_reading(  # pyright: ignore[reportUnusedFunction]
         file_id: str,
         who: Caller,
+        *,
         _: Tx,
         ocr: OcrMode = "auto",
         language: str = Query("eng", min_length=2, max_length=64, pattern=r"^[A-Za-z_]+(\+[A-Za-z_]+)*$"),
         page: int | None = Query(None, ge=1),
+        picture_sensitivity: str | None = Query(
+            None, alias="pictureSensitivity", pattern="^(public|internal|confidential|restricted)$"
+        ),
     ) -> JSONResponse:
         """The reading as it is now, with every page or the one asked for once done; status none when never asked
-        for. A file the team cannot see is 404, whoever else holds its bytes."""
-        return ok(await readings.get(who, file_id, settings_of(ocr, language), page=page))
+        for. A file the team cannot see is 404, whoever else holds its bytes. `pictureSensitivity` names the same
+        reading the POST asked for."""
+        return ok(await readings.get(who, file_id, settings_of(ocr, language), page=page, pictures=picture_sensitivity))
 
     @docs.get(
         "/readings/{file_id}/pages/{number}/image",
@@ -358,8 +369,15 @@ def create_documents_app(
     ) -> Response:
         """One page drawn as an image, on request and never stored: 150 DPI, longest side 1,600 pixels (512 at low)."""
         file = await extractor.files.readable(who, file_id)
-        data = await extractor.files.read(who, file)
-        drawn = await asyncio.to_thread(page_images.render, data, file.mime, [number])
+        data, mime = await extractor.files.read(who, file), file.mime
+        if file.mime in DRAWN:
+            # A Word file or deck has pages only as drawn into its PDF.
+            kept = await readings.store.rendition(who.team, file.digest or "") if readings.renditions else None
+            pdf = await readings.renditions.read(who, kept) if readings.renditions and kept else None
+            if pdf is None:
+                raise NotFound(f"Page {number}")
+            data, mime = pdf, "application/pdf"
+        drawn = await asyncio.to_thread(page_images.render, data, mime, [number])
         if number not in drawn:
             raise NotFound(f"Page {number}")
         image = drawn[number]

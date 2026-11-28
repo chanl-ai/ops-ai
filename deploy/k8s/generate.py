@@ -45,6 +45,10 @@ class Workload:
     # The console copies its build to .next at every start (deploy/images/console-start.mjs) and Next writes its cache
     # there, inside a folder of the image; a mount cannot stand in, since the copy first deletes the folder.
     writable_root: bool = False
+    # A cap on each emptyDir (/tmp and the scratch paths); the kubelet evicts a pod that writes past it.
+    scratch_size: str | None = None
+    # Ingress only from these workloads on its port, and no egress at all (isolated_policy).
+    isolated_from: tuple[str, ...] = ()
 
 
 WORKLOADS = [
@@ -92,9 +96,23 @@ WORKLOADS = [
         "documents",
         8760,
         "/health",
-        env={"OPS_SERVICE_SIGNING_KID": "svc-documents-1"},
+        # The converter below is on in every cluster, so Word files and decks are drawn as pages.
+        env={"OPS_SERVICE_SIGNING_KID": "svc-documents-1", "OPS_DOCUMENTS_CONVERTER_URL": "http://converter:8770"},
         secret="documents",
         memory="512Mi",
+    ),
+    # Draws Word files and decks as PDF with LibreOffice for documents-service (docs/deploy/converter.md). It opens
+    # untrusted files, so it holds no settings or keys, reaches nothing, and only documents can reach it.
+    Workload(
+        "converter",
+        "converter",
+        8770,
+        "/health",
+        settings=False,
+        scratch=("/home/ops",),
+        memory="1Gi",
+        scratch_size="512Mi",
+        isolated_from=("documents",),
     ),
     Workload(
         "opa",
@@ -234,7 +252,12 @@ POD_SECURITY = {
 
 def workload(w: Workload) -> str:
     pod: dict[str, Any] = {"securityContext": POD_SECURITY, "containers": [container(w)]}
-    pod["volumes"] = [{"name": "tmp", "emptyDir": {}}, *({"name": _scratch_name(p), "emptyDir": {}} for p in w.scratch)]
+    pod["volumes"] = [
+        {"name": name, "emptyDir": {"sizeLimit": w.scratch_size} if w.scratch_size else {}}
+        for name in ("tmp", *(_scratch_name(p) for p in w.scratch))
+    ]
+    if w.isolated_from:
+        pod["automountServiceAccountToken"] = False
     docs: list[dict[str, Any]] = []
     if w.data:
         pod["volumes"].append({"name": "data", "persistentVolumeClaim": {"claimName": f"{w.name}-data"}})
@@ -275,7 +298,36 @@ def workload(w: Workload) -> str:
         )
         if w.name == "platform":
             docs.append(internal_policy(w.port))
+        if w.isolated_from:
+            docs.append(isolated_policy(w, w.port))
     return dump(docs)
+
+
+def isolated_policy(w: Workload, port: int) -> dict[str, Any]:
+    """Ingress to `w` only from `isolated_from` on its port, and no egress: an empty egress list with Egress among the
+    policy types denies every connection out, DNS included. Enforced only where the network plugin enforces
+    NetworkPolicy."""
+    unknown = set(w.isolated_from) - {x.name for x in WORKLOADS}
+    if unknown:
+        raise SystemExit(f"generate: {w.name}'s isolated_from names no workload: {sorted(unknown)}")
+    return {
+        "apiVersion": "networking.k8s.io/v1",
+        "kind": "NetworkPolicy",
+        "metadata": {"name": f"{w.name}-isolated", "labels": labels(w.name)},
+        "spec": {
+            "podSelector": {"matchLabels": {"app.kubernetes.io/name": w.name}},
+            "policyTypes": ["Ingress", "Egress"],
+            "ingress": [
+                {
+                    "from": [
+                        {"podSelector": {"matchLabels": {"app.kubernetes.io/name": name}}} for name in w.isolated_from
+                    ],
+                    "ports": [{"protocol": "TCP", "port": port}],
+                }
+            ],
+            "egress": [],
+        },
+    }
 
 
 def internal_policy(public_port: int) -> dict[str, Any]:
