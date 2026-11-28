@@ -4,15 +4,18 @@ import { join, resolve } from 'node:path';
 
 import type { NextConfig } from 'next';
 
-// What's new and Coming next: the entries under the repo's changelog/ (one file each, the file name its id) and
-// roadmap.json, read once here and inlined into the build, so the console shows the list it was built with.
+// What's new and Coming next: the unreleased fragments under the repo's changelog/ (one file each, the file name its id)
+// and the folded releases under changelog/releases/ (one file each, the version its name), with roadmap.json, read once
+// here and inlined into the build, so the console shows the list it was built with.
 const repoRoot = resolve(process.cwd(), '../..');
 const changelogDir = join(repoRoot, 'changelog');
-const changelog = existsSync(changelogDir)
-  ? readdirSync(changelogDir)
-      .filter((f) => f.endsWith('.json'))
-      .map((f) => ({ id: f.replace(/\.json$/, ''), ...JSON.parse(readFileSync(join(changelogDir, f), 'utf8')) }))
-  : [];
+const jsonFiles = (dir: string) => (existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.json')) : []);
+const fragments = jsonFiles(changelogDir).map((f) => ({ id: f.replace(/\.json$/, ''), version: '', ...JSON.parse(readFileSync(join(changelogDir, f), 'utf8')) }));
+const releases = jsonFiles(join(changelogDir, 'releases')).flatMap((f) => {
+  const release = JSON.parse(readFileSync(join(changelogDir, 'releases', f), 'utf8'));
+  return (release.entries ?? []).map((e: object, i: number) => ({ ...e, id: `${release.version}-${i}`, version: release.version, date: release.date }));
+});
+const changelog = [...fragments, ...releases];
 const roadmapFile = join(repoRoot, 'roadmap.json');
 const roadmap = existsSync(roadmapFile) ? JSON.parse(readFileSync(roadmapFile, 'utf8')) : [];
 
@@ -30,13 +33,16 @@ const git = (args: string[]) => {
 const version = process.env.OPS_VERSION || git(['describe', '--tags', '--exact-match', '--match', 'v*', 'HEAD']);
 // A full SHA (deploy/release/images.sh passes one) is cut to the short form people compare.
 const commit = (process.env.OPS_COMMIT || git(['rev-parse', '--short', 'HEAD'])).slice(0, 8);
+// The branch an untagged build came from; a detached checkout answers HEAD, which names nothing.
+const branchRaw = process.env.OPS_BRANCH || git(['rev-parse', '--abbrev-ref', 'HEAD']);
+const branch = branchRaw === 'HEAD' ? '' : branchRaw;
 
 const nextConfig: NextConfig = {
   // Next's development badge sits over the bottom-left corner, where the Settings sidebar's last row is (PM test 10-29).
   devIndicators: false,
   // A cloud box serves `next dev` through a proxy on its own host name; Next 16 refuses dev assets from any other origin.
   ...(process.env.OPS_PUBLIC_ORIGIN ? { allowedDevOrigins: [new URL(process.env.OPS_PUBLIC_ORIGIN).hostname] } : {}),
-  env: { OPS_CHANGELOG: JSON.stringify(changelog), OPS_ROADMAP: JSON.stringify(roadmap), NEXT_PUBLIC_OPS_VERSION: version, NEXT_PUBLIC_OPS_COMMIT: commit },
+  env: { OPS_CHANGELOG: JSON.stringify(changelog), OPS_ROADMAP: JSON.stringify(roadmap), NEXT_PUBLIC_OPS_VERSION: version, NEXT_PUBLIC_OPS_COMMIT: commit, NEXT_PUBLIC_OPS_BRANCH: branch },
   // The console image ships Next's traced server alone (deploy/fly/Dockerfile, target console). Traced from the
   // workspace root, so packages pnpm links from there are found.
   ...(process.env.OPS_CONSOLE_STANDALONE === '1' ? { output: 'standalone', outputFileTracingRoot: resolve(process.cwd(), '../..') } : {}),

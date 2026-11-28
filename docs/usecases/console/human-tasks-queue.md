@@ -1,6 +1,6 @@
 # A reviewer decides a Human Task beside a fixed decision panel
 
-Status: current. Id: `uc-460`. Service: `console` with `agents-service`. Layers: ui.
+Status: current. Id: `uc-460`. Service: `console` with `agents-service`. Layers: api, ui.
 
 Human Tasks is one page: the queue grouped by case on the left, the open task's evidence beside a decision panel whose
 header and Decide stay in view. The service orders and names the cases (`GET /v1/reviews?group=case`) and says which
@@ -28,9 +28,18 @@ task is next (`/place?group=case`). Every view as a table, with bulk decisions a
 | 7 | Open All tasks | The table with its views |
 | 8 | Open the sidebar on Human Tasks, then open Cases | The sidebar stays open: it starts folded and keeps her own choice |
 | 9 | Throughout | No page error; no sideways scroll at 375 px |
+| 10 | ui: Maya searches the list for Jordan, then for nobody | Only Jordan's task is listed, asked of the server; then No task matches |
+| 11 | ui: Rohan, a viewer, opens Jordan's task | The task shows with no More menu and no page error |
+| 12 | ui: Maya opens Jordan's workflow task, then a publish request; she chooses Return, cancels, chooses it again, gives a reason and returns it | No Return on the workflow task; on the publish request Approve and Reject sit in the pinned bar, Return opens the reason box with Return and Cancel, Cancel leaves it pending, and the second try returns it |
+| 13 | ui: at 390 px Maya opens Jordan's task from its row, tabs through it and closes it | Focus stays inside the task; closing it puts focus back on the row |
+| 14 | api: James opens a write approval through the tasks API; Maya reads it | The step in words (`actionLabel`), `approvalsNeeded`, `viewerApproved` false; `canDecide` and `canAssign` true, `canReassign` and `canReturn` false |
+| 15 | api: Rohan, a viewer, reads it and tries to assign it | Every right false; the assign route refuses him (403) |
+| 16 | api: Maya assigns it to herself | The task and its list row offer Reassign, not Assign |
+| 17 | api: Maya searches | The server finds it by its words and lists nothing for a search that matches nothing |
 
 ## Acceptance layers
 
 | Layer | Script | State |
 |---|---|---|
+| api | `console/scripts/test-uc-460-api.py` | passing |
 | ui | `console/scripts/test-uc-460-ui.mjs` | passing |

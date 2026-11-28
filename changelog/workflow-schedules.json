@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-23",
-  "title": "Workflows can run on a schedule",
-  "description": "A workflow's Schedule trigger can run every few minutes, hours or days, on the weekdays you choose and between set hours, in your time zone. A change applies at once to the live version, and a time skipped or repeated by a clock change runs once.",
-  "tag": "new"
-}

@@ -63,6 +63,7 @@ ENV NEXT_PUBLIC_AUTH_PROVIDER=platform \
 # The version What's new shows (next.config.ts): the build has no .git, so stg_deploy.sh passes the tag and commit.
 ARG OPS_VERSION=
 ARG OPS_COMMIT=
+ARG OPS_BRANCH=
 RUN pnpm --filter @ops-ai/console exec next build
 
 # The portable console: every URL variable the console reads is set to its placeholder (console-build.ts), so the
@@ -81,6 +82,7 @@ ENV NEXT_PUBLIC_AUTH_PROVIDER=platform \
     OPS_CONSOLE_STANDALONE=1
 ARG OPS_VERSION=
 ARG OPS_COMMIT=
+ARG OPS_BRANCH=
 RUN pnpm --filter @ops-ai/console exec next build
 
 FROM node-image AS console

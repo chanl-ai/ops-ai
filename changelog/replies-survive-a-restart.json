@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-21",
-  "title": "A reply survives a restart of the platform",
-  "description": "If the platform restarts while an assistant is replying, the reply is picked up and finished without asking the model again or repeating a change it already made. A team that is already running as many replies as it may is asked to try again shortly.",
-  "tag": "improved"
-}

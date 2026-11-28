@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-20",
-  "title": "Test an agent that asks other agents before publishing",
-  "description": "An agent's Test panel now offers the agents its draft was granted, so a chain can be tried before the agent is published. Chats keep running the published version.",
-  "tag": "fix"
-}

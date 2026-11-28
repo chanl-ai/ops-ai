@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-22",
-  "title": "Links to an agent's Evals or Channels tab open that tab",
-  "description": "Links from reviews, publish checks and channels to an agent's Evals or Channels tab opened its Settings instead; they now open the tab they name.",
-  "tag": "fix"
-}

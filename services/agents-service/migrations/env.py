@@ -8,15 +8,33 @@ from alembic import context
 from sqlalchemy import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from ops_agents.store import background as _background  # noqa: F401 - registers the background process tables
-from ops_agents.store import channels as _channels  # noqa: F401 - registers the channel tables
-from ops_agents.store import events as _events  # noqa: F401 - registers thread_events
-from ops_agents.store import guardrails as _guardrails  # noqa: F401 - registers the guardrail tables
-from ops_agents.store import leases as _leases  # noqa: F401 - registers thread_leases on the metadata
-from ops_agents.store import model_calls as _model_calls  # noqa: F401 - registers model_call_records
-from ops_agents.store import reviews as _reviews  # noqa: F401 - registers review_decisions and review_approvals
-from ops_agents.store import skills as _skills  # noqa: F401 - registers the skill tables
-from ops_agents.store import usage as _usage  # noqa: F401 - registers thread_budgets
+from ops_agents.store import (
+    background as _background,  # noqa: F401  # pyright: ignore[reportUnusedImport] - registers the background process tables
+)
+from ops_agents.store import (
+    channels as _channels,  # noqa: F401  # pyright: ignore[reportUnusedImport] - registers the channel tables
+)
+from ops_agents.store import (
+    events as _events,  # noqa: F401  # pyright: ignore[reportUnusedImport] - registers thread_events
+)
+from ops_agents.store import (
+    guardrails as _guardrails,  # noqa: F401  # pyright: ignore[reportUnusedImport] - registers the guardrail tables
+)
+from ops_agents.store import (
+    leases as _leases,  # noqa: F401  # pyright: ignore[reportUnusedImport] - registers thread_leases on the metadata
+)
+from ops_agents.store import (
+    model_calls as _model_calls,  # noqa: F401  # pyright: ignore[reportUnusedImport] - registers model_call_records
+)
+from ops_agents.store import (
+    reviews as _reviews,  # noqa: F401  # pyright: ignore[reportUnusedImport] - registers review_decisions and review_approvals
+)
+from ops_agents.store import (
+    skills as _skills,  # noqa: F401  # pyright: ignore[reportUnusedImport] - registers the skill tables
+)
+from ops_agents.store import (
+    usage as _usage,  # noqa: F401  # pyright: ignore[reportUnusedImport] - registers thread_budgets
+)
 from ops_agents.store.graphs import metadata
 from ops_service_kit.settings import Settings
 from ops_store.schema import offline_dialect_opts

@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from alembic import op
 
+from ops_store.schema import role_ddl
+
 revision = "0004_lookups"
 down_revision = "0003_key_expiry"
 branch_labels = None
@@ -48,7 +50,7 @@ FUNCTIONS = {
 
 
 def upgrade() -> None:
-    op.execute(f"DO $$ BEGIN CREATE ROLE {LOOKUP} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$")
+    op.execute(role_ddl(LOOKUP))
     for table in TABLES:
         op.execute(f"GRANT SELECT ON {table} TO {LOOKUP}")
         op.execute(f"CREATE POLICY {table}_lookup ON {table} FOR SELECT TO {LOOKUP} USING (true)")

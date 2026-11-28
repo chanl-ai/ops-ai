@@ -21,6 +21,7 @@ import { useDeleteKb, useKnowledgeBase, useRefreshKb, useRetryKbFailed } from '@
 import { useKnowledgeChanges } from '@/hooks/knowledge-change-queries';
 import { useCanBuild } from '@/hooks/me-queries';
 import { useTabParam } from '@/hooks/use-tab-param';
+import { baseHeader } from '@/lib/fact-line';
 import { count, relativeTime } from '@/lib/format';
 
 import { KbDocumentsTab } from '../_parts/kb-documents-tab';
@@ -67,6 +68,7 @@ export default function KnowledgeBasePage() {
     );
 
   const kb = query.data;
+  const header = baseHeader({ description: kb.description, collections: kb.collections, synced: kb.lastSyncAt ? relativeTime(kb.lastSyncAt) : 'never' });
   // The knowledge base's own flags (its detail asks the write routes' check); the team's permission until they load.
   const canBuild = kb.canEdit ?? teamCanBuild;
   const canDelete = kb.canDelete ?? teamCanBuild;
@@ -82,10 +84,8 @@ export default function KnowledgeBasePage() {
         badge={<KbHealthBadge health={kb.health} />}
         description={
           <span>
-            {kb.description ? `${kb.description} · ` : null}
-            <span className="text-xs">
-              {kb.collections.length ? `Collections: ${kb.collections.join(', ')}` : 'All collections'} · synced {kb.lastSyncAt ? relativeTime(kb.lastSyncAt) : 'never'}
-            </span>
+            {header.lead}
+            <span className="text-xs">{header.facts}</span>
           </span>
         }
         backHref="/data/knowledge"
