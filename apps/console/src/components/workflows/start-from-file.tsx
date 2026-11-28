@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { ArrowRight, Loader2 } from 'lucide-react';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { FileUpload, type UploadItem } from '@/components/shared/file-upload';

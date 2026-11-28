@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import type { DateRange } from 'react-day-picker';
 import { CheckCircle2, Clock, SquareTerminal, XCircle } from 'lucide-react';
 

@@ -1,6 +1,6 @@
 'use client';
 
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { PanelRight } from 'lucide-react';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
@@ -57,7 +57,7 @@ export const reviewColumns: ColumnDef<ReviewRow>[] = [
     accessorKey: 'risk',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Risk" />,
     cell: ({ row }) => <RiskBadge risk={row.original.risk} />,
-    sortingFn: (a, b) => RISK_ORDER[a.original.risk] - RISK_ORDER[b.original.risk],
+    sortFn: (a, b) => RISK_ORDER[a.original.risk] - RISK_ORDER[b.original.risk],
     filterFn: facetFilterFn,
   },
   {

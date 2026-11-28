@@ -4,7 +4,7 @@ import Link from 'next/link';
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { Activity, AlertTriangle, ArrowRight, Boxes, CalendarClock, Download, CalendarX, Clock, Plus, Route, ShieldAlert, Trash2, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 

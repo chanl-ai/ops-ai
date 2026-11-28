@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { useRouter } from 'next/navigation';
 import { FlaskConical, Gavel, History, PlayCircle, Scale, ShieldAlert, ShieldCheck, ShieldX, TestTubes } from 'lucide-react';
 import { toast } from 'sonner';

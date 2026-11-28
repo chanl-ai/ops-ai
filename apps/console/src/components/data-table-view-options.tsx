@@ -2,7 +2,8 @@
 
 import { DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
 import { MixerHorizontalIcon } from '@radix-ui/react-icons';
-import { Table } from '@tanstack/react-table';
+import type { RowData } from '@tanstack/react-table';
+import type { LegacyReactTable as Table } from '@tanstack/react-table/legacy';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -13,7 +14,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 
-interface DataTableViewOptionsProps<TData> {
+interface DataTableViewOptionsProps<TData extends RowData> {
   table: Table<TData>;
 }
 
@@ -24,7 +25,7 @@ function columnName(id: string, header: unknown): string {
   return words.charAt(0).toUpperCase() + words.slice(1).toLowerCase();
 }
 
-export function DataTableViewOptions<TData>({ table }: DataTableViewOptionsProps<TData>) {
+export function DataTableViewOptions<TData extends RowData>({ table }: DataTableViewOptionsProps<TData>) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { Archive, ArchiveRestore, Bot, ExternalLink, History, Pin, PinOff, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 

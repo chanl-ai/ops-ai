@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { KeyRound, ShieldCheck } from 'lucide-react';
 
 import { DataTableWithViews } from '@/components/data-table-with-views';

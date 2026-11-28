@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { Download } from 'lucide-react';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
@@ -23,7 +23,7 @@ const tierColumn = <T extends { tier: Risk }>(): ColumnDef<T> => ({
   accessorKey: 'tier',
   header: ({ column }) => <DataTableColumnHeader column={column} title="Risk tier" />,
   cell: ({ row }) => <RiskBadge risk={row.original.tier} />,
-  sortingFn: (a, b) => TIER_ORDER[a.original.tier] - TIER_ORDER[b.original.tier],
+  sortFn: (a, b) => TIER_ORDER[a.original.tier] - TIER_ORDER[b.original.tier],
   filterFn: facetFilterFn,
 });
 const kindColumn = <T extends { asset: { kind: string } }>(): ColumnDef<T> => ({ id: 'kind', accessorFn: (r) => r.asset.kind, header: 'Kind', filterFn: facetFilterFn });

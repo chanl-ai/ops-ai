@@ -2,7 +2,8 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { RowData } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { Globe, Network, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -84,7 +85,7 @@ function rangeColumns(canEdit: boolean, onRemove: (v: string) => void): ColumnDe
   ];
 }
 
-function actions<T>(onRemove: (row: T) => void): ColumnDef<T> {
+function actions<T extends RowData>(onRemove: (row: T) => void): ColumnDef<T> {
   return {
     id: 'actions',
     meta: { className: 'sticky right-0 z-[1] w-10 bg-card shadow-[-8px_0_8px_-8px_rgb(0_0_0/0.12)]' },

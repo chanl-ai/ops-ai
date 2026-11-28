@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { Database, Globe, KeyRound, FlaskConical, Plus, RefreshCw, Server, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 

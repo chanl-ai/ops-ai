@@ -1,6 +1,6 @@
 'use client';
 
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { Bot, KeyRound, LogOut, MonitorSmartphone, Smartphone, Trash2 } from 'lucide-react';
 
 import { DataTableWithViews } from '@/components/data-table-with-views';

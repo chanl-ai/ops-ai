@@ -1,6 +1,7 @@
 'use client';
 
-import { Row } from '@tanstack/react-table';
+import type { RowData } from '@tanstack/react-table';
+import type { LegacyRow as Row } from '@tanstack/react-table/legacy';
 import { LucideIcon, MoreVertical } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -17,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-interface DataTableRowActionsProps<TData> {
+interface DataTableRowActionsProps<TData extends RowData> {
   row: Row<TData>;
   actions?: {
     label: string;
@@ -34,7 +35,7 @@ interface DataTableRowActionsProps<TData> {
   onStatusChange?: (row: Row<TData>, status: string) => void;
 }
 
-export function DataTableRowActions<TData>({
+export function DataTableRowActions<TData extends RowData>({
   row,
   actions = [],
   statusOptions = [],

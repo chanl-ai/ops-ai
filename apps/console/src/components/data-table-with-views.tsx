@@ -4,20 +4,24 @@ import * as React from 'react';
 import { usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  ColumnDef,
   ColumnFiltersState,
+  type RowData,
+  ColumnVisibilityState as VisibilityState,
   SortingState,
-  VisibilityState,
   flexRender,
+  PaginationState as TanStackPaginationState,
+} from '@tanstack/react-table';
+// The v8-shaped hook and row model options of react-table 9: every feature on, as the table was written for.
+import {
+  type LegacyColumnDef as ColumnDef,
   getCoreRowModel,
   getFacetedRowModel,
   getFacetedUniqueValues,
   getFilteredRowModel,
   getPaginationRowModel,
   getSortedRowModel,
-  useReactTable,
-  PaginationState as TanStackPaginationState,
-} from '@tanstack/react-table';
+  useLegacyTable as useReactTable,
+} from '@tanstack/react-table/legacy';
 import { ChevronRight, LayoutGrid, Table as TableIcon } from 'lucide-react';
 
 import {
@@ -73,7 +77,7 @@ export interface DataTableWithViewsServerPagination {
   isLoading?: boolean;
 }
 
-interface DataTableWithViewsProps<TData, TValue> {
+interface DataTableWithViewsProps<TData extends RowData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   searchColumn?: string;
@@ -163,13 +167,13 @@ interface DataTableWithViewsProps<TData, TValue> {
 /** How many data columns a list shows before the rest wait under View (five or six; six overflowed
  * Files at 1280). */
 const SHOWN_BY_DEFAULT = 5;
-const keyOf = <T, V>(c: ColumnDef<T, V>) => c.id ?? ((c as { accessorKey?: string }).accessorKey ? String((c as { accessorKey?: string }).accessorKey) : undefined);
+const keyOf = <T extends RowData, V>(c: ColumnDef<T, V>) => c.id ?? ((c as { accessorKey?: string }).accessorKey ? String((c as { accessorKey?: string }).accessorKey) : undefined);
 
 /**
  * Which columns show: the page's own choice first; otherwise the first five data columns, with the rest under View (a
  * column that cannot be hidden always shows). A person's own choice is remembered per list in this browser.
  */
-function useRememberedColumns<T, V>(columns: ColumnDef<T, V>[], initial: VisibilityState) {
+function useRememberedColumns<T extends RowData, V>(columns: ColumnDef<T, V>[], initial: VisibilityState) {
   const pathname = usePathname();
   const { ids } = useCurrentPerson();
   const keys = columns.map(keyOf).filter((k): k is string => !!k);
@@ -223,7 +227,7 @@ function useRememberedColumns<T, V>(columns: ColumnDef<T, V>[], initial: Visibil
   return [visibility, set] as const;
 }
 
-export function DataTableWithViews<TData, TValue>({
+export function DataTableWithViews<TData extends RowData, TValue>({
   columns: given,
   data,
   searchColumn = 'title',
@@ -303,7 +307,8 @@ export function DataTableWithViews<TData, TValue>({
   );
   const table = useReactTable({
     data: shownData.rows,
-    columns,
+    // The table reads every column's value as unknown; a column list typed with one value type is the same list.
+    columns: columns as ColumnDef<TData, unknown>[],
     state: {
       rowPinning: { top: shownData.pinned, bottom: [] },
       columnOrder,
@@ -334,6 +339,10 @@ export function DataTableWithViews<TData, TValue>({
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
   });
+  // The hook returns a new table object when its state changes, so an effect that listed it would run again after
+  // every change it makes; effects read the current table through this ref.
+  const tableNow = React.useRef(table);
+  tableNow.current = table;
   // The first visible name column, pinned on a phone with the select box before it; a list that marks none pins its
   // first data column, so a phone always leads with what the row is.
   const visible = table.getVisibleLeafColumns();
@@ -390,10 +399,10 @@ export function DataTableWithViews<TData, TValue>({
   // Notify parent of selection changes
   React.useEffect(() => {
     if (onSelectionChange) {
-      const selectedRows = table.getSelectedRowModel().rows.map((row) => row.original);
+      const selectedRows = tableNow.current.getSelectedRowModel().rows.map((row) => row.original);
       onSelectionChange(selectedRows);
     }
-  }, [rowSelection, onSelectionChange, table]);
+  }, [rowSelection, onSelectionChange]);
 
   // Imperative selection clear — parent bumps selectionResetKey after a bulk
   // action so the checkboxes don't linger on rows that shifted under a refetch.
@@ -419,8 +428,8 @@ export function DataTableWithViews<TData, TValue>({
       didMountResetRef.current = true;
       return; // skip the initial mount so we don't clear a pre-seeded selection
     }
-    table.resetRowSelection();
-  }, [selectionResetKey, table]);
+    tableNow.current.resetRowSelection();
+  }, [selectionResetKey]);
 
   const didMountFilterResetRef = React.useRef(false);
   React.useEffect(() => {
@@ -429,8 +438,8 @@ export function DataTableWithViews<TData, TValue>({
       didMountFilterResetRef.current = true;
       return;
     }
-    table.resetColumnFilters();
-  }, [filterResetKey, table]);
+    tableNow.current.resetColumnFilters();
+  }, [filterResetKey]);
 
   // Transport bulk actions to PageLayout header when inside a PageLayout
   const bulkTransport = useBulkSelectionTransport();
@@ -453,7 +462,7 @@ export function DataTableWithViews<TData, TValue>({
           variant: action.variant,
           onClick: () => action.onClick(selected),
         })),
-        onClear: () => table.resetRowSelection(),
+        onClear: () => tableNow.current.resetRowSelection(),
       });
     } else {
       bulkTransport.unregister();

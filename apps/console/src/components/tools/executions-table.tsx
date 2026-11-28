@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { ScrollText } from 'lucide-react';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';

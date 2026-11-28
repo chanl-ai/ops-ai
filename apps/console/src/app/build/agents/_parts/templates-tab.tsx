@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { LayoutTemplate, Play } from 'lucide-react';
 
 import { CATEGORY_ICON, CATEGORY_ORDER, TemplateCard, TemplatePreview, TemplateStatusBadge } from '@/components/agents/template-meta';

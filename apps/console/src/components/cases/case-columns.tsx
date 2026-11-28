@@ -1,6 +1,6 @@
 'use client';
 
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { selectColumn } from '@/components/shared/select-column';
@@ -50,7 +50,7 @@ export const caseColumns: ColumnDef<CaseTableRow>[] = [
     accessorKey: 'priority',
     header: ({ column }) => <DataTableColumnHeader column={column} title="Priority" />,
     cell: ({ row }) => <PriorityBadge priority={row.original.priority} />,
-    sortingFn: (a, b) => PRIORITY_ORDER[a.original.priority] - PRIORITY_ORDER[b.original.priority],
+    sortFn: (a, b) => PRIORITY_ORDER[a.original.priority] - PRIORITY_ORDER[b.original.priority],
     filterFn: facetFilterFn,
   },
   {

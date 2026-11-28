@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import type { ColumnDef } from '@tanstack/react-table';
+import type { LegacyColumnDef as ColumnDef } from '@tanstack/react-table/legacy';
 import { Clock, Pencil, Plus, ShieldCheck, ShieldQuestion, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
