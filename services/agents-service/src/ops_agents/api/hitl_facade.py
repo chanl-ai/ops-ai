@@ -120,10 +120,12 @@ class ChatReview(TypedDict):
     confidence: float
     proposal: str
     actionTool: JsonValue
-    currency: str
+    actionLabel: str | None
+    currency: str | None
     policy: ReviewPolicy
     slaMinutes: int | None
     approvals: list[str]
+    approvalsNeeded: int
     status: str
     createdAt: JsonValue
     reasoning: list[str]
@@ -140,6 +142,10 @@ class ChatReview(TypedDict):
     assignee: NotRequired[JsonValue]
     caseTitle: NotRequired[str | None]
     canDecide: NotRequired[bool]
+    canAssign: NotRequired[bool]
+    canReassign: NotRequired[bool]
+    canReturn: NotRequired[bool]
+    viewerApproved: NotRequired[bool]
 
 
 # One review as GET /reviews/{id} and a decision answer it: a paused thread step, a run's review step, a publish
@@ -154,7 +160,8 @@ Listed = Review | engine_reviews.EngineRow
 _TASK_KEEP = frozenset(
     {
         "id", "runId", "threadId", "reviewId", "workflowId", "workflowVersion", "agentSlug", "caseId", "origin",
-        "status", "kind", "risk", "policy", "decidingTeam", "assignee", "canDecide", "actionTool", "stepName",
+        "status", "kind", "risk", "policy", "decidingTeam", "assignee", "canDecide", "canAssign", "canReassign",
+        "canReturn", "approvalsNeeded", "viewerApproved", "actionTool", "stepName",
         "workflowName", "createdAt", "dueAt", "decidedAt", "slaMinutes", "href", "url",
     }
 )  # fmt: skip
@@ -784,8 +791,11 @@ async def review_view(rt: Runtime, row: Json, interrupt: Json, now: datetime, kn
     # What the proposal would move: the first option's (or the call's) input named amount, as the operation spells it.
     proposals: list[Json] = [dict(cast(Json, o.get("call") or {})) for o in options] + ([call] if call else [])
     amount = _amount_of(proposals)
+    # The currency the call itself names, so its amount reads in it; none is guessed when it names none.
+    currency = _currency_of(proposals)
+    money_key = _money_key(call) if amount is not None else None
     # The step's own call in words, as a workflow review words it (engine_reviews.view): what approving does and sends.
-    described = await describe_call(rt, call, currency=None, money_key=None) if call.get("tool") else None
+    described = await describe_call(rt, call, currency=currency, money_key=money_key) if call.get("tool") else None
     customer: Json = dict(payload.get("customer") or {})
     origin: Json = {"kind": "chat", "threadId": row["id"], "agentName": agent_name} if chat else {"kind": "workflow"}
     return {
@@ -801,7 +811,8 @@ async def review_view(rt: Runtime, row: Json, interrupt: Json, now: datetime, kn
         "confidence": float(payload.get("score") or 0),
         "proposal": str(payload.get("draft") or ""),
         "actionTool": call.get("tool") or "",
-        "currency": "USD",
+        "actionLabel": described["label"] if described else None,
+        "currency": currency,
         "policy": {
             "id": f"{row['graph']}:{payload.get('kind', 'review')}",
             "name": "Human review",
@@ -814,6 +825,7 @@ async def review_view(rt: Runtime, row: Json, interrupt: Json, now: datetime, kn
         # None when the step set no SLA: a row then says so instead of "0m left".
         "slaMinutes": _minutes_until(due, now) if due else None,
         "approvals": known.approvals.get((str(row["id"]), str(call["step"])), []) if call.get("step") else [],
+        "approvalsNeeded": policy.approvers if policy else 1,
         "status": "pending",
         "createdAt": row["updated_at"],
         "reasoning": _reasoning(payload),
@@ -838,6 +850,22 @@ def _amount_of(proposals: list[Json]) -> float | None:
         for key, value in inputs.items():
             if key.replace("_", "").casefold().endswith("amount") and isinstance(value, int | float):
                 return float(value)
+    return None
+
+
+def _money_key(call: Json) -> str | None:
+    """The call's input `_amount_of` reads as its amount, so describe_call shows that one as money."""
+    inputs: Json = dict(cast(Json, call.get("input") or {}))
+    return next((k for k in inputs if k.replace("_", "").casefold().endswith("amount")), None)
+
+
+def _currency_of(proposals: list[Json]) -> str | None:
+    """The first proposed call input named currency (an ISO code such as EUR), when it is text."""
+    for proposal in proposals:
+        inputs: Json = dict(cast(Json, proposal.get("input") or {}))
+        for key, value in inputs.items():
+            if key.replace("_", "").casefold().endswith("currency") and isinstance(value, str) and value.strip():
+                return value.strip().upper()
     return None
 
 
@@ -1126,9 +1154,21 @@ async def list_reviews(
         # A typed task's title comes from its task, so a search reads the full reviews it matches against.
         needle = search.lower()
         in_view = await engine_reviews.expand(rt, in_view)
-        in_view = [
-            r for r in in_view if needle in cast(str, r["title"]).lower() or needle in cast(str, r["id"]).lower()
-        ]
+        # The customer and the case's name are matched only where the reader reads them (as_seen_by), so a search is
+        # never a way to find a task by a name its reader sees masked; a case of a team they are not in has no name.
+        ids = sorted({str(r.get("caseId")) for r in in_view if r.get("caseId")})
+        cases = await CaseStore(rt.db).summaries(ids, teams) if ids else {}
+
+        def hit(r: Listed) -> bool:
+            if needle in cast(str, r["title"]).lower() or needle in cast(str, r["id"]).lower():
+                return True
+            if approver is not None and not sees_real_values(approver, r):
+                return False
+            case = cases.get(str(r.get("caseId")))
+            named = [str(r.get("customer") or ""), case.subject if case else ""]
+            return any(needle in n.lower() for n in named)
+
+        in_view = [r for r in in_view if hit(r)]
     facets = _facets(in_view, ["risk", "workflowId", "kind", "agentSlug", "status"])
     for column, wanted in filters.items():
         if wanted:
@@ -1148,9 +1188,8 @@ async def list_reviews(
     if approver is not None:
         decidable: list[Listed] = []
         for r in shown["data"]:
-            with_say = r.copy()
-            with_say["canDecide"] = await _may_decide(rt, approver, str(r["id"]), r.get("status"), held)
-            decidable.append(with_say)
+            decides = await _may_decide(rt, approver, str(r["id"]), r.get("status"), held)
+            decidable.append(with_rights(approver, r, decides))
         shown["data"] = decidable
     return {
         "data": shown["data"],
@@ -1159,6 +1198,26 @@ async def list_reviews(
         "viewCounts": counts,
         "stats": stats,
     }
+
+
+def with_rights[R: Listed](viewer: Principal, review: R, can_decide: bool) -> R:
+    """`review` with what `viewer` may do with it now, each flag by the check its own route runs, so the More menu
+    offers nothing the route then refuses: `canDecide` as given (can_decide); Assign and Reassign (POST /reviews/assign)
+    for someone who may decide it and decides reviews in the team they act in, by whether it has an assignee; Return
+    (a decision of `returned`) only on a publish request, the one kind that takes it. `viewerApproved`: `viewer` is
+    already one of its approvals."""
+    waiting = review.get("status") in ("pending", "in_review")
+    assigns = can_decide and waiting and (viewer.team_id or "") in review_teams(viewer)
+    approvals = cast(list[object], review.get("approvals") or [])
+    rights: Json = {
+        "canDecide": can_decide,
+        "canAssign": assigns and not review.get("assignee"),
+        "canReassign": assigns and bool(review.get("assignee")),
+        "canReturn": can_decide and publish_reviews.is_request_id(str(review.get("id") or "")),
+        "viewerApproved": viewer.email in approvals,
+    }
+    # Each kind of review is a different TypedDict; the flags are the same on every one.
+    return cast(R, cast(Json, dict(review)) | rights)
 
 
 async def _may_decide(rt: Runtime, approver: Principal, review_id: str, status: object, held: Held) -> bool:
@@ -1242,21 +1301,17 @@ async def review_for(rt: Runtime, approver: Principal, thread_id: str) -> Review
     if publish_reviews.is_request_id(thread_id) or engine_reviews.is_engine_id(thread_id):
         review = await with_assignee(rt, await get_review(rt, thread_id))
         waiting = review.get("status") in ("pending", "in_review")
-        review["canDecide"] = waiting and await can_decide(rt, approver, str(review["id"]))
-        return review
+        return with_rights(approver, review, waiting and await can_decide(rt, approver, str(review["id"])))
     async with isolation.request_transaction():
         row, step, d = await _thread_step(rt, thread_id)
         if step is None:
             assert d is not None
-            decided = await with_assignee(rt, _decided(d))
-            decided["canDecide"] = False
-            return decided
+            return with_rights(approver, await with_assignee(rt, _decided(d)), False)
     await ask_outside(rt, ReviewReads([(row, step, d)], {}, None))
     async with isolation.request_transaction():
         review = await with_assignee(rt, await review_view(rt, row, step, datetime.now(UTC)))
         held = {str(row["id"]): HeldStep(ThreadRow.model_validate(row), cast(Json, step["payload"]))}
-        review["canDecide"] = await _may_decide(rt, approver, str(review["id"]), review["status"], held)
-        return review
+        return with_rights(approver, review, await _may_decide(rt, approver, str(review["id"]), review["status"], held))
 
 
 async def decide(

@@ -17048,6 +17048,11 @@
             "title": "Approvals",
             "type": "array"
           },
+          "approvalsNeeded": {
+            "default": 1,
+            "title": "Approvalsneeded",
+            "type": "integer"
+          },
           "assignee": {
             "anyOf": [
               {
@@ -17059,6 +17064,17 @@
             ],
             "title": "Assignee"
           },
+          "canAssign": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canassign"
+          },
           "canDecide": {
             "anyOf": [
               {
@@ -17069,6 +17085,28 @@
               }
             ],
             "title": "Candecide"
+          },
+          "canReassign": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canreassign"
+          },
+          "canReturn": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canreturn"
           },
           "confidence": {
             "title": "Confidence",
@@ -17241,6 +17279,17 @@
                 "type": "null"
               }
             ]
+          },
+          "viewerApproved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Viewerapproved"
           },
           "workflowId": {
             "title": "Workflowid",
@@ -25447,6 +25496,17 @@
             "title": "Actionfields",
             "type": "array"
           },
+          "actionLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actionlabel"
+          },
           "actionTool": {
             "title": "Actiontool",
             "type": "string"
@@ -25473,6 +25533,11 @@
             "title": "Approvals",
             "type": "array"
           },
+          "approvalsNeeded": {
+            "default": 1,
+            "title": "Approvalsneeded",
+            "type": "integer"
+          },
           "assignee": {
             "anyOf": [
               {
@@ -25498,6 +25563,17 @@
             ],
             "title": "Calls"
           },
+          "canAssign": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canassign"
+          },
           "canDecide": {
             "anyOf": [
               {
@@ -25508,6 +25584,28 @@
               }
             ],
             "title": "Candecide"
+          },
+          "canReassign": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canreassign"
+          },
+          "canReturn": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canreturn"
           },
           "caseId": {
             "anyOf": [
@@ -25861,6 +25959,17 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "viewerApproved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Viewerapproved"
           },
           "workflowId": {
             "title": "Workflowid",
