@@ -169,6 +169,8 @@ await withUiStack(
 
       await step('5 reassigning Tom gives the task to someone else', async () => {
         await page.goto(`${consoleUrl}/reviews?review=${encodeURIComponent(ids.tom)}`, { waitUntil: 'domcontentloaded' });
+        // Reassign sits under More, offered because the server says Maya may reassign it.
+        await page.getByTestId('task-more').click();
         await page.getByTestId('reassign').click();
         const to = page.locator('[data-testid^=reassign-to-]').first();
         const who = (await to.innerText()).trim();
@@ -204,6 +206,107 @@ await withUiStack(
         await page.waitForTimeout(1500);
         const state = await sidebar();
         check('8 a sidebar opened on Human Tasks stays open on the next page', opened === 'expanded' && state === 'expanded', { opened, state, url: page.url() });
+      });
+      await step('10 the search runs on the server: a customer’s name lists only that task', async () => {
+        await page.goto(`${consoleUrl}/work/tasks?view=open`, { waitUntil: 'domcontentloaded' });
+        await page.getByTestId('queue-list').waitFor({ timeout: 60_000 });
+        const asked = page.waitForRequest((r) => r.url().includes('/reviews?') && r.url().includes('search=Jordan'), { timeout: 30_000 });
+        await page.getByTestId('tasks-search').fill('Jordan');
+        await asked;
+        await page.waitForFunction((id) => { const items = [...document.querySelectorAll('[data-testid^=queue-item-]')]; return items.length > 0 && items.every((e) => e.dataset.testid === `queue-item-${id}`); }, ids.tom, { timeout: 30_000 });
+        await page.getByTestId('tasks-search').fill('nobody by this name');
+        await page.getByTestId('queue-no-match').waitFor({ timeout: 30_000 });
+        await shot('search-none');
+        check('10 the search runs on the server: a customer’s name lists only that task', true);
+      });
+
+      await step('11 a viewer sees the task with no actions', async () => {
+        const viewerErrors = [];
+        const viewer = await consoleSignIn(browser, consoleUrl, 'r.menon@harborpine.example', PASSWORD, viewerErrors);
+        viewer.setDefaultTimeout(60_000);
+        await viewer.setViewportSize({ width: 1440, height: 900 });
+        await viewer.goto(`${consoleUrl}/work/tasks?review=${encodeURIComponent(ids.tom)}`, { waitUntil: 'domcontentloaded' });
+        await viewer.getByTestId('decision-panel').waitFor({ timeout: 120_000 });
+        await viewer.screenshot({ path: join(SHOTS, 'member-1440-light.png') });
+        await viewer.setViewportSize({ width: 390, height: 844 });
+        await viewer.waitForTimeout(700);
+        await viewer.screenshot({ path: join(SHOTS, 'member-390-light.png') });
+        const offered = await viewer.getByTestId('task-more').count();
+        check('11 a viewer sees the task with no actions', offered === 0 && viewerErrors.length === 0, { offered, viewerErrors: viewerErrors.slice(0, 3) });
+      });
+      await step('12 a publish request has Approve and Reject in the pinned bar and Return in More, in one step with a reason; a workflow task has no Return', async () => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.goto(`${consoleUrl}/work/tasks?review=${encodeURIComponent(ids.tom)}`, { waitUntil: 'domcontentloaded' });
+        await page.getByTestId('decision-panel').waitFor({ timeout: 60_000 });
+        await page.getByTestId('task-more').click();
+        const onWorkflow = await page.getByTestId('task-return').count();
+        await page.keyboard.press('Escape');
+        await page.goto(`${consoleUrl}/work/tasks?view=open`, { waitUntil: 'domcontentloaded' });
+        await page.getByTestId('queue-list').waitFor({ timeout: 60_000 });
+        const publishRow = page.locator('[data-testid^=queue-item-]', { hasText: /^Publish / }).first();
+        const publishId = (await publishRow.getAttribute('data-testid')).replace('queue-item-', '');
+        await publishRow.click();
+        const bar = page.getByTestId('task-bar');
+        await bar.getByTestId('review-approve').waitFor({ timeout: 60_000 });
+        const reject = await bar.getByTestId('review-reject').count();
+        // Return opens the reason box with its own Return and Cancel; Cancel closes it without returning.
+        await page.getByTestId('task-more').click();
+        await page.getByTestId('task-return').click();
+        await page.getByTestId('return-confirm').waitFor();
+        await page.getByTestId('return-cancel').click();
+        await page.getByTestId('return-confirm').waitFor({ state: 'detached' });
+        const stillOpen = (await json(await fetch(`${agents}/reviews/${encodeURIComponent(publishId)}`, { headers: maya })))?.status;
+        await page.getByTestId('task-more').click();
+        await page.getByTestId('task-return').click();
+        await page.locator('#decision-reason').fill('Add the missing eval first');
+        await shot('publish-return');
+        await page.getByTestId('return-submit').click();
+        const returned = await until(async () => {
+          const got = await json(await fetch(`${agents}/reviews/${encodeURIComponent(publishId)}`, { headers: maya }));
+          return got?.status === 'returned' ? got : null;
+        }, 60_000);
+        check('12 a publish request has Approve and Reject in the pinned bar and Return in More, in one step with a reason; a workflow task has no Return', reject === 1 && onWorkflow === 0 && stillOpen === 'pending' && !!returned, { reject, onWorkflow, stillOpen, returned: returned?.status });
+      });
+
+      await step('13 on a phone the task holds the focus and closing it gives it back to its row', async () => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto(`${consoleUrl}/work/tasks?view=open`, { waitUntil: 'domcontentloaded' });
+        await page.getByTestId('queue-list').waitFor({ timeout: 60_000 });
+        const row = page.getByTestId(`queue-item-${ids.tom}`);
+        await row.focus();
+        await page.keyboard.press('Enter');
+        // The sheet is a visible modal dialog before any key is pressed, so the Tabs below run with the overlay open.
+        await page.getByTestId('task-sheet').waitFor({ state: 'visible' });
+        const modal = await page.getByTestId('task-sheet').getAttribute('aria-modal');
+        for (let i = 0; i < 25; i += 1) await page.keyboard.press('Tab');
+        const inside = await page.evaluate(() => !!document.activeElement?.closest('[data-testid=task-sheet]'));
+        await page.keyboard.press('Escape');
+        // The sheet stays mounted when closed (a half-made decision survives a resize), so closed is hidden; a timeout fails the step.
+        await page.getByTestId('task-sheet').waitFor({ state: 'hidden', timeout: 10_000 });
+        const back = await page.evaluate(() => document.activeElement?.getAttribute('data-testid'));
+        await page.setViewportSize({ width: 1280, height: 800 });
+        check('13 on a phone the task holds the focus and closing it gives it back to its row', modal === 'true' && inside && back === `queue-item-${ids.tom}`, { modal, inside, back });
+      });
+      // WCAG 1.4.10: at 390 and 375 px every control of the pinned bar is inside the window, and More opens its menu there.
+      await step('14 the pinned bar and its More menu are reachable at 390 and 375 px', async () => {
+        const seen = [];
+        for (const width of [390, 375]) {
+          await page.setViewportSize({ width, height: 844 });
+          await page.goto(`${consoleUrl}/work/tasks?review=${encodeURIComponent(ids.tom)}`, { waitUntil: 'domcontentloaded' });
+          await page.getByTestId('task-bar').waitFor({ state: 'visible', timeout: 60_000 });
+          await page.getByTestId('task-more').waitFor({ state: 'visible' });
+          const out = await page.evaluate(() => [...document.querySelectorAll('[data-testid=task-bar] button')].map((b) => { const r = b.getBoundingClientRect(); return { id: b.dataset.testid ?? b.getAttribute('aria-label'), left: Math.round(r.left), right: Math.round(r.right) }; }).filter((b) => b.left < 0 || b.right > window.innerWidth));
+          await page.getByTestId('task-more').click();
+          const first = page.getByRole('menuitem').first();
+          await first.waitFor({ state: 'visible' });
+          const box = await first.boundingBox();
+          await page.keyboard.press('Escape');
+          await page.getByRole('menu').waitFor({ state: 'hidden' });
+          const sheetOpen = await page.getByTestId('task-sheet').isVisible();
+          seen.push({ width, out, menuInside: !!box && box.x >= 0 && box.x + box.width <= width, sheetOpen });
+        }
+        check('14 the pinned bar and its More menu are reachable at 390 and 375 px', seen.every((w) => w.out.length === 0 && w.menuInside && w.sheetOpen), seen);
+        await page.setViewportSize({ width: 1280, height: 800 });
       });
       check('9 no page errors and no sideways scroll at 375 px', errors.length === 0, errors.slice(0, 3));
     } finally {

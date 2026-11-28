@@ -308,10 +308,12 @@ class EngineReview(TypedDict):
     risk: str
     confidence: float | None
     actionTool: str
+    actionLabel: str | None
     policy: ReviewPolicy
     slaMinutes: int | None
     dueAt: str | None
     approvals: list[str]
+    approvalsNeeded: int
     status: str
     createdAt: JsonValue
     reasoning: list[str]
@@ -417,6 +419,15 @@ async def _visible(rt: Runtime, run_id: str) -> Json:
 def _options(payload: ReviewPayload) -> list[str]:
     # `entries` iterates as `payload.get("options") or []` did, so a number there still fails the decision.
     return [str(o.get("name") if isinstance(o, dict) else o) for o in entries(payload.get("options"))]
+
+
+# Each run's approvals by (run, call step), earliest first.
+Approvals = dict[tuple[str, str], list[str]]
+
+
+async def approvals_of(rt: Runtime, run_ids: list[str]) -> Approvals:
+    """The approvals recorded on `run_ids`' calls, in one statement for a whole list."""
+    return await ReviewStore(rt.db).approvers_of(run_ids)
 
 
 def step_id(run: Json, payload: ReviewPayload) -> str:
@@ -773,11 +784,12 @@ async def view(
     case_id: str | None = None,
     titles: Titles | None = None,
     reads: TaskReads | None = None,
+    approvals: Approvals | None = None,
 ) -> EngineReview:
     """A review step of a run as a console `Review`: risk and step-up from the operations its options would call,
     as v1's review_view reads them. `case_id` is the case the run is on and `titles` the workflow's and its
     steps' names (titles_of), each looked up when not given; `reads` what a list of typed tasks reads once
-    (TaskReads)."""
+    (TaskReads), and `approvals` its runs' approvals (approvals_of)."""
     if case_id is None:
         case_id = (await CaseStore(rt.db).cases_of_runs([str(run["id"])])).get(str(run["id"]))
     if titles is None:
@@ -823,6 +835,8 @@ async def view(
             "inputs": inputs_of.get(name, []),
         }
 
+    if approvals is None:
+        approvals = await approvals_of(rt, [str(run["id"])])
     out: EngineReview = {
         "origin": {"kind": "workflow"},
         "id": step_id(run, payload),
@@ -840,6 +854,8 @@ async def view(
         # No model scores a v2 review step: no confidence, not a confidence of zero.
         "confidence": None,
         "actionTool": str(call.get("tool") or ""),
+        # What approving runs in words; a step that sends no call is named by the step itself.
+        "actionLabel": described[0]["label"] if described else titles["steps"].get(str(payload.get("node"))),
         "policy": {
             "id": f"{run['workflow_id']}:{payload.get('node', 'review')}",
             "name": "Human review",
@@ -852,7 +868,9 @@ async def view(
         # Minutes left before the deadline, negative once past it; null once decided.
         "slaMinutes": deadline["minutes"] if decided is None else None,
         "dueAt": deadline["dueAt"],
-        "approvals": [],
+        # Who approved the step's call so far, as _approve_call records it under the run and the call's step.
+        "approvals": approvals.get((str(run["id"]), str(call.get("step"))), []) if call.get("step") else [],
+        "approvalsNeeded": max((p.approvers for p in policies), default=1),
         "status": "pending",
         "createdAt": run["updated_at"],
         "reasoning": [],
@@ -1057,10 +1075,13 @@ async def expand(rt: Runtime, rows: list[Listed]) -> list[Listed]:
     named = await titles_by_run(rt, runs)
     payloads = [_payload(r[BUILD][0], r[BUILD][1]) for r in light]
     reads = TaskReads(rt, runs, [str(p.get("step_id")) for p in payloads if p.get("step_id")])
+    approvals = await approvals_of(rt, [str(run["id"]) for run in runs])
     built: dict[int, EngineReview] = {}
     for r in light:
         run, decided, case_id = r[BUILD]
-        full = await view(rt, run, decided, case_id=case_id, titles=named[str(run["id"])], reads=reads)
+        full = await view(
+            rt, run, decided, case_id=case_id, titles=named[str(run["id"])], reads=reads, approvals=approvals
+        )
         if "assignee" in r:
             full["assignee"] = r["assignee"]
         built[id(r)] = full
