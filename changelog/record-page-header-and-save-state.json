@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-21",
-  "title": "One save status and header on edit pages",
-  "description": "Edit pages now show Saved, Unsaved, Saving or Not saved in the same place, followed by Save, Test, the main action and a menu. Cmd+S or Ctrl+S saves, and shorter button names.",
-  "tag": "improved"
-}

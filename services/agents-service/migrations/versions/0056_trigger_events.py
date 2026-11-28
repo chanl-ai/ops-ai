@@ -11,6 +11,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import role_ddl
+
 revision = "0056_trigger_events"
 down_revision = "0055_drop_publish_policies"
 branch_labels = None
@@ -39,7 +41,7 @@ def upgrade() -> None:
     op.create_index("ix_trigger_events_workflow", "trigger_events", ["tenant_id", "workflow_id", "recorded_at"])
     if op.get_bind().dialect.name != "postgresql":
         return
-    op.execute(f"DO $$ BEGIN CREATE ROLE {TENANT_ROLE} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$")
+    op.execute(role_ddl(TENANT_ROLE))
     op.execute(f"GRANT SELECT, INSERT ON trigger_events TO {TENANT_ROLE}")
     op.execute("ALTER TABLE trigger_events ENABLE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE trigger_events FORCE ROW LEVEL SECURITY")

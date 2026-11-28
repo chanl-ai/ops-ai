@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-24",
-  "title": "Workflow steps read in plain words everywhere",
-  "description": "Lists inside a step now show step names and words like Equal to or At least, never type ids or codes. Problems name the step, Human review says it waits for a person, and opening a step no longer zooms the canvas.",
-  "tag": "improved"
-}

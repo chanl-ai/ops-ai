@@ -15,6 +15,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import role_ddl
+
 revision = "0021_tenant_rls_run_tables"
 down_revision = "0020_model_call_records"
 branch_labels = None
@@ -46,10 +48,8 @@ def upgrade() -> None:
     if op.get_bind().dialect.name != "postgresql":
         return
     # Roles are cluster-wide, so another database on the same server may already have created them.
-    op.execute(f"DO $$ BEGIN CREATE ROLE {TENANT_ROLE} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$")
-    op.execute(
-        f"DO $$ BEGIN CREATE ROLE {SYSTEM_ROLE} NOLOGIN BYPASSRLS; EXCEPTION WHEN duplicate_object THEN NULL; END $$"
-    )
+    op.execute(role_ddl(TENANT_ROLE))
+    op.execute(role_ddl(SYSTEM_ROLE, bypass=True))
     for table in TABLES:
         op.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO {TENANT_ROLE}")
         op.execute(f"GRANT SELECT ON {table} TO {SYSTEM_ROLE}")

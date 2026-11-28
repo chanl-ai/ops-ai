@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, NotRequired, TypedDict, cast
 
 import httpx
 
@@ -62,6 +62,55 @@ class Usage:
     alias: str | None = None
 
 
+class _Error(TypedDict, total=False):
+    code: str
+    message: str
+
+
+class _Envelope(TypedDict, total=False):
+    error: _Error
+
+
+class _Function(TypedDict):
+    arguments: str
+
+
+class _ToolCall(TypedDict):
+    function: _Function
+
+
+class _Message(TypedDict, total=False):
+    content: str | None
+    tool_calls: list[_ToolCall] | None
+
+
+class _Choice(TypedDict):
+    message: _Message
+    finish_reason: NotRequired[str | None]
+
+
+class _Counted(TypedDict, total=False):
+    prompt_tokens: int
+    completion_tokens: int
+
+
+class _ChatReply(TypedDict):
+    """models-service's chat completion, as far as this client reads it."""
+
+    choices: list[_Choice]
+    usage: NotRequired[_Counted | None]
+
+
+class _Vector(TypedDict):
+    index: int
+    embedding: list[float]
+
+
+class _EmbeddingsReply(TypedDict):
+    data: list[_Vector]
+    usage: NotRequired[_Counted | None]
+
+
 def _headers(key: str, tenant: str, step: str, sensitivity: str) -> dict[str, str]:
     return {
         "Authorization": f"Bearer {key}",
@@ -74,9 +123,9 @@ def _headers(key: str, tenant: str, step: str, sensitivity: str) -> dict[str, st
 def refusal(r: httpx.Response) -> ModelCallError:
     """models-service's refusal as an error carrying its code; a body that is not its envelope keeps the status."""
     try:
-        error = cast(dict[str, Any], cast(dict[str, Any], r.json()).get("error") or {})
-    except ValueError:
-        error = {}
+        error = cast(_Envelope, r.json()).get("error") or _Error()
+    except (ValueError, AttributeError):
+        error = _Error()
     code = str(error.get("code") or f"http_{r.status_code}")
     message = str(error.get("message") or r.text[:300])
     return ModelCallError(f"models-service answered {r.status_code} {code}: {message}", code=code, status=r.status_code)
@@ -88,11 +137,11 @@ def _chat_body(alias: str, messages: list[dict[str, Any]], **extra: Any) -> dict
 
 def _structured_answer(r: httpx.Response, alias: str, usage: Usage | None) -> Any:
     try:
-        data = cast(dict[str, Any], r.json())
-        message = cast(dict[str, Any], cast(list[dict[str, Any]], data["choices"])[0]["message"])
-        calls = cast(list[dict[str, Any]], message.get("tool_calls") or [])
+        data = cast(_ChatReply, r.json())
+        message = data["choices"][0]["message"]
+        calls = message.get("tool_calls") or []
         raw = calls[0]["function"]["arguments"] if calls else message.get("content")
-        counted = cast(dict[str, Any], data.get("usage") or {})
+        counted = data.get("usage") or _Counted()
         tokens = (int(counted.get("prompt_tokens") or 0), int(counted.get("completion_tokens") or 0))
     except (ValueError, KeyError, IndexError, TypeError, AttributeError) as e:
         raise ModelCallError(f"models-service's answer could not be read: {e!r}", code=UNREADABLE) from e
@@ -109,10 +158,10 @@ def _structured_answer(r: httpx.Response, alias: str, usage: Usage | None) -> An
 
 def _embedded(r: httpx.Response, sent: int) -> Embedded:
     try:
-        data = cast(dict[str, Any], r.json())
-        rows = sorted(cast(list[dict[str, Any]], data["data"]), key=lambda d: int(d["index"]))
-        vectors = [[float(x) for x in cast(list[Any], d["embedding"])] for d in rows]
-        tokens = int(cast(dict[str, Any], data.get("usage") or {}).get("prompt_tokens", 0))
+        data = cast(_EmbeddingsReply, r.json())
+        rows = sorted(data["data"], key=lambda d: int(d["index"]))
+        vectors = [[float(x) for x in d["embedding"]] for d in rows]
+        tokens = int((data.get("usage") or _Counted()).get("prompt_tokens", 0))
     except (ValueError, KeyError, TypeError) as e:
         raise ModelCallError(f"models-service's embeddings answer could not be read: {e}", code=UNREADABLE) from e
     if len(vectors) != sent:
@@ -226,9 +275,10 @@ class IngestModel:
         if r.status_code >= 400:
             raise refusal(r)
         self.calls += 1
-        data = cast(dict[str, Any], r.json())
-        usage = cast(dict[str, Any], data.get("usage") or {})
+        data = cast(_ChatReply, r.json())
+        usage = data.get("usage") or _Counted()
         self.input_tokens += int(usage.get("prompt_tokens", 0))
         self.output_tokens += int(usage.get("completion_tokens", 0))
-        message = cast(dict[str, Any], cast(list[dict[str, Any]], data.get("choices") or [{}])[0].get("message") or {})
+        choices = data.get("choices") or [_Choice(message=_Message())]
+        message = choices[0].get("message") or _Message()
         return str(message.get("content") or "")

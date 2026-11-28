@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-24",
-  "title": "A schedule shows who changed it and why a run was skipped",
-  "description": "The schedule view now carries the name of the person who saved it, the reason the last slot did not run, the last run and a code for why it is idle, and the time zones a schedule may use can be searched.",
-  "tag": "improved"
-}
