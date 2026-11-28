@@ -13,13 +13,15 @@ import { ROOT, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack 
 const PASSWORD = 'northfield-demo';
 const JAMES = 'j.richardson@harborpine.example';
 const SHOTS = evidenceDir('510', 'uc');
-// The newest entry as the console orders them: by date, then title.
+// The first row What's new shows, as the console orders them (lib/changelog.ts): the upcoming fragments, else the newest
+// release's file; fixes sit behind their own line, so the first row is a new or improved entry.
 const RANK = { new: 0, improved: 1, fix: 2 };
-const entries = readdirSync(join(ROOT, 'changelog'))
-  .filter((f) => f.endsWith('.json'))
-  .map((f) => JSON.parse(readFileSync(join(ROOT, 'changelog', f), 'utf8')))
-  // The console's order (lib/changelog.ts): new, then improved, then fixes, each newest first.
-  .sort((a, b) => RANK[a.tag] - RANK[b.tag] || b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
+const jsonIn = (dir) => readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')));
+const fragments = jsonIn(join(ROOT, 'changelog'));
+const newestRelease = jsonIn(join(ROOT, 'changelog', 'releases')).sort((a, b) => b.date.localeCompare(a.date) || b.version.localeCompare(a.version, undefined, { numeric: true }))[0];
+const entries = (fragments.length ? fragments : newestRelease.entries)
+  .filter((e) => e.tag !== 'fix')
+  .sort((a, b) => RANK[a.tag] - RANK[b.tag] || (b.date ?? '').localeCompare(a.date ?? '') || a.title.localeCompare(b.title));
 const roadmap = JSON.parse(readFileSync(join(ROOT, 'roadmap.json'), 'utf8'));
 
 async function step(name, body) {

@@ -2,12 +2,12 @@
 
 import * as React from 'react';
 
-import { buildCommit, buildTag, changelogSource, releaseSwitches, roadmapSource } from '@/lib/api';
+import { buildBranch, buildCommit, buildTag, changelogSource, releaseSwitches, roadmapSource } from '@/lib/api';
 import { type ChangelogEntry, hasUnseen, parseChangelog, parseRoadmap } from '@/lib/changelog';
 import { versionLabel } from '@/lib/version';
 
 const SEEN_KEY = 'ops-whats-new-seen';
-const VERSION = versionLabel(buildTag, buildCommit);
+const VERSION = versionLabel(buildTag, buildCommit, buildBranch);
 
 function readSeen(): string[] {
   try {

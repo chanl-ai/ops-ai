@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-20",
-  "title": "A reply no longer stops when tools are called together",
-  "description": "An agent that searched its tools or showed widgets several times at once ended its reply with a step limit notice after one model call; it is now told to answer in text and does. An agent limited to one model call a reply answers in text instead of calling a tool it could not read.",
-  "tag": "fix"
-}

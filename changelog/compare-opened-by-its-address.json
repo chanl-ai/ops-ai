@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-22",
-  "title": "Compare opened from a link picks a version",
-  "description": "Opening an agent's Compare page from its address now offers the published version to compare with, and asking a question sends it to both.",
-  "tag": "fix"
-}

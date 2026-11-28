@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-24",
-  "title": "A schedule shows only its own skipped-run reason",
-  "description": "When a workflow has more than one schedule, each now shows the reason for its own last run. Schedule changes also reach the audit log reliably, and wait there when the audit log is not connected.",
-  "tag": "fix"
-}
