@@ -219,6 +219,8 @@ PUBLIC_SCOPES: dict[str, list[str]] = {
     "kb": ["knowledge:view"],
     "tools": ["tools:view"],
     "platform": ["settings:view"],
+    # The model picker reads the account's aliases, which models-service gives a service token holding settings:view.
+    "models": ["settings:view"],
 }
 
 

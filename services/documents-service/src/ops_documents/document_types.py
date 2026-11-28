@@ -813,7 +813,9 @@ def default_document_types(files: Files, engine: Any, settings: Settings, extrac
     prices: Prices | None = None
     if settings.models is not None:
         try:
-            prices = ModelsPrices(ServiceClient.for_settings(settings, service="documents", audience="models"))
+            prices = ModelsPrices(
+                ServiceClient.for_settings(settings, service="documents", audience="models", scopes=["settings:view"])
+            )
         except ValueError as e:  # no service signing key outside dev
             log.warning("no service signing key; test estimates carry no cost", extra={"error": str(e)})
     types = DocumentTypes(DocumentTypesStore(engine), files, extractor, prices)

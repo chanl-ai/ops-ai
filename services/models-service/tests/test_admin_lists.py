@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import httpx
 
-from .conftest import SERVICE, Models
+from .conftest import ADMIN, SERVICE, Models
 
 
 async def every_row(client: httpx.AsyncClient, path: str, **params: Any) -> list[dict[str, Any]]:
@@ -34,7 +34,7 @@ async def test_provider_connections_are_listed_by_name(models: Models) -> None:
     made: dict[str, str] = {}
     for suffix in ("c", "a", "b"):
         body = {"name": f"{prefix}-{suffix}", "type": "openai-compatible", "baseUrl": "http://up/v1"}
-        r = await models.client.post("/v1/models/providers", json=body, headers=SERVICE)
+        r = await models.client.post("/v1/models/providers", json=body, headers=ADMIN)
         assert r.status_code == 201, r.text
         made[suffix] = r.json()["data"]["id"]
 
@@ -58,9 +58,9 @@ async def test_provider_connections_are_listed_by_name(models: Models) -> None:
 async def test_aliases_list_each_serving_version_by_name(models: Models) -> None:
     prefix = f"la-{uuid4().hex[:6]}"
     for suffix in ("b", "c", "a"):
-        r = await models.client.post("/v1/models/aliases", json=_version(name=f"{prefix}-{suffix}"), headers=SERVICE)
+        r = await models.client.post("/v1/models/aliases", json=_version(name=f"{prefix}-{suffix}"), headers=ADMIN)
         assert r.status_code == 201, r.text
-    await models.client.post(f"/v1/models/aliases/{prefix}-b/versions", json=_version(modelId="m-2"), headers=SERVICE)
+    await models.client.post(f"/v1/models/aliases/{prefix}-b/versions", json=_version(modelId="m-2"), headers=ADMIN)
 
     listed = [(a["name"], a["version"]) for a in await every_row(models.client, "/v1/models/aliases")]
 
@@ -79,10 +79,10 @@ async def test_aliases_list_each_serving_version_by_name(models: Models) -> None
 
 async def test_an_aliases_versions_are_listed_oldest_first(models: Models) -> None:
     name = f"lv-{uuid4().hex[:6]}"
-    await models.client.post("/v1/models/aliases", json=_version(name=name), headers=SERVICE)
+    await models.client.post("/v1/models/aliases", json=_version(name=name), headers=ADMIN)
     # More versions than the largest page holds, so the order is held across pages.
     for model in [f"m-{n}" for n in range(2, 53)]:
-        await models.client.post(f"/v1/models/aliases/{name}/versions", json=_version(modelId=model), headers=SERVICE)
+        await models.client.post(f"/v1/models/aliases/{name}/versions", json=_version(modelId=model), headers=ADMIN)
 
     listed = await every_row(models.client, f"/v1/models/aliases/{name}/versions")
 

@@ -20,7 +20,7 @@ from ops_service_kit.public_address import PublicFetch
 from ops_service_kit.request_timing import current
 from ops_service_kit.testing import Seeded, SeedTeam, StatementBudget, budget_check
 
-from .conftest import SERVICE, Models
+from .conftest import ADMIN, SERVICE, Models
 from .test_provider_key_check import Resolver
 from .test_provider_keys import people
 
@@ -80,17 +80,17 @@ def seed_team(app: FastAPI, client: httpx.AsyncClient, models: Models) -> SeedTe
     async def seed(n: int) -> Seeded:
         version = {"providerId": "prov_scripted", "modelId": "scripted-standard", "clearedSensitivity": "internal"}
         if (await http.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).status_code == 404:
-            made = await http.post("/v1/models/aliases", json={"name": name, **version}, headers=SERVICE)
+            made = await http.post("/v1/models/aliases", json={"name": name, **version}, headers=ADMIN)
             assert made.status_code == 201, made.text
         assert (await http.put(f"/v1/provider-keys/{name}", json={"value": KEY})).status_code == 200
         _, secret = await on_app.key(budget="100")
         for i in range(n):
             tag = f"{name}-{n}-{i}"
             conn = {"name": tag, "type": "openai-compatible", "baseUrl": "http://up/v1"}
-            assert (await http.post("/v1/models/providers", json=conn, headers=SERVICE)).status_code == 201
+            assert (await http.post("/v1/models/providers", json=conn, headers=ADMIN)).status_code == 201
             alias = {"name": tag, **version}
-            assert (await http.post("/v1/models/aliases", json=alias, headers=SERVICE)).status_code == 201
-            added = await http.post(f"/v1/models/aliases/{name}/versions", json=version, headers=SERVICE)
+            assert (await http.post("/v1/models/aliases", json=alias, headers=ADMIN)).status_code == 201
+            added = await http.post(f"/v1/models/aliases/{name}/versions", json=version, headers=ADMIN)
             assert added.status_code == 201, added.text
             await on_app.key()
             assert (await on_app.complete(secret)).status_code == 200

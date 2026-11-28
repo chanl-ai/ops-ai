@@ -8,26 +8,21 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Annotated, Any
 from uuid import uuid4
 
 import httpx
 import pytest
 import sqlalchemy as sa
-from fastapi import Header, Request
 from pydantic import SecretStr
 
-from ops_access import builtin_roles_for
-from ops_identity import Principal
-from ops_identity.fastapi import current_principal
+from ops_identity.fastapi import current_principal, current_tenant_caller
 from ops_models.__main__ import dev_provider_keys
 from ops_models.app import create_models_app
 from ops_models.store import provider_keys
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
-from ops_store import isolation
 
-from .conftest import SERVICE, Models, as_account, service_as
+from .conftest import SERVICE, Models, admin_as, admins, as_account, people
 
 
 def _provider(seen: list[str | None]) -> httpx.AsyncClient:
@@ -40,43 +35,6 @@ def _provider(seen: list[str | None]) -> httpx.AsyncClient:
         return httpx.Response(200, json={"id": "up", "object": "chat.completion", "choices": [choice], "usage": usage})
 
     return httpx.AsyncClient(transport=httpx.MockTransport(handle))
-
-
-def people(tenant: str) -> Any:
-    """A person signed in to `tenant` with the role X-Role names in the team X-Team-Id names (admin of team_security
-    is the account admin). A request with a bearer token (a service) is resolved as usual."""
-
-    async def as_person(
-        request: Request,
-        authorization: Annotated[str | None, Header()] = None,
-        x_team_id: Annotated[str | None, Header()] = None,
-        x_role: Annotated[str | None, Header()] = None,
-    ) -> Principal:
-        if authorization:
-            return await current_principal(request, authorization=authorization)
-        team = x_team_id or "team_security"
-        held = list(builtin_roles_for(x_role or "admin", security_team=team == "team_security"))
-        p = Principal(
-            kind="person",
-            sub="usr_nadia",
-            email="nadia@harborpine.example",
-            name="nadia",
-            tenant_id=tenant,
-            team_id=team,
-            team_ids=[team],
-            roles={team: x_role or "admin"},
-            access={team: held},
-            scopes=[],
-            auth_method="session",
-            # The workspace's Security team, which platform-service names in every person's token.
-            security_team="team_security",
-        )
-        # As the real dependency does: the request acts in the person's tenant and team, which the database holds
-        # provider keys to.
-        isolation.enter_caller(p, dev=False)
-        return p
-
-    return as_person
 
 
 @dataclass
@@ -100,12 +58,12 @@ class Rig:
 async def _bind(client: httpx.AsyncClient, tenant: str, key_name: str, alias: str | None = None) -> str:
     """A connection of `tenant` naming `key_name`, and an alias of that account on it."""
     conn = {"name": f"openai-{uuid4().hex[:8]}", "type": "openai-compatible", "baseUrl": "http://up/v1"}
-    pid = await client.post("/v1/models/providers", json={**conn, "keyRef": key_name}, headers=service_as(tenant))
+    pid = await client.post("/v1/models/providers", json={**conn, "keyRef": key_name}, headers=admin_as(tenant))
     assert pid.status_code == 201, pid.text
     alias = alias or f"bank-keys-{uuid4().hex[:8]}"
     version = {"name": alias, "providerId": pid.json()["data"]["id"], "modelId": "gpt-4.1-mini"}
     made = await client.post(
-        "/v1/models/aliases", json={**version, "clearedSensitivity": "internal"}, headers=service_as(tenant)
+        "/v1/models/aliases", json={**version, "clearedSensitivity": "internal"}, headers=admin_as(tenant)
     )
     assert made.status_code == 201, made.text
     return alias
@@ -119,6 +77,8 @@ async def _rig(models: Models, in_settings: str | None = None) -> AsyncIterator[
     fallback = {key_name: in_settings} if in_settings else {}
     app = create_models_app(models.engine, upstream=_provider(seen), provider_secrets=fallback)
     app.dependency_overrides[current_principal] = people(tenant)
+    # Writes resolve the tenant caller: the account admin of the account X-Tenant-Id names (admin_as).
+    app.dependency_overrides[current_tenant_caller] = admins(current_tenant_caller)
     hooks = {"response": [response_checker(app)]}
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://models", event_hooks=hooks) as client:

@@ -17,7 +17,7 @@ import pytest
 from ops_models.app import create_models_app
 from ops_service_kit.contract import response_checker
 
-from .conftest import SERVICE, Models
+from .conftest import ADMIN, Models
 
 LEAKED_KEY = "sk-live-4f9a0c7d1e2b3a4c5d6e7f80"
 ADMIN_FIX = "Settings > Model providers"
@@ -50,10 +50,10 @@ async def _rig(models: Models, handle: Handler) -> AsyncIterator[Rig]:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://models", event_hooks=hooks) as client:
         conn = {"name": f"up-{uuid4().hex[:8]}", "type": "openai-compatible", "baseUrl": "http://up/v1"}
-        made = await client.post("/v1/models/providers", json={**conn, "keyRef": "UPSTREAM_KEY"}, headers=SERVICE)
+        made = await client.post("/v1/models/providers", json={**conn, "keyRef": "UPSTREAM_KEY"}, headers=ADMIN)
         alias = f"bank-up-{uuid4().hex[:8]}"
         version = {"name": alias, "providerId": made.json()["data"]["id"], "modelId": "gpt-up"}
-        r = await client.post("/v1/models/aliases", json={**version, "clearedSensitivity": "internal"}, headers=SERVICE)
+        r = await client.post("/v1/models/aliases", json={**version, "clearedSensitivity": "internal"}, headers=ADMIN)
         assert r.status_code == 201, r.text
         on_app = Models(client, models.engine, app)
         key_id, secret = await on_app.key(budget="5")

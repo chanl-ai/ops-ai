@@ -14,7 +14,7 @@ from ops_identity.fastapi import current_principal, current_tenant_caller
 from ops_models.app import create_models_app
 from ops_service_kit.contract import response_checker
 
-from .conftest import Models
+from .conftest import SERVICE, Models
 from .test_provider_keys import people
 
 
@@ -50,3 +50,15 @@ async def test_the_roles_matrix_decides_who_creates_or_versions_an_alias(client:
     assert {refused.json()["error"]["code"], versioned.json()["error"]["code"]} == {"admin_only"}
     listed = await client.get(f"/v1/models/aliases/{name}/versions")
     assert [v["version"] for v in listed.json()["data"]["data"]] == [1, 2], listed.text
+
+
+async def test_a_service_token_without_settings_manage_changes_no_alias(models: Models) -> None:
+    # Through the real caller resolution: agents-service's token reads aliases (settings:view) and changes none.
+    version = {"providerId": "prov_scripted", "modelId": "m-1", "clearedSensitivity": "internal"}
+    made = await models.client.post(
+        "/v1/models/aliases", json={"name": f"svc-{uuid4().hex[:6]}", **version}, headers=SERVICE
+    )
+    versioned = await models.client.post("/v1/models/aliases/default/versions", json=version, headers=SERVICE)
+    listed = await models.client.get("/v1/models/aliases", headers=SERVICE)
+    assert (made.status_code, versioned.status_code, listed.status_code) == (403, 403, 200), (made.text, versioned.text)
+    assert {made.json()["error"]["code"], versioned.json()["error"]["code"]} == {"scope_required"}

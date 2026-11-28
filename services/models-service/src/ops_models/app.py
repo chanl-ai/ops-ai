@@ -20,7 +20,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, Literal, TypedDict, cast
 
 import httpx
-from fastapi import Depends, FastAPI, Header, Path, Query
+from fastapi import Depends, FastAPI, Header, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -595,11 +595,12 @@ def create_models_app(
     # calls (provider connections, provider keys) takes the tenant caller and asks can(), as `connections_caller`.
     guard = Depends(current_service)
 
-    async def connections_caller(p: CurrentTenantCaller) -> Principal:
-        """Provider connections are set up by an install's own scripts (a service token) or by an account admin on
-        Settings > Model providers (settings.manage, as for provider keys): one API for both."""
-        if p.kind != "service":
-            access.can(p, "settings", "manage", what="model provider connections", code="admin_only")
+    async def connections_caller(request: Request, p: CurrentTenantCaller) -> Principal:
+        """Provider connections and aliases are an account's, set up by its admin (settings.manage, as for provider
+        keys): the console, or the installer signed in as the first admin. A service token needs settings:view to read
+        them (agents-service's model picker, documents-service's prices) and settings:manage to change one."""
+        read = p.kind == "service" and request.method == "GET"
+        access.can(p, "settings", "view" if read else "manage", what="model provider connections", code="admin_only")
         return p
 
     connections_guard = Depends(connections_caller)
@@ -607,9 +608,8 @@ def create_models_app(
     async def alias_writer(p: CurrentTenantCaller) -> Principal:
         """An alias is its account's, and every team's agents in that account run on it, so a person creates or
         re-points one with the cell the roles matrix gives for the account's model setup (`settings.manage`, as for
-        provider connections and keys). An install's own scripts (a service token) write them as before."""
-        if p.kind != "service":
-            access.can(p, "settings", "manage", what="model aliases", code="admin_only")
+        provider connections and keys), and so does any service token, through its scopes."""
+        access.can(p, "settings", "manage", what="model aliases", code="admin_only")
         return p
 
     alias_write_guard = Depends(alias_writer)

@@ -19,7 +19,7 @@ from ops_service_kit.contract import response_checker
 from ops_service_kit.logging import captured_logging
 from ops_service_kit.request_timing import current
 
-from .conftest import SERVICE, Models
+from .conftest import ADMIN, SERVICE, Models
 
 BUDGETS = Path(__file__).parents[1] / "budgets.toml"
 # (transactions finished, transactions open) at each moment the provider is working.
@@ -77,11 +77,11 @@ async def test_the_provider_answers_with_no_transaction_open_between_one_gate_an
         transport=httpx.ASGITransport(app=app), base_url="http://models", event_hooks=hooks
     ) as client:
         conn = {"name": f"up-{uuid4().hex[:8]}", "type": "openai-compatible", "baseUrl": "http://up/v1"}
-        made = await client.post("/v1/models/providers", json={**conn, "keyRef": "UPSTREAM_KEY"}, headers=SERVICE)
+        made = await client.post("/v1/models/providers", json={**conn, "keyRef": "UPSTREAM_KEY"}, headers=ADMIN)
         alias = f"bank-up-{uuid4().hex[:8]}"
         kind = "embedding" if call == "embedding" else "chat"
         version = {"name": alias, "kind": kind, "providerId": made.json()["data"]["id"], "modelId": "gpt-up"}
-        r = await client.post("/v1/models/aliases", json={**version, "clearedSensitivity": "internal"}, headers=SERVICE)
+        r = await client.post("/v1/models/aliases", json={**version, "clearedSensitivity": "internal"}, headers=ADMIN)
         assert r.status_code == 201, r.text
         key_id, secret = await Models(client, models.engine, app).key(budget="5")
         caller = {"Authorization": f"Bearer {secret}", "X-Tenant-Id": "local"}
