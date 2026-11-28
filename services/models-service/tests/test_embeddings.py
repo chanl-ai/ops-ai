@@ -15,7 +15,7 @@ import pytest
 from ops_service_kit.model_calls import IngestModel, ModelCallError, ModelCalls, Usage
 from ops_service_kit.scripted_vectors import scripted_vector
 
-from .conftest import LOCAL, SERVICE, Models
+from .conftest import LOCAL, PRICE, SERVICE, Models
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -41,7 +41,8 @@ async def test_the_answer_names_the_model_serving_the_alias_so_a_new_version_rea
     name, so an answer naming only the alias would let vectors of two models be compared."""
     _, secret = await models.key(budget="5")
     name = f"embed-{uuid4().hex[:6]}"
-    version = {"providerId": "prov_scripted", "clearedSensitivity": "internal"}
+    # The scripted models carry no catalog price, so each version names its own; an unpriced one is refused.
+    version = {"providerId": "prov_scripted", "clearedSensitivity": "internal", **PRICE}
     body = {"name": name, "kind": "embedding", "modelId": "embed-a", **version}
     assert (await models.client.post("/v1/models/aliases", json=body, headers=SERVICE)).status_code == 201
     calls = ModelCalls(models.client, secret)
