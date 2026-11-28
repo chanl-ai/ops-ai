@@ -106,18 +106,19 @@ it carried.
 | Callers marking each call with the level of its data | Planned: today every call is treated as internal, so an alias must be cleared for internal to serve |
 | Page images for document reads only where the document type, the team's policy and the alias all allow them | Built |
 
-## When it is working
+## With and without the gateway
 
-Once the gateway is set up, your agents answer through the alias `default`. When you move that alias to another model,
-you add one new version and no agent changes. When a key reaches its cap, the gateway refuses the next call with
-`key_budget_exhausted` and logs it. If a reviewer asks what a chat cost, you can answer from the call log, and the
-provider's key is held in one place.
+Your agents answer through the alias `default`, and a reviewer's questions about cost and data are answered from one log.
 
-## The risk of giving agents provider keys directly
-
-Without the gateway, each agent holds a provider key. A single leaked key then exposes the whole provider account. You
-also cannot cap spend per caller, and nothing checks whether confidential data is going to a model that was never
-cleared for it.
+<!-- site: before-after caption="Agents holding provider keys directly, and agents calling through the AI gateway" -->
+- **Agents hold provider keys**: Each agent carries a key to your provider.
+  - A single leaked key exposes the whole provider account
+  - You cannot cap spend per caller
+  - Nothing checks whether confidential data is going to a model that was never cleared for it
+- **Through the AI gateway**: Agents hold only a capped model key, and the provider's key is held in one place.
+  - Moving the alias to another model is one new version, and no agent changes
+  - A key at its cap is refused with `key_budget_exhausted` and the refusal is logged
+  - What a chat cost is answered from the call log
 
 ## The test model
 
