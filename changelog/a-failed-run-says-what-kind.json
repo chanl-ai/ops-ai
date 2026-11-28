@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-20",
-  "title": "A failed run says what kind of failure it was",
-  "description": "A failed run now says whether its input, a rule, an app, a clock or the platform stopped it, at which step and attempt, and whether trying again can help. Chat shows one plain sentence instead of technical text, and the opsai command exits with a different status for each kind.",
-  "tag": "improved"
-}

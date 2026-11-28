@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-24",
-  "title": "Safer saves and clearer publish blockers",
-  "description": "A template update and the team assistant no longer overwrite a skill draft saved a moment before, and an update to a shipped workflow waits until the publish policy can be read. A workflow copy that cannot be read still shows its open review, and only people who may view workflows can list the step types.",
-  "tag": "fix"
-}

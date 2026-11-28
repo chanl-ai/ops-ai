@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-21",
-  "title": "Hand off when and Examples in an agent's brief",
-  "description": "An agent's brief has two more headings: Hand off when, a list of moments the agent passes the conversation to a person, and Examples of good answers. Both reach the prompt, and View prompt shows the exact text the model reads, with Never last.",
-  "tag": "new"
-}
