@@ -168,15 +168,12 @@ def build_jobs(
     return sorted(jobs, key=lambda j: (not any(h in j.label for h in HEAVY), j.skipped != ""))
 
 
-def mssql_files(workflow_text: str) -> dict[str, list[str]]:
-    """Per service, the store test files ci.yml's store-mssql job runs (its `[svc]="files"` lines: one list)."""
-    return {
-        m.group(1): m.group(2).split()
-        for m in re.finditer(r'^\s*\[([a-z]+-service)\]="([^"]+)"', workflow_text, re.MULTILINE)
-    }
+def mssql_files() -> dict[str, list[str]]:
+    """Per service, the store test files ci.yml's store-mssql job runs (scripts/mssql-store-tests.json)."""
+    return json.loads((ROOT / "scripts/mssql-store-tests.json").read_text(encoding="utf-8"))["services"]
 
 
-def mssql_job(changed: list[str], workflow_text: str) -> Job | None:
+def mssql_job(changed: list[str]) -> Job | None:
     """The store-mssql job against the shared Fly SQL Server, or None when no changed path is a store or a migration.
 
     It only brings the server up (`up` is idempotent) and runs tests. The server is shared with other builders, so this
@@ -185,7 +182,7 @@ def mssql_job(changed: list[str], workflow_text: str) -> Job | None:
     hits = [p for p in changed if MSSQL_PATHS.search(p)]
     if not hits:
         return None
-    files = mssql_files(workflow_text)
+    files = mssql_files()
     everything = any(p.startswith(("packages/ops_store/", "deploy/database/")) for p in hits)
     touched = {p.split("/")[1] for p in hits if p.startswith("services/")}
     services = sorted(files) if everything else sorted(s for s in files if s in touched)
@@ -391,7 +388,7 @@ def main(argv: list[str]) -> int:
     changed = subprocess.run(
         ["git", "diff", "--name-only", base, "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True
     ).stdout.split()
-    store = mssql_job(changed, (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    store = mssql_job(changed)
     if store and not args.rerun and (not only or store.name in only or store.label in only):
         jobs.append(store)
     jobs += [j for j in usecase_jobs(ucs) if not only or j.name in only or j.label in only]
@@ -456,10 +453,9 @@ def self_test() -> int:
         all(j.skipped for j in jobs if j.name in ("release-proof", "maintainer-review")),
     ]
     print("plan to jobs:", labels)
-    ci_text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    store = mssql_job(["services/kb-service/src/ops_kb/store/rows.py", "docs/x.md"], ci_text)
-    migration = mssql_job(["services/files-service/migrations/versions/x.py"], ci_text)
-    kit = mssql_job(["packages/ops_store/src/ops_store/base.py"], ci_text)
+    store = mssql_job(["services/kb-service/src/ops_kb/store/rows.py", "docs/x.md"])
+    migration = mssql_job(["services/files-service/migrations/versions/x.py"])
+    kit = mssql_job(["packages/ops_store/src/ops_store/base.py"])
     ok += [
         store is not None
         and any("test services/kb-service" in c and "tests/test_kb_isolation.py" in c for c in store.commands),
@@ -468,8 +464,7 @@ def self_test() -> int:
         migration is not None and any("test services/files-service" in c for c in migration.commands),
         kit is not None
         and sum("test services/" in c for c in kit.commands) == 7,  # the shared store moves every service
-        mssql_job(["docs/plans/x.md", "apps/console/src/a.tsx", "services/kb-service/src/ops_kb/search.py"], ci_text)
-        is None,
+        mssql_job(["docs/plans/x.md", "apps/console/src/a.tsx", "services/kb-service/src/ops_kb/search.py"]) is None,
         all(" down" not in c and "sweep" not in c for j in (store, migration, kit) if j for c in j.commands),
         "store-mssql" not in labels,  # build_jobs leaves it to mssql_job
     ]

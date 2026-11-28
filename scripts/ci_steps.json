@@ -28,7 +28,7 @@
     "store-mssql": [
       {"step": "SQL Server", "no_local_twin": "Starts a SQL Server container and the ODBC driver; nearest proof is `make mssql-remote-up` then `make mssql-remote-test`."},
       {"step": "The both-database suites", "no_local_twin": "Needs the SQL Server container; nearest proof is `make mssql-remote-test PKG=packages/ops_store T=<files>`."},
-      {"step": "The services' store tests on both databases", "no_local_twin": "Needs the SQL Server container; nearest proof is `make mssql-remote-test PKG=services/<svc> T=<files>`."}
+      {"step": "The service's store tests on both databases", "no_local_twin": "Needs the SQL Server container; nearest proof is `make mssql-remote-test PKG=services/<svc> T=<files>`."}
     ],
     "usecases": [
       {"step": "Pick the use cases", "twin": "python3 scripts/ci_usecases.py pick --base \"$(git merge-base \"${BASE_SHA:-origin/develop}\" HEAD)\""},
