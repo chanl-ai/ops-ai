@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import math
 from typing import Any
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -14,7 +15,7 @@ import pytest
 from ops_service_kit.model_calls import IngestModel, ModelCallError, ModelCalls, Usage
 from ops_service_kit.scripted_vectors import scripted_vector
 
-from .conftest import LOCAL, Models
+from .conftest import LOCAL, SERVICE, Models
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -31,6 +32,25 @@ async def test_an_embedding_alias_answers_vectors_at_the_width_asked_and_records
     [row] = await models.calls(key_id)
     assert (row["outcome"], row["alias"], row["inputTokens"], row["outputTokens"]) == ("ok", "bank-embed", 16, 0)
     assert await models.spent(key_id) > 0
+
+
+async def test_the_answer_names_the_model_serving_the_alias_so_a_new_version_reads_as_a_new_space(
+    models: Models,
+) -> None:
+    """A caller keeping vectors keys them by the model that made them; an alias pointed at another model keeps its
+    name, so an answer naming only the alias would let vectors of two models be compared."""
+    _, secret = await models.key(budget="5")
+    name = f"embed-{uuid4().hex[:6]}"
+    version = {"providerId": "prov_scripted", "clearedSensitivity": "internal"}
+    body = {"name": name, "kind": "embedding", "modelId": "embed-a", **version}
+    assert (await models.client.post("/v1/models/aliases", json=body, headers=SERVICE)).status_code == 201
+    calls = ModelCalls(models.client, secret)
+    first = await calls.embed(["a loan"], alias=name, width=8, tenant="local", step="kb:test")
+    again = {**version, "modelId": "embed-b"}
+    added = await models.client.post(f"/v1/models/aliases/{name}/versions", json=again, headers=SERVICE)
+    assert added.status_code == 201, added.text
+    second = await calls.embed(["a loan"], alias=name, width=8, tenant="local", step="kb:test")
+    assert (first.model, second.model) == ("scripted/embed-a", "scripted/embed-b")
 
 
 async def test_a_chat_alias_is_refused_for_embeddings_and_an_embedding_alias_for_chat(models: Models) -> None:
@@ -71,7 +91,7 @@ def test_scripted_vectors_put_texts_that_share_words_closer_than_unrelated_ones(
     assert _cosine(claim, late) > _cosine(claim, loan) + 0.25
 
 
-class _Bridge(httpx.BaseTransport):
+class Bridge(httpx.BaseTransport):
     """A blocking transport that hands each request to the async app on the test's own event loop, so the ingestion
     client, which runs in a worker thread, reaches the real models-service app."""
 
@@ -90,7 +110,7 @@ class _Bridge(httpx.BaseTransport):
 async def test_the_ingestion_client_answers_text_and_counts_its_calls_and_tokens(models: Models) -> None:
     key_id, secret = await models.key(budget="5")
     transport = httpx.ASGITransport(app=models.app)
-    sync = httpx.Client(transport=_Bridge(transport, asyncio.get_running_loop()), base_url="http://models")
+    sync = httpx.Client(transport=Bridge(transport, asyncio.get_running_loop()), base_url="http://models")
     ingest = IngestModel(sync, secret, tenant="local", step="kb:questions")
     answer: Any = await asyncio.to_thread(
         ingest.complete, "Write three questions this passage answers.", alias="bank-standard", max_tokens=200

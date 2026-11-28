@@ -2,34 +2,42 @@
 
 Status: current.
 
-A skill is a reusable procedure, written once and attached to any agent that should follow it. It has a line that
-says when to use it and the instructions to follow. These examples write a skill, attach it to an agent, and pick it
-for one reply.
+Three of your agents handle returns, and each one carries its own copy of the return procedure. When the policy
+changes, you edit three sets of instructions, and sooner or later one of them is missed. A skill solves this. You
+write the procedure once, with a line that says when it applies, and attach it to every agent that should follow it.
 
-Connect first: see [Before you start](README.md#before-you-start). The examples use the agent from
-[Agent examples](agents.md#create-and-publish-an-agent).
+Without skills, the agents drift apart over time, and a reviewer cannot read the procedure in one place or see which
+version each agent follows. These examples write a skill, attach it to an agent and pick it for one reply.
+
+## The plan
+
+<!-- site: steps -->
+1. **Write and publish the skill.** Give it a name, a line saying when it applies, and the procedure.
+2. **Attach it to an agent**, pinned to a version, and publish the agent again.
+3. **Pick it for one reply** when a person already knows which procedure they want.
+
+Connect first: see [Connect once, then copy any example](README.md#connect-once-then-copy-any-example). The examples
+use the agent from [Agent examples](agents.md#put-an-agent-your-team-can-chat-with-into-a-file).
 
 ## What each surface can do
 
 | Task | Python | TypeScript | Command line |
 |---|---|---|---|
 | List and read skills | built | built | built |
-| Write and publish a skill | built, by API operation name | built, by API operation name | upcoming |
-| Attach a skill to an agent | built, by API operation name | built, by API operation name | upcoming |
+| Write and publish a skill | built | built | built |
+| Attach a skill to an agent | built, by API operation name | built, by API operation name | built |
 | Pick a skill for one reply | built | built | built |
-| Write and publish with `ops.skills` and `opsai skills apply` | upcoming | upcoming | upcoming |
-| Skills that run step by step | upcoming | upcoming | upcoming |
+| Skills that run step by step | built | built | built |
 
-"By API operation name" means the SDK has no short verb for the task yet. You call the operation under `ops.raw`,
-with the name the API reference gives it.
+"By API operation name" means the SDKs have no short verb for attaching a skill with a version pin, so you call the
+operation under `ops.raw` with the name the API reference gives it. The first example below also writes the skill that
+way; [Manage skills with their own verbs](#manage-skills-with-their-own-verbs) shows the shorter calls.
 
-## Write and publish a skill
+## Write the return procedure once
 
-**The problem.** Several agents should handle a return the same way. Copying the procedure into each agent's
-instructions means fixing it in several places later.
-
-**When to use it.** Use a skill for any procedure more than one agent follows, or one you want to version and review
-on its own.
+When several agents should handle a return the same way, copying the procedure into each agent's instructions means
+fixing it in several places later. Write it as a skill instead. A skill suits any procedure that more than one agent
+follows, or one you want to version and review on its own.
 
 ```python
 from ops_ai import OpsAI
@@ -74,7 +82,7 @@ const published = await ops.raw.agents.agents_request_skill_publish({ path: { sk
 console.log(skill.id, published.status, published.publishedVersion);
 ```
 
-The command line lists and reads skills today.
+On the command line, `opsai skills apply` creates a skill from a file, as shown under [Manage skills with their own verbs](#manage-skills-with-their-own-verbs). The commands below list and read skills.
 
 ```bash
 opsai skills list --search "Return checklist"
@@ -85,7 +93,7 @@ opsai skills show "$SKILL"
 | Field | What it does |
 |---|---|
 | `name` | The skill's name. A team uses each name once |
-| `ownerTeam` | The id of the team that answers for the skill, one of `ownerTeams` in `GET /v1/skills/options` (each with its name). The team you act in when left out; another team you may not create skills in is refused with 400 `unknown_owner_team`. Reads return the id and `ownerTeamName` |
+| `ownerTeam` | The id of the team that answers for the skill. It must be one of the `ownerTeams` that `GET /v1/skills/options` lists, each with its name. When it is left out, the skill belongs to the team you act in. A team you may not create skills in is refused with 400 `unknown_owner_team`. Reads return the id and `ownerTeamName` |
 | `useWhen` | One line that says when the skill applies. The agent reads it to decide whether to load the skill |
 | `loading` | `on_match` loads the skill when a request matches `useWhen`. `always` puts it in every reply |
 | `instructions` | The procedure the agent follows. Required |
@@ -93,13 +101,11 @@ opsai skills show "$SKILL"
 | `toolIds`, `knowledgeBases` | Tools and knowledge bases the skill needs |
 | `refusal` | What the agent says when the skill tells it to refuse |
 
-## Attach the skill to an agent
+## Hand the procedure to an agent
 
-**The problem.** A published skill does nothing until an agent holds it.
-
-**When to use it.** Attach after the skill is published. The agent keeps the version you attach, so a later version
-of the skill reaches the agent only when you attach that version. Attaching changes the agent's draft, so publish
-the agent again.
+A published skill does nothing until an agent holds it, so attach it once it is published. The agent keeps the
+version you attach, and a later version of the skill reaches the agent only when you attach that version. Attaching
+changes the agent's draft, so publish the agent again afterwards.
 
 ```python
 agent = next(a for a in ops.agents.list(search="Returns helper") if a["name"] == "Returns helper")
@@ -127,13 +133,11 @@ console.log(held.limits);
 The answer lists the skills the agent holds and the limits: how many skills an agent may hold, how many it may load
 in one reply, and how much text they may add.
 
-## Pick a skill for one reply
+## Start a known procedure from the chat
 
-**The problem.** The agent loads a skill when it judges that the request matches. Sometimes the person already knows
-which procedure they want and should not depend on that judgement.
-
-**When to use it.** Use it to start a known procedure, and to pass the values it needs. The pick applies to that one
-reply.
+The agent loads a skill when it judges that the request matches. When a person already knows which procedure they
+want, they can pick it instead of relying on that judgement, and pass the values it needs. The pick applies to that
+one reply.
 
 ```python
 thread = ops.chat.start(agent["id"])
@@ -158,13 +162,10 @@ opsai chat say --agent "Returns helper" --skill "$SKILL" --input order_number=11
 Each reply records the skills it used. `how` is `picked` when a person chose the skill, and the record keeps the
 skill's version and the inputs it was given.
 
-## Upcoming: skill verbs
+## Manage skills with their own verbs
 
-> [!NOTE]
-> **Upcoming.** This section is merged and is not in the current release (v1.0.0). The verbs were run against
-> the merged code on [Step-by-step skills](step-by-step-skills.md).
-
-Skills get their own verbs, so a skill is a file you apply and publish like an agent.
+Skills have their own verbs in both SDKs and on the command line, so you can keep a skill in a file and apply and
+publish it the way you do an agent.
 
 ```python
 skill = ops.skills.create({"name": "Return checklist", "instructions": "..."})
@@ -187,15 +188,26 @@ opsai skills export <id> --format yaml
 opsai skills references <id> --search refund
 ```
 
-| Verb | What it will do |
+| Verb | What it does |
 |---|---|
 | `create`, `save_draft` / `apply` | Create a skill, or save a new draft of the skill a file names by id, slug or name |
 | `publish` | Ask to publish the newest draft. A skill that cannot be published is refused, and the error names each problem |
 | `export` | Print a stored skill as a file `apply` reads |
 | `references` | Search what the skill's text may mention: tools, knowledge bases, other skills, agents and workflows |
 
-## Next steps
+## What success looks like
 
-- [Step-by-step skills](step-by-step-skills.md): numbered steps with checks, exits and sub-skills. Upcoming.
+The skill is published at version 1, and the agent holds it at that version. When you pick the skill in a chat, the
+reply records which skill and version ran and the inputs it was given, so a reviewer can see which procedure produced
+an answer.
+
+On a team that requires a review, `publishedVersion` stays empty until the publish is approved, so wait for that before you attach the skill. A reviewer approves it, as the `reviewer` profile from
+[Connect once, then copy any example](README.md#connect-once-then-copy-any-example).
+
+If you skip the version pin, the agent keeps whatever version it was last attached to, and a reviewer cannot tell which one that is.
+
+## What to do next
+
+- [Step-by-step skills](step-by-step-skills.md): numbered steps with checks, exits and sub-skills.
 - [Agent examples](agents.md): the agent these skills attach to.
 - [Workflow examples](workflows.md): fixed steps with a person's approval.

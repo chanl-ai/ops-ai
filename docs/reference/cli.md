@@ -1,6 +1,6 @@
 # The opsai command line
 
-Status: current. The command list matches version 1.0.0.
+Status: current. The command list matches release v1.2.0. The package version, shown by `opsai --version`, is still 1.0.0.
 
 The opsai command does from a terminal what the console does: author and publish agents and workflows, start runs, decide Human
 tasks, chat, and manage apps, knowledge, secrets and people. Reach for it in scripts and CI, or when a change is easier
@@ -40,27 +40,28 @@ exits 2.
 | Area | Verbs | For |
 |---|---|---|
 | `login` | | Sign in and keep the session in a profile |
-| `workflows` | `init`, `validate`, `plan`, `apply`, `export`, `publish`, `pause`, `archive`, `run`, `list`, `forms`, `batch-start`, `batch`, `watch`, `inspect`, `trace`, `test`, `retry`, `decide`, `schedule` | Author a workflow as a file, publish it and run it; `schedule show\|save\|clear\|kinds\|preview` sets when it runs by itself (`set` still works for `save`); `show` prints the saver's name, the last outcome with the clock's reason, and why it is idle |
-| `agents` | `validate`, `apply`, `export`, `publish`, `pause`, `chat`, `run`, `test`, `trace`, `list`, `tool-options`, `grant-tools` | Author an agent, grant it tools, test and publish it |
-| `chat` | `agents`, `threads`, `start`, `say`, `show`, `calls`, `approve`, `reject`, `submit`, `transcript`, `script`, `evals` | Chat as the chat screen does; script a conversation and score it |
-| `runs` | `list`, `start`, `show`, `events`, `cancel`, `retry` | Start and follow workflow runs |
+| `workflows` | `init`, `convert`, `types`, `type`, `validate`, `plan`, `apply`, `export`, `save-copy`, `diff`, `publish`, `pause`, `archive`, `run`, `send-test-email`, `list`, `forms`, `batch-start`, `batch`, `watch`, `inspect`, `trace`, `test`, `retry`, `decide`, `schedule` | Author a workflow as a file, publish it and run it; `schedule show\|save\|clear\|kinds\|preview` sets when it runs by itself (`set` still works for `save`); `show` prints the saver's name, the last outcome with the clock's reason, and why it is idle |
+| `agents` | `validate`, `apply`, `export`, `publish`, `publish-check`, `pause`, `chat`, `run`, `test`, `trace`, `eval`, `list`, `tool-options`, `grant-tools`, `references`, `add-reference`, `sections`, `sections-apply`, `sections-reset` | Author an agent and its brief, grant it tools and what the brief mentions, test it, run its eval cases and publish it |
+| `chat` | `agents`, `threads`, `start`, `say`, `show`, `calls`, `connected`, `approve`, `reject`, `submit`, `transcript`, `transcripts`, `script`, `evals` | Chat as the chat screen does; script a conversation and score it |
+| `runs` | `list`, `start`, `show`, `events`, `cancel`, `retry`, `redrive`, `bulk` | Start and follow workflow runs; `redrive` sends a failed run again from its failed step, and `bulk` redrives or cancels every run a filter matches |
 | `tasks` | `list`, `types`, `show`, `decide`, `approve` | Work the Human tasks queue |
 | `cases` | `list`, `types`, `show`, `note` | Read cases and add notes |
 | `threads` | `list`, `show`, `inbox` | Read conversations |
-| `apps` | `list`, `show`, `add-tool`, `accounts`, `mine`, `connect`, `test`, `auth-configs` | Turn on apps and connect accounts |
-| `connectors` | `list`, `disconnect` | Your own sign-ins on apps |
-| `tools` | `list`, `show`, `run`, `discover`, `import`, `request-review`, `decide-review`, `publish`, `calls` | Take an OpenAPI description to a published tool, and read the call log |
+| `apps` | `list`, `show`, `on`, `add-tool`, `accounts`, `default`, `mine`, `connect`, `test`, `auth-configs`, `people`, `end-sign-in` | Turn on apps, connect accounts, and see or end each person's sign-ins |
+| `connectors` | `list`, `connect`, `finish`, `accounts`, `disconnect` | Your own sign-ins on apps |
+| `tools` | `list`, `show`, `run`, `calls`, `call`, `create`, `discover`, `import`, `request-review`, `decide-review`, `publish` | Take an OpenAPI description to a published tool, and read the call log |
 | `secrets` | `list`, `create`, `rotate`, `rename`, `delete` | The team's secrets; a value is read from `--value` or standard input and never printed |
 | `egress` | `list`, `allow-host`, `allow-range`, `remove-host`, `remove-range` | The hosts and ranges tools may reach (Security admins) |
 | `policies` | `get`, `set` | The team's policies |
-| `kb` | `bases`, `sources`, `items`, `add-file`, `add-text`, `sync`, `search`, `changes` | Knowledge bases and what is in them |
-| `files`, `documents` | `list`, `show`, `upload`, `limits`; document types and extractions | Files and what is read from them |
+| `kb` | `bases`, `show`, `documents`, `sources`, `source`, `items`, `create`, `add-source`, `scopes`, `delete`, `set`, `push`, `add-file`, `add-text`, `sync`, `search`, `changes`, `change` | Knowledge bases and what is in them |
+| `files`, `documents` | `list`, `show`, `upload`, `limits`, `watch`; `types`, `type`, `extractions`, `extraction` | Files, watched folders and what is read from files |
 | `resources`, `templates` | `list`, `plan`, `add`, `update`, `remove`; `list`, `install` | Copy an app's agents, skills and workflows, or a template, into the team |
-| `skills`, `guardrails`, `widgets` | `list`, `show` | Read the team's skills, guardrails and widget templates |
+| `skills` | `list`, `show`, `versions`, `apply`, `export`, `publish`, `references` | Keep a skill as a file, publish it and read its versions; see [Skill examples](../guide/examples/skills.md#manage-skills-with-their-own-verbs) |
+| `guardrails`, `widgets` | `list`, `show` | Read the team's guardrails and widget templates |
 | `people` | `list`, `invite`, `roles`, `role`, `me` | Members, invites and roles; an invite is printed unless `--send` |
-| `models` | `aliases`, `providers`, `keys`, `test` | Model aliases and their prices; providers and keys for account admins (no key value is shown) |
+| `models` | `aliases`, `providers`, `provider-types`, `catalog`, `knobs`, `keys`, `test` | Model aliases and their prices; providers and keys for account admins (no key value is shown) |
 | `memories` | `list`, `forget`, `forget-agent`, `export` | What agents remember about you |
-| `test-data` | `list`, `clean --confirm` | Find and remove what test runs made |
+| `test-data` | `clean` (lists; `--confirm` removes) | Find and remove what test runs made |
 | `plugin` | `validate`, `test` | Build and check a plugin (needs the plugin extra) |
 
 `opsai <area> --help` lists each verb's arguments.

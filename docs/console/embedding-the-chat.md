@@ -119,11 +119,18 @@ app.post('/api/ops-chat/session', requireIntranetLogin, async (req, res) => {
 </script>
 ```
 
-The page holds no key. When it starts, the loader first reads the deployment's config. If the page's origin is not on
-the deployment's list, that read is refused, nothing is drawn, and the `error` event reports `origin_not_allowed`.
-Otherwise the loader draws the launcher, creates the iframe (`/embed/{deployment}` on the same host) the first time
-someone opens it, and passes the session to it. `getSession` may also return the session as a plain string, in which
-case the loader refreshes it after 14 minutes.
+The page holds no key. When the page's origin is not on the deployment's list, nothing is drawn and the `error` event
+reports `origin_not_allowed`. `getSession` may also return the session as a plain string, in which case the loader
+refreshes it after 14 minutes.
+
+<!-- site: sequence caption="How the launcher gets a session: the page never holds a key" -->
+1. **Loader → Ops AI**: Reads the deployment's config
+   - A page origin that is not on the list is refused here, and nothing is drawn.
+2. **Loader → Bank server**: Calls `getSession` for the signed-in person
+3. **Bank server → Ops AI**: Mints a session with the widget's mint key
+   - The key stays on the bank's server.
+4. **Ops AI → Loader**: Returns a session that lasts 15 minutes
+5. **Loader → Embed iframe**: Creates the iframe the first time someone opens the launcher and passes it the session
 
 ## 4. Control it from the page
 

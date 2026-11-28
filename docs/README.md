@@ -208,10 +208,10 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `guide/agents.md` | Author, publish and chat with agents from the SDK and `opsai agents` |
 | `guide/examples/README.md` | Examples for builders: who each page is for, how to connect, and how to read the examples |
 | `guide/examples/agents.md` | Agent examples per surface: create and publish, chat, knowledge, tools, test a draft, run modes, scoring with cases |
-| `guide/examples/skills.md` | Skill examples per surface: write and publish, attach to an agent, pick for one reply; skill verbs marked upcoming |
+| `guide/examples/skills.md` | Skill examples per surface: write and publish, attach to an agent, pick for one reply, and the skill verbs |
 | `guide/examples/workflows.md` | Workflow examples per surface: check, publish and run, a person's decision, an agent step, reading a run, refused starts |
-| `guide/examples/step-by-step-skills.md` | Upcoming: skills with numbered steps, rule checks, exits, approvals and sub-skills |
-| `guide/examples/coming-from-other-frameworks.md` | 22 agent patterns from LangChain and LangGraph, the OpenAI Agents SDK and Strands, each with the Ops AI way and the upcoming features |
+| `guide/examples/step-by-step-skills.md` | Skills with numbered steps, rule checks, exits, approvals and sub-skills, and the skill written as text |
+| `guide/examples/coming-from-other-frameworks.md` | 22 agent patterns from LangChain and LangGraph, the OpenAI Agents SDK and Strands, each with the Ops AI way and the features that are still upcoming |
 | `guide/workflow-example-coverage.md` | Generated: every built node type and the Example that teaches it |
 | `guide/agent-example-coverage.md` | Generated: every Agent Example and the capabilities it teaches |
 | `guide/developer-surface-coverage.md` | Generated: API, Python, TypeScript, CLI and UI proof per lifecycle operation |
