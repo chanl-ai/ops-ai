@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { CheckCircle2, FolderOpen, MousePointerClick } from 'lucide-react';
+import { CheckCircle2, FolderOpen, MousePointerClick, SearchX } from 'lucide-react';
 
 import { EmptyState } from '@/components/shared/empty-state';
 import { isOpen } from '@/components/reviews/review-columns';
@@ -38,6 +38,7 @@ export function TaskQueue({
   onOpen,
   onMore,
   loadingMore,
+  search,
 }: {
   rows: Review[];
   /** How many the view holds, loaded or not. */
@@ -47,6 +48,8 @@ export function TaskQueue({
   onOpen: (r: Review) => void;
   onMore?: () => void;
   loadingMore?: boolean;
+  /** The search the server ran, so an empty answer says nothing matched rather than that nothing is left. */
+  search?: string;
 }) {
   const [cursor, setCursor] = React.useState(0);
   const activeIndex = rows.findIndex((r) => r.id === activeId);
@@ -82,6 +85,8 @@ export function TaskQueue({
         ))}
       </div>
     );
+  if (!rows.length && search)
+    return <EmptyState icon={SearchX} title="No task matches" description={`No task in this view matches “${search}” by title, customer or case.`} testId="queue-no-match" />;
   if (!rows.length) return <QueueDone />;
   const unloaded = Math.max(0, total - rows.length);
   return (
@@ -91,9 +96,9 @@ export function TaskQueue({
           <span className="tabular-nums">{total}</span> to decide
           {unloaded > 0 && <span className="font-normal text-muted-foreground"> · {unloaded} not loaded</span>}
         </p>
-        <p className="hidden items-center gap-1 text-xs text-muted-foreground lg:flex">
+        <p className="hidden shrink-0 items-center gap-1 text-xs whitespace-nowrap text-muted-foreground lg:flex">
           <Kbd>j</Kbd>
-          <Kbd>k</Kbd> to move, <Kbd>Enter</Kbd> to open
+          <Kbd>k</Kbd> move · <Kbd>Enter</Kbd> opens
         </p>
       </div>
       <ItemGroup className="gap-1">
@@ -126,13 +131,13 @@ export function TaskQueue({
                   }}
                 >
                   <ItemContent className="min-w-0 gap-0.5">
-                    {/* Title and customer wrap to two lines: in the narrow queue a one-line trim cut the amount and the customer. */}
-                    <div className="flex min-w-0 items-baseline justify-between gap-2">
-                      <ItemTitle className="line-clamp-2 min-w-0 wrap-break-word" title={r.title}>{r.title}</ItemTitle>
-                      {r.amount != null && <span className="shrink-0 text-sm font-medium tabular-nums">{money(r.amount, r.currency)}</span>}
-                    </div>
+                    {/* The title gets the row's width (two lines at most); the amount sits with the time left below it. */}
+                    <ItemTitle className="line-clamp-2 min-w-0 wrap-break-word" title={r.title}>{r.title}</ItemTitle>
                     <ItemDescription className="wrap-break-word line-clamp-none">{[KIND_LABEL[r.kind], r.customer].filter(Boolean).join(' · ')}</ItemDescription>
-                    <SlaText minutes={r.slaMinutes} open={isOpen(r)} />
+                    <div className="flex min-w-0 items-baseline justify-between gap-2">
+                      <SlaText minutes={r.slaMinutes} open={isOpen(r)} />
+                      {r.amount != null && <span className="shrink-0 text-sm font-medium tabular-nums">{money(r.amount, r.currency ?? null)}</span>}
+                    </div>
                   </ItemContent>
                 </button>
               </Item>

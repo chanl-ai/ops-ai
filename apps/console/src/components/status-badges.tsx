@@ -39,8 +39,9 @@ const RISK: Record<Risk, string> = {
   low: 'border-border bg-muted text-muted-foreground',
 };
 
-export function RiskBadge({ risk }: { risk: Risk }) {
-  return <span className={cn(pill, 'capitalize', RISK[risk])}>{risk}</span>;
+/** `named`: the word risk follows the level ("Critical risk"), where no column or label says what the pill is. */
+export function RiskBadge({ risk, named }: { risk: Risk; named?: boolean }) {
+  return <span className={cn(pill, RISK[risk])}>{`${risk[0]?.toUpperCase() ?? ''}${risk.slice(1)}${named ? ' risk' : ''}`}</span>;
 }
 
 const STATUS: Record<ReviewStatus, { label: string; cls: string; dot: string }> = {
