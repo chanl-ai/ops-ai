@@ -32,7 +32,7 @@ it. This guide uses Salesforce, but the same steps work for any app.
 | A team admin | To turn the app on and sign in the team login |
 | A builder | To add tools to an agent and publish it |
 | A Salesforce org with a case in it | Without one, follow [Build your first tool](../build-your-first-tool.md) with an app you have |
-| A Salesforce user | Access to Ops AI's connected app in your org (see [Salesforce](../integrations/salesforce.md#if-sign-in-fails)) |
+| A Salesforce user | Access to Ops AI's connected app in your org (see [Salesforce](../integrations/salesforce.md#when-salesforce-refuses-the-sign-in)) |
 
 ## Try it
 
