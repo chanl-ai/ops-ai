@@ -101,6 +101,20 @@ images crash under Docker Desktop's emulation; the pinned 2025 image runs on the
 
 - A lease test that waits on real time against a short ttl => build the lease on the suite's `LeaseClock` (`make(clock)`) and lapse it with `clock.advance`; a loaded CI runner can take longer than the ttl between two acquires, so a live lease reads as lapsed
 
+## Known traps
+
+- A migration that adds a tenant-scoped table => create its row policy after the table and drop it before the table on downgrade; the policy names the table, so neither order works the other way round, and `make db-ddl-golden` (reviewed) records it
+- A local variable spelled like a `TEAM_OWNED` table name (`cases`) => rename it (`case_count`); `tests/test_team_reads.py` scans source by name, so do not touch the test
+- A read of a team-owned table in a helper => name the caller's team in the statement the isolation scans see, and pass no empty team list
+- A boolean compared with `.is_(True)` or `.is_(False)` => use `sa.true()` and `sa.false()`; SQL Server refuses `IS 1`
+- A list keyed on `(tenant_id, id)` => pick the ids under the caller's tenant, or another tenant's row of that id comes back
+- A migration number another branch also took => renumber it, regenerate the golden DDL and run `scripts/check_migration_heads.py` after every develop merge
+- A migration with a data-only downgrade => state it as such; `check_downgrades` refuses an empty one
+- A system user that reads a table => grant the table in `SYSTEM_USERS` of `deploy/database/mssql.py`, and name the user in its SQL Server team functions
+- A system transaction on SQL Server => revert inside it; reverting after the commit counts two transactions
+- A store change (tables, repositories, migrations, queries) pushed after `make ci-local` alone => ci-local lists `store-mssql` as skipped, so run `deploy/database/mssql_remote.sh test <member> -q <tests>` before the push
+- The relay or a worker loop throws `ProgrammingError` after a stack starts on an empty database without migrating => run `make migrate`, then restart the stack
+
 ## Reference docs
 
 - [docs/architecture/data.md](../../docs/architecture/data.md): store inventory and data rules

@@ -82,7 +82,10 @@ export default function KnowledgeBasePage() {
         badge={<KbHealthBadge health={kb.health} />}
         description={
           <span>
-            {kb.description} <span className="text-xs">· {kb.collections.length ? `Collections: ${kb.collections.join(', ')}` : 'All collections'} · synced {kb.lastSyncAt ? relativeTime(kb.lastSyncAt) : 'never'}</span>
+            {kb.description ? `${kb.description} · ` : null}
+            <span className="text-xs">
+              {kb.collections.length ? `Collections: ${kb.collections.join(', ')}` : 'All collections'} · synced {kb.lastSyncAt ? relativeTime(kb.lastSyncAt) : 'never'}
+            </span>
           </span>
         }
         backHref="/data/knowledge"

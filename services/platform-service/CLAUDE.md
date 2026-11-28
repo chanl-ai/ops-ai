@@ -66,6 +66,15 @@ real sign-in path. Reference: [make/CLAUDE.md](../../make/CLAUDE.md).
 | Audit | Every change to identity, roles, keys and sign-in settings writes an audit row; tests assert it |
 | People in tests | Use the seeded roles (`seed/dev-roles.json`); never a real address |
 
+## Known traps
+
+- A migration that adds a tenant-scoped table => create its row policy after the table and drop it before the table on downgrade; the policy names the table, so neither order works the other way round, and `make db-ddl-golden` (reviewed) records it
+- A new team policy flag => add its entry to `tests/fixtures/reply-pins.json`, or this service's verify fails
+- A migration that updates `tenants` or other policed tables after policies are forced => it sees no rows; read the cells back in the migration test
+- A new `GET` route such as a lookup list => add its `budgets.toml` row and share the request transaction in its session check
+- A route that decides the members list's admins => do it in one read; per-member reads break the statement budget
+- A store change (tables, repositories, migrations, queries) pushed after `make ci-local` alone => ci-local lists `store-mssql` as skipped, so run `deploy/database/mssql_remote.sh test services/platform-service -q <tests>` before the push
+
 ## Reference docs
 
 | Doc | Covers |

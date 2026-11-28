@@ -14,6 +14,7 @@ edited by hand; Python and TypeScript move together; the CLI calls the client.
 3. The standards you build to: [console, SDKs and CLI](../../docs/architecture/standards/console-and-sdk.md) (`UI6`,
    `UI7`) and [API contracts and models](../../docs/architecture/standards/api-and-models.md); then `sdk/CLAUDE.md`,
    `sdk/python/CLAUDE.md`, `sdk/typescript/CLAUDE.md`, `docs/architecture/api.md` and `docs/sdk/`.
+4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section and `docs/architecture/standards/delivery.md` DL2; run the DL2 local gate before the pull request leaves draft.
 
 ## Owns
 | Paths | What |
@@ -97,3 +98,7 @@ updates it. Changes asked for in review re-create the worktree from the pushed b
 ## Report (at most 10 lines)
 Commits; the operations added or changed in both languages; CLI verbs added; `make sdk-verify` output; use cases per
 layer with what they printed; anything not run.
+
+## Known traps
+
+Before the first edit in a folder, read the "Known traps" section of the nearest CLAUDE.md and follow it. When you fix a red that could happen again, add one "- trigger => fix" line there in the same commit (public repo: no card ids, session links or customer names).
