@@ -19,10 +19,6 @@ on:
   # hotfix branch (docs/deploy/release.md) so the release is tested on staging.
   push:
     branches: [develop, main, "release/[0-9]*", "hotfix/**"]
-  # Nightly: only the SQL Server job (scripts/ci-plan.sh plans it alone), so a combination of changes that no single
-  # store change showed still meets SQL Server within a day. GitHub starts a schedule from the default branch's copy.
-  schedule:
-    - cron: "47 3 * * *"
 
 permissions:
   contents: read
@@ -222,8 +218,7 @@ jobs:
           failed=""
           for pkg in $PACKAGES; do
             echo "::group::test $pkg"
-            uv run python scripts/test_db.py "$OPS_TEST_DATABASE_URL"
-            if (cd "packages/$pkg" && OPS_DATABASE_URL=$OPS_TEST_DATABASE_URL uv run pytest -q); then echo "PASS $pkg"; else echo "FAIL $pkg"; failed="$failed $pkg"; fi
+            if (uv run python scripts/test_db.py "$OPS_TEST_DATABASE_URL" && cd "packages/$pkg" && OPS_DATABASE_URL=$OPS_TEST_DATABASE_URL uv run pytest -q); then echo "PASS $pkg"; else echo "FAIL $pkg"; failed="$failed $pkg"; fi
             echo "::endgroup::"
           done
           if [ -n "$failed" ]; then echo "::error title=package tests failed::$failed"; exit 1; fi
@@ -300,11 +295,11 @@ jobs:
     # The store, kit and identity suites on SQL Server beside PostgreSQL: the tests that run on both databases skip
     # SQL Server unless OPS_MSSQL_SERVER and MSSQL_SA_PASSWORD are set (packages/ops_store/CLAUDE.md), so a run that
     # skips any of them fails here. The image is the pinned one deploy/fly/mssql/Dockerfile builds on.
-    # It runs when the diff touches a store, a migration, ops_store or the database scripts (store), on a pull request and
-    # in the merge queue alike; on a release or hotfix branch and on a heavy full plan (the queue, ci:full) whatever
-    # changed; and in the nightly run (the schedule trigger, whose plan is this job alone).
+    # Never on a pull request (heavy is false there, a store change included) unless it carries ci:full: the merge queue
+    # and develop pushes run it whenever the plan says mssql, and a release or hotfix branch runs it with its full plan,
+    # so a SQL Server failure first shows in the queue.
     needs: plan
-    if: needs.plan.outputs.mssql == 'true' && (needs.plan.outputs.store == 'true' || needs.plan.outputs.release == 'true' || (needs.plan.outputs.full == 'true' && needs.plan.outputs.heavy == 'true'))
+    if: needs.plan.outputs.mssql == 'true' && needs.plan.outputs.heavy == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:

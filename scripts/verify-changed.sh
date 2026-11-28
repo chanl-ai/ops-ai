@@ -31,13 +31,15 @@ done
 if [ "${#pkgs[@]}" -gt 0 ]; then
   declare -A reached=()
   depth=(); [ "${VERIFY_CHANGED_DEPTH:-}" = direct ] && depth=(--direct); [ "${VERIFY_CHANGED_DEPTH:-}" = self ] && depth=(--only)
+  # Captured first: a failed uv inside `done < <(...)` would be dropped and leave the dependants empty.
+  deps=$(uv run --quiet python scripts/dependants.py "${depth[@]}" "${!pkgs[@]}") || { echo "verify-changed: scripts/dependants.py failed" >&2; exit 1; }
   while read -r kind dir; do
     case "$kind" in
       unknown) full "package $dir is no workspace member" ;;
       package) reached[$dir]=1 ;;
       service) svcs[${dir#services/}]=1 ;;
     esac
-  done < <(uv run --quiet python scripts/dependants.py "${depth[@]}" "${!pkgs[@]}")
+  done <<<"$deps"
   for d in "${!reached[@]}"; do pkgs[$d]=1; done
 fi
 echo "verify-changed since $base: packages [${!pkgs[*]}] services [${!svcs[*]}] console=$console docs=$docs"

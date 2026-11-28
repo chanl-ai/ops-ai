@@ -210,20 +210,13 @@ def _runs(job: str, p: dict[str, str]) -> bool:
 
 
 def test_a_pull_request_skips_the_slow_jobs_that_the_merge_queue_and_develop_run(tmp_path: Path) -> None:
-    # A service change plans store-mssql; a change of the make files plans the full repo job.
+    # A service change plans store-mssql for the queue; a change of the make files plans the full repo job.
     for changed in ("services/kb-service/src/ops_kb/app.py", "make/env.mk"):
         pr = plan(tmp_path, changed, event="pull_request")
         assert (pr["heavy"], _runs("store-mssql", pr), _runs("repo", pr)) == ("false", False, False), pr
         for event in ("merge_group", "push"):
             assert plan(tmp_path, changed, event=event)["heavy"] == "true"
-    # The queue runs SQL Server for a store change only; a release branch and the nightly run always do.
-    api = "services/kb-service/src/ops_kb/app.py"
-    assert not _runs("store-mssql", plan(tmp_path, api, event="merge_group"))
-    assert _runs("store-mssql", plan(tmp_path, "services/kb-service/src/ops_kb/store/rows.py", event="merge_group"))
-    assert _runs("store-mssql", plan(tmp_path, api, ref="refs/heads/release/1.2.0", event="push"))
-    nightly = plan(tmp_path, api, event="schedule")
-    assert (_runs("store-mssql", nightly), nightly["services"], nightly["docs"]) == (True, "[]", "false"), nightly
-    # A store or migration change runs store-mssql on a pull request; an api-only or docs change does not.
+    # SQL Server never runs on a pull request, a store change included; the queue runs it whenever the plan says mssql.
     for changed in (
         "services/kb-service/migrations/versions/kb_0042_x.py",
         "services/kb-service/src/ops_kb/store/rows.py",
@@ -231,13 +224,14 @@ def test_a_pull_request_skips_the_slow_jobs_that_the_merge_queue_and_develop_run
         "deploy/database/tests/test_x.py",
     ):
         pr = plan(tmp_path, changed, event="pull_request")
-        assert (pr["store"], _runs("store-mssql", pr)) == ("true", True), (changed, pr)
-    for changed in ("services/kb-service/src/ops_kb/app.py", "services/kb-service/tests/test_app.py", "docs/x.md"):
-        pr = plan(tmp_path, changed, event="pull_request")
-        assert (pr["store"], _runs("store-mssql", pr)) == ("false", False), (changed, pr)
+        queue = plan(tmp_path, changed, event="merge_group")
+        assert (pr["store"], _runs("store-mssql", pr), _runs("store-mssql", queue)) == ("true", False, True), changed
+    assert _runs("store-mssql", plan(tmp_path, "services/kb-service/src/ops_kb/app.py", event="merge_group"))
+    assert not _runs("store-mssql", plan(tmp_path, "docs/x.md", event="merge_group"))
     assert _runs("repo", plan(tmp_path, "make/env.mk", event="push"))
-    # Labelled ci:full, a pull request still runs everything.
+    # Labelled ci:full, a pull request still runs everything, SQL Server included.
     assert _runs("repo", plan(tmp_path, "make/env.mk", event="pull_request", full="true"))
+    assert _runs("store-mssql", plan(tmp_path, "make/env.mk", event="pull_request", full="true"))
 
 
 def test_release_proof_waits_for_heavy_and_a_pull_request_still_gets_ci_ok() -> None:
@@ -305,6 +299,21 @@ def test_a_pull_request_plans_only_what_it_changed_and_the_merge_queue_plans_the
     )
     # ci:full on a pull request is a full plan, not the narrow one.
     assert plan(tmp_path, changed, event="pull_request", full="true")["full"] == "true"
+
+
+def test_a_failing_dependants_command_fails_the_plan(tmp_path: Path) -> None:
+    # A fake uv that fails: the plan must stop, not go on with no dependants.
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (fake / "uv").write_text("#!/bin/sh\nexit 1\n")
+    (fake / "uv").chmod(0o755)
+    listed = tmp_path / "changed.txt"
+    listed.write_text("packages/ops_store/src/ops_store/base.py\n")
+    env = {**CLEAN_MAKE_ENV, "PATH": f"{fake}:{os.environ['PATH']}", "GITHUB_EVENT_NAME": "merge_group"}
+    done = subprocess.run(
+        ["bash", "scripts/ci-plan.sh", str(listed)], cwd=ROOT, env=env, capture_output=True, text=True, check=False
+    )
+    assert done.returncode != 0 and "dependants.py failed" in done.stderr, done
 
 
 def test_a_release_or_main_push_runs_every_job_even_when_told_it_was_tested(tmp_path: Path) -> None:
