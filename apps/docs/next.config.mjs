@@ -19,6 +19,9 @@ const config = {
   // output tracing both start at the repository root.
   turbopack: { root: repoRoot },
   outputFileTracingRoot: repoRoot,
+  // Typescript 7 ships its compiler as a command, with no programmatic API for Next to load, so the build's type
+  // check and config loading run the project's own tsc.
+  experimental: { useTypeScriptCli: true },
 };
 
 export default createMDX()(config);

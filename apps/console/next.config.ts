@@ -88,6 +88,9 @@ const nextConfig: NextConfig = {
     workerThreads: false,
     // Turbopack holds its task graph in memory; 'full' drops what a snapshot already wrote to disk after every one.
     turbopackMemoryEviction: 'full',
+    // Typescript 7 ships its compiler as a command, with no programmatic API for Next to load, so the build's type
+    // check and config loading run the project's own tsc.
+    useTypeScriptCli: true,
   },
 };
 

@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
   distDir: process.env.OPS_EMBED_DIST_DIR || '.next',
   // A use-case run hands Next its own tsconfig, as for the console, so the committed one never gains build globs.
   typescript: { tsconfigPath: process.env.OPS_EMBED_TSCONFIG || 'tsconfig.json' },
+  // Typescript 7 ships its compiler as a command, with no programmatic API for Next to load, so the build's type
+  // check and config loading run the project's own tsc.
+  experimental: { useTypeScriptCli: true },
   turbopack: {
     root: resolve(__dirname, '../..'),
     resolveAlias: { '@/lib/api': './src/widget-api/index.ts' },
