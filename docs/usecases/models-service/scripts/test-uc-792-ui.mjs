@@ -159,8 +159,11 @@ await withUiStack(
         await builder.getByText('Only an account admin').first().waitFor({ timeout: 60_000 });
         const rail = await builder.getByRole('link', { name: 'Connections', exact: true }).count();
         const listed = await fetch(`${models}/v1/models/providers`, { headers: J });
+        // The roles matrix, not an owner rule, refuses the builder an alias write: settings.manage, code admin_only.
+        const repoint = await fetch(`${models}/v1/models/aliases/${ALIAS}/versions`, { method: 'POST', headers: { ...J, 'content-type': 'application/json' }, body: JSON.stringify({ providerId: CONNECTION, modelId: MODEL, clearedSensitivity: 'internal' }) });
+        const code = (await repoint.json().catch(() => ({})))?.error?.code;
         const body = await builder.content();
-        check('15 the page says only an account admin changes models, the rail has no Connections link, the API answers 403', rail === 0 && listed.status === 403 && !body.includes(CONNECTION), { rail, status: listed.status });
+        check('15 the page says only an account admin changes models, the rail has no Connections link, the API answers 403, and re-pointing an alias is 403 admin_only', rail === 0 && listed.status === 403 && repoint.status === 403 && code === 'admin_only' && !body.includes(CONNECTION), { rail, status: listed.status, repoint: repoint.status, code });
       });
 
       const pages = [...everyone, await admin.content(), await builder.content()];
