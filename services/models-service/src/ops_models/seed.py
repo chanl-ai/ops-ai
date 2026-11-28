@@ -13,7 +13,7 @@ from ops_service_kit.ids import now_iso
 from ops_store.database import Database
 
 from .app import secret_hash
-from .connection_settings import ModelConnectionSettings
+from .connection_settings import OPENAI_LOCAL, ModelConnectionSettings
 from .store import Aliases, ModelKeys, Providers
 from .store.providers import InstallConnection
 
@@ -39,7 +39,6 @@ TOOLS_CHECK_SECRET = "mk_dev_tools_check"
 KB_KEY = "kb:index"
 KB_SECRET = "mk_dev_kb"
 KB_TENANT_BUDGET = Decimal(10)
-OPENAI_LOCAL = "openai-local"
 # The runtime's default alias, and the team assistant's own, served by whatever openai-local points at: the fake in dev,
 # where any model name answers. Pointing one at a real provider means setting its provider model too (PUT the alias);
 # no vendor model is named here. `assistant` carries no reasoning effort: a model that refuses function tools with one

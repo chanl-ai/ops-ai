@@ -24,7 +24,7 @@ from ops_identity import Principal, current_tenant_caller
 from ops_models.app import create_models_app
 from ops_service_kit.contract import response_checker
 
-from .conftest import SERVICE, Models
+from .conftest import PRICE, SERVICE, Models
 
 FAKE = Path(__file__).resolve().parents[1] / "scripts" / "fake_openai"
 KEY = "azure-key-0123456789abcdef"
@@ -107,7 +107,13 @@ class Azure:
 
     async def alias(self, provider_id: str) -> str:
         name = f"claims-{uuid4().hex[:8]}"
-        version = {"name": name, "providerId": provider_id, "modelId": DEPLOYMENT, "clearedSensitivity": "internal"}
+        version = {
+            "name": name,
+            "providerId": provider_id,
+            "modelId": DEPLOYMENT,
+            "clearedSensitivity": "internal",
+            **PRICE,
+        }
         assert (await self.client.post("/v1/models/aliases", json=version, headers=SERVICE)).status_code == 201
         return name
 

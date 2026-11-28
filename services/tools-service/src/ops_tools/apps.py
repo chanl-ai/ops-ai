@@ -112,6 +112,7 @@ from .plugins.host import (
     own_and_registration,
     per_account,
     plugin_id_of,
+    plugin_on_for_team,
     points_at,
     same_place,
     shown_value,
@@ -851,8 +852,7 @@ class Apps:
                         "mayManage": may,
                         "managedClient": platform,
                         "plugin": {
-                            # On only with an enabled binding row, as PluginHost.off_reason decides.
-                            "teamOn": b.enabled if b is not None else False,
+                            "teamOn": plugin_on_for_team(b),
                             "platformApp": platform,
                             "kinds": list(m.connection.kinds),
                             "signIn": list(m.connection.sign_in),
@@ -880,7 +880,7 @@ class Apps:
             # A plugin the team turned on that the install no longer holds keeps its card, so the team sees why its
             # tools stopped instead of finding its account listed as a custom app.
             for pid, b in sorted(bindings.items()):
-                if pid in self.plugins.plugins or not b.enabled:
+                if pid in self.plugins.plugins or not plugin_on_for_team(b):
                     continue
                 conn = by_id.get(str(b.connection_id or ""))
                 row = next((md for md in modules if plugin_id_of(md) == pid), None)
@@ -1187,8 +1187,8 @@ class Apps:
         usable = [c for c, holds in creds if c.app_id == card["id"] and (holds or not kind.signs_in)]
         installed = self.connections.store.install_client(str(pid)) is not None
         any_usable = installed or bool(usable)
-        team_on = bool(offered_plugin["teamOn"])
-        if conn is None or not team_on:
+        offered_on = bool(offered_plugin["teamOn"])
+        if conn is None or not offered_on:
             return "ok" if any_usable else "none"
         held = any(c.id == str(conn.credential_id) for c in usable) if conn.credential_id else installed
         return "ok" if held else "other" if any_usable else "none"

@@ -122,13 +122,16 @@ def main() -> int:
             # A new alias (guardrail-check, for the guardrail checks) starts on the runtime alias's clearance; `default`
             # is the one every dev seed has.
             chat = data(m.get("/v1/models/aliases", params={"ids": "default"}))["data"][0]
-            price_in, price_out = PRICES.get(model_id, ("0", "0"))
+            # A model this table does not price takes the catalog's; models-service refuses one neither prices.
+            price = PRICES.get(model_id)
             body = {"name": alias, "kind": "chat", "providerId": provider, "modelId": model_id}
-            body |= {"clearedSensitivity": chat["clearedSensitivity"], "inputPerMillion": price_in}
+            body |= {"clearedSensitivity": chat["clearedSensitivity"]}
+            if price:
+                body |= {"inputPerMillion": price[0], "outputPerMillion": price[1]}
             if effort := os.environ.get("EFFORT"):
                 # The effort the alias sends when a request names none; a later switch of model keeps it.
                 body["reasoningEffort"] = effort
-            data(m.post("/v1/models/aliases", json=body | {"outputPerMillion": price_out}))
+            data(m.post("/v1/models/aliases", json=body))
             print(f"alias {alias}: created on {model_id}")
         # The serving version, which the versions list (oldest first, a page at a time) may not reach.
         current = data(m.get("/v1/models/aliases", params={"ids": alias}))["data"][0]

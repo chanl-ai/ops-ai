@@ -22,6 +22,8 @@ os.environ["FAKE_OPENAI_API_KEY"] = KEY
 ADMIN = {"X-Team-Id": "team_security", "X-Dev-User": "n.petrov@harborpine.example"}
 BUILDER = {**TEAM, "X-Dev-User": "m.okafor@harborpine.example"}
 MODEL = "claude-haiku-4-5"
+# Anthropic's list price for Claude Haiku 4.5, per million tokens in and out.
+PRICE = {"inputPerMillion": "1", "outputPerMillion": "5"}
 RUN = uuid.uuid4().hex[:6]
 ALIAS = f"fast-{RUN}"
 
@@ -67,7 +69,7 @@ with fake_openai(Path(tempfile.mkdtemp(prefix="uc792-fake-"))) as fake_v1:
             tested.text[:300],
         )
 
-        version = {"providerId": pid, "modelId": MODEL, "clearedSensitivity": "confidential"}
+        version = {"providerId": pid, "modelId": MODEL, "clearedSensitivity": "confidential", **PRICE}
         mapped = m.post("/v1/models/aliases", json={"name": ALIAS, **version}, headers=ADMIN)
         check("4 the admin maps alias fast to Claude Haiku 4.5 on it", mapped.status_code == 201, mapped.text[:300])
 

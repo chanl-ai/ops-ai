@@ -711,6 +711,8 @@ class Settings(BaseSettings):
             raise ValueError("credential_store 'memory' is for dev and test only; its values are lost on restart")
         if self.environment != "dev" and self.signin_fetch_local:
             raise ValueError("signin_fetch_local is for dev only; elsewhere provider fetches reach public https only")
+        if self.environment != "dev" and self.models_fake_openai_url:
+            raise ValueError("models_fake_openai_url is for dev only; elsewhere model calls go to the real provider")
         if self.environment != "dev" and self.egress_resolve:
             raise ValueError("egress_resolve is for dev only; outside dev, names resolve through DNS")
         faults = self.engine_fault_kill_after_node is not None or self.engine_fault_ignore_recorded

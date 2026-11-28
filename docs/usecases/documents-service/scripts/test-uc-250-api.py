@@ -268,7 +268,7 @@ def page_images(
     allowed_admin = team("w.kamau@harborpine.example", True)
     reads["alias off"] = scan_read()
     alias = {"name": "extract", "providerId": "openai-local", "modelId": "default"}
-    alias["clearedSensitivity"] = "confidential"
+    alias |= {"clearedSensitivity": "confidential", "inputPerMillion": "1.25", "outputPerMillion": "10"}
     cleared = model_admin.post("/v1/models/aliases", json={**alias, "images": True}, headers=MODELS_ADMIN).status_code
     reads["all on"] = scan_read()
     team("w.kamau@harborpine.example", False)

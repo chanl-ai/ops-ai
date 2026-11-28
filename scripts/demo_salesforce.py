@@ -74,6 +74,8 @@ REAL_ENV = Path.home() / ".config" / "ops-ai" / "salesforce.env"
 # Every service that reads the plugins switch: tools-service loads plugins, agents-service and documents-service list
 # their templates, kb-service reads their knowledge sources, and the worker runs workflow steps that call their tools.
 PLUGIN_SERVICES = ("tools", "agents", "worker", "kb", "documents")
+# The fake model is not in the catalog, and a zero price would let every budget pass.
+FAKE_PRICE = {"inputPerMillion": "0.25", "outputPerMillion": "2"}
 DEMO_ALIAS = "salesforce-demo"
 DEMO_PROVIDER = "salesforce-demo-fake"
 
@@ -332,7 +334,7 @@ def model_alias() -> None:
         if m.get(f"/v1/models/aliases/{DEMO_ALIAS}/versions").status_code == 404:
             chat = data(m.get("/v1/models/aliases", params={"ids": "default"}), "default alias")["data"][0]
             body = {"name": DEMO_ALIAS, "kind": "chat", "providerId": found["id"], "modelId": DEMO_ALIAS}
-            body |= {"clearedSensitivity": chat["clearedSensitivity"], "inputPerMillion": "0", "outputPerMillion": "0"}
+            body |= {"clearedSensitivity": chat["clearedSensitivity"], **FAKE_PRICE}
             data(m.post("/v1/models/aliases", json=body), "demo alias")
             say("MADE", f"model alias {DEMO_ALIAS} on the fake model")
         else:

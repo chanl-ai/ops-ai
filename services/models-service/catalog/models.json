@@ -3853,6 +3853,26 @@
     "temperature": false,
     "toolCall": true
    },
+   "claude-sonnet-4-5": {
+    "context": 200000,
+    "images": true,
+    "inputPerMillion": 3,
+    "name": "Claude Sonnet 4.5 (latest)",
+    "output": 64000,
+    "outputPerMillion": 15,
+    "reasoning": true,
+    "reasoningOptions": [
+     {
+      "type": "toggle"
+     },
+     {
+      "min": 1024,
+      "type": "budget_tokens"
+     }
+    ],
+    "temperature": true,
+    "toolCall": true
+   },
    "claude-sonnet-4-6": {
     "context": 1000000,
     "images": true,
@@ -5752,6 +5772,42 @@
    }
   },
   "openai": {
+   "gpt-4.1": {
+    "context": 1047576,
+    "images": true,
+    "inputPerMillion": 2,
+    "name": "GPT-4.1",
+    "output": 32768,
+    "outputPerMillion": 8,
+    "reasoning": false,
+    "reasoningOptions": [],
+    "temperature": true,
+    "toolCall": true
+   },
+   "gpt-4.1-mini": {
+    "context": 1047576,
+    "images": true,
+    "inputPerMillion": 0.4,
+    "name": "GPT-4.1 mini",
+    "output": 32768,
+    "outputPerMillion": 1.6,
+    "reasoning": false,
+    "reasoningOptions": [],
+    "temperature": true,
+    "toolCall": true
+   },
+   "gpt-4o-mini": {
+    "context": 128000,
+    "images": true,
+    "inputPerMillion": 0.15,
+    "name": "GPT-4o mini",
+    "output": 16384,
+    "outputPerMillion": 0.6,
+    "reasoning": false,
+    "reasoningOptions": [],
+    "temperature": true,
+    "toolCall": true
+   },
    "gpt-5.2": {
     "context": 400000,
     "images": true,

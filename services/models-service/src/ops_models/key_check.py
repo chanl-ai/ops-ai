@@ -3,10 +3,11 @@ Anthropic account, the deployments of an Azure OpenAI resource, the foundation m
 each provider keeps its list and which header takes the key is the registry entry's `modelList`; the request is
 built from it here and nowhere else.
 
-The key leaves only for the provider: at the entry's own address unless the admin names an endpoint, and for Azure
-OpenAI at a resource host under openai.azure.com. Every request goes through ops_service_kit's PublicFetch (the
-address rule tools-service and platform-service use), which refuses a private, loopback, link-local or metadata
-address and, with no redirects allowed, never follows one with the key. A refusal reads by status only; the
+The key leaves only for the provider: at the base URL of the connection that serves it, else the entry's own
+address, unless the admin names an endpoint, and for Azure OpenAI at a resource host under openai.azure.com. Every
+request goes through ops_service_kit's PublicFetch (the address rule tools-service and platform-service use), which
+refuses a private, loopback, link-local or metadata address and, with no redirects allowed, never follows one with
+the key. A refusal reads by status only; the
 provider's body is never passed on."""
 
 from __future__ import annotations
@@ -66,20 +67,27 @@ def azure_host(endpoint: str | None) -> str:
 
 
 def _request(
-    entry: ProviderEntry, key: str, endpoint: str | None, api_version: str | None, region: str | None
+    entry: ProviderEntry,
+    key: str,
+    endpoint: str | None,
+    api_version: str | None,
+    region: str | None,
+    *,
+    connection_base: str | None,
 ) -> tuple[str, dict[str, str]]:
-    """The model-list request the entry describes: its base (the endpoint given, else the entry's own, `{region}`
-    filled), its path, and the key in the header the provider reads it from."""
+    """The model-list request the entry describes: its base (the endpoint given, else the base URL of the connection
+    that serves the provider, else the entry's own, `{region}` filled), its path, and the key in the header the
+    provider reads it from."""
     listing = entry.model_list
     if listing is None:
         raise KeyRefused(f"{entry.label} connections list no models.")
     if listing.host == "azure":
         base: str | None = azure_host(endpoint)
     else:
-        # A key goes to an address the admin typed only for a type whose connections name their own base URL;
-        # OpenAI's or Gemini's key always goes to the provider's own address.
+        # A key goes to an address typed in the request only for a type whose connections name their own base URL;
+        # otherwise to the base URL a saved connection of the provider holds, else the provider's own address.
         own = endpoint if "baseUrl" in entry.connection.properties else None
-        base = listing.base or own or entry.base_url
+        base = listing.base or own or connection_base or entry.base_url
         if base and "{region}" in base:
             # The region's form is the entry's (its connection field's pattern), so it cannot change the host.
             field = entry.connection.properties.get("region")
@@ -125,12 +133,14 @@ async def listed_models(
     endpoint: str | None = None,
     api_version: str | None = None,
     region: str | None = None,
+    connection_base: str | None = None,
 ) -> list[dict[str, str]]:
-    """The ids the key reaches ({id, model?}). EndpointRefused for an endpoint outside the rule; KeyRefused
+    """The ids the key reaches ({id, model?}). `connection_base` is the base URL a connection of this provider is
+    saved with, so a key is tested where its calls go. EndpointRefused for an endpoint outside the rule; KeyRefused
     otherwise when the provider does not answer 200. A type that lists no models (scripted) answers none."""
     if entry.test == "none":
         return []
-    url, headers = _request(entry, key, endpoint, api_version, region)
+    url, headers = _request(entry, key, endpoint, api_version, region, connection_base=connection_base)
     try:
         body = await fetch.get(http, url, headers)
     except AddressRefused as e:

@@ -20,7 +20,7 @@ from ops_service_kit.public_address import PublicFetch
 from ops_service_kit.request_timing import current
 from ops_service_kit.testing import Seeded, SeedTeam, StatementBudget, budget_check
 
-from .conftest import SERVICE, Models
+from .conftest import PRICE, SERVICE, Models
 from .test_provider_key_check import Resolver
 from .test_provider_keys import people
 
@@ -78,7 +78,12 @@ def seed_team(app: FastAPI, client: httpx.AsyncClient, models: Models) -> SeedTe
     on_app = Models(http, models.engine, app)
 
     async def seed(n: int) -> Seeded:
-        version = {"providerId": "prov_scripted", "modelId": "scripted-standard", "clearedSensitivity": "internal"}
+        version = {
+            "providerId": "prov_scripted",
+            "modelId": "scripted-standard",
+            "clearedSensitivity": "internal",
+            **PRICE,
+        }
         if (await http.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).status_code == 404:
             made = await http.post("/v1/models/aliases", json={"name": name, **version}, headers=SERVICE)
             assert made.status_code == 201, made.text

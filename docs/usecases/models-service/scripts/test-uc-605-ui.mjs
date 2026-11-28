@@ -47,7 +47,7 @@ await withUiStack(
     // The fake's root is the Azure resource's endpoint; its /v1 is OpenAI's path.
     const endpoint = (await data(await fetch(`${models}/v1/models/providers`, { headers: S }))).data.find((p) => p.id === 'openai-local').baseUrl.replace(/\/v1$/, '');
     await data(await fetch(`${models}/v1/provider-keys/${KEY}`, { method: 'PUT', headers: N, body: JSON.stringify({ value: FAKE_OPENAI_KEY }) }));
-    const aliasOn = async (alias, providerId) => data(await fetch(`${models}/v1/models/aliases`, { method: 'POST', headers: S, body: JSON.stringify({ name: alias, kind: 'chat', providerId, modelId: 'claims-gpt4o', clearedSensitivity: 'confidential' }) }));
+    const aliasOn = async (alias, providerId) => data(await fetch(`${models}/v1/models/aliases`, { method: 'POST', headers: S, body: JSON.stringify({ name: alias, kind: 'chat', providerId, modelId: 'claims-gpt4o', clearedSensitivity: 'confidential', inputPerMillion: '2.5', outputPerMillion: '10' }) }));
     const chat = (alias) =>
       fetch(`${models}/v1/models/chat/completions`, {
         method: 'POST',

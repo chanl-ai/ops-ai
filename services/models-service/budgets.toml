@@ -16,9 +16,12 @@ queries = 2
 ["GET /v1/provider-keys"]
 queries = 2
 
-# The key is read in a transaction of its own, closed before the provider is asked for the models it reaches.
+# The key is read in a transaction of its own, then the connection naming it (where the key goes) in another, both
+# closed before the provider is asked for the models it reaches.
 ["GET /v1/provider-keys/{name}/models"]
-queries = 1
+queries = 3
+transactions = 2
+connections = 2
 query = { provider = "openai" }
 
 # The shared list contract: the page's count and its rows, then one page of their connections by id, for their names.

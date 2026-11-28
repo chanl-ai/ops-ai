@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, Literal, TypedDict, cast
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import Depends, FastAPI, Header, Path, Query
@@ -204,6 +205,10 @@ class ChatModelIn(_Wire):
     model: str = Field(min_length=1, max_length=200)
     endpoint: str | None = Field(default=None, max_length=500)
     api_version: str | None = Field(default=None, max_length=40, pattern=r"^[0-9a-z-]+$")
+    # Dollars per million tokens, for a model the catalog does not price (an Azure deployment); a catalogued model
+    # takes the catalog's price when these are left out.
+    input_per_million: Decimal | None = Field(default=None, ge=0)
+    output_per_million: Decimal | None = Field(default=None, ge=0)
 
 
 class ChatModelOut(Out):
@@ -225,8 +230,9 @@ class AliasVersionIn(_Wire):
     provider_id: str
     model_id: str
     cleared_sensitivity: str = Field(pattern="^(public|internal|confidential|restricted)$")
-    input_per_million: Decimal = Decimal(0)
-    output_per_million: Decimal = Decimal(0)
+    # Both or neither: with neither, the catalog's price for the model; a model it does not price is refused.
+    input_per_million: Decimal | None = Field(default=None, ge=0)
+    output_per_million: Decimal | None = Field(default=None, ge=0)
     # A reasoning model at its default effort thinks for seconds before its first word; chat aliases name a low one.
     reasoning_effort: str | None = Field(default=None, pattern="^(minimal|low|medium|high)$")
     # Cleared for page images: an image carries the whole page, so a version receives none unless set.
@@ -510,8 +516,6 @@ def create_models_app(
     the lifespan runs beside the server, by default the sweep of idle key spend. `alias_users` says how many agents
     name each alias; by default agents-service on `OPS_AGENTS_URL`, and no counts when that is unset."""
     http = upstream or httpx.AsyncClient(timeout=60)
-    # Testing a key sends it out: only to a public address, never following a redirect with it.
-    key_fetch = key_fetch or PublicFetch(max_redirects=0, timeout_s=20)
 
     stop = asyncio.Event()
     providers, aliases, key_store, call_log = Providers(db), Aliases(db), ModelKeys(db), CallLog(db)
@@ -561,6 +565,10 @@ def create_models_app(
     )
     install_error_handlers(app)
     settings = Settings()
+    # Testing a key sends it out: only to a public address, never following a redirect with it. In dev the fake OpenAI
+    # the stack runs beside is the one address reached as it is (settings refuse the URL outside dev).
+    fake = urlsplit(settings.models_fake_openai_url or "").netloc.lower()
+    key_fetch = key_fetch or PublicFetch(max_redirects=0, timeout_s=20, local=(fake,) if fake else ())
     # Read and checked here, at start-up: an entry naming an adapter no code registers stops the service.
     registry = load_registry(ADAPTERS, BUILTIN, settings.models_provider_registry_extra)
     catalog = Catalog.load()
@@ -788,6 +796,21 @@ def create_models_app(
         keys.forget(p.tenant_id, name)
         return typed(_provider_key_view(saved))
 
+    async def connection_base(provider: str, key_name: str) -> str | None:
+        """The base URL of the connection that signs in with the key `key_name`, the one place a key check, a model
+        list and the chat choice learn where a key goes: only a connection whose keyRef names the key receives it.
+        None when no OpenAI-compatible connection does, so the provider's own address applies."""
+        if provider not in CHAT_BASES:
+            return None
+        # A key name can serve two providers' connections; one pointing at another provider's own address is not this
+        # provider's.
+        others = {b for p, b in CHAT_BASES.items() if p != provider}
+        named = (await providers.page(ListParams(), key_ref=key_name)).data
+        return next(
+            (r.base_url for r in named if r.type == "openai-compatible" and r.base_url and r.base_url not in others),
+            None,
+        )
+
     async def saved_key(p: Principal, name: str) -> str:
         """The key's value, read in a transaction of its own that is closed before the key goes to the provider; inside
         a route on `Tx` it is the request's."""
@@ -820,6 +843,7 @@ def create_models_app(
                 endpoint=body.endpoint,
                 api_version=body.api_version,
                 region=body.region,
+                connection_base=await connection_base(body.provider, name),
             )
         except KeyRefused as e:
             return typed(KeyCheckOut(ok=False, reason=str(e)))
@@ -848,7 +872,14 @@ def create_models_app(
         value = await saved_key(p, name)
         try:
             found = await listed_models(
-                http, key_fetch, entry, value, endpoint=endpoint, api_version=api_version, region=region
+                http,
+                key_fetch,
+                entry,
+                value,
+                endpoint=endpoint,
+                api_version=api_version,
+                region=region,
+                connection_base=await connection_base(provider, name),
             )
         except KeyRefused as e:
             raise Unprocessable(str(e), code="key_refused") from e
@@ -856,12 +887,53 @@ def create_models_app(
             raise Unprocessable(str(e), code="endpoint_refused") from e
         return ok(found)
 
+    def known_price(
+        catalog_id: str | None, model_id: str, given_in: Decimal | None, given_out: Decimal | None
+    ) -> tuple[Decimal, Decimal]:
+        """The price every alias version is written at, the one rule for it: both prices given, else the catalog's
+        for the model. A version at zero lets every budget pass, so one price alone (422 `price_incomplete`), zero
+        for a model the catalog does not list at zero, or no price at all (422 `price_required`) is refused."""
+        if (given_in is None) != (given_out is None):
+            raise Unprocessable(
+                "Give both the input and the output price per million tokens, or neither for the catalog's.",
+                code="price_incomplete",
+            )
+        found = catalog.model(catalog_id, model_id)
+        listed = (
+            None
+            if found is None or found.input_per_million is None or found.output_per_million is None
+            else (Decimal(str(found.input_per_million)), Decimal(str(found.output_per_million)))
+        )
+        if given_in is not None and given_out is not None:
+            if given_in or given_out or listed == (0, 0):
+                return given_in, given_out
+            raise Unprocessable(
+                f"A price of zero lets every budget pass, and the model catalog does not list {model_id} as free; give "
+                "its input and output price per million tokens.",
+                code="price_required",
+            )
+        if listed is not None:
+            return listed
+        raise Unprocessable(
+            f"{model_id} has no price in the model catalog; give its input and output price per million tokens.",
+            code="price_required",
+        )
+
+    async def version_price(body: AliasVersionIn) -> tuple[Decimal, Decimal]:
+        connection = await providers.get(body.provider_id)
+        catalog_id = registry.catalog_for(connection.type, connection.base_url) if connection else None
+        return known_price(catalog_id, body.model_id, body.input_per_million, body.output_per_million)
+
     @app.put(
         "/v1/models/chat-model",
         tags=["providers"],
         response_model=Envelope[ChatModelOut],
         responses=error_responses(
-            {403: "Not an account admin", 404: "No key saved under that name", 422: "The endpoint is refused"}
+            {
+                403: "Not an account admin",
+                404: "No key saved under that name",
+                422: "The endpoint is refused, or the chat model has no known price",
+            }
         ),
     )
     async def set_chat_model(body: ChatModelIn, p: CurrentPrincipal, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -878,7 +950,25 @@ def create_models_app(
                 raise Unprocessable(str(e), code="endpoint_refused") from e
             kind, base_url, api_version = "azure-openai", base, body.api_version or "v1"
         else:
-            kind, base_url, api_version = "openai-compatible", CHAT_BASES[body.provider], None
+            kind, api_version = "openai-compatible", None
+            base_url = await connection_base(body.provider, body.key_name) or CHAT_BASES[body.provider]
+        # Every price is settled before anything is written. An alias kept on the same model keeps its nonzero prices,
+        # which an admin may have set on the Models page; a body price, or a new model, sets them.
+        # Priced by the provider's catalogue, whatever address its connection calls: a gateway in front of OpenAI
+        # serves OpenAI's models.
+        catalog_id = registry.catalog_for(kind, CHAT_BASES.get(body.provider, base_url))
+        given = body.input_per_million is not None or body.output_per_million is not None
+        prices: dict[str, tuple[Decimal, Decimal]] = {}
+        fresh: set[str] = set()
+        for alias in chat_aliases:
+            serving = await aliases.current(alias)
+            if serving is None:
+                fresh.add(alias)
+            kept = serving is not None and serving.model_id == body.model and not given
+            if kept and serving is not None and (serving.input_per_million or serving.output_per_million):
+                prices[alias] = (serving.input_per_million, serving.output_per_million)
+            else:
+                prices[alias] = known_price(catalog_id, body.model, body.input_per_million, body.output_per_million)
         name = f"{chat_aliases[0]}-{body.provider}"
         held = next(iter((await providers.page(ListParams(), name=name)).data), None)
         pid = new_id("prov") if held is None else held.id
@@ -900,30 +990,18 @@ def create_models_app(
             await providers.rebind(
                 pid, {"base_url": base_url, "key_ref": body.key_name, "api_version": api_version, "region": None}
             )
-        version_fields: AliasFields = {
-            "provider_id": pid,
-            "model_id": body.model,
-            "cleared_sensitivity": "confidential",
-            "input_per_million": Decimal(0),
-            "output_per_million": Decimal(0),
-            "reasoning_effort": None,
-            "images": False,
-        }
         for alias in chat_aliases:
-            # A new model keeps the alias's prices: zero would let every budget pass. A fresh alias starts at zero
-            # until an admin prices it on the Models page.
-            held_version = await aliases.current(alias)
-            priced: AliasFields = (
-                version_fields
-                if held_version is None
-                else {
-                    **version_fields,
-                    "input_per_million": held_version.input_per_million,
-                    "output_per_million": held_version.output_per_million,
-                }
-            )
-            if await aliases.add_version(alias, priced) is None:
-                await aliases.create(alias, "chat", version_fields)
+            fields: AliasFields = {
+                "provider_id": pid,
+                "model_id": body.model,
+                "cleared_sensitivity": "confidential",
+                "input_per_million": prices[alias][0],
+                "output_per_million": prices[alias][1],
+                "reasoning_effort": None,
+                "images": False,
+            }
+            if alias in fresh or await aliases.add_version(alias, fields) is None:
+                await aliases.create(alias, "chat", fields)
         return typed(ChatModelOut(provider_id=pid, model=body.model, aliases=list(chat_aliases)))
 
     @app.delete(
@@ -982,7 +1060,7 @@ def create_models_app(
         responses=ERRORS,
     )
     async def create_alias(body: AliasIn, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        if not await aliases.create(body.name, body.kind, _version_fields(body)):
+        if not await aliases.create(body.name, body.kind, _version_fields(body, await version_price(body))):
             raise Conflict(f"Alias {body.name} exists; add a version instead.", code="alias_exists")
         return typed(AliasRef(name=body.name, version=1), status=201)
 
@@ -1039,7 +1117,9 @@ def create_models_app(
     )
     async def add_version(name: str, body: AliasVersionIn, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         # Versions are immutable: a change is a new version, which replaces the one serving.
-        version = await aliases.add_version(name, _version_fields(body))
+        if await aliases.current(name) is None:
+            raise refusal(404, "alias_not_found", f"No alias {name}.")
+        version = await aliases.add_version(name, _version_fields(body, await version_price(body)))
         if version is None:
             raise refusal(404, "alias_not_found", f"No alias {name}.")
         return typed(AliasRef(name=name, version=version), status=201)
@@ -1558,13 +1638,13 @@ def create_models_app(
     return app
 
 
-def _version_fields(body: AliasVersionIn) -> AliasFields:
+def _version_fields(body: AliasVersionIn, price: tuple[Decimal, Decimal]) -> AliasFields:
     return {
         "provider_id": body.provider_id,
         "model_id": body.model_id,
         "cleared_sensitivity": body.cleared_sensitivity,
-        "input_per_million": body.input_per_million,
-        "output_per_million": body.output_per_million,
+        "input_per_million": price[0],
+        "output_per_million": price[1],
         "reasoning_effort": body.reasoning_effort,
         "images": body.images,
     }

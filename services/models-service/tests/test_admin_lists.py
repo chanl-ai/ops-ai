@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import httpx
 
-from .conftest import SERVICE, Models
+from .conftest import PRICE, SERVICE, Models
 
 
 async def every_row(client: httpx.AsyncClient, path: str, **params: Any) -> list[dict[str, Any]]:
@@ -26,7 +26,7 @@ async def every_row(client: httpx.AsyncClient, path: str, **params: Any) -> list
 
 
 def _version(**extra: str) -> dict[str, str]:
-    return {"providerId": "prov_scripted", "modelId": "m-1", "clearedSensitivity": "internal", **extra}
+    return {"providerId": "prov_scripted", "modelId": "m-1", "clearedSensitivity": "internal", **PRICE, **extra}
 
 
 async def test_provider_connections_are_listed_by_name(models: Models) -> None:

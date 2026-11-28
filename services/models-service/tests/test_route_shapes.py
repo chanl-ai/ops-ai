@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from .conftest import SERVICE, Models
+from .conftest import PRICE, SERVICE, Models
 
 ALIAS_KEYS = {
     "providerName",
@@ -26,10 +26,10 @@ ALIAS_KEYS = {
 
 async def test_the_alias_list_holds_each_aliases_serving_version_only(models: Models) -> None:
     name = f"shape-{uuid4().hex[:8]}"
-    version = {"providerId": "prov_scripted", "modelId": "m-1", "clearedSensitivity": "internal"}
+    version = {"providerId": "prov_scripted", "modelId": "m-1", "clearedSensitivity": "internal", **PRICE}
     made = await models.client.post("/v1/models/aliases", json={**version, "name": name}, headers=SERVICE)
     assert made.status_code == 201, made.text
-    again = {**version, "modelId": "m-2", "inputPerMillion": "1.5"}
+    again = {**version, "modelId": "m-2", "inputPerMillion": "1.5", "outputPerMillion": "0"}
     added = await models.client.post(f"/v1/models/aliases/{name}/versions", json=again, headers=SERVICE)
     assert added.json()["data"] == {"name": name, "version": 2}
 

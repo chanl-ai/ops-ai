@@ -11,8 +11,8 @@ import sqlalchemy as sa
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from ops_models.connection_settings import ModelConnectionSettings
-from ops_models.seed import OPENAI_LOCAL, install_connection, seed
+from ops_models.connection_settings import OPENAI_LOCAL, ModelConnectionSettings
+from ops_models.seed import install_connection, seed
 from ops_models.store import provider_connections
 from ops_models.store.providers import InstallConnection
 from ops_service_kit.settings import Settings

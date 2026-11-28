@@ -23,6 +23,8 @@ KEY = "azure-uc605-key-0123456789"
 os.environ["FAKE_OPENAI_API_KEY"] = KEY
 os.environ["FAKE_AZURE_REGION"] = "Sweden Central"
 S = service_headers("models")
+# An Azure deployment name is the customer's own, so the catalog never prices it: the admin gives the price.
+PRICE = {"inputPerMillion": "2.5", "outputPerMillion": "10"}
 CALLER = {"Authorization": "Bearer mk_dev_agents", "X-Tenant-Id": "local"}
 
 
@@ -50,7 +52,7 @@ with fake_openai(Path(tempfile.mkdtemp(prefix="uc605-fake-"))) as fake_v1:
             return data(m.post("/v1/models/providers", json=body, headers=S))["id"]
 
         def alias(name: str, provider_id: str) -> str:
-            v = {"name": name, "providerId": provider_id, "modelId": "claims-gpt4o", "clearedSensitivity": "internal"}
+            v = {"name": name, "providerId": provider_id, "modelId": "claims-gpt4o", "clearedSensitivity": "internal", **PRICE}
             data(m.post("/v1/models/aliases", json=v, headers=S))
             return name
 

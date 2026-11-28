@@ -182,12 +182,20 @@ Any plugin can carry templates beside its tools.
 
 | Pack | Holds | Turned on for | Built |
 |---|---|---|---|
-| `opsai.core` | General case types and task types; the Ops Assistant's body, for a team that wants a second, editable copy | Every team; a builder adds its types, first from an empty Cases or task types list | No |
-| `opsai.starters` | Skills, guardrails, agents and workflows for several industries (banking complaints, insurance first notice of loss, telecom billing disputes, patient billing questions, retail returns) | Teams whose admin turns it on | No |
+| `opsai.core` | General case types and task types; the Ops Assistant's body, for a team that wants a second, editable copy | Every new team, as every built-in plugin; a builder adds its types, first from an empty Cases or task types list | Yes (`builtin-plugins/ops_plugin_core`) |
+| `opsai.starters` | Skills, guardrails, agents and workflows for several industries (banking complaints, insurance first notice of loss, telecom billing disputes, patient billing questions, retail returns) | Every new team, as every built-in plugin; a team admin turns it off | Yes, starter skills (`builtin-plugins/ops_plugin_starters`) |
 | `opsai.sample-team` | What `make sample-team` installs | Dev and self-hosted, never cloud production | No |
-| Vendor plugins | Their own templates beside their tools | As any plugin | Yes, for the four built kinds |
+| Vendor plugins | Their own templates beside their tools | Built-in ones (`builtin-plugins/`) on for every new team; others as any plugin | Yes, for the four built kinds |
 
-A new team holds no team content. The core pack is on for every team, so an empty Cases or task types list offers
+Which packs are on is each team's binding row, read by one rule (`plugin_on_for_team`,
+`services/tools-service/src/ops_tools/plugins/host.py`). Every way a team is made, the create route and seeding (the
+install's first team, the dev seed) included, writes the `team.created` event; on it tools-service stores an enabled
+row for each built-in plugin (`turn_on_builtins`, `platform_events.py`). A team with no row has the plugin off: its
+templates still list, its tools do not run. Nothing turns a built-in on later, so a team made before a plugin became
+built in keeps it off until an admin turns it on; a dev database is reseeded (`make reset-db`, then `make up`) rather
+than migrated.
+
+A new team holds no team content. The core pack is on for every new team, so an empty Cases or task types list offers
 "Add the core case types" to a builder, which opens the add preview with the core types ticked; the copies are
 published through the kind's own publish path. A member sees "Ask an admin".
 

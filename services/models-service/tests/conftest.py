@@ -32,6 +32,8 @@ from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_ser
 
 ROOT = Path(__file__).parents[1]
 # agents-service's Ed25519 token for models-service's internal routes (dev key, dev only), naming its tenant.
+# Every alias version carries a price: the test models are not in the catalog, which would price them.
+PRICE = {"inputPerMillion": "1.25", "outputPerMillion": "10"}
 SERVICE = {
     "Authorization": "Bearer "
     + mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="local", ttl_s=3600)

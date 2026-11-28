@@ -7,9 +7,9 @@ release runs on the catalog it was cut with; run this, review the diff, commit i
     uv run python scripts/sync_catalog.py            # fetch both sources
     uv run python scripts/sync_catalog.py --from DIR # read DIR/models-dev.json and DIR/litellm.json instead
 
-Kept: each provider catalog/knobs.json lists, its chat models that call tools, not deprecated, with the facts
-models-service builds their knobs from (whether it takes a temperature, its reasoning options, its output limit). No
-range or default is written here: those are catalog/knobs.json's, read by models-service."""
+Kept: each provider catalog/knobs.json lists, its chat models that call tools, not deprecated (STILL_SERVED aside),
+with the facts models-service builds their knobs from (whether it takes a temperature, its reasoning options, its
+output limit). No range or default is written here: those are catalog/knobs.json's, read by models-service."""
 
 from __future__ import annotations
 
@@ -27,6 +27,12 @@ CATALOG = Path(__file__).resolve().parents[1] / "catalog"
 # Where LiteLLM keys each provider's models, after the bare id.
 LITELLM_PREFIX = {"google": "gemini/", "azure": "azure/", "anthropic": "", "openai": "", "amazon-bedrock": ""}
 FETCH_TIMEOUT_S = 60
+# Models models.dev marks deprecated that the providers still serve and a first-run key still lists, so choosing one as
+# the chat model on first run is priced from the catalog (models.dev's list price) instead of refused.
+STILL_SERVED = {
+    "openai": frozenset({"gpt-4.1", "gpt-4.1-mini", "gpt-4o-mini"}),
+    "anthropic": frozenset({"claude-sonnet-4-5"}),
+}
 
 
 def _litellm_row(table: dict[str, Any], provider: str, model_id: str) -> dict[str, Any]:
@@ -52,7 +58,8 @@ def snapshot(models_dev: dict[str, Any], litellm: dict[str, Any], knobs: dict[st
             row = _litellm_row(litellm, pid, model_id)
             tools = m.get("tool_call", row.get("supports_function_calling", False))
             text_out = "text" in (m.get("modalities") or {}).get("output", ["text"])
-            if not tools or not text_out or m.get("status") == "deprecated":
+            retired = m.get("status") == "deprecated" and model_id not in STILL_SERVED.get(pid, frozenset())
+            if not tools or not text_out or retired:
                 continue
             limit = m.get("limit") or {}
             output = limit.get("output") or row.get("max_output_tokens")

@@ -77,6 +77,7 @@ gets 401 there; aliases also answer an account admin. Reference:
 - An alias write => it needs `install.manage`, held by Owner; a test acting as another role gets a refusal
 - A new `GET` route => add its row to `budgets.toml`, and open no second transaction in its session check; `tests/test_statement_budget.py` fails any route without a row
 - A store change (tables, repositories, migrations, queries) pushed after `make ci-local` alone => ci-local lists `store-mssql` as skipped, so run `deploy/database/mssql_remote.sh test services/models-service -q <tests>` before the push
+- Connections and chat aliases are read install-wide (one install serves one account) => a second account on the same install would let its admin choose where the first account's keys are sent; make connections per account before adding one
 
 ## Reference docs
 

@@ -153,6 +153,18 @@ class Registry:
     def get(self, type_id: str) -> ProviderEntry | None:
         return self.entries.get(type_id)
 
+    def catalog_for(self, type_id: str, base_url: str | None) -> str | None:
+        """The catalog that prices a connection's models: its type's, else, for a type the catalog does not hold (an
+        OpenAI-compatible connection), the catalogued provider whose own base URL it calls, as the chat-model route's
+        connections to OpenAI and Anthropic do. The one reading for every alias price."""
+        entry = self.entries.get(type_id)
+        if entry is not None and entry.catalog:
+            return entry.catalog
+        wanted = (base_url or "").rstrip("/")
+        if not wanted:
+            return None
+        return next((e.catalog for e in self.entries.values() if e.catalog and e.base_url == wanted), None)
+
     def listed(self) -> list[ProviderEntry]:
         return sorted(self.entries.values(), key=lambda e: e.label.lower())
 

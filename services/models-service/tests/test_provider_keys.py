@@ -27,7 +27,7 @@ from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 
-from .conftest import SERVICE, Models
+from .conftest import PRICE, SERVICE, Models
 
 
 def _provider(seen: list[str | None]) -> httpx.AsyncClient:
@@ -115,7 +115,7 @@ async def _rig(models: Models, in_settings: str | None = None) -> AsyncIterator[
         alias = f"bank-keys-{uuid4().hex[:8]}"
         version = {"name": alias, "providerId": pid.json()["data"]["id"], "modelId": "gpt-4.1-mini"}
         made = await client.post(
-            "/v1/models/aliases", json={**version, "clearedSensitivity": "internal"}, headers=SERVICE
+            "/v1/models/aliases", json={**version, "clearedSensitivity": "internal", **PRICE}, headers=SERVICE
         )
         assert made.status_code == 201, made.text
         on_app = Models(client, models.engine, app)

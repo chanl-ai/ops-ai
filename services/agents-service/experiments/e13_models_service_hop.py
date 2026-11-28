@@ -48,6 +48,7 @@ from ops_identity import dev_service_signer, mint_service_token
 ROOT = Path(__file__).resolve().parents[3]
 MODELS_DIR = ROOT / "services" / "models-service"
 DB = "ops_e13"
+PRICE = {"inputPerMillion": "0.25", "outputPerMillion": "2"}
 PG = f"postgresql+asyncpg://ops:ops@localhost:{os.environ.get('OPS_PG_PORT', '5477')}/{DB}"
 PORT = 8893
 # agents-service's Ed25519 token for models-service (the dev key, dev only); the shared static token is gone.
@@ -187,7 +188,13 @@ async def part_real() -> None:
         pid = httpx.post(f"http://127.0.0.1:{PORT}/v1/models/providers", json=conn, headers=SERVICE).json()["data"][
             "id"
         ]
-        alias = {"name": "bank-live-e13", "providerId": pid, "modelId": REAL_MODEL, "clearedSensitivity": "internal"}
+        alias = {
+            "name": "bank-live-e13",
+            "providerId": pid,
+            "modelId": REAL_MODEL,
+            "clearedSensitivity": "internal",
+            **PRICE,
+        }
         httpx.post(f"http://127.0.0.1:{PORT}/v1/models/aliases", json=alias, headers=SERVICE).raise_for_status()
         through = ModelsServiceModels(f"http://127.0.0.1:{PORT}", issue_key("purpose:e13-real"))
         direct_model = OpenAIChatModel(REAL_MODEL, provider=OpenAIProvider(api_key=key))

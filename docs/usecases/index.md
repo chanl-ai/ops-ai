@@ -293,7 +293,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-750 | agents-service | An admin limits what the menu offers | api | `(no doc)` |
 | uc-723 | console | The console lists every area as an open sidebar section, offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams; with the area_tabs flag on, the area tabs come back | ui | `console/console-areas.md` |
 | uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | `console/console-areas-server-facts.md` |
-| uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due and once per key, and a saved schedule starts one run at each slot from the worker's clock | api, sdk, cli | `(no doc)` |
+| uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due and once per key, and a saved schedule starts one run at each slot from the worker's clock | api, sdk, cli, ui | `(no doc)` |
 | uc-workflows-2 | agents-service | A builder reads why a test run failed: its kind, code, the failed step, a sentence for an end user and the End it stopped at | api, sdk, cli | `(no doc)` |
 | uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | `(no doc)` |
 | uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, cli, ui | `agents-service/evals-keep-saved-cases-and-runs.md` |
@@ -304,6 +304,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-756 | agents-service | A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record | api, ui | `agents-service/a-shared-form-filled-in-signed.md` |
 | uc-757 | agents-service | A builder writes a skill with steps and an agent brief, and a chat follows the steps | api, sdk, cli, ui | `agents-service/a-builder-writes-a-skill-with.md` |
 | uc-948 | agents-service | A builder edits an agent's brief and what it uses on one page | api, sdk, cli, ui | `agents-service/agent-page-in-one-editor.md` |
+| uc-949 | platform-service | A new workspace chats and writes with no extra setup; the first admin connects a model key | api, sdk, ui | `platform-service/a-new-workspace-chats-and-writes.md` |
 | uc-761 | console | A builder edits a workflow that saves itself, publishes it past its problems and compares its versions | sdk, cli, ui | `console/workflow-drafts-and-versions.md` |
 | uc-762 | agents-service | A builder tries one path of a skill: reads run, a write is planned and sent once only when confirmed, and nothing is stored | api, ui | `agents-service/a-builder-tries-one-skill-path.md` |
 | uc-763 | agents-service | A run outlives a killed worker and redrives from its failed step | api | `agents-service/a-run-outlives-a-killed-worker.md` |
@@ -319,6 +320,7 @@ ones with a script. `make usecase-list` adds each layer's last recorded run.
 | uc-772 | kb-service | Search a long document's pieces on the server | api | `kb-service/search-a-long-document-s-pieces.md` |
 | uc-782 | agents-service | Only a person who may decide a review decides, resumes or replays it | api | `agents-service/only-a-person-who-may-decide.md` |
 | uc-790 | tools-service | A chat user never chooses between their own login and the team's | api, ui | `tools-service/chat-never-asks-whose-login.md` |
+| uc-779 | files-service | A watched folder brings files in | api, ui | `files-service/a-watched-folder-brings-files-in.md` |
 | uc-780 | console | A long list or text in a table cell stays inside its column | ui | `console/long-values-in-tables.md` |
 | uc-791 | models-service | A provider type added as a file shows in the add list | api, ui | `models-service/a-provider-type-added-as-a.md` |
 | uc-792 | models-service | An admin connects Anthropic and an agent's model settings reach its chat | api, ui | `models-service/an-admin-connects-anthropic-and-an.md` |
