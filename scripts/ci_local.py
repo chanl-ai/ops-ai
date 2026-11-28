@@ -451,7 +451,7 @@ def self_test() -> int:
     labels = [j.label for j in jobs]
     ok += [
         "service: a-service verify" in labels and "service: b-service test 1/2" in labels,
-        "package: p" in labels,
+        "package" in labels,
         "console" not in labels,  # the plan did not enable it
         all(j.skipped for j in jobs if j.name in ("release-proof", "maintainer-review")),
     ]

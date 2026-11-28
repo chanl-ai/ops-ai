@@ -5,7 +5,8 @@ name: ci
 on:
   pull_request:
     # labeled: adding ci:full starts a run of every job without a new push.
-    # ready_for_review: leaving draft runs the jobs a draft skips.
+    # ready_for_review: a draft runs no job (plan is skipped, and so is everything that needs it); marking it ready starts
+    # the run, and later pushes run as usual.
     types: [opened, synchronize, reopened, labeled, ready_for_review]
     # A pull request into a release branch runs nothing: the release's own pull request to develop runs CI once
     # (docs/deploy/release.md).
@@ -45,6 +46,8 @@ env:
 
 jobs:
   plan:
+    # A draft pull request runs nothing; ci-ok below still reports (success), so no required check stays pending.
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -62,7 +65,6 @@ jobs:
       repo_pool: ${{ steps.plan.outputs.repo_pool }}
       code: ${{ steps.plan.outputs.code }}
       mssql: ${{ steps.plan.outputs.mssql }}
-      store: ${{ steps.plan.outputs.store }}
       heavy: ${{ steps.plan.outputs.heavy }}
       repo_jobs: ${{ steps.plan.outputs.repo_jobs }}
     steps:
@@ -138,7 +140,9 @@ jobs:
         run: uv run pytest -q -n auto --dist loadfile scripts/tests
 
   service:
-    # One job per service; the long suites as test shards beside one job for their lint, types and gates.
+    # One job per service; the long suites as test shards beside one job for their lint, types and gates. The services
+    # whose verify is short share one job (scripts/ci-plan.sh): the service field then lists them, and each runs in its
+    # own log group with a PASS or FAIL line, so the failed one is named.
     needs: plan
     if: needs.plan.outputs.service_jobs != '[]'
     strategy:
@@ -157,7 +161,7 @@ jobs:
         options: --health-cmd "pg_isready -U ops -d ops_runtime" --health-interval 2s --health-timeout 3s --health-retries 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - if: matrix.service == 'runner-service'
+      - if: contains(matrix.service, 'runner-service')
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .data/runner
@@ -173,21 +177,28 @@ jobs:
           PART: ${{ matrix.part }}
         run: |
           case "$PART" in
-            verify|checks) make -C "services/$SERVICE" "$PART" ;;
+            verify)
+              failed=""
+              for svc in $SERVICE; do
+                echo "::group::$svc verify"
+                if make -C "services/$svc" verify; then echo "PASS $svc"; else echo "FAIL $svc"; failed="$failed $svc"; fi
+                echo "::endgroup::"
+              done
+              if [ -n "$failed" ]; then echo "::error title=verify failed::$failed"; exit 1; fi ;;
+            checks) make -C "services/$SERVICE" checks ;;
             test\ *) make -C "services/$SERVICE" test T="$(python3 scripts/test_shard.py "services/$SERVICE/tests" "${PART#test }")" ;;
             *) echo "unknown part $PART"; exit 1 ;;
           esac
 
   package:
+    # Every changed package's suite in one job, one after the other: a suite takes 15 to 30 seconds and the checkout, setup
+    # and database container of a job of its own took 45 (measured 2026-11), so nine jobs became one. Each suite gets a
+    # fresh test database, runs to the end whatever the one before did, and the job names every package that failed.
     needs: plan
     if: needs.plan.outputs.full != 'true' && needs.plan.outputs.packages != '[]'
-    strategy:
-      fail-fast: false
-      matrix:
-        package: ${{ fromJSON(needs.plan.outputs.packages) }}
-    name: test ${{ matrix.package }}
+    name: test packages
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     services:
       postgres:
         # PostgreSQL 17 with pgvector, which knowledge search by meaning needs (kb_0021).
@@ -200,9 +211,16 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           infra: "true"
-      - run: |
-          uv run python scripts/test_db.py "$OPS_TEST_DATABASE_URL"
-          cd packages/${{ matrix.package }} && OPS_DATABASE_URL=$OPS_TEST_DATABASE_URL uv run pytest -q
+      - env:
+          PACKAGES: ${{ join(fromJSON(needs.plan.outputs.packages), ' ') }}
+        run: |
+          failed=""
+          for pkg in $PACKAGES; do
+            echo "::group::test $pkg"
+            if (uv run python scripts/test_db.py "$OPS_TEST_DATABASE_URL" && cd "packages/$pkg" && OPS_DATABASE_URL=$OPS_TEST_DATABASE_URL uv run pytest -q); then echo "PASS $pkg"; else echo "FAIL $pkg"; failed="$failed $pkg"; fi
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then echo "::error title=package tests failed::$failed"; exit 1; fi
 
   console:
     needs: plan
@@ -276,10 +294,11 @@ jobs:
     # The store, kit and identity suites on SQL Server beside PostgreSQL: the tests that run on both databases skip
     # SQL Server unless OPS_MSSQL_SERVER and MSSQL_SA_PASSWORD are set (packages/ops_store/CLAUDE.md), so a run that
     # skips any of them fails here. The image is the pinned one deploy/fly/mssql/Dockerfile builds on.
-    # A pull request runs it only when the diff touches a store, a migration, ops_store or the database scripts (store);
-    # any other change waits for the merge queue and develop pushes (heavy).
+    # Never on a pull request (heavy is false there, a store change included) unless it carries ci:full: the merge queue
+    # and develop pushes run it whenever the plan says mssql, and a release or hotfix branch runs it with its full plan,
+    # so a SQL Server failure first shows in the queue.
     needs: plan
-    if: needs.plan.outputs.mssql == 'true' && (needs.plan.outputs.heavy == 'true' || needs.plan.outputs.store == 'true')
+    if: needs.plan.outputs.mssql == 'true' && needs.plan.outputs.heavy == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
@@ -585,7 +604,7 @@ jobs:
     # a push are built on develop, and CodeQL reports on pull requests, so there only the jobs are judged.
     # scripts/pr_flow.py ready; its --self-test is in make checks.
     name: ready
-    if: always()
+    if: always() && github.event.pull_request.draft != true
     needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, usecases, maintainer-review]
     runs-on: ubuntu-24.04
     # CodeQL may still be running when the last job ends; this waits for it (codeql.yml allows it 45 minutes).
@@ -604,7 +623,8 @@ jobs:
 
   ci-ok:
     # The one required check: it always runs, waits for every other job, and fails when any of them failed or was
-    # cancelled. A job the plan skipped counts as passed, so a narrow change is not held up by suites it did not touch.
+    # cancelled. A job the plan skipped counts as passed, so a narrow change is not held up by suites it did not touch;
+    # a draft pull request skips the plan and so every job, and this reports success without waiting for any.
     # `ready` is one of them, so the queue requires it without a second required check.
     name: ci-ok
     if: always()
@@ -614,8 +634,10 @@ jobs:
     steps:
       - env:
           NEEDS: ${{ toJSON(needs) }}
+          DRAFT: ${{ github.event.pull_request.draft }}
         run: |
           if grep -qE '"result": "(failure|cancelled)"' <<<"$NEEDS"; then echo "$NEEDS"; exit 1; fi
+          if [ "$DRAFT" = true ]; then echo "draft pull request: no job ran; the checks start when it is marked ready"; exit 0; fi
           echo "every check that ran passed"
 
   staging:

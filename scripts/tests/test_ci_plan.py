@@ -56,7 +56,7 @@ def test_a_full_plan_runs_every_suite_make_verify_runs(tmp_path: Path) -> None:
     p = plan(tmp_path, "make/env.mk")
     assert p["full"] == "true", p
     jobs = json.loads(p["service_jobs"])
-    services = {f"pool-{j['service'].removesuffix('-service')}" for j in jobs}
+    services = {f"pool-{svc.removesuffix('-service')}" for j in jobs for svc in j["service"].split()}
     assert services | set(p["repo_pool"].split()) == verify_pool(), p
     assert (p["console"], p["docs"]) == ("true", "true"), p
 
@@ -64,9 +64,15 @@ def test_a_full_plan_runs_every_suite_make_verify_runs(tmp_path: Path) -> None:
 def test_the_long_suites_run_as_shards_beside_their_checks(tmp_path: Path) -> None:
     jobs = json.loads(plan(tmp_path, "make/env.mk")["service_jobs"])
     agents = sorted(j["part"] for j in jobs if j["service"] == "agents-service")
-    assert agents == ["checks"] + [f"test {i}/6" for i in range(1, 7)], agents
+    assert agents == ["checks"] + [f"test {i}/4" for i in range(1, 5)], agents
     tools = sorted(j["part"] for j in jobs if j["service"] == "tools-service")
-    assert tools == ["checks", "test 1/5", "test 2/5", "test 3/5", "test 4/5", "test 5/5"], tools
+    assert tools == ["checks", "test 1/3", "test 2/3", "test 3/3"], tools
+    # The short verifies share one job, which names each service; the long ones keep their own.
+    verify = [j["service"] for j in jobs if j["part"] == "verify"]
+    assert {"documents-service", "files-service", "models-service", "runner-service"} in [
+        set(v.split()) for v in verify
+    ]
+    assert {"kb-service", "platform-service"} <= set(verify), verify
 
 
 def test_a_service_change_runs_that_service_and_no_repo_job(tmp_path: Path) -> None:
@@ -204,14 +210,13 @@ def _runs(job: str, p: dict[str, str]) -> bool:
 
 
 def test_a_pull_request_skips_the_slow_jobs_that_the_merge_queue_and_develop_run(tmp_path: Path) -> None:
-    # A service change plans store-mssql; a change of the make files plans the full repo job.
+    # A service change plans store-mssql for the queue; a change of the make files plans the full repo job.
     for changed in ("services/kb-service/src/ops_kb/app.py", "make/env.mk"):
         pr = plan(tmp_path, changed, event="pull_request")
         assert (pr["heavy"], _runs("store-mssql", pr), _runs("repo", pr)) == ("false", False, False), pr
         for event in ("merge_group", "push"):
             assert plan(tmp_path, changed, event=event)["heavy"] == "true"
-    assert _runs("store-mssql", plan(tmp_path, "services/kb-service/src/ops_kb/app.py", event="merge_group"))
-    # A store or migration change runs store-mssql on a pull request; an api-only or docs change does not.
+    # SQL Server never runs on a pull request, a store change included; the queue runs it whenever the plan says mssql.
     for changed in (
         "services/kb-service/migrations/versions/kb_0042_x.py",
         "services/kb-service/src/ops_kb/store/rows.py",
@@ -219,13 +224,14 @@ def test_a_pull_request_skips_the_slow_jobs_that_the_merge_queue_and_develop_run
         "deploy/database/tests/test_x.py",
     ):
         pr = plan(tmp_path, changed, event="pull_request")
-        assert (pr["store"], _runs("store-mssql", pr)) == ("true", True), (changed, pr)
-    for changed in ("services/kb-service/src/ops_kb/app.py", "services/kb-service/tests/test_app.py", "docs/x.md"):
-        pr = plan(tmp_path, changed, event="pull_request")
-        assert (pr["store"], _runs("store-mssql", pr)) == ("false", False), (changed, pr)
+        queue = plan(tmp_path, changed, event="merge_group")
+        assert (pr["store"], _runs("store-mssql", pr), _runs("store-mssql", queue)) == ("true", False, True), changed
+    assert _runs("store-mssql", plan(tmp_path, "services/kb-service/src/ops_kb/app.py", event="merge_group"))
+    assert not _runs("store-mssql", plan(tmp_path, "docs/x.md", event="merge_group"))
     assert _runs("repo", plan(tmp_path, "make/env.mk", event="push"))
-    # Labelled ci:full, a pull request still runs everything.
+    # Labelled ci:full, a pull request still runs everything, SQL Server included.
     assert _runs("repo", plan(tmp_path, "make/env.mk", event="pull_request", full="true"))
+    assert _runs("store-mssql", plan(tmp_path, "make/env.mk", event="pull_request", full="true"))
 
 
 def test_release_proof_waits_for_heavy_and_a_pull_request_still_gets_ci_ok() -> None:
@@ -268,6 +274,46 @@ def test_only_a_successful_merge_group_run_of_the_sha_counts_as_tested() -> None
         "<html>",
     ):
         assert tested(body) == "false", body
+
+
+def test_a_draft_pull_request_runs_no_job_but_ci_ok_still_reports() -> None:
+    jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
+    assert "pull_request.draft != true" in jobs["plan"]["if"], jobs["plan"]["if"]
+    assert "pull_request.draft != true" in jobs["ready"]["if"], jobs["ready"]["if"]
+    # Every other job waits on the plan (or on a job that does), so skipping the plan skips them; ci-ok alone runs.
+    for name, job in jobs.items():
+        if name in ("plan", "ready", "ci-ok", "staging", "staging-scan", "generated-commit"):
+            continue
+        assert "plan" in job["needs"] and "always()" not in str(job.get("if")), name
+    assert jobs["ci-ok"]["if"] == "always()" and jobs["ci-ok"]["needs"][0] == "plan"
+    assert "push" in jobs["staging"]["if"] and "generated" in jobs["generated-commit"]["needs"]
+
+
+def test_a_pull_request_plans_only_what_it_changed_and_the_merge_queue_plans_the_dependants(tmp_path: Path) -> None:
+    changed = "packages/ops_store/src/ops_store/base.py"
+    pr = plan(tmp_path, changed, event="pull_request")
+    assert (json.loads(pr["packages"]), pr["services"]) == (["ops_store"], "[]"), pr
+    queue = plan(tmp_path, changed, event="merge_group")
+    assert {"ops_store", "ops_identity"} <= set(json.loads(queue["packages"])) and "kb-service" in queue["services"], (
+        queue
+    )
+    # ci:full on a pull request is a full plan, not the narrow one.
+    assert plan(tmp_path, changed, event="pull_request", full="true")["full"] == "true"
+
+
+def test_a_failing_dependants_command_fails_the_plan(tmp_path: Path) -> None:
+    # A fake uv that fails: the plan must stop, not go on with no dependants.
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    (fake / "uv").write_text("#!/bin/sh\nexit 1\n")
+    (fake / "uv").chmod(0o755)
+    listed = tmp_path / "changed.txt"
+    listed.write_text("packages/ops_store/src/ops_store/base.py\n")
+    env = {**CLEAN_MAKE_ENV, "PATH": f"{fake}:{os.environ['PATH']}", "GITHUB_EVENT_NAME": "merge_group"}
+    done = subprocess.run(
+        ["bash", "scripts/ci-plan.sh", str(listed)], cwd=ROOT, env=env, capture_output=True, text=True, check=False
+    )
+    assert done.returncode != 0 and "dependants.py failed" in done.stderr, done
 
 
 def test_a_release_or_main_push_runs_every_job_even_when_told_it_was_tested(tmp_path: Path) -> None:

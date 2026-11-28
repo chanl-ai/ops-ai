@@ -6,7 +6,7 @@ used to force a full run whatever it touched. A changed directory that is not a 
 `unknown <dir>`, and the caller then runs everything. --direct stops at the members that list a changed package
 themselves: the push check (.githooks/pre-push) runs those, and the full run on each new HEAD covers the rest.
 
-  uv run python scripts/dependants.py [--direct] packages/ops_store packages/ops_policy
+  uv run python scripts/dependants.py [--direct | --only] packages/ops_store packages/ops_policy
   # package packages/ops_store
   # package packages/ops_engine
   # service services/agents-service
@@ -39,9 +39,12 @@ def _name(requirement: str) -> str:
     return requirement.strip().lower()
 
 
-def dependants(changed: list[str], root: Path = ROOT, direct: bool = False) -> tuple[list[str], list[str]]:
+def dependants(
+    changed: list[str], root: Path = ROOT, direct: bool = False, only: bool = False
+) -> tuple[list[str], list[str]]:
     """The member directories `changed` reaches (itself included), and the changed directories that are no member.
-    With `direct`, only the changed members and the members that depend on one of them themselves."""
+    With `direct`, only the changed members and the members that depend on one of them themselves; with `only`, just
+    the changed members."""
     graph = members(root)
     by_dir = {d: n for n, (d, _) in graph.items()}
     users: dict[str, set[str]] = {n: set() for n in graph}
@@ -51,7 +54,9 @@ def dependants(changed: list[str], root: Path = ROOT, direct: bool = False) -> t
     unknown = [c for c in changed if c.rstrip("/") not in by_dir]
     seen: set[str] = set()
     todo = [by_dir[c.rstrip("/")] for c in changed if c.rstrip("/") in by_dir]
-    if direct:
+    if only:
+        seen, todo = set(todo), []
+    elif direct:
         seen = set(todo).union(*(users[n] for n in todo))
         todo = []
     while todo:
@@ -64,7 +69,9 @@ def dependants(changed: list[str], root: Path = ROOT, direct: bool = False) -> t
 
 
 def main(argv: list[str]) -> int:
-    reached, unknown = dependants([a for a in argv if a != "--direct"], direct="--direct" in argv)
+    reached, unknown = dependants(
+        [a for a in argv if a not in ("--direct", "--only")], direct="--direct" in argv, only="--only" in argv
+    )
     for d in reached:
         print(f"{'service' if d.startswith('services/') else 'package'} {d}")
     for d in unknown:
