@@ -6,6 +6,12 @@
           {
             "checks": [
               {
+                "agent": null,
+                "fields": null,
+                "kind": null,
+                "maxCostUsd": null,
+                "maxSeconds": null,
+                "modes": null,
                 "rubric": null,
                 "text": "could not find",
                 "tool": null,
@@ -25,6 +31,12 @@
           {
             "checks": [
               {
+                "agent": null,
+                "fields": null,
+                "kind": null,
+                "maxCostUsd": null,
+                "maxSeconds": null,
+                "modes": null,
                 "rubric": null,
                 "text": null,
                 "tool": "lookup_account",
@@ -44,6 +56,12 @@
           {
             "checks": [
               {
+                "agent": null,
+                "fields": null,
+                "kind": null,
+                "maxCostUsd": null,
+                "maxSeconds": null,
+                "modes": null,
                 "rubric": null,
                 "text": "could not find",
                 "tool": null,
@@ -88,7 +106,7 @@
           "type": "rubric"
         },
         "kind": "refused",
-        "message": "Unknown check type: rubric. Allowed: calls_tool, judge, refuses, reply_contains.",
+        "message": "Unknown check type: rubric. Allowed: calls_tool, hands_to, judge, mode_in, not_calls_tool, output_matches, pauses_for, pauses_on, refuses, reply_contains, within.",
         "requestId": "<req>",
         "retryable": false,
         "status": 422
@@ -118,6 +136,12 @@
           {
             "checks": [
               {
+                "agent": null,
+                "fields": null,
+                "kind": null,
+                "maxCostUsd": null,
+                "maxSeconds": null,
+                "modes": null,
                 "rubric": null,
                 "text": "could not find",
                 "tool": null,
@@ -137,6 +161,12 @@
           {
             "checks": [
               {
+                "agent": null,
+                "fields": null,
+                "kind": null,
+                "maxCostUsd": null,
+                "maxSeconds": null,
+                "modes": null,
                 "rubric": null,
                 "text": null,
                 "tool": "lookup_account",
@@ -206,6 +236,12 @@
           {
             "checks": [
               {
+                "agent": null,
+                "fields": null,
+                "kind": null,
+                "maxCostUsd": null,
+                "maxSeconds": null,
+                "modes": null,
                 "rubric": null,
                 "text": "could not find",
                 "tool": null,
@@ -225,6 +261,12 @@
           {
             "checks": [
               {
+                "agent": null,
+                "fields": null,
+                "kind": null,
+                "maxCostUsd": null,
+                "maxSeconds": null,
+                "modes": null,
                 "rubric": null,
                 "text": null,
                 "tool": "lookup_account",
@@ -278,7 +320,7 @@
           "type": "rubric"
         },
         "kind": "refused",
-        "message": "Unknown check type: rubric. Allowed: calls_tool, judge, refuses, reply_contains.",
+        "message": "Unknown check type: rubric. Allowed: calls_tool, hands_to, judge, mode_in, not_calls_tool, output_matches, pauses_for, pauses_on, refuses, reply_contains, within.",
         "requestId": "<req>",
         "retryable": false,
         "status": 422
@@ -703,6 +745,12 @@
           {
             "checks": [
               {
+                "agent": null,
+                "fields": null,
+                "kind": null,
+                "maxCostUsd": null,
+                "maxSeconds": null,
+                "modes": null,
                 "rubric": null,
                 "text": "could not find",
                 "tool": null,
@@ -732,6 +780,12 @@
           {
             "checks": [
               {
+                "agent": null,
+                "fields": null,
+                "kind": null,
+                "maxCostUsd": null,
+                "maxSeconds": null,
+                "modes": null,
                 "rubric": null,
                 "text": "could not find",
                 "tool": null,

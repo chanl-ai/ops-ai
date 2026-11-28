@@ -797,13 +797,6 @@ class EvalCaseContextInput(TypedDict, closed=True):
     collections: NotRequired[list[str]]
 
 
-class EvalCheckInput(TypedDict, closed=True):
-    rubric: NotRequired[str | None]
-    text: NotRequired[str | None]
-    tool: NotRequired[str | None]
-    type: str
-
-
 class EvalCheckResult(TypedDict, closed=True):
     confidence: NotRequired[float | None]
     label: str
@@ -1899,6 +1892,12 @@ class SaveBase(TypedDict, closed=True):
 
 
 class SavedCaseCheck(TypedDict, closed=True):
+    agent: NotRequired[str | None]
+    fields: NotRequired[dict[str, JsonValue] | None]
+    kind: NotRequired[Literal["approval", "question", "plan_review"] | None]
+    maxCostUsd: NotRequired[float | None]
+    maxSeconds: NotRequired[float | None]
+    modes: NotRequired[list[Literal["direct", "plan", "helpers", "sandbox"]] | None]
     rubric: NotRequired[str | None]
     text: NotRequired[str | None]
     tool: NotRequired[str | None]
@@ -3723,13 +3722,6 @@ class EnvelopeListWorkflowRef(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EvalCaseInput(TypedDict, closed=True):
-    checks: NotRequired[list[EvalCheckInput]]
-    context: NotRequired[EvalCaseContextInput | None]
-    input: str
-    name: str
-
-
 class EvalCaseOutcome(TypedDict, closed=True):
     checks: list[EvalCheckResult]
     latencyMs: int
@@ -3746,8 +3738,17 @@ class EvalCaseResult(TypedDict, closed=True):
     unpriced: NotRequired[bool]
 
 
-class EvalCasesInput(TypedDict, closed=True):
-    cases: NotRequired[list[EvalCaseInput]]
+class EvalCheckInput(TypedDict, closed=True):
+    agent: NotRequired[str | None]
+    fields: NotRequired[dict[str, JsonValue] | None]
+    kind: NotRequired[Literal["approval", "question", "plan_review"] | None]
+    maxCostUsd: NotRequired[float | None]
+    maxSeconds: NotRequired[float | None]
+    modes: NotRequired[list[Literal["direct", "plan", "helpers", "sandbox"]] | None]
+    rubric: NotRequired[str | None]
+    text: NotRequired[str | None]
+    tool: NotRequired[str | None]
+    type: str
 
 
 class EvalGate(TypedDict, closed=True):
@@ -3757,11 +3758,6 @@ class EvalGate(TypedDict, closed=True):
 
 class EvalGateDetails(TypedDict, closed=True):
     steps: list[GateStep]
-
-
-class EvalRunInput(TypedDict, closed=True):
-    cases: NotRequired[list[EvalCaseInput] | None]
-    trigger: NotRequired[str | None]
 
 
 class EvalRunRecord(TypedDict, closed=True):
@@ -4957,6 +4953,22 @@ class EnvelopeListGraphInfo(TypedDict, closed=True):
 class EnvelopeListNodeTypeView(TypedDict, closed=True):
     data: list[NodeTypeView]
     success: Literal[True]
+
+
+class EvalCaseInput(TypedDict, closed=True):
+    checks: NotRequired[list[EvalCheckInput]]
+    context: NotRequired[EvalCaseContextInput | None]
+    input: str
+    name: str
+
+
+class EvalCasesInput(TypedDict, closed=True):
+    cases: NotRequired[list[EvalCaseInput]]
+
+
+class EvalRunInput(TypedDict, closed=True):
+    cases: NotRequired[list[EvalCaseInput] | None]
+    trigger: NotRequired[str | None]
 
 
 class LabelledListResultRunRow(TypedDict, closed=True):

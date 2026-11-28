@@ -27,7 +27,7 @@ from tests.conftest import SEED, FakeGraphModels, empty_engine, scripted_model, 
 AGENT = "ag_fraud"
 
 
-def _case(name: str, message: str, *checks: dict[str, str]) -> dict[str, Any]:
+def _case(name: str, message: str, *checks: dict[str, Any]) -> dict[str, Any]:
     return {"name": name, "input": message, "checks": list(checks)}
 
 
@@ -64,6 +64,8 @@ async def test_one_pass_one_fail_and_summary_counts(client: AsyncClient) -> None
             "cases": [
                 _case("says-not-found", "Hello", {"type": CHECK_REPLY_CONTAINS, "text": "could not find"}),
                 _case("calls-lookup", "Hello", {"type": CHECK_CALLS_TOOL, "tool": "lookup_account"}),
+                # The new checks are saved and run through the same route.
+                _case("answers-directly", "Hello", {"type": "mode_in", "modes": ["direct"], "maxSeconds": 60}),
             ]
         },
     )
@@ -74,9 +76,10 @@ async def test_one_pass_one_fail_and_summary_counts(client: AsyncClient) -> None
     assert data["id"].startswith(f"{EVAL_RUN_PREFIX}_")
     assert data["agentId"] == AGENT
     assert data["status"] == EVAL_STATUS_COMPLETE
-    assert data["summary"] == {"passed": 1, "total": 2, "regressions": 0}
-    assert len(data["results"]) == 2
-    first, second = data["results"]
+    assert data["summary"] == {"passed": 2, "total": 3, "regressions": 0}
+    assert len(data["results"]) == 3
+    first, second, third = data["results"]
+    assert third["draft"]["status"] == CHECK_STATUS_PASS, third
     assert first["caseName"] == "says-not-found"
     assert first["draft"]["status"] == CHECK_STATUS_PASS
     assert first["draft"]["reply"]

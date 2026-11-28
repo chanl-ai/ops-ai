@@ -8202,6 +8202,20 @@ export interface components {
         };
         /** EvalCheckInput */
         EvalCheckInput: {
+            /** Agent */
+            agent?: string | null;
+            /** Fields */
+            fields?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** Kind */
+            kind?: ("approval" | "question" | "plan_review") | null;
+            /** Maxcostusd */
+            maxCostUsd?: number | null;
+            /** Maxseconds */
+            maxSeconds?: number | null;
+            /** Modes */
+            modes?: ("direct" | "plan" | "helpers" | "sandbox")[] | null;
             /** Rubric */
             rubric?: string | null;
             /** Text */
@@ -11271,6 +11285,20 @@ export interface components {
         };
         /** SavedCaseCheck */
         SavedCaseCheck: {
+            /** Agent */
+            agent?: string | null;
+            /** Fields */
+            fields?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** Kind */
+            kind?: ("approval" | "question" | "plan_review") | null;
+            /** Maxcostusd */
+            maxCostUsd?: number | null;
+            /** Maxseconds */
+            maxSeconds?: number | null;
+            /** Modes */
+            modes?: ("direct" | "plan" | "helpers" | "sandbox")[] | null;
             /** Rubric */
             rubric?: string | null;
             /** Text */
