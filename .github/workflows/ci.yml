@@ -19,6 +19,10 @@ on:
   # hotfix branch (docs/deploy/release.md) so the release is tested on staging.
   push:
     branches: [develop, main, "release/[0-9]*", "hotfix/**"]
+  # Nightly: only the SQL Server job (scripts/ci-plan.sh plans it alone), so a combination of changes that no single
+  # store change showed still meets SQL Server within a day. GitHub starts a schedule from the default branch's copy.
+  schedule:
+    - cron: "47 3 * * *"
 
 permissions:
   contents: read
@@ -296,10 +300,11 @@ jobs:
     # The store, kit and identity suites on SQL Server beside PostgreSQL: the tests that run on both databases skip
     # SQL Server unless OPS_MSSQL_SERVER and MSSQL_SA_PASSWORD are set (packages/ops_store/CLAUDE.md), so a run that
     # skips any of them fails here. The image is the pinned one deploy/fly/mssql/Dockerfile builds on.
-    # A pull request runs it only when the diff touches a store, a migration, ops_store or the database scripts (store);
-    # any other change waits for the merge queue and develop pushes (heavy).
+    # It runs when the diff touches a store, a migration, ops_store or the database scripts (store), on a pull request and
+    # in the merge queue alike; on a release or hotfix branch and on a heavy full plan (the queue, ci:full) whatever
+    # changed; and in the nightly run (the schedule trigger, whose plan is this job alone).
     needs: plan
-    if: needs.plan.outputs.mssql == 'true' && (needs.plan.outputs.heavy == 'true' || needs.plan.outputs.store == 'true')
+    if: needs.plan.outputs.mssql == 'true' && (needs.plan.outputs.store == 'true' || needs.plan.outputs.release == 'true' || (needs.plan.outputs.full == 'true' && needs.plan.outputs.heavy == 'true'))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:

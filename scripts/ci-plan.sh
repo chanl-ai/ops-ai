@@ -15,6 +15,14 @@
 set -euo pipefail
 base=${1:?usage: ci-plan.sh <base sha | file of changed paths>}
 cd "$(git rev-parse --show-toplevel)"
+# The nightly run (ci.yml's schedule trigger) plans the SQL Server job alone: verify-full.yml runs everything else.
+if [ "${GITHUB_EVENT_NAME:-}" = schedule ]; then
+  for k in full heavy release console docs scripts code; do echo "$k=false"; done
+  echo "mssql=true"; echo "store=true"
+  for k in repo_jobs services packages service_jobs; do echo "$k=[]"; done
+  echo "repo_pool="
+  exit 0
+fi
 if [ "${CI_TESTED:-}" = true ] && [ "${GITHUB_REF:-}" = refs/heads/develop ] && [ "${CI_FULL:-}" != true ]; then
   for k in full heavy release console docs scripts code mssql store; do echo "$k=false"; done
   for k in repo_jobs services packages service_jobs; do echo "$k=[]"; done
@@ -106,7 +114,7 @@ if [ "$full" = true ]; then echo "mssql=true"; else
   echo "mssql=$(flag '^(services/|packages/|deploy/database/)')"
 fi
 # store=true when the diff touches a service's store, any migrations folder, ops_store or the database scripts: where SQL
-# Server breaks and PostgreSQL does not. ci.yml runs store-mssql on a pull request for it (mssql && (heavy || store)); any
+# Server breaks and PostgreSQL does not. ci.yml runs store-mssql for it on a pull request and in the queue (mssql && (store || release || full && heavy)); any
 # other service change, and a full plan on its own, wait for the merge queue. ci_local.py's MSSQL_PATHS is the same rule.
 echo "store=$(flag '^services/[^/]+/(.+/)?store/|(^|/)migrations/|^packages/ops_store/|^deploy/database/')"
 if [ "${#jobs_json[@]}" -eq 0 ]; then echo "service_jobs=[]"; else echo "service_jobs=[$(IFS=,; echo "${jobs_json[*]}")]"; fi

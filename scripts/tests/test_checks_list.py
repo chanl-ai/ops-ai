@@ -143,10 +143,11 @@ def test_the_both_database_run_and_the_release_proof_are_required_with_their_tri
     assert "pull_request" in TRIGGERS
     # On every change to a service, a package or the database scripts (ci-plan.sh's mssql), and on every full plan;
     # the run names SQL Server and fails on a skip.
-    # (a pull request leaves the run to the merge queue: heavy is false there, except when the diff touches a store)
+    # (the queue and a pull request run it when the diff touches a store; a full plan and the nightly run always do)
     assert jobs["store-mssql"]["if"] == (
         "needs.plan.outputs.mssql == 'true' && "
-        "(needs.plan.outputs.heavy == 'true' || needs.plan.outputs.store == 'true')"
+        "(needs.plan.outputs.store == 'true' || needs.plan.outputs.release == 'true' || "
+        "(needs.plan.outputs.full == 'true' && needs.plan.outputs.heavy == 'true'))"
     )
     steps = "\n".join(str(step.get("run", "")) for step in jobs["store-mssql"]["steps"])
     assert "OPS_MSSQL_SERVER" in steps and "mssql/server:2025-latest@sha256:" in steps and "SKIPPED" in steps

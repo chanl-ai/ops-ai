@@ -216,7 +216,13 @@ def test_a_pull_request_skips_the_slow_jobs_that_the_merge_queue_and_develop_run
         assert (pr["heavy"], _runs("store-mssql", pr), _runs("repo", pr)) == ("false", False, False), pr
         for event in ("merge_group", "push"):
             assert plan(tmp_path, changed, event=event)["heavy"] == "true"
-    assert _runs("store-mssql", plan(tmp_path, "services/kb-service/src/ops_kb/app.py", event="merge_group"))
+    # The queue runs SQL Server for a store change only; a release branch and the nightly run always do.
+    api = "services/kb-service/src/ops_kb/app.py"
+    assert not _runs("store-mssql", plan(tmp_path, api, event="merge_group"))
+    assert _runs("store-mssql", plan(tmp_path, "services/kb-service/src/ops_kb/store/rows.py", event="merge_group"))
+    assert _runs("store-mssql", plan(tmp_path, api, ref="refs/heads/release/1.2.0", event="push"))
+    nightly = plan(tmp_path, api, event="schedule")
+    assert (_runs("store-mssql", nightly), nightly["services"], nightly["docs"]) == (True, "[]", "false"), nightly
     # A store or migration change runs store-mssql on a pull request; an api-only or docs change does not.
     for changed in (
         "services/kb-service/migrations/versions/kb_0042_x.py",

@@ -115,6 +115,7 @@ anything that is not a fast-forward, and the script never forces.
 |---|---|---|
 | Pull request into `release/**` | None | `ci.yml` does not run; the push that follows the merge does |
 | Pull request into `develop` or `main`, merge queue entry | `ci.yml`, `codeql.yml` | The checks; the queue tests the pull request on develop's tip and merges only on green, so a branch behind develop is not rebuilt until it queues. `scorecard.yml` runs only when the pull request changes workflows, Dockerfiles or `sdk/check.sh` |
+| Every night | `ci.yml` (schedule) and `verify-full.yml` | `ci.yml` plans only the SQL Server job (`store-mssql`); `verify-full.yml` runs the full `make verify` |
 | Push to `develop` | `ci.yml`, then `deploy-staging.yml`; `release-tag.yml` after a green staging walk | Checks (none when a green merge queue run already tested that commit), then a deploy to staging unless a numbered `release/X.Y.Z` or a `hotfix/*` branch exists or `STAGING_HOLD` is set. `release-tag.yml` tags a release merge and moves `main` |
 | A merge queue run of `ci.yml` finishes | `queue-retry.yml` | First failure: reruns the failed jobs. Second failure: comments each failed job and its first error line on the pull request. A green rerun queues the pull request again |
 | A `release/*` or `hotfix/*` pull request merges into `main` | `merge-back.yml` | Opens `merge-back/<name>` (cut from main, develop merged in) into develop with auto-merge on |
