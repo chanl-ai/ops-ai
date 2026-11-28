@@ -107,7 +107,7 @@
   "failedExtraction": {
     "error": {
       "code": "model_unavailable",
-      "message": "models-service answered 500: {\"error\":{\"code\":\"internal\",\"message\":\"down\"}}"
+      "message": "models-service answered 500 internal: down"
     },
     "fileId": "fil_0001",
     "id": "<ext>",

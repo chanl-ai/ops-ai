@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from alembic import op
 
+from ops_store.schema import role_ddl
+
 revision = "0004_checkpointer"
 down_revision = "0003_graph_versions"
 branch_labels = None
@@ -57,7 +59,7 @@ def upgrade() -> None:
     )
     op.execute("CREATE INDEX ix_ops_checkpoints_metadata ON ops_checkpoints USING gin (metadata)")
     # Roles are cluster-wide, so another database on the same server may already have created it.
-    op.execute(f"DO $$ BEGIN CREATE ROLE {ROLE} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$")
+    op.execute(role_ddl(ROLE))
     for table in TABLES:
         op.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO {ROLE}")
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")

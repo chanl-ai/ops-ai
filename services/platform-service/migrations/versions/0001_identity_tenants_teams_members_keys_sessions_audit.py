@@ -9,6 +9,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import role_ddl
+
 revision = "0001_identity"
 down_revision = None
 branch_labels = None
@@ -102,7 +104,7 @@ def upgrade() -> None:
     )
 
     # Roles are cluster-wide, so another database's migration may have made it already.
-    op.execute(f"DO $$ BEGIN CREATE ROLE {ROLE} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$")
+    op.execute(role_ddl(ROLE))
     for table, column in (
         ("tenants", "id"),
         ("teams", "tenant_id"),

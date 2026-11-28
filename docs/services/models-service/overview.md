@@ -68,9 +68,13 @@ flowchart LR
 Admin and admission routes take a service token. Provider types, connections, provider keys and reading aliases also take an account admin's token (`settings.manage`); a connection's `secrets` are saved as the provider key its `keyRef` names and never returned. One install serves one account, and its aliases apply to the whole install: creating an alias, adding a version and choosing the chat model also need `install.manage`, which only Owner (the install's first admin) holds, so a workspace Admin reads aliases and is refused a change (403 `install_admin_only`). Builders read an alias's knobs through agents-service (`GET /v1/model-aliases/{name}/knobs`).
 
 Services that are not agents call through one client, `ops_service_kit.model_calls`: `ModelCalls.structured` (a
-`final_result` answer, tools-service's sending check), `ModelCalls.embed` (vectors and their tokens) and
-`IngestModel.complete` (ingestion's AI steps, blocking, in a worker thread). A refusal keeps this service's code on
-`ModelCallError.code`. The environment's one embedding model is `OPS_EMBEDDING_ALIAS` (default `bank-embed`) at
+`final_result` answer, with an optional run id, extra message parts such as page images, and a `Usage` it adds the
+billed tokens to; tools-service's sending check, kb-service's query rewrite and rerank, documents-service's
+extraction), `ModelCalls.embed` (vectors and their tokens; kb-service's index) and `IngestModel.complete` (ingestion's
+AI steps, blocking, in a worker thread). A refusal keeps this service's code on `ModelCallError.code`, and an answer in
+another shape is `models_answer_unreadable`. No other module names this service's model routes:
+`ops_service_kit.standards` fails on one (rule SC1, `make test PKG=packages/ops_service_kit T=tests/test_standards.py`).
+Agent turns, and the judge, guardrail and memory steps inside them, go through the agent kernel instead. The environment's one embedding model is `OPS_EMBEDDING_ALIAS` (default `bank-embed`) at
 `OPS_EMBEDDING_WIDTH` (default 1,536); a width above 1,998 stops every service at start-up, since no vector index on
 either database holds it. kb-service spends on its own key, `kb:index` in the dev seed, per tenant.
 

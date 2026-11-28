@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from alembic import op
 
+from ops_store.schema import role_ddl
+
 revision = "0072_memories_system_tenants"
 down_revision = "0071_hot_query_indexes"
 branch_labels = None
@@ -24,9 +26,7 @@ SYSTEM_ROLE = "ops_runtime_system"
 def upgrade() -> None:
     if op.get_bind().dialect.name != "postgresql":
         return
-    op.execute(
-        f"DO $$ BEGIN CREATE ROLE {SYSTEM_ROLE} NOLOGIN BYPASSRLS; EXCEPTION WHEN duplicate_object THEN NULL; END $$"
-    )
+    op.execute(role_ddl(SYSTEM_ROLE, bypass=True))
     op.execute(f"GRANT SELECT (tenant_id) ON agent_memories TO {SYSTEM_ROLE}")
 
 
