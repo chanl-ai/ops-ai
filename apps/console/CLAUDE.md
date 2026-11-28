@@ -59,6 +59,11 @@ because the route returns it is fixed in the service, never in the hook or compo
 | `src/lib/types/` | Shared types |
 | `scripts/` | `check-standards.mjs` with its baselines, `bake-workflow-positions.ts` (`pnpm bake:workflows`) |
 
+## Known traps
+
+- A link built from stored or model-written data => pass it through `safeHref` or `consolePath` (`src/lib/safe-href.ts`); CodeQL does not recognise them as a sanitizer and may still flag the sink, so write no second link check to quiet it and say so on the pull request
+- `next dev` exits on an agent-detection security nudge when `AI_AGENT`, `CLAUDECODE` or `CLAUDE_CODE_ENTRYPOINT` are set => unset them for the dev server
+
 ## Reference docs
 
 | Topic | Doc |
@@ -69,7 +74,7 @@ because the route returns it is fixed in the service, never in the hook or compo
 | Use cases the console must pass | [docs/usecases/README.md](../../docs/usecases/README.md) (rows with service `console`) |
 | The SDK screens move onto | [docs/sdk/](../../docs/sdk/), [sdk/CLAUDE.md](../../sdk/CLAUDE.md) |
 
-A `feat` or `fix` that changes this folder needs a What's new entry ([Commits](../../CLAUDE.md#commits)).
+A `feat` that changes this folder needs a What's new fragment (`changelog/<topic>.json`: title up to 10 words, description up to 25), a `fix` only when a console user would notice it; the release folds fragments into `changelog/releases/` ([Commits](../../CLAUDE.md#commits)).
 
 ## Layers (one direction only)
 

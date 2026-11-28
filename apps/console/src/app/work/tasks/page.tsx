@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ArrowLeft, List, UserCheck } from 'lucide-react';
+import { Search, Table2, UserCheck, X } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 
@@ -13,14 +13,17 @@ import { type ReadEdits, useReadConfirmations } from '@/components/reviews/docum
 import { PickATask, TaskQueue } from '@/components/reviews/task-queue';
 import { useReviewDecider } from '@/components/reviews/use-review-decider';
 import { QueryError } from '@/components/shared/query-states';
-import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { taskView } from '@/components/tasks/task-regions';
 import { Button } from '@/components/ui/button';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAssignReviews, useLookups, useReview, useReviewByRunKey, useReviewPlace, useReviews } from '@/hooks/queries';
 import { useCurrentPerson } from '@/hooks/auth-queries';
 import { useTeam } from '@/hooks/use-team';
+import { useDebounced } from '@/hooks/use-debounced';
+import { useFocusTrap } from '@/hooks/use-focus-trap';
+import { useWide } from '@/hooks/use-wide';
 import { cn } from '@/lib/utils';
 import type { Review } from '@/lib/types/domain';
 import type { ReviewView } from '@/lib/types/query';
@@ -43,7 +46,10 @@ export default function HumanTasksPage() {
   const view: ReviewView = (VIEWS as readonly string[]).includes(params.get('view') ?? '') ? (params.get('view') as ReviewView) : 'open';
   const activeId = params.get('review');
   const [pageSize, setPageSize] = React.useState(PAGE);
-  const query = useReviews({ view, group: 'case', page: 1, pageSize });
+  // The server matches the title, the customer and the case's name; nothing is filtered in the browser.
+  const [typed, setTyped] = React.useState('');
+  const search = useDebounced(typed.trim());
+  const query = useReviews({ view, group: 'case', page: 1, pageSize, ...(search ? { search } : {}) });
   const rows = React.useMemo(() => query.data?.data ?? [], [query.data]);
   const counts = query.data?.viewCounts;
 
@@ -128,110 +134,166 @@ export default function HumanTasksPage() {
   };
 
   const twoPanes = !!task?.evidence.some((n) => n.type === 'viewer');
-  const allTasks = (
-    <Button variant="outline" asChild>
-      <Link href="/govern/reviews" data-testid="all-tasks">
-        <List /> All tasks
-      </Link>
-    </Button>
+  const wide = useWide();
+  // Over the list on a phone the task holds the focus, and closing it gives the focus back to the row that opened it.
+  const panelRef = React.useRef<HTMLElement>(null);
+  const overList = !wide && showTask && !!active;
+  useFocusTrap(panelRef, overList);
+
+  // The open task as the reading pane: beside the list from 1024 px, over it as a sheet below that.
+  const taskPane = !active ? (
+    query.isPending || fetched.isLoading || byKey.isLoading ? (
+      <Skeleton className="h-96 w-full rounded-lg" />
+    ) : missing ? (
+      <QueryError what="this task" onRetry={() => fetched.refetch()} error={fetched.error} retrying={fetched.isFetching} testId="task-error" />
+    ) : rows.length ? (
+      // The queue says when nothing is left; the pane only says what to do next.
+      <PickATask />
+    ) : null
+  ) : (
+    task && (
+      // `review-sheet` names the open task wherever it opens, as on /govern/reviews; both decide through TaskDecision.
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3" data-testid="review-sheet">
+        {twoPanes && (
+          <Tabs value={pane} onValueChange={(v) => setPane(v as 'decide' | 'evidence')} className="2xl:hidden">
+            <TabsList className="w-full">
+              <TabsTrigger value="decide" data-testid="pane-decide">
+                Decide
+              </TabsTrigger>
+              <TabsTrigger value="evidence" data-testid="pane-evidence">
+                Evidence
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
+        <div className={cn('grid min-h-0 min-w-0 flex-1 gap-4', twoPanes ? '2xl:grid-cols-[minmax(0,1fr)_minmax(26rem,32rem)] 2xl:grid-rows-[minmax(0,1fr)]' : 'w-full lg:grid-rows-[minmax(0,1fr)]')}>
+          {twoPanes && (
+            // The evidence scrolls in its own column; the decision beside it does not move.
+            <section className={cn('min-h-0 min-w-0 flex-col gap-3 overflow-y-auto', pane === 'evidence' ? 'flex' : 'hidden', '2xl:flex')} aria-label="Evidence" data-testid="evidence-pane">
+              {task.evidence.map((node, i) => (
+                <KindView key={i} node={node} />
+              ))}
+            </section>
+          )}
+          <DecisionPanel
+            key={active.id}
+            review={active}
+            view={twoPanes ? task : { ...task, decide: [...task.evidence, ...task.decide] }}
+            edits={edits}
+            onEdit={onEdit}
+            checks={checks}
+            decider={decider}
+            me={me}
+            owners={lookups?.owners ?? []}
+            reviewers={(lookups?.reviewers ?? []).filter((p) => p !== active.assignee)}
+            platformTeam={team?.scope === 'all'}
+            onReassign={(to) => void reassign(to)}
+            onAssignToMe={() => void assignToMe()}
+            place={place.data ? { ...place.data, onGo: (id) => go({ review: id }) } : undefined}
+            className={cn(twoPanes && pane !== 'decide' ? 'hidden' : 'flex', '2xl:flex')}
+          />
+        </div>
+      </div>
+    )
   );
 
   return (
-    <PageLayout icon={UserCheck} title="Human Tasks" description="What waits for a person, grouped by case, soonest due first" className="min-h-0 flex-1 pb-0" contentClassName="flex min-h-0 flex-1 flex-col gap-3" actions={allTasks}>
+    // The page title block is dropped (the top bar names the page); it stays for screen readers.
+    <PageLayout icon={UserCheck} title="Human Tasks" className="min-h-0 flex-1 pb-0" headerClassName="sr-only" contentClassName="flex min-h-0 flex-1 flex-col">
       {decider.stepUp.dialog}
-      <SavedViewTabs
-        ariaLabel="Human Tasks views"
-        presets={[
-          { id: 'open', label: countLabel('All open', counts?.open) },
-          { id: 'mine', label: countLabel('Assigned to me', counts?.mine) },
-          { id: 'overdue', label: countLabel('Past SLA', counts?.overdue) },
-        ]}
-        savedViews={[]}
-        activePresetId={view}
-        activeSavedViewId={null}
-        onSelectPreset={(id) => {
-          setPageSize(PAGE);
-          go({ view: id as ReviewView, review: null });
-        }}
-        onSelectSavedView={() => undefined}
-        onSaveView={() => undefined}
-        onDeleteView={() => undefined}
-        canSave={false}
-      />
       {query.isError && !query.data ? (
         <QueryError what="Human Tasks" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} testId="reviews-error" />
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4 xl:flex-row xl:overflow-clip" data-testid="queue-and-task">
-          <div className={cn('min-h-0 flex-col xl:flex xl:w-72 xl:shrink-0 xl:overflow-y-auto xl:pr-1', showTask ? 'hidden' : 'flex')}>
-            <TaskQueue
-              rows={rows}
-              total={query.data?.pagination.total ?? rows.length}
-              activeId={active?.id ?? null}
-              loading={query.isPending}
-              onOpen={open}
-              onMore={() => setPageSize((n) => n + PAGE)}
-              loadingMore={query.isFetching}
-            />
-          </div>
-          <div className={cn('min-h-0 min-w-0 flex-1 flex-col gap-3 xl:flex', showTask ? 'flex' : 'hidden')}>
-            <Button variant="ghost" size="sm" className="self-start xl:hidden" onClick={() => setShowTask(false)} data-testid="back-to-queue">
-              <ArrowLeft /> Queue
-            </Button>
-            {!active ? (
-              query.isPending || fetched.isLoading || byKey.isLoading ? (
-                <Skeleton className="h-96 w-full rounded-lg" />
-              ) : missing ? (
-                <QueryError what="this task" onRetry={() => fetched.refetch()} error={fetched.error} retrying={fetched.isFetching} testId="task-error" />
-              ) : rows.length ? (
-                // The queue says when nothing is left; the pane only says what to do next.
-                <PickATask />
-              ) : null
-            ) : (
-              task && (
-                // `review-sheet` names the open task wherever it opens, as on /govern/reviews; both decide through TaskDecision.
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3" data-testid="review-sheet">
-                  {twoPanes && (
-                    <Tabs value={pane} onValueChange={(v) => setPane(v as 'decide' | 'evidence')} className="lg:hidden">
-                      <TabsList className="w-full">
-                        <TabsTrigger value="decide" data-testid="pane-decide">
-                          Decide
-                        </TabsTrigger>
-                        <TabsTrigger value="evidence" data-testid="pane-evidence">
-                          Evidence
-                        </TabsTrigger>
-                      </TabsList>
-                    </Tabs>
-                  )}
-                  <div className={cn('grid min-h-0 min-w-0 flex-1 gap-4', twoPanes ? 'lg:grid-cols-[minmax(0,1fr)_minmax(26rem,32rem)] lg:grid-rows-[minmax(0,1fr)]' : 'mx-auto w-full max-w-3xl lg:grid-rows-[minmax(0,1fr)]')}>
-                    {twoPanes && (
-                      // The evidence scrolls in its own column; the decision beside it does not move.
-                      <section className={cn('min-h-0 min-w-0 flex-col gap-3 overflow-y-auto', pane === 'evidence' ? 'flex' : 'hidden', 'lg:flex')} aria-label="Evidence" data-testid="evidence-pane">
-                        {task.evidence.map((node, i) => (
-                          <KindView key={i} node={node} />
-                        ))}
-                      </section>
-                    )}
-                    <DecisionPanel
-                      key={active.id}
-                      review={active}
-                      view={twoPanes ? task : { ...task, decide: [...task.evidence, ...task.decide] }}
-                      edits={edits}
-                      onEdit={onEdit}
-                      checks={checks}
-                      decider={decider}
-                      me={me}
-                      owners={lookups?.owners ?? []}
-                      reviewers={(lookups?.reviewers ?? []).filter((p) => p !== active.assignee)}
-                      platformTeam={team?.scope === 'all'}
-                      onReassign={(to) => void reassign(to)}
-                      onAssignToMe={() => void assignToMe()}
-                      className={cn(twoPanes && pane !== 'decide' ? 'hidden' : 'flex', 'lg:flex')}
-                    />
-                  </div>
-                </div>
-              )
+        <div className="flex min-h-0 flex-1 overflow-clip rounded-lg border bg-card" data-testid="queue-and-task">
+          {/* The list column: a fixed width from 1024 px so the tabs never wrap; the whole width below it. */}
+          <aside className="flex min-h-0 w-full flex-col border-r lg:w-[23rem] lg:shrink-0 xl:w-[24rem]" aria-label="Tasks">
+            <div className="flex flex-col gap-3 border-b p-3">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs text-muted-foreground">Soonest due first. Tasks on one case sit together under its name.</p>
+                <Button variant="ghost" size="icon" asChild>
+                  <Link href="/govern/reviews" aria-label="All tasks as a table" title="All tasks as a table" data-testid="all-tasks">
+                    <Table2 />
+                  </Link>
+                </Button>
+              </div>
+              <Tabs
+                value={view}
+                onValueChange={(id) => {
+                  setPageSize(PAGE);
+                  go({ view: id as ReviewView, review: null });
+                }}
+              >
+                <TabsList className="grid w-full grid-cols-3" aria-label="Human Tasks views">
+                  <TabsTrigger value="open" className="gap-1 px-1 text-xs sm:text-sm" data-testid="view-open">
+                    All open
+                    {counts?.open != null && <span className="font-normal text-muted-foreground tabular-nums">{counts.open}</span>}
+                  </TabsTrigger>
+                  <TabsTrigger value="mine" className="gap-1 px-1 text-xs sm:text-sm" data-testid="view-mine">
+                    Assigned to me
+                    {counts?.mine != null && <span className="font-normal text-muted-foreground tabular-nums">{counts.mine}</span>}
+                  </TabsTrigger>
+                  <TabsTrigger value="overdue" className="gap-1 px-1 text-xs sm:text-sm" data-testid="view-overdue">
+                    Past SLA
+                    {counts?.overdue != null && <span className="font-normal text-muted-foreground tabular-nums">{counts.overdue}</span>}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <InputGroup>
+                <InputGroupAddon>
+                  <Search />
+                </InputGroupAddon>
+                <InputGroupInput
+                  type="search"
+                  value={typed}
+                  onChange={(e) => {
+                    setTyped(e.target.value);
+                    setPageSize(PAGE);
+                  }}
+                  placeholder="Search tasks, customers, cases"
+                  aria-label="Search Human Tasks"
+                  data-testid="tasks-search"
+                />
+              </InputGroup>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
+              <TaskQueue
+                rows={rows}
+                total={query.data?.pagination.total ?? rows.length}
+                activeId={active?.id ?? null}
+                loading={query.isPending}
+                onOpen={open}
+                onMore={() => setPageSize((n) => n + PAGE)}
+                loadingMore={query.isFetching}
+                search={search}
+              />
+            </div>
+          </aside>
+          {/* One reading pane at every width, so a half-made decision survives crossing 1024 px: beside the list from
+              1024, and below it over the list as a sheet from the bottom, closed back to the same place in the list. */}
+          {!wide && showTask && !!active && <div className="fixed inset-0 z-40 bg-black/50" aria-hidden onClick={() => setShowTask(false)} />}
+          <section
+            ref={panelRef}
+            tabIndex={-1}
+            className={cn(
+              'min-h-0 min-w-0 flex-col bg-background',
+              wide ? 'flex flex-1 overflow-y-auto p-4' : showTask && active ? 'fixed inset-x-0 bottom-0 z-50 flex h-[90dvh] overflow-y-auto rounded-t-xl border-t p-3 pt-12 shadow-lg' : 'hidden',
             )}
-          </div>
+            role={wide ? undefined : 'dialog'}
+            aria-modal={wide ? undefined : true}
+            aria-label={active?.title ?? 'Task'}
+            onKeyDown={(e) => {
+              // A menu or dialog inside the task takes its own Escape (it marks the key handled) before the sheet closes.
+              if (!wide && e.key === 'Escape' && !e.defaultPrevented) setShowTask(false);
+            }}
+            data-testid={wide ? 'task-pane' : 'task-sheet'}
+          >
+            {!wide && (
+              <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2" aria-label="Close task" onClick={() => setShowTask(false)} data-testid="back-to-queue">
+                <X />
+              </Button>
+            )}
+            {taskPane}
+          </section>
         </div>
       )}
     </PageLayout>

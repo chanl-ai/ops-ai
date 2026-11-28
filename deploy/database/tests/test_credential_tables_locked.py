@@ -102,7 +102,8 @@ def scratch() -> Iterator[URL]:
             asyncio.run(
                 _admin(
                     admin,
-                    f"DO $$ BEGIN CREATE ROLE {login} LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+                    f"DO $$ BEGIN CREATE ROLE {login} LOGIN; "
+                    f"EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL; END $$",
                     f"ALTER ROLE {login} LOGIN PASSWORD '{PASSWORD}' NOSUPERUSER NOBYPASSRLS INHERIT",
                 )
             )

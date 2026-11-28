@@ -23,9 +23,6 @@ TEAM_COLUMNS = {"team_id", "team"}
 # Tables with a team column whose reads take the team as an argument instead of the helper. Remove a name when its
 # table is marked; the test fails on a name that is marked or gone, so the list only shrinks.
 NOT_YET_MARKED = {
-    # agents-service: a workflow's saved schedules hold its team as a plain column; they are read and written through
-    # the workflow's own rights, which cover shared workflows the team policy has no branch for (store/schedules.py)
-    "workflow_schedules",
     # agents-service: work records, scoped by the acting team passed in, or by thread
     # publish requests gained their subject's team in agents 0106; the registry stores read it by team with the
     # registry tables' marking (docs/architecture/migration/agents-registry-tenancy.md)
@@ -124,6 +121,18 @@ def unscoped_reads(source: str, marked: set[str], where: str = "<source>") -> li
             for root in _names(a.value) & marked
             if isinstance(a.value, ast.Name | ast.Attribute)
         }
+        # A column list built from one (`cols = [c for c in t.c if ...]`, then `sa.select(*cols)`) reads it too.
+        alias |= {
+            target.id: root
+            for a in ast.walk(fn)
+            if isinstance(a, ast.Assign) and id(a) not in inner and isinstance(a.value, ast.ListComp | ast.GeneratorExp)
+            for target in a.targets
+            if isinstance(target, ast.Name)
+            for gen in a.value.generators
+            for n in _names(gen.iter)
+            for root in [n if n in marked else alias.get(n)]
+            if root is not None
+        }
         read: dict[str, int] = {}
         for c in calls:
             name = _func_name(c)
@@ -210,6 +219,11 @@ def union_one_branch(engine):
         sa.select(registry_skills.c.id),
     ).subquery("u")
     return engine.execute(sa.select(both))
+
+def by_columns(engine):
+    t = registry_agents
+    cols = [c for c in t.c if c.name != "tenant_id"]
+    return engine.execute(sa.select(*cols))
 """
     # A list over several sources (ops_store.listing) is scoped in each branch of its union.
     assert unscoped_reads(planted, {"registry_agents", "registry_skills"}) == [
@@ -217,4 +231,5 @@ def union_one_branch(engine):
         "<source>:9 joined registry_agents",
         "<source>:12 by_method registry_agents",
         "<source>:24 union_one_branch registry_skills",
+        "<source>:31 by_columns registry_agents",
     ]

@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-19",
-  "title": "Reconnect notices name the environment",
-  "description": "The notice admins get when an app's team account stops working now says whether it is the sandbox or the production account.",
-  "tag": "fix"
-}

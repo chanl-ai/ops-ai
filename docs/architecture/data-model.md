@@ -409,7 +409,7 @@ erDiagram
 | `trigger_events` | Each arrival, with a dedupe key so a repeat starts nothing new | planned |
 | `poll_cursors` | Where a polling trigger last read up to | planned |
 | `agents_outbox` | The audit entry of each schedule save and clear, written with the change and relayed to platform-service's audit log | built |
-| `workflow_schedules` | One saved schedule per workflow and trigger step, outside the workflow's versions: the rule, who changed it (id and name as saved), and the schedule clock's slot state (`rule_digest`, `last_slot_at`, `last_outcome`, `last_run_id`, `seen_at`). Row security by tenant; the team is a plain column | built |
+| `workflow_schedules` | One saved schedule per workflow and trigger step, outside the workflow's versions: the rule, who changed it (id and name as saved), and the schedule clock's slot state (`rule_digest`, `last_slot_at`, `last_outcome`, `last_run_id`, `seen_at`). Row security by team, as the other team tables; the schedule clock reads every team tenant-wide | built |
 
 ## Tools and the data gateway
 

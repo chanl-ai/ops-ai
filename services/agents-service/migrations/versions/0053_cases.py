@@ -12,6 +12,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import role_ddl
+
 revision = "0053_cases"
 down_revision = "0052_drop_engine_settings"
 branch_labels = None
@@ -56,7 +58,7 @@ def upgrade() -> None:
     )
     if op.get_bind().dialect.name != "postgresql":
         return
-    op.execute(f"DO $$ BEGIN CREATE ROLE {TENANT_ROLE} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$")
+    op.execute(role_ddl(TENANT_ROLE))
     op.execute(f"GRANT SELECT, INSERT, UPDATE ON cases TO {TENANT_ROLE}")
     op.execute(f"GRANT SELECT, INSERT ON case_events TO {TENANT_ROLE}")
     for table in ("cases", "case_events"):

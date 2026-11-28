@@ -1,6 +1,0 @@
-{
-  "date": "2026-11-15",
-  "title": "The files list sorts by name or upload time",
-  "description": "The files list can be sorted by name or by upload time in either order, and asks for exact files by id. A page holds at most 50 files.",
-  "tag": "improved"
-}

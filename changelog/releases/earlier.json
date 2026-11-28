@@ -1,0 +1,2151 @@
+{
+  "version": "earlier",
+  "date": "2026-11-16",
+  "entries": [
+    {
+      "title": "Invite someone as a Chat user",
+      "description": "An invite or a role change can make a person a Chat user: they chat with the team's published agents and see only their own threads.",
+      "tag": "new"
+    },
+    {
+      "title": "Demo branding from settings",
+      "description": "A workspace name and the console accent colour can be set for a demo without changing code.",
+      "tag": "new"
+    },
+    {
+      "title": "Evals keep saved test cases and every run",
+      "description": "Agents and skills can save test cases, run them again and compare each run with the live version. The Evals page reads suites, runs and publish checks for your team from what was saved.",
+      "tag": "new"
+    },
+    {
+      "title": "A demo policy library on a new install",
+      "description": "A fresh local install now has a Policy library knowledge base in team Platform: 24 bank documents in six collections, as PDF, Word, text and web pages, three of them with a second version, so search, filters and citations can be tried at once.",
+      "tag": "new"
+    },
+    {
+      "title": "Attach decks and pictures in chat",
+      "description": "Chat now takes .pptx decks and PNG or JPG pictures as attachments. Text in a picture is read for the agent.",
+      "tag": "new"
+    },
+    {
+      "title": "Knowledge base documents filter by collection and type",
+      "description": "A knowledge base's Documents tab now filters by source, status, collection, type, freshness, sensitivity and tag, and each filter counts what choosing it would show. A test question can be narrowed to one collection.",
+      "tag": "new"
+    },
+    {
+      "title": "Knowledge bases keep answer, sync and source settings",
+      "description": "A knowledge base now keeps what it gives back, how syncs treat changes and removals, how new sources split and its MCP tool name, all filled by the starting preset and editable afterwards. Its search filters by collection, source, tag and metadata, and a base can hold synced changes for review.",
+      "tag": "new"
+    },
+    {
+      "title": "MCP links for your assistants",
+      "description": "Under Channels › MCP, a team admin makes a link: a name and the tools and published workflows it offers. People paste its address into Claude, Cursor or VS Code and sign in with their own account; the link's page lists every call made through it.",
+      "tag": "new"
+    },
+    {
+      "title": "One menu to add knowledge, and a Test sheet",
+      "description": "A knowledge base opens on one Documents table with a single Add data source menu for files, folders, websites, apps, pushed items and typed text, and files or folders can be dropped anywhere on it. Test opens beside any tab with the pieces used, their scores, the search trace and a collection filter.",
+      "tag": "new"
+    },
+    {
+      "title": "PowerPoint decks can be read",
+      "description": "A .pptx deck is read slide by slide, with its tables, chart data and speaker notes, so knowledge bases and agents can use it and answers can name the slide. Old .ppt, .xls and Keynote files say to re-save them as .pptx or .xlsx.",
+      "tag": "new"
+    },
+    {
+      "title": "Every app and template comes built in",
+      "description": "A new install has the Salesforce, GitHub, SharePoint, Confluence and website apps and every starter skill, agent and workflow template from the start, with nothing to download first.",
+      "tag": "new"
+    },
+    {
+      "title": "Set up your AI model in three steps",
+      "description": "A new workspace's admin picks OpenAI, Azure OpenAI or Anthropic, pastes the key, sees it tested, and picks the model chat and agents answer with. Settings › Approvals gains a switch for whether writes a plugin or template marks ask first.",
+      "tag": "new"
+    },
+    {
+      "title": "Skills with parts, and only published skills in assistants",
+      "description": "One skill can hold several named parts, such as preparing a client meeting and updating an opportunity, each with its own inputs. Claude and other assistants now get only a skill's published version, and a required input left empty is refused instead of sent half filled.",
+      "tag": "new"
+    },
+    {
+      "title": "Start a skill from a starter template",
+      "description": "A team admin can turn on Starter skills and add ready-made skills for drafting, reviewing, planning and research. Each skill lists the inputs it asks for, such as a topic, and the team edits its own copy.",
+      "tag": "new"
+    },
+    {
+      "title": "Test a model key and list what it reaches",
+      "description": "An account admin can test a saved OpenAI, Azure OpenAI or Anthropic key and see the models or deployments it reaches. The key goes only to the provider's own address.",
+      "tag": "new"
+    },
+    {
+      "title": "Connect assistants to a team with your company sign-in",
+      "description": "Paste a team's MCP address into Claude, Cursor, VS Code or ChatGPT, sign in in the browser window and press Allow. The assistant runs only what you may run in that team, for 8 hours, and stops when you leave the team.",
+      "tag": "new"
+    },
+    {
+      "title": "Guardrails can come from an app's template",
+      "description": "An app can bring a guardrail. Your team gets its own copy, and a later update adds the template's new topics without dropping the ones you added.",
+      "tag": "new"
+    },
+    {
+      "title": "The sidebar shows one area at a time",
+      "description": "Work, Build, Data and Govern sit in the top bar (one menu on a phone), and the sidebar lists only that area's pages that your access opens. ⌘1 to ⌘4 switch areas, team switching moved to ⌘⇧1 to ⌘⇧9, and Policies is now at /policies.",
+      "tag": "new"
+    },
+    {
+      "title": "Add case and task types from an app",
+      "description": "Case types and task types an app brings can be added to your team as your own types, and their updates keep the fields you changed.",
+      "tag": "new"
+    },
+    {
+      "title": "Apps can ship case types, task types and guardrails",
+      "description": "An app can now bring case types, task types and guardrails as templates, and an app that only brings templates needs no account or sign-in.",
+      "tag": "new"
+    },
+    {
+      "title": "Package apps run on the org you pick",
+      "description": "An app that runs inside another one, such as a lending package in a Salesforce org, uses the Salesforce account you pick. Orgs without the package are marked and refused, with the org named, before anything is sent.",
+      "tag": "new"
+    },
+    {
+      "title": "A settings change rebuilds a source in the background",
+      "description": "Saving new splitting or reading settings rebuilds the source's documents from what is already stored, shows progress in its sync history, and can be cancelled.",
+      "tag": "new"
+    },
+    {
+      "title": "Add a source in three steps",
+      "description": "Add source on a knowledge base now picks the kind from the kinds your team can add, says what to include with a live preview where the kind offers one, and reviews the schedule, the questions and FAQ switches with their cost basis, and the defaults applied. Create and sync attaches the source and starts its first sync.",
+      "tag": "new"
+    },
+    {
+      "title": "Copies of fetched pages are kept, then cleared",
+      "description": "Each page or article a knowledge source brings in is kept as a file while the source uses it, and removed 30 days after the source lets it go unless it is on legal hold.",
+      "tag": "new"
+    },
+    {
+      "title": "Every knowledge source keeps itself current",
+      "description": "Any source can sync every few hours, daily or weekly, shows its health and days failing, alerts after a second failed sync, and drops a page gone at its source after it answers gone twice.",
+      "tag": "new"
+    },
+    {
+      "title": "FAQ drafts to review, each quoting its source",
+      "description": "A source can draft question-and-answer pairs from its sections; the knowledge owner approves, edits or rejects them in the Changes queue, and an approved pair answers with a citation of the passage it came from.",
+      "tag": "new"
+    },
+    {
+      "title": "Knowledge search finds answers by meaning",
+      "description": "Agents find a knowledge passage even when the question uses other words than the page, by meaning and keywords together; each search says which ran, and a knowledge base's own settings decide how many passages return.",
+      "tag": "new"
+    },
+    {
+      "title": "Knowledge settings changes show in the audit log",
+      "description": "Changing a knowledge base's or a source's settings now appears in the Audit log with each value before and after.",
+      "tag": "new"
+    },
+    {
+      "title": "Likely questions help search find a passage",
+      "description": "A knowledge owner can approve a source's likely questions after seeing what they would cost; each sync writes them only for passages that changed and records what the model calls spent.",
+      "tag": "new"
+    },
+    {
+      "title": "Menus, footers and duplicate pages stay out of answers",
+      "description": "A source can drop page menus, banners and footers and keep only a page's main content, and when two sources hold the same text only the newer copy is searched.",
+      "tag": "new"
+    },
+    {
+      "title": "Rerank and question rewrite on knowledge search",
+      "description": "A knowledge base's Retrieval tab can turn on a model that reranks the best pieces and one that rewrites the question with your instruction. The Playground shows the rewritten question and each piece's rerank score.",
+      "tag": "new"
+    },
+    {
+      "title": "Review FAQ drafts in Changes",
+      "description": "A knowledge base's Changes tab lists FAQ drafts with the passage each quotes and a check that flags an answer using words its passage lacks or a source that changed. Approve or reject them one at a time or in bulk, and edit a draft's question and answer before approving.",
+      "tag": "new"
+    },
+    {
+      "title": "Several accounts of one app, each named and told apart",
+      "description": "A team can keep two Salesforce orgs or two GitHub servers side by side: each new account signs in at its own address, shows what it points at, and a call that names it runs there. A call never uses another person's own account, and a test run never uses a named live one.",
+      "tag": "new"
+    },
+    {
+      "title": "SharePoint and Confluence knowledge sources",
+      "description": "Add source can now take in SharePoint and OneDrive libraries or Confluence spaces, picked by searching for them by name. Each sync reads only what changed and keeps who can see each item.",
+      "tag": "new"
+    },
+    {
+      "title": "Track a website in a knowledge base",
+      "description": "A knowledge base can follow a website through its sitemaps and links, obeying robots.txt and a gentle rate, fetching only pages that changed, with a preview before anything is stored.",
+      "tag": "new"
+    },
+    {
+      "title": "Typed text and pushed items as knowledge sources",
+      "description": "Add source now offers Typed text, written in the console, and a push source your systems send items to by name. Sending the same item again changes nothing; new content becomes its next version.",
+      "tag": "new"
+    },
+    {
+      "title": "A checklist for asks that take several steps",
+      "description": "For an ask that needs a chain of lookups, several apps or a change, the assistant shows a short checklist and ticks each step off; after a sign-in or an approval it goes on at the same step.",
+      "tag": "new"
+    },
+    {
+      "title": "Add another account of your own to an app",
+      "description": "A connected app on Connectors offers Add another account, which signs in through the same setup, so a personal and an office login sit side by side; signing in as a login already linked updates it instead.",
+      "tag": "new"
+    },
+    {
+      "title": "Chat asks which account when two fit",
+      "description": "With two accounts of the same app connected and none chosen, chat shows a card to pick one; the pick becomes your default for calls that name no account, and Connectors shows it and lets you change it.",
+      "tag": "new"
+    },
+    {
+      "title": "Embeddings run through the model gateway",
+      "description": "Text is turned into vectors through the same model keys, budgets and data clearance as chat, ready for search by meaning in knowledge bases.",
+      "tag": "new"
+    },
+    {
+      "title": "Follow-ups reuse what the chat already read",
+      "description": "A follow-up in the same chat answers from what the assistant already read from an app for a few minutes, so it answers faster; a save to that app makes the next look read it again, and a reused read is labelled from earlier in this chat.",
+      "tag": "new"
+    },
+    {
+      "title": "Long chats stay quick",
+      "description": "In a long chat the assistant reads the older turns as a short summary, made again every ten messages, so replies stay quick and the chat keeps its thread.",
+      "tag": "new"
+    },
+    {
+      "title": "Think harder",
+      "description": "A reply that took a plan or several lookups offers Think harder: one tap answers the same question again on the deeper model.",
+      "tag": "new"
+    },
+    {
+      "title": "Choose which connectors one chat uses",
+      "description": "Every connected app is on in a new chat, and you can leave some out of one chat; it never adds a tool the assistant was not given, and the next chat starts with all of them on.",
+      "tag": "new"
+    },
+    {
+      "title": "Connectors replace the accounts and Apps pages",
+      "description": "Connectors has a view of your own sign-ins, one row per app with a details sheet that fits a phone, and Team setup for admins; the chat composer lists the chat's connectors so you can leave one out of a chat.",
+      "tag": "new"
+    },
+    {
+      "title": "Prep briefs, review cards and saved cards in chat",
+      "description": "The assistant can show a prep brief before a meeting, a prefilled review card to check before it writes, and a saved card with each change as old and new, each with its app's mark and an Open link to the record. Replies can offer up to three quick replies.",
+      "tag": "new"
+    },
+    {
+      "title": "Quick replies under the assistant's questions",
+      "description": "When the assistant asks you something, its likely answers show as chips under the reply, so one click answers.",
+      "tag": "new"
+    },
+    {
+      "title": "Turn an app on in one window",
+      "description": "Turning an app on asks only where your team signs in and whose account tools use, and can give the team's assistant the app's read tools at once. Where you sign in is asked once and kept on the app's auth config.",
+      "tag": "new"
+    },
+    {
+      "title": "Turning an app on teaches the assistant to use it",
+      "description": "When an admin turns an app on and gives it to the team assistant, the skills the app ships come with it, and each says which app it needs and whether you are signed in.",
+      "tag": "new"
+    },
+    {
+      "title": "Your connectors list one row per app",
+      "description": "Each app that acts as you is one row, with what it can do from the tools your team switched on, whom it signs in as and your calls this week; an app your team has off is listed so you can ask for it.",
+      "tag": "new"
+    },
+    {
+      "title": "Change how a custom app signs in from its Settings",
+      "description": "Change sign-in lists the ways the app may sign in and says what moving removes, then opens the set-up for the new way. Turning an app off now sits with its settings, apart from deleting it, since it keeps the app's accounts and tools.",
+      "tag": "new"
+    },
+    {
+      "title": "Set where an app signs in on its auth config",
+      "description": "An auth config can hold where its accounts sign in, such as your company's Salesforce address, either as a default each Connect starts from or fixed for every account; its row shows which. A team can set it on Ops AI's built-in app too, and each account shows the org address its sign-in landed in.",
+      "tag": "new"
+    },
+    {
+      "title": "The agent tool picker says which app tools are not added",
+      "description": "When an app has tools your team has not added, the picker says how many under its list and links to that app's Tools tab, where they are added.",
+      "tag": "new"
+    },
+    {
+      "title": "Add an app's tools to your team from its catalog",
+      "description": "An app's Tools tab lists everything it offers, each with Add or Remove, and Select all with Add takes every tool not yet added; a new app starts with its read tools added. Only added tools show on the Tools page and in the agent picker, a call to one not added is refused, and a sign-in asks only for the permissions added tools need.",
+      "tag": "new"
+    },
+    {
+      "title": "Add several of an app's resources at once",
+      "description": "On an app's Resources tab, tick several resources and Add selected shows what each brings with it, the knowledge base and model to pick, and anything refused, before anything is made. Each row says whether it is added, has an update, is no longer offered or needs the app signed in first, and offers Review update, Open, Remove or Connect, while a person who cannot act reads who can.",
+      "tag": "new"
+    },
+    {
+      "title": "An app's resources say what they need",
+      "description": "Each resource an app brings shows whether it is added, has an update or is no longer offered, and a workflow added before the agent it runs is refused naming that agent, then runs the team's copy once it is added. A name the team already uses is refused with another offered, an update makes a new draft and asks first when the copy was edited, and an agent a workflow runs is kept until that workflow changes.",
+      "tag": "new"
+    },
+    {
+      "title": "Delete a custom app or change its sign-in",
+      "description": "The API now deletes a custom app with its accounts and their secrets, refusing while a tool still uses it and naming those tools. It also moves every account to another sign-in kind, naming the accounts that must be set up again.",
+      "tag": "new"
+    },
+    {
+      "title": "Edit what every role may do",
+      "description": "A workspace admin can change what any role allows, the built-in ones included, and every part of Ops AI follows the change once people's sign-ins refresh; each built-in role can go back to its default. Builders can now do everything in their team except managing people, roles and the workspace's settings, so they connect apps and keep secrets too.",
+      "tag": "new"
+    },
+    {
+      "title": "Make your own roles",
+      "description": "A workspace admin creates a role from scratch or by copying one, renames it, sets its permissions and deletes it, moving the people who hold it to another role first.",
+      "tag": "new"
+    },
+    {
+      "title": "Rename a secret",
+      "description": "A secret no operation reads can now be renamed from its row, keeping its value, and each row shows the value's last four characters. While operations read it, Rename and Delete name them.",
+      "tag": "new"
+    },
+    {
+      "title": "Tick what each role allows",
+      "description": "On Access, Roles, a workspace admin opens a role, sees every area at once, ticks or unticks what it allows and saves; a built-in role has Reset to default. Everyone else sees each role's permissions read only, and Admin always holds every permission.",
+      "tag": "new"
+    },
+    {
+      "title": "Plugins say what each resource needs",
+      "description": "A plugin's agent, skill, workflow or document type can name the other resources of the plugin it cannot run without, and checking a plugin refuses a name the plugin does not have. An app's knowledge source is now listed among its resources.",
+      "tag": "new"
+    },
+    {
+      "title": "Add your team's own app credential",
+      "description": "An admin can add the team's own OAuth app, with its client ID, secret and permissions, to an app the team set up, and the secret is never shown again. Each app card says whether it is connected, needs a sign-in or failed its test, and which credential it uses.",
+      "tag": "new"
+    },
+    {
+      "title": "Agents read your team's files and documents",
+      "description": "An agent can read a file your team uploaded and pull a document's fields with one of your document types. Both show under Built in in Connections and keep to your team's files.",
+      "tag": "new"
+    },
+    {
+      "title": "Connect apps from a catalog",
+      "description": "Connections is a catalog of apps: connect one in a small window, connect your own account in one click, and see an app's tools, skills, sign-ins and runs on its page. Tools show their own names everywhere.",
+      "tag": "new"
+    },
+    {
+      "title": "More runnable example folders for agents and workflows",
+      "description": "Three new agent folders (run in three modes, delegate to a specialist, a morning check of held wires) and seven new workflow folders (transform a record, filter a list, retrieve from knowledge, send a message, repeat until done, ask a person, and more). Each one runs from its own folder against the public SDK, and agents can now be scored on a set of cases.",
+      "tag": "new"
+    },
+    {
+      "title": "Run your agents on your own Azure OpenAI resource",
+      "description": "An account admin can connect an Azure OpenAI resource on Settings > Model providers with its endpoint, API version, region and key, or set it at install with OPENAI_API_TYPE=azure, OPENAI_API_BASE, OPENAI_API_VERSION, OPENAI_API_REGION and OPENAI_API_KEY. A call answered from another region than the one you named is flagged on the connection and in the call log.",
+      "tag": "new"
+    },
+    {
+      "title": "Build plugins for outside systems",
+      "description": "Developers build a plugin as one package with its sign-in, tools and knowledge sources, check it with ops plugin validate and test it against a fake with ops plugin test. Teams sign in with their own OAuth app or the platform's, as the team or as each person.",
+      "tag": "new"
+    },
+    {
+      "title": "Connect every system for real, from one dialog",
+      "description": "A team admin connects each system its tools use from one dialog, with keys or the team's own app for test and production, each tested before it counts as working. Each environment keeps its own health, so a failing sandbox no longer marks a working production connection as broken.",
+      "tag": "new"
+    },
+    {
+      "title": "Read any document without setting up a type",
+      "description": "A document can be read as full text, or with fields the model proposes from the first pages, then saved as a document type in one step.",
+      "tag": "new"
+    },
+    {
+      "title": "Start workflows from a form or a spreadsheet",
+      "description": "A workflow can be shared as a form people fill in by a link that expires, or only for the team. It can also run once for each row of a spreadsheet, with a results table, a CSV download and failed rows retried.",
+      "tag": "new"
+    },
+    {
+      "title": "Your assistant remembers you across a team's agents",
+      "description": "Tell one agent in a team how you like answers or a fact about your work, and every agent in that team uses it, while nothing reaches another team. Only what you say yourself is kept, never text you paste or the assistant's own words, and a memory you forget is erased 30 days later.",
+      "tag": "new"
+    },
+    {
+      "title": "Answer an emailed notice from start to finish",
+      "description": "A workflow can now thank the sender at once, look each person up at the bank, work out a hold with your own code, check it against the handbook, and reply once someone approves. Steps that add to a case keep their notes on its timeline and can mark it resolved.",
+      "tag": "new"
+    },
+    {
+      "title": "Hand over, leave or delete a workspace or team",
+      "description": "The workspace's owner can hand it to another account admin, or delete it and restore it within 30 days. People can leave a team or the workspace, and an account admin can delete a team once it has been archived for 30 days with no live workflow.",
+      "tag": "new"
+    },
+    {
+      "title": "Scripts can run workflows from Python or TypeScript",
+      "description": "Developers can start workflow runs, wait for them, decide the human tasks they open and work with agents, cases, knowledge and files from a Python or TypeScript library with an API key. The guides are in the docs under API reference.",
+      "tag": "new"
+    },
+    {
+      "title": "See every background process on Govern > Background",
+      "description": "Account admins see each background process, whether it is running, late or stopped, and what it did for which team. Each team sees its own background jobs in Activity, and a process that hits an error tries again by itself.",
+      "tag": "new"
+    },
+    {
+      "title": "Work through Human Tasks case by case",
+      "description": "Human Tasks now shows your queue grouped by case beside the open task, and the next task in the same case opens after you decide. Every task as a table, with bulk decisions, is under All tasks.",
+      "tag": "new"
+    },
+    {
+      "title": "Write a tool as a Python function",
+      "description": "A code module holds Python functions that run in a sandbox with no network, read the step's input, call the tools they are allowed to and return data the next step can branch on. A function names a secret, such as a bank key, and the gateway sends the value with the call, so the function never sees it.",
+      "tag": "new"
+    },
+    {
+      "title": "Start your day from the chat home",
+      "description": "After you sign in, Chat opens with suggested starts and the Human Task waiting for you. The assistant answers with cards for cases, tasks and runs that you can act on.",
+      "tag": "new"
+    },
+    {
+      "title": "The document types list sorts by name in either order",
+      "description": "The document types list can be sorted by name, A to Z or Z to A.",
+      "tag": "improved"
+    },
+    {
+      "title": "The files list sorts by name or upload time",
+      "description": "The files list can be sorted by name or by upload time in either order, and asks for exact files by id. A page holds at most 50 files.",
+      "tag": "improved"
+    },
+    {
+      "title": "Evals page shows your team's real suites and runs",
+      "description": "Govern > Evals lists saved test cases, their runs and publish checks for your team instead of sample data. Evidence and Judges appear once there is something to show, and the Gates tab is now Publish checks.",
+      "tag": "improved"
+    },
+    {
+      "title": "Your own calls on an MCP link",
+      "description": "Anyone in the team can open an MCP link's Calls tab and see the calls they made through it. Builders and admins see everyone's.",
+      "tag": "improved"
+    },
+    {
+      "title": "App resources split by kind, each with details",
+      "description": "An app page lists its skills, agents and workflows on tabs of their own with counts, and each one opens a short summary of what it does and what it needs.",
+      "tag": "improved"
+    },
+    {
+      "title": "Apps use the team's account first",
+      "description": "Turning an app on now runs every call as the team's account, so nobody is asked to sign in before their first call. An admin can still let each person use their own account on the app's settings, and accounts set up before keep their choice.",
+      "tag": "improved"
+    },
+    {
+      "title": "Attach files from Files in chat",
+      "description": "Attach in chat opens a dialog to upload new files or pick ones already in Files.",
+      "tag": "improved"
+    },
+    {
+      "title": "Chats get their own column beside the conversation",
+      "description": "On Chat, your chats sit in a column beside the conversation, with search and Show more chats; it folds away on a desktop and opens as a sheet on a phone. The sidebar keeps New chat and a Chat link, lists one short link per page, and a page's related pages (Workflows and Runs, Members, Roles and Tool access) are tabs under its title.",
+      "tag": "improved"
+    },
+    {
+      "title": "Every page's address names its area",
+      "description": "Pages now live under their area: /work, /build, /data and /govern, so /agents is /build/agents and Tools sits in Data at /data/tools. Old links and bookmarks still work: they send you to the new address, and every page loads its data there.",
+      "tag": "improved"
+    },
+    {
+      "title": "Every team starts with every app on",
+      "description": "Each built-in app is on for every team until a team admin turns it off, and every template lists for every team. A template whose app is off for your team says so when you add it.",
+      "tag": "improved"
+    },
+    {
+      "title": "Invites start as Builder, and Chat shows the model setup",
+      "description": "The invite dialog now preselects Builder, so an invited person can make agents from day one. Chat shows admins where to add a model key, and an empty templates list links to Connectors.",
+      "tag": "improved"
+    },
+    {
+      "title": "New workspaces run built-in app writes without a reviewer",
+      "description": "In a workspace created from now on, writes an app marks ask-first run unless the team asks, and teams added later skip publish reviews too. Admins turn either on in Settings.",
+      "tag": "improved"
+    },
+    {
+      "title": "New workspaces skip publish reviews and the address list",
+      "description": "In a workspace created from now on, a publish goes live at once and an app may call any public address until an admin turns either on in Settings. Workspaces created before keep their settings.",
+      "tag": "improved"
+    },
+    {
+      "title": "One sidebar lists every page again",
+      "description": "The sidebar shows every area as its own section, Work, Agent Builder, Workflows, Data Gateway and Governance, so no page is hidden behind a tab. Pages and their addresses are unchanged.",
+      "tag": "improved"
+    },
+    {
+      "title": "Team shows once, in the sidebar",
+      "description": "The team and workspace name are gone from the page header, since the sidebar already shows them. When the sidebar is collapsed, the team is a square with the workspace logo or the team's initials, and pointing at it shows the team name.",
+      "tag": "improved"
+    },
+    {
+      "title": "The overview asks a new workspace's admin for a model key",
+      "description": "When a workspace has no model key, its admins see a short setup card on the overview that leads to Model providers.",
+      "tag": "improved"
+    },
+    {
+      "title": "Your chat list loads in pages",
+      "description": "The chat list in the sidebar and the conversations table now read one page at a time and keep pinned chats first, so a long history opens quickly and no pinned chat is cut off.",
+      "tag": "improved"
+    },
+    {
+      "title": "Agents change apps without asking by default",
+      "description": "A write with no approval setting now runs. A team admin can ask the person or a reviewer first, for the whole team, one app or one tool, a plugin's tools included.",
+      "tag": "improved"
+    },
+    {
+      "title": "Safer company sign-in setup",
+      "description": "Ops AI only fetches your identity provider's details from public internet addresses, so a typed-in address can never reach inside your network.",
+      "tag": "improved"
+    },
+    {
+      "title": "A connected app can make changes at once, and asks you first",
+      "description": "A newly added app starts with every tool on, writes included, while apps set up earlier keep the tools they had. Before the AI changes anything, the person in the chat gets an Allow or Deny card unless a team admin turns the app's Ask before changes switch off, and a test account never asks.",
+      "tag": "improved"
+    },
+    {
+      "title": "A refused model call says what went wrong and what to do",
+      "description": "When an agent's model provider refuses a reply, chat and the agent test panel now say whether the provider could not be reached, refused the account's key, limited calls, refused the request or failed, instead of one generic refusal. An admin who manages settings is told to fix it on Settings > Model providers and offered the page; anyone else is told to ask an admin.",
+      "tag": "improved"
+    },
+    {
+      "title": "An account in use is not deleted",
+      "description": "Deleting an app account that a workflow step or an agent names is refused, with how many published and draft versions name it. Point them at another account first.",
+      "tag": "improved"
+    },
+    {
+      "title": "Approvals are safe by default",
+      "description": "The person who asks for a decision no longer approves it, a tool write with no approval setting waits for a person, and an approval the asker gave themselves is checked again when the write is sent. A team can loosen either with Requester may decide in Policies or by switching a tool to run at once; values already set are kept.",
+      "tag": "improved"
+    },
+    {
+      "title": "Document type updates keep your edits",
+      "description": "Taking an app's update to a document type keeps the fields your team changed, takes the ones it did not, and asks where both changed. A copy can be detached to make it your own.",
+      "tag": "improved"
+    },
+    {
+      "title": "Every account action fits on a phone",
+      "description": "On a phone an app's Accounts tab shows each account's state, Sign in and its menu without scrolling sideways. Signing in again reads Sign in everywhere, an account not signed in reads Needs sign-in, and the team's default is set with the star only.",
+      "tag": "improved"
+    },
+    {
+      "title": "Simpler account choices",
+      "description": "An account asks once who signs in, a star marks the default, and an agent's Tools section picks each app's account. Each account's Settings changes its name, who signs in and its auth config, shows how many people signed in, and counts the workflows and agents that name it before a change.",
+      "tag": "improved"
+    },
+    {
+      "title": "Template updates keep your team's edits",
+      "description": "Taking an update to an agent or skill your team added from an app keeps the fields your team changed, takes the rest from the app, and asks you only where both changed. You can also detach a copy to keep it as your own.",
+      "tag": "improved"
+    },
+    {
+      "title": "A source shows the kind its app named",
+      "description": "A source's page and the knowledge base's Sources tab show the kind of source as its app names it, and which AI steps still wait for approval, both from the server.",
+      "tag": "improved"
+    },
+    {
+      "title": "A source's reading and splitting settings now apply",
+      "description": "OCR, splitting, include and exclude rules set on a knowledge source are saved, checked and used at the next sync, and the source says when its documents need rebuilding.",
+      "tag": "improved"
+    },
+    {
+      "title": "Add source lists what your team can connect",
+      "description": "Adding a knowledge source now lists files and every knowledge source your team's apps offer, and a website source drops menus, footers and lines repeated on most of its pages.",
+      "tag": "improved"
+    },
+    {
+      "title": "AI steps stop at a spend ceiling",
+      "description": "Likely questions and FAQ drafts stop at each source's ceiling per sync ($5 by default) and at the environment's daily cap ($50), counted from what the models service recorded.",
+      "tag": "improved"
+    },
+    {
+      "title": "An agent searches only its own knowledge bases",
+      "description": "An agent's knowledge search keeps to the knowledge bases it was given, unless it has the all team knowledge bases option; each knowledge base's own settings decide how many passages it returns.",
+      "tag": "improved"
+    },
+    {
+      "title": "An attached file reaches the agent whole",
+      "description": "A file you attach in chat is given to the agent in full, up to about 24,000 characters, scanned files included, instead of three short pieces.",
+      "tag": "improved"
+    },
+    {
+      "title": "An item shows its reading, pieces and questions",
+      "description": "An item's sheet now shows how its file was read page by page and what cleaning removed, each piece with what search matches it as and its metadata, and the questions written for its pieces, all from the item's own record.",
+      "tag": "improved"
+    },
+    {
+      "title": "Answers from connected apps open the exact copy used",
+      "description": "Articles a knowledge source brings in from a connected app are kept as files, so rebuilding needs no new fetch and a citation opens the version the answer came from.",
+      "tag": "improved"
+    },
+    {
+      "title": "App pages and the chat picker speak to each role",
+      "description": "The chat picker offers people who manage the team's apps their next step, and an app each person signs in to says which state is yours and which is the team account's. A missing app's page asks for no resources, counts the tools it lists, and tells admins how apps are installed.",
+      "tag": "improved"
+    },
+    {
+      "title": "Apps say who acts next; a broken auth config shows",
+      "description": "Every App now carries who acts next (the person, an admin, or nobody because it works), and an App that is on with a missing or secretless auth config reads Auth config needs fixing, with Turn off still offered. Viewers no longer see auth config names or ids on app cards, their connectors page or their own accounts.",
+      "tag": "improved"
+    },
+    {
+      "title": "Auth configs are shown to builders and admins only",
+      "description": "An app's Auth configs tab, the Auth config column on its accounts and every auth config name or count are now shown only to people who manage the team's apps; viewers get none from the API either.",
+      "tag": "improved"
+    },
+    {
+      "title": "Cancel a running sync and see removed addresses",
+      "description": "Sync history shows what each run checked, changed, removed and failed, its model use, and each error with its reason, and a running sync can be cancelled. Addresses removed for answering gone twice are listed with Lift, so the next sync takes them in again.",
+      "tag": "improved"
+    },
+    {
+      "title": "Connected apps sync only what changed",
+      "description": "Knowledge sources from connected apps now list only what changed since the last sync, skip items the app says are unchanged, and drop items deleted in the app at once.",
+      "tag": "improved"
+    },
+    {
+      "title": "Connectors and the chat picker show an app's one state",
+      "description": "The connectors page for each person, the chat picker and the chat Connect card now show the same state as the app's own page, and a person's state on an app that signs in as each person is their own sign-in. In the API and SDK, a connector row and a chat connector carry appState in place of their own state field.",
+      "tag": "improved"
+    },
+    {
+      "title": "Document reads see scans and typed form values",
+      "description": "A page that is half text and half scan is now read in full, values typed into a fillable PDF form are read, and a file is read only once however many times it is used.",
+      "tag": "improved"
+    },
+    {
+      "title": "Every App says what state it is in and what to do next",
+      "description": "An App's card, page header and Settings now read one state with one next action, including Needs an auth config, Available for an App off for the team, and Not installed for a plugin the system does not hold. In the API and SDK, appState gains needs_auth_config and not_installed, and an App installed but off for the team now reads off instead of not_installed.",
+      "tag": "improved"
+    },
+    {
+      "title": "Every source setting saves and applies",
+      "description": "A source's Settings tab now saves how items are read, cleaned and split, its rules, metadata and schedule, and the likely questions and FAQ drafts switches, with their cost estimate and the knowledge owner's approval beside them. A change that rebuilds items says so and links to Sync history.",
+      "tag": "improved"
+    },
+    {
+      "title": "Fewer weak matches from knowledge search",
+      "description": "New knowledge bases search by meaning with a higher floor, set from real embeddings, so questions your documents do not answer return nothing instead of a loosely related passage. Existing bases keep their saved setting.",
+      "tag": "improved"
+    },
+    {
+      "title": "One clear line per app for people who cannot set it up",
+      "description": "People who cannot set an app up now read Not set up for your team yet and Ask an admin on one line, and app pages hide the Settings tab from them. The Settings row for admins says in one line what is true for the team and its one action.",
+      "tag": "improved"
+    },
+    {
+      "title": "Overview shows how much is embedded",
+      "description": "A knowledge base's Overview shows how many of its pieces and questions are embedded for meaning search and how many are not yet, and each source's health as the service keeps it.",
+      "tag": "improved"
+    },
+    {
+      "title": "Plainer words on apps, chat and settings",
+      "description": "A missing app now says to ask the person who runs Ops AI at the company, chat tool rows no longer name the platform's own parts, each person's connectors page has one name everywhere and says what is missing on each row, and a page with sample data says so once.",
+      "tag": "improved"
+    },
+    {
+      "title": "Playground shows lanes, scores and an agent's answer",
+      "description": "A knowledge base's Playground shows the search lanes that ran or were skipped and why, each passage's keyword, meaning and fused scores, and the question's embedding tokens, with the answer from a test turn of an agent citing the base. The Retrieval tab is back and edits the search mode, weight, threshold and pieces returned.",
+      "tag": "improved"
+    },
+    {
+      "title": "Pushing an item reads only that item",
+      "description": "Writing or pushing one item into a typed text or push source now indexes just that item, so a large push source stays fast to update.",
+      "tag": "improved"
+    },
+    {
+      "title": "Re-syncs redo only what changed",
+      "description": "A changed page keeps its unchanged passages and their search vectors, a page whose text did not change keeps its version, and a site too large for one sync is taken in over several.",
+      "tag": "improved"
+    },
+    {
+      "title": "Scanned PDFs are searchable in knowledge bases",
+      "description": "A scanned or half-scanned PDF added to a knowledge source is now read with OCR and indexed, typed form values are searchable, and an item says which pages were read by OCR.",
+      "tag": "improved"
+    },
+    {
+      "title": "Search finds a passage by its parts and cites it once",
+      "description": "Knowledge search now matches a passage's smaller parts and generated questions, cites the whole passage once, and takes at most two passages from one document.",
+      "tag": "improved"
+    },
+    {
+      "title": "See how each document was read and cleaned",
+      "description": "A knowledge document now shows, page by page, how it was read and what cleaning removed, with each passage's searchable parts and the settings that built it.",
+      "tag": "improved"
+    },
+    {
+      "title": "Sources show kind, schedule, health and FAQ steps",
+      "description": "A knowledge base's Sources tab lists each source's kind, schedule, last sync, health as the service keeps it, items and its question and FAQ steps, with Kind and Health filters, a sort by last good sync, and Sync now on every row.",
+      "tag": "improved"
+    },
+    {
+      "title": "The built-in database includes pgvector",
+      "description": "The trial database, local stack and CI run PostgreSQL 17 with pgvector, which knowledge search by meaning uses; make db-move-image moves an existing local database onto it.",
+      "tag": "improved"
+    },
+    {
+      "title": "The Changes queue stays quick as it grows",
+      "description": "The Changes queue filters, counts and pages in the database, so a long history of changes no longer slows each page.",
+      "tag": "improved"
+    },
+    {
+      "title": "Website crawls follow redirects and keep pace",
+      "description": "The website source follows same-site redirects, skips sitemaps on other sites, and spaces its page fetches by the site's own crawl delay.",
+      "tag": "improved"
+    },
+    {
+      "title": "The assistant reads a save back before it writes",
+      "description": "Before the assistant changes anything in an app it shows the change and writes it only after you say Save; a save also clears what the chat had reused, so the next look reads the app again.",
+      "tag": "improved"
+    },
+    {
+      "title": "A chat link from another of your teams offers to switch",
+      "description": "Opening a link to your own conversation while working in a different team offers to switch to its team instead of saying it was not found. A teammate's conversation says it is someone else's, with no failed request behind it.",
+      "tag": "improved"
+    },
+    {
+      "title": "A team assistant that looks things up first",
+      "description": "The team assistant now looks up your applications, meetings, reviews, tasks and knowledge with sensible defaults instead of asking which, reads several things at once, lists matching records in a table, and never hands out command-line steps.",
+      "tag": "improved"
+    },
+    {
+      "title": "Activity follows permissions and hides background jobs",
+      "description": "The Activity list opens for people who may read activity, not viewers. Background jobs are listed only when you pick them under Kind, and a finished run says which end it reached.",
+      "tag": "improved"
+    },
+    {
+      "title": "API keys and gate policies follow your permissions",
+      "description": "API keys opens only for people who manage a team's access, lists only the teams they manage, and offers Create key and Revoke only with those permissions. Gate policies shows New gate and edits only to people who manage reviews, and reads each gate's rule in words with the rule itself one click away.",
+      "tag": "improved"
+    },
+    {
+      "title": "Case search finds every word, in any order",
+      "description": "Searching cases, on the Cases page or through the assistant, now finds the cases that hold every word you type, in any order, across the subject and the customer.",
+      "tag": "improved"
+    },
+    {
+      "title": "Chat says when an app is off for your team",
+      "description": "Asking chat for an app your team has installed but not turned on now shows a card naming the app and your team, instead of a sentence with nothing to act on.",
+      "tag": "improved"
+    },
+    {
+      "title": "Chat tables lead with the record's name",
+      "description": "A table in chat starts with each record's name or subject, and its ids move to the table's View menu, where you can show them again.",
+      "tag": "improved"
+    },
+    {
+      "title": "Egress shows which tool sets call a host by name",
+      "description": "The Called by column on the egress allow-list names each tool set as you know it, instead of its internal id, and still links to it.",
+      "tag": "improved"
+    },
+    {
+      "title": "Failed app calls explained in plain words",
+      "description": "When a call to an app fails, the assistant says what happened and what to do next instead of repeating an error code. The code stays in the call log for whoever looks into it.",
+      "tag": "improved"
+    },
+    {
+      "title": "Human Tasks says nothing is left once; tools named in words",
+      "description": "With no open tasks, Human Tasks says so once in the queue, and the task pane asks you to pick a task. A team's own tool shows its name in words instead of its code name, and its app link is easier to tap on a phone.",
+      "tag": "improved"
+    },
+    {
+      "title": "Knowledge answers carry citations",
+      "description": "When the assistant answers from your knowledge bases, each fact it cites shows as a citation you can open, instead of a document name at the end of the sentence.",
+      "tag": "improved"
+    },
+    {
+      "title": "Lists of cases in chat show as one table",
+      "description": "When the assistant finds three or more cases, they appear as one table with each case's subject, customer, status and due date, instead of a stack of cards.",
+      "tag": "improved"
+    },
+    {
+      "title": "Lists show whole names and descriptions",
+      "description": "Names, descriptions, reasons and errors in lists and page headers wrap instead of stopping mid-word or mid-sentence. Record ids are shown whole and sit under View until you turn them on.",
+      "tag": "improved"
+    },
+    {
+      "title": "Meeting prep from the case, policy answers from policy",
+      "description": "Asking the assistant to prep you for a meeting shows the case once and sums up its customer, purpose and notes. A policy question is answered from your team's knowledge, without your tasks.",
+      "tag": "improved"
+    },
+    {
+      "title": "Plain egress notes; long rules and device names wrap",
+      "description": "Hosts listed for the sample tool sets say so in plain words. A long gate rule and a long device name wrap inside their columns instead of running into the next.",
+      "tag": "improved"
+    },
+    {
+      "title": "Plainer words and keyboard scrolling in settings",
+      "description": "Storage and Usage and cost name file storage and models in a person's words, any box that scrolls can be reached and scrolled by keyboard, and long sidebar names such as Model inventory wrap instead of being cut.",
+      "tag": "improved"
+    },
+    {
+      "title": "Runs say how they ended and what started them",
+      "description": "A finished run's outcome names the end it reached, such as \"Finished at the Not found end.\", instead of a bare word that looked like an error. A run a service started says what happened, such as \"File deleted\", instead of the event's code.",
+      "tag": "improved"
+    },
+    {
+      "title": "The assistant always answers within its limits",
+      "description": "A reply no longer stops at its step limit with nothing to show, and each reply is checked for error codes, stray endings and missing citations before it is kept.",
+      "tag": "improved"
+    },
+    {
+      "title": "The assistant asks before it remembers",
+      "description": "The assistant keeps something at once only when you say remember or set a rule with always or from now on. Anything else it thinks is worth keeping, and any change to what it kept, shows as one line under its reply that you answer Yes or No.",
+      "tag": "improved"
+    },
+    {
+      "title": "The assistant knows which apps you can reach",
+      "description": "Each assistant reply starts from your team's apps: which are on, which are installed but off, and whether you are signed in, so it can say plainly when an app is off or needs your sign-in.",
+      "tag": "improved"
+    },
+    {
+      "title": "The demo sign-in lists people by team",
+      "description": "On a local install, Sign in as a demo person lists each team under its name with each person's role there.",
+      "tag": "improved"
+    },
+    {
+      "title": "The demo sign-in lists the sample teams' people",
+      "description": "On a local install, Sign in as a demo person now offers the people of the installed sample teams (Wealth Advisory, Small Business Lending, Risk Oversight) beside the seeded ones. Someone whose team is not installed yet is not offered.",
+      "tag": "improved"
+    },
+    {
+      "title": "The team assistant has its own model and a plainer core",
+      "description": "The team assistant runs on its own model setting and starts from a short, general set of rules; what it can reach comes from the apps your team has turned on.",
+      "tag": "improved"
+    },
+    {
+      "title": "The team assistant has its own model setting",
+      "description": "The team assistant runs on its own model alias, so an admin can give it a stronger model without changing every other agent. It also no longer points you to buttons a card does not have, or adds details its records do not hold.",
+      "tag": "improved"
+    },
+    {
+      "title": "A part that is down is asked once",
+      "description": "When a service says something behind it is down, such as the model list, the page asks once and says so, while a server error is still retried. The Model field says in plain words when a saved model is no longer offered.",
+      "tag": "improved"
+    },
+    {
+      "title": "Clearer labels, Start run only for people who can run",
+      "description": "Each member shows one role, and a run's result reads \"Result: Not found\" beside its status. Workflow triggers wrap instead of being cut off, and viewers no longer see Start run.",
+      "tag": "improved"
+    },
+    {
+      "title": "Human Tasks reads well with a screen reader",
+      "description": "Small section headings are drawn at full contrast, and each task in the queue is announced as an item of the list.",
+      "tag": "improved"
+    },
+    {
+      "title": "Larger select boxes and sidebar arrows",
+      "description": "Table select boxes and the sidebar's show and hide arrows are easier to click and tap, with the same look.",
+      "tag": "improved"
+    },
+    {
+      "title": "Red warnings are easier to read",
+      "description": "Overdue times, errors and other red text use a darker red that stays readable on cards and selected rows. The hidden file picker behind Attach now has a name for screen readers.",
+      "tag": "improved"
+    },
+    {
+      "title": "Section links for screen readers, real workspace name",
+      "description": "The section links at the top of Tools, a tool, a file and Channels are announced as links to other pages, with the current one marked, instead of as tabs that open nothing. The header and sidebar show the workspace's own name, or nothing when it has none.",
+      "tag": "improved"
+    },
+    {
+      "title": "Sign-ins have their own view in the audit log",
+      "description": "The audit log opens on Changes, which leaves out sign-ins, so edits to roles, access and settings are no longer buried; sign-ins have their own view saying how the person signed in, and All still lists everything. Each row says what happened once, without a chip repeating it.",
+      "tag": "improved"
+    },
+    {
+      "title": "Tables read cleaner",
+      "description": "A row you can open now lines its name up with the rest of the row. A filter that offers only one value stays hidden until it is in use, and the rows-per-page control is named for screen readers.",
+      "tag": "improved"
+    },
+    {
+      "title": "What's new moved to the header",
+      "description": "What's new now sits in the header beside notifications, so it no longer covers table buttons or the chat's Send button on a phone.",
+      "tag": "improved"
+    },
+    {
+      "title": "Accounts are named by who signed in",
+      "description": "An app's accounts and its header now name who signed in, and each auth config shows how many accounts use it. A viewer no longer sees the Auth configs page in the sidebar, and an account each person signs in to no longer reads as one person's.",
+      "tag": "improved"
+    },
+    {
+      "title": "Add your own account without blocking anyone",
+      "description": "Apps whose plugin allows it now let each person add their own account by default, with the team's sign-in as backup. A call for someone who has not added their own account uses the team's sign-in instead of asking them to connect.",
+      "tag": "improved"
+    },
+    {
+      "title": "An app's addresses on Settings",
+      "description": "An app's Settings tab shows where its calls and sign-in go, and marks an address on a test or fake host.",
+      "tag": "improved"
+    },
+    {
+      "title": "An app's page leads with its accounts",
+      "description": "An app's page opens on one list of its accounts, with one Connect that asks the auth config, where to sign in when the config leaves it open, and test or team. Tools is the app's catalog to add from, Auth configs keeps each config's details in a sheet, Settings holds personal accounts, Change sign-in and Delete app, and the page of your own accounts moves to the top of the sidebar.",
+      "tag": "improved"
+    },
+    {
+      "title": "Ask an admin, by name",
+      "description": "Where you may not connect an app, its card and page say Ask an admin and name the people in your team who can.",
+      "tag": "improved"
+    },
+    {
+      "title": "Auth config secrets on the Secrets page",
+      "description": "An auth config's client secret is listed on the Secrets page, read only, with a link to its auth config, where it is changed. A refusal to change it there names the auth config, and a refused secret change no longer names a team by its id.",
+      "tag": "improved"
+    },
+    {
+      "title": "Auth configs on an app's page",
+      "description": "An app's page lists how it signs in, Ops AI's own app or one your team made, with each account under it: whose sign-in it is, one state, and what you can do to it.",
+      "tag": "improved"
+    },
+    {
+      "title": "Auth configs page grouped by app",
+      "description": "The Auth configs page in the sidebar lists each app's auth configs under the app, with Edit and Delete on your team's own.",
+      "tag": "improved"
+    },
+    {
+      "title": "Choose the team's default account",
+      "description": "An admin makes any live account of an app the team's default from its menu on the app's page, and every auth config shows its client secret's last four characters, older ones included.",
+      "tag": "improved"
+    },
+    {
+      "title": "Connect asks where you sign in",
+      "description": "Connecting Salesforce, or adding another of its accounts, asks where you sign in: login.salesforce.com, test.salesforce.com or your company's address. Add account starts from where the first account signs in.",
+      "tag": "improved"
+    },
+    {
+      "title": "Each workspace keeps its own sign-in secrets",
+      "description": "A Security admin saves the client secret a company sign-in uses for their own workspace, sealed and never shown back, instead of an installation setting holding every workspace's.",
+      "tag": "improved"
+    },
+    {
+      "title": "Lists lead with names; a phone shows more columns",
+      "description": "Every list now shows a record's id last, and on a phone an arrow says more columns sit past the edge. Long client IDs are cut short with a Copy button, and the header names your team beside the workspace.",
+      "tag": "improved"
+    },
+    {
+      "title": "Live runs read live",
+      "description": "A call's kind of run reads test or live in the API, the SDKs and the call log, where a live run used to read production.",
+      "tag": "improved"
+    },
+    {
+      "title": "One list of an app's accounts",
+      "description": "An app's accounts, and each person's own sign-in on one, now come as one list naming the person and the auth config, while each auth config gives its account count, where it signs in and the permissions its tools need. Signing in an app for the first time signs in the team's account.",
+      "tag": "improved"
+    },
+    {
+      "title": "Plain words on Tools and Secrets",
+      "description": "Tool calls filter by kind of call (tool or model) instead of by gateway, and Secrets no longer speaks of tool modules.",
+      "tag": "improved"
+    },
+    {
+      "title": "Refusals in plain words",
+      "description": "When the API refuses something, it names the thing in the words the screens use, such as the team's apps or auth configs, and who may do it, never a permission's or a team's internal name.",
+      "tag": "improved"
+    },
+    {
+      "title": "Remove and update every kind of app resource",
+      "description": "On an app's Resources tab, Remove shows only to someone who may remove them, a document type takes the app's update as a new version, and a knowledge source reads added once your team has it. A document type a workflow reads is kept until that workflow changes, and the AI steps refusal says who can turn them on.",
+      "tag": "improved"
+    },
+    {
+      "title": "Role changes apply at once",
+      "description": "A change to a role's permissions, someone's roles or an access policy now applies on the person's next action, instead of up to 15 minutes later when their sign-in renewed.",
+      "tag": "improved"
+    },
+    {
+      "title": "Tab counts read quieter than tab names",
+      "description": "On every tabbed page, the count or status after a tab's name, such as the 6 of 15 on in Tools, is shown muted so the name stands out.",
+      "tag": "improved"
+    },
+    {
+      "title": "Test account, not sandbox",
+      "description": "Connect and Add account have a Test account switch, which a test sign-in place such as test.salesforce.com turns on; test runs use that account and live runs never do.",
+      "tag": "improved"
+    },
+    {
+      "title": "The app's header names its account",
+      "description": "Once an app's default account is signed in, its page header reads Connected with the account's name, and whom it signed in as when the system says.",
+      "tag": "improved"
+    },
+    {
+      "title": "The callback URL to register is shown",
+      "description": "New auth config, Edit and each of your team's auth configs show the callback URL to register in your Salesforce connected app or GitHub app, with a copy button.",
+      "tag": "improved"
+    },
+    {
+      "title": "Where an app signs in is set on its auth config",
+      "description": "An app's auth config now holds where its accounts sign in, such as your Salesforce org's address, and its New and Edit windows offer the app's own choices or your company's address. Changing it asks every account on that auth config to sign in again, and the Connect window shows where it signs in with a link to edit it.",
+      "tag": "improved"
+    },
+    {
+      "title": "A refused sign-in says why and who acts",
+      "description": "When an app refuses a sign-in, Connect says in one sentence what went wrong and whether you or an admin fixes it, with the app's own code under Details, and the account reads as refused.",
+      "tag": "improved"
+    },
+    {
+      "title": "Add as many accounts of an app as you need",
+      "description": "A team admin can add another live account or a test account to any app from its page, with no install setting to turn on first.",
+      "tag": "improved"
+    },
+    {
+      "title": "Dialog forms are one column",
+      "description": "Every dialog lays out its fields in one column, and the Connect dialog for an app that takes a key is wider, with its Connect button at full size.",
+      "tag": "improved"
+    },
+    {
+      "title": "Edit an app credential in place",
+      "description": "An app credential keeps everything its app registration needs, such as a Microsoft tenant, and each part can be changed; changing the client ID, permissions or settings says how many accounts must sign in again. A client secret added after the credential was made is now used to sign in.",
+      "tag": "improved"
+    },
+    {
+      "title": "One window edits every part of an app credential",
+      "description": "Edit opens one window with the credential's name, client ID, permissions, settings and secret, and an app's page lists its own credentials. Add your own app from Connect without leaving it.",
+      "tag": "improved"
+    },
+    {
+      "title": "See which client secret an app credential holds",
+      "description": "Every app credential shows the last four characters of its client secret, and a credential with accounts on it can be deleted once you pick where those accounts move.",
+      "tag": "improved"
+    },
+    {
+      "title": "Sign-in addresses are checked before you connect",
+      "description": "An app that lists where its system signs in, such as Salesforce, now takes only those places or your company's own address on that system, and says which before any sign-in starts.",
+      "tag": "improved"
+    },
+    {
+      "title": "Unused sign-ins stay signed in",
+      "description": "Every app sign-in is refreshed once it has gone 20 days unused, so an app that ends idle sign-ins after 30 days, such as Salesforce, keeps yours. One the app has ended shows Reconnect.",
+      "tag": "improved"
+    },
+    {
+      "title": "Your own OAuth app is added once, under Credentials",
+      "description": "Add your team's own OAuth app under Credentials, then pick it when you connect an app or add a sandbox. Each app credential has its own page with the accounts that sign in with it.",
+      "tag": "improved"
+    },
+    {
+      "title": "A failed sign-in can be tried again",
+      "description": "When connecting an app fails or access is not given, the sign-in window offers Try again, which starts the same sign-in in the same window, and a blocked address now says who allows it.",
+      "tag": "improved"
+    },
+    {
+      "title": "A removed app says it is no longer installed",
+      "description": "When an app a team uses is taken off the install, its card and page say it is no longer installed and its tools refuse with that reason, instead of the app disappearing.",
+      "tag": "improved"
+    },
+    {
+      "title": "A team's own app credential is kept once",
+      "description": "A team's own OAuth client is stored once and every account that uses it points at it, and Ops AI's own app comes only from the install's configuration. Replacing a credential's secret on the Credentials page now changes the team's own client, never Ops AI's app.",
+      "tag": "improved"
+    },
+    {
+      "title": "An app's accounts in one list, with a Sandbox badge",
+      "description": "An app's page lists all its accounts in one place, marks sandbox accounts and offers Add a sandbox account. The Test and Production key sections are gone.",
+      "tag": "improved"
+    },
+    {
+      "title": "An installed app needs no admin switch",
+      "description": "An app installed on the platform is offered to every team at once, and each team turns it on for itself. Settings fixed for every team now come from the install's configuration.",
+      "tag": "improved"
+    },
+    {
+      "title": "App accounts and tool calls say whose account ran",
+      "description": "The team account row no longer shows your own sign-in, your own row keeps your email, and a tool call's details say which account it ran as without internal ids. An app with no account for an environment now says who connects one.",
+      "tag": "improved"
+    },
+    {
+      "title": "App page: Accounts and People tabs",
+      "description": "An app's page lists the team's logins under Accounts and each person's own sign-in under People, with one Connect, Reconnect or Connected as in its header. Its Tools tab shows who uses each tool, and Secrets names the app credential it signs in with.",
+      "tag": "improved"
+    },
+    {
+      "title": "Apps grid, menu and tool pages",
+      "description": "Apps uses the standard list with Connected and Available views, one action per card and its account count, and Credentials and personal accounts sit in the sidebar. Tools filters by kind in its tabs, and a tool page shows its title, its app and where it runs.",
+      "tag": "improved"
+    },
+    {
+      "title": "Apps lists your connected apps first",
+      "description": "Apps shows the apps your team has connected above the ones it can connect, each card with its state (Connected, Needs sign-in, Signed in but test failed, Not installed) and one action. A category filter narrows the list, and clicking anywhere on a card opens the app's page.",
+      "tag": "improved"
+    },
+    {
+      "title": "Apps reach their own addresses without listing",
+      "description": "An installed app signs in and calls its own system without Security listing its addresses first, while private and cloud metadata addresses stay blocked. A new New app addresses policy lets Security choose how other new addresses are allowed: ask Security, builders, any public address, or only listed ones.",
+      "tag": "improved"
+    },
+    {
+      "title": "Cards no longer carry doubled padding",
+      "description": "App cards, an agent's side cards and the layout editor's blocks had padding both on the card and inside it, so they sat taller than their content. They now use the padding of their sections only.",
+      "tag": "improved"
+    },
+    {
+      "title": "Connect an app in one window",
+      "description": "Connect opens one window for every app that signs in with an account: choose Ops AI's app or your team's own, see the access it asks for, then Authorize, and the sign-in window closes once access is allowed. A refused sign-in, or a test call that fails after it, says why in place, with a way to try again.",
+      "tag": "improved"
+    },
+    {
+      "title": "Every tool with its app and who uses it",
+      "description": "The tools list shows one row per tool with the app it comes from, whether you can run it now or must sign in first, and the agents and workflows that use it. It is searched, filtered and paged on the server, so a long list opens quickly.",
+      "tag": "improved"
+    },
+    {
+      "title": "Filter tools by app",
+      "description": "The Tools list has an App filter that names each app and counts its tools.",
+      "tag": "improved"
+    },
+    {
+      "title": "Installed apps are ready to connect",
+      "description": "An app installed on the platform is offered to every team without a separate switch, and when the install sets up its own sign-in app for it, teams connect with one click and type no client id or secret.",
+      "tag": "improved"
+    },
+    {
+      "title": "Logs on every tool and app",
+      "description": "A tool's page and an app's page each have a Logs tab listing their calls, with whose account each ran as. A run waiting for a person's own account shows that task on its page, where the person connects their account or an admin runs it as the team account.",
+      "tag": "improved"
+    },
+    {
+      "title": "One Connect is enough, with sandbox accounts for testing",
+      "description": "An app's account no longer has separate Test and Production settings, so one Connect works for test runs and live runs. Add a sandbox account to an app and test runs use it, while live runs never do.",
+      "tag": "improved"
+    },
+    {
+      "title": "Pick your default account and grant tools from an app",
+      "description": "On an app's page, People shows which of your own accounts your calls use, and you can make another one the default. Each tool on its Tools tab has Grant to agent.",
+      "tag": "improved"
+    },
+    {
+      "title": "Release images ship their pinned apps",
+      "description": "The release image now holds the apps the install pins, each at an exact version and checked when the image is built, so staging and production offer Salesforce without copying anything by hand.",
+      "tag": "improved"
+    },
+    {
+      "title": "Testing works after one Connect",
+      "description": "An app connected once can be tested at once: a test run uses the app's test account when it has one and otherwise its live account, and a write from such a test waits for a person so live data never changes unseen.",
+      "tag": "improved"
+    },
+    {
+      "title": "Tools lists every tool, with who uses it",
+      "description": "Tools now lists each tool on its own row with its app, kind, access and status, and the agents and workflows that use it; the tool sets a team built move to Custom tools, and Logs sits beside them. A tool's page shows its Used by too.",
+      "tag": "improved"
+    },
+    {
+      "title": "Plugin lists from GitHub-style apps come back whole",
+      "description": "A plugin's list tool can now follow the next-page link a system sends in its Link header, or ask for pages by number. Lists from systems such as GitHub and GitLab, which page that way, now come back a page at a time to the end instead of stopping after the first page.",
+      "tag": "improved"
+    },
+    {
+      "title": "Signing in connects an account right away",
+      "description": "An app account reads Connected as soon as its sign-in finishes. Its test runs straight after on its own, for the team account and for each person's own account, and a failed test shows as a warning on that account with the reason, instead of holding the account back.",
+      "tag": "improved"
+    },
+    {
+      "title": "A workflow waits for you to connect your account",
+      "description": "When a workflow you started needs your own account of an app you haven't connected, it waits instead of failing, and goes on by itself once you connect.",
+      "tag": "improved"
+    },
+    {
+      "title": "Admins get a task when an app needs reconnecting",
+      "description": "When an app turns down your team's account or its sign-in ends, your team's admins get a Human Task saying which app, what it said and where to fix it. A workflow that fails on it says the same in its reason.",
+      "tag": "improved"
+    },
+    {
+      "title": "Agents with many tools find the one they need",
+      "description": "When an install turns on tool search, an agent with many tools searches for the one it needs instead of reading every tool's details on every step, then uses it with the same approvals, sign-in and audit as before.",
+      "tag": "improved"
+    },
+    {
+      "title": "An app that stops working says which one to reconnect",
+      "description": "When an app turns down your team's account, or its sign-in ends, a run's step now says which app needs reconnecting and that an admin does it under Apps, and the app page says why. Admins hear about it once, not on every call.",
+      "tag": "improved"
+    },
+    {
+      "title": "Approvals are off until your team turns them on",
+      "description": "Tool writes now run without an approval unless your team turns approval on in Policies: for every write, for the apps you list, or for one tool. When approval is on, someone who decides your team's reviews is not asked to approve their own write, unless your workspace has someone else decide every request; anyone else's write waits for them.",
+      "tag": "improved"
+    },
+    {
+      "title": "Chat doesn't ask you to approve a write you may approve",
+      "description": "When an agent in chat drafts a write that needs approval and you decide your team's reviews, it runs as approved by you without showing an approval card. A write that needs a step-up still asks, and with the four-eyes rule on someone else decides.",
+      "tag": "improved"
+    },
+    {
+      "title": "Human Tasks shows a run waiting for your account",
+      "description": "A workflow waiting for someone's own account of an app now shows in Human Tasks for that person, naming the app. Someone allowed to use the team's account can run it on the team account instead, where the app has one.",
+      "tag": "improved"
+    },
+    {
+      "title": "Leaving a team removes your accounts on its apps",
+      "description": "When someone is removed from a team, the accounts they connected to that team's apps are removed within seconds, so their sign-ins stop working there. Their accounts in other teams stay.",
+      "tag": "improved"
+    },
+    {
+      "title": "New features stay off until your install turns them on",
+      "description": "Features still being released are listed as flags and stay off until your install's settings name them. The address that lets outside assistants such as Claude or Cursor use your team's tools is the first: it stays hidden until it is turned on.",
+      "tag": "improved"
+    },
+    {
+      "title": "One Apps menu, one Connect window",
+      "description": "Apps are connected from one small window, one environment at a time, and each app has one page with its accounts and tools. The Apps menu holds the catalog, the accounts each person connected (once in settings) and Tools with its call log; the old addresses open the new pages.",
+      "tag": "improved"
+    },
+    {
+      "title": "One list of how your apps sign in",
+      "description": "Team admins can read every app's credential in one list: whether it uses Ops AI's app or your own, its permissions, how many accounts signed in through it, and whether its last test worked. Secrets never appear.",
+      "tag": "improved"
+    },
+    {
+      "title": "Pick whose account a plugin uses when you connect it",
+      "description": "Connecting a plugin such as Salesforce now asks whose account calls use: the team's, each person's, or each person's with the team account as backup, and the backup is on from the start. Each row of a tool's call log says whether the call signed in as the person or with the team account.",
+      "tag": "improved"
+    },
+    {
+      "title": "Real runs on a tool page follow the same rules as agents",
+      "description": "Running a tool for real from its page now goes through the same checks as an agent's call: approvals, limits, allowed hosts and your team's account. It uses the environment you pick, test or production, and shows up in tool call history.",
+      "tag": "improved"
+    },
+    {
+      "title": "Review a plugin update before your tools change",
+      "description": "When an app's plugin is upgraded, your team keeps running the version it took until a team admin reviews the new, changed and removed tools and which agents and workflows use them, then takes the update.",
+      "tag": "improved"
+    },
+    {
+      "title": "Several accounts of one app",
+      "description": "A team connects a second org or account of the same app under its own name, and a tool or step names the one it uses. Each person picks their own default account, behind the several_accounts install flag.",
+      "tag": "improved"
+    },
+    {
+      "title": "What's new shows the biggest changes first",
+      "description": "The newest major changes come first; earlier and smaller changes are folded under one link. The Feedback button is a small icon.",
+      "tag": "improved"
+    },
+    {
+      "title": "Workflows you may approve don't stop to ask you",
+      "description": "A workflow step that approves a write no longer waits when the person who started the run decides your team's reviews, so the run carries on as approved by them. A write that needs two people or a step-up still waits.",
+      "tag": "improved"
+    },
+    {
+      "title": "A REST tool's page reads like an API client",
+      "description": "A REST tool's page now runs in order: pick the connection, write the call, Run it in Mock or Real, read the answer and the exact request sent, then Save. A refused save lists every problem at once.",
+      "tag": "improved"
+    },
+    {
+      "title": "A tool sends a form or raw body",
+      "description": "A REST tool's operation can now send its body as JSON, as a form, or as raw text with its own Content-Type. Systems that take only forms, such as Stripe, can be called from a tool.",
+      "tag": "improved"
+    },
+    {
+      "title": "Plugins send the headers, forms and limits a system needs",
+      "description": "A plugin can now send the extra headers a system asks for, post form fields to systems like Slack and Stripe, ask for extra sign-in options and look up which site a team signed in to. A money-moving tool can carry a limit, so a transfer over it or with no amount is refused before it leaves.",
+      "tag": "improved"
+    },
+    {
+      "title": "Approvals show each field a change writes",
+      "description": "An approval card in chat lists every field a tool would change with its new value, such as Fields · Status: Escalated, instead of a raw record or nothing. The person who asked for a change no longer sees Approve on it while the card is live.",
+      "tag": "improved"
+    },
+    {
+      "title": "Connect an app with your own key or password",
+      "description": "When an app lets each person sign in, you can now use your own API key, username and password, or token, not only an account sign-in. Your calls carry your own key, a call with nobody behind it never borrows someone else's, and a wrong key fails for you alone.",
+      "tag": "improved"
+    },
+    {
+      "title": "Connect systems that sign in with a certificate",
+      "description": "A connection can prove itself with its app's certificate instead of a client secret, as Microsoft Entra apps at banks require, or sign in as a service account the way DocuSign and Google ask. The private key is uploaded once and never shown again, and the connection shows the certificate's thumbprint and when it expires.",
+      "tag": "improved"
+    },
+    {
+      "title": "Install the agents and workflows a plugin brings",
+      "description": "While a plugin is on for the team, its agents, skills, workflows and document types are listed, and each can be installed as the team's own copy to edit and publish like any other.",
+      "tag": "improved"
+    },
+    {
+      "title": "Ops AI's database installs on SQL Server",
+      "description": "A database administrator can create Ops AI's database on SQL Server from the reviewed scripts, memory search included, though the services do not run on it yet. Each chat's saved state now belongs to the chat's own team, so no other team in your organisation can read it.",
+      "tag": "improved"
+    },
+    {
+      "title": "Plugin tools page results and check query values",
+      "description": "An agent using a plugin's search or listing tool gets one page of results and can ask for the next, and a knowledge sync reads every page, stopping at 200 a run and starting again when the system has forgotten a saved page. Every value a model puts into a plugin's query is checked against what the plugin allows and escaped, so it cannot change the query, and ops plugin test runs these tools the same way.",
+      "tag": "improved"
+    },
+    {
+      "title": "Plugin tools show their titles",
+      "description": "A plugin's tools read by their own titles, such as Find cases or Update a record, in the tools picker, on the agent page and on approval cards in chat and Human Tasks, instead of their operation names. The picker's search finds a tool by its title too.",
+      "tag": "improved"
+    },
+    {
+      "title": "Plugins sign in every way a system asks",
+      "description": "A plugin can now sign in with an API key in a header or a query, a username and password, a fixed token, an OAuth client, each person's own account, or a client certificate. A team admin gives the key, password, token or certificate once when turning the plugin on, Test connection checks it, and no answer or log ever shows it back.",
+      "tag": "improved"
+    },
+    {
+      "title": "Saved sign-ins are walled off by the database",
+      "description": "The tokens, keys and sign-ins a person or a team saves on a connection are now held to that connection's team by the database itself, as other team records are, so another team's request can never read or change them even if a service forgets a filter. A developer session that names no team can no longer save a workflow or an agent that no team owns.",
+      "tag": "improved"
+    },
+    {
+      "title": "Send disagreeing sources to a person",
+      "description": "Combine facts can leave by a Disagree way when its sources give different values, so a Human review settles them instead of the workflow going on.",
+      "tag": "improved"
+    },
+    {
+      "title": "Memories stay private and old ones are still found",
+      "description": "A card number, IBAN or national id is never kept as a memory, and only you see what the assistant remembered about you, even where an admin can read the conversation. Your assistant searches all of your memories by their words, so something you said months ago is still found, and asking it to remember something saves it once.",
+      "tag": "improved"
+    },
+    {
+      "title": "Pages read well on a phone; Human Tasks waits for you",
+      "description": "On a phone, lists lead with each record's name, a fade shows when more sits past the edge, descriptions read in full and record pages show the way back. Human Tasks no longer picks a decision for you, and Workflows and Runs show one list each, with old workflow links opening the workflow or saying it is gone.",
+      "tag": "improved"
+    },
+    {
+      "title": "Screens open at once on a reload",
+      "description": "A reload shows what your screens last showed in this browser straight away, then refreshes it; Human Tasks and runs still going always load fresh. Signing out or switching team clears what was kept.",
+      "tag": "improved"
+    },
+    {
+      "title": "Sign in to a connected system with your own account",
+      "description": "Test connection checks a connection with your own sign-in, or with the team's account if you manage the connection, and keeps the result on the connection. A module can now require each person's own sign-in, so an action that must act as a person never runs on the team's account in their place.",
+      "tag": "improved"
+    },
+    {
+      "title": "Chat first: one sidebar, hints from your work, and Overview",
+      "description": "Your chats now sit in the one sidebar under New chat, Overview, Cases and Human Tasks, and Chat suggests the task, late case or running workflow that is waiting for you. If your session ends while you type, you sign in again over the page and your message is still there.",
+      "tag": "improved"
+    },
+    {
+      "title": "Replies read like emails",
+      "description": "A reply waiting for approval now shows its sender, recipient, subject and body the way an email client does.",
+      "tag": "improved"
+    },
+    {
+      "title": "Settings is easier to find your way around",
+      "description": "Every page in the sidebar and in Settings now has an icon, Settings sections fold away, and opening Settings takes you straight to your workspace's general settings.",
+      "tag": "improved"
+    },
+    {
+      "title": "The docs are organised around what you want to do",
+      "description": "The documentation site has four tabs: Docs, API reference, Architecture and Contributing. Docs leads from getting started through concepts, building, deploying and operating, with an icon on every page, and each page's contents sit on its right.",
+      "tag": "improved"
+    },
+    {
+      "title": "Workflows wait for long files and slow systems",
+      "description": "A step that reads a long file or waits for another system now pauses without blocking other work, carries on as soon as the result is ready, and takes its own Timeout way if the result never comes.",
+      "tag": "improved"
+    },
+    {
+      "title": "A case shows how it started",
+      "description": "A case now says what is left, on whom and by when, with Resolve once nothing is; how its work began (an email, a form or a person); one timer, the court's date for a notice; and everything that happened to it in plain sentences, with People, Automation and Email filters.",
+      "tag": "improved"
+    },
+    {
+      "title": "A plainer introduction to Ops AI",
+      "description": "The guide opens with the problem Ops AI solves for regulated teams, walks a card dispute end to end, and lists common banking and insurance examples.",
+      "tag": "improved"
+    },
+    {
+      "title": "A run says what it did in plain sentences",
+      "description": "Each run tells its steps as short sentences, so you can follow what happened without reading raw data.",
+      "tag": "improved"
+    },
+    {
+      "title": "Each team keeps its own records",
+      "description": "Every team now has its own copy of the general task and case types, and one team never sees or depends on another team's records. A new team gets the general types the first time someone in it opens a list.",
+      "tag": "improved"
+    },
+    {
+      "title": "Every page is the real one",
+      "description": "Publish on a workflow you may not publish now stays visible and says why and who can grant it. The design copies of the console's pages are gone, so what you see in review is what you use.",
+      "tag": "improved"
+    },
+    {
+      "title": "Every page says a step the same way",
+      "description": "Activity, Human Tasks, chat cards and the run page describe each step in plain words, name workflows instead of showing their ids, and show amounts as you would write them. A case now records its first response when someone first works on it.",
+      "tag": "improved"
+    },
+    {
+      "title": "See what changed in What's new",
+      "description": "What's new in the sidebar lists each change in plain words, and Coming next shows what is planned.",
+      "tag": "improved"
+    },
+    {
+      "title": "What's new moves to a button and shows the version",
+      "description": "What's new is now a round button in the bottom-right corner of every page. Its list ends with the version of the console you are using, so you can tell which release you are on.",
+      "tag": "improved"
+    },
+    {
+      "title": "A demo mailbox to try email intake",
+      "description": "Send a document to the demo mailbox and watch it start a workflow, with each step shown on the run page.",
+      "tag": "improved"
+    },
+    {
+      "title": "Runs started by email tell the whole story",
+      "description": "A run page shows the email that started it, what was read beside the document, and each run it started with its case and task.",
+      "tag": "improved"
+    },
+    {
+      "title": "Workflows are laid out clearly",
+      "description": "Steps on the workflow canvas keep their gaps and order, lines go around steps, long names wrap instead of being cut off, and Tidy up lays a workflow out again.",
+      "tag": "improved"
+    },
+    {
+      "title": "Answers about a file you attached are kept",
+      "description": "When you ask about a file you attached in chat, the assistant's answer is no longer replaced by the knowledge base's no-answer message.",
+      "tag": "fix"
+    },
+    {
+      "title": "Tool test panel runs as the owner only",
+      "description": "Run as in a tool module's test panel now offers the module's owner, with no sample-values entries for workflows. Type the record a bound input reads and run it.",
+      "tag": "fix"
+    },
+    {
+      "title": "Tools on a new public address save in new workspaces",
+      "description": "In a workspace that allows any public address, adding a tool on an address nobody listed yet saves it and lists the address in your name, instead of refusing it.",
+      "tag": "fix"
+    },
+    {
+      "title": "Chat menus and widget tiles fit their space",
+      "description": "The skills and agent menus in chat open below the message box when there is no room above it. Figure tiles in a widget share the row at full width, and a small table in a widget shows without an empty toolbar.",
+      "tag": "fix"
+    },
+    {
+      "title": "A team admin sees only their own team's settings",
+      "description": "The demo workspace's team admin is now Admin of Operations only, so the settings screens show that team's people, apps and access, and nothing from other teams.",
+      "tag": "fix"
+    },
+    {
+      "title": "A tool from a newer app version says it needs the update",
+      "description": "A tool that exists only in a newer version of an app now tells the team that an admin takes the update first, instead of saying the tool is not added to the team.",
+      "tag": "fix"
+    },
+    {
+      "title": "Assistants can run your tools over MCP",
+      "description": "An assistant connected to your team's MCP address, such as Claude or Cursor, now gets the real result when it calls a read tool, instead of an Internal server error. The call runs in the team named in the address, never another team's.",
+      "tag": "fix"
+    },
+    {
+      "title": "Every team can hold the same guardrail",
+      "description": "A guardrail's name only has to be unique within your team. Making a second one with a name your team already uses now says the name is taken, instead of renaming it with a number.",
+      "tag": "fix"
+    },
+    {
+      "title": "Human Tasks no longer repeats a step's plain fields",
+      "description": "A task now shows a workflow step's proposal only when two sources disagree, one row per field. Other step details are no longer drawn as extra cards.",
+      "tag": "fix"
+    },
+    {
+      "title": "Human Tasks shows what a workflow step proposes",
+      "description": "A task from a workflow step now lists the values the step carries. When an email and its attachment disagree, the task shows both case numbers.",
+      "tag": "fix"
+    },
+    {
+      "title": "Knowledge bases show correct counts and jobs",
+      "description": "A source counts its items, not its pieces. The overview lists recent index jobs, documents show whether they are fresh, stale or have no schedule, files show the right split preset, Add source says why a source cannot be added, and a chat on a test thread of a draft agent opens its connectors.",
+      "tag": "fix"
+    },
+    {
+      "title": "Model key errors link to the page that fixes them",
+      "description": "When a reply stops because an agent's model key was revoked, expired, missing or out of budget, an admin gets a link to Model providers and a member is told to ask an admin. An error the console has no wording for now reads as one plain sentence, with its code under Details.",
+      "tag": "fix"
+    },
+    {
+      "title": "Starting a scheduled workflow by API checks its input",
+      "description": "Starting a workflow with a Schedule trigger through the runs API now refuses input that does not fit the trigger's schema, with the same message Start scheduled run gives, instead of starting a run that fails later.",
+      "tag": "fix"
+    },
+    {
+      "title": "The header trail fits, and Govern starts shorter",
+      "description": "Policies now reads Govern / Policies in the header and no crumb is cut at 1440. In Govern, Activity, Access and Evals start folded so the area shows six rows; open one with its arrow and it stays open.",
+      "tag": "fix"
+    },
+    {
+      "title": "A call fails when the app says so inside a successful answer",
+      "description": "Some apps, such as Slack, answer a failed call with success and put the error inside, and a plugin can now say where that error sits. The call then fails with the app's own error, or asks you to connect again when the error means the sign-in ended.",
+      "tag": "fix"
+    },
+    {
+      "title": "A new chat says which account it uses",
+      "description": "When an app has several accounts, a new chat's Connectors list shows the account it starts on, the agent's or the team's default, before the first message.",
+      "tag": "fix"
+    },
+    {
+      "title": "A row you remove right after adding it leaves the list",
+      "description": "A row you add shows first, marked New, and now leaves the list as soon as you remove, revoke or archive it, instead of staying on screen until you page, search or sort.",
+      "tag": "fix"
+    },
+    {
+      "title": "A run waits when a named account's sign-in ends",
+      "description": "When the team sign-in of an account a step, agent or chat names expires or is revoked, the run waits until an admin signs that account in again and then goes on, and the chat shows a card to sign it in. No call moves to another account.",
+      "tag": "fix"
+    },
+    {
+      "title": "App names read in full in the chat connectors list",
+      "description": "For someone who cannot set an app up, the reason to ask an admin now sits under the app's name at every screen width, so the name is no longer cut to a letter or two on a desktop.",
+      "tag": "fix"
+    },
+    {
+      "title": "Every team can add the same skill",
+      "description": "A skill's name only has to be unique within your team, so several teams can add the same skill from an app.",
+      "tag": "fix"
+    },
+    {
+      "title": "Scrollbars match the light or dark theme",
+      "description": "Scrollbars in the console are now thin and take their colour from the page, so they no longer look wide and dark on Windows.",
+      "tag": "fix"
+    },
+    {
+      "title": "The assistant hears where an account points, not who",
+      "description": "The line that tells the assistant which account each app uses names the org or server it points at, and leaves out the person who signed in.",
+      "tag": "fix"
+    },
+    {
+      "title": "Updates name the tools your team is missing",
+      "description": "When an app's update needs a tool your team cannot call, it is refused and names the tools, so you know which app to turn on.",
+      "tag": "fix"
+    },
+    {
+      "title": "Workflows an agent starts from chat use your app accounts",
+      "description": "When you ask an agent in chat to start a workflow, its app steps now run as you, with the account you signed in with. Before, those steps were refused with a message that no team member had that email.",
+      "tag": "fix"
+    },
+    {
+      "title": "A new website waits for an admin's approval",
+      "description": "A website source on an address the account has not allowed waits for an admin to approve its host, as any new outside address does. Nothing is fetched until then, and it syncs once approved.",
+      "tag": "fix"
+    },
+    {
+      "title": "A removed app's card counts its tools",
+      "description": "The Team setup card of an app that is no longer installed now shows the same number of tools as its Tools tab, not zero.",
+      "tag": "fix"
+    },
+    {
+      "title": "A row you add shows right away",
+      "description": "When you add a host, a webhook, a team, a key or another row to a list, it shows at the top marked New, even when the list is sorted or searched so it would land on another page.",
+      "tag": "fix"
+    },
+    {
+      "title": "A website sync keeps to the site's pace",
+      "description": "Changed pages are fetched one at a time at the source's rate, or slower when the site's robots.txt asks for a crawl delay.",
+      "tag": "fix"
+    },
+    {
+      "title": "Add a page works on earlier knowledge bases",
+      "description": "A knowledge base that already had pages from before typed text sources takes new pages again, keeping the pages and versions it had.",
+      "tag": "fix"
+    },
+    {
+      "title": "App answers have a size cap",
+      "description": "An answer from an app larger than 25 MB is refused as it arrives, so one huge page can no longer fill the gateway's memory.",
+      "tag": "fix"
+    },
+    {
+      "title": "Ask an admin names someone in the team",
+      "description": "Ask an admin now names a person granted the role in the team itself, never an admin of every team such as the install's first admin, and says to ask the team's admins when nobody in the team holds it.",
+      "tag": "fix"
+    },
+    {
+      "title": "Changes filter on the server; decisions by right",
+      "description": "The From filter covers every page, a viewer no longer sees Approve and Reject the server refuses, and a knowledge base's Sources tab follows a sync the schedule started.",
+      "tag": "fix"
+    },
+    {
+      "title": "Chat asks to connect an app nobody has signed in to yet",
+      "description": "When an app each person signs in to is on for the team but nobody has signed in yet, chat now shows the Connect card naming the app instead of an error, and the assistant names the app too.",
+      "tag": "fix"
+    },
+    {
+      "title": "Chat shows who connects an app's team account",
+      "description": "When an app is on for the team but its team account is not signed in yet, chat shows a card naming the app: people who manage the team's apps get Connect the team account, and everyone else gets the admins to ask.",
+      "tag": "fix"
+    },
+    {
+      "title": "Clearer counts in Add source pickers",
+      "description": "Add source's site, library and space pickers say how many you picked and how many are listed, spell libraries correctly, and name a pick the current search hides.",
+      "tag": "fix"
+    },
+    {
+      "title": "Connectors not set up for your team say so",
+      "description": "On Connectors › Mine, an app your team has not set up now reads Not set up for your team yet, with the admins to ask. An admin's Turn on opens the app's own page instead of a page that does not exist.",
+      "tag": "fix"
+    },
+    {
+      "title": "Document text is fenced as data for AI steps",
+      "description": "Pages and files reach the questions and FAQ steps marked as data, so text in a document cannot give the model instructions.",
+      "tag": "fix"
+    },
+    {
+      "title": "Documentation sites keep their articles when cleaned",
+      "description": "A website whose layout carries utility classes or wraps its article in a sidebar element no longer has every page cleaned down to nothing.",
+      "tag": "fix"
+    },
+    {
+      "title": "Files names knowledge snapshots",
+      "description": "Copies a knowledge source keeps of fetched pages show as Knowledge snapshot in Files, and Storage settings can place them.",
+      "tag": "fix"
+    },
+    {
+      "title": "Knowledge bases show only what you can change",
+      "description": "People who can read a knowledge base no longer see Add source, Add documents, Add page, Attach sources, Sync now or Detach. Off-for-team apps in the chat picker keep their names on narrow screens, and tab rows show when there is more to scroll to.",
+      "tag": "fix"
+    },
+    {
+      "title": "Knowledge searches name their bases",
+      "description": "A knowledge search names the knowledge bases it reads, or asks for all of the team's on purpose; an agent's model can no longer widen its own search.",
+      "tag": "fix"
+    },
+    {
+      "title": "Long syncs keep their source to themselves",
+      "description": "A sync or rebuild renews its hold on its source while it runs, so a long one is never overlapped by another sync or ended as stopped.",
+      "tag": "fix"
+    },
+    {
+      "title": "Meaning search finds small knowledge bases",
+      "description": "Search by meaning keeps scanning until a small knowledge base beside a large one gets its nearest passages, has its own similarity floor, and says when it found no candidate.",
+      "tag": "fix"
+    },
+    {
+      "title": "Moving the local database checks every row",
+      "description": "make db-move-image counts every table's rows before and after, refuses a dump that holds fewer rows than it counted, and stops the restore at its first error.",
+      "tag": "fix"
+    },
+    {
+      "title": "Search on SQL Server names its skipped lanes",
+      "description": "On a database without full-text search, a knowledge search says its keyword lane was skipped instead of failing with a database error.",
+      "tag": "fix"
+    },
+    {
+      "title": "Sync right after a rebuild finishes",
+      "description": "When a rebuild shows as finished, its source is free: a sync asked at that moment starts instead of saying a run is still going.",
+      "tag": "fix"
+    },
+    {
+      "title": "Turning an app on saves and stops",
+      "description": "Turning an app on for your team, or saving its settings, now only saves, and the window says members connect their own account from Connectors › Mine. Connecting an account yourself is an optional button after it.",
+      "tag": "fix"
+    },
+    {
+      "title": "Upgrading keeps a base's keyword-only choice",
+      "description": "The upgrade to meaning search moves only knowledge bases still on the old defaults to both kinds of search, copies every account's pieces on SQL Server too, and a downgrade puts moved bases back.",
+      "tag": "fix"
+    },
+    {
+      "title": "Website and app sources sync on a real stack",
+      "description": "A source read through an app no longer fails every call on the run's environment, and a setting saved while a rebuild runs is rebuilt as soon as it ends.",
+      "tag": "fix"
+    },
+    {
+      "title": "A file's reading stays in its team",
+      "description": "When two teams upload the same document, each team's reading of it is its own. One team can no longer see what was read from another team's file.",
+      "tag": "fix"
+    },
+    {
+      "title": "A prep brief shows each count once",
+      "description": "A section of a meeting prep brief shows how many records it holds in its badge only, not again in its title.",
+      "tag": "fix"
+    },
+    {
+      "title": "A resumed chat still acts as the person who asked",
+      "description": "A chat reply picked up again after a restart, or after someone approved its change, reads and writes your apps as you, never as the team account; when the chat's person is not known the call is not made.",
+      "tag": "fix"
+    },
+    {
+      "title": "After Connect, the chat carries on",
+      "description": "When an app needs your sign-in, the reply says it carries on with your ask once you connect, instead of asking you to ask again.",
+      "tag": "fix"
+    },
+    {
+      "title": "An agent reads only the file it names",
+      "description": "When an agent reads a file by its id, an id written to reach some other part of Files is treated as no file at all, so text inside a document cannot steer an agent into a different request.",
+      "tag": "fix"
+    },
+    {
+      "title": "Answers are not swapped for 'nothing found'",
+      "description": "When a reply needs a citation, the assistant now only adds the source numbers instead of replacing a correct answer with 'nothing found'. It also states facts about your organisation only from your documents or systems.",
+      "tag": "fix"
+    },
+    {
+      "title": "Asking to think harder in a message uses the deeper model",
+      "description": "A message that asks the assistant to think harder alongside a question is answered on the deeper model; the Think harder quick reply on its own still answers the last reply again.",
+      "tag": "fix"
+    },
+    {
+      "title": "Attached files cannot pose as instructions",
+      "description": "Text in an attached file or a knowledge page that tries to end the file's section or add a fake knowledge passage is now shown to the agent as plain text, so a document cannot pass itself off as guidance.",
+      "tag": "fix"
+    },
+    {
+      "title": "Calls that never ran no longer show as errors",
+      "description": "When a reply reaches its limit, the calls it skipped are no longer listed under the answer as failed steps; the call log still records them.",
+      "tag": "fix"
+    },
+    {
+      "title": "Cards replace the raw tables they came from",
+      "description": "When the assistant shows a brief or a saved card, the table of the records it read no longer shows above it, and a saved card lists only what changed.",
+      "tag": "fix"
+    },
+    {
+      "title": "Chat connectors show icons and stay open",
+      "description": "The Connectors button shows the icons of the apps a chat uses, the list shows each app's icon, and checking or unchecking one keeps the list open instead of closing it and opening another page.",
+      "tag": "fix"
+    },
+    {
+      "title": "One record reads as a card, not a one-row table",
+      "description": "When the assistant reads back a single record, chat shows its fields as a card; the table is still one click away, and two or more records still show as a table.",
+      "tag": "fix"
+    },
+    {
+      "title": "Replies keep their formatting when no source matched",
+      "description": "A reply that found no matching knowledge passage keeps its lists and paragraphs, with a short note under it, instead of running together as one paragraph.",
+      "tag": "fix"
+    },
+    {
+      "title": "Replies read in order: plan, cards, answer",
+      "description": "A reply now shows its plan first, its lookups folded into one quiet line you can open, then its cards and the answer; skill loads no longer show in the reply.",
+      "tag": "fix"
+    },
+    {
+      "title": "Reworded replies no longer show a guardrail audit",
+      "description": "A reply the assistant only reworded at the end no longer shows what a guardrail took back; that note now appears only when a guardrail refused or replaced the answer.",
+      "tag": "fix"
+    },
+    {
+      "title": "Settings lights the page you are on, not its parent",
+      "description": "On a settings page under Team, such as Webhooks, the sidebar no longer lights Team's General page while your access loads.",
+      "tag": "fix"
+    },
+    {
+      "title": "Short results in chat read cleanly",
+      "description": "A single record the assistant reads shows as its fields, and a table that fits on one page no longer shows a paging bar.",
+      "tag": "fix"
+    },
+    {
+      "title": "Signing in again as the same user keeps one account",
+      "description": "Signing in to an app as a user you already linked there updates that account instead of adding a second one, and the window says you are already connected as that user.",
+      "tag": "fix"
+    },
+    {
+      "title": "Turn-on and fix links open the app",
+      "description": "The Turn on button in chat and on the connectors page, Open on a revoked knowledge source, and Fix the connection on a mailbox deployment now open the app's page instead of a page that does not exist.",
+      "tag": "fix"
+    },
+    {
+      "title": "A file's page no longer reports an outage it does not have",
+      "description": "A file not yet read for text, or whose stored content is missing, opens without the \"can't reach its services\" banner. Its preview says what is wrong in its own place.",
+      "tag": "fix"
+    },
+    {
+      "title": "A link to someone else's chat says so",
+      "description": "Opening a teammate's conversation now says it is someone else's instead of showing a broken page. Pickers, status dots and usage bars carry names a screen reader can read.",
+      "tag": "fix"
+    },
+    {
+      "title": "A refused mailbox is not read again until it changes",
+      "description": "When a mailbox's password secret or host is refused, the listener stops reading it after the first refusal and says why once, instead of asking again every few seconds. Changing the mailbox on Channels > Email makes it read again.",
+      "tag": "fix"
+    },
+    {
+      "title": "Answers from what was read at the tool limit",
+      "description": "A reply that runs out of tool calls now answers from the records it already read, instead of saying only that it reached the limit.",
+      "tag": "fix"
+    },
+    {
+      "title": "App updates reach the assistant's skills",
+      "description": "When an app's new release changes a skill, the update is offered, and turning the app on again gives the assistant the new skill, unless your team edited its copy.",
+      "tag": "fix"
+    },
+    {
+      "title": "Assistant replies name records, not ids",
+      "description": "The assistant no longer reads the same record twice in one reply, and its replies name records by their title instead of showing internal ids or tool names.",
+      "tag": "fix"
+    },
+    {
+      "title": "Chat tables stay readable on a phone",
+      "description": "Long values in a chat table are trimmed to the column with the full value on hover, so the first column no longer runs over the next one on a small screen.",
+      "tag": "fix"
+    },
+    {
+      "title": "Follow-ups keep the skill and what was read",
+      "description": "A follow-up in the same chat keeps the skill the assistant loaded and the records it read, so it answers sooner instead of reading them again.",
+      "tag": "fix"
+    },
+    {
+      "title": "Human Tasks shows only your team's publish reviews",
+      "description": "A publish review now appears and counts only in the team that owns what it publishes, and a tool's security review only in the Security team. Other teams no longer see or count it, and the team that asked can still open it.",
+      "tag": "fix"
+    },
+    {
+      "title": "Meeting cards read cleanly",
+      "description": "A prep brief keeps record names on one line beside long details, case numbers stay readable, and a save shows only its saved card.",
+      "tag": "fix"
+    },
+    {
+      "title": "Meetings and record changes are not offered as memories",
+      "description": "A meeting you mention or a change to a record is no longer offered as something to remember. The assistant offers to remember only lasting preferences, ways of working and facts about you.",
+      "tag": "fix"
+    },
+    {
+      "title": "Plainer replies, workflow pages and failed calls",
+      "description": "Agents no longer point to results above or below, and a failed tool call says why in words. A workflow page shows its version without a digest, and someone who cannot edit it sees that it is live and who changes it.",
+      "tag": "fix"
+    },
+    {
+      "title": "Row checkboxes appear only when you can act on rows",
+      "description": "A list shows checkboxes on its rows only when there is something you may do with the rows you pick, so a viewer no longer sees checkboxes that lead nowhere.",
+      "tag": "fix"
+    },
+    {
+      "title": "The assistant can ask which record you mean",
+      "description": "When logging a meeting, the assistant asks whether to update the client's open opportunity or open a new one, with both as quick replies.",
+      "tag": "fix"
+    },
+    {
+      "title": "The assistant no longer offers to remember one-off asks",
+      "description": "An instruction for one reply, a request, a question or an app's connection state is not offered as something to remember, so you only see Remember lines for things about you and how you work.",
+      "tag": "fix"
+    },
+    {
+      "title": "The assistant says what it could not read",
+      "description": "When a lookup fails, the assistant says what could not be read instead of asking whether to try again.",
+      "tag": "fix"
+    },
+    {
+      "title": "Tool calls are read only with the activity permission",
+      "description": "The tool-call log names who called each tool, so it is now read only by people whose roles hold Activity: view, which reviewers, builders and admins do and viewers do not. A tool's and an app's call history follow the same rule.",
+      "tag": "fix"
+    },
+    {
+      "title": "Uninstalled apps and chat tables read clearly",
+      "description": "An app the system no longer has installed says your operator installs apps and offers nothing to sign in to. Chat result tables name their columns in words, show dates as dates, leave out empty columns and wrap long text.",
+      "tag": "fix"
+    },
+    {
+      "title": "Viewers no longer add document types",
+      "description": "Adding a document type, or one from a template, now needs permission to create document types, which viewers do not have. Viewers still keep the team's types up to date and run Extract.",
+      "tag": "fix"
+    },
+    {
+      "title": "Webhooks, usage and storage for who can open them",
+      "description": "Webhooks and Usage and cost are team-admin pages with their own permissions, and the settings list offers them, and Storage, only to people whose roles open them; anyone else is told so at once, with no failed request behind it.",
+      "tag": "fix"
+    },
+    {
+      "title": "A failed customer lookup reads Failed",
+      "description": "A customer summary whose customer lookup fails now ends Failed with the error, instead of a successful run that reads Not found. A customer the bank does not have reads Customer not found.",
+      "tag": "fix"
+    },
+    {
+      "title": "A knowledge base shows when it last synced",
+      "description": "A knowledge base now shows when its sources were last read, the same time its sources show, with when its content last changed underneath. The overview no longer links to a Retrieval tab that does not exist, and people who cannot change the base see no build or refresh buttons.",
+      "tag": "fix"
+    },
+    {
+      "title": "Activity names the workflow behind a tool call",
+      "description": "A tool call a workflow made shows the workflow's name as its source, not its short id.",
+      "tag": "fix"
+    },
+    {
+      "title": "Agents reach their app tools after a restart",
+      "description": "An agent's tool calls, such as a Salesforce query, no longer fail with \"caller identity is not registered\" after the platform's policy service restarts without its settings.",
+      "tag": "fix"
+    },
+    {
+      "title": "Agents show each result once and ask plainly to connect",
+      "description": "A result already shown as a table is no longer shown again, so answers come back sooner. When you need to connect your own account, the agent asks you to press the Connect button instead of repeating an error code, a link or your email.",
+      "tag": "fix"
+    },
+    {
+      "title": "Audit log and Background only for who can open them",
+      "description": "The page switcher and search no longer list Audit log and Background to someone their roles keep out, as the sidebar already did, and opening either page without the rights shows why at once instead of asking for data first.",
+      "tag": "fix"
+    },
+    {
+      "title": "Clearer chat tables and sign-in cards",
+      "description": "A chat table is titled by what it lists, such as Accounts, and leaves out a system's own record details. When a tool needs your account, the card says whether it reads or changes something as you, and the tool shows Needs your sign-in instead of Error.",
+      "tag": "fix"
+    },
+    {
+      "title": "Clearer ids, icons and lists",
+      "description": "Long ids in tables are shortened at word breaks instead of mid-word, and library widgets read Built in under Updated. The Runs and Audit log pages have their own icons, and lists on Overview, cases and channels read correctly to screen readers.",
+      "tag": "fix"
+    },
+    {
+      "title": "Human Tasks names who asked and keeps the sidebar",
+      "description": "A tool publish request names the person who asked, not the service that filed it, and a request with no changes says so in words. Reassign shows only to people who may decide the task, and Human Tasks keeps the sidebar like every other page.",
+      "tag": "fix"
+    },
+    {
+      "title": "Lists lead with the record, not its id",
+      "description": "Every list shows what each row is first and its id last, the same way for every role.",
+      "tag": "fix"
+    },
+    {
+      "title": "One slow service no longer covers a working page",
+      "description": "The Agents list loads the model list only when you open New agent, and a model list that cannot be read is said in that dialog instead of a banner over the page.",
+      "tag": "fix"
+    },
+    {
+      "title": "Only the Security team is offered Add allowed host",
+      "description": "A tool on a host that is not allowed shows Add allowed host only to people who manage egress in the Security team. Everyone else reads that saving asks a Security admin in Human Tasks, which is what then happens.",
+      "tag": "fix"
+    },
+    {
+      "title": "Page tabs and wide tables work by keyboard",
+      "description": "Tabs on Evals and on agent, skill, guardrail, tool, knowledge base and source pages now point a screen reader at the content they show. A table wider than the screen can be focused and scrolled with the arrow keys.",
+      "tag": "fix"
+    },
+    {
+      "title": "Query results show as tables in chat",
+      "description": "A query's records, such as Salesforce cases, now show in chat as a table instead of a Details card listing the query's totals. Agents also stop re-showing a tool's result, so answers come back sooner.",
+      "tag": "fix"
+    },
+    {
+      "title": "Secrets and your own accounts say what they hold",
+      "description": "An auth config's client secret is listed by its config's name, and its Used by names that config instead of reading as unused. Your own accounts list tells a connected account whose sign-in has not been named yet apart from one never connected.",
+      "tag": "fix"
+    },
+    {
+      "title": "The Agents list fits its page",
+      "description": "Long agent descriptions are trimmed to one line, so every agent's id shows with its Copy button.",
+      "tag": "fix"
+    },
+    {
+      "title": "Tool calls name the agent and the workflow",
+      "description": "The Tool calls page shows the agent and the workflow behind each call by name, each in its own column, instead of an agent id under Workflow.",
+      "tag": "fix"
+    },
+    {
+      "title": "Tools you run act as you",
+      "description": "On an app where each person signs in, a tool you start in chat or a run you start now uses your own account, and asks you to connect once if you have none, instead of quietly using the team account. The team account serves only runs nobody started, such as schedules and mailboxes.",
+      "tag": "fix"
+    },
+    {
+      "title": "Viewers no longer see buttons they cannot use",
+      "description": "On Channels a viewer no longer sees Connect channel, Connect, Manage or Embed on a page, and a mailbox's settings open read only with a View only note. An agent page no longer offers a viewer the Test panel, Chat no longer suggests starting a workflow to someone who cannot start one, and a model inventory entry hides its tier, condition and validation actions from whoever cannot change the agent or workflow it describes.",
+      "tag": "fix"
+    },
+    {
+      "title": "Your avatar shows your initials",
+      "description": "The sidebar avatar shows each person's own initials instead of the same two letters for everyone. Apps and accounts take their initials the same way.",
+      "tag": "fix"
+    },
+    {
+      "title": "A closed sign-in window says so",
+      "description": "Closing the app's sign-in window before allowing access no longer leaves Connect waiting: it says the window was closed and offers Try again.",
+      "tag": "fix"
+    },
+    {
+      "title": "A missing field is shown",
+      "description": "When a custom app's Run test needs a field under More settings, such as its test address, that section opens and the field shows why.",
+      "tag": "fix"
+    },
+    {
+      "title": "A refusal names who can act in your workspace",
+      "description": "When a role's permissions have been edited, a refused action now names the roles that hold it in your workspace, not the roles that hold it by default.",
+      "tag": "fix"
+    },
+    {
+      "title": "A second account signs in where the first does",
+      "description": "Add account on an app now signs in at the address the app's first account uses, such as your company's Salesforce or GitHub Enterprise address, instead of the public one.",
+      "tag": "fix"
+    },
+    {
+      "title": "Add accounts in any order",
+      "description": "Add account works on an app with no account yet: the first one you add becomes its default and turns the app on.",
+      "tag": "fix"
+    },
+    {
+      "title": "Connect again asks where to sign in",
+      "description": "Connecting an app again on Ops AI's own app, such as Salesforce after it was turned on without signing in, now asks where to sign in, starting from where the account signs in now.",
+      "tag": "fix"
+    },
+    {
+      "title": "Connecting an account turns its app on",
+      "description": "Signing in an account of an app turns the app on for your team, so its tools work and the app reads Connected; there is no separate switch to find.",
+      "tag": "fix"
+    },
+    {
+      "title": "Each workspace's own Security team decides",
+      "description": "Security reviews, held hosts, workspace secrets and storage settings now follow the Security team named on Settings > Workspace, even when it is not the default team. A workspace that names none has no Security team until an admin names one.",
+      "tag": "fix"
+    },
+    {
+      "title": "Model calls use their own account's provider keys",
+      "description": "An agent's chat turn now names its account when it reaches the model gateway, so it signs in with that account's saved provider key rather than one account the install named.",
+      "tag": "fix"
+    },
+    {
+      "title": "One state per account",
+      "description": "An app's Settings show its account's one state, the same as its Auth configs row and its card, with the last test as a line under it.",
+      "tag": "fix"
+    },
+    {
+      "title": "Only what you may do",
+      "description": "Apps no longer offers Add custom app, the auth configs list or Add selected to someone who may not use them; it says who to ask, and the Connected view says when nothing is connected yet.",
+      "tag": "fix"
+    },
+    {
+      "title": "Ops AI's app asks where each account signs in",
+      "description": "An auth config that leaves where to sign in unset, such as Ops AI's own app, now asks it in Connect and Add account for each account. An auth config that sets it still decides it for every account on it.",
+      "tag": "fix"
+    },
+    {
+      "title": "Sign in again is asked only after a change",
+      "description": "The note that accounts must sign in again now shows only once you change where the auth config signs in, its client ID or its permissions. The Connect window waits for the auth config before showing where it signs in.",
+      "tag": "fix"
+    },
+    {
+      "title": "Signed in as a person, not a link",
+      "description": "An app reads as signed in as the person's username or email, such as their Salesforce username or GitHub login, never the system's identity link or an id.",
+      "tag": "fix"
+    },
+    {
+      "title": "Test an MCP server by listing its tools",
+      "description": "Test on an MCP server's app now asks the server to list its tools with the account's sign-in, the same call its tools make, so it no longer needs a test address. A server that refuses says why.",
+      "tag": "fix"
+    },
+    {
+      "title": "Your own accounts keep apps after a disconnect",
+      "description": "The list of apps you can sign in to with your own account now carries each one's state (connected, expired or not connected) and the auth config it signs in through, so an app stays listed after you disconnect it. New auth configs are named after your team, and Ops AI's built-in one reads Ops AI's app.",
+      "tag": "fix"
+    },
+    {
+      "title": "A file cited in chat opens in Files",
+      "description": "Clicking a file you attached in chat, from the message, its source chip or a citation, opens the file in Files with its preview. A missing record now says so in one plain sentence.",
+      "tag": "fix"
+    },
+    {
+      "title": "Background shows the knowledge schedule",
+      "description": "Govern › Background lists the knowledge schedule with its state on installs that have plugins.",
+      "tag": "fix"
+    },
+    {
+      "title": "Connect finishes in any window",
+      "description": "A sign-in finishes wherever the app sends you back, even in a new tab or another browser, and the window you started from shows Connected. A refusal shows one plain sentence naming who acts.",
+      "tag": "fix"
+    },
+    {
+      "title": "Email texts in Files are named and filtered",
+      "description": "The text of a received email is stored under its subject, or the sender when there is none, instead of the same name for every email. Files lists email texts only when you filter for them, and a run or case that used one still opens it.",
+      "tag": "fix"
+    },
+    {
+      "title": "Files you attach in chat are read and kept in Files",
+      "description": "A file attached to a chat message is stored in Files as a chat attachment, the agent reads it to answer, and the message links to it. A file the agent cannot read, such as a scan with no text, is named in the reply with the reason.",
+      "tag": "fix"
+    },
+    {
+      "title": "Test runs never change a live account unasked",
+      "description": "A write tried in a test run on an app's live account now waits for someone's approval, even when the person testing could approve writes themselves. Add a test account to the app to try writes freely.",
+      "tag": "fix"
+    },
+    {
+      "title": "Uploads are typed the same on every server",
+      "description": "An executable renamed to a PDF is now recognised as an executable on Linux servers as well as on Macs.",
+      "tag": "fix"
+    },
+    {
+      "title": "A file read as full text says so",
+      "description": "After Full text, a file's header reads \"Read as full text\" instead of \"Not read\", and still does after the page reloads.",
+      "tag": "fix"
+    },
+    {
+      "title": "Every plugin tool reaches its own system",
+      "description": "A plugin's request-template tools and MCP tools now reach the plugin's own addresses without Security listing them, as its code tools already did; a call to any other address still needs the allowed list.",
+      "tag": "fix"
+    },
+    {
+      "title": "Running an app's tool from its page",
+      "description": "Real on a tool page runs in Production when the app is set up only for Production, instead of asking for Test. An app tool's answer shows shaped once, with no false transform error, and the Request sent tab shows the request that went out.",
+      "tag": "fix"
+    },
+    {
+      "title": "Salesforce tools reach your org",
+      "description": "Salesforce tools read cases again, whether they run on the team account or on a person's own sign-in. On an app where everyone signs in with their own account, a person can use its tools before anyone signs in the team account.",
+      "tag": "fix"
+    },
+    {
+      "title": "An app shows Connected only once it works",
+      "description": "Turning an app on or saving its keys no longer marks it Connected. An app reads Connected after the team account signs in or Test connection passes, and shows when its sign-in has expired or was refused.",
+      "tag": "fix"
+    },
+    {
+      "title": "An app's tool page names your team's account",
+      "description": "A tool from an app your team connected shows the team's account it runs with, instead of saying it has no connection yet.",
+      "tag": "fix"
+    },
+    {
+      "title": "Approvals show fields inside records, row by row",
+      "description": "When a call changes a record that holds other records, an approver now sees each inner field as its own row, in chat and on the run page, instead of one flattened line.",
+      "tag": "fix"
+    },
+    {
+      "title": "Asking for two approvers turns a tool's approval on",
+      "description": "Choosing two approvers for a tool now also turns its approval on, so its writes wait for both people.",
+      "tag": "fix"
+    },
+    {
+      "title": "Forms are members-only until public pages are on",
+      "description": "A workflow shared as a form is offered to signed-in team members only; the link anyone can open appears once your install turns public form pages on.",
+      "tag": "fix"
+    },
+    {
+      "title": "Roles, sign-ins and limits hold as given",
+      "description": "A person holds only the roles they were given, removing someone from a team removes their saved sign-ins to other systems, and limits apply to each key, person and address. One busy key or a guessing address no longer spends everyone's allowance.",
+      "tag": "fix"
+    },
+    {
+      "title": "Sample team installs when a document type is shared",
+      "description": "When another team already holds a document type the sample team needs, it now gets its own copy under the team's prefix, and the workflows that read that type follow it. Reading a file with a seeded workflow is covered by a test.",
+      "tag": "fix"
+    },
+    {
+      "title": "Tool call history shows only your team's calls",
+      "description": "Tool call history and an app's usage list only the calls your team made, also on apps every team shares, and each call says whether it ran as a person's own account or the team account.",
+      "tag": "fix"
+    },
+    {
+      "title": "A knowledge source of any type opens its page",
+      "description": "A knowledge source read through a plugin, such as Salesforce articles, now opens its page, shows as a Plugin source and syncs from there. A source of a type the console does not know yet opens under its own name instead of a blank error page.",
+      "tag": "fix"
+    },
+    {
+      "title": "A tool fills its query placeholders",
+      "description": "A tool operation whose address held a placeholder in the query, such as ?email={email}, sent the placeholder itself instead of the value. It now sends the value, and leaves the parameter out when no value is given.",
+      "tag": "fix"
+    },
+    {
+      "title": "Adding a knowledge source works again",
+      "description": "Add source on a knowledge base was refused with a validation error for every kind of source, so no files could be added from the console. Adding a source to a knowledge base works again for every source type.",
+      "tag": "fix"
+    },
+    {
+      "title": "Embedded chat widgets start sessions again",
+      "description": "A bank's server could not mint a widget session with its deployment's key, and the widget page could not load its settings, because the deployment was not found. Both work again, and each still reads only the one deployment its key or session names.",
+      "tag": "fix"
+    },
+    {
+      "title": "A failed tool call no longer stalls a workflow",
+      "description": "When a tool call fails before the connected system answers, the step now ends as failed instead of waiting forever. Saving an operation whose body puts a placeholder inside quotes is refused with the placeholder named, since that body could never be sent.",
+      "tag": "fix"
+    },
+    {
+      "title": "Every workflow run ends with a clear outcome",
+      "description": "A run nobody is working on shows as Stuck with its reason, and Retry resumes it without sending anything twice. A timed-out change, a short tools outage, a long Human Tasks list or an email that will not start no longer leaves a run silently broken.",
+      "tag": "fix"
+    },
+    {
+      "title": "Every flow is checked each night, in your devcontainer too",
+      "description": "The nightly checks now run each use case on its own fresh database and get past the first step again, so a page that broke during the day is named the next morning. Use cases also run inside the Ops AI devcontainer, against its own database and policy service.",
+      "tag": "fix"
+    },
+    {
+      "title": "Approvals go to your own team",
+      "description": "A step waiting for approval now goes to approvers in the run's own team.",
+      "tag": "fix"
+    },
+    {
+      "title": "Docs pages keep working while they are edited",
+      "description": "A documentation page being changed no longer breaks the docs site; the other pages stay open while it is edited.",
+      "tag": "fix"
+    },
+    {
+      "title": "Pages open for your own team after sign-in",
+      "description": "A link opened straight after sign-in now loads for a team you belong to. A record in another team says so and offers to switch.",
+      "tag": "fix"
+    }
+  ]
+}

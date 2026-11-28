@@ -1,1 +1,0 @@
-{"date": "2026-11-25", "title": "Only the install owner changes model aliases", "description": "Model aliases apply to every team in the install, so only the workspace owner creates or re-points them, and chooses the chat model. Other admins still see every alias.", "tag": "fix"}

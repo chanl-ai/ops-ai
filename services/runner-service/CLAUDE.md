@@ -53,6 +53,13 @@ for it (`SVC=runner` fails with a traceback). Exercise it through a code tool in
 | Nothing kept | A run's directory and pipes are deleted when it ends; its outcome and timings go on tools-service's call row |
 | Pinned runtime | The build's URL and SHA-256 are settings (`runner_wasm_url`, `runner_wasm_sha256`); change both together |
 
+## Known traps
+
+- A call back to tools-service from a guest => bound it by the run's deadline, not a fresh time limit per call, or a run lasts about twice its limit
+- A bounded stdin open or write => count it against the same deadline
+- `make api` against this service => it cannot reach it (service tokens only); use a code tool in tools-service or the tests
+- A test run without the pinned build => `make wasm` first; the tests use real guests
+
 ## Reference docs
 
 | Doc | Covers |

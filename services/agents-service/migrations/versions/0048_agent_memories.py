@@ -14,6 +14,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import role_ddl
+
 revision = "0048_agent_memories"
 down_revision = "0047_mailboxes"
 branch_labels = None
@@ -53,7 +55,7 @@ def upgrade() -> None:
     )
     if op.get_bind().dialect.name != "postgresql":
         return
-    op.execute(f"DO $$ BEGIN CREATE ROLE {TENANT_ROLE} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$")
+    op.execute(role_ddl(TENANT_ROLE))
     for table in ("agent_memories", "memory_audit"):
         op.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {table} TO {TENANT_ROLE}")
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")

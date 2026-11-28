@@ -7,6 +7,8 @@ next-env.d.ts
 .env*
 !.env.example
 !.devcontainer/.env.local.example
+.cl/
+.cl.from-review/
 
 # Python
 .venv/
@@ -39,6 +41,15 @@ sdk/python/uv.lock
 /plugins/*
 !/plugins/README.md
 
+# make plugins-sync moves hand-copied plugins here and never deletes them
+/plugins.bak-*/
+
+# Copies left beside a file during a merge
+*.pre-merge-*
+
+# Local sales-deck capture. Output goes to a private repo
+/scripts/deck-shots/
+
 # Example setup writes resolved ids for the local team only
 examples/**/.bindings.json
 examples/**/.ops-profile.json
@@ -58,3 +69,6 @@ examples/**/.ops-profile.json
 .cursor/commands/
 .cursor/hooks.json
 .cursor/mcp.json
+
+# Linked from .private on this machine
+/.claude/skills/ops-release

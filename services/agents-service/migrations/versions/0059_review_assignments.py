@@ -12,6 +12,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import role_ddl
+
 revision = "0059_review_assignments"
 down_revision = "0058_widget_follows_latest"
 branch_labels = None
@@ -33,7 +35,7 @@ def upgrade() -> None:
     op.create_index("ix_review_assignments_review", "review_assignments", ["tenant_id", "review_id", "assigned_at"])
     if op.get_bind().dialect.name != "postgresql":
         return
-    op.execute(f"DO $$ BEGIN CREATE ROLE {TENANT_ROLE} NOLOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$")
+    op.execute(role_ddl(TENANT_ROLE))
     op.execute(f"GRANT SELECT, INSERT ON review_assignments TO {TENANT_ROLE}")
     op.execute("ALTER TABLE review_assignments ENABLE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE review_assignments FORCE ROW LEVEL SECURITY")
