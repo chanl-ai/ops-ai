@@ -58,8 +58,9 @@ class Judge(ModelCalls):
         run: str | None = None,
         parts: Sequence[dict[str, Any]] = (),
         usage: Usage | None = None,
+        max_tokens: int | None = None,
     ) -> Any:
-        del sensitivity, run, parts, usage
+        del sensitivity, run, parts, usage, max_tokens
         self.calls += 1
         if self.down:
             raise ModelCallError("models-service could not be reached")

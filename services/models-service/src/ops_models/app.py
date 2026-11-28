@@ -1467,11 +1467,12 @@ def create_models_app(
             return await failed(e)
         await settle(done.input_tokens, done.output_tokens)
         # `tool_calls` is left unset, not None, when there are none: the route drops unset fields, so the key is absent.
-        message = (
-            ChatMessage(role="assistant", content=done.text, tool_calls=[_tool_call(c) for c in done.tool_calls])
-            if done.tool_calls
-            else ChatMessage(role="assistant", content=done.text)
-        )
+        message = ChatMessage(role="assistant", content=done.text)
+        # Added only when present, so each counts as set and the route keeps it; absent, the key is dropped.
+        if done.tool_calls:
+            message = message.model_copy(update={"tool_calls": [_tool_call(c) for c in done.tool_calls]})
+        if done.refusal:
+            message = message.model_copy(update={"refusal": done.refusal})
         return ChatCompletion(
             id=call_id,
             object="chat.completion",

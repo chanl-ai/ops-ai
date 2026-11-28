@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import hashlib
 
-from ops_ingest.model_client import ModelBudgetSpent, ModelUnavailable
+from ops_ingest.model_client import ModelBudgetSpent, ModelReplyUnusable, ModelUnavailable
 from ops_ingest.models import Chunk
 from ops_ingest.strategies.base import FENCE_RULE, SplitContext, json_list, json_object, unfenced
 
@@ -67,6 +67,11 @@ def add_faq(chunks: list[Chunk], ctx: SplitContext) -> None:
         )
         try:
             reply = ctx.call_model(prompt, max_tokens=MAX_TOKENS)
+        except ModelReplyUnusable as e:
+            ctx.notes.append(
+                f"Likely questions for chunk {chunk.index + 1} were skipped: the reply held no answer ({e})."
+            )
+            continue
         except ModelBudgetSpent as e:
             ctx.notes.append(f"Likely questions stopped at a spend ceiling: {e}")
             stopped = True

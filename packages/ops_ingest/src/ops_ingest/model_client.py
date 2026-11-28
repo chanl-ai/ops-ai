@@ -26,6 +26,11 @@ class ModelUnavailable(Exception):
     indexed without what it would have added."""
 
 
+class ModelReplyUnusable(ModelUnavailable):
+    """The model answered one prompt with nothing to use (cut off at its limit, declined, filtered, empty). A step that
+    asks per piece skips that piece and asks for the next; anything that stops on ModelUnavailable still stops."""
+
+
 class ModelBudgetSpent(Exception):
     """The run or the environment reached its ceiling on model spend (models-service refused, from what it recorded);
     an AI step stops asking and notes the reason."""

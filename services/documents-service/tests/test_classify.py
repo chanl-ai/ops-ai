@@ -7,6 +7,9 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+import pytest
+
+from ops_service_kit.model_calls import ModelCallError
 
 from .conftest import OPS, Make
 from .test_document_types import READ, TYPE, Prices, data
@@ -16,8 +19,8 @@ from .test_extractions import NOTICE, Floor
 class Models:
     """The model: a classification when asked for a typeId, else the invoice's fields."""
 
-    def __init__(self, kind: str, confidence: float) -> None:
-        self.kind, self.confidence = kind, confidence
+    def __init__(self, kind: str, confidence: float, ended: str | None = None) -> None:
+        self.kind, self.confidence, self.ended = kind, confidence, ended
         self.steps: list[str] = []
 
     async def structured(
@@ -33,6 +36,8 @@ class Models:
         images: Any = (),
     ) -> Any:
         self.steps.append(step)
+        if self.ended is not None:
+            raise ModelCallError("the reply held no answer", code=self.ended)
         if "typeId" in schema["properties"]:
             return {"typeId": self.kind, "confidence": self.confidence, "reason": "The page says Invoice."}
         return {k: v for k, v in READ.items() if k in schema["properties"]}
@@ -73,6 +78,20 @@ async def test_an_unknown_or_doubtful_kind_goes_to_a_person_unread(make: Make) -
         assert (read["status"], read["outcome"], read["needsReview"]) == ("done", "unknown", ["documentType"]), read
         assert read["fields"] == {} and read["classification"]["needsReview"] is True, read
         assert models.steps == ["classify"], f"{kind} was read anyway"
+
+
+@pytest.mark.parametrize("ended", ["reply_cut_off", "reply_empty"])
+async def test_a_classification_whose_reply_held_no_answer_names_no_type_and_goes_to_a_person(
+    make: Make, ended: str
+) -> None:
+    s = make(Models("invoice_notice", 0.95, ended=ended), Floor(0.8), Prices())
+    async with s.client as c:
+        fid = await s.stored(NOTICE)
+        data(await c.post("/v1/document-types", json=TYPE, headers=OPS), 201)
+        asked = data(await c.post("/v1/documents/classifications", json={"fileId": fid}, headers=OPS))
+        read = await detect(c, fid)
+    assert (asked["typeId"], asked["needsReview"]) == (None, True) and asked["reason"], asked
+    assert (read["status"], read["outcome"]) == ("done", "unknown"), read
 
 
 async def test_a_retried_detect_reads_the_first_answer(make: Make) -> None:

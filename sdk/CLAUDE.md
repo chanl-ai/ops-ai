@@ -42,6 +42,11 @@ Run from the repo root.
 this checkout. Its tests run in an isolated environment (`--isolated --with-editable sdk/python`) so they see only
 what the package itself declares, as an outside developer's install would.
 
+## Known traps
+
+- `make openapi` or `make sdk` in a fresh worktree fails with pnpm exit 254 and deletes the generated files => run `pnpm install --frozen-lockfile` at the root, then rerun; the generated layer comes back as committed.
+- The console's pre-commit `pnpm verify` reports `Property 'body' does not exist on type '{}'` after a merge => the workspace links are stale; run `pnpm install --frozen-lockfile` and commit again.
+
 ## Rules
 
 | Rule | Detail |

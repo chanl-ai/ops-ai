@@ -4,7 +4,8 @@
 # generated-file checks always. A change to uv.lock, pyproject.toml or the Makefiles runs the full `make verify`.
 # The member suites run side by side, each on its own test database (<db>_<member>), and print in a fixed order.
 # VERIFY_CHANGED_DEPTH=direct stops at the members that depend on a changed package themselves: the push check
-# (.githooks/pre-push) runs that, and the full suite on each new HEAD covers the rest.
+# (.githooks/pre-push) runs that, and the full suite on each new HEAD covers the rest. VERIFY_CHANGED_DEPTH=self runs
+# only the changed members (ci-plan.sh on a pull request; the merge queue plans the dependants).
 set -euo pipefail
 # Takes a base sha, or a file listing the changed paths (verify-head passes one, since its export has no history).
 arg=${1:?usage: verify-changed.sh <base-sha | file of changed paths>}
@@ -29,14 +30,16 @@ done
 # from the workspace's pyproject.toml files (scripts/dependants.py); a directory that is no member runs everything.
 if [ "${#pkgs[@]}" -gt 0 ]; then
   declare -A reached=()
-  depth=(); [ "${VERIFY_CHANGED_DEPTH:-}" = direct ] && depth=(--direct)
+  depth=(); [ "${VERIFY_CHANGED_DEPTH:-}" = direct ] && depth=(--direct); [ "${VERIFY_CHANGED_DEPTH:-}" = self ] && depth=(--only)
+  # Captured first: a failed uv inside `done < <(...)` would be dropped and leave the dependants empty.
+  deps=$(uv run --quiet python scripts/dependants.py "${depth[@]}" "${!pkgs[@]}") || { echo "verify-changed: scripts/dependants.py failed" >&2; exit 1; }
   while read -r kind dir; do
     case "$kind" in
       unknown) full "package $dir is no workspace member" ;;
       package) reached[$dir]=1 ;;
       service) svcs[${dir#services/}]=1 ;;
     esac
-  done < <(uv run --quiet python scripts/dependants.py "${depth[@]}" "${!pkgs[@]}")
+  done <<<"$deps"
   for d in "${!reached[@]}"; do pkgs[$d]=1; done
 fi
 echo "verify-changed since $base: packages [${!pkgs[*]}] services [${!svcs[*]}] console=$console docs=$docs"

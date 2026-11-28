@@ -152,6 +152,22 @@ export const CODES: Record<string, { kind: string; retryable: boolean }> = {
     "kind": "upstream",
     "retryable": true
   },
+  "reply_cut_off": {
+    "kind": "upstream",
+    "retryable": false
+  },
+  "reply_declined": {
+    "kind": "upstream",
+    "retryable": false
+  },
+  "reply_empty": {
+    "kind": "upstream",
+    "retryable": true
+  },
+  "reply_filtered": {
+    "kind": "upstream",
+    "retryable": false
+  },
   "reply_too_long": {
     "kind": "timeout",
     "retryable": true

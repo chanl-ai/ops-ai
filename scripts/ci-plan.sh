@@ -33,6 +33,9 @@ json() { if [ "$#" -eq 0 ]; then echo '[]'; else printf '"%s",' "$@" | sed 's/,$
 release=false
 case "${GITHUB_REF:-}" in refs/heads/release/* | refs/heads/hotfix/*) release=true ;; esac
 # CI_FULL=true (ci.yml sets it for a pull request titled with [ci full] or labelled ci:full) runs every job.
+# A pull request plans the services and packages whose own files changed; the merge queue's run plans their dependants too,
+# since that is where the combination is gated. Release, hotfix, main pushes and ci:full are not pull requests.
+if [ "${GITHUB_EVENT_NAME:-}" = pull_request ] && [ "${CI_FULL:-}" != true ]; then export VERIFY_CHANGED_DEPTH=self; fi
 if [ "$release" = true ] || [ "${CI_FULL:-}" = true ]; then plan="plan: full"; else
   plan=$(VERIFY_CHANGED_PLAN=jobs scripts/verify-changed.sh "$base")
 fi
@@ -56,15 +59,24 @@ else
     fi
   done
 fi
-# The long suites run as test shards (scripts/test_shard.py) beside one job for their lint, types and gates.
-declare -A SHARDS=([agents-service]=6 [tools-service]=5)
-jobs_json=()
+# The long suites run as test shards (scripts/test_shard.py) beside one job for their lint, types and gates. A shard
+# stays under about 12 minutes of tests; fewer, longer shards pay the checkout, setup and database container once each
+# (measured 2026-11: 45 to 60 seconds of every job against 300 for a shard's tests).
+declare -A SHARDS=([agents-service]=4 [tools-service]=3)
+# Services whose verify takes under 3 minutes share one job (one checkout, setup and database), run one after the other
+# with a result line each; kb-service and platform-service take 7 to 11 minutes and keep their own.
+SHORT=(documents-service files-service models-service runner-service)
+jobs_json=(); short=()
 for svc in ${services[@]+"${services[@]}"}; do
   n=${SHARDS[$svc]:-0}
-  if [ "$n" -eq 0 ]; then jobs_json+=("{\"service\":\"$svc\",\"part\":\"verify\"}"); continue; fi
+  if [ "$n" -eq 0 ]; then
+    if [[ " ${SHORT[*]} " == *" $svc "* ]]; then short+=("$svc"); else jobs_json+=("{\"service\":\"$svc\",\"part\":\"verify\"}"); fi
+    continue
+  fi
   jobs_json+=("{\"service\":\"$svc\",\"part\":\"checks\"}")
   for i in $(seq 1 "$n"); do jobs_json+=("{\"service\":\"$svc\",\"part\":\"test $i/$n\"}"); done
 done
+if [ "${#short[@]}" -gt 0 ]; then jobs_json+=("{\"service\":\"${short[*]}\",\"part\":\"verify\"}"); fi
 echo "full=$full"
 if [ "${GITHUB_EVENT_NAME:-}" = pull_request ] && [ "${CI_FULL:-}" != true ]; then echo "heavy=false"; else echo "heavy=true"; fi
 repo_json=()
@@ -98,7 +110,7 @@ if [ "$full" = true ]; then echo "mssql=true"; else
   echo "mssql=$(flag '^(services/|packages/|deploy/database/)')"
 fi
 # store=true when the diff touches a service's store, any migrations folder, ops_store or the database scripts: where SQL
-# Server breaks and PostgreSQL does not. ci.yml runs store-mssql on a pull request for it (mssql && (heavy || store)); any
-# other service change, and a full plan on its own, wait for the merge queue. ci_local.py's MSSQL_PATHS is the same rule.
+# Server breaks and PostgreSQL does not. ci.yml's store-mssql never runs on a pull request (unless ci:full): the merge
+# queue and develop pushes run it whenever mssql=true. ci_local.py's MSSQL_PATHS is the same rule for a local run.
 echo "store=$(flag '^services/[^/]+/(.+/)?store/|(^|/)migrations/|^packages/ops_store/|^deploy/database/')"
 if [ "${#jobs_json[@]}" -eq 0 ]; then echo "service_jobs=[]"; else echo "service_jobs=[$(IFS=,; echo "${jobs_json[*]}")]"; fi

@@ -16,9 +16,9 @@ from typing import Protocol
 
 import httpx
 
-from ops_ingest import ModelBudgetSpent, ModelUnavailable
+from ops_ingest import ModelBudgetSpent, ModelReplyUnusable, ModelUnavailable
 from ops_service_kit.ids import new_id
-from ops_service_kit.model_calls import IngestModel, ModelCallError
+from ops_service_kit.model_calls import ENDINGS, IngestModel, ModelCallError
 from ops_service_kit.settings import Endpoint
 
 QUESTIONS_STEP = "kb:questions"
@@ -59,6 +59,9 @@ class ModelsIngest:
         except ModelCallError as e:
             if e.code in CEILINGS:
                 raise ModelBudgetSpent(CEILINGS[e.code]) from e
+            if e.code in ENDINGS:
+                # One piece's reply held nothing to use; the split skips that piece, not the rest of the document.
+                raise ModelReplyUnusable(e.code) from e
             raise ModelUnavailable(e.code) from e
         finally:
             self.calls, self.input_tokens, self.output_tokens = (
