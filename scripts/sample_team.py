@@ -42,9 +42,6 @@ from typing import Any, cast
 import httpx
 from dev_egress import HOSTS, host_ip, private_address
 
-from ops_identity import mint_service_token
-from ops_identity.service_keys import dev_service_signer
-
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 SAMPLE = HERE / "sample-team"
@@ -1114,7 +1111,7 @@ def local(admin: Session) -> bool:
     return httpx.URL(admin.urls["platform"]).host in {"127.0.0.1", "localhost"}
 
 
-def ensure_fake_aliases(fakes: dict[str, Any], tenant: str) -> None:
+def ensure_fake_aliases(fakes: dict[str, Any], admin: Session) -> None:
     """The alias the team's agents name, served by the stack's fake model (its committed rules answer each alias by
     name), through models-service's own admin routes with a dev service token. The aliases the guardrail checks,
     memory and document reads use join it only when MODEL is `fake` (make sample-team passes make up's DEMO_MODEL), so
@@ -1122,9 +1119,9 @@ def ensure_fake_aliases(fakes: dict[str, Any], tenant: str) -> None:
     model = os.environ.get("MODEL") or "fake"
     port = os.environ.get("OPS_MODELS_PORT", "8730")
     fake_url = f"http://127.0.0.1:{os.environ.get('OPS_FAKE_OPENAI_PORT', '8746')}/v1"
-    # As the admin's own account: connections and aliases are each account's.
-    token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id=tenant)
-    with httpx.Client(base_url=f"http://127.0.0.1:{port}", headers={"Authorization": f"Bearer {token}"}) as m:
+    # As the account's admin, signed in: connections and aliases are each account's, and only its admin changes them.
+    signed = {"Authorization": f"Bearer {admin.token}", **({"X-Team-Id": admin.team} if admin.team else {})}
+    with httpx.Client(base_url=f"http://127.0.0.1:{port}", headers=signed) as m:
         # The connections this needs, by id or by name, rather than one page of them all.
         asked = ({"ids": FAKE_PROVIDER}, {"search": FAKE_PROVIDER}, {"search": "openai-local"})
         providers = [p for q in asked for p in items(data(m.get("/v1/models/providers", params=q)))]
@@ -1198,7 +1195,7 @@ def ensure_fakes(admin: Session, lead: Session, fakes: dict[str, Any]) -> None:
     if not local(admin):
         say("SKIP", "model aliases and egress", "not a local stack")
         return
-    ensure_fake_aliases(fakes, str(data(admin("platform").get("/v1/me"))["tenantId"]))
+    ensure_fake_aliases(fakes, admin)
     ensure_egress(admin, fakes)
 
 

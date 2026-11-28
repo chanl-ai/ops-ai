@@ -1,6 +1,6 @@
 """Points the local stack's chat alias at a real, cheap OpenAI model for a live demo, or back at the fake (`make
 demo-model MODEL=<id>`, `make demo-model MODEL=fake`). Dev tooling only: it drives models-service's own admin routes
-with a dev service token, the way an operator would, and changes nothing in any service's code.
+signed in as the first admin, the way an operator would, and changes nothing in any service's code.
 
   MODEL=<id>   rebinds provider connection `openai-local` to https://api.openai.com/v1 with credential name `openai`
                (the key models-service holds from OPS_MODEL_PROVIDER_KEYS) and adds a version of ALIAS on model <id>;
@@ -23,15 +23,16 @@ from __future__ import annotations
 import os
 import sys
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import httpx
 
-from ops_identity import mint_service_token
-from ops_identity.service_keys import dev_service_signer
 from ops_models.connection_settings import ModelConnectionSettings
 from ops_models.seed import install_connection
 
+ROOT = Path(__file__).resolve().parents[1]
+PLATFORM = os.environ.get("OPS_PLATFORM_URL") or f"http://127.0.0.1:{os.environ.get('OPS_PLATFORM_PORT', '8710')}"
 MODELS = os.environ.get("OPS_MODELS_URL") or f"http://127.0.0.1:{os.environ.get('OPS_MODELS_PORT', '8730')}"
 FAKE_PORT = os.environ.get("OPS_FAKE_OPENAI_PORT", "8746")
 FAKE = os.environ.get("OPS_MODELS_FAKE_OPENAI_URL") or f"http://127.0.0.1:{FAKE_PORT}/v1"
@@ -75,6 +76,26 @@ def usable(model: str) -> None:
         raise SystemExit(f"demo-model: the key cannot use {model}; cheap ones it can: {', '.join(near)}")
 
 
+def admin_headers() -> dict[str, str]:
+    """The dev stack's first admin (.run/dev-admin.env), signed in; the password stays in memory."""
+    found: dict[str, str] = {}
+    path = ROOT / os.environ.get("OPS_RUN_DIR", ".run") / "dev-admin.env"
+    for line in path.read_text().splitlines() if path.is_file() else []:
+        name, sep, value = line.partition("=")
+        if sep:
+            found[name.strip()] = value.strip().strip('"').strip("'")
+    if "OPS_BOOTSTRAP_ADMIN_EMAIL" not in found:
+        raise SystemExit(f"demo-model: {path} names no first admin; run make up first")
+    body = {"email": found["OPS_BOOTSTRAP_ADMIN_EMAIL"], "password": found.get("OPS_BOOTSTRAP_ADMIN_PASSWORD", "")}
+    r = httpx.post(f"{PLATFORM}/v1/auth/sign-in", json=body, timeout=20)
+    if r.status_code != 200:
+        raise SystemExit(f"demo-model: the first admin's sign-in answered {r.status_code}")
+    session = r.json()["data"]
+    principal = session["principal"]
+    team = principal.get("teamId") or next(iter(principal.get("teamIds") or []), None)
+    return {"Authorization": f"Bearer {session['token']}", **({"X-Team-Id": team} if team else {})}
+
+
 def main() -> int:
     model = os.environ.get("MODEL") or (sys.argv[1] if len(sys.argv) > 1 else "")
     alias = os.environ.get("ALIAS") or "default"
@@ -82,10 +103,8 @@ def main() -> int:
         print(__doc__)
         return 2
     to_fake = model == "fake"
-    # As the install's account, which holds the connection and the aliases this moves.
-    tenant = os.environ.get("OPS_BOOTSTRAP_TENANT_ID") or "local"
-    token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id=tenant)
-    with httpx.Client(base_url=MODELS, headers={"Authorization": f"Bearer {token}"}, timeout=20) as m:
+    # As the install's first admin, who owns the account's connection and the aliases this moves.
+    with httpx.Client(base_url=MODELS, headers=admin_headers(), timeout=20) as m:
         # PROVIDER is a connection's id or its name: `ids` finds the one, `search` the other.
         listed = data(m.get("/v1/models/providers", params={"ids": PROVIDER}))["data"]
         listed += data(m.get("/v1/models/providers", params={"search": PROVIDER}))["data"]

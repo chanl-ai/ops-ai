@@ -2,7 +2,6 @@
 // docs/usecases/models-service/a-team-connects-azure-openai.md. The run's own demo stack: platform sign-in,
 // models-service and the fake OpenAI, whose Azure paths answer only FAKE_OPENAI_KEY in `api-key` and say they run in
 // Sweden Central. Sam is the account admin (an admin on the Security team); James is a builder of Operations.
-import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -22,9 +21,6 @@ const data = async (r) => {
   if (body.data === undefined) throw new Error(`${r.url} answered ${r.status}: ${JSON.stringify(body).slice(0, 300)}`);
   return body.data;
 };
-// agents-service's token for models-service's admin routes (dev key, dev only), as the install scripts call them.
-const serviceToken = (tenant) =>
-  execFileSync('uv', ['run', 'python', '-c', `from ops_identity import dev_service_signer, mint_service_token; print(mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="${tenant}", ttl_s=600))`], { cwd: join(ROOT, 'services/models-service'), encoding: 'utf8' }).trim();
 
 /** Waits for `text` on `page`; on a timeout, saves the page and fails with what it showed instead. */
 async function see(page, text, name) {
@@ -43,7 +39,8 @@ await withUiStack(
     const tenant = sam.principal.tenantId;
     const N = { Authorization: `Bearer ${sam.token}`, 'X-Team-Id': 'team_security', 'Content-Type': 'application/json' };
     const J = { Authorization: `Bearer ${(await signIn(JAMES)).token}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
-    const S = { Authorization: `Bearer ${serviceToken(tenant)}`, 'Content-Type': 'application/json' };
+    // Sam, the account admin, sets up the account's connections and aliases (settings.manage), as on Settings.
+    const S = { Authorization: `Bearer ${sam.token}`, 'X-Team-Id': 'team_security', 'Content-Type': 'application/json' };
     // The fake's root is the Azure resource's endpoint; its /v1 is OpenAI's path.
     const endpoint = (await data(await fetch(`${models}/v1/models/providers`, { headers: S }))).data.find((p) => p.id === 'openai-local').baseUrl.replace(/\/v1$/, '');
     await data(await fetch(`${models}/v1/provider-keys/${KEY}`, { method: 'PUT', headers: N, body: JSON.stringify({ value: FAKE_OPENAI_KEY }) }));

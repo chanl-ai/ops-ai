@@ -314,16 +314,11 @@ def egress(admin: str, team: str, hosts: list[str], ranges: list[str]) -> None:
 # ── the demo's model alias ──
 
 
-def model_alias() -> None:
+def model_alias(admin: str) -> None:
     """`salesforce-demo` on a connection of its own to the fake model: the case helper's turns follow the fake's
     Salesforce rules (services/models-service/seed/demo-fake-openai/script.json) and never reach a real provider, while
-    the stack's other aliases stay where they are."""
-    from ops_identity import mint_service_token  # noqa: PLC0415
-    from ops_identity.service_keys import dev_service_signer  # noqa: PLC0415
-
-    tenant = os.environ.get("OPS_BOOTSTRAP_TENANT_ID") or "local"
-    token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id=tenant)
-    with httpx.Client(base_url=MODELS, headers={"Authorization": f"Bearer {token}"}, timeout=20) as m:
+    the stack's other aliases stay where they are. Made as the account's admin, who owns its model setup."""
+    with httpx.Client(base_url=MODELS, headers=heads(admin), timeout=20) as m:
         providers = data(m.get("/v1/models/providers", params={"search": DEMO_PROVIDER}), "model providers")["data"]
         found = next((p for p in providers if p["name"] == DEMO_PROVIDER), None)
         if found is None:
@@ -477,9 +472,9 @@ def main() -> int:
                 f"with the values in {REAL_ENV}, then make restart SVC=tools"
             )
     restart(plugin_changed, fake_started)
-    model_alias()
     admin_env = read_env(RUN / "dev-admin.env")
     admin = sign_in(admin_env["OPS_BOOTSTRAP_ADMIN_EMAIL"], admin_env["OPS_BOOTSTRAP_ADMIN_PASSWORD"])
+    model_alias(admin)
     team = team_id(admin)
     # SF=real lists nothing: the plugin's own hosts (its sign-in and instance) pass for its own requests.
     if mode != "real" and info is not None:

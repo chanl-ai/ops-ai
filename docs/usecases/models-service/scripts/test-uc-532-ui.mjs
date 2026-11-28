@@ -2,7 +2,6 @@
 // ui layer: docs/usecases/models-service/an-account-admin-saves-a-model.md. The run's own demo stack: platform
 // sign-in, models-service and the fake OpenAI, which refuses any credential but FAKE_OPENAI_KEY. Sam is the account
 // admin (an admin on the Security team); James is a builder of Operations.
-import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -24,9 +23,6 @@ const data = async (r) => {
   if (body.data === undefined) throw new Error(`${r.url} answered ${r.status}: ${JSON.stringify(body).slice(0, 300)}`);
   return body.data;
 };
-// agents-service's token for models-service's admin routes (dev key, dev only): what make demo-model drives.
-const serviceToken = (tenant) =>
-  execFileSync('uv', ['run', 'python', '-c', `from ops_identity import dev_service_signer, mint_service_token; print(mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="${tenant}", ttl_s=600))`], { cwd: join(ROOT, 'services/models-service'), encoding: 'utf8' }).trim();
 
 /** Waits for `text` on `page`; on a timeout, saves the page and fails with what it showed instead. */
 async function see(page, text, name) {
@@ -45,7 +41,8 @@ await withUiStack(
     const tenant = sam.principal.tenantId;
     const N = { Authorization: `Bearer ${sam.token}`, 'X-Team-Id': 'team_security' };
     const J = { Authorization: `Bearer ${(await signIn(JAMES)).token}`, 'X-Team-Id': 'team_ops' };
-    const S = { Authorization: `Bearer ${serviceToken(tenant)}`, 'Content-Type': 'application/json' };
+    // Sam, the account admin, sets up the account's connections and aliases (settings.manage), as on Settings.
+    const S = { Authorization: `Bearer ${sam.token}`, 'X-Team-Id': 'team_security', 'Content-Type': 'application/json' };
     // A connection to the run's fake OpenAI that signs in with OPENAI, and an alias on gpt-4.1-mini through it.
     const fake = (await data(await fetch(`${models}/v1/models/providers`, { headers: S }))).data.find((p) => p.id === 'openai-local').baseUrl;
     const made = await data(await fetch(`${models}/v1/models/providers`, { method: 'POST', headers: S, body: JSON.stringify({ name: 'openai-uc532', type: 'openai-compatible', baseUrl: fake, keyRef: KEY }) }));
