@@ -185,9 +185,14 @@ def test_a_candidate_is_tagged_only_after_its_staging_deploy_and_walk_passed(tmp
 def test_a_merged_branch_is_tagged_only_with_the_version_its_name_says() -> None:
     assert release.finish_tag("release/1.2.1", "1.2.1", ["v1.2.0"]) == "v1.2.1"
     assert release.finish_tag("hotfix/login-loop", "1.2.2", ["v1.2.1"]) == "v1.2.2"
+    assert release.finish_tag("release/1.2.1", "1.2.1", ["v1.2.0", "v1.2.1"], existing=True) == "v1.2.1"
+    with pytest.raises(release.Refusal):
+        release.finish_tag("release/1.2.1", "1.2.0", ["v1.2.0"], existing=True)
     for branch, have, tags in (
         ("release/1.2.1", "1.2.0", []),
         ("release/1.2.1", "1.2.1", ["v1.2.1"]),
+        ("release/1.2.1", "1.2.1", ["v1.3.0"]),
+        ("hotfix/x", "1.2.0", ["v1.2.1"]),
         ("feature/x", "1.2.1", []),
     ):
         with pytest.raises(release.Refusal):
@@ -258,6 +263,14 @@ def test_the_upgrade_starts_at_the_newest_release_on_main_and_only_a_passing_pro
     assert release.latest_release(tags, lambda t: t != "v1.2.2") == "v1.2.0"
     assert release.latest_release(tags, lambda t: False) is None
     ran = {"name": "release-proof", "conclusion": "success"}
-    assert release.proof_problem([ran]) is None
-    for jobs in ([], [{**ran, "conclusion": "skipped"}], [{**ran, "conclusion": "failure"}]):
+    deployed = {"name": "staging / deploy", "conclusion": "success"}
+    assert release.proof_problem([ran, deployed]) is None
+    for jobs in (
+        [],
+        [deployed],
+        [ran],
+        [{**ran, "conclusion": "skipped"}, deployed],
+        [ran, {**deployed, "conclusion": "failure"}],
+        [ran, {**deployed, "conclusion": None, "status": "in_progress"}],
+    ):
         assert release.proof_problem(jobs)

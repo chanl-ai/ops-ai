@@ -57,8 +57,10 @@
     "staging-scan": [
       {"step": "ZAP baseline scan of staging", "no_local_twin": "Scans the staging app after a release or hotfix branch's deploy; the same docker command runs against any origin."}
     ],
+    "release-gate": [
+      {"step": "Wait for the push run of this commit and read its release-proof and staging deploy", "no_local_twin": "Reads the push run of a release branch on GitHub; `make release-doctor LIVE=1` reports the same verdict."}
+    ],
     "ci-ok": [
-      {"step": "A release pull request reports the push run of its commit", "no_local_twin": "Reads the push run of a release branch on GitHub; `make release-doctor LIVE=1` reports the same verdict."},
       {"step": "if grep -qE '\"result\": \"(failure|cancelled)\"' <<<\"$NEEDS\"; then echo \"$NEEDS\"; exit 1; fi", "no_local_twin": "Reads the other jobs' results on GitHub."}
     ]
   }

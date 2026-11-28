@@ -56,9 +56,7 @@ def ready_reasons(needs: dict[str, dict[str, str]], codeql: dict[str, str]) -> l
     """Why a pull request is not ready for the queue; empty when it is."""
     reasons = [f"job {name} is {job.get('result')}" for name, job in sorted(needs.items()) if job.get("result") in RED]
     reasons += [
-        f"CodeQL {name} is {result}"
-        for name, result in sorted(codeql.items())
-        if result not in ("success", "neutral", "skipped")
+        f"CodeQL {name} is {result}" for name, result in sorted(codeql.items()) if result not in ("success", "neutral")
     ]
     return reasons
 
@@ -90,12 +88,6 @@ def auto_queue_step(pr: dict) -> str:
     if ok and not pr["armed"]:
         return "arm"
     return "disarm" if pr["armed"] and not ok else "nothing"
-
-
-def review_survives(parents: int, before: dict[str, str], after: dict[str, str]) -> bool:
-    """A push keeps the review only when it is a merge commit whose changes against develop (each file with its blob)
-    are exactly what was reviewed: a clean merge of develop, no conflict resolution, nothing else."""
-    return parents == 2 and bool(after) and before == after
 
 
 def failure_comment(failed: list[tuple[str, str]], url: str) -> str:
@@ -202,8 +194,8 @@ def cmd_ready() -> int:
     sha, event = os.environ.get("HEAD_SHA", ""), os.environ.get("GITHUB_EVENT_NAME", "")
     codeql = {}
     # The merge queue tests a pull request on develop's tip, so a stale base is not checked here; CodeQL
-    # reports on pull requests only (codeql.yml).
-    if event == "pull_request" and sha:
+    # reports on pull requests only (codeql.yml). A pull request that changes no file runs no CodeQL (TRIVIAL).
+    if event == "pull_request" and sha and os.environ.get("TRIVIAL") != "true":
         deadline = time.time() + int(os.environ.get("CODEQL_WAIT", "2400"))
         while True:
             runs = json.loads(
@@ -246,30 +238,76 @@ def cmd_queue_failure(run: str, attempt: int, conclusion: str, *, branch: str, u
     return 0
 
 
-def changed_blobs(sha: str) -> dict[str, str]:
-    """Each file a commit's branch changes against develop, with its blob, read through the API (no checkout)."""
-    out = gh(
-        "api",
-        f"repos/{repo()}/compare/develop...{sha}",
-        "--jq",
-        "[.files[] | {(.filename): .sha}] | add // {}",
+WRITERS = ("admin", "maintain", "write")
+
+
+def gh_ok(*args: str) -> bool:
+    return subprocess.run(["gh", *args], capture_output=True, text=True, check=False).returncode == 0
+
+
+def drop_review(number: int, dry: bool) -> int:
+    """Any push after the review takes `reviewed` off and disarms auto-merge, with no exception for a merge of develop.
+    The label comes off first and the disarm is tried whatever happened to it; a failure of either fails the job, so a
+    pull request is never left armed by a run that could not tell."""
+    print(f"#{number}: a push, so `reviewed` comes off and auto-merge is disarmed")
+    if dry:
+        return 0
+    removed = gh_ok("pr", "edit", str(number), "--remove-label", "reviewed")
+    disarmed = gh_ok("pr", "merge", str(number), "--disable-auto") or not armed(number)
+    if not (removed and disarmed):
+        print(f"::error title=Review not dropped::#{number}: could not remove `reviewed` or disarm; do it by hand")
+        return 1
+    return 0
+
+
+def armed(number: int) -> bool:
+    """Whether auto-merge is on; an unreadable answer counts as on."""
+    out = subprocess.run(
+        ["gh", "api", f"repos/{repo()}/pulls/{number}", "--jq", ".auto_merge != null"],
+        capture_output=True,
+        text=True,
+        check=False,
     )
-    return json.loads(out or "{}")
+    return out.returncode != 0 or out.stdout.strip() == "true"
 
 
-def cmd_auto_queue(number: int, action: str, before: str, dry: bool) -> int:
-    """Only the API is called with the event's pull request number; the pull request's code is never fetched."""
+def label_refused(number: int, actor: str, dry: bool) -> bool:
+    """`reviewed` counts only from someone with write, maintain or admin rights; the label of anyone else comes off with
+    one comment. An unreadable permission refuses too."""
+    out = subprocess.run(
+        ["gh", "api", f"repos/{repo()}/collaborators/{actor}/permission", "--jq", ".permission"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if out.returncode == 0 and out.stdout.strip() in WRITERS:
+        return False
+    print(f"#{number}: {actor} may not label a pull request `reviewed`")
+    if not dry:
+        gh("pr", "edit", str(number), "--remove-label", "reviewed", check=False)
+        gh(
+            "pr",
+            "comment",
+            str(number),
+            "--body",
+            "`reviewed` comes from a maintainer with write access; the label was removed.",
+            check=False,
+        )
+    return True
+
+
+def cmd_auto_queue(number: int, action: str, dry: bool, *, label: str = "", actor: str = "") -> int:
+    """Only the API is called with the event's pull request number, never the pull request's code. `action` is
+    empty for a hand-started run, which judges a pull request into develop and leaves every other base alone."""
+    if action == "synchronize":
+        return drop_review(number, dry)
     info = json.loads(gh("api", f"repos/{repo()}/pulls/{number}"))
+    if not action and info["base"]["ref"] != "develop":
+        print(f"#{number}: base {info['base']['ref']}, not judged by hand")
+        return 0
     labels = [x["name"] for x in info["labels"]]
-    head = info["head"]["sha"]
-    if action == "synchronize" and "reviewed" in labels:
-        parents = len(json.loads(gh("api", f"repos/{repo()}/commits/{head}"))["parents"])
-        kept = before and review_survives(parents, changed_blobs(before), changed_blobs(head))
-        if not kept:
-            print(f"#{number}: a push after the review, so `reviewed` comes off")
-            if not dry:
-                gh("pr", "edit", str(number), "--remove-label", "reviewed")
-            labels.remove("reviewed")
+    if action == "labeled" and label == "reviewed" and "reviewed" in labels and label_refused(number, actor, dry):
+        return 0
     pr = {
         "base": info["base"]["ref"],
         "head": info["head"]["ref"],
@@ -388,16 +426,6 @@ def self_test() -> int:
             ],
             ["disarm", "disarm", "disarm", "nothing", "nothing"],
         ),
-        (
-            "a push keeps the review only as a merge of develop that changes nothing the review saw",
-            [
-                review_survives(2, {"a.py": "1"}, {"a.py": "1"}),
-                review_survives(2, {"a.py": "1"}, {"a.py": "2"}),
-                review_survives(1, {"a.py": "1"}, {"a.py": "1"}),
-                review_survives(2, {}, {}),
-            ],
-            [True, False, False, False],
-        ),
     ]
     bad = [f"{name}: got {got!r}, expected {want!r}" for name, got, want in cases if got != want]
     for b in bad:
@@ -419,7 +447,8 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--pr", type=int, default=0)
     ap.add_argument("--action", default="")
-    ap.add_argument("--before", default="")
+    ap.add_argument("--label", default="")
+    ap.add_argument("--actor", default="")
     a = ap.parse_args()
     if a.self_test:
         return self_test()
@@ -430,7 +459,9 @@ def main() -> int:
     if a.command == "ready":
         return cmd_ready()
     if a.command == "auto-queue":
-        return cmd_auto_queue(a.pr or sys.exit("usage: pr_flow.py auto-queue --pr N"), a.action, a.before, a.dry_run)
+        return cmd_auto_queue(
+            a.pr or sys.exit("usage: pr_flow.py auto-queue --pr N"), a.action, a.dry_run, label=a.label, actor=a.actor
+        )
     if a.command == "queue-failure":
         return cmd_queue_failure(a.run, a.attempt, a.conclusion, branch=a.branch, url=a.url, dry=a.dry_run)
     ap.print_help()

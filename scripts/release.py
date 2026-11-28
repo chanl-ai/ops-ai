@@ -14,9 +14,11 @@
   latest         prints the newest vX.Y.Z tag reachable from origin/main (release candidates are not releases): the
                  release the upgrade proof starts from (ci.yml, job release-proof)
   proof          reads the jobs of a push run (the Actions API's jobs list) on stdin and exits 1 unless its
-                 `release-proof` job succeeded; a skipped or missing one fails too (the release pull request's gate)
+                 `release-proof` job and its staging deploy (`staging / ...`) succeeded; a skipped or
+                 missing one fails too (release-gate)
   check-version  exits 1 when BRANCH (default: the checked-out branch) is release/X.Y.Z and HEAD's
-                 deploy/release/version is not X.Y.Z (ci.yml, job release-proof)
+                 deploy/release/version is not X.Y.Z, or a release or hotfix version is not above the newest
+                 vX.Y.Z tag (ci.yml, job release-proof)
 """
 
 from __future__ import annotations
@@ -90,8 +92,11 @@ def start_refusals(v: str, branches: list[str], tags: list[str], tip: str) -> li
     return out
 
 
-def finish_tag(branch: str, have: str, tags: list[str]) -> str:
-    """The tag a merged release or hotfix branch gets, from the version file on main at its merge commit."""
+def finish_tag(branch: str, have: str, tags: list[str], existing: bool = False) -> str:
+    """The tag a merged release or hotfix branch gets, from the version file on main at its merge commit. With
+    `existing` the tag is already on that commit (a rerun): it is checked the same way and kept."""
+    if existing:
+        tags = [t for t in tags if t != f"v{have}"]
     if not SEMVER.fullmatch(have):
         raise Refusal(f"{VERSION_FILE} on main says '{have}', not X.Y.Z")
     named = re.fullmatch(r"release/(\d+\.\d+\.\d+)", branch)
@@ -101,7 +106,18 @@ def finish_tag(branch: str, have: str, tags: list[str]) -> str:
         raise Refusal(f"{branch} is not a release or hotfix branch")
     if f"v{have}" in tags:
         raise Refusal(f"v{have} exists already")
+    low = floor_problem(have, tags)
+    if low:
+        raise Refusal(low)
     return f"v{have}"
+
+
+def floor_problem(have: str, tags: list[str]) -> str | None:
+    """Why a release or hotfix version is no newer than the newest released tag, or None."""
+    released = release_tags(tags)
+    if released and key(have) <= key(released[-1]):
+        return f"{have} is not above the newest release v{released[-1]}"
+    return None
 
 
 def sdk_edits(read: Callable[[str], str | None], v: str) -> dict[str, str]:
@@ -136,12 +152,22 @@ def latest_release(tags: list[str], on_main: Callable[[str], bool]) -> str | Non
 
 
 def proof_problem(jobs: list[dict[str, Any]]) -> str | None:
-    """Why the push run of a release branch is no proof, or None when its `release-proof` job succeeded."""
-    found = [j for j in jobs if j.get("name") == "release-proof"]
-    if not found:
-        return "the push run has no release-proof job"
-    state = found[0].get("conclusion") or found[0].get("status")
-    return None if state == "success" else f"release-proof of the push run is {state}, not success"
+    """Why the push run of a release branch is no proof, or None when its `release-proof` job and its staging deploy
+    (the jobs of the called workflow are named `staging / ...`) all succeeded."""
+    for label, found in (
+        ("release-proof", [j for j in jobs if j.get("name") == "release-proof"]),
+        ("the staging deploy", [j for j in jobs if str(j.get("name", "")).startswith("staging /")]),
+    ):
+        if not found:
+            return f"the push run has no {label} job"
+        bad = [
+            j.get("conclusion") or j.get("status")
+            for j in found
+            if (j.get("conclusion") or j.get("status")) != "success"
+        ]
+        if bad:
+            return f"{label} of the push run is {bad[0]}, not success"
+    return None
 
 
 def remote_branches() -> list[str]:
@@ -164,13 +190,17 @@ def file_version(ref: str) -> str:
     return text.strip() if text is not None else "missing"
 
 
-def version_problem(branch: str, ref: str) -> str | None:
-    named = re.fullmatch(r"release/(\d+\.\d+\.\d+)", branch)
-    if not named:
-        return None
+def version_problem(branch: str, ref: str, tags: list[str]) -> str | None:
+    """A release branch's version file names its branch; a release or hotfix version is above the newest tag."""
     have = file_version(ref)
-    if have != named.group(1):
+    named = re.fullmatch(r"release/(\d+\.\d+\.\d+)", branch)
+    if named and have != named.group(1):
         return f"{VERSION_FILE} on {branch} says {have}, not {named.group(1)}"
+    if named or branch.startswith("hotfix/"):
+        if not SEMVER.fullmatch(have):
+            return f"{VERSION_FILE} on {branch} says '{have}', not X.Y.Z"
+        low = floor_problem(have, tags)
+        return f"{branch}: {low}" if low else None
     return None
 
 
@@ -295,7 +325,7 @@ def rc(dry: bool) -> int:
     branch = branches[0]
     run("git", "fetch", "--quiet", "--no-tags", "origin", branch)
     sha = run("git", "rev-parse", f"origin/{branch}").strip()
-    problem = version_problem(branch, sha) or staging_problem(sha)
+    problem = version_problem(branch, sha, tag_names()) or staging_problem(sha)
     if problem:
         raise Refusal(problem)
     name = next_rc(tag_names(), file_version(sha))
@@ -319,7 +349,7 @@ def main() -> int:
     try:
         if command == "check-version":
             branch = os.environ.get("BRANCH") or run("git", "rev-parse", "--abbrev-ref", "HEAD").strip()
-            wrong = version_problem(branch, "HEAD")
+            wrong = version_problem(branch, "HEAD", tag_names())
             if wrong:
                 raise Refusal(wrong)
             print(f"release: {branch}: {VERSION_FILE} says {file_version('HEAD')}")
@@ -347,7 +377,14 @@ def main() -> int:
             print("release: release-proof of the push run succeeded")
             return 0
         if command == "finish":
-            print(finish_tag(os.environ.get("BRANCH", ""), file_version(os.environ.get("SHA", "HEAD")), tag_names()))
+            print(
+                finish_tag(
+                    os.environ.get("BRANCH", ""),
+                    file_version(os.environ.get("SHA", "HEAD")),
+                    tag_names(),
+                    existing=os.environ.get("EXISTING") == "1",
+                )
+            )
             return 0
         if command in ("start", "hotfix-start"):
             return start(dry, hotfix=command == "hotfix-start")

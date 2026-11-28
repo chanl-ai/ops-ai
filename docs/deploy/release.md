@@ -11,10 +11,10 @@ path (`LIVE=1` also reads GitHub).
 | Step | Who | Command | What fires |
 |---|---|---|---|
 | 1. Start | Maintainer | `make release-start V=X.Y.Z` (preview), then `DRY=0` | Pushes `release/X.Y.Z` from develop's tip with one commit that sets `deploy/release/version`, both SDK versions and the folded changelog, and opens the pull request `release: X.Y.Z` into `main`. Refuses while another `release/*` or `hotfix/*` exists, when `vX.Y.Z` exists or is not above the newest tag, or when develop's tip has no green run. A hotfix: `make hotfix-start V=X.Y.Z NAME=<what>` from the newest tag |
-| 2. Test | Automatic | none | The push runs every job of `ci.yml`, `release-security.yml`, `codeql.yml` and the staging deploy with its click walk. The pull request into `main` starts no second run: its `ci-ok` waits for the push run's result. A fix is a pull request into the release branch: it runs only the leak scan, and its merge push runs every job again |
+| 2. Test | Automatic | none | The push runs every job of `ci.yml`, `release-security.yml`, `codeql.yml` and the staging deploy with its click walk. The pull request into `main` starts no second run: its `release-gate` waits for the push run (up to 150 minutes) and passes only when that run's `release-proof` and staging deploy both succeeded. A fix is a pull request into the release branch: it runs the changed-files plan like one into `develop`, and its merge push runs every job again |
 | 3. Candidate | Maintainer | `make release-rc` (preview), then `DRY=0` | Tags the branch tip `vX.Y.Z-rc.N` once its staging deploy and walk passed and prints the staging address. An rc tag publishes nothing |
 | 4. Finish | Owner | Click merge on the pull request | `release-finish.yml` tags the merge commit `vX.Y.Z` (the version in `deploy/release/version` on `main`; it refuses when the branch name differs), starts `sdk-publish.yml` and `release-images.yml` on the tag, opens the merge-back pull request into `develop` and arms auto-merge so it enters the queue by itself, and deletes the release branch |
-| 5. Merge-back | Automatic | none | The merge-back changes nothing or only the version fields and the changelog, so it runs no CodeQL, no leak scan and no test job (`scripts/ci_trivial.py` reads the diff, not the branch name) and is green in about a minute |
+| 5. Merge-back | Automatic | none | A merge-back that changes no file against `develop` runs no CodeQL, no leak scan and no test job (`scripts/ci_trivial.py` reads the diff, not the branch name); one that carries any change runs its normal checks |
 
 While a `release/*` or `hotfix/*` branch exists, a push to `develop` still runs its checks and the staging job is skipped
 with a notice naming the branch, so the candidate on staging is not overwritten. The branch's deletion ends the freeze.
@@ -32,7 +32,9 @@ with a notice naming the branch, so the candidate on staging is not overwritten.
 
 | Symptom | Command |
 |---|---|
-| The pull request merged but there is no tag, merge-back or deleted branch | `gh workflow run release-finish.yml -f branch=release/X.Y.Z`; a rerun keeps a tag that already exists |
+| The pull request merged but there is no tag, merge-back or deleted branch | `gh workflow run release-finish.yml -f branch=release/X.Y.Z`; a rerun validates and keeps a tag that already exists, starts the publish workflows only for a tag it made, continues a merge-back branch that exists, and deletes the release branch whenever the tag is good |
+| A label did not start a run (`ci:full`) | Labels start no run; push, or `make gha-verify BRANCH=<branch>` |
+| A release pull request into `main` is blocked | The required check is `release-gate` (the maintainer adds it to the protection of `main`); `ci-ok` does not wait for the push run |
 | The merge-back pull request exists but is not armed | `gh pr merge --auto --merge <number>` |
 | The merge-back conflicts (label `needs-merge`) | Merge `origin/develop` into `merge-back/<branch>` by hand and push, never a rebase |
 | `main` has a release `develop` lacks | `gh workflow run release-finish.yml -f branch=<the merged branch>` opens the merge-back |

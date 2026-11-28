@@ -45,7 +45,8 @@ REMOVED = "the old release flows are gone; docs/deploy/release.md is the one pat
 CI_STALE = "a stale statement about what CI runs; docs/architecture/delivery.md says what runs when"
 BANNED: list[tuple[str, str]] = [
     (
-        r"release/current|release-intake|release-cut|release-pr\b|release-main|release-version|hotfix-cut|release-tag",
+        r"release/current|release-intake|release-cut|release-pr\b|release-main|release-version|hotfix-cut|release-tag"
+        r"|merge-back\.yml",
         REMOVED,
     ),
     (r"keep-current|sync-prs", REMOVED),
@@ -107,8 +108,10 @@ def doc_problems(doc: str, targets: set[str], release_mk: str) -> list[str]:
     return out
 
 
-def version_problems(version: str, ts: str, py: str, init: str | None) -> list[str]:
+def version_problems(version: str, ts: str, py: str, init: str | None, lock: str | None = None) -> list[str]:
     have = {"deploy/release/version": version, "sdk/typescript/package.json": ts, "sdk/python/pyproject.toml": py}
+    if lock is not None:
+        have["uv.lock"] = lock
     if init is not None:
         have["sdk/python/src/ops_ai/__init__.py"] = init
     if len(set(have.values())) == 1:
@@ -129,8 +132,13 @@ def static_problems() -> list[str]:
     ts = json.loads(read("sdk/typescript/package.json"))["version"]
     py = re.search(r'^version = "([^"]*)"', read("sdk/python/pyproject.toml"), re.M)
     init = re.search(r'^__version__ = "([^"]*)"', read("sdk/python/src/ops_ai/__init__.py"), re.M)
+    lock = re.search(r'^name = "ops-ai"\nversion = "([^"]*)"', read("uv.lock"), re.M)
     problems += version_problems(
-        read("deploy/release/version").strip(), ts, py.group(1) if py else "?", init.group(1) if init else None
+        read("deploy/release/version").strip(),
+        ts,
+        py.group(1) if py else "?",
+        init.group(1) if init else None,
+        lock.group(1) if lock else "?",
     )
     problems += doc_problems(
         read(RELEASE_DOC), make_targets(texts) | make_targets({"Makefile": read("Makefile")}), read("make/release.mk")

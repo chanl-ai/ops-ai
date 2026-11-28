@@ -1,9 +1,10 @@
 # The kanban's move from Reviewed to the merge queue, done by this workflow and not by a person
 # (docs/architecture/delivery.md, "From draft to main"). A pull request into develop is armed for the queue (auto-merge,
 # which the queue takes) when it is not a draft, carries the label `reviewed` (the reviewer's; one account authors every
-# pull request here, so approvals cannot be used), does not carry `hold`, and comes from this repository. A push after
-# the review takes `reviewed` off and disarms, unless it only merged develop in without touching what was reviewed. A
-# stacked pull request (its base is not develop) is never armed; when its base merges and GitHub retargets it to
+# pull request here, so approvals cannot be used), does not carry `hold`, and comes from this repository. Any push
+# after the review takes `reviewed` off and disarms (a merge of develop included), and a `reviewed` label counts only
+# from someone with write rights. A stacked
+# pull request (its base is not develop) is never armed; when its base merges and GitHub retargets it to
 # develop, the `edited` event applies the same rule. Decisions: scripts/pr_flow.py auto-queue; its --self-test is in
 # make checks. The merge-back that release-finish.yml opens is armed there.
 #
@@ -46,5 +47,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number || inputs.pr }}
           ACTION: ${{ github.event.action }}
-          BEFORE: ${{ github.event.before }}
-        run: python3 scripts/pr_flow.py auto-queue --pr "$PR" --action "$ACTION" --before "$BEFORE"
+          LABEL: ${{ github.event.label.name }}
+          ACTOR: ${{ github.event.sender.login }}
+        run: python3 scripts/pr_flow.py auto-queue --pr "$PR" --action "$ACTION" --label "$LABEL" --actor "$ACTOR"

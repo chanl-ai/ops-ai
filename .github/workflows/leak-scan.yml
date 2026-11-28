@@ -11,8 +11,8 @@ permissions:
 
 jobs:
   trivial:
-    # A pull request whose diff is empty or only a release's version fields and changelog (scripts/ci_trivial.py) has
-    # nothing to scan: the merge-back of a release into develop.
+    # A pull request that changes no file (scripts/ci_trivial.py) has nothing to scan: the merge-back of a release that
+    # develop already holds.
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
@@ -32,7 +32,9 @@ jobs:
 
   scan:
     needs: trivial
-    if: needs.trivial.outputs.trivial != 'true'
+    # Fails closed: the scan is skipped only when the trivial job succeeded and said true; a failed or cancelled
+    # trivial job, or any other answer, runs it.
+    if: ${{ always() && !(needs.trivial.result == 'success' && needs.trivial.outputs.trivial == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

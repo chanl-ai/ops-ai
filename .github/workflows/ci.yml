@@ -4,13 +4,14 @@ name: ci
 
 on:
   pull_request:
-    # labeled: adding ci:full starts a run of every job without a new push.
+    # No `labeled`: a label restarts the run, and the concurrency group cancels the one in progress, which leaves its ready and
+    # ci-ok failed on the same commit. ci:full counts on the next push; `make gha-verify BRANCH=` runs everything on demand.
     # ready_for_review: a draft runs no job (plan is skipped, and so is everything that needs it); marking it ready starts
     # the run, and later pushes run as usual.
-    types: [opened, synchronize, reopened, labeled, ready_for_review]
-    # A pull request into a release branch runs nothing here: the push that merges it runs every job
-    # (docs/deploy/release.md). The release's own pull request into main reports the push run's result in ci-ok.
-    branches: [develop, main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    # A pull request into a release or hotfix branch runs the changed-files plan like one into develop; the push that
+    # merges it runs every job. The release's own pull request into main runs release-gate, which reports that push run.
+    branches: [develop, main, "release/[0-9]*", "hotfix/**"]
   # The merge queue on develop: the queue's temporary branch (develop plus the queued pull requests) runs the same jobs
   # as a pull request, planned from the queue's base, so ci-ok reports on it and the queue merges only on green.
   merge_group:
@@ -69,6 +70,7 @@ jobs:
       mssql: ${{ steps.plan.outputs.mssql }}
       heavy: ${{ steps.plan.outputs.heavy }}
       repo_jobs: ${{ steps.plan.outputs.repo_jobs }}
+      trivial: ${{ steps.plan.outputs.trivial }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -98,6 +100,7 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = pull_request ] || [ "$GITHUB_EVENT_NAME" = merge_group ]; then
             if [ "$(python3 scripts/ci_trivial.py "$BASE_SHA" HEAD)" = true ]; then export CI_TRIVIAL=true; fi
           fi
+          echo "trivial=${CI_TRIVIAL:-false}" >> "$GITHUB_OUTPUT"
           base=$(git merge-base "$BASE_SHA" HEAD)
           scripts/ci-plan.sh "$base" | tee -a "$GITHUB_OUTPUT"
 
@@ -624,6 +627,8 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # A pull request that changes no file runs no CodeQL; only then does ready not wait for it.
+          TRIVIAL: ${{ needs.plan.outputs.trivial }}
         run: python3 scripts/pr_flow.py ready
 
   ci-ok:
@@ -635,30 +640,8 @@ jobs:
     if: always()
     needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, usecases, maintainer-review, generated, generated-commit, ready]
     runs-on: ubuntu-24.04
-    # 5 minutes, except for a release pull request, which waits for the push run of its commit (up to 90).
-    timeout-minutes: 90
+    timeout-minutes: 10
     steps:
-      - if: github.event_name == 'pull_request' && github.base_ref == 'main' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'hotfix/'))
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: A release pull request reports the push run of its commit
-        if: github.event_name == 'pull_request' && github.base_ref == 'main' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'hotfix/'))
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          for _ in $(seq 180); do
-            found=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=push&head_sha=$SHA&per_page=1" --jq '.workflow_runs[0] | "\(.id) \(.status) \(.conclusion)"' 2>/dev/null || true)
-            id=${found%% *}; run=${found#* }
-            case "$run" in
-              "completed success")
-                # A green run is not enough: its release-proof must have run and passed, or the release was not proven.
-                gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" | python3 scripts/release.py proof && exit 0
-                echo "::error title=Release not proven::the push run of $SHA has no passing release-proof"; exit 1 ;;
-              "completed "*) echo "::error title=Candidate not green::the push run of $SHA ended: $run"; exit 1 ;;
-            esac
-            sleep 30
-          done
-          echo "::error title=Candidate not tested::no finished push run of $SHA; push the branch or re-run this job"; exit 1
       - env:
           NEEDS: ${{ toJSON(needs) }}
           DRAFT: ${{ github.event.pull_request.draft }}
@@ -666,6 +649,38 @@ jobs:
           if grep -qE '"result": "(failure|cancelled)"' <<<"$NEEDS"; then echo "$NEEDS"; exit 1; fi
           if [ "$DRAFT" = true ]; then echo "draft pull request: no job ran; the checks start when it is marked ready"; exit 0; fi
           echo "every check that ran passed"
+
+  release-gate:
+    # The release or hotfix pull request into main reports the push run of its commit: that run holds every job, the
+    # release-proof (the upgrade from the newest release, 90 minutes at most) and the staging deploy with its click walk.
+    # It has its own name because the push run's ci-ok sits on the same commit; branch protection requires this one on main.
+    # Red, cancelled, skipped, missing or timed out all fail it. The wait is 150 minutes and the job allows 170, so the last
+    # error line always prints.
+    if: github.event_name == 'pull_request' && github.base_ref == 'main' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'hotfix/'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 170
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Wait for the push run of this commit and read its release-proof and staging deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          for _ in $(seq 300); do
+            found=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=push&head_sha=$SHA&per_page=1" --jq '.workflow_runs[0] | "\(.id) \(.status) \(.conclusion)"' 2>/dev/null || true)
+            id=${found%% *}; run=${found#* }
+            case "$run" in
+              "completed success")
+                gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" | python3 scripts/release.py proof && exit 0
+                echo "::error title=Release not proven::the push run of $SHA has no passing release-proof and staging deploy"; exit 1 ;;
+              "completed "*) echo "::error title=Candidate not green::the push run of $SHA ended: $run"; exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "::error title=Candidate not tested::no finished push run of $SHA after 150 minutes; push the branch or re-run this job"; exit 1
 
   staging:
     # Every merge to develop, and every push to a release or hotfix branch, goes to staging once ci-ok passed for that

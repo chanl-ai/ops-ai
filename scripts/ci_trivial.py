@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Prints `true` when the diff between two commits holds nothing to test, else `false`: no file at all (a merge-back
-of a release that develop already holds), or only the release's version fields (deploy/release/version, the one
-`version` line of each SDK's package file and of its entry in uv.lock) and the folded changelog (changelog/**). The
-decision reads the diff, never a branch name, so a branch that carries any other change is tested in full. ci.yml's
-plan step uses it for a pull request and a merge queue group; codeql.yml and leak-scan.yml skip their jobs on it.
+"""Prints `true` when a pull request changes no file against its base, else `false` (also when git cannot say). That is
+the merge-back of a release that develop already holds. ci.yml's plan uses it to plan nothing; codeql.yml and
+leak-scan.yml skip their scan only when their `trivial` job succeeded and printed `true`. Any other diff, a version
+bump included, runs every check.
 
   python3 scripts/ci_trivial.py <base> <head>
   python3 scripts/ci_trivial.py --self-test
@@ -11,78 +10,44 @@ plan step uses it for a pull request and a merge queue group; codeql.yml and lea
 
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
-
-# Per file, the changed lines that count as the version field. uv.lock also needs the hunk to sit in the ops-ai entry.
-VERSION_LINES = {
-    "sdk/typescript/package.json": re.compile(r'^\s*"version": "[^"]*",?$'),
-    "sdk/python/pyproject.toml": re.compile(r'^version = "[^"]*"$'),
-    "sdk/python/src/ops_ai/__init__.py": re.compile(r'^__version__ = "[^"]*"$'),
-    "uv.lock": re.compile(r'^version = "[^"]*"$'),
-}
-WHOLE = ("deploy/release/version",)
-FOLDED = re.compile(r"^changelog/.*\.json$")
+import tempfile
+from pathlib import Path
 
 
-def only_version_lines(path: str, diff: str) -> bool:
-    pattern = VERSION_LINES[path]
-    changed = [ln for ln in diff.splitlines() if ln[:1] in "+-" and not ln.startswith(("+++", "---"))]
-    if not changed or not all(pattern.match(ln[1:]) for ln in changed):
-        return False
-    return path != "uv.lock" or 'name = "ops-ai"' in diff
-
-
-def trivial(diffs: dict[str, str]) -> bool:
-    """`diffs` maps each changed path to its unified diff (-U2)."""
-    for path, diff in diffs.items():
-        if path in WHOLE or FOLDED.match(path):
-            continue
-        if path in VERSION_LINES and only_version_lines(path, diff):
-            continue
-        return False
-    return True
-
-
-def git(*args: str) -> str:
-    return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
-
-
-def read(base: str, head: str) -> dict[str, str]:
-    """Each changed path with its diff (only the files with a version field need one)."""
-    paths = [p for p in git("diff", "--name-only", f"{base}...{head}").splitlines() if p]
-    return {p: git("diff", "-U2", f"{base}...{head}", "--", p) if p in VERSION_LINES else "" for p in paths}
+def trivial(base: str, head: str, cwd: str | None = None) -> bool:
+    """No file differs between the merge base of the two commits and head; a git failure is not trivial."""
+    done = subprocess.run(
+        ["git", "diff", "--quiet", "--no-renames", f"{base}...{head}"], cwd=cwd, capture_output=True, check=False
+    )
+    return done.returncode == 0
 
 
 def self_test() -> int:
-    lock = ' name = "ops-ai"\n-version = "1.0.0"\n+version = "1.2.1"\n source = x\n'
-    other = ' name = "requests"\n-version = "1.0.0"\n+version = "1.2.1"\n'
-    ts = '-  "version": "1.0.0",\n+  "version": "1.2.1",\n'
-    cases = [
-        ("no file is trivial", trivial({}), True),
-        ("the version file alone", trivial({"deploy/release/version": ""}), True),
-        (
-            "the version fields and the folded changelog",
-            trivial(
-                {
-                    "deploy/release/version": "",
-                    "changelog/releases/1.2.1.json": "",
-                    "sdk/typescript/package.json": ts,
-                    "uv.lock": lock,
-                }
-            ),
-            True,
-        ),
-        ("another dependency's version in uv.lock", trivial({"uv.lock": other}), False),
-        ("a code file next to the version", trivial({"deploy/release/version": "", "services/a/x.py": ""}), False),
-        (
-            "a package.json change beyond the version",
-            trivial({"sdk/typescript/package.json": ts + '+  "name": "y",\n'}),
-            False,
-        ),
-        ("a branch named release/x is no excuse", trivial({"docs/a.md": ""}), False),
-    ]
+    with tempfile.TemporaryDirectory() as tmp:
+
+        def git(*args: str) -> str:
+            return subprocess.run(
+                ["git", "-c", "user.name=t", "-c", "user.email=t@example.test", *args],
+                cwd=tmp,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+
+        git("init", "-q", "-b", "main")
+        (Path(tmp) / "version").write_text("1.0.0\n")
+        git("add", "version")
+        git("commit", "-q", "-m", "base")
+        base = git("rev-parse", "HEAD")
+        git("commit", "-q", "--allow-empty", "-m", "empty")
+        same = trivial(base, "HEAD", tmp)
+        (Path(tmp) / "version").write_text("1.0.1\n")
+        git("commit", "-q", "-am", "version only")
+        bump = trivial(base, "HEAD", tmp)
+        broken = trivial("no-such-commit", "HEAD", tmp)
+    cases = [("an empty commit", same, True), ("a version bump", bump, False), ("a missing base", broken, False)]
     bad = [f"{n}: got {g}, expected {w}" for n, g, w in cases if g != w]
     for b in bad:
         print(f"ci_trivial self-test FAILED: {b}")
@@ -97,7 +62,7 @@ def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(__doc__, file=sys.stderr)
         return 2
-    print("true" if trivial(read(*argv)) else "false")
+    print("true" if trivial(*argv) else "false")
     return 0
 
 
