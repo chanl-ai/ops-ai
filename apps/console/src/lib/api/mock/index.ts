@@ -178,7 +178,13 @@ export function createMockApi(): OpsApi {
       policy: { id: p.id, name: p.name, condition: p.condition, reviewers: p.reviewers, sla: p.sla, onTimeout: p.onTimeout, fourEyes: p.fourEyes },
       slaMinutes: s.slaMinutes,
       assignee: s.assignee,
-      approvals: [],
+      approvals: s.approvals ?? [],
+      approvalsNeeded: s.approvalsNeeded ?? (p.fourEyes ? 2 : 1),
+      caseId: s.caseId,
+      caseTitle: s.caseTitle,
+      actionLabel: s.actionLabel,
+      consequence: s.consequence,
+      actionFields: s.actionFields,
       status: s.status,
       createdAt: F.reviewCreatedAt(s.createdMinutesAgo),
       decidedAt: isOpen(s as unknown as Review) ? undefined : F.reviewCreatedAt(s.createdMinutesAgo - 20),
@@ -190,7 +196,14 @@ export function createMockApi(): OpsApi {
 
   // Approving a call whose operation needs two approvers asks for a step-up, as agents-service does.
   const needsStepUp = (r: Review) => !!r.actionTool && F.TWO_APPROVER_TOOLS.has(r.actionTool);
-  const withAgentName = (r: Review): Review => ({ ...r, agentName: agents.find((a) => a.slug === r.agentSlug)?.name, stepUp: needsStepUp(r) });
+  // What the service sends per person (hitl_facade.with_rights), so the console reads rights and never works them out:
+  // a task nobody decides carries none, and Return is offered where a task has someone to go back to.
+  const rightsOf = (r: Review): Pick<Review, 'canAssign' | 'canReassign' | 'canReturn'> => {
+    const decides = isOpen(r) && r.canDecide !== false;
+    const returnable = (r.kind === 'publish_request' || r.kind === 'agent_publish' || r.kind === 'skill_publish' || r.kind === 'template_submission' || !r.runId) && r.kind !== 'egress_host';
+    return { canAssign: decides && r.assignee !== me, canReassign: decides && !!r.assignee, canReturn: r.canReturn ?? (decides && returnable) };
+  };
+  const withAgentName = (r: Review): Review => ({ ...r, ...rightsOf(r), agentName: agents.find((a) => a.slug === r.agentSlug)?.name, stepUp: needsStepUp(r) });
   /** 422 unless the token came from a re-authentication by the signed-in person in the last 5 minutes. */
   const requireStepUp = (token?: string) => {
     const v = verifyMockStepUp(token ?? '');
@@ -438,6 +451,8 @@ export function createMockApi(): OpsApi {
       policy: PUBLISH_POLICY,
       slaMinutes: 480,
       approvals: [],
+      // A publish request is the one kind a decider returns to who asked (the service's canReturn).
+      canReturn: true,
       status: 'pending',
       createdAt: new Date().toISOString(),
       reasoning: changes.length ? changes : ['Only positions changed'],

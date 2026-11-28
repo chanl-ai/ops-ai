@@ -511,6 +511,15 @@ export interface Review {
   place?: ReviewPlace;
   /** Whether the signed-in person may decide it now, by the decision route's own checks (agents-service); absent from the mock. */
   canDecide?: boolean;
+  /** What the signed-in person may do with it now, each by its route's own check (hitl_facade.with_rights). */
+  canAssign?: boolean;
+  canReassign?: boolean;
+  canReturn?: boolean;
+  /** How many distinct people approve it, and whether the signed-in person is already one of `approvals`. */
+  approvalsNeeded?: number;
+  viewerApproved?: boolean;
+  /** What approving runs, in a reviewer's words; null when the step sends no call. */
+  actionLabel?: string | null;
   title: string;
   origin?: ReviewOrigin;
   customer: string;

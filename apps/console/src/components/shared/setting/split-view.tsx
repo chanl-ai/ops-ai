@@ -2,18 +2,10 @@
 
 import * as React from 'react';
 
+import { useWide } from '@/hooks/use-wide';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 
 const KEY = 'ops.split.';
-
-const WIDE = '(min-width: 1024px)';
-const subscribeWide = (onChange: () => void) => {
-  const q = window.matchMedia(WIDE);
-  q.addEventListener('change', onChange);
-  return () => q.removeEventListener('change', onChange);
-};
-// Read as an external store so the layout changes in the same task as the resize, not a render later.
-const useWide = (): boolean => React.useSyncExternalStore(subscribeWide, () => window.matchMedia(WIDE).matches, () => true);
 
 /**
  * Two columns with a drag handle, a minimum on each side and a remembered split (this browser only; the page works
