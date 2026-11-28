@@ -29,6 +29,9 @@ json() { if [ "$#" -eq 0 ]; then echo '[]'; else printf '"%s",' "$@" | sed 's/,$
 release=false
 case "${GITHUB_REF:-}" in refs/heads/release/* | refs/heads/hotfix/*) release=true ;; esac
 # CI_FULL=true (ci.yml sets it for a pull request titled with [ci full] or labelled ci:full) runs every job.
+# A pull request plans the services and packages whose own files changed; the merge queue's run plans their dependants too,
+# since that is where the combination is gated. Release, hotfix, main pushes and ci:full are not pull requests.
+if [ "${GITHUB_EVENT_NAME:-}" = pull_request ] && [ "${CI_FULL:-}" != true ]; then export VERIFY_CHANGED_DEPTH=self; fi
 if [ "$release" = true ] || [ "${CI_FULL:-}" = true ]; then plan="plan: full"; else
   plan=$(VERIFY_CHANGED_PLAN=jobs scripts/verify-changed.sh "$base")
 fi

@@ -289,6 +289,18 @@ def test_a_draft_pull_request_runs_no_job_but_ci_ok_still_reports() -> None:
     assert "push" in jobs["staging"]["if"] and "generated" in jobs["generated-commit"]["needs"]
 
 
+def test_a_pull_request_plans_only_what_it_changed_and_the_merge_queue_plans_the_dependants(tmp_path: Path) -> None:
+    changed = "packages/ops_store/src/ops_store/base.py"
+    pr = plan(tmp_path, changed, event="pull_request")
+    assert (json.loads(pr["packages"]), pr["services"]) == (["ops_store"], "[]"), pr
+    queue = plan(tmp_path, changed, event="merge_group")
+    assert {"ops_store", "ops_identity"} <= set(json.loads(queue["packages"])) and "kb-service" in queue["services"], (
+        queue
+    )
+    # ci:full on a pull request is a full plan, not the narrow one.
+    assert plan(tmp_path, changed, event="pull_request", full="true")["full"] == "true"
+
+
 def test_a_release_or_main_push_runs_every_job_even_when_told_it_was_tested(tmp_path: Path) -> None:
     for ref in ("refs/heads/release/1.2.0", "refs/heads/hotfix/1.2.1", "refs/heads/main"):
         p = plan(tmp_path, "docs/deploy/release.md", ref=ref, event="push", tested="true")
