@@ -52,15 +52,24 @@ else
     fi
   done
 fi
-# The long suites run as test shards (scripts/test_shard.py) beside one job for their lint, types and gates.
-declare -A SHARDS=([agents-service]=6 [tools-service]=5)
-jobs_json=()
+# The long suites run as test shards (scripts/test_shard.py) beside one job for their lint, types and gates. A shard
+# stays under about 12 minutes of tests; fewer, longer shards pay the checkout, setup and database container once each
+# (measured 2026-11: 45 to 60 seconds of every job against 300 for a shard's tests).
+declare -A SHARDS=([agents-service]=4 [tools-service]=3)
+# Services whose verify takes under 3 minutes share one job (one checkout, setup and database), run one after the other
+# with a result line each; kb-service and platform-service take 7 to 11 minutes and keep their own.
+SHORT=(documents-service files-service models-service runner-service)
+jobs_json=(); short=()
 for svc in ${services[@]+"${services[@]}"}; do
   n=${SHARDS[$svc]:-0}
-  if [ "$n" -eq 0 ]; then jobs_json+=("{\"service\":\"$svc\",\"part\":\"verify\"}"); continue; fi
+  if [ "$n" -eq 0 ]; then
+    if [[ " ${SHORT[*]} " == *" $svc "* ]]; then short+=("$svc"); else jobs_json+=("{\"service\":\"$svc\",\"part\":\"verify\"}"); fi
+    continue
+  fi
   jobs_json+=("{\"service\":\"$svc\",\"part\":\"checks\"}")
   for i in $(seq 1 "$n"); do jobs_json+=("{\"service\":\"$svc\",\"part\":\"test $i/$n\"}"); done
 done
+if [ "${#short[@]}" -gt 0 ]; then jobs_json+=("{\"service\":\"${short[*]}\",\"part\":\"verify\"}"); fi
 echo "full=$full"
 if [ "${GITHUB_EVENT_NAME:-}" = pull_request ] && [ "${CI_FULL:-}" != true ]; then echo "heavy=false"; else echo "heavy=true"; fi
 repo_json=()

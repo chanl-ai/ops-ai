@@ -56,7 +56,7 @@ def test_a_full_plan_runs_every_suite_make_verify_runs(tmp_path: Path) -> None:
     p = plan(tmp_path, "make/env.mk")
     assert p["full"] == "true", p
     jobs = json.loads(p["service_jobs"])
-    services = {f"pool-{j['service'].removesuffix('-service')}" for j in jobs}
+    services = {f"pool-{svc.removesuffix('-service')}" for j in jobs for svc in j["service"].split()}
     assert services | set(p["repo_pool"].split()) == verify_pool(), p
     assert (p["console"], p["docs"]) == ("true", "true"), p
 
@@ -64,9 +64,15 @@ def test_a_full_plan_runs_every_suite_make_verify_runs(tmp_path: Path) -> None:
 def test_the_long_suites_run_as_shards_beside_their_checks(tmp_path: Path) -> None:
     jobs = json.loads(plan(tmp_path, "make/env.mk")["service_jobs"])
     agents = sorted(j["part"] for j in jobs if j["service"] == "agents-service")
-    assert agents == ["checks"] + [f"test {i}/6" for i in range(1, 7)], agents
+    assert agents == ["checks"] + [f"test {i}/4" for i in range(1, 5)], agents
     tools = sorted(j["part"] for j in jobs if j["service"] == "tools-service")
-    assert tools == ["checks", "test 1/5", "test 2/5", "test 3/5", "test 4/5", "test 5/5"], tools
+    assert tools == ["checks", "test 1/3", "test 2/3", "test 3/3"], tools
+    # The short verifies share one job, which names each service; the long ones keep their own.
+    verify = [j["service"] for j in jobs if j["part"] == "verify"]
+    assert {"documents-service", "files-service", "models-service", "runner-service"} in [
+        set(v.split()) for v in verify
+    ]
+    assert {"kb-service", "platform-service"} <= set(verify), verify
 
 
 def test_a_service_change_runs_that_service_and_no_repo_job(tmp_path: Path) -> None:

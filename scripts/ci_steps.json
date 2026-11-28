@@ -14,7 +14,7 @@
       {"step": "case \"$PART\" in", "twin": "make python-verify"}
     ],
     "package": [
-      {"step": "uv run python scripts/test_db.py \"$OPS_TEST_DATABASE_URL\"", "twin": "make test"}
+      {"step": "failed=\"\"", "twin": "make test"}
     ],
     "console": [
       {"step": "pnpm verify", "twin": "pnpm verify"}
