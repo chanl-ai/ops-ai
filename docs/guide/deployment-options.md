@@ -9,9 +9,17 @@ layout. What changes is how they start, how secrets reach them and where file by
 and runs outside the containers. The Compose and Kubernetes layouts have both passed the release's install tests, and the
 sizing figures are a starting point to measure your own workload against.
 
-Settle it before you install, because the layout decides how secrets reach the containers and where file bytes live. To
-decide, find your situation in the first table, then read the network and sizing sections for what your platform team
-needs to approve.
+Settle it before you install, because the layout decides how secrets reach the containers and where file bytes live. Start
+with the choice below, then read the network and sizing sections for what your platform team needs to approve.
+
+<!-- site: decision caption="Which install to use, by what your machines can reach and who runs them" -->
+- **Can the machines reach the internet?**
+  - **No**: [Install offline from a release package](../deploy/release-package.md).
+  - **Yes**: **Does your platform team run a Kubernetes cluster for this?**
+    - **Yes**: [Install on Kubernetes](../deploy/kubernetes.md).
+    - **No**: **Do you want to run each step yourself?**
+      - **Yes**: [Install with Docker Compose](../deploy/compose.md).
+      - **No**: [Install with the script](../deploy/install.md).
 
 ## Where it can run
 

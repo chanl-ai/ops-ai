@@ -16,10 +16,15 @@ server. SQL Server 2025 and Azure SQL are partial: see [SQL Server and Azure SQL
 | Automatic | The install's schema job, with a superuser login you give it | A trial, or a database Ops AI owns |
 | DBA | Your DBA, from the release's scripts | Production: the services never hold a login that may change the schema |
 
-The [install script](install.md) asks which one you want (`--db-mode auto` or `--db-mode dba`). In DBA mode it writes the
-scripts to `./dba/` and prints three `psql` commands to run, then waits until the schema is current. Its own
-`1-server.sql` takes the place of the `roles.sql` and `ALTER ROLE` steps below. The scripts
-also come from two other places.
+The [install script](install.md) asks which one you want (`--db-mode auto` or `--db-mode dba`). In DBA mode the two of
+you work in this order. The script's own `1-server.sql` takes the place of the `roles.sql` and `ALTER ROLE` steps below.
+The scripts also come from two other places.
+
+<!-- site: sequence caption="DBA mode: the script writes the scripts and waits, your DBA applies them, and the services start only on a current schema" -->
+1. **Install script → Your DBA**: Writes the scripts and each login's password to `./dba/` and prints three `psql` commands
+2. **Your DBA → PostgreSQL**: Runs `1-server.sql` for the roles and the database, then the bundle and the grants
+3. **Install script → PostgreSQL**: Checks the schema version and waits until it is current
+4. **Install script → Services**: Starts them, each on its own login
 
 | Source | How to get the scripts |
 |---|---|

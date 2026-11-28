@@ -76,6 +76,20 @@ The script turns `sslmode=` into the form the services use.
 
 ## What the script does
 
+The script starts these containers on the machine. Your TLS terminator sends people to the one published port.
+
+<!-- site: layers frame="One machine running Ops AI" caption="What the install runs: one proxy in front, the services behind it, and PostgreSQL and the model outside the containers" -->
+- **Front door**: The one published port
+  - **Proxy**: Serves the console and the APIs on one origin
+- **Ops AI containers**: Started by the script, on a private network
+  - **Console and policy engine**: The screens, and the checks on who may do what
+  - **Seven services**: Platform, agents, tools, models, knowledge, files and documents
+  - **Worker and code runner**: Run workflows, and run code tools
+  - **Schema job**: Applies the schema when the install owns it, then stops
+- **Outside the containers**: Yours, or the trial's
+  - **PostgreSQL**: A built-in container for a trial, otherwise your server
+  - **Model endpoint**: An OpenAI-compatible endpoint, or the built-in test model
+
 <!-- site: steps -->
 1. **Gets the images** for linux/amd64 or linux/arm64 from `ghcr.io/chanl-ai/ops-ai`. With `--offline`, it loads them
    from a release package's image file instead.
