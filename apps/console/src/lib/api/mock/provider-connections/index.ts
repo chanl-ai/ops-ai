@@ -85,9 +85,12 @@ const CATALOG: CatalogModel[] = [
 ];
 
 /** Sample connections for a console with no models-service; nothing outlives a reload. */
-export function createMockProviderConnections(keys: ProviderKeysApi): ProviderConnectionsApi {
+export function createMockProviderConnections(keys: ProviderKeysApi): ProviderConnectionsApi & { catalogModels: (providerId: string) => CatalogModel[] } {
   let rows = structuredClone(SEED);
+  // Only a catalogued type has models in the catalog; a URL's models are listed by its key, not here.
+  const catalogModels = (providerId: string) => (rows.find((r) => r.id === providerId && TYPES.find((t) => t.id === r.type)?.catalogued) ? CATALOG : []);
   return {
+    catalogModels,
     list: async (p) => list(rows, p, { text: (c) => `${c.name} ${c.type}`, value: () => '', facetKeys: [], id: (c) => c.id }, 'normal'),
     create: async (input) => {
       // The secrets a connection is made with are saved as its key, as models-service does in the same request.
@@ -98,7 +101,6 @@ export function createMockProviderConnections(keys: ProviderKeysApi): ProviderCo
       return { id: row.id, name: row.name, type: row.type };
     },
     types: () => respond(() => TYPES),
-    // Only a catalogued type has models in the catalog; a URL's models are listed by its key, not here.
-    catalog: (providerId) => respond(() => (rows.find((r) => r.id === providerId && TYPES.find((t) => t.id === r.type)?.catalogued) ? CATALOG : [])),
+    catalog: (providerId) => respond(() => catalogModels(providerId)),
   };
 }

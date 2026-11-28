@@ -94,7 +94,15 @@ export function aliasNameProblem(name: string): string | undefined {
   return /^[a-z0-9][a-z0-9.-]{1,118}$/.test(name.trim()) ? undefined : 'Use lowercase letters, digits, dots and dashes, at least two characters.';
 }
 
-/** A price the person typed: empty means none (0), anything else a number of at least 0. */
+/** A price the person typed: empty leaves it to the catalog (the dialog sends no price when both are empty), anything else a number of at least 0. */
+/** Where a refused alias save shows: by the error's code, since a message names the alias, and an alias may be called
+ * "price-bot" or "named-x". A taken name goes on the name field of a new alias; a price refusal on the price field. */
+export function aliasSaveErrors(e: { message: string; code?: string }, editing: boolean): { name?: string; inputPerMillion?: string; submit?: string } {
+  if (e.code === 'alias_exists' && !editing) return { name: e.message };
+  if (e.code === 'price_required' || e.code === 'price_incomplete') return { inputPerMillion: e.message };
+  return { submit: e.message };
+}
+
 export function priceProblem(value: string): string | undefined {
   if (!value.trim()) return undefined;
   const n = Number(value);

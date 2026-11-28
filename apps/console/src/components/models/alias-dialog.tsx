@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSaveAlias } from '@/hooks/model-queries';
 import { providerConnectionOptions, modelOptions } from '@/hooks/options-queries';
-import { aliasNameProblem, SENSITIVITIES, priceProblem } from '@/lib/model-forms';
+import { aliasNameProblem, aliasSaveErrors, SENSITIVITIES, priceProblem } from '@/lib/model-forms';
 import type { CatalogModel, ModelAliasRow, ProviderConnection } from '@/lib/types/models';
 
 type Picked = { id: string; label: string };
@@ -75,8 +75,7 @@ export function AliasDialog({ open, onOpenChange, editing }: { open: boolean; on
       toast.success(editing ? `Saved ${saved.name} as version ${saved.version}` : `Made ${saved.name}`, { description: 'Builders can pick it on an agent.' });
       onOpenChange(false);
     } catch (e) {
-      const message = (e as Error).message;
-      setErrors(/exists|named/i.test(message) && !editing ? { name: message } : /price/i.test(message) ? { inputPerMillion: message } : { submit: message });
+      setErrors(aliasSaveErrors(e as { message: string; code?: string }, !!editing));
     }
   };
 
