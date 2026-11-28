@@ -39,6 +39,7 @@ import { baseOf, staleNote, staleSave } from '@/lib/save-base';
 import type { PublishBlocker } from '@/lib/types/references';
 import type { SkillDetail, SkillInputField, SkillLoading, SkillPartContent } from '@/lib/types/skills';
 
+import { useCanBuild } from '@/hooks/me-queries';
 import { PartsList } from './parts-section';
 import { skillBody } from './skill-body';
 import { nameError } from '@/lib/validation/names';
@@ -135,6 +136,7 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
   // A save refused for one step, shown on that step until the steps change.
   const [refused, setRefused] = React.useState<PublishBlocker | null>(null);
   // A skill has steps or parts, never both: one with parts keeps its Markdown introduction, edited in the same editor.
+  const canBuildSkills = useCanBuild('skills');
   const body = skillBody(form);
   const stepped = body.field === 'text';
   const newest = sk.versions[0];
@@ -445,7 +447,7 @@ export function SkillEditor({ skill: sk, tab = 'instructions', hidden, rail, can
                 ))}
               </div>
             )}
-            {body.parts.length > 0 && <PartsList parts={body.parts} />}
+            {body.parts.length > 0 && <PartsList parts={body.parts} ownerTeam={sk.ownerTeam} knowledgeBases={form.knowledgeBases} canSplit={!readOnly && canBuildSkills} />}
           </div>
         </RecordLayout>
       </div>

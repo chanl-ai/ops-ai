@@ -27,6 +27,7 @@ from ops_service_kit.testing import Seeded, SeedTeam, StatementBudget, budget_ch
 from ops_storage.local import LocalObjectStore
 
 from .test_api import CONFIG, OPS, PDF, sign_in
+from .test_watch_routes import Declaring
 
 BUDGETS = Path(__file__).parents[1] / "budgets.toml"
 
@@ -49,7 +50,7 @@ async def app(database_url: str, tenant: str, tmp_path: Path) -> AsyncIterator[F
     )
     files = TenantFiles(default, FilesStore(engine), CONFIG, scanning="off", settings=storage)  # pyright: ignore[reportArgumentType]
     auth = Auth.for_dev(Settings(), audience="files", name="sam", email="sam@harborpine.example", tenant_id=tenant)
-    built = create_files_app(files, engine=engine, auth=auth, settings=storage)
+    built = create_files_app(files, engine=engine, auth=auth, settings=storage, reader=Declaring())
     # An admin of team_ops for the files routes, and the Security admin storage settings need.
     sign_in(built, tenant, "admin", "sam@harborpine.example")
 
@@ -71,8 +72,8 @@ async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
 
 @pytest.fixture
 def seed_team(client: httpx.AsyncClient) -> SeedTeam:
-    """`n` more files of team_ops, each with its own bytes so none is deduplicated, `n` more storage credentials, and
-    one read request on the first file."""
+    """`n` more files of team_ops, each with its own bytes so none is deduplicated, `n` more storage credentials and
+    watched folders, and one read request on the first file."""
     first: dict[str, str] = {}
 
     async def seed(n: int) -> Seeded:
@@ -91,6 +92,15 @@ def seed_team(client: httpx.AsyncClient) -> SeedTeam:
             credential = {"kind": "aws_access_key", "values": values}
             put = await client.put(f"/v1/settings/storage/credentials/BANK_{n}_{i}", json=credential, headers=OPS)
             assert put.status_code == 200, put.text
+            watch = {
+                "name": f"Folder {n}-{i}",
+                "plugin": "sharepoint",
+                "source": "files",
+                "values": {"libraries": ["L"]},
+            }
+            made = await client.post("/v1/watches", json=watch, headers=OPS)
+            assert made.status_code == 201, made.text
+            first.setdefault("watch_id", made.json()["data"]["id"])
         if "key" not in first:
             ask = {"documentTypeId": "restraining_notice", "typeName": "Restraining notice"}
             asked = await client.post(f"/v1/files/{first['file_id']}/read-requests", json=ask, headers=OPS)

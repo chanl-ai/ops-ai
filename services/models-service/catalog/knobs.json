@@ -1,0 +1,233 @@
+{
+  "about": "The knobs a model can be given and where every knob value comes from. `knobs`: each knob's request field (`wire`), what goes beside it (`with`), the value at or below which it is off (`offAt`), and the model limit that caps it (`maximumFrom`, with `maximumOffset`). `sampling`: knobs a model takes only when models.dev says it takes a temperature. `options`: which knob each of models.dev's reasoning options is, and `optionFields` which range keyword each option field fills. `providers`: per catalogued provider, the knobs it takes and their ranges and defaults. models-service builds each model's knobs from these and the snapshot's facts when it starts (catalog.py); scripts/sync_catalog.py writes only the snapshot.",
+  "knobs": {
+    "temperature": {
+      "type": "number",
+      "title": "Temperature",
+      "description": "Lower is steadier, higher is more varied.",
+      "wire": "temperature"
+    },
+    "top_p": {
+      "type": "number",
+      "title": "Top p",
+      "description": "Only the most likely words whose chances add up to this are considered.",
+      "wire": "top_p"
+    },
+    "top_k": {
+      "type": "integer",
+      "title": "Top k",
+      "description": "Only this many of the most likely words are considered.",
+      "wire": "top_k"
+    },
+    "max_tokens": {
+      "type": "integer",
+      "title": "Longest answer (tokens)",
+      "description": "The most tokens one answer may use, thinking included.",
+      "wire": "max_tokens",
+      "alsoWire": [
+        "max_completion_tokens"
+      ],
+      "maximumFrom": "output"
+    },
+    "thinking_budget": {
+      "type": "integer",
+      "title": "Thinking budget (tokens)",
+      "description": "How many tokens the model may think for before it answers. 0 turns thinking off.",
+      "wire": "thinking.budget_tokens",
+      "with": {
+        "thinking.type": "enabled"
+      },
+      "offAt": 0,
+      "maximumFrom": "output",
+      "maximumOffset": -1
+    },
+    "reasoning_effort": {
+      "type": "string",
+      "title": "Thinking effort",
+      "description": "How hard the model thinks. Higher is slower and costs more per answer.",
+      "wire": "reasoning_effort"
+    }
+  },
+  "sampling": [
+    "temperature",
+    "top_p",
+    "top_k"
+  ],
+  "options": {
+    "budget_tokens": "thinking_budget",
+    "effort": "reasoning_effort"
+  },
+  "optionFields": {
+    "min": "x-minimum-on",
+    "max": "maximum",
+    "values": "enum"
+  },
+  "providers": {
+    "openai": {
+      "takes": [
+        "temperature",
+        "top_p",
+        "max_tokens",
+        "reasoning_effort"
+      ],
+      "ranges": {
+        "temperature": {
+          "minimum": 0,
+          "maximum": 2,
+          "default": 1
+        },
+        "top_p": {
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        },
+        "max_tokens": {
+          "minimum": 1,
+          "default": 16384
+        },
+        "reasoning_effort": {
+          "default": "medium"
+        }
+      }
+    },
+    "azure": {
+      "takes": [
+        "temperature",
+        "top_p",
+        "max_tokens",
+        "reasoning_effort"
+      ],
+      "ranges": {
+        "temperature": {
+          "minimum": 0,
+          "maximum": 2,
+          "default": 1
+        },
+        "top_p": {
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        },
+        "max_tokens": {
+          "minimum": 1,
+          "default": 16384
+        },
+        "reasoning_effort": {
+          "default": "medium"
+        }
+      }
+    },
+    "anthropic": {
+      "takes": [
+        "temperature",
+        "top_p",
+        "top_k",
+        "max_tokens",
+        "thinking_budget",
+        "reasoning_effort"
+      ],
+      "ranges": {
+        "temperature": {
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        },
+        "top_p": {
+          "minimum": 0,
+          "maximum": 1,
+          "default": 1
+        },
+        "top_k": {
+          "minimum": 1,
+          "maximum": 500,
+          "default": 250
+        },
+        "max_tokens": {
+          "minimum": 1,
+          "default": 8192
+        },
+        "thinking_budget": {
+          "minimum": 0,
+          "default": 8000,
+          "x-minimum-on": 1024
+        },
+        "reasoning_effort": {
+          "default": "medium"
+        }
+      }
+    },
+    "google": {
+      "takes": [
+        "temperature",
+        "top_p",
+        "top_k",
+        "max_tokens",
+        "thinking_budget",
+        "reasoning_effort"
+      ],
+      "ranges": {
+        "temperature": {
+          "minimum": 0,
+          "maximum": 2,
+          "default": 1
+        },
+        "top_p": {
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.95
+        },
+        "top_k": {
+          "minimum": 1,
+          "maximum": 100,
+          "default": 40
+        },
+        "max_tokens": {
+          "minimum": 1,
+          "default": 8192
+        },
+        "thinking_budget": {
+          "minimum": 0,
+          "default": 8192,
+          "wire": "extra_body.google.thinking_config.thinking_budget"
+        },
+        "reasoning_effort": {
+          "default": "medium"
+        }
+      }
+    },
+    "amazon-bedrock": {
+      "takes": [
+        "temperature",
+        "top_p",
+        "max_tokens",
+        "reasoning_effort"
+      ],
+      "ranges": {
+        "temperature": {
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.7
+        },
+        "top_p": {
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.9
+        },
+        "max_tokens": {
+          "minimum": 1,
+          "default": 4096
+        },
+        "reasoning_effort": {
+          "default": "medium"
+        }
+      }
+    }
+  },
+  "uncatalogued": {
+    "takes": [
+      "temperature",
+      "top_p",
+      "max_tokens"
+    ]
+  }
+}

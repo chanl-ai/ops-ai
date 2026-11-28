@@ -1054,6 +1054,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       OPS_FILES_SCANNING: 'off',
       // Service events (file.deleted, file.read_requested) reach this run's agents-service.
       OPS_AGENTS_URL: `http://127.0.0.1:${AGENTS_PORT}`,
+      // A watched folder's check reads its app through this run's tools-service; files-service exits at start without it.
+      OPS_TOOLS_URL: `http://127.0.0.1:${TOOLS_PORT}`,
       // The console calls files-service for its Storage settings.
       OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
       ...auth,
@@ -1154,6 +1156,8 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
     const dev = process.env.OPS_USECASE_CONSOLE === 'dev';
     let consoleArgv = ['pnpm', 'exec', 'next', 'dev', '-p', String(CONSOLE_PORT)];
     const consoleEnv: NodeJS.ProcessEnv = { ...env, ...publicEnv };
+    // Next 16.4 exits on a security-upgrade nudge when it sees a coding agent's variables.
+    for (const name of ['AI_AGENT', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT']) delete consoleEnv[name];
     if (dev) {
       writeRunTsconfig();
     } else {

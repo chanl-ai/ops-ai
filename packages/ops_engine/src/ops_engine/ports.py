@@ -129,12 +129,6 @@ class ReviewPort(Protocol):
         id. The decision arrives later as a resume of the run."""
         ...
 
-    async def own_decision(self, run_id: str, node_id: str, payload: Json) -> Json | None:
-        """The decision of a step that approves a write when the person who started the run may approve it themselves
-        (roles decide approvals): {decision, by, call, approval}, recorded as theirs. None to pause
-        for a person as before."""
-        ...
-
 
 class TaskTypePort(Protocol):
     async def pin(self, type_id: str, version: int | None) -> int:
@@ -210,6 +204,14 @@ class DocumentsPort(Protocol):
         ocr, reviewBelow}; `key` (run:node:iteration) is the Idempotency-Key, so a retried step reads the same
         extraction. Another team's or tenant's file is not found; documents-service down is raised, so the wrapper
         retries."""
+        ...
+
+    async def reading(self, run_id: str, file_id: str, *, ocr: str, ask: bool) -> Json:
+        """The file's one shared reading with OCR mode `ocr` (auto or off), as the run's team, never waited for: done
+        with every page, failed with its error, queued or reading (reported by reading.finished or reading.failed when
+        it ends), or none. `ask` asks for it (POST /v1/documents/readings), which reads a failed one again; otherwise it
+        is read as it is (GET). Another team's or tenant's file is not found; documents-service down is raised, so the
+        wrapper retries."""
         ...
 
     async def purge(self, run_id: str, file_id: str) -> Json:

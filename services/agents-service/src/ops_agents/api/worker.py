@@ -26,10 +26,13 @@ from ops_engine.ports import EnginePorts, Faults
 from ops_engine.store import DefinitionStore, RunRow, RunStore
 from ops_engine.worker import Worker, WorkerHost
 from ops_files_client import FilesClient
+from ops_identity import ServiceClient
 from ops_service_kit.logging import configure_logging, get_logger
 from ops_service_kit.settings import Settings, require_keys
 from ops_store import background, isolation
+from ops_store.audit import AUDIT_SCOPE
 from ops_store.isolation import Isolation
+from ops_store.outbox import run_relay
 from ops_store.schema_version import require_current_schema
 
 from ..store.api_key_copies import RESYNC_KEY as KEY_RESYNC_KEY
@@ -40,6 +43,7 @@ from ..store.events import EventLog
 from ..store.graphs import GraphStore
 from ..store.leases import Leases
 from ..store.mailboxes import MailboxRow
+from ..store.outbox import outbox_relay
 from ..store.tenancy import ENGINE_PASS
 from ..store.tool_copies import RESYNC_KEY
 from .acting_for import CallPeople, acting_for_tokens
@@ -59,7 +63,6 @@ from .engine_host import (
     KillAfterNode,
     RunEvents,
     RunReviews,
-    StarterApprovals,
     ThreadLeases,
     assisted_reviews,
 )
@@ -69,6 +72,8 @@ from .fencing import ToolsFence
 from .mailbox_gateway import mailbox_client, mailbox_source
 from .platform_policies import PlatformPolicies
 from .review_sla import PlatformReviewSla
+from .schedule_clock import KEY as CLOCK_KEY
+from .schedule_clock import ScheduleClock, keep_schedules_ticking
 from .service_events import reminders
 from .sweeper import reconcile_forever
 from .task_type_seeds import StoredTaskTypes
@@ -119,11 +124,7 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
         )
         minter = ApprovalMinter(db, settings.review_key.get_secret_value(), settings.review_token_ttl_seconds)
         # One kernel for agent steps and AI steps: an AI step's call is the agent port's prompt.
-        # A step approving a write its starter may approve is decided as theirs.
-        starters = StarterApprovals(db, gateway)
-        ports = EnginePorts(
-            tools=GatewayTools(gateway, minter), reviews=RunReviews(starters=starters), agents=agents, prompts=agents
-        )
+        ports = EnginePorts(tools=GatewayTools(gateway, minter), reviews=RunReviews(), agents=agents, prompts=agents)
         if kb_http is not None:
             from ops_agents.activities.knowledge import KbService  # noqa: PLC0415
 
@@ -165,7 +166,7 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             if agents is not None:
                 # Task assist writes a typed task's help as its step pauses, where the team turned it on.
                 policies = PlatformPolicies(service_client(settings, platform_http, "platform"))
-                ports.reviews = assisted_reviews(stack, db, agents, policies, StarterApprovals(db, gateway, policies))
+                ports.reviews = assisted_reviews(stack, db, agents, policies)
                 # AI steps run only where the run's team allows them, masked unless it turned that off.
                 agents.rules = RunTeamRules(db, policies)
         # The chat runtime, as the API builds it: a reply whose process died is continued here (chat_turns.py).
@@ -209,8 +210,8 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
         stack.push_async_callback(lambda: asyncio.wait_for(starting, None))
         # The API key copy's resync reads platform-service's keys as this service (settings:view).
         key_reader = service_client(settings, platform_http, "platform") if platform_http is not None else None
-        if tools is not None or key_reader is not None:
-            await stack.enter_async_context(background.supervisor())
+        # The lifespan's supervisor: every loop started below runs on it, its failure on /health/background.
+        await stack.enter_async_context(background.supervisor())
         if tools is not None:
             # The tool catalogue copy's resync: a pass at start, then hourly, on the lifespan's supervisor.
             await background.start(
@@ -221,6 +222,26 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             await background.start(
                 keep_keys_in_step(db, key_reader, stop=stop, beats=heartbeats(db)),
                 key=KEY_RESYNC_KEY,
+                store=heartbeats(db),
+            )
+        # The schedule clock: each minute, every saved schedule on a live workflow (schedule_clock.py).
+        clock = ScheduleClock(db, Leases(db, owner=owner, ttl=settings.lease_ttl_seconds))
+        await background.start(keep_schedules_ticking(clock, stop, heartbeats(db)), key=CLOCK_KEY, store=heartbeats(db))
+        # The audit entries of schedule saves and clears reach platform-service's audit log. With no internal endpoint
+        # no relay runs, so the entries wait in the outbox until an install that has one starts it.
+        audit_log = (
+            ServiceClient.for_settings(
+                settings, service="agents", audience="platform", scopes=[AUDIT_SCOPE], endpoint="platform_internal"
+            )
+            if settings.platform_internal is not None
+            else None
+        )
+        if audit_log is not None:
+            await background.start(
+                run_relay(
+                    outbox_relay(db, {"platform": audit_log}), key="agents_relay", stop=stop, store=heartbeats(db)
+                ),
+                key="agents_relay",
                 store=heartbeats(db),
             )
         listener = email_listener(settings, db, owner, stack)

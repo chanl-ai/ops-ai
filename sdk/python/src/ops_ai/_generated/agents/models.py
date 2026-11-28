@@ -99,6 +99,13 @@ class AgentSkillPin(TypedDict, closed=True):
     useWhen: str
 
 
+class AgentToolAppMatch(TypedDict, closed=True):
+    access: str
+    granted: bool
+    id: str
+    label: str
+
+
 class AgentUses(TypedDict, closed=True):
     agents: NotRequired[int]
     knowledgeBases: NotRequired[int]
@@ -136,6 +143,16 @@ class AllHrefs(TypedDict, closed=True):
     runs: str
 
 
+class AppTool(TypedDict, closed=True):
+    access: str
+    approval: NotRequired[str | None]
+    description: str
+    granted: bool
+    id: str
+    label: str
+    requiresApproval: bool
+
+
 class AppToolsGiven(TypedDict, closed=True):
     agentId: str
     agentName: str
@@ -149,6 +166,11 @@ ModuleId: TypeAlias = str
 
 class AppToolsIn(TypedDict, closed=True):
     moduleIds: list[ModuleId]
+
+
+class AppToolsPage(TypedDict, closed=True):
+    data: list[AppTool]
+    nextCursor: NotRequired[str | None]
 
 
 class Approval(TypedDict, closed=True):
@@ -288,16 +310,6 @@ NeverItem: TypeAlias = str
 Succes: TypeAlias = str
 
 
-class Brief(TypedDict, closed=True):
-    examples: NotRequired[str]
-    goal: NotRequired[str]
-    handOff: NotRequired[list[HandOffItem]]
-    howToAnswer: NotRequired[str]
-    never: NotRequired[list[NeverItem]]
-    purpose: str
-    success: NotRequired[list[Succes]]
-
-
 class BriefDraft(TypedDict, closed=True):
     examples: str
     handOff: list[str]
@@ -310,6 +322,18 @@ class BriefDraftInput(TypedDict, closed=True):
     description: str
 
 
+class BriefSection(TypedDict, closed=True):
+    kind: str
+    name: NotRequired[str]
+    text: NotRequired[str]
+
+
+class BriefSectionView(TypedDict, closed=True):
+    kind: str
+    name: NotRequired[str]
+    text: NotRequired[str]
+
+
 class BriefView(TypedDict, closed=True):
     examples: NotRequired[str]
     goal: NotRequired[str]
@@ -317,6 +341,7 @@ class BriefView(TypedDict, closed=True):
     howToAnswer: NotRequired[str]
     never: NotRequired[list[str]]
     purpose: str
+    sections: NotRequired[list[BriefSectionView]]
     success: NotRequired[list[str]]
 
 
@@ -688,6 +713,11 @@ class EnvelopeAppToolsGiven(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeAppToolsPage(TypedDict, closed=True):
+    data: AppToolsPage
+    success: Literal[True]
+
+
 class EnvelopeApproval(TypedDict, closed=True):
     data: Approval
     success: Literal[True]
@@ -730,6 +760,11 @@ class EnvelopeDeploymentView(TypedDict, closed=True):
 
 class EnvelopeNoneType(TypedDict, closed=True):
     data: None
+    success: Literal[True]
+
+
+class EnvelopeDictStrInt(TypedDict, closed=True):
+    data: dict[str, int]
     success: Literal[True]
 
 
@@ -1080,6 +1115,12 @@ class KindRow(TypedDict, closed=True):
     type: str
 
 
+class KindView(TypedDict, closed=True):
+    label: str
+    name: str
+    schema: dict[str, JsonValue]
+
+
 class KnowledgeBaseRef(TypedDict, closed=True):
     id: str
     name: str
@@ -1225,6 +1266,14 @@ class ModelAlias(TypedDict, closed=True):
     outputPerMillion: NotRequired[str | None]
 
 
+class ModelAliasKnobs(TypedDict, closed=True):
+    alias: str
+    catalogued: bool
+    knobs: dict[str, JsonValue]
+    modelId: str
+    version: int
+
+
 class NextAction(TypedDict, closed=True):
     dueAt: str | None
     href: str
@@ -1362,6 +1411,12 @@ class PersonRef(TypedDict, closed=True):
     name: str
 
 
+class PlaceSchedule(TypedDict, closed=True):
+    nextRun: str | None
+    triggerStep: str
+    words: str
+
+
 class PlanInput(TypedDict, closed=True):
     resources: list[str]
 
@@ -1393,6 +1448,55 @@ class PortView(TypedDict, closed=True):
     connection: str
     label: str
     name: str
+
+
+class Preset(TypedDict, closed=True):
+    icon: Literal[
+        "smile",
+        "sun",
+        "scale",
+        "briefcase",
+        "zap",
+        "message",
+        "heart",
+        "shield",
+        "star",
+        "book",
+    ]
+    id: str
+    label: str
+    text: str
+
+
+class PresetIn(TypedDict, closed=True):
+    icon: NotRequired[
+        Literal[
+            "smile",
+            "sun",
+            "scale",
+            "briefcase",
+            "zap",
+            "message",
+            "heart",
+            "shield",
+            "star",
+            "book",
+        ]
+    ]
+    id: NotRequired[str]
+    label: str
+    text: str
+
+
+class PreviewIn(TypedDict, closed=True):
+    after: NotRequired[str | None]
+    rule: dict[str, JsonValue]
+
+
+class PreviewView(TypedDict, closed=True):
+    nextRuns: list[str]
+    rule: dict[str, JsonValue]
+    words: str
 
 
 class PromptVariable(TypedDict, closed=True):
@@ -1652,6 +1756,10 @@ class RoutedVersion(TypedDict, closed=True):
     workflowId: str
 
 
+class RuleIn(TypedDict, closed=True):
+    rule: dict[str, JsonValue]
+
+
 class RunChild(TypedDict, closed=True):
     index: int
     nodeId: str
@@ -1746,6 +1854,27 @@ class RunsFilter(TypedDict, closed=True):
     workflowId: NotRequired[str | None]
 
 
+class SampleField(TypedDict, closed=True):
+    label: str
+    name: str
+    path: str
+    sample: NotRequired[str | None]
+
+
+class SampleRun(TypedDict, closed=True):
+    createdAt: str
+    id: str
+    version: int
+
+
+class SampleStep(TypedDict, closed=True):
+    fields: list[SampleField]
+    id: str
+    installed: bool
+    kind: NotRequired[str | None]
+    name: str
+
+
 class SaveBase(TypedDict, closed=True):
     digest: str
     version: int
@@ -1760,6 +1889,61 @@ class SavedCaseCheck(TypedDict, closed=True):
 
 class SavedCaseContext(TypedDict, closed=True):
     collections: NotRequired[list[str]]
+
+
+class ScheduleView(TypedDict, closed=True):
+    changedAt: str
+    changedBy: str
+    changedByName: NotRequired[str]
+    idle: NotRequired[str | None]
+    idleCode: NotRequired[Literal["no_live_version", "paused", "step_missing", "not_schedulable"] | None]
+    lastOutcome: NotRequired[str | None]
+    lastOutcomeReason: NotRequired[str | None]
+    lastRunId: NotRequired[str | None]
+    lastSlotAt: NotRequired[str | None]
+    nextRuns: list[str]
+    rule: dict[str, JsonValue]
+    triggerStep: str
+    words: str
+    workflowId: str
+
+
+class SectionItem(TypedDict, closed=True):
+    drives: NotRequired[Literal["none", "handoff", "never-last", "eval-tag"]]
+    example: NotRequired[str]
+    group: NotRequired[str]
+    hidden: NotRequired[bool]
+    hint: NotRequired[str]
+    id: str
+    kind: Literal["fixed", "menu", "custom"]
+    label: str
+    order: int
+    presets: NotRequired[list[Preset]]
+    required: NotRequired[bool]
+
+
+class SectionItemIn(TypedDict, closed=True):
+    drives: NotRequired[Literal["none", "handoff", "never-last", "eval-tag"]]
+    example: NotRequired[str]
+    group: NotRequired[str]
+    hidden: NotRequired[bool]
+    hint: NotRequired[str]
+    id: NotRequired[str]
+    kind: Literal["fixed", "menu", "custom"]
+    label: str
+    order: NotRequired[int]
+    presets: NotRequired[list[PresetIn]]
+    required: NotRequired[bool]
+
+
+class SectionList(TypedDict, closed=True):
+    customMax: NotRequired[int]
+    sections: list[SectionItem]
+
+
+class SectionListIn(TypedDict, closed=True):
+    customMax: NotRequired[int]
+    sections: list[SectionItemIn]
 
 
 class Serves(TypedDict, closed=True):
@@ -2728,33 +2912,6 @@ class AgentLimits(TypedDict, closed=True):
     temperature: NotRequired[TemperatureLimits | None]
 
 
-class AgentPatch(TypedDict, closed=True):
-    accounts: NotRequired[dict[str, str] | None]
-    allTeamKnowledgeBases: NotRequired[bool | None]
-    baseDigest: str
-    baseVersion: int
-    brief: NotRequired[Brief | None]
-    channels: NotRequired[list[Literal["voice", "chat", "email", "api"]] | None]
-    collections: NotRequired[list[str] | None]
-    guardrailPins: NotRequired[list[GuardrailPinInput] | None]
-    guardrails: NotRequired[GuardrailsInput | None]
-    instructions: NotRequired[str | None]
-    limits: NotRequired[AgentLimits | None]
-    memory: NotRequired[MemorySettings | None]
-    model: NotRequired[str | None]
-    name: NotRequired[str | None]
-    note: NotRequired[str | None]
-    patterns: NotRequired[Patterns | None]
-    promptMode: NotRequired[Literal["brief", "full"] | None]
-    protection: NotRequired[Literal["system", "managed"] | None]
-    role: NotRequired[str | None]
-    skillMenu: NotRequired[Literal["team", "attached", "off"] | None]
-    templateId: NotRequired[str | None]
-    toolIds: NotRequired[list[str] | None]
-    widgetPins: NotRequired[list[WidgetPinInput] | None]
-    widgets: NotRequired[WidgetSettings | None]
-
-
 class AgentPublishRequest(TypedDict, closed=True):
     agentId: str
     agentName: str
@@ -2810,6 +2967,26 @@ class AgentTestTurn(TypedDict, closed=True):
     tools: NotRequired[list[HeldTool]]
     usage: TurnUsage
     wouldPause: NotRequired[WouldPause | None]
+
+
+class AgentToolApp(TypedDict, closed=True):
+    appGroup: NotRequired[str | None]
+    appState: NotRequired[str | None]
+    connected: bool
+    id: str
+    kind: Literal["plugin", "builtin", "custom", "workflows", "agents", "other"]
+    matches: list[AgentToolAppMatch]
+    name: str
+    notAdded: int
+    signIn: NotRequired[str | None]
+    toolsGranted: int
+    toolsOffered: int
+    toolsTotal: int
+
+
+class AgentToolAppsPage(TypedDict, closed=True):
+    data: list[AgentToolApp]
+    nextCursor: NotRequired[str | None]
 
 
 class AiStepOut(TypedDict, closed=True):
@@ -2891,6 +3068,17 @@ class Branch(TypedDict, closed=True):
 class BranchOut(TypedDict, closed=True):
     otherwise: JumpOut
     test: StepCheckOut
+
+
+class Brief(TypedDict, closed=True):
+    examples: NotRequired[str]
+    goal: NotRequired[str]
+    handOff: NotRequired[list[HandOffItem]]
+    howToAnswer: NotRequired[str]
+    never: NotRequired[list[NeverItem]]
+    purpose: str
+    sections: NotRequired[list[BriefSection]]
+    success: NotRequired[list[Succes]]
 
 
 class BulkResult(TypedDict, closed=True):
@@ -3055,6 +3243,15 @@ class DefinitionPublished(TypedDict, closed=True):
     workflowId: str
 
 
+class DefinitionSample(TypedDict, closed=True):
+    given: NotRequired[SampleStep | None]
+    run: NotRequired[SampleRun | None]
+    saved: bool
+    step: NotRequired[str | None]
+    steps: list[SampleStep]
+    workflowId: str
+
+
 class DefinitionShapes(TypedDict, closed=True):
     steps: dict[str, dict[str, dict[str, JsonValue]]]
     version: int
@@ -3071,6 +3268,7 @@ class DefinitionView(TypedDict, closed=True):
     paused: bool
     review: OpenPublishRequest | None
     saveBase: SaveBase
+    schedules: NotRequired[list[ScheduleView]]
     stage: Literal["draft", "in_review", "live", "paused", "superseded"]
     startForm: NotRequired[StartFormView | None]
     version: int
@@ -3104,6 +3302,11 @@ class EnvelopeAgentSkills(TypedDict, closed=True):
 
 class EnvelopeAgentTestTurn(TypedDict, closed=True):
     data: AgentTestTurn
+    success: Literal[True]
+
+
+class EnvelopeAgentToolAppsPage(TypedDict, closed=True):
+    data: AgentToolAppsPage
     success: Literal[True]
 
 
@@ -3149,6 +3352,11 @@ class EnvelopeChannelRow(TypedDict, closed=True):
 
 class EnvelopeDefinitionPublished(TypedDict, closed=True):
     data: DefinitionPublished
+    success: Literal[True]
+
+
+class EnvelopeDefinitionSample(TypedDict, closed=True):
+    data: DefinitionSample
     success: Literal[True]
 
 
@@ -3217,6 +3425,11 @@ class EnvelopeMigrated(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeModelAliasKnobs(TypedDict, closed=True):
+    data: ModelAliasKnobs
+    success: Literal[True]
+
+
 class EnvelopeOptionsPage(TypedDict, closed=True):
     data: OptionsPage
     success: Literal[True]
@@ -3224,6 +3437,11 @@ class EnvelopeOptionsPage(TypedDict, closed=True):
 
 class EnvelopePlatformEventOut(TypedDict, closed=True):
     data: PlatformEventOut
+    success: Literal[True]
+
+
+class EnvelopePreviewView(TypedDict, closed=True):
+    data: PreviewView
     success: Literal[True]
 
 
@@ -3274,6 +3492,16 @@ class EnvelopeRouted(TypedDict, closed=True):
 
 class EnvelopeRunStarted(TypedDict, closed=True):
     data: RunStarted
+    success: Literal[True]
+
+
+class EnvelopeScheduleView(TypedDict, closed=True):
+    data: ScheduleView
+    success: Literal[True]
+
+
+class EnvelopeSectionList(TypedDict, closed=True):
+    data: SectionList
     success: Literal[True]
 
 
@@ -3339,6 +3567,11 @@ class EnvelopeListGraphVersion(TypedDict, closed=True):
 
 class EnvelopeListInboxItem(TypedDict, closed=True):
     data: list[InboxItem]
+    success: Literal[True]
+
+
+class EnvelopeListKindView(TypedDict, closed=True):
+    data: list[KindView]
     success: Literal[True]
 
 
@@ -3603,6 +3836,7 @@ class LivePlace(TypedDict, closed=True):
     health: Health | None
     lastActivityAt: str | None
     pinned: bool
+    schedule: NotRequired[PlaceSchedule | None]
     traffic24H: int | None
     version: int | Literal["latest"] | None
     where: Where
@@ -3619,17 +3853,22 @@ class NodeTypeView(TypedDict, closed=True):
     effects: str
     executor: str
     extraOutputs: NotRequired[list[str]]
+    fails: str
     group: str
+    how: str
     id: str
     inputs: list[PortView]
     label: str
+    limit: NotRequired[str]
     optionalOutputs: list[OptionalPortView]
     outputs: list[PortView]
     outputsFrom: str | None
     outputsUnless: NotRequired[list[OptionalPortView]]
     parameters: dict[str, JsonValue]
     retry: RetryView
+    summary: str
     timeoutSeconds: float
+    tries: NotRequired[str]
     ui: dict[str, JsonValue]
     unavailable: NotRequired[str | None]
     version: int
@@ -4171,6 +4410,7 @@ class Agent(TypedDict, closed=True):
     limits: AgentLimits
     memory: NotRequired[MemorySettings]
     model: str
+    modelSettings: NotRequired[dict[str, float | int | str]]
     name: str
     patterns: NotRequired[PatternsView]
     paused: bool
@@ -4204,6 +4444,34 @@ class AgentEvalRun(TypedDict, closed=True):
     status: Literal["complete"]
     summary: EvalSummary
     unpriced: bool
+
+
+class AgentPatch(TypedDict, closed=True):
+    accounts: NotRequired[dict[str, str] | None]
+    allTeamKnowledgeBases: NotRequired[bool | None]
+    baseDigest: str
+    baseVersion: int
+    brief: NotRequired[Brief | None]
+    channels: NotRequired[list[Literal["voice", "chat", "email", "api"]] | None]
+    collections: NotRequired[list[str] | None]
+    guardrailPins: NotRequired[list[GuardrailPinInput] | None]
+    guardrails: NotRequired[GuardrailsInput | None]
+    instructions: NotRequired[str | None]
+    limits: NotRequired[AgentLimits | None]
+    memory: NotRequired[MemorySettings | None]
+    model: NotRequired[str | None]
+    modelSettings: NotRequired[dict[str, float | int | str] | None]
+    name: NotRequired[str | None]
+    note: NotRequired[str | None]
+    patterns: NotRequired[Patterns | None]
+    promptMode: NotRequired[Literal["brief", "full"] | None]
+    protection: NotRequired[Literal["system", "managed"] | None]
+    role: NotRequired[str | None]
+    skillMenu: NotRequired[Literal["team", "attached", "off"] | None]
+    templateId: NotRequired[str | None]
+    toolIds: NotRequired[list[str] | None]
+    widgetPins: NotRequired[list[WidgetPinInput] | None]
+    widgets: NotRequired[WidgetSettings | None]
 
 
 class AgentPublishCheck(TypedDict, closed=True):
@@ -4619,8 +4887,12 @@ class PublishReview(TypedDict, closed=True):
     agentPublish: NotRequired[AgentPublishRequest | None]
     agentSlug: str
     approvals: list[str]
+    approvalsNeeded: NotRequired[int]
     assignee: NotRequired[str | None]
+    canAssign: NotRequired[bool | None]
     canDecide: NotRequired[bool | None]
+    canReassign: NotRequired[bool | None]
+    canReturn: NotRequired[bool | None]
     confidence: float
     createdAt: str
     currency: str
@@ -4643,6 +4915,7 @@ class PublishReview(TypedDict, closed=True):
     status: Literal["pending", "in_review", "approved", "rejected", "returned", "withdrawn"]
     title: str
     toolModule: NotRequired[ToolModuleReviewRef | None]
+    viewerApproved: NotRequired[bool | None]
     workflowId: str
     workflowName: str
 
@@ -4740,13 +5013,18 @@ class StoryRead(TypedDict, closed=True):
 
 class ThreadReview(TypedDict, closed=True):
     actionFields: NotRequired[list[ActionField]]
+    actionLabel: NotRequired[str | None]
     actionTool: str
     agentSlug: str
     amount: NotRequired[float | None]
     approvals: list[str]
+    approvalsNeeded: NotRequired[int]
     assignee: NotRequired[str | None]
     calls: NotRequired[dict[str, JsonValue] | None]
+    canAssign: NotRequired[bool | None]
     canDecide: NotRequired[bool | None]
+    canReassign: NotRequired[bool | None]
+    canReturn: NotRequired[bool | None]
     caseId: NotRequired[str | None]
     caseTitle: NotRequired[str | None]
     confidence: float | None
@@ -4785,6 +5063,7 @@ class ThreadReview(TypedDict, closed=True):
     stepUpRef: NotRequired[str | None]
     task: NotRequired[TypedTask | None]
     title: str
+    viewerApproved: NotRequired[bool | None]
     workflowId: str
     workflowName: str
     workflowVersion: NotRequired[int | None]

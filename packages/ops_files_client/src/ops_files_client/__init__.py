@@ -250,9 +250,16 @@ class FilesClient:
         status: Literal["clean", "infected", "failed"],
         engine: str,
         detail: str | None = None,
+        version: int | None = None,
+        digest: str | None = None,
     ) -> FileInfo:
-        """A scanner adapter's verdict, through the scan hook; the token needs `files:decide`."""
-        body = {"fileId": file_id, "status": status, "engine": engine, "detail": detail}
+        """A scanner adapter's verdict, through the scan hook; the token needs `files:decide`. `version` or `digest`
+        names the version scanned, which a file of several versions needs."""
+        body: dict[str, JsonValue] = {"fileId": file_id, "status": status, "engine": engine, "detail": detail}
+        if version is not None:
+            body["version"] = version
+        if digest is not None:
+            body["digest"] = digest
         return await self._json("POST", "/v1/files/scan-results", tenant, None, json=body)
 
     async def aclose(self) -> None:

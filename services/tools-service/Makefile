@@ -23,12 +23,12 @@ lint: ## ruff format check and lint
 typecheck: ## Strict pyright, test-file errors held to tests-typecheck-baseline.txt
 	uv run python $(ROOT)/scripts/check_tests_typecheck.py $(PY_DIRS)
 
-test: ## Registry and API tests on the test database (starts compose); T= runs only those files
-	$(MAKE) -C ../agents-service db-up
+test: ## Registry and API tests on the test database (runs the root db-up first); T= runs only those files
+	$(MAKE) -C $(ROOT) db-up
 	$(TEST_DB) uv run pytest $(PYTEST_PAR) $(T)
 
 test-gateway: ## Gateway tests, still in agents-service/tests/gateway, which agents-service verify also runs
-	$(MAKE) -C ../agents-service db-up
+	$(MAKE) -C $(ROOT) db-up
 	cd ../agents-service && $(TEST_DB) uv run pytest tests/gateway
 
 verify: checks test ## lint, typecheck, test and the OpenAPI gate

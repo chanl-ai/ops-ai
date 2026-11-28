@@ -51,6 +51,12 @@ class Principal:
     # The dev header caller (dev mode, no roles): every permission, in the one team its request names.
     dev: bool = False
 
+    @property
+    def actor(self) -> str:
+        """Who a save or a publish is recorded under: the email, else the key's or person's subject, so two API keys
+        (which have no email) are never one author."""
+        return self.email or self.sub or self.name
+
 
 async def principal(p: CurrentPrincipal) -> Principal:
     return _principal(p)
@@ -331,15 +337,6 @@ def started_by(me: Principal) -> str:
     counted and its runs are its own; a person's email otherwise."""
     key = me.identity.key_id if me.is_key and me.identity is not None else None
     return f"key:{key}" if key else me.email
-
-
-def approves_own_writes(me: Principal) -> bool:
-    """Whether `me` is their own approver in the team they act in: reviews.decide there, while the
-    requesterMayDecide policy lets an asker decide or they are an Admin of the team (`can`). An API key never is: a key
-    acts for nobody who could approve."""
-    if me.is_key:
-        return False
-    return ACCESS.may(caller_of(me), "reviews", "decide", team=me.team_id, requested_by=(me.email,))
 
 
 def require_key_reaches(me: Principal, kind: Literal["agent", "workflow"], target_id: str) -> int | None:

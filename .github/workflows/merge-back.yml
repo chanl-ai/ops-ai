@@ -1,0 +1,63 @@
+# A release/* or hotfix/* pull request that merges into main is merged back into develop by a pull request this opens:
+# a branch merge-back/<name> cut from main (main itself cannot be the head: it is protected, and it is always behind
+# develop), develop merged into it, and auto-merge on, so it enters the merge queue when its checks pass. When develop
+# does not merge cleanly the pull request gets the label needs-merge and a comment naming the files.
+# The branch is pushed over the deploy key after the pull request exists: a pull request opened with the workflow token
+# starts no checks, and the key's push does (.github/actions/push-key).
+name: merge-back
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  open:
+    if: >-
+      github.event.pull_request.merged == true &&
+      (startsWith(github.event.pull_request.head.ref, 'release/') || startsWith(github.event.pull_request.head.ref, 'hotfix/'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: ./.github/actions/push-key
+        with:
+          key: ${{ secrets.RELEASE_MAIN_DEPLOY_KEY }}
+      - name: Open the pull request into develop
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          branch="merge-back/${HEAD_REF//\//-}"
+          git fetch -q origin develop
+          git push -q "$PUSH_URL" "HEAD:refs/heads/$branch"
+          url=$(gh pr list --head "$branch" --base develop --json url --jq '.[0].url // empty')
+          [ -n "$url" ] || url=$(gh pr create --base develop --head "$branch" \
+            --title "chore(release): merge $HEAD_REF back into develop" \
+            --body "Merges what #$NUMBER put on main back into develop. Opened by merge-back.yml; it enters the merge queue when its checks pass.")
+          echo "merge back: $url"
+          git checkout -q -B "$branch"
+          if git merge --no-edit -m "Merge branch 'develop' into $branch" origin/develop; then
+            # Already holding develop: an empty commit, so the key's push still starts the checks.
+            [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ] || git commit -q --allow-empty -m "chore(release): start the checks of the merge back"
+            git push -q "$PUSH_URL" "HEAD:refs/heads/$branch"
+          else
+            files=$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')
+            git merge --abort
+            gh label create needs-merge --force --color B60205 --description "develop no longer merges cleanly into this branch" || true
+            gh pr edit "$url" --add-label needs-merge
+            gh pr comment "$url" --body "develop does not merge into this branch. Conflicting files:"$'\n\n'"$files"$'\n\n'"Merge develop in by hand (never a rebase) and push; the push starts the checks."
+          fi
+          gh pr merge "$url" --auto --merge

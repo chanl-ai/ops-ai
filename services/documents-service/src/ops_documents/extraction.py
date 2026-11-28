@@ -20,12 +20,14 @@ import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from functools import partial
 from typing import Any, Protocol, TypedDict, cast
 
 import httpx
 import regex
 
 from ops_access import team_off, team_on
+from ops_contracts import readings as readings_contract
 from ops_contracts.field_values import FIELD_TYPES
 from ops_documents.errors import IdempotencyConflictError, InvalidRequestError, StateError
 from ops_documents.files import Files, Who
@@ -47,6 +49,8 @@ from ops_service_kit import narrow
 from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
+from ops_service_kit.model_calls import ModelCallError, ModelCalls
+from ops_service_kit.model_calls import Usage as CallUsage
 from ops_service_kit.narrow import Malformed, a_list, an_object, entries, required
 from ops_service_kit.settings import Settings
 from ops_store import background, isolation
@@ -56,15 +60,6 @@ from ops_store.listing import ListPage
 log = get_logger("ops_documents.extraction")
 
 ALIAS = "extract"
-FALLBACK_ALIAS = "default"
-
-
-class ModelRefusedError(RuntimeError):
-    """models-service refused the call or could not be reached; `code` is its error code when it answered one."""
-
-    def __init__(self, message: str, code: str | None = None) -> None:
-        super().__init__(message)
-        self.code = code
 
 
 # models-service's refusals a person can act on, as the read's error: a spent budget waits for its reset, a busy model
@@ -74,19 +69,17 @@ REFUSALS = {
     "key_budget_exhausted": ("budget_exhausted", SPENT),
     "tenant_budget_exhausted": ("budget_exhausted", SPENT),
     "rate_limited": ("model_rate_limited", "The model is busy; try again in a minute."),
+    "models_answer_unreadable": ("model_answer_unreadable", "The model's answer could not be read; try again."),
 }
 READS = ("fields", "propose")
 PROPOSE_PAGES = 5
-# Page text per model token, the estimate a read's token ceiling counts in.
-CHARS_PER_TOKEN = 4
 
 
 @dataclass
-class Usage:
-    """The model's tokens over an extraction's calls (the first ask and any re-ask), as models-service reports them."""
+class Usage(CallUsage):
+    """The model's calls and tokens over an extraction (the first ask and any re-ask), as models-service bills them,
+    with what extraction keeps about page images."""
 
-    input_tokens: int = 0
-    output_tokens: int = 0
     # Every call that carried a page image: {step, pages, images, alias}, kept on the read.
     image_calls: JsonList = field(default_factory=JsonList)
     # Why an image was not sent though the read allowed it: the alias is not cleared for images.
@@ -163,10 +156,10 @@ class TypeResolver(Protocol):
 
 @dataclass
 class ModelsService:
-    """models-service's OpenAI-compatible completions, on documents-service's own model key (`purpose:extract`, with its
-    own budget), so this service holds no provider key. The answer is the `final_result` tool's arguments, the form
-    the agent kernel asks structured output in. `extract` falls back to `default` while models-service has no such
-    alias (404 alias_not_found), as memory-extract does."""
+    """Extraction's model calls on the one client (`ops_service_kit.model_calls`), with documents-service's own model
+    key (`purpose:extract`, with its own budget), so this service holds no provider key. `extract` falls back to
+    `default` while models-service has no such alias. What is extraction's own is what it does with a page image: an
+    alias not cleared for images reads on with the text alone and says why, and every call that carried one is kept."""
 
     http: httpx.AsyncClient
     key: str
@@ -184,73 +177,27 @@ class ModelsService:
         usage: Usage | None = None,
         images: Sequence[page_images.PageImage] = (),
     ) -> JsonValue:
-        for name in dict.fromkeys((self.alias, FALLBACK_ALIAS)):
-            r = await self._post(system, user, schema, name=name, run=run, step=step, tenant=tenant, images=images)
-            if images and r.status_code == 403 and "images_not_cleared" in r.text:
-                # The alias may not receive page images: the read goes on with the text alone, and says why.
-                if usage is not None:
-                    usage.image_refused = f"The model alias {name} is not cleared for page images."
-                images = ()
-                r = await self._post(system, user, schema, name=name, run=run, step=step, tenant=tenant, images=images)
-            if r.status_code == 404 and "alias_not_found" in r.text and name != FALLBACK_ALIAS:
-                continue
-            if r.status_code >= 400:
-                raise ModelRefusedError(f"models-service answered {r.status_code}: {r.text[:300]}", _error_code(r))
-            # models-service's answer and the tokens it bills: a wrong shape fails the call, as it always has.
-            body = an_object(r.json(), "models-service's answer")
-            if usage is not None:
-                counted = an_object(body.get("usage") or {}, "usage")
-                usage.input_tokens += _whole(counted.get("prompt_tokens") or 0, "prompt_tokens")
-                usage.output_tokens += _whole(counted.get("completion_tokens") or 0, "completion_tokens")
-                if images:
-                    pages: JsonList = [*sorted({i.page for i in images})]
-                    usage.image_calls.append({"step": step, "pages": pages, "images": len(images), "alias": name})
-            message = an_object(a_list(body["choices"], "choices")[0], "choice")["message"]
-            message = an_object(message, "message")
-            calls = a_list(message.get("tool_calls") or [], "tool_calls")
-            raw = (
-                an_object(an_object(calls[0], "tool call")["function"], "function")["arguments"]
-                if calls
-                else (message.get("content"))
-            )
-            try:
-                return json.loads(raw) if isinstance(raw, str) else {}
-            except json.JSONDecodeError:
-                return {}  # an unreadable answer fails the schema check and is asked again
-        raise ModelRefusedError(f"models-service has neither {self.alias} nor {FALLBACK_ALIAS}")
+        spent = usage if usage is not None else Usage()
 
-    async def _post(
-        self,
-        system: str,
-        user: str,
-        schema: Json,
-        *,
-        name: str,
-        run: str,
-        step: str,
-        tenant: str,
-        images: Sequence[page_images.PageImage],
-    ) -> httpx.Response:
-        content: JsonValue = [{"type": "text", "text": user}, *(i.part() for i in images)] if images else user
+        def ask(alias: str) -> partial[Any]:
+            # The tenant spends from its own share of this key, so one tenant cannot drain the others.
+            calls = ModelCalls(self.http, self.key, alias)
+            return partial(calls.structured, system, user, schema, tenant=tenant, step=step,
+                           run=run, usage=spent)  # fmt: skip
+
         try:
-            return await self.http.post(
-                "/v1/models/chat/completions",
-                # The tenant spends from its own share of this key, so one tenant cannot drain the others.
-                headers={
-                    "Authorization": f"Bearer {self.key}",
-                    "X-Run-Id": run,
-                    "X-Step-Id": step,
-                    "X-Tenant-Id": tenant,
-                },
-                json={
-                    "model": name,
-                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}],
-                    "tools": [{"type": "function", "function": {"name": "final_result", "parameters": schema}}],
-                    "tool_choice": "required",
-                },
-            )
-        except httpx.HTTPError as e:
-            raise ModelRefusedError(f"models-service could not be reached: {e}") from e
+            answer = await ask(self.alias)(parts=[i.part() for i in images])
+        except ModelCallError as e:
+            if not images or e.code != "images_not_cleared":
+                raise
+            refused = e.alias or self.alias
+            spent.image_refused = f"The model alias {refused} is not cleared for page images."
+            # Asked again on the alias that refused, so an unbound alias is not looked up a second time.
+            return cast(JsonValue, await ask(refused)())
+        if images:
+            pages: JsonList = [*sorted({i.page for i in images})]
+            spent.image_calls.append({"step": step, "pages": pages, "images": len(images), "alias": spent.alias})
+        return cast(JsonValue, answer)
 
 
 @dataclass
@@ -417,16 +364,6 @@ def _check_rules(field: Json) -> None:
     rules = field.get("clean")
     if rules is not None and (not isinstance(rules, list) or not all(r in CLEAN_RULES for r in cast(list[Any], rules))):
         raise InvalidRequestError(f"field {field['key']}: clean lists rules from {', '.join(CLEAN_RULES)}")
-
-
-def _error_code(r: httpx.Response) -> str | None:
-    try:
-        body = r.json()
-    except ValueError:
-        return None
-    # Read outside the try: an answer that is not an object fails the call, as it always has.
-    error = an_object(body, "models-service's refusal").get("error")
-    return str(error.get("code")) if isinstance(error, dict) else None
 
 
 def _key_hash(who: Who, key: str) -> str:
@@ -954,7 +891,7 @@ class Extractor:
         if read == "propose":
             try:
                 proposal = await self._propose(row, pages, usage)
-            except ModelRefusedError as e:
+            except ModelCallError as e:
                 return await self._refused(row, e)
             fields = [FIELD(f) for f in entries(proposal["fields"])]
             if not fields:
@@ -991,7 +928,7 @@ class Extractor:
             floor = await self.floors.floor(tenant, row.team) if self.floors is not None else DEFAULT_FLOOR
         except FloorUnreadError as e:
             return await self._fail(row, "floor_unread", str(e))
-        except ModelRefusedError as e:
+        except ModelCallError as e:
             return await self._refused(row, e)
         outcome, out = result.scored(
             fields,
@@ -1110,9 +1047,10 @@ class Extractor:
                     run=row.id, step="extract:reread", tenant=row.tenant_id, usage=usage,
                     images=list(crops.values()),
                 )  # fmt: skip
-            except ModelRefusedError:
+            except ModelCallError:
                 answer = None
-            # An answer that is not an object fails the read, as it always has.
+            # A re-read the model cannot answer keeps the first read's values and their rule failures; an answer
+            # that is not an object fails the read.
             said: Json = {k: v for k, v in an_object(answer or {}, "the re-read's answer").items() if k in failures}
             if answer is not None and not prompt.schema_errors(said, schema):
                 _, again = result.scored(
@@ -1214,7 +1152,7 @@ class Extractor:
             kept.append(named | {"type": kind})
         return {"name": str(raw.get("name") or ""), "fields": [*kept]}
 
-    async def _refused(self, row: ExtractionRow, e: ModelRefusedError) -> ExtractionRow:
+    async def _refused(self, row: ExtractionRow, e: ModelCallError) -> ExtractionRow:
         code, message = REFUSALS.get(e.code or "", ("model_unavailable", str(e)))
         return await self._fail(row, code, message)
 
@@ -1233,28 +1171,17 @@ class Extractor:
 
 
 def _limited(pages: Pages, request: Json) -> tuple[Pages, Json]:
-    """The pages a read may send: the first `maxPages`, then as many as fit under `maxTokens`. What it says about them:
-    `readPages` when a limit applied, and `partial` when the token ceiling left pages unread."""
-    keep = sorted(pages.texts)
-    said: Json = {}
-    if request.get("maxPages"):
-        keep = [n for n in keep if n <= _whole(request["maxPages"], "maxPages")]
-    if request.get("maxTokens"):
-        budget, used = _whole(request["maxTokens"], "maxTokens") * CHARS_PER_TOKEN, 0
-        fits: list[int] = []
-        for n in keep:
-            used += len(pages.texts[n])
-            if used > budget:
-                break
-            fits.append(n)
-        said["partial"] = len(fits) < len(keep)
-        keep = fits
-    if not said and len(keep) == len(pages.texts):
+    """The pages a read may send: the first `maxPages`, then as many as fit under `maxTokens` (ops_contracts.readings,
+    which a workflow's Full text trims with too). `readPages` when a limit applied, `partial` when the token ceiling
+    left pages unread."""
+    max_pages = _whole(request["maxPages"], "maxPages") if request.get("maxPages") else None
+    max_tokens = _whole(request["maxTokens"], "maxTokens") if request.get("maxTokens") else None
+    keep, said = readings_contract.within(list(pages.texts.items()), max_pages, max_tokens)
+    if not said:
         return pages, {}
-    said["readPages"] = len(keep)
     texts = {n: pages.texts[n] for n in keep}
     confidence = {n: c for n, c in pages.confidence.items() if n in texts}
-    return replace(pages, texts=texts, ocr={n for n in pages.ocr if n in texts}, confidence=confidence), said
+    return replace(pages, texts=texts, ocr={n for n in pages.ocr if n in texts}, confidence=confidence), dict(said)
 
 
 def default_extractor(files: Files, engine: Any, settings: Settings, *, readings: Readings | None = None) -> Extractor:

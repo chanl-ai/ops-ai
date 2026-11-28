@@ -7,14 +7,15 @@ from __future__ import annotations
 import asyncio
 import math
 from typing import Any
+from uuid import uuid4
 
 import httpx
 import pytest
 
-from ops_service_kit.model_calls import IngestModel, ModelCallError, ModelCalls
+from ops_service_kit.model_calls import IngestModel, ModelCallError, ModelCalls, Usage
 from ops_service_kit.scripted_vectors import scripted_vector
 
-from .conftest import LOCAL, Models
+from .conftest import LOCAL, SERVICE, Models
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
@@ -31,6 +32,25 @@ async def test_an_embedding_alias_answers_vectors_at_the_width_asked_and_records
     [row] = await models.calls(key_id)
     assert (row["outcome"], row["alias"], row["inputTokens"], row["outputTokens"]) == ("ok", "bank-embed", 16, 0)
     assert await models.spent(key_id) > 0
+
+
+async def test_the_answer_names_the_model_serving_the_alias_so_a_new_version_reads_as_a_new_space(
+    models: Models,
+) -> None:
+    """A caller keeping vectors keys them by the model that made them; an alias pointed at another model keeps its
+    name, so an answer naming only the alias would let vectors of two models be compared."""
+    _, secret = await models.key(budget="5")
+    name = f"embed-{uuid4().hex[:6]}"
+    version = {"providerId": "prov_scripted", "clearedSensitivity": "internal"}
+    body = {"name": name, "kind": "embedding", "modelId": "embed-a", **version}
+    assert (await models.client.post("/v1/models/aliases", json=body, headers=SERVICE)).status_code == 201
+    calls = ModelCalls(models.client, secret)
+    first = await calls.embed(["a loan"], alias=name, width=8, tenant="local", step="kb:test")
+    again = {**version, "modelId": "embed-b"}
+    added = await models.client.post(f"/v1/models/aliases/{name}/versions", json=again, headers=SERVICE)
+    assert added.status_code == 201, added.text
+    second = await calls.embed(["a loan"], alias=name, width=8, tenant="local", step="kb:test")
+    assert (first.model, second.model) == ("scripted/embed-a", "scripted/embed-b")
 
 
 async def test_a_chat_alias_is_refused_for_embeddings_and_an_embedding_alias_for_chat(models: Models) -> None:
@@ -99,3 +119,29 @@ async def test_the_ingestion_client_answers_text_and_counts_its_calls_and_tokens
     assert (ingest.calls, ingest.input_tokens, ingest.output_tokens) == (1, 6, 4)
     [row] = await models.calls(key_id)
     assert (row["outcome"], row["stepId"]) == ("ok", "kb:questions")
+
+
+async def test_a_structured_call_adds_its_tokens_to_the_callers_usage_and_is_logged_under_its_run(
+    models: Models,
+) -> None:
+    key_id, secret = await models.key(budget="5")
+    spent = Usage()
+    calls = ModelCalls(models.client, secret, alias="bank-standard")
+    schema = {"type": "object", "properties": {"answer": {"type": "string"}}}
+    for step in ("extract", "extract:reask"):
+        await calls.structured("Read the notice.", "Invoice INV-2207", schema, tenant="local", step=step, run="ext_1",
+                               usage=spent)  # fmt: skip
+    rows = await models.calls(key_id)
+    assert {(r["runId"], r["stepId"]) for r in rows} == {("ext_1", "extract"), ("ext_1", "extract:reask")}
+    tokens = (sum(r["inputTokens"] for r in rows), sum(r["outputTokens"] for r in rows))
+    assert spent == Usage(2, *tokens, alias="bank-standard") and tokens[0] > 0, (spent, tokens)
+
+
+async def test_a_structured_answer_in_another_shape_is_a_named_error_not_a_crash() -> None:
+    def odd(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": []})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(odd), base_url="http://models") as http:
+        with pytest.raises(ModelCallError) as unread:
+            await ModelCalls(http, "mk").structured("s", "u", {}, tenant="t", step="s")
+    assert unread.value.code == "models_answer_unreadable"

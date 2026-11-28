@@ -5,7 +5,8 @@ name: ci
 on:
   pull_request:
     # labeled: adding ci:full starts a run of every job without a new push.
-    types: [opened, synchronize, reopened, labeled]
+    # ready_for_review: leaving draft runs the jobs a draft skips.
+    types: [opened, synchronize, reopened, labeled, ready_for_review]
     # A pull request into a release branch runs nothing: the release's own pull request to develop runs CI once
     # (docs/deploy/release.md).
     branches: [develop, main]
@@ -16,7 +17,7 @@ on:
   # develop and main run the same checks after a merge; the staging job at the end deploys develop, and a release or
   # hotfix branch (docs/deploy/release.md) so the release is tested on staging.
   push:
-    branches: [develop, main, "hotfix/**"]
+    branches: [develop, main, "release/[0-9]*", "hotfix/**"]
 
 permissions:
   contents: read
@@ -61,6 +62,7 @@ jobs:
       repo_pool: ${{ steps.plan.outputs.repo_pool }}
       code: ${{ steps.plan.outputs.code }}
       mssql: ${{ steps.plan.outputs.mssql }}
+      store: ${{ steps.plan.outputs.store }}
       heavy: ${{ steps.plan.outputs.heavy }}
       repo_jobs: ${{ steps.plan.outputs.repo_jobs }}
     steps:
@@ -75,9 +77,16 @@ jobs:
           CI_FULL: ${{ contains(github.event.pull_request.title, '[ci full]') || contains(github.event.pull_request.labels.*.name, 'ci:full') }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          # A push to develop or main is planned from the last commit whose run passed ci-ok, so a merge whose run was
-          # lost or failed is checked with the next one. With no such commit the plan is a full run.
-          if [ "$GITHUB_EVENT_NAME" = push ] && { [ "$GITHUB_REF" = refs/heads/develop ] || [ "$GITHUB_REF" = refs/heads/main ]; }; then
+          # The queue fast-forwards develop to the commit a merge_group run of this workflow tested, so a push to develop of
+          # a commit with a green merge_group run plans nothing (ci-ok and staging still run). Anything else pushed to
+          # develop, and main, is planned from the last commit whose run passed ci-ok, so a merge whose run was lost or
+          # failed is checked with the next one. With no such commit the plan is a full run.
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/develop ]; then
+            tested=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=merge_group&head_sha=$GITHUB_SHA&per_page=20" \
+              | scripts/ci-tested.sh "$GITHUB_SHA" || echo false)
+            if [ "$tested" = true ]; then export CI_TESTED=true; fi
+          fi
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "${CI_TESTED:-}" != true ] && { [ "$GITHUB_REF" = refs/heads/develop ] || [ "$GITHUB_REF" = refs/heads/main ]; }; then
             green=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=${GITHUB_REF#refs/heads/}&event=push&status=success&per_page=50" \
               | scripts/ci-last-green.sh "$GITHUB_SHA" || true)
             if [ -n "$green" ]; then BASE_SHA=$green; else export CI_FULL=true; fi
@@ -124,8 +133,8 @@ jobs:
           if git diff --name-only "$base" HEAD | grep -q '^packages/'; then uv run python scripts/check_tests_typecheck.py packages; fi
       - run: make -s checks
       - name: Script tests
-        # The slowest check here; a pull request leaves it to the merge queue (heavy is false on a pull request).
-        if: needs.plan.outputs.scripts == 'true' && needs.plan.outputs.heavy == 'true'
+        # The slowest check here; it runs whenever scripts/ or a workflow changed, so a pull request sees what the queue will.
+        if: needs.plan.outputs.scripts == 'true'
         run: uv run pytest -q -n auto --dist loadfile scripts/tests
 
   service:
@@ -267,9 +276,10 @@ jobs:
     # The store, kit and identity suites on SQL Server beside PostgreSQL: the tests that run on both databases skip
     # SQL Server unless OPS_MSSQL_SERVER and MSSQL_SA_PASSWORD are set (packages/ops_store/CLAUDE.md), so a run that
     # skips any of them fails here. The image is the pinned one deploy/fly/mssql/Dockerfile builds on.
-    # Not on a pull request: the merge queue and develop pushes run it (heavy).
+    # A pull request runs it only when the diff touches a store, a migration, ops_store or the database scripts (store);
+    # any other change waits for the merge queue and develop pushes (heavy).
     needs: plan
-    if: needs.plan.outputs.mssql == 'true' && needs.plan.outputs.heavy == 'true'
+    if: needs.plan.outputs.mssql == 'true' && (needs.plan.outputs.heavy == 'true' || needs.plan.outputs.store == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
@@ -315,7 +325,7 @@ jobs:
           # (ops_store.testing.sql_server_schema). The files that exercise stores, isolation and migrations only; the
           # provider, storage and route tests stay in the service job, on PostgreSQL.
           declare -A files=(
-            [agents-service]="tests/store/test_registry_policies.py tests/store/test_registry_policies_migration.py tests/store/test_registry_tenant_migration.py tests/store/test_registry_tenant_keys_migration.py tests/store/test_skill_list.py tests/store/test_threads_list.py tests/store/test_skill_step_tools_migration.py tests/store/test_stale_saves.py"
+            [agents-service]="tests/store/test_registry_policies.py tests/store/test_registry_policies_migration.py tests/store/test_registry_tenant_migration.py tests/store/test_registry_tenant_keys_migration.py tests/store/test_skill_list.py tests/store/test_threads_list.py tests/store/test_skill_step_tools_migration.py tests/store/test_stale_saves.py tests/store/test_schedule_teams_migration.py tests/store/test_workflow_schedules.py"
             [models-service]="tests/test_call_log_isolation_migration.py tests/test_call_log_rows_isolated.py tests/test_model_key_share_rows_isolated.py tests/test_provider_key_rows_isolated.py tests/test_alias_current_index.py tests/test_spend_caps.py tests/test_key_spend_race.py tests/test_spend_retention.py"
             [documents-service]="tests/test_isolation.py tests/test_template_copies.py"
             [files-service]="tests/test_isolation.py tests/test_store.py"
@@ -429,12 +439,176 @@ jobs:
           echo "maintainer review: $review"
           OPS_STANDARDS_BASE=$(git merge-base "$BASE_SHA" HEAD) OPS_STANDARDS_REVIEW="$review" make -s checks-history
 
+  usecases:
+    # Only the use cases the changed files affect (scripts/agents/usecase_map.json, the map `make usecase-pick` prints),
+    # on a pull request and on the merge queue's group alike, so a use case is never run on the owner's Mac. A failure
+    # config/quarantine.json covers is printed and does not fail the job; the nightly runs every use case
+    # (nightly-usecases.yml). A diff that affects more than ci_usecases.MAX_PICK use cases runs none here and prints why.
+    needs: plan
+    if: needs.plan.outputs.code == 'true'
+    # Warn-only from 2026-11-27 (owner decision). Back to blocking after 3 develop runs in a row pass the use case job
+    # with nothing quarantined except the documented nightly 621; the same PR reverts this. A job-level
+    # continue-on-error leaves the job's own check red when a use case fails, and reports its result to `ready` and
+    # `ci-ok` (through `needs`) as success, so a failure shows on the run without holding the queue.
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        # PostgreSQL 17 with pgvector, which knowledge search by meaning needs (kb_0021).
+        image: pgvector/pgvector:pg17
+        env: { POSTGRES_USER: ops, POSTGRES_PASSWORD: ops, POSTGRES_DB: ops_runtime }
+        ports: ["5477:5432"]
+        options: --health-cmd "pg_isready -U ops -d ops_runtime" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Pick the use cases
+        id: pick
+        shell: bash
+        run: |
+          set -o pipefail
+          base=$(git merge-base "$BASE_SHA" HEAD)
+          ids=$(python3 scripts/ci_usecases.py pick --base "$base" | tr '\n' ' ' | xargs)
+          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+          echo "use cases: ${ids:-none}"
+      - if: steps.pick.outputs.ids != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .data/runner
+          key: runner-wasm-${{ hashFiles('packages/ops_service_kit/src/ops_service_kit/settings.py') }}
+      - if: steps.pick.outputs.ids != ''
+        uses: ./.github/actions/setup
+        with:
+          node: "true"
+          browser: "true"
+          infra: "true"
+      - if: steps.pick.outputs.ids != ''
+        name: Run them on the scripted model
+        env:
+          IDS: ${{ steps.pick.outputs.ids }}
+        run: |
+          scripts/ensure-sdk-ts-built.sh
+          # shellcheck disable=SC2086
+          python3 scripts/ci_usecases.py run --out "$RUNNER_TEMP/usecases.json" $IDS
+      - if: always() && steps.pick.outputs.ids != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: usecase-logs
+          path: |
+            .logs/usecases
+            ${{ runner.temp }}/usecases.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  generated:
+    # The committed OpenAPI documents and the SDKs' generated layer are rebuilt from the pull request's code with the
+    # target a person would run (`make openapi`). A difference is handed to generated-commit as a patch, so nobody
+    # commits generated files by hand and two pull requests do not conflict in them. This job holds no secret and no
+    # write access, because it runs the pull request's code. Not for a fork (its branch cannot be pushed to) and never
+    # in the merge queue, where the repo job's sdk-verify fails a document that drifted.
+    needs: plan
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.plan.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      changed: ${{ steps.regen.outputs.changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - id: touched
+        name: Did a route, a model or the SDK generator change
+        run: |
+          base=$(git merge-base "$BASE_SHA" HEAD)
+          if git diff --name-only "$base" HEAD | grep -qE '^(services|packages|sdk)/'; then echo "run=true" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.touched.outputs.run == 'true'
+        uses: ./.github/actions/setup
+        with:
+          node: "true"
+      - id: regen
+        if: steps.touched.outputs.run == 'true'
+        name: Regenerate the OpenAPI documents and the SDKs
+        run: |
+          make -s openapi
+          git add -A -- 'services/*/openapi.json' sdk
+          git diff --cached --binary > "$RUNNER_TEMP/generated.patch"
+          if [ -s "$RUNNER_TEMP/generated.patch" ]; then
+            git diff --cached --stat
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "the committed documents and SDKs match the code"
+          fi
+      - if: steps.regen.outputs.changed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: generated-patch
+          path: ${{ runner.temp }}/generated.patch
+          retention-days: 1
+
+  generated-commit:
+    # Commits the patch to the pull request's branch. It runs none of the pull request's code: it applies the patch and
+    # pushes over the deploy key, so the commit starts its own checks (.github/actions/push-key).
+    needs: generated
+    if: github.event_name == 'pull_request' && needs.generated.outputs.changed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: generated-patch
+          path: ${{ runner.temp }}/patch
+      - uses: ./.github/actions/push-key
+        with:
+          key: ${{ secrets.RELEASE_MAIN_DEPLOY_KEY }}
+      - name: Commit the generated files to the branch
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$HEAD_SHA" ]; then echo "the branch moved on; its newer run regenerates"; exit 0; fi
+          git apply --index "$RUNNER_TEMP/patch/generated.patch"
+          git commit -q -m "chore(sdk): regenerate the OpenAPI documents and the SDKs"
+          git push -q "$PUSH_URL" "HEAD:refs/heads/$HEAD_REF"
+
+  ready:
+    # Whether the merge queue may take this: every other job passed and CodeQL is green on the pull request's head. The
+    # queue tests the pull request on develop's tip, so how far behind develop it is does not matter. A queue group and
+    # a push are built on develop, and CodeQL reports on pull requests, so there only the jobs are judged.
+    # scripts/pr_flow.py ready; its --self-test is in make checks.
+    name: ready
+    if: always()
+    needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, usecases, maintainer-review]
+    runs-on: ubuntu-24.04
+    # CodeQL may still be running when the last job ends; this waits for it (codeql.yml allows it 45 minutes).
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Ready for the queue
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/pr_flow.py ready
+
   ci-ok:
     # The one required check: it always runs, waits for every other job, and fails when any of them failed or was
     # cancelled. A job the plan skipped counts as passed, so a narrow change is not held up by suites it did not touch.
+    # `ready` is one of them, so the queue requires it without a second required check.
     name: ci-ok
     if: always()
-    needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, maintainer-review]
+    needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, usecases, maintainer-review, generated, generated-commit, ready]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -448,7 +622,7 @@ jobs:
     # Every merge to develop, and every push to a release or hotfix branch, goes to staging once ci-ok passed for that
     # commit, so the owner tests the real combination. Pull requests and pushes to main never reach this job.
     # deploy-staging.yml holds the deploy, the freeze rules (a release or hotfix branch on origin, or STAGING_HOLD, skips
-    # a develop deploy with a notice), the checks, the rollback and the summary.
+    # a develop deploy and fails the job red), the checks, the rollback and the summary.
     needs: ci-ok
     if: ${{ !cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/heads/hotfix/')) && needs.ci-ok.result == 'success' }}
     permissions:
@@ -457,3 +631,29 @@ jobs:
     with:
       ref: ${{ github.sha }}
     secrets: inherit
+
+  staging-scan:
+    # A release or hotfix branch's web scan: an OWASP ZAP baseline of staging after that branch's own deploy, so it reads
+    # the release under test (release-security.yml holds the branch's other scans, which need no deploy). Passive rules
+    # only: it spiders for a minute and sends no attack. Report only for now: baseline rules warn, and -I keeps a
+    # warning from failing the job; the report is the artifact zap-baseline.
+    needs: [plan, ci-ok, staging]
+    if: ${{ !cancelled() && needs.plan.outputs.release == 'true' && needs.staging.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ORIGIN: https://${{ vars.STG_APP }}.fly.dev
+      # By digest, so a moved tag cannot change what runs here.
+      ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:2.16.1@sha256:7840969c7c9fead565bf9734b12f49f6886db90b1d35b1f74d79710bbd081dab
+    steps:
+      - name: ZAP baseline scan of staging
+        run: |
+          mkdir -p zap && chmod 777 zap
+          docker run --rm -v "$PWD/zap:/zap/wrk:rw" "$ZAP_IMAGE" zap-baseline.py -t "$ORIGIN" -m 1 -I -r zap.html -J zap.json
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: zap-baseline
+          path: zap/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -28,11 +28,14 @@ from datetime import UTC, datetime
 from typing import Any, TypedDict, cast
 
 from langchain_core.runnables import RunnableConfig
+from langgraph._internal._constants import CONFIG_KEY_SCRATCHPAD  # pyright: ignore[reportMissingTypeStubs]
+from langgraph.config import get_config
 from langgraph.errors import GraphInterrupt
 from langgraph.graph import END, START, StateGraph  # pyright: ignore[reportMissingTypeStubs]
 from langgraph.types import interrupt
 
 from ops_checkpointer import LeaseSupersededError
+from ops_contracts import readings as readings_contract
 from ops_contracts.errors import CODES, code_of
 from ops_service_kit.http import Json, JsonList, JsonValue
 
@@ -47,9 +50,9 @@ from .ports import (
     AgentRequest,
     CaseNotFoundError,
     CaseTypeNotFoundError,
+    DocumentsPort,
     EnginePorts,
     OutsideAnswerError,
-    ReviewPort,
     RunPort,
     RunRefusedError,
     StartedRun,
@@ -680,16 +683,10 @@ async def review_open(call: NodeCall) -> Outcome:
                 declared["inputs"] = list(cast(list[Any], o.get("inputs") or []))
             listed.append(declared)
         payload["options"] = listed
-    # A plain approval of one write needs no one when the run's starter may approve it themselves; a step with
-    # options or a task type is a person's choice, so it always pauses.
-    plain = bool(payload.get("call")) and "options" not in payload and "taskType" not in payload
-    own = await call.ports.reviews.own_decision(call.run_id, call.node.id, payload) if plain else None
-    decision: Any
-    if own is not None:
-        decision = own
-    else:
-        payload["review_id"] = await call.ports.reviews.open(call.run_id, call.node.id, call.iteration, payload)
-        decision = interrupt(payload)
+    # Every review pauses for a person's click, the run's starter included: who may click is the decision route's
+    # check (engine_reviews._check_decider), never decided here.
+    payload["review_id"] = await call.ports.reviews.open(call.run_id, call.node.id, call.iteration, payload)
+    decision: Any = interrupt(payload)
     chosen = dict(cast(Json, decision)) if isinstance(decision, dict) else {"decision": decision}
     port = str(chosen.get("option") or DEFAULT_OPTIONS.get(str(chosen.get("decision")), chosen.get("decision")))
     if port not in options:
@@ -796,10 +793,11 @@ async def ai_extract(call: NodeCall) -> Outcome:
     # A full-text or proposed read names no fields, type or Detect: the read itself says what comes back. A read
     # that resolved to nothing (a read request that asked for none) is today's read.
     read = call.params.get("read")
-    if read in ("text", "propose"):
+    if read == "text":
+        return await _full_text(call, call.ports.documents, file_id)
+    if read == "propose":
         request = {"read": read, "ocr": request["ocr"], "reviewBelow": request["reviewBelow"]}
-        if read == "propose":
-            request |= {k: call.params[k] for k in ("hint", "proposePages") if call.params.get(k) not in (None, "")}
+        request |= {k: call.params[k] for k in ("hint", "proposePages") if call.params.get(k) not in (None, "")}
     for limit in ("maxPages", "maxTokens"):
         if isinstance(call.params.get(limit), int):
             request[limit] = call.params[limit]
@@ -841,6 +839,88 @@ async def ai_extract(call: NodeCall) -> Outcome:
         # A state this step does not know is raised, never turned into a port it does not have.
         raise OutsideAnswerError(f"documents-service answered status {status!r} with outcome {answer.get('outcome')!r}")
     return Outcome(str(answer["outcome"]), out)
+
+
+def woken_with() -> Any:
+    """What woke a parked step, on the pass that runs it again; None on a pass that never parked. The value interrupt()
+    will return, read without using it up, so a step can choose what to ask before it reaches its park again."""
+    try:
+        pad = get_config().get("configurable", {}).get(CONFIG_KEY_SCRATCHPAD)
+    except RuntimeError:  # outside a graph run
+        return None
+    if pad is None:
+        return None
+    return pad.resume[0] if pad.resume else pad.get_null_resume(False)
+
+
+async def _full_text(call: NodeCall, documents: DocumentsPort, file_id: str) -> Outcome:
+    """Full text: the file's one shared reading (every caller of the same file and OCR choice gets it, and no model is
+    asked), trimmed as documents-service trims a read (ops_contracts.readings.within), each page with its text and
+    tables. A reading still under way parks the step on reading.finished; the pass after its end reads it as it is."""
+    ocr = "auto" if call.params.get("ocr") else "off"
+    reading = await documents.reading(call.run_id, file_id, ocr=ocr, ask=False)
+    status = reading.get("status")
+    if status == "none" or (status == "failed" and woken_with() is None):
+        # Never asked, or a reading that failed before this step: asking reads the file (again). A step woken by the
+        # reading failing reads it as it is, since asking again would read it once more.
+        reading = await documents.reading(call.run_id, file_id, ocr=ocr, ask=True)
+        status = reading.get("status")
+    if status in ("queued", "reading"):
+        settings = cast(Json, reading.get("settings") or {})
+        key = readings_contract.event_key(
+            readings_contract.FINISHED,
+            digest=str(reading.get("digest")),
+            reader_version=str(reading.get("readerVersion")),
+            settings_key=f"{settings.get('ocr')}:{settings.get('language')}",
+            file_id=str(reading.get("fileId") or file_id),
+        )
+        seconds = float(cast(float | str, call.params.get("waitSeconds") or EXTRACT_WAIT_SECONDS))
+        title = call.node.name or "Extract from file"
+        # The worker reads the reading once more after the wait is written (`reading` on the wait), so one that ended
+        # between the ask and the park wakes the step at once.
+        recheck = {"reading": {"fileId": file_id, "ocr": ocr}}
+        park_external(call, event=readings_contract.FINISHED, key=key, title=title, timeout_seconds=seconds, **recheck)
+        # Back here only when the time limit (or a callback) woke a reading still under way.
+        waited = {"waitedFor": readings_contract.FINISHED, "key": key, "seconds": seconds, "fileId": file_id}
+        if call.params.get("onTimeout") == "port":
+            return Outcome("timeout", waited)
+        return Outcome(
+            "error", {"error": f"The read did not finish in {seconds:g} seconds", "code": "extraction_timeout"}
+        )
+    if status == "failed":
+        error = cast(Json, reading.get("error") or {})
+        return Outcome(
+            "error", {"error": error.get("message") or "The file could not be read", "code": error.get("code")}
+        )
+    if status != "done":
+        raise OutsideAnswerError(f"documents-service answered a reading with status {status!r}")
+    pages = {int(cast(int, p.get("number") or 0)): p for p in cast(list[Json], reading.get("pages") or [])}
+    max_pages, max_tokens = call.params.get("maxPages"), call.params.get("maxTokens")
+    numbers, said = readings_contract.within(
+        [(n, str(p.get("text") or "")) for n, p in pages.items()],
+        max_pages if isinstance(max_pages, int) else None,
+        max_tokens if isinstance(max_tokens, int) else None,
+    )
+    keep = [pages[n] for n in numbers]
+    # Only what a later step reads: a page's words and boxes stay in documents-service, out of the run's state.
+    out_pages: list[JsonValue] = [
+        {
+            "number": p.get("number"),
+            "text": str(p.get("text") or ""),
+            "tables": [
+                {
+                    "cells": [
+                        {k: c.get(k) for k in ("row", "col", "text")} for c in cast(list[Json], b.get("cells") or [])
+                    ]
+                }
+                for b in cast(list[Json], p.get("blocks") or [])
+                if b.get("kind") == "table"
+            ],
+        }
+        for p in keep
+    ]
+    text = "\n\n".join(str(p.get("text")) for p in keep if p.get("text"))
+    return Outcome("ok", cast(Json, {"fileId": file_id, "text": text, "pages": out_pages, **said}))
 
 
 def read_on_file(read: Json, *, checked: bool, type_name: Any) -> Json | None:
@@ -1223,28 +1303,11 @@ async def action_send(call: NodeCall) -> Outcome:
     if not to:
         return Outcome("error", {"error": "Send read no recipient.", "code": "no_recipient"})
     arguments: Json = {"to": to, "subject": subject, "body": body}
-    token = None
-    # A run without a review port (a unit run) sends without an own approval.
-    reviews = cast("ReviewPort | None", call.ports.reviews)
-    own = (
-        await reviews.own_decision(
-            call.run_id,
-            call.node.id,
-            {"call": {"tool": "send_reply", "input": arguments, "step": call.key}},
-        )
-        if reviews is not None
-        else None
-    )
-    approval = (own or {}).get("approval")
-    if isinstance(approval, Mapping):
-        token = await call.ports.tools.mint(
-            call.run_id,
-            {"tool": "send_reply", "input": arguments, "step": call.key},
-            dict(cast(Mapping[str, JsonValue], approval)),
-        )
-    result = await call.ports.tools.call(
-        "send_reply", arguments, call.key, call.generation, str(token) if token else None
-    )
+    # Sent without an approval, whoever started the run: the gateway applies the team's approval rules (send_reply's
+    # declared wait holds while the workspace keeps makers' asks on) and its send check. A reply they hold is refused,
+    # so the step leaves by its error way out; a reply that needs a person's yes is a send_reply tool step after a
+    # review step.
+    result = await call.ports.tools.call("send_reply", arguments, call.key, call.generation, None)
     if result.ok:
         out: Json = {}
         raw_output: object = result.output

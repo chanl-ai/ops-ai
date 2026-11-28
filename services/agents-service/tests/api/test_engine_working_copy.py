@@ -50,7 +50,7 @@ async def test_a_save_keeps_a_failing_copy_and_makes_no_version(client: AsyncCli
     assert ("ghost", "unknown_type") in {(c["node"], c["code"]) for c in checks}
     # A setting's error reads as the step's form names it, not as the schema validator words it.
     assert {(c["node"], c["message"]) for c in checks if c["code"] == "invalid_parameter"} == {
-        ("fields", "Fields must be a group of named values.")
+        ("fields", "Set fields: Fields must be a group of named values.")
     }, checks
     again = (await client.get(WF)).json()["data"]
     assert [v["version"] for v in again["versions"]] == [1]
@@ -167,6 +167,41 @@ async def test_a_tool_step_the_team_lacks_is_listed_with_its_step_and_refused(cl
     assert refused.status_code == 422 and refused.json()["error"]["code"] == "tool_not_available", refused.text
 
 
+async def _publish_send_reply(client: AsyncClient, view: dict[str, Any]) -> Any:
+    """Publishes the live workflow again with its lookup step sending send_reply, the shipped mail workflows' reply."""
+    named = basic()
+    next(n for n in named["nodes"] if n["id"] == "lookup")["parameters"]["operation"] = "send_reply"
+    base = (await _save(client, named, view["saveBase"])).json()["data"]["saveBase"]
+    return await _publish(client, base)
+
+
+async def test_a_reply_step_with_no_tool_gateway_is_refused_naming_the_gateway(client: AsyncClient) -> None:
+    refused = await _publish_send_reply(client, await _published(client))
+    error = refused.json()["error"]
+    assert refused.status_code == 422 and error["code"] == "tool_not_available", refused.text
+    assert "no tool gateway (OPS_GATEWAY_URL is not set)" in error["message"], error["message"]
+
+
+class _TurnedOff:
+    """A gateway's directory for a team that turned every operation off, send_reply among them."""
+
+    async def operations(self) -> list[Any]:
+        return []
+
+
+async def test_with_a_gateway_a_team_that_turned_send_reply_off_is_refused(
+    graph_models: FakeGraphModels, database_url: str
+) -> None:
+    settings = Settings(database_url=database_url, seed_dir=SEED)
+    async with empty_engine(database_url) as engine, started(engine, settings, graph_models) as (app, client):
+        view = await _published(client)
+        app.state.runtime.gateway, app.state.runtime.tool_directory = True, _TurnedOff()
+        refused = await _publish_send_reply(client, view)
+        error = refused.json()["error"]
+        assert refused.status_code == 422 and error["code"] == "tool_not_available", refused.text
+        assert "which this team does not have" in error["message"], error["message"]
+
+
 @pytest.fixture
 async def reviewed(graph_models: FakeGraphModels, database_url: str) -> AsyncIterator[AsyncClient]:
     """The app with the dev auto-approve off, so a publish waits in Reviews."""
@@ -186,6 +221,18 @@ async def test_a_publish_while_a_review_is_open_is_listed_and_refused_before_a_v
     opened = (await client.get(WF)).json()["data"]["saveBase"]
     base = (await _save(client, basic() | {"name": "Refund check, while waiting"}, opened)).json()["data"]["saveBase"]
     await _refused_and_kept(client, base, "review_open", [1])
+
+
+async def test_an_unparseable_copy_still_lists_the_review_that_is_open(reviewed: AsyncClient) -> None:
+    client = reviewed
+    made = await client.post("/v1/workflows/definitions", json={"yaml": BASIC.read_text()})
+    assert made.status_code == 201, made.text
+    assert (await client.post(f"{WF}/publish-requests", json={"note": "first"})).status_code == 201
+    opened = (await client.get(WF)).json()["data"]["saveBase"]
+    saved = await _save(client, basic() | {"connections": "not a list"}, opened)
+    assert saved.status_code == 200, saved.text
+    preview = (await client.get(f"{WF}/publish-preview")).json()["data"]
+    assert {b["code"] for b in preview["blockers"]} >= {"review_open", "invalid_definition"}, preview
 
 
 async def test_a_copy_equal_to_the_live_version_is_listed_and_refused_with_the_copy_kept(client: AsyncClient) -> None:

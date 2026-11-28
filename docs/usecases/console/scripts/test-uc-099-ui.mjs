@@ -5,6 +5,19 @@
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const RAVI = 'r.menon@harborpine.example';
+const WORKFLOW_ID = 'uc099ui_read_only';
+const WORKFLOW = `
+schemaVersion: 2
+id: ${WORKFLOW_ID}
+name: Read-only check (uc-099 ui)
+nodes:
+  - {id: start, type: ops.trigger.request, typeVersion: 1, name: Request}
+  - {id: fields, type: ops.data.set, typeVersion: 1, name: Set fields, parameters: {values: {customer: "$.input.customerId"}}}
+  - {id: done, type: ops.flow.end, typeVersion: 1, name: Done, parameters: {outcome: done}}
+connections:
+  - {from: {node: start, port: payload}, to: {node: fields, port: in}}
+  - {from: {node: fields, port: out}, to: {node: done, port: in}}
+`;
 const JAMES = 'j.richardson@harborpine.example';
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 
@@ -47,6 +60,9 @@ await withUiStack(
     const agents = (await (await fetch(`http://127.0.0.1:${AGENTS_PORT}/v1/agents?pageSize=5`, { headers: { Authorization: `Bearer ${await tokenFor(RAVI)}`, 'X-Team-Id': 'team_ops' } })).json()).data;
     const agentId = (agents.data ?? agents)[0]?.id;
     if (!agentId) throw new Error('setup: the viewer lists no agent');
+    // A workflow the runner holds, made by the builder: the old engine's workflows no longer open in the console.
+    const made = await fetch(`http://127.0.0.1:${AGENTS_PORT}/v1/workflows/definitions`, { method: 'POST', headers: { Authorization: `Bearer ${await tokenFor(JAMES)}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' }, body: JSON.stringify({ yaml: WORKFLOW }) });
+    if (made.status !== 201) throw new Error(`setup: the workflow answered ${made.status}: ${await made.text()}`);
 
     const browser = await chromium.launch();
     const errors = [];
@@ -58,30 +74,30 @@ await withUiStack(
 
       await ravi.goto(`${consoleUrl}/agents/${agentId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const notice = await ravi.getByTestId('read-only-notice').waitFor({ timeout: 60_000 }).then(() => true, () => false);
-      const raviAgent = { notice, save: await ravi.getByTestId('agent-save-status').count(), more: await ravi.getByRole('button', { name: 'More actions' }).count(), nameDisabled: await ravi.locator('#ag-name').isDisabled().catch(() => null) };
+      const raviAgent = { notice, save: await ravi.getByTestId('save-state').count(), more: await ravi.getByRole('button', { name: 'More actions' }).count(), nameInput: await ravi.getByTestId('page-title-input').count() };
       // The notice says why: which role changes agents here and who holds it (GET /v1/access/holders).
       const why = await ravi.getByTestId('read-only-why').filter({ hasText: 'ask' }).first().textContent({ timeout: 30_000 }).catch(() => '');
       check('the View only notice names the role that edits agents and who on the team holds it', /Builder/.test(why ?? '') && /James Richardson/.test(why ?? ''), why);
-      check('a viewer opens an agent read-only: a View only notice, no save or actions, the fields disabled', raviAgent.notice && raviAgent.save === 0 && raviAgent.more === 0 && raviAgent.nameDisabled === true, raviAgent);
+      check('a viewer opens an agent read-only: a View only notice, no save or actions, the name not editable', raviAgent.notice && raviAgent.save === 0 && raviAgent.more === 0 && raviAgent.nameInput === 0, raviAgent);
 
       // A workflow page reads the record's own canEdit, canDelete and canPublish (GET /v1/workflows/<id>).
-      await ravi.goto(`${consoleUrl}/workflows/dispute_email`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      const wfNotice = await ravi.getByTestId('read-only-notice').waitFor({ timeout: 60_000 }).then(() => true, () => false);
-      const raviWorkflow = { notice: wfNotice, publish: await ravi.getByRole('button', { name: 'Publish…' }).count(), more: await ravi.getByRole('button', { name: 'More actions' }).count() };
-      check('a viewer opens a workflow read-only: a View only notice, no Publish or actions', raviWorkflow.notice && raviWorkflow.publish === 0 && raviWorkflow.more === 0, raviWorkflow);
+      await ravi.goto(`${consoleUrl}/workflows/definitions/${WORKFLOW_ID}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      const wfNotice = await ravi.getByTestId('definition-view-only').waitFor({ timeout: 60_000 }).then(() => true, () => false);
+      const raviWorkflow = { notice: wfNotice, save: await ravi.getByTestId('definition-save').count(), lifecycle: await ravi.getByTestId('definition-lifecycle').count() };
+      check('a viewer opens a workflow read-only: a View only line, no Save or publish actions', raviWorkflow.notice && raviWorkflow.save === 0 && raviWorkflow.lifecycle === 0, raviWorkflow);
 
       // The control: a builder on the same team sees every create button and can edit the agent.
       const james = await signIn(browser, consoleUrl, JAMES, errors, mes);
       const jamesCreates = await creates(james, consoleUrl);
       await james.goto(`${consoleUrl}/agents/${agentId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await james.getByTestId('agent-save-status').waitFor({ timeout: 60_000 }).catch(() => undefined);
-      const jamesAgent = { save: await james.getByTestId('agent-save-status').count(), notice: await james.getByTestId('read-only-notice').count(), nameDisabled: await james.locator('#ag-name').isDisabled().catch(() => null) };
-      check('a builder on the same team sees every create button and edits the agent', Object.values(jamesCreates).every(Boolean) && jamesAgent.save === 1 && jamesAgent.notice === 0 && jamesAgent.nameDisabled === false, { jamesCreates, jamesAgent });
+      await james.getByTestId('save-state').waitFor({ timeout: 60_000 }).catch(() => undefined);
+      const jamesAgent = { save: await james.getByTestId('save-state').count(), notice: await james.getByTestId('read-only-notice').count(), nameInput: await james.getByTestId('page-title-input').isEnabled().catch(() => null) };
+      check('a builder on the same team sees every create button and edits the agent', Object.values(jamesCreates).every(Boolean) && jamesAgent.save === 1 && jamesAgent.notice === 0 && jamesAgent.nameInput === true, { jamesCreates, jamesAgent });
 
-      await james.goto(`${consoleUrl}/workflows/dispute_email`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await james.getByRole('button', { name: 'More actions' }).waitFor({ timeout: 60_000 }).catch(() => undefined);
-      const jamesWorkflow = { notice: await james.getByTestId('read-only-notice').count(), more: await james.getByRole('button', { name: 'More actions' }).count() };
-      check('a builder opens the same workflow with its actions and no View only notice', jamesWorkflow.notice === 0 && jamesWorkflow.more === 1, jamesWorkflow);
+      await james.goto(`${consoleUrl}/workflows/definitions/${WORKFLOW_ID}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await james.getByTestId('definition-lifecycle').waitFor({ timeout: 60_000 }).catch(() => undefined);
+      const jamesWorkflow = { notice: await james.getByTestId('definition-view-only').count(), save: await james.getByTestId('definition-save').count(), lifecycle: await james.getByTestId('definition-lifecycle').count() };
+      check('a builder opens the same workflow with Save and its publish actions and no View only line', jamesWorkflow.notice === 0 && jamesWorkflow.save === 1 && jamesWorkflow.lifecycle === 1, jamesWorkflow);
 
       check('what each person may do is read from the permissions GET /v1/me returns', mes.some((m) => m.startsWith(`${RAVI} 200`)) && mes.some((m) => m.startsWith(`${JAMES} 200`)), mes);
       check('no page errors', errors.length === 0, errors);

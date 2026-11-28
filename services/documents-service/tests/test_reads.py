@@ -139,6 +139,17 @@ async def test_a_spent_budget_and_a_busy_model_are_told_apart_from_a_model_that_
     }, said
 
 
+async def test_an_answer_in_a_shape_the_client_cannot_read_fails_the_read_in_words_a_person_can_act_on(
+    make: Make,
+) -> None:
+    unreadable = httpx.MockTransport(lambda _: httpx.Response(200, json={"choices": []}))
+    s = make(ModelsService(httpx.AsyncClient(base_url="http://models", transport=unreadable), "key"), Floor())
+    async with s.client as c:
+        body = (await read(c, await s.stored(NOTICE), fields=[{"key": "invoice", "type": "text"}])).json()["data"]
+    assert (body["status"], body["error"]["code"]) == ("failed", "model_answer_unreadable"), body
+    assert "Error" not in body["error"]["message"] and "try again" in body["error"]["message"], body
+
+
 async def test_an_unknown_read_and_a_bad_ceiling_are_refused(make: Make) -> None:
     s = make(Models(), Floor())
     async with s.client as c:

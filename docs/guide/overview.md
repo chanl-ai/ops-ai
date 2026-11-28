@@ -1,16 +1,25 @@
 # Overview
 
-Status: current. Checked against the code of this release.
+Status: current.
+
+## Routine work fills your team's day
+
+An operations team spends its day on work that follows a pattern. A court notice arrives and someone opens a case, a
+complaint email needs triage, an account needs a hold, or a colleague asks what the procedure says. Software could do
+the reading and drafting. In a regulated business, though, software cannot change a customer's account unless a person
+decides, and every step has to leave a record that an auditor can read.
+
+## Why one-off automations fall short
+
+Without a platform that carries those controls, each automation is a one-off script, or a pilot that your risk function
+has to review from scratch. Your team keeps retyping the same request across systems, and someone rebuilds the audit
+answer by hand each time it is asked for.
 
 ## What Ops AI does
 
-Ops AI is an operational AI platform. A bank's or other regulated business's operations teams use it to hand routine
-back-office work to software: reading a court notice and opening a case, triaging a complaint email, placing a hold on
-an account, answering a staff question from the team's own procedures. The team decides which writes to its
-other systems wait for a person, such as anything that moves money, and every step leaves a record an auditor can read.
-
-It runs on your own infrastructure, against a database your DBA controls and a model endpoint you choose. Nothing
-calls home.
+Ops AI is an operational AI platform that hands routine back-office work to software. Your team decides which changes to
+its other systems wait for a person, such as anything that moves money, and every step leaves a record. It runs on your
+own infrastructure, against a database your DBA controls and a model endpoint you choose. Nothing calls home.
 
 ## In three parts
 
@@ -32,42 +41,30 @@ calls home.
 
 ## The platform in one picture
 
-```mermaid
-flowchart TB
-  IN["Where work comes from: people in the console,<br/>team mailboxes, other systems over the API,<br/>AI assistants over MCP"]:::outside
-  subgraph RUN["Two ways to run work"]
-    direction LR
-    AG["Agents<br/>a model with instructions, tools,<br/>knowledge, skills and guardrails"]
-    WF["Workflows<br/>typed steps that run the same<br/>way every time, each journaled"]
-    AG <-->|"agent as a step,<br/>workflow as a tool"| WF
-  end
-  subgraph SH["Shared services"]
-    direction TB
-    HT["Reviews, human tasks, cases"]
-    KF["Knowledge, files, documents"]
-    ID["Identity, teams, roles, audit"]
-    HT ~~~ KF ~~~ ID
-  end
-  subgraph GW["Gateways: the only way out"]
-    direction TB
-    DG["Data gateway: tools, approvals,<br/>policy, allow-list, credentials"]
-    AIG["AI gateway: aliases,<br/>keys, budgets"]
-    DG ~~~ AIG
-  end
-  DB[("PostgreSQL")]:::store
-  OUT["Your systems (REST, MCP, mail)<br/>and your model endpoint"]:::outside
-  IN --> RUN
-  RUN --> SH
-  RUN --> GW
-  SH --> DB
-  GW --> OUT
-```
+Read it from the top: where work comes in, what runs it, and the one way out to your systems.
 
-*What runs today. Work arrives from people, mailboxes, other systems and AI assistants; agents and workflows run it on
-the shared services. Every call to one of your systems leaves through the data gateway, and every model call through the
-AI gateway.*
+<!-- site: layers frame="Ops AI, on your infrastructure" caption="What runs today: work arrives from people, mailboxes, other systems and AI assistants; agents and workflows run it on the shared services; every call to your systems and every model call leaves through a gateway" -->
+- **Where work comes from**: People, mailboxes, other systems and AI assistants
+  - **A person in the console**: A lending team member asks for a payoff quote
+  - **A team mailbox**: An outage report reaches a utility's service desk
+  - **Another system, over the API**: A claims system opens a case
+  - **An AI assistant, over MCP**: Every write it asks for waits for a person
+- **Two ways to run work**: An agent can be a workflow step, and a workflow can be an agent's tool
+  - **Agents**: A model with instructions, tools, knowledge, skills and guardrails
+  - **Workflows**: Typed steps that run the same way every time, each one journaled
+- **Shared services**: Used by both, stored in your own database
+  - **Reviews, human tasks, cases**
+  - **Knowledge, files, documents**
+  - **Identity, teams, roles, audit**
+  - **PostgreSQL**: The database your DBA controls
+- **Gateways, the only way out**: Nothing reaches your systems or a model any other way
+  - **Data gateway**: Tools, approvals, policy, allowed hosts, credentials
+  - **AI gateway**: Model aliases, keys, budgets
+- **Your systems and your model**
+  - **Your systems**: Over REST, MCP and mail
+  - **Your model endpoint**: The provider you choose
 
-## Ideas the design rests on
+## Principles behind the design
 
 | Idea | What it means for you |
 |---|---|
@@ -93,9 +90,15 @@ AI gateway.*
 | Tool | One operation on one of your systems, such as "get account" or "place hold", with its access class (read or write) and approval policy |
 | Alias | A name such as `default` that points at a provider's model; changing the alias changes the model without changing an agent |
 
+## What success looks like
+
+A builder configures a new process by writing its agents and workflows and publishing them through a second person's
+review, and the team can start using them the same day. When the risk team asks about a change, the answer is already on
+the record: who approved it, which version ran and what it could reach.
+
 ## Next
 
 <!-- site: cards -->
 - **[Quickstart](quickstart.md)**: run Ops AI on one machine.
-- **[How work flows](how-work-flows.md)**: a chat turn, a workflow run and an email to case, step by step.
-- **[Agents](agents.md)** and **[Workflows](workflows.md)**: the two ways to run work.
+- **[How work flows](how-work-flows.md)**: follow a chat turn, a workflow run and an email that becomes a case, step by step.
+- **[Agents](agents.md)** and **[Workflows](workflows.md)**: learn the two ways to run work.

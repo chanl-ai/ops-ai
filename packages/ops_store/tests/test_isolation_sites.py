@@ -93,8 +93,12 @@ WIDENINGS: dict[str, set[str]] = {
         "services/agents-service/src/ops_agents/api/email_trigger.py",
         "services/agents-service/src/ops_agents/store/mailboxes.py",
     },
+    "SCHEDULE_CLOCK": {"services/agents-service/src/ops_agents/api/schedule_clock.py"},
     "CLAIM_THREAD": {"services/agents-service/src/ops_agents/store/graphs.py"},
     "RETENTION_TENANTS": {"services/agents-service/src/ops_agents/store/memories.py"},
+    "SCHEDULE_TENANTS": {"services/agents-service/src/ops_agents/store/schedules.py"},
+    # The agent and workflow live places list every team the caller may view, each step with its saved schedule.
+    "SCHEDULE_VIEWS": {"services/agents-service/src/ops_agents/store/schedules.py"},
     "ASSISTANT_TEAMS": {"services/agents-service/src/ops_agents/store/team_defaults.py"},
     "ASSISTANT_CATCH_UP": {"services/agents-service/src/ops_agents/api/ops_tools.py"},
     # The tool catalogue copy's resync applies one tenant's catalogue, every team's grants, as that tenant.
@@ -126,6 +130,9 @@ WIDENINGS: dict[str, set[str]] = {
     "STORAGE_TARGETS": {"services/files-service/src/ops_files/store/settings.py"},
     # The retention process lists every tenant's released snapshots past their date, then deletes each in its team.
     "RETENTION_DUE": {"services/files-service/src/ops_files/store/files.py"},
+    # The watch check process lists each tenant's asked-for checks; retention deletes each tenant's old watch events.
+    "WATCHES_DUE": {"services/files-service/src/ops_files/store/watches.py"},
+    "EVENTS_DUE": {"services/files-service/src/ops_files/store/watches.py"},
     # Kb's background processes, the dev demo seed and the start-up move between file stores.
     "MOVE_TENANTS": {"services/kb-service/src/ops_kb/store/knowledge.py"},
     "DEMO_SEED": {"services/kb-service/src/ops_kb/__main__.py"},
@@ -185,6 +192,8 @@ ENTRIES: dict[str, set[str]] = {
         "services/documents-service/src/ops_documents/extraction.py",
         # The retention process deletes each released snapshot as its own tenant and team.
         "services/files-service/src/ops_files/tenant_files.py",
+        # Each asked-for watch check runs as the watch's own tenant and team.
+        "services/files-service/src/ops_files/watches.py",
         # A queued reading is read in the team that asked for it.
         "services/documents-service/src/ops_documents/readings.py",
         # A reading event settles the items of the one team its service token names.

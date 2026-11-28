@@ -431,6 +431,23 @@
             "title": "Model",
             "type": "string"
           },
+          "modelSettings": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Modelsettings",
+            "type": "object"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -1036,6 +1053,34 @@
               }
             ],
             "title": "Model"
+          },
+          "modelSettings": {
+            "anyOf": [
+              {
+                "maxProperties": 12,
+                "patternProperties": {
+                  "^[a-z][a-z0-9_]{0,39}$": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "maxLength": 40,
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelsettings"
           },
           "name": {
             "anyOf": [
@@ -1747,6 +1792,163 @@
         "title": "AgentTestTurn",
         "type": "object"
       },
+      "AgentToolApp": {
+        "additionalProperties": false,
+        "description": "An app as an agent's tools picker shows it: its state for the person asking, and how many of its tools the team\nadded and the agent holds. A tool with no app card groups under its module, or under Workflows or Agents.",
+        "properties": {
+          "appGroup": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appgroup"
+          },
+          "appState": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appstate"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "plugin",
+              "builtin",
+              "custom",
+              "workflows",
+              "agents",
+              "other"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/AgentToolAppMatch"
+            },
+            "title": "Matches",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "notAdded": {
+            "title": "Notadded",
+            "type": "integer"
+          },
+          "signIn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signin"
+          },
+          "toolsGranted": {
+            "title": "Toolsgranted",
+            "type": "integer"
+          },
+          "toolsOffered": {
+            "title": "Toolsoffered",
+            "type": "integer"
+          },
+          "toolsTotal": {
+            "title": "Toolstotal",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "connected",
+          "toolsTotal",
+          "toolsOffered",
+          "toolsGranted",
+          "notAdded",
+          "matches"
+        ],
+        "title": "AgentToolApp",
+        "type": "object"
+      },
+      "AgentToolAppMatch": {
+        "additionalProperties": false,
+        "description": "One of an app's tools whose words match the search, so the picker can offer it under its app.",
+        "properties": {
+          "access": {
+            "title": "Access",
+            "type": "string"
+          },
+          "granted": {
+            "title": "Granted",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "access",
+          "granted"
+        ],
+        "title": "AgentToolAppMatch",
+        "type": "object"
+      },
+      "AgentToolAppsPage": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AgentToolApp"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "AgentToolAppsPage",
+        "type": "object"
+      },
       "AgentUses": {
         "additionalProperties": false,
         "description": "How many of each kind the agent holds, for the page's one-line summary.",
@@ -1958,6 +2160,57 @@
         "title": "AllHrefs",
         "type": "object"
       },
+      "AppTool": {
+        "additionalProperties": false,
+        "description": "One of an app's tools the team added, and whether this agent holds it.",
+        "properties": {
+          "access": {
+            "title": "Access",
+            "type": "string"
+          },
+          "approval": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "granted": {
+            "title": "Granted",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "requiresApproval": {
+            "title": "Requiresapproval",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "description",
+          "access",
+          "requiresApproval",
+          "granted"
+        ],
+        "title": "AppTool",
+        "type": "object"
+      },
       "AppToolsGiven": {
         "additionalProperties": false,
         "properties": {
@@ -2023,6 +2276,34 @@
           "moduleIds"
         ],
         "title": "AppToolsIn",
+        "type": "object"
+      },
+      "AppToolsPage": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AppTool"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "AppToolsPage",
         "type": "object"
       },
       "Approval": {
@@ -3139,7 +3420,7 @@
       },
       "Brief": {
         "additionalProperties": false,
-        "description": "What a builder writes instead of one block of instructions. Persona, tone and glossary are text inside\n`how_to_answer`. `purpose` is the Job; `goal` is kept on agents that already have one and is not asked for on\nnew ones. `success` is kept readable on old versions and is never sent to the model. `hand_off` and `examples`\ndefault to empty, so a version stored before them reads and runs as it did.",
+        "description": "What a builder writes instead of one block of instructions. Personality, tone and the like are `sections`\nthe builder adds; text already inside `how_to_answer` stays there. `purpose` is the Job; `goal` is kept on agents\nthat already have one and is not asked for on new ones. `success` is kept readable on old versions and is never\nsent to the model. `hand_off`, `examples` and `sections` default to empty, so a version stored before them reads\nand runs as it did.",
         "properties": {
           "examples": {
             "default": "",
@@ -3184,6 +3465,14 @@
             "minLength": 1,
             "title": "Purpose",
             "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/BriefSection"
+            },
+            "maxItems": 50,
+            "title": "Sections",
+            "type": "array"
           },
           "success": {
             "items": {
@@ -3259,6 +3548,60 @@
         "title": "BriefDraftInput",
         "type": "object"
       },
+      "BriefSection": {
+        "additionalProperties": false,
+        "description": "A headed section a builder adds to the brief. `kind` is the id of a menu section in the workspace's list,\nwritten under that section's label, and the tag evals read; a `custom` section is written under its own name, is\nprompt text only and drives nothing. The save fills a menu section's name from the list.",
+        "properties": {
+          "kind": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Name",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "BriefSection",
+        "type": "object"
+      },
+      "BriefSectionView": {
+        "additionalProperties": false,
+        "description": "A section added to a brief, as replied: `kind` is the id of a menu section in the workspace's list (the tag\nevals read) or `custom`; `name` is the heading it was saved under.",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "BriefSectionView",
+        "type": "object"
+      },
       "BriefView": {
         "additionalProperties": false,
         "description": "An agent's brief as replied (`ops_agent_kernel.prompt_writer.Brief` is the request form).",
@@ -3295,6 +3638,13 @@
           "purpose": {
             "title": "Purpose",
             "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/BriefSectionView"
+            },
+            "title": "Sections",
+            "type": "array"
           },
           "success": {
             "items": {
@@ -6566,6 +6916,64 @@
         "title": "DefinitionRow",
         "type": "object"
       },
+      "DefinitionSample": {
+        "additionalProperties": false,
+        "properties": {
+          "given": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SampleStep"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SampleRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "saved": {
+            "title": "Saved",
+            "type": "boolean"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/SampleStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "workflowId": {
+            "title": "Workflowid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflowId",
+          "saved",
+          "steps"
+        ],
+        "title": "DefinitionSample",
+        "type": "object"
+      },
       "DefinitionShapes": {
         "additionalProperties": false,
         "properties": {
@@ -6752,6 +7160,13 @@
           },
           "saveBase": {
             "$ref": "#/components/schemas/SaveBase"
+          },
+          "schedules": {
+            "items": {
+              "$ref": "#/components/schemas/ScheduleView"
+            },
+            "title": "Schedules",
+            "type": "array"
           },
           "stage": {
             "enum": [
@@ -7591,6 +8006,25 @@
         "title": "Envelope[AgentTestTurn]",
         "type": "object"
       },
+      "Envelope_AgentToolAppsPage_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AgentToolAppsPage"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[AgentToolAppsPage]",
+        "type": "object"
+      },
       "Envelope_Agent_": {
         "additionalProperties": false,
         "properties": {
@@ -7646,6 +8080,25 @@
           "data"
         ],
         "title": "Envelope[AppToolsGiven]",
+        "type": "object"
+      },
+      "Envelope_AppToolsPage_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AppToolsPage"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[AppToolsPage]",
         "type": "object"
       },
       "Envelope_Approval_": {
@@ -7988,6 +8441,25 @@
           "data"
         ],
         "title": "Envelope[DefinitionPublished]",
+        "type": "object"
+      },
+      "Envelope_DefinitionSample_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DefinitionSample"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[DefinitionSample]",
         "type": "object"
       },
       "Envelope_DefinitionShapes_": {
@@ -8674,6 +9146,25 @@
         "title": "Envelope[Migrated]",
         "type": "object"
       },
+      "Envelope_ModelAliasKnobs_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ModelAliasKnobs"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ModelAliasKnobs]",
+        "type": "object"
+      },
       "Envelope_NoneType_": {
         "additionalProperties": false,
         "properties": {
@@ -8768,6 +9259,25 @@
           "data"
         ],
         "title": "Envelope[PlatformEventOut]",
+        "type": "object"
+      },
+      "Envelope_PreviewView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PreviewView"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[PreviewView]",
         "type": "object"
       },
       "Envelope_PublicForm_": {
@@ -9148,6 +9658,44 @@
           "data"
         ],
         "title": "Envelope[SavedCases]",
+        "type": "object"
+      },
+      "Envelope_ScheduleView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ScheduleView"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ScheduleView]",
+        "type": "object"
+      },
+      "Envelope_SectionList_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SectionList"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[SectionList]",
         "type": "object"
       },
       "Envelope_SkillDetail_": {
@@ -9808,6 +10356,29 @@
         "title": "Envelope[WorkingCopySaved]",
         "type": "object"
       },
+      "Envelope_dict_str__int__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Data",
+            "type": "object"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[dict[str, int]]",
+        "type": "object"
+      },
       "Envelope_dict_str__list_ToolUser___": {
         "additionalProperties": false,
         "properties": {
@@ -9947,6 +10518,29 @@
           "data"
         ],
         "title": "Envelope[list[InboxItem]]",
+        "type": "object"
+      },
+      "Envelope_list_KindView__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/KindView"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[list[KindView]]",
         "type": "object"
       },
       "Envelope_list_KnowledgeUsage__": {
@@ -12804,6 +13398,33 @@
         "title": "KindRow",
         "type": "object"
       },
+      "KindView": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "schema": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Schema",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "schema"
+        ],
+        "title": "KindView",
+        "type": "object"
+      },
       "KnowledgeBaseRef": {
         "additionalProperties": false,
         "properties": {
@@ -13490,6 +14111,16 @@
           "pinned": {
             "title": "Pinned",
             "type": "boolean"
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlaceSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "traffic24H": {
             "anyOf": [
@@ -14492,6 +15123,44 @@
         "title": "ModelAlias",
         "type": "object"
       },
+      "ModelAliasKnobs": {
+        "additionalProperties": false,
+        "description": "The settings an agent on the alias may save, from models-service: `knobs` is a JSON Schema object of only the\nknobs the alias's model takes, each with its type, title, description, range and catalog default.",
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "catalogued": {
+            "title": "Catalogued",
+            "type": "boolean"
+          },
+          "knobs": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Knobs",
+            "type": "object"
+          },
+          "modelId": {
+            "title": "Modelid",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "alias",
+          "version",
+          "modelId",
+          "catalogued",
+          "knobs"
+        ],
+        "title": "ModelAliasKnobs",
+        "type": "object"
+      },
       "NextAction": {
         "additionalProperties": false,
         "properties": {
@@ -14563,8 +15232,16 @@
             "title": "Extraoutputs",
             "type": "array"
           },
+          "fails": {
+            "title": "Fails",
+            "type": "string"
+          },
           "group": {
             "title": "Group",
+            "type": "string"
+          },
+          "how": {
+            "title": "How",
             "type": "string"
           },
           "id": {
@@ -14580,6 +15257,11 @@
           },
           "label": {
             "title": "Label",
+            "type": "string"
+          },
+          "limit": {
+            "default": "",
+            "title": "Limit",
             "type": "string"
           },
           "optionalOutputs": {
@@ -14624,9 +15306,18 @@
           "retry": {
             "$ref": "#/components/schemas/RetryView"
           },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
           "timeoutSeconds": {
             "title": "Timeoutseconds",
             "type": "number"
+          },
+          "tries": {
+            "default": "",
+            "title": "Tries",
+            "type": "string"
           },
           "ui": {
             "additionalProperties": {
@@ -14657,6 +15348,9 @@
           "group",
           "label",
           "description",
+          "summary",
+          "how",
+          "fails",
           "inputs",
           "outputs",
           "outputsFrom",
@@ -15379,6 +16073,37 @@
         "title": "PersonRef",
         "type": "object"
       },
+      "PlaceSchedule": {
+        "additionalProperties": false,
+        "properties": {
+          "nextRun": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextrun"
+          },
+          "triggerStep": {
+            "title": "Triggerstep",
+            "type": "string"
+          },
+          "words": {
+            "title": "Words",
+            "type": "string"
+          }
+        },
+        "required": [
+          "words",
+          "nextRun",
+          "triggerStep"
+        ],
+        "title": "PlaceSchedule",
+        "type": "object"
+      },
       "Plan": {
         "additionalProperties": false,
         "properties": {
@@ -15649,6 +16374,153 @@
           "label"
         ],
         "title": "PortView",
+        "type": "object"
+      },
+      "Preset": {
+        "additionalProperties": false,
+        "properties": {
+          "icon": {
+            "enum": [
+              "smile",
+              "sun",
+              "scale",
+              "briefcase",
+              "zap",
+              "message",
+              "heart",
+              "shield",
+              "star",
+              "book"
+            ],
+            "title": "Icon",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "icon",
+          "text"
+        ],
+        "title": "Preset",
+        "type": "object"
+      },
+      "PresetIn": {
+        "additionalProperties": false,
+        "description": "A sentence the editor offers as a chip above a section's text; picking it writes the text into the section.",
+        "properties": {
+          "icon": {
+            "default": "smile",
+            "enum": [
+              "smile",
+              "sun",
+              "scale",
+              "briefcase",
+              "zap",
+              "message",
+              "heart",
+              "shield",
+              "star",
+              "book"
+            ],
+            "title": "Icon",
+            "type": "string"
+          },
+          "id": {
+            "default": "",
+            "maxLength": 40,
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "text"
+        ],
+        "title": "PresetIn",
+        "type": "object"
+      },
+      "PreviewIn": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "rule": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Rule",
+            "type": "object"
+          }
+        },
+        "required": [
+          "rule"
+        ],
+        "title": "PreviewIn",
+        "type": "object"
+      },
+      "PreviewView": {
+        "additionalProperties": false,
+        "properties": {
+          "nextRuns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Nextruns",
+            "type": "array"
+          },
+          "rule": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Rule",
+            "type": "object"
+          },
+          "words": {
+            "title": "Words",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule",
+          "words",
+          "nextRuns"
+        ],
+        "title": "PreviewView",
         "type": "object"
       },
       "PromptVariable": {
@@ -16176,6 +17048,11 @@
             "title": "Approvals",
             "type": "array"
           },
+          "approvalsNeeded": {
+            "default": 1,
+            "title": "Approvalsneeded",
+            "type": "integer"
+          },
           "assignee": {
             "anyOf": [
               {
@@ -16187,6 +17064,17 @@
             ],
             "title": "Assignee"
           },
+          "canAssign": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canassign"
+          },
           "canDecide": {
             "anyOf": [
               {
@@ -16197,6 +17085,28 @@
               }
             ],
             "title": "Candecide"
+          },
+          "canReassign": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canreassign"
+          },
+          "canReturn": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canreturn"
           },
           "confidence": {
             "title": "Confidence",
@@ -16369,6 +17279,17 @@
                 "type": "null"
               }
             ]
+          },
+          "viewerApproved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Viewerapproved"
           },
           "workflowId": {
             "title": "Workflowid",
@@ -17687,6 +18608,23 @@
         "title": "RoutedVersion",
         "type": "object"
       },
+      "RuleIn": {
+        "additionalProperties": false,
+        "properties": {
+          "rule": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Rule",
+            "type": "object"
+          }
+        },
+        "required": [
+          "rule"
+        ],
+        "title": "RuleIn",
+        "type": "object"
+      },
       "RunChild": {
         "additionalProperties": false,
         "description": "A run a step started (Start workflow, once or for each item), with where it is now.",
@@ -18879,6 +19817,108 @@
         "title": "RunsFilter",
         "type": "object"
       },
+      "SampleField": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "sample": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sample"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "path"
+        ],
+        "title": "SampleField",
+        "type": "object"
+      },
+      "SampleRun": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "title": "Createdat",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "createdAt"
+        ],
+        "title": "SampleRun",
+        "type": "object"
+      },
+      "SampleStep": {
+        "additionalProperties": false,
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/SampleField"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "installed",
+          "fields"
+        ],
+        "title": "SampleStep",
+        "type": "object"
+      },
       "SaveBase": {
         "additionalProperties": false,
         "description": "The copy a save is made on: its version and digest (save-base.ts `baseOf` reads it as `baseVersion` and\n`baseDigest`).",
@@ -19043,6 +20083,348 @@
           "cases"
         ],
         "title": "SavedCases",
+        "type": "object"
+      },
+      "ScheduleView": {
+        "additionalProperties": false,
+        "properties": {
+          "changedAt": {
+            "title": "Changedat",
+            "type": "string"
+          },
+          "changedBy": {
+            "title": "Changedby",
+            "type": "string"
+          },
+          "changedByName": {
+            "default": "",
+            "title": "Changedbyname",
+            "type": "string"
+          },
+          "idle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idle"
+          },
+          "idleCode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_live_version",
+                  "paused",
+                  "step_missing",
+                  "not_schedulable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idlecode"
+          },
+          "lastOutcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastoutcome"
+          },
+          "lastOutcomeReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastoutcomereason"
+          },
+          "lastRunId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrunid"
+          },
+          "lastSlotAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastslotat"
+          },
+          "nextRuns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Nextruns",
+            "type": "array"
+          },
+          "rule": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Rule",
+            "type": "object"
+          },
+          "triggerStep": {
+            "title": "Triggerstep",
+            "type": "string"
+          },
+          "words": {
+            "title": "Words",
+            "type": "string"
+          },
+          "workflowId": {
+            "title": "Workflowid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflowId",
+          "triggerStep",
+          "rule",
+          "words",
+          "nextRuns",
+          "changedBy",
+          "changedAt"
+        ],
+        "title": "ScheduleView",
+        "type": "object"
+      },
+      "SectionItem": {
+        "additionalProperties": false,
+        "description": "One entry of the workspace's list, as stored and replied.",
+        "properties": {
+          "drives": {
+            "default": "none",
+            "enum": [
+              "none",
+              "handoff",
+              "never-last",
+              "eval-tag"
+            ],
+            "title": "Drives",
+            "type": "string"
+          },
+          "example": {
+            "default": "",
+            "title": "Example",
+            "type": "string"
+          },
+          "group": {
+            "default": "",
+            "title": "Group",
+            "type": "string"
+          },
+          "hidden": {
+            "default": false,
+            "title": "Hidden",
+            "type": "boolean"
+          },
+          "hint": {
+            "default": "",
+            "title": "Hint",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "fixed",
+              "menu",
+              "custom"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/Preset"
+            },
+            "title": "Presets",
+            "type": "array"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "order"
+        ],
+        "title": "SectionItem",
+        "type": "object"
+      },
+      "SectionItemIn": {
+        "additionalProperties": false,
+        "description": "One entry of the list as an admin sends it. An entry sent without `id` is new and given one from its label.",
+        "properties": {
+          "drives": {
+            "default": "none",
+            "enum": [
+              "none",
+              "handoff",
+              "never-last",
+              "eval-tag"
+            ],
+            "title": "Drives",
+            "type": "string"
+          },
+          "example": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Example",
+            "type": "string"
+          },
+          "group": {
+            "default": "",
+            "maxLength": 40,
+            "title": "Group",
+            "type": "string"
+          },
+          "hidden": {
+            "default": false,
+            "title": "Hidden",
+            "type": "boolean"
+          },
+          "hint": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Hint",
+            "type": "string"
+          },
+          "id": {
+            "default": "",
+            "maxLength": 40,
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "fixed",
+              "menu",
+              "custom"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "order": {
+            "default": 0,
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Order",
+            "type": "integer"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/PresetIn"
+            },
+            "maxItems": 100,
+            "title": "Presets",
+            "type": "array"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label",
+          "kind"
+        ],
+        "title": "SectionItemIn",
+        "type": "object"
+      },
+      "SectionList": {
+        "additionalProperties": false,
+        "description": "The workspace's list in order, and how many sections of their own a builder may add to one agent.",
+        "properties": {
+          "customMax": {
+            "default": 5,
+            "title": "Custommax",
+            "type": "integer"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SectionItem"
+            },
+            "title": "Sections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sections"
+        ],
+        "title": "SectionList",
+        "type": "object"
+      },
+      "SectionListIn": {
+        "additionalProperties": false,
+        "description": "The whole list, replacing the saved one.",
+        "properties": {
+          "customMax": {
+            "default": 5,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Custommax",
+            "type": "integer"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SectionItemIn"
+            },
+            "maxItems": 80,
+            "minItems": 1,
+            "title": "Sections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sections"
+        ],
+        "title": "SectionListIn",
         "type": "object"
       },
       "Serves": {
@@ -24114,6 +25496,17 @@
             "title": "Actionfields",
             "type": "array"
           },
+          "actionLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actionlabel"
+          },
           "actionTool": {
             "title": "Actiontool",
             "type": "string"
@@ -24140,6 +25533,11 @@
             "title": "Approvals",
             "type": "array"
           },
+          "approvalsNeeded": {
+            "default": 1,
+            "title": "Approvalsneeded",
+            "type": "integer"
+          },
           "assignee": {
             "anyOf": [
               {
@@ -24165,6 +25563,17 @@
             ],
             "title": "Calls"
           },
+          "canAssign": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canassign"
+          },
           "canDecide": {
             "anyOf": [
               {
@@ -24175,6 +25584,28 @@
               }
             ],
             "title": "Candecide"
+          },
+          "canReassign": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canreassign"
+          },
+          "canReturn": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canreturn"
           },
           "caseId": {
             "anyOf": [
@@ -24528,6 +25959,17 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "viewerApproved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Viewerapproved"
           },
           "workflowId": {
             "title": "Workflowid",
@@ -30864,6 +32306,549 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/agent-instruction-sections": {
+      "delete": {
+        "description": "Resets the list to the default and returns it; 200 when it already was.",
+        "operationId": "agents_reset_instruction_sections",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SectionList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Reset Instruction Sections",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      },
+      "get": {
+        "description": "The workspace's list, or the default when it has saved none.",
+        "operationId": "agents_get_instruction_sections",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SectionList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Get Instruction Sections",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      },
+      "put": {
+        "description": "Replaces the list with the one sent (422 `validation_failed` naming `sections` when it breaks a rule). Agents\nalready saved keep the prompt they were saved with; the next save of each is written in the new order.",
+        "operationId": "agents_put_instruction_sections",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SectionListIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SectionList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Put Instruction Sections",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/agents": {
       "get": {
         "description": "One page of the team's agents on the shared list contract, by name: `search` matches the name, role and slug;\n`sortBy` is one of name, updatedAt, tasks24h, version, teamId and availability; the filters `availability`,\n`teamId` and `templateId` narrow the page, and the first two are counted in `facets`.",
@@ -36017,6 +38002,501 @@
           }
         },
         "summary": "Test Agent",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/agents/{agent_id}/tool-apps": {
+      "get": {
+        "description": "The apps whose tools the agent may be granted, connected first, then by name. `search` matches an app's name or\nthe title, name and description of one of its tools, which are listed under it (`matches`). `granted=true` keeps\nthe apps the agent holds a tool of; `granted=false` the apps with a tool it does not hold yet.",
+        "operationId": "agents_tool_apps",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Search",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "granted",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Granted"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AgentToolAppsPage_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Tool Apps",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/agents/{agent_id}/tool-apps/{app_id}/tools": {
+      "get": {
+        "description": "One app's tools the team added, searched by title, name and description, each marked with whether the agent\nholds it; `granted` keeps the held ones (`true`) or the rest (`false`). An app the team has no card or tool of\nanswers 404.",
+        "operationId": "agents_app_tools",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Search",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "granted",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Granted"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AppToolsPage_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "App Tools",
         "tags": [
           "Agents"
         ],
@@ -46670,7 +49150,7 @@
     },
     "/v1/guardrails/{guardrail_id}": {
       "delete": {
-        "description": "Refused (403) unless the caller created the guardrail or is an admin of its team, and (409) while it is\npinned. Who deleted it is logged; agents-service has no audit table yet.",
+        "description": "Refused (403) unless the caller created the guardrail or is an admin of its team, and (409) while it is\npinned. Who deleted it is logged; this write records no audit entry yet.",
         "operationId": "agents_delete_guardrail",
         "parameters": [
           {
@@ -49637,6 +52117,196 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/model-alias-uses": {
+      "get": {
+        "description": "`aliases` is a comma-separated list of alias names; each comes back with how many agents name it. A person\nwith agents.view counts their team's agents; a service holding `agents:view` with no team counts the tenant's.",
+        "operationId": "agents_list_model_alias_uses",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "aliases",
+            "required": true,
+            "schema": {
+              "maxLength": 8000,
+              "minLength": 1,
+              "title": "Aliases",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_dict_str__int__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "List Model Alias Uses",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/model-aliases": {
       "get": {
         "operationId": "agents_list_model_aliases",
@@ -49809,6 +52479,194 @@
           }
         },
         "summary": "List Model Aliases",
+        "tags": [
+          "Agents"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/model-aliases/{name}/knobs": {
+      "get": {
+        "description": "The settings an agent on alias `name` may save: only the knobs its model takes, each with its range and catalog\ndefault, for the agent page's model settings; 422 `unknown_model_alias` for an alias models-service does not\nserve.",
+        "operationId": "agents_model_alias_knobs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ModelAliasKnobs_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Model Alias Knobs",
         "tags": [
           "Agents"
         ],
@@ -52407,7 +55265,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Take update. `merge` (the default) saves one draft that keeps every field the team edited, takes every field\nonly the template changed, and writes the template's value on a conflict only where `choices` says so; `reset`\nmakes the draft from the template as it is, after `confirm` (409 `copy_edited` listing the edits it drops). What\nruns keeps running until the draft passes its publish review. 409 `update_stale` when the template or the copy\nmoved since the review `expect` names, and nothing is saved; 409 `detached` for a copy the team made its own; 422\n`tool_not_available`, naming the tools, when the template needs one the team cannot call.",
+        "description": "Take update. `merge` (the default) saves one draft that keeps every field the team edited, takes every field\nonly the template changed, and writes the template's value on a conflict only where `choices` says so; `reset`\nmakes the draft from the template as it is, after `confirm` (409 `copy_edited` listing the edits it drops). What\nruns keeps running until the draft passes its publish review. 409 `update_stale` when the template or the copy\nmoved since the review `expect` names, and nothing is saved; 409 `stale_base` when another builder saved the\nagent's or skill's draft after it was read, and nothing is saved; 409 `detached` for a copy the team made its\nown; 422 `tool_not_available`, naming the tools, when the template needs one the team cannot call.",
         "operationId": "resources_take_update",
         "parameters": [
           {
@@ -54835,6 +57693,591 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/schedules/kinds": {
+      "get": {
+        "description": "Every rule kind a schedule may be written in, with its label and the JSON Schema of its own fields.",
+        "operationId": "schedules_schedule_kinds",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_KindView__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Schedule Kinds",
+        "tags": [
+          "Schedules"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/schedules/preview": {
+      "post": {
+        "description": "The rule as it would be saved, in words, with its next three runs. 422 naming the field for a rule a save would\nrefuse, including one under the install's shortest interval.",
+        "operationId": "schedules_preview_schedule",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PreviewView_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Preview Schedule",
+        "tags": [
+          "Schedules"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/schedules/zones": {
+      "get": {
+        "description": "The time zones a rule's `tz` may name, searched by a case-blind part of the name and paged: the same zone data\nthe save checks against, so a zone listed here is never refused.",
+        "operationId": "schedules_schedule_zones",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Search",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_OptionsPage_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Schedule Zones",
+        "tags": [
+          "Schedules"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/skills": {
       "get": {
         "description": "One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when\nor slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,\nwhich is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,\n`ownerTeam`, `origin` and `loading` filter by facet; `knowledgeBases` keeps skills naming any base given. The view\ncounts and facets cover every skill the search leaves, before the view and the facet filters; the page, its counts\nand its facets are read in SQL (`store/skill_list.py`).\n\nEvery view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.\nWith `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing\na tool or knowledge base the agent lacks as `locked`, naming them in `needs`. Each row's `ownerTeamName` and the\nfilter's `teamNames` are asked of platform-service once the transaction has closed.",
@@ -55623,7 +59066,7 @@
     },
     "/v1/skills/{skill_id}": {
       "delete": {
-        "description": "Refused (403) unless the caller created the skill or is an admin of its team, and (409) while it is pinned.\nWho deleted it is logged; agents-service has no audit table yet.",
+        "description": "Refused (403) unless the caller created the skill or is an admin of its team, and (409) while it is pinned.\nWho deleted it is logged; this write records no audit entry yet.",
         "operationId": "agents_delete_skill",
         "parameters": [
           {
@@ -67976,6 +71419,801 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/workflows/definitions/{workflow_id}/sample": {
+      "get": {
+        "description": "What `step` receives: each step that can finish before it, from the working copy when one is open, with each\nfield's name, path and the value the acting team's newest finished run gave it, so the sheet joins nothing. All\nsteps when `step` is left out. Only the acting team's runs feed it, through the runs list's own team rule and\n`visible_run`; values are masked when the team masks personal data for people. 403 unless the caller may view the\nteam's workflows. One transaction for the run and its steps; documents-service, tools-service and the masking\npolicy are asked with none open.",
+        "operationId": "workflows_definition_sample",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "step",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Step"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_DefinitionSample_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Definition Sample",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
+    "/v1/workflows/definitions/{workflow_id}/triggers/{step}/schedule": {
+      "delete": {
+        "description": "Clears the schedule: nothing more ticks. Needs the same rights as a save and nothing else, so a schedule whose\nstep a newer version dropped, or whose newest version needs an input, can still be cleared. 404 when none was\nsaved.",
+        "operationId": "workflows_clear_schedule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "step",
+            "required": true,
+            "schema": {
+              "title": "Step",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Clear Schedule",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      },
+      "get": {
+        "description": "The schedule saved on the trigger step, in words, with its next runs, last outcome and why it is idle when it\nis. 403 without the right to view the team's workflows; 404 when none is saved.",
+        "operationId": "workflows_get_schedule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "step",
+            "required": true,
+            "schema": {
+              "title": "Step",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ScheduleView_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Get Schedule",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      },
+      "put": {
+        "description": "Saves the schedule; it applies at once to the live version, with no publish, and first runs at its next slot.\n403 without the rights to pause the workflow and put it on a channel; 422 naming the field for a bad rule, a rule\nunder the shortest interval, an input schema that needs more than dueAt, or a workflow with no team.",
+        "operationId": "workflows_save_schedule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "step",
+            "required": true,
+            "schema": {
+              "title": "Step",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-api-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-team-id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Team-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-dev-user",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Dev-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ScheduleView_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Degraded: no model, or the graph runtime did not start"
+          }
+        },
+        "summary": "Save Schedule",
+        "tags": [
+          "Workflows"
+        ],
+        "x-ops-public": "sdk"
+      }
+    },
     "/v1/workflows/definitions/{workflow_id}/versions/{version}/shapes": {
       "get": {
         "description": "What each step of a saved version outputs, by port, before it has run: fixed by its type, built from\nits settings, or read from its document type or operation. A mapping picker reads it. 403 unless the caller may\nview the team's workflows.\nNo request transaction: the version is read, then documents-service is asked with none open.",
@@ -68373,7 +72611,7 @@
     },
     "/v1/workflows/node-types": {
       "get": {
-        "description": "Every registered node type at every version: ports with their connection types, parameters as JSON Schema with\nthe form generated from them, effects, retry and executor, and why the acting team cannot use one now. No request\ntransaction: it reads no row, and the AI-steps policy comes from platform-service.",
+        "description": "Every registered node type at every version: ports with their connection types, parameters as JSON Schema with\nthe form generated from them, effects, retry and executor, and why the acting team cannot use one now. No request\ntransaction: it reads no row, and the AI-steps policy comes from platform-service. 403 for a caller without the\nworkflows view cell.",
         "operationId": "workflows_node_types",
         "parameters": [
           {

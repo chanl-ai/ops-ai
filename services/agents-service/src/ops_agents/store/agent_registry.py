@@ -153,7 +153,11 @@ SPEC_FIELDS = (
     "brief",
     "promptMode",
     "patterns",
+    "modelSettings",
 )
+# What a key a version was saved without reads as: a version from before `modelSettings` runs on the model's
+# defaults, the same as one saved with no settings, so saving it with `{}` is no change.
+ABSENT_AS: dict[str, JsonValue] = {"modelSettings": {}}
 
 
 # (agent, version) pairs per statement of published_specs: two parameters each, under SQL Server's 2100.
@@ -209,8 +213,13 @@ def changes_between(old: Json | None, new: Json) -> list[str]:
         "widgets": "widget settings",
         "promptMode": "prompt mode",
         "patterns": "thinking and parallel reads",
+        "modelSettings": "model settings",
     }
-    out = [f"Changed {labels.get(k, k)}" for k in SPEC_FIELDS if old.get(k) != new.get(k)]
+    out = [
+        f"Changed {labels.get(k, k)}"
+        for k in SPEC_FIELDS
+        if old.get(k, ABSENT_AS.get(k)) != new.get(k, ABSENT_AS.get(k))
+    ]
     # A guardrail switched off or on names itself, so the review says what stopped (or started) being checked.
     # A pin without an id, or a list of something else, raises as indexing it did.
     pins = [narrow.an_object(p, "guardrail pin") for p in narrow.a_list(new.get("guardrailPins") or [], "pins")]

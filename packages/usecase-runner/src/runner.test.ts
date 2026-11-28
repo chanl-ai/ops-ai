@@ -15,6 +15,7 @@ import { EXIT, exitFor, parseChecks, verdict } from './report.ts';
 import { resolveScript } from './resolve.ts';
 import { childEnv, pluginsRepoRefusal } from './run.ts';
 import { nextId, scaffold } from './scaffold.ts';
+import { StoryError } from './stories.ts';
 
 const TABLE = `# Use cases
 
@@ -340,8 +341,25 @@ test('each use case in a run gets its own database, dropped before the next one 
   assert.deepEqual(dropped, [{ name: names[0], scriptsRun: 1 }, { name: names[1], scriptsRun: 2 }]);
 });
 
+test('a Stories table that is proved by a step it does not have is refused before any script runs', async () => {
+  const root = repo();
+  writeFileSync(
+    join(root, 'docs/usecases/agents-service/chat.md'),
+    '# Chat\n\nStatus: current. Id: `uc-001`. Service: `agents-service`. Layers: api.\n\n## Stories\n\n| # | Story | Layer | Steps | Proved by |\n|---|---|---|---|---|\n| S1 | A person chats | api | 1-2 | 9-22 |\n\n## Steps and expected results\n',
+  );
+  const ran = join(root, 'ran');
+  writeFileSync(join(root, 'docs/usecases/agents-service/scripts/test-uc-001-api.mjs'), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(ran)}, '1'); console.log('PASS ran');\n`);
+  const parent = { ...process.env };
+  for (const k of [...PORT_VARS, DB_VAR]) delete parent[k];
+  const drop = async () => true;
+  await assert.rejects(runUseCases(root, parseRegistry(TABLE), 'uc-001', 'api', { parent, drop }), StoryError);
+  assert.equal(existsSync(ran), false, 'the script ran before the table was checked');
+});
+
 test("a database URL follows make/env.mk: the devcontainer's postgres side container, else this machine's port", () => {
   assert.equal(pgUrl('ops_x', 'postgresql+asyncpg', { OPS_INFRA: 'external', OPS_PG_PORT: '5477' }), 'postgresql+asyncpg://ops:ops@postgres:5432/ops_x');
+  const hosted = { OPS_INFRA: 'external', OPS_DATABASE_URL: 'postgresql+asyncpg://ops:ops@localhost:5477/ops_runtime' };
+  assert.equal(pgUrl('ops_x', 'postgresql+asyncpg', hosted), 'postgresql+asyncpg://ops:ops@localhost:5477/ops_x');
   assert.equal(pgUrl('postgres', 'postgresql', { OPS_PG_PORT: '6477' }), 'postgresql://ops:ops@localhost:6477/postgres');
   assert.equal(pgUrl('ops_x', 'postgresql+asyncpg', {}), 'postgresql+asyncpg://ops:ops@localhost:5477/ops_x');
 });

@@ -64,7 +64,7 @@ a review id for a pause, so case content stays inside the console.
 | Email | The mailbox the trigger reads | The mailbox's process principal | The graph version | Mailbox and message id |
 | API | API key | The key's principal, or the end user when a user token is passed | The graph version | Caller's key, or one per request |
 | MCP | The assistant's user | The user | The assistant client, then the graph version | Assistant session id |
-| Schedule | The timers poller | The schedule's process principal | The graph version | `deployment id:tick time` |
+| Schedule | The schedule clock | None: the run is created by `trigger:schedule:{workflow}` and acts for no person | The workflow's version | `schedule:{workflow}:{slot to the minute}` |
 | Event, webhook | Sender by signature | The deployment's process principal | The graph version | `deployment id:event id` |
 
 The external key includes the deployment id, so one message sent to two deployments opens one case in each.
@@ -86,7 +86,8 @@ a run holds the thread.
 
 | Channel or part | Needs |
 |---|---|
-| Schedule deployments | Ticks fired by the timer poller, keyed by deployment and tick time; workflows already start on a schedule trigger |
+| Schedule deployments | Not a deployment kind. A schedule is saved on a workflow's schedule trigger step and ticked by the schedule clock (see [Triggers and schedules](integrations.md#triggers-and-schedules)); an agent runs on one through a workflow with the agent as its step |
+| Live views | `GET /v1/agents/{id}/live` and `GET /v1/workflows/{id}/live` list workflow steps only for teams whose channels the caller may view; a workflow no team owns is not listed | 
 | Webhooks | Signed events in, and webhooks out for `waiting_review` and `finished` |
 | Sender authentication for mail | DKIM, DMARC and allowed sender domains |
 | Deployment environments and pointers | A deployment names a graph, not `@production` |

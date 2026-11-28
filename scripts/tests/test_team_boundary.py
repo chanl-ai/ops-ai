@@ -46,6 +46,7 @@ TENANT_HELD = {
     "documents_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "kb_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
     "platform_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
+    "agents_outbox": "a relay read past the tenant by system_tx; each row carries its team, no read uses it",
 }
 # Until each team has its own tool modules (keys per team, its own policies): then this list is empty.
 TOOLS_UNTIL_C509 = {

@@ -333,7 +333,9 @@ class _Parser:
                         ),
                     }
                 )
-                items.extend(self._inner(line, ind, depth))
+                # Its lines are read where the "else:" stands, not as a path: a Stop under it is an ordinary line.
+                if self.i < len(self.rows) and self.rows[self.i][1] > ind:
+                    items.extend(self.block(self.rows[self.i][1], depth))
             elif (stop := _stop_of(word, self.declared)) is not None and depth > 0:
                 name, rest = stop
                 ruled = name in BUILT_IN_EXITS or name in self.declared

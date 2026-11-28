@@ -52,7 +52,10 @@ class HybridRetriever:
             return "no_embedding_model", [], 0
         if not await self.vectors.ready():
             return "no_vector_store", [], 0
-        embedded, _ = await self.vectors.coverage(tenant, kb_ids, model=embedder.model, width=embedder.width)
+        # No call before the question's own: a process that has not heard from the model yet compares with the model
+        # of the tenant's stored vectors, so the reason a search gives does not depend on how long the process has run.
+        before = embedder.model or await self.vectors.stored_model(tenant, width=embedder.width)
+        embedded, _ = await self.vectors.coverage(tenant, kb_ids, model=before, width=embedder.width)
         if embedded == 0:
             return "no_vectors", [], 0
         try:
@@ -62,6 +65,11 @@ class HybridRetriever:
             return f"embedding_unavailable: {e.code}", [], 0
         except TimeoutError:
             return "embedding_unavailable: timeout", [], 0
+        if embedder.model != before:
+            # The alias now serves another model: vectors of the old one are never compared with the question.
+            embedded, _ = await self.vectors.coverage(tenant, kb_ids, model=embedder.model, width=embedder.width)
+            if embedded == 0:
+                return "no_vectors", [], tokens
         rows = await self.vectors.nearest(
             tenant, kb_ids, vector, model=embedder.model, width=embedder.width, limit=how.limit, how=how
         )

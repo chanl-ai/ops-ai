@@ -33,7 +33,7 @@ CANDIDATES = 10
 # The last port below macOS's ephemeral range (49152 up), which it hands to any server bound to port 0.
 MAX_PORT = 49151
 CONSOLE_BASE = 3016
-# Ports the stack does not bind when OPS_INFRA=external (postgres, opa and the mail servers run as side containers).
+# Ports the stack does not bind when OPS_INFRA=external or shared (postgres, opa and the mail servers are not its own).
 INFRA_PORTS = ("OPS_PG_PORT", "OPS_OPA_PORT", "OPS_GREENMAIL_", "OPS_MAILPIT_")
 
 
@@ -228,7 +228,7 @@ def ports_for(offset: int, env: dict[str, str]) -> dict[int, str]:
         name, _, val = line.partition("=")
         if not val.strip().isdigit():
             continue
-        if env.get("OPS_INFRA") == "external" and name.startswith(INFRA_PORTS):
+        if env.get("OPS_INFRA") in ("external", "shared") and name.startswith(INFRA_PORTS):
             continue
         out[int(val)] = name
     if not out:
@@ -399,24 +399,39 @@ def check_offset(p: Previews, a: argparse.Namespace) -> int:
     return 0
 
 
+def offset_volume(off: int) -> str:
+    """The one database volume of offset `off`'s compose project (make/env.mk OPS_COMPOSE_PROJECT, the volume key in
+    deploy/compose/compose.yaml). Offset 0 is the shared stack and never a preview's."""
+    if off <= 0:
+        raise ValueError("offset 0 is the shared stack, not a preview")
+    return f"ops-runtime-{off}_ops-runtime-pgvector"
+
+
 def stop(p: Previews, a: argparse.Namespace) -> int:
     mine = [e for e in p.entries() if e["branch"] == a.branch]
     if not mine:
         print(f"no preview for {a.branch}; make wt-list shows them", file=sys.stderr)
         return 1
     e = mine[0]
+    off = int(e["offset"])
+    volume = offset_volume(off)
     if a.dry_run:
-        print(f"would stop {a.branch} (offset {e['offset']}) and keep its data")
+        print(f"would stop {a.branch} (offset {off}) and drop the volume {volume}")
         return 0
-    # make down stops the services by their pid files and runs compose down, which leaves the data volume and the
-    # .data/offset-N folder in place; the worktree stays too, so the next make wt for the branch starts warm.
-    r = subprocess.run(["make", "-C", e["dir"], "down", f"OPS_PORT_OFFSET={e['offset']}"], env=clean_env(), check=False)
+    # make down stops the services by their pid files and runs compose down; the worktree stays, so the next make wt
+    # for the branch starts warm on its installed packages.
+    r = subprocess.run(["make", "-C", e["dir"], "down", f"OPS_PORT_OFFSET={off}"], env=clean_env(), check=False)
     if r.returncode:
         print("stop failed; the preview stays listed", file=sys.stderr)
         return r.returncode
+    # The offset's database volume goes, by its exact name, so the next stack on this offset does not start on another
+    # branch's migration stamps. Never a prune or a pattern: other worktrees' and the shared stack's volumes stay.
+    gone = subprocess.run(["docker", "volume", "rm", volume], capture_output=True, text=True, timeout=60, check=False)
+    if gone.returncode and "no such volume" not in gone.stderr.lower():
+        print(f"stopped, but the volume {volume} stays: {gone.stderr.strip()}", file=sys.stderr)
     Path(e["file"]).unlink(missing_ok=True)
     p.write_page()
-    print(f"stopped {a.branch}; its data is kept")
+    print(f"stopped {a.branch}; dropped {volume}")
     return 0
 
 

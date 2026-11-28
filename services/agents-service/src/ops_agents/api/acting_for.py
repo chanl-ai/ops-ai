@@ -13,11 +13,11 @@ from typing import Any
 
 import httpx
 
+from ops_agents.activities.gateway import GatewayRefused, RunContext
 from ops_engine.store import RUN_PREFIX, RunStore
 from ops_identity import ACTING_FOR_HEADER, ActingForTokens, ServiceClient, service_signer
 from ops_service_kit.settings import Settings
 
-from ..activities.gateway import GatewayRefused, RunContext
 from ..store.engine import AsyncEngine, EngineTransactions
 from .actors import parse
 from .child_runs import TURN_PERSON

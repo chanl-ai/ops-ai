@@ -57,22 +57,53 @@ export function AgentTestPanel({
   const messages = visibleMessages(t, live);
   const streaming = !!live?.streaming;
 
+  // One test chat per press: Connectors and the first message both ask for it, and a second ask while it is being made
+  // gets the same one.
+  const starting = React.useRef<Promise<string | undefined> | null>(null);
+  const startThread = (): Promise<string | undefined> => {
+    if (threadId) return Promise.resolve(threadId);
+    starting.current ??= create
+      .mutateAsync({ agentId, kbIds: [], test: true })
+      .then((made) => (onThreadIdChange(made.id), made.id))
+      .catch((e: unknown) => (toast.error('Couldn’t start the test', { description: (e as Error).message }), undefined))
+      .finally(() => {
+        starting.current = null;
+      });
+    return starting.current;
+  };
   const send = async (input: SendInput) => {
-    let id = threadId;
-    if (!id) {
-      try {
-        id = (await create.mutateAsync({ agentId, kbIds: [], test: true })).id;
-        onThreadIdChange(id);
-      } catch (e) {
-        toast.error('Couldn’t start the test', { description: (e as Error).message });
-        return;
-      }
-    }
-    chat.send(id, input);
+    const id = await startThread();
+    if (id) chat.send(id, input);
   };
 
+  // At the large breakpoint the panel is as tall as the room under the page header and stays there while the settings
+  // column scrolls: sticky at the offset it starts at, filling the rest of the scrolling area. Stacked, it keeps its minimum height.
+  const root = React.useRef<HTMLDivElement>(null);
+  const [fit, setFit] = React.useState<{ top: number; height: number } | null>(null);
+  React.useLayoutEffect(() => {
+    const anchor = root.current?.parentElement;
+    let scroller: HTMLElement | null = anchor?.parentElement ?? null;
+    while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+    if (!anchor || !scroller) return;
+    const wide = window.matchMedia('(min-width: 1024px)');
+    const measure = () => {
+      if (!wide.matches) return setFit(null);
+      const top = Math.max(0, Math.round(anchor.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop));
+      setFit({ top, height: Math.max(448, scroller.clientHeight - top - 16) });
+    };
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(scroller);
+    if (scroller.firstElementChild) watch.observe(scroller.firstElementChild);
+    wide.addEventListener('change', measure);
+    return () => {
+      watch.disconnect();
+      wide.removeEventListener('change', measure);
+    };
+  }, []);
+
   return (
-    <div className="flex min-h-[28rem] flex-col rounded-lg border bg-card lg:sticky lg:top-4 lg:h-[calc(100vh-17rem)]" data-testid="agent-test-panel">
+    <div ref={root} style={fit ? { top: fit.top, height: fit.height } : undefined} className="flex min-h-[28rem] flex-col rounded-lg border bg-card lg:sticky" data-testid="agent-test-panel">
       {actions.stepUpDialog}
       <div className="flex items-center gap-2 border-b px-3 py-1.5 text-xs text-muted-foreground">
         <Badge variant="outline">
@@ -127,7 +158,7 @@ export function AgentTestPanel({
           onStop={() => threadId && chat.stop(threadId)}
           onSend={(text, files, skill) => void send({ content: text, attachments: files.length ? files : undefined, skill })}
           skillsFor={{ id: agentId, name: agentName }}
-          footer={threadId ? <ConnectorsPicker threadId={threadId} disabled={streaming} /> : undefined}
+          footer={<ConnectorsPicker threadId={threadId} agentId={agentId} ensureThread={startThread} disabled={streaming || !canTest} />}
           disabledReason={canTest ? undefined : 'You can read this agent but not run tests on it.'}
         />
       </div>

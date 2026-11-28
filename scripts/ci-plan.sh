@@ -4,8 +4,10 @@
 # service_jobs (the service matrix: one job per service, or per test shard and its checks for the long suites), release.
 # A push to release/* or hotfix/* (GITHUB_REF) is always a full plan with release=true: the impact plan once skipped
 # jobs on such a push and let a failure reach develop untested. ci.yml then also runs `checks` and release-proof.
-# heavy=false on a pull request (unless CI_FULL=true): the slow jobs (repo, store-mssql, release-proof, the script
-# tests) then wait for the merge queue and develop pushes, which run them before anything reaches develop.
+# CI_TESTED=true (ci.yml sets it for a push to develop whose commit a green merge_group run of ci.yml already tested: the
+# queue fast-forwards develop to the group's commit) prints an empty plan, so no test job runs again. A release/* or
+# hotfix/* push, main and [ci full] never skip.
+# heavy=false on a pull request (unless CI_FULL=true): the slow jobs (repo, store-mssql, release-proof) then wait for the merge queue and develop pushes, which run them before anything reaches develop.
 # repo_jobs is the repo job's matrix: one entry per suite of the full plan outside the services, plus the check list,
 # the script tests and the SDK/changelog checks, so they run side by side.
 # A full plan runs what `make verify` runs, spread over jobs: every service of its suite list (make/python.mk,
@@ -13,6 +15,12 @@
 set -euo pipefail
 base=${1:?usage: ci-plan.sh <base sha | file of changed paths>}
 cd "$(git rev-parse --show-toplevel)"
+if [ "${CI_TESTED:-}" = true ] && [ "${GITHUB_REF:-}" = refs/heads/develop ] && [ "${CI_FULL:-}" != true ]; then
+  for k in full heavy release console docs scripts code mssql store; do echo "$k=false"; done
+  for k in repo_jobs services packages service_jobs; do echo "$k=[]"; done
+  echo "repo_pool="
+  exit 0
+fi
 # A file of changed paths instead of a sha, as verify-changed.sh takes, for scripts/tests/test_ci_plan.py.
 if [ -f "$base" ]; then changed=$(cat "$base"); else changed=$(git diff --name-only "$base" HEAD); fi
 flag() { if grep -qE "$1" <<<"$changed"; then echo true; else echo false; fi; }
@@ -72,7 +80,8 @@ if [ "$full" = true ]; then echo "console=true"; echo "docs=true"; else
   echo "console=$(flag '^(apps/|sdk/|packages/usecase-runner/)')"
   echo "docs=$(flag '(\.md$|^docs/)')"
 fi
-echo "scripts=$(flag '^scripts/')"
+# The script tests read ci.yml (test_ci_plan.py), so a workflow change runs them too.
+echo "scripts=$(flag '^(scripts/|\.github/workflows/)')"
 # code=false for a change of documents only (markdown or docs/): the checks job then has nothing to check, and the
 # leak scan and docs job still run. A use-case script or the harness under docs/usecases is code: the checks job lints
 # it and runs make checks' usecase-outputs rule, which the docs job does not.
@@ -84,4 +93,8 @@ if [ "$full" = true ] || grep -vqE '(\.md$|^docs/)' <<<"$changed" \
 if [ "$full" = true ]; then echo "mssql=true"; else
   echo "mssql=$(flag '^(services/|packages/|deploy/database/)')"
 fi
+# store=true when the diff touches a service's store, any migrations folder, ops_store or the database scripts: where SQL
+# Server breaks and PostgreSQL does not. ci.yml runs store-mssql on a pull request for it (mssql && (heavy || store)); any
+# other service change, and a full plan on its own, wait for the merge queue. ci_local.py's MSSQL_PATHS is the same rule.
+echo "store=$(flag '^services/[^/]+/(.+/)?store/|(^|/)migrations/|^packages/ops_store/|^deploy/database/')"
 if [ "${#jobs_json[@]}" -eq 0 ]; then echo "service_jobs=[]"; else echo "service_jobs=[$(IFS=,; echo "${jobs_json[*]}")]"; fi

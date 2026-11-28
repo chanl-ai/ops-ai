@@ -31,6 +31,46 @@ class ProviderOut(Out):
     region_mismatch: str | None = None
 
 
+class ProviderTypeOut(Out):
+    """A provider type a connection can be made of, from the registry. `connection` is a JSON Schema object of the
+    fields a connection of it takes; a field marked `x-secret` is saved as a provider key and never returned."""
+
+    id: str
+    label: str
+    icon: str
+    connection: Json
+    # Whether a saved key can be tested and its models listed (POST /v1/provider-keys/{name}/check).
+    lists_models: bool
+    # Whether its models are in the model catalog, with capabilities, prices and knobs.
+    catalogued: bool
+
+
+class CatalogModelOut(Out):
+    """One catalogued model: what it can do, its limits and list prices (per million tokens, None when unknown), and
+    the knobs it takes."""
+
+    id: str
+    name: str
+    context: int | None
+    output: int | None
+    reasoning: bool
+    images: bool
+    input_per_million: float | None
+    output_per_million: float | None
+    knobs: list[str]
+
+
+class KnobsOut(Out):
+    """The settings an agent on an alias may set: `knobs` is a JSON Schema object of only the knobs the alias's model
+    takes, each with its type, title, description, range and catalog default."""
+
+    alias: str
+    version: int
+    model_id: str
+    catalogued: bool
+    knobs: Json
+
+
 class ProviderKeyOut(Out):
     """A model provider key's name and history; its value is never returned once saved."""
 
@@ -59,6 +99,10 @@ class AliasOut(Out):
     status: str
     reasoning_effort: str | None = None
     images: bool = False
+    # The connection's name, for the aliases page; None when the connection is gone.
+    provider_name: str | None = None
+    # How many agents name this alias: for a person only, None when agents-service did not answer.
+    used_by: int | None = None
 
 
 class AliasRef(Out):

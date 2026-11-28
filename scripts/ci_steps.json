@@ -30,6 +30,10 @@
       {"step": "The both-database suites", "no_local_twin": "Needs the SQL Server container; nearest proof is `make mssql-remote-test PKG=packages/ops_store T=<files>`."},
       {"step": "The services' store tests on both databases", "no_local_twin": "Needs the SQL Server container; nearest proof is `make mssql-remote-test PKG=services/<svc> T=<files>`."}
     ],
+    "usecases": [
+      {"step": "Pick the use cases", "twin": "python3 scripts/ci_usecases.py pick --base \"$(git merge-base \"${BASE_SHA:-origin/develop}\" HEAD)\""},
+      {"step": "Run them on the scripted model", "no_local_twin": "Starts the full stack for each use case, which runs on cloud runners and never on a Mac; `make usecase-pick` prints the set and `make usecase-test UC=<id>` runs one."}
+    ],
     "release-proof": [
       {"step": "The version file matches the branch", "no_local_twin": "Reads the branch name GitHub gives the run; run `BRANCH=release/X.Y.Z python3 scripts/release.py check-version` by hand."},
       {"step": "The upgrade from the last release", "no_local_twin": "Needs Docker and the release tags; run `make db-scripts-proof FROM=<last tag>` by hand."},
@@ -38,6 +42,19 @@
     "maintainer-review": [
       {"step": "The base revision's copies of the gate", "no_local_twin": "Reads the pull request's base revision on GitHub."},
       {"step": "A rise needs a maintainer's approval", "no_local_twin": "The approving review is the owner's, read from GitHub; `make checks-history` shows a rise locally."}
+    ],
+    "generated": [
+      {"step": "Did a route, a model or the SDK generator change", "no_local_twin": "Decides whether the next step runs; locally `make openapi` is run after any route or model change."},
+      {"step": "Regenerate the OpenAPI documents and the SDKs", "twin": "make -s openapi && git diff --exit-code -- 'services/*/openapi.json' sdk"}
+    ],
+    "generated-commit": [
+      {"step": "Commit the generated files to the branch", "no_local_twin": "Pushes the regenerated files to the pull request's branch; locally `make openapi` and a commit do the same."}
+    ],
+    "ready": [
+      {"step": "Ready for the queue", "no_local_twin": "Reads the other jobs' results, CodeQL's check runs and the distance from develop on GitHub; `python3 scripts/pr_flow.py --self-test` proves the decisions."}
+    ],
+    "staging-scan": [
+      {"step": "ZAP baseline scan of staging", "no_local_twin": "Scans the staging app after a release or hotfix branch's deploy; the same docker command runs against any origin."}
     ],
     "ci-ok": [
       {"step": "if grep -qE '\"result\": \"(failure|cancelled)\"' <<<\"$NEEDS\"; then echo \"$NEEDS\"; exit 1; fi", "no_local_twin": "Reads the other jobs' results on GitHub."}

@@ -182,7 +182,9 @@ def _tools_service(settings: Settings) -> ToolReader | None:
     if not settings.plugins or settings.tools is None:
         return None
     scopes = ["tools:view", "tools:run", "knowledge:run"]
-    return ToolReader(ServiceClient.for_settings(settings, service="kb", audience="tools", scopes=scopes))
+    return ToolReader(
+        ServiceClient.for_settings(settings, service="kb", audience="tools", scopes=scopes), key_prefix="kbcall"
+    )
 
 
 def _platform_service(settings: Settings) -> ServiceClient | None:

@@ -39,15 +39,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import atomic_json
 import ci_steps
 
 ROOT = Path(__file__).resolve().parents[1]
-# Jobs that are not checks of the change: the plan itself, the join, and the deploy that follows a green push.
-NOT_CHECKS = ("plan", "ci-ok", "staging")
+# Jobs that are not checks of the change: the plan itself, the joins (ready reads GitHub), the bot's commit of the
+# generated files, and the deploy and web scan that follow a green push.
+NOT_CHECKS = ("plan", "ci-ok", "ready", "generated-commit", "staging", "staging-scan")
 # Ports of the shared infrastructure, which every job reaches; the rest are service ports a test may bind.
 SHARED_PORTS = re.compile(r"^OPS_(PG|OPA|GREENMAIL_.*|MAILPIT_.*)_?PORT$|^OPS_PORT_OFFSET$")
 # Long suites first, so the run does not end waiting on one of them alone (as VERIFY_POOL does in make/python.mk).
 HEAVY = ("repo", "agents-service", "tools-service", "platform-service")
+# A change to a store or a migration is where SQL Server breaks and PostgreSQL does not (the merge queue found them).
+MSSQL_PATHS = re.compile(r"^services/[^/]+/(.+/)?store/|(^|/)migrations/|^packages/ops_store/|^deploy/database/")
+# What ci.yml's store-mssql job runs on the shared packages (the both-database suites), and `ops_store` itself and the
+# database scripts move every service's store, so those changes run them all.
+MSSQL_PACKAGES = ("packages/ops_store", "packages/ops_service_kit", "packages/ops_identity")
+MSSQL_REMOTE = "deploy/database/mssql_remote.sh"
 
 
 @dataclass
@@ -79,12 +87,13 @@ def parse_plan(text: str) -> dict[str, str]:
 
 
 def condition(expr: str | None, plan: dict[str, str]) -> bool | None:
-    """`if:` of a job or step against the plan outputs; None when it reads GitHub's own context (an event, a ref)."""
+    """`if:` of a job or step against the plan outputs; None when it reads GitHub's own context
+    (an event, a ref, an earlier step's output)."""
     if expr is None:
         return True
     text = str(expr).strip()
     text = re.sub(r"^\$\{\{(.*)\}\}$", r"\1", text, flags=re.S).strip()
-    if re.search(r"\b(github|matrix|secrets|always|cancelled)\b", text):
+    if re.search(r"\b(github|matrix|secrets|always|cancelled|steps)\b", text):
         return None
     py = re.sub(r"needs\.plan\.outputs\.(\w+)", r"O['\1']", text).replace("&&", " and ").replace("||", " or ")
     # The text is this repo's own ci.yml; only plan lookups, string literals, comparisons and and/or may reach eval.
@@ -119,8 +128,8 @@ def build_jobs(
 ) -> list[Job]:
     jobs: list[Job] = []
     for name, body in workflow["jobs"].items():
-        if name in NOT_CHECKS:
-            continue
+        if name in NOT_CHECKS or name == "store-mssql":
+            continue  # store-mssql is mssql_job's: it picks by the diff, and ci.yml's heavy gate has no local meaning
         planned = condition(body.get("if"), plan)
         if planned is False:
             continue
@@ -157,6 +166,33 @@ def build_jobs(
     if only:
         jobs = [j for j in jobs if j.name in only or j.label in only]
     return sorted(jobs, key=lambda j: (not any(h in j.label for h in HEAVY), j.skipped != ""))
+
+
+def mssql_files(workflow_text: str) -> dict[str, list[str]]:
+    """Per service, the store test files ci.yml's store-mssql job runs (its `[svc]="files"` lines: one list)."""
+    return {
+        m.group(1): m.group(2).split()
+        for m in re.finditer(r'^\s*\[([a-z]+-service)\]="([^"]+)"', workflow_text, re.MULTILINE)
+    }
+
+
+def mssql_job(changed: list[str], workflow_text: str) -> Job | None:
+    """The store-mssql job against the shared Fly SQL Server, or None when no changed path is a store or a migration.
+
+    It only brings the server up (`up` is idempotent) and runs tests. The server is shared with other builders, so this
+    job never calls `down` or `sweep`: the PM stops it.
+    """
+    hits = [p for p in changed if MSSQL_PATHS.search(p)]
+    if not hits:
+        return None
+    files = mssql_files(workflow_text)
+    everything = any(p.startswith(("packages/ops_store/", "deploy/database/")) for p in hits)
+    touched = {p.split("/")[1] for p in hits if p.startswith("services/")}
+    services = sorted(files) if everything else sorted(s for s in files if s in touched)
+    job = Job("store-mssql", "store-mssql", commands=[f"{MSSQL_REMOTE} up"])
+    job.commands += [f"{MSSQL_REMOTE} test {pkg} -q -rs -p no:cacheprovider" for pkg in MSSQL_PACKAGES]
+    job.commands += [f"{MSSQL_REMOTE} test services/{s} -q -p no:cacheprovider {' '.join(files[s])}" for s in services]
+    return job
 
 
 def usecase_jobs(items: list[str]) -> list[Job]:
@@ -352,6 +388,12 @@ def main(argv: list[str]) -> int:
         if not only:
             print(f"ci-local: nothing failed in {args.rerun}")
     jobs = [] if args.rerun and not only else build_jobs(workflow, listed, plan, only)
+    changed = subprocess.run(
+        ["git", "diff", "--name-only", base, "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout.split()
+    store = mssql_job(changed, (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    if store and not args.rerun and (not only or store.name in only or store.label in only):
+        jobs.append(store)
     jobs += [j for j in usecase_jobs(ucs) if not only or j.name in only or j.label in only]
     jobs = shard_of(jobs, args.shard, args.shards)
     print(f"ci-local: plan from {args.base} ({base[:9]}): full={plan['full']} services={plan['services']}")
@@ -369,9 +411,7 @@ def main(argv: list[str]) -> int:
     if args.out:
         everything = results + [carried(e) for e in earlier if e["label"] not in {r.job.label for r in results}]
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True)
-        Path(args.out).write_text(
-            json.dumps(report(everything, base, head.stdout.strip(), wall, plan), indent=2) + "\n"
-        )
+        atomic_json.write_json(args.out, report(everything, base, head.stdout.strip(), wall, plan))
     for r in results:
         if r.status == "failed":
             print(f"\n--- {r.job.label}: last lines of {r.log}\n{tail(r.log)}")
@@ -416,6 +456,23 @@ def self_test() -> int:
         all(j.skipped for j in jobs if j.name in ("release-proof", "maintainer-review")),
     ]
     print("plan to jobs:", labels)
+    ci_text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    store = mssql_job(["services/kb-service/src/ops_kb/store/rows.py", "docs/x.md"], ci_text)
+    migration = mssql_job(["services/files-service/migrations/versions/x.py"], ci_text)
+    kit = mssql_job(["packages/ops_store/src/ops_store/base.py"], ci_text)
+    ok += [
+        store is not None
+        and any("test services/kb-service" in c and "tests/test_kb_isolation.py" in c for c in store.commands),
+        store is not None
+        and not any("services/files-service" in c for c in store.commands),  # only the touched service
+        migration is not None and any("test services/files-service" in c for c in migration.commands),
+        kit is not None
+        and sum("test services/" in c for c in kit.commands) == 7,  # the shared store moves every service
+        mssql_job(["docs/plans/x.md", "apps/console/src/a.tsx", "services/kb-service/src/ops_kb/search.py"], ci_text)
+        is None,
+        all(" down" not in c and "sweep" not in c for j in (store, migration, kit) if j for c in j.commands),
+        "store-mssql" not in labels,  # build_jobs leaves it to mssql_job
+    ]
     # A failing job must fail the run, and a passing one must not hide it: plant one of each.
     with tempfile.TemporaryDirectory() as tmp:
         planted = [Job("x", "x: green", commands=["true"]), Job("x", "x: red", commands=["echo boom; false"])]

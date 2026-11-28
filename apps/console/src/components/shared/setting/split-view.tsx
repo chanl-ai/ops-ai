@@ -2,21 +2,10 @@
 
 import * as React from 'react';
 
+import { useWide } from '@/hooks/use-wide';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 
 const KEY = 'ops.split.';
-
-function useWide(): boolean {
-  const [wide, setWide] = React.useState(true);
-  React.useEffect(() => {
-    const q = window.matchMedia('(min-width: 1024px)');
-    const on = () => setWide(q.matches);
-    on();
-    q.addEventListener('change', on);
-    return () => q.removeEventListener('change', on);
-  }, []);
-  return wide;
-}
 
 /**
  * Two columns with a drag handle, a minimum on each side and a remembered split (this browser only; the page works
@@ -81,6 +70,8 @@ export function SplitView({
         }
       }}
       className={bare ? 'h-auto' : 'min-h-96 rounded-lg border bg-card'}
+      // Page columns are not clipped, so a sticky panel in one of them sticks to the page's scroll.
+      style={bare ? { overflow: 'visible' } : undefined}
     >
       <ResizablePanel id="left" minSize={`${leftMin}%`} style={bare ? { overflow: 'visible' } : undefined}>
         <div className={bare ? 'h-full pr-3' : 'h-full overflow-auto p-4'}>{left}</div>

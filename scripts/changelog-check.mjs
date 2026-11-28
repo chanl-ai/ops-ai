@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// The changelog the console shows under What's new (changelog/<topic>.json, one entry per file, its date inside) and the roadmap
-// under Coming next (roadmap.json), and the gate that keeps them current.
+// The changelog the console shows under What's new and the roadmap under Coming next (roadmap.json), and the gate that keeps
+// them current. While work is unreleased each change is a fragment, changelog/<topic>.json with its date inside, so parallel
+// pull requests never touch one file; `make release-version` folds the fragments into changelog/releases/<version>.json
+// (scripts/changelog-fold.mjs). Fragments are held to the caps below; folded release files are history and are not.
 //
 //   --entries                 every entry and roadmap item is written for a person using the console (make verify)
 //   --commit <msgfile>        the commit-msg hook: a feat that changes apps/ or services/ names its entry in a
@@ -51,6 +53,11 @@ const REFUSED = [
   [/\b(I|we|We|my|My|our|Our)\b/, 'speaks in the first person'],
   [/\b(turned out|it turns out|the bug where|previously|was broken|we found|I found|root cause)\b/i, 'narrates the debugging'],
 ];
+// A fragment is read in a list of many: a short title and one or two short sentences. A fix is worth one only when a person
+// using the console would notice it.
+const MAX_TITLE_WORDS = 10;
+const MAX_DESCRIPTION_WORDS = 25;
+const words = (text) => text.trim().split(/\s+/).filter(Boolean).length;
 const sentences = (text) => (text.trim().match(/[^.!?]+[.!?]+(\s|$)/g) ?? []).length;
 const endsAsSentence = (text) => /[.!?]$/.test(text.trim());
 
@@ -70,6 +77,8 @@ export function entryProblems(entry) {
   if (!title.trim() || title.length > 60) out.push('title is not 1 to 60 characters');
   const n = sentences(description);
   if (!endsAsSentence(description) || n < 1 || n > 2) out.push('description is not one or two sentences');
+  if (words(title) > MAX_TITLE_WORDS) out.push(`title is over ${MAX_TITLE_WORDS} words`);
+  if (words(description) > MAX_DESCRIPTION_WORDS) out.push(`description is over ${MAX_DESCRIPTION_WORDS} words`);
   if (entry?.cards !== undefined) out.push('cards is not a field: a commit names its entry in a Changelog: trailer');
   if (entry?.switch !== undefined && !SWITCHES.has(entry.switch)) out.push(`switch is not one the console reads: ${[...SWITCHES].join(', ')}`);
   return [...out, ...wordingProblems([['title', title], ['description', description]])];
@@ -95,7 +104,8 @@ function readChangelog(ref) {
     for (const f of existsSync(dir) ? readdirSync(dir).filter((x) => x.endsWith('.json')).sort() : []) entries.push([f, readFileSync(join(dir, f), 'utf8')]);
   } else {
     const listing = ref === ':' ? tryGit(['ls-files', '--', 'changelog/']) : tryGit(['ls-tree', '-r', '--name-only', ref, '--', 'changelog/']);
-    for (const p of (listing ?? '').split('\n').filter((x) => x.endsWith('.json')))
+    // Fragments only: changelog/releases/ holds the folded history.
+    for (const p of (listing ?? '').split('\n').filter((x) => x.endsWith('.json') && x.split('/').length === 2))
       entries.push([p.slice('changelog/'.length), git(['show', ref === ':' ? `:${p}` : `${ref}:${p}`])]);
   }
   return entries.map(([id, text]) => {
@@ -105,6 +115,18 @@ function readChangelog(ref) {
       return { id, entry: null };
     }
   });
+}
+
+/** What is wrong with a folded release file: its shape only, the wording stays as it was written. */
+export function releaseProblems(file, name) {
+  const out = [];
+  if (file?.version !== name) out.push('version is not the file name');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(file?.date ?? '')) out.push('date is not YYYY-MM-DD');
+  if (!Array.isArray(file?.entries)) return [...out, 'entries is not a list'];
+  file.entries.forEach((e, i) => {
+    if (!TAGS.has(e?.tag) || typeof e?.title !== 'string' || typeof e?.description !== 'string') out.push(`entry ${i + 1} needs a title, a description and a tag of new, improved or fix`);
+  });
+  return out;
 }
 
 function readRoadmap() {
@@ -118,6 +140,17 @@ function checkEntries() {
     if (!entry) bad.push(`changelog/${id}: not valid JSON`);
     else for (const p of entryProblems(entry)) bad.push(`changelog/${id}: ${p}`);
     if (!/^[a-z0-9-]+\.json$/.test(id)) bad.push(`changelog/${id}: name is not <topic>.json in lower case`);
+  }
+  const releases = join(repo, 'changelog', 'releases');
+  for (const f of existsSync(releases) ? readdirSync(releases).filter((x) => x.endsWith('.json')).sort() : []) {
+    let file = null;
+    try {
+      file = JSON.parse(readFileSync(join(releases, f), 'utf8'));
+    } catch {
+      bad.push(`changelog/releases/${f}: not valid JSON`);
+      continue;
+    }
+    for (const p of releaseProblems(file, f.slice(0, -5))) bad.push(`changelog/releases/${f}: ${p}`);
   }
   readRoadmap().forEach((item, i) => roadmapProblems(item).forEach((p) => bad.push(`roadmap.json item ${i + 1}: ${p}`)));
   return bad;
@@ -143,7 +176,7 @@ function gateStart() {
 const topics = (ref) => new Set(readChangelog(ref).map(({ id }) => id.replace(/\.json$/, '')));
 
 const howToAdd = (topic) =>
-  `add changelog/${topic}.json with {"date","title","description","tag":"new|improved|fix"}, written for a person using the console, and stage it`;
+  `add changelog/${topic}.json with {"date","title" (10 words at most),"description" (one or two sentences, 25 words at most),"tag":"new|improved|fix"}, written for a person using the console, and stage it`;
 
 function checkCommit(msgFile) {
   const message = readFileSync(msgFile, 'utf8');
@@ -225,6 +258,8 @@ function selfTest() {
     'first person': { description: 'We made pages wait for your team.' },
     'debugging narration': { description: 'It turned out pages loaded too early.' },
     'a 61-character title': { title: 'x'.repeat(61) },
+    'an 11-word title': { title: 'one two three four five six seven eight nine ten eleven' },
+    'a 26-word description': { description: `${'word '.repeat(25)}more.` },
     'three sentences': { description: 'One. Two. Three.' },
     'no full stop': { description: 'Pages wait for your team' },
     'a switch the console does not know': { switch: 'NEXT_PUBLIC_OPS_UNKNOWN' },
@@ -232,6 +267,9 @@ function selfTest() {
   for (const [what, change] of Object.entries(red)) expect(`refused: ${what}`, entryProblems({ ...clean, ...change }).length > 0);
   const green = ['Imports 10,000,000 rows.', 'People who used to sign in with a password keep their access.', 'If it fails, contact us.', 'Search shows what it found.', 'A form can be used to start a case.'];
   for (const d of green) expect(`passes: "${d}"`, entryProblems({ ...clean, description: d }).length === 0);
+  expect('a 25-word description passes', entryProblems({ ...clean, description: `${'word '.repeat(24)}more.` }).length === 0);
+  expect('a folded release passes whatever its wording', releaseProblems({ version: '1.0.0', date: '2026-11-19', entries: [{ title: 'We fixed apps/x.ts', description: 'Long. '.repeat(40), tag: 'fix' }] }, '1.0.0').length === 0);
+  expect('refused: a release file that is not named for its version', releaseProblems({ version: '1.0.1', date: '2026-11-19', entries: [] }, '1.0.0').length > 0);
   expect('a roadmap item passes', roadmapProblems({ title: 'Cases from chat', line: 'Start a case from any conversation.' }).length === 0);
   expect('refused: a roadmap line with a path', roadmapProblems({ title: 'Cases', line: 'Edits in services/agents-service land.' }).length > 0);
 

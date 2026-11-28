@@ -1,7 +1,14 @@
 # What's built today
 
-Status: current. Each row is read from the code of this release. Built means it runs and is covered by an automated
-use case or test; Partial names what runs and what does not; Planned means designed and not in the code.
+Status: current.
+
+## Check what runs before you plan around it
+
+You are deciding whether Ops AI covers your use case, and a feature list that mixes working and hoped-for items does not
+help you. If you plan around a capability that is only designed, you can lose months. Every row below says which kind it is,
+and each row is read from the code of this release. Built means the feature runs and an automated use case or test
+covers it. Partial means part of it runs, and the row says which part. Planned means it is designed and not yet in the
+code. Read the area your use case touches, then start with the [Quickstart](quickstart.md) to try what is built.
 
 ## Agents and chat
 
@@ -18,7 +25,7 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | An agent as a workflow step, and a published workflow as an agent's tool | Built |
 | Starting a published agent from code, waiting for it, streaming it or running it in the background | Built: REST API, Python and the command line; TypeScript planned. A background run is lost if the program that started it exits first |
 | Chat widgets on your other web pages ([Chat on your own pages](../console/embedding-the-chat.md)) | Partial: widgets are configured, published and keyed in the console, and the embed app is built; the installer does not run it yet |
-| Agents that run on a schedule toward a goal and report back, with no chat | Partial: one run at a due time, once per key; repeating schedules planned |
+| Agents that run on a schedule toward a goal and report back, with no chat | Partial: a workflow runs on a repeating schedule set from the console or a script, and an agent runs on one through a workflow made from its Channels tab; an agent still has no goal of its own |
 
 ## Workflows, tasks and cases
 
@@ -34,7 +41,8 @@ use case or test; Partial names what runs and what does not; Planned means desig
 | Versions pinned per run; publishing through a second person's review | Built |
 | Triggers: an API request, a team mailbox, an event from another service | Built |
 | Triggers: a due time on the platform clock, one run per key | Built |
-| Triggers: a recurring schedule, an incoming webhook, polling a system | Planned |
+| Triggers: a recurring schedule | Built: set on the Schedule trigger in the console, the CLI or the SDKs |
+| Triggers: an incoming webhook, polling a system | Planned |
 | Code steps | Partial: formulas and transforms in a bounded sandbox; no general code runtime |
 | Load figures for many concurrent runs | Planned |
 
@@ -68,11 +76,11 @@ use case or test; Partial names what runs and what does not; Planned means desig
 |---|---|
 | Tool modules from OpenAPI 3.0 and 3.1, from an MCP server, or written in the console; versions and a Security review for major changes | Built |
 | App accounts, with a sandbox account for test runs: API key, basic, bearer, OAuth client credentials, OAuth authorization code, an app's signed client assertion in place of a secret, a signed service-account grant, client certificate | Built |
-| Each person connecting their own Account of an App, used by the Tools they run and the agents acting for them | Built |
+| Each person connecting their own account of an app, used by the tools they run and the agents acting for them | Built |
 | Apps in the console: the catalog, Connect in a small window, each App's page with its Accounts, Tools, Auth configs, Resources, Logs and Settings, each person's own sign-ins, and Turn off ([Tools and apps](apps.md)) | Built |
-| A run waiting for a person's own login is a Human Task that asks them only to sign in; someone else may run it with the team login | Built |
+| A run waiting for a person's own login becomes a human task that asks only for that person to sign in, and someone else may run it with the team login | Built |
 | An admin sets each app once: Everyone uses the team's login, or Each person signs in; chat never asks whose login | Built |
-| Approvals off by default; a team turns them on for every write, the writes of picked Apps, or one Tool | Built |
+| Approvals are off by default, and a team turns them on for every write, for the writes of chosen apps, or for one tool | Built |
 | Approval tokens bound to the exact input, approver counts, step-up, rate and amount limits | Built |
 | The outbound allow-list, the encrypted credential store, the call log | Built |
 | Check before sending: a model judges a write against the team's sending policy | Built |

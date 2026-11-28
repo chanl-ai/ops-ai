@@ -42,6 +42,8 @@ SEED = "seed"  # the dev seed writes records of every team into the local tenant
 ENGINE_PASS = "engine_pass"  # the workflow worker runs one claimed run's pass
 MEMORY_RETENTION = "memory_retention"  # the retention sweep expires one tenant's memories
 MAIL_LISTENER = "mail_listener"  # the mailbox listener polls one tenant's bound mailboxes
+SCHEDULE_CLOCK = "schedule_clock"  # the schedule clock ticks one tenant's saved schedules on their live workflows
+SCHEDULE_VIEWS = "schedule_views"  # a live-places list shows the schedules of every team its caller may view
 RUN_RECONCILER = "run_reconciler"  # the run reconciler gives one tenant's run with nothing behind it its state
 TESTS = "tests"  # `tenant_scope`, which tests use to act for a tenant
 ASSISTANT_CATCH_UP = "assistant_catch_up"  # start-up: one tenant's Ops Assistants brought to the declared version
@@ -54,6 +56,7 @@ API_KEY_RESYNC = "api_key_resync"  # one tenant's copy of platform's API keys ma
 # Why a path reads past the tenant (`isolation.system_tx`): only to find the tenant of what it claimed.
 CLAIM_THREAD = "claim_thread"  # GraphStore.owner_of, for the sweeper and the timer poller
 RETENTION_TENANTS = "retention_tenants"  # Memories.tenants, for the retention sweep
+SCHEDULE_TENANTS = "schedule_tenants"  # WorkflowSchedules.tenants, for the schedule clock
 ASSISTANT_TEAMS = "assistant_teams"  # TeamDefaults.on_agents, for the start-up Ops Assistant catch-up
 # Start-up: every tenant's published agent pointers (AgentRegistry.published_pointers), then each tenant's specs.
 SERVE_PUBLISHED = "serve_published"
@@ -77,6 +80,9 @@ __all__ = [
     "OWNER",
     "RETENTION_TENANTS",
     "RUN_RECONCILER",
+    "SCHEDULE_CLOCK",
+    "SCHEDULE_TENANTS",
+    "SCHEDULE_VIEWS",
     "SEED",
     "SERVE_PUBLISHED",
     "SYSTEM_ROLE",

@@ -2,7 +2,7 @@
 # :8730 (docs/services/models-service/overview.md). Its tables have their own migration chain (alembic_version_models).
 SERVICE_NAME := models-service
 SERVICE_STATUS := first slice: aliases, keys, admission, completions through the scripted provider
-OWN_VERBS := install run test lint typecheck verify migrate clean openapi openapi-check
+OWN_VERBS := install run test lint typecheck verify migrate clean openapi openapi-check catalog-sync
 
 PY_DIRS := src tests migrations scripts
 
@@ -34,6 +34,9 @@ openapi-check: ## openapi.json matches the app, every route named, tagged and ty
 
 openapi: ## Regenerate openapi.json after a route change
 	uv run python scripts/check_openapi.py --write
+
+catalog-sync: ## Refresh catalog/models.json from models.dev and LiteLLM (network); review the diff and commit it
+	uv run python scripts/sync_catalog.py
 
 clean: ## Remove caches
 	rm -rf .pytest_cache .ruff_cache

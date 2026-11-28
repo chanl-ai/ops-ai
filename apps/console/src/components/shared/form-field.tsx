@@ -13,6 +13,7 @@ export function FormField({
   error,
   children,
   className,
+  action,
 }: {
   id: string;
   label: string;
@@ -23,9 +24,10 @@ export function FormField({
   error?: string;
   children: React.ReactNode;
   className?: string;
+  /** Sits at the label's end, such as a state badge and a Reset button. */
+  action?: React.ReactNode;
 }) {
-  return (
-    <div className={cn('flex flex-col gap-1.5', className)}>
+  const labelNode = (
       <Label htmlFor={id}>
         {label}
         {optional && <span className="font-normal text-muted-foreground">(optional)</span>}
@@ -36,6 +38,17 @@ export function FormField({
         )}
         {required && <span className="sr-only">(required)</span>}
       </Label>
+  );
+  return (
+    <div className={cn('flex flex-col gap-1.5', className)}>
+      {action ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {labelNode}
+          <span className="flex items-center gap-1">{action}</span>
+        </div>
+      ) : (
+        labelNode
+      )}
       {children}
       {error ? <p className="text-xs text-destructive-text">{error}</p> : hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>

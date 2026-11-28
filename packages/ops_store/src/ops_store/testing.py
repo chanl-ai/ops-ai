@@ -214,6 +214,13 @@ def _shape(c: sa.Connection, tables: Collection[str], version_table: str) -> set
     return out | _policy_rules(c, tables)
 
 
+def schema_shape(url: str, tables: Collection[str], version_table: str = "alembic_version") -> set[tuple[object, ...]]:
+    """What `tables` hold at `url` as the database reflects it (columns, indexes, keys, isolation and each policy's
+    rule) with the chain's version: for a migration test that compares a revision's schema before and after a round
+    trip through a later one."""
+    return _on(url, lambda c: _shape(c, tables, version_table))
+
+
 def _policy_rules(c: sa.Connection, tables: Collection[str]) -> set[tuple[object, ...]]:
     """Each isolation policy's own rule, beside its kind, so a downgrade and re-upgrade that brings a policy back
     weaker (another predicate, column or function body) changes the shape. PostgreSQL: each policy's command, roles,

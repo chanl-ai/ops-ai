@@ -58,6 +58,16 @@ export class Agents {
     return rows;
   }
 
+  /** One page of the apps whose tools the agent may be granted. `search` also matches tool text and names the matching tools in `matches`. */
+  toolApps(agentId: string, params: { search?: string; granted?: boolean; cursor?: string; limit?: number } = {}) {
+    return this.raw.agents.agents_tool_apps({ path: { agent_id: agentId }, query: params as never });
+  }
+
+  /** One page of one app's tools for the agent. */
+  toolAppTools(agentId: string, appId: string, params: { search?: string; granted?: boolean; cursor?: string; limit?: number } = {}) {
+    return this.raw.agents.agents_app_tools({ path: { agent_id: agentId, app_id: appId }, query: params as never });
+  }
+
   /** Adds tools (their ids from `toolOptions`) to the agent's draft, keeping the ones it holds. Publish it for the grant to take effect. */
   async grantTools(id: string, tools: string[]) {
     const agent = await this.get(id);
@@ -73,6 +83,21 @@ export class Agents {
   /** Grants the agent a tool, knowledge base, skill, agent or workflow its brief mentions, as a new draft. `added` is empty when the agent already held it. */
   addReference(id: string, kind: 'tool' | 'knowledge' | 'skill' | 'agent' | 'workflow', refId: string) {
     return this.raw.agents.agents_add_reference({ path: { agent_id: id }, body: { kind, id: refId } as never });
+  }
+
+  /** The workspace's instruction section list: the stored one, or the default. Any signed-in person reads it. */
+  instructionSections() {
+    return this.raw.agents.agents_get_instruction_sections({});
+  }
+
+  /** Replaces the list (needs settings.manage). The server holds up to 8 presets per section and 40 sections. */
+  setInstructionSections(listing: unknown) {
+    return this.raw.agents.agents_put_instruction_sections({ body: listing as never });
+  }
+
+  /** Brings the default list back and returns it (needs settings.manage). */
+  resetInstructionSections() {
+    return this.raw.agents.agents_reset_instruction_sections({});
   }
 
   /** What stops the agent's newest draft from being published, each problem with the field it is in. */
@@ -128,7 +153,7 @@ export class Agents {
       channels: definition.channels,
     };
     // The create route takes no brief; it is saved on the new agent's draft, as the Python SDK does.
-    const later = Object.fromEntries(['brief', 'promptMode', 'patterns'].filter((k) => definition[k] !== undefined).map((k) => [k, definition[k]]));
+    const later = Object.fromEntries(['brief', 'promptMode', 'patterns', 'modelSettings'].filter((k) => definition[k] !== undefined).map((k) => [k, definition[k]]));
     const made = this.raw.agents.agents_create_agent({ body: body as never });
     if (!Object.keys(later).length) return made;
     return made.then((agent: Read & { id: string }) => this.update(agent.id, later, agent));

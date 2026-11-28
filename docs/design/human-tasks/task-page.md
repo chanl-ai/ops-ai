@@ -19,9 +19,9 @@ the same three failures on every one:
 | Engine vocabulary fills the space | "Gate: Human review / Every paused step", run ids, event names such as `event:tools/tool_access.requested`, and tool calls printed as raw dictionaries, often the same fact twice |
 | The container works against the content | A 672 px side sheet (52% of a 1280 px window), with a 199 px decision bar overlaid on the bottom of the scroll area, and four screens of scrolling on a read check of 18 fields |
 
-![The read check as first built: a side sheet with no document, every field marked Check](images/before-read-check.png)
+![The read check as first built: a side sheet with no document, every field marked Check](https://opsai.chanl.ai/docs/design/human-tasks/images/before-read-check.png)
 
-![A tool access request as first built: the agent's reason is buried below policy and reviewer details](images/before-tool-access.png)
+![A tool access request as first built: the agent's reason is buried below policy and reviewer details](https://opsai.chanl.ai/docs/design/human-tasks/images/before-tool-access.png)
 
 | Task opened | On screen that does not help | Missing |
 |---|---|---|
@@ -30,9 +30,9 @@ the same three failures on every one:
 | Hold or flag (a write approval) | The `place_hold` call shown twice as a dictionary; an empty "Agent reasoning" box | The account balance against the hold; which button runs which call |
 | Tool access request | "Runs apply_tool_access on approval"; two evidence cards showing the same call | Whether each tool reads or writes; the agent's stated reason, first |
 
-![The Human Tasks list as first built: rows differ only by debtor and no row says what is asked](images/before-task-list.png)
+![The Human Tasks list as first built: rows differ only by debtor and no row says what is asked](https://opsai.chanl.ai/docs/design/human-tasks/images/before-task-list.png)
 
-![A hold-or-flag approval as first built: two bare buttons and the call as raw parameters](images/before-hold-or-flag.png)
+![A hold-or-flag approval as first built: two bare buttons and the call as raw parameters](https://opsai.chanl.ai/docs/design/human-tasks/images/before-hold-or-flag.png)
 
 ## Requirements the design meets
 
@@ -78,26 +78,26 @@ Any task, in any workflow, answers these questions in this order:
 
 ### Wireframe A: the page, any task type
 
-![Wireframe A: header, a scrolling body of regions, and a footer row that holds the decision](images/page-frame.png)
+![Wireframe A: header, a scrolling body of regions, and a footer row that holds the decision](https://opsai.chanl.ai/docs/design/human-tasks/images/page-frame.png)
 
 ### Wireframe B: read check with key fields
 
 The document type marks Amount and Case number as key fields. Each key field needs its own confirmation; the other 12
 are accepted together. Reject asks for a reason and sends the document to the team queue, optionally naming a person.
 
-![Wireframe B: the document with boxed values beside the key fields to confirm](images/read-check-key-fields.png)
+![Wireframe B: the document with boxed values beside the key fields to confirm](https://opsai.chanl.ai/docs/design/human-tasks/images/read-check-key-fields.png)
 
 ### Wireframe C: tool access request
 
 A specialised type in one column: the agent's reason first, then what the access is, then Grant or Refuse.
 
-![Wireframe C: the agent's stated reason, the tools and whether each reads or writes, and Grant or Refuse](images/tool-access-request.png)
+![Wireframe C: the agent's stated reason, the tools and whether each reads or writes, and Grant or Refuse](https://opsai.chanl.ai/docs/design/human-tasks/images/tool-access-request.png)
 
 ### Wireframe D: acknowledgement
 
 The received email, the reply that will be sent, and one row per case the email opened.
 
-![Wireframe D: the received email, the reply, the cases it opened, and Send or Do not send](images/acknowledgement.png)
+![Wireframe D: the received email, the reply, the cases it opened, and Send or Do not send](https://opsai.chanl.ai/docs/design/human-tasks/images/acknowledgement.png)
 
 ## Task types as records
 
@@ -188,7 +188,7 @@ POST /v1/tasks
 A builder edits params, regions and actions with the existing settings list and form components, beside a live
 preview of the real page fed with sample parameters.
 
-![Wireframe E: params, regions and actions of a task type, with a live preview](images/task-type-editor.png)
+![Wireframe E: params, regions and actions of a task type, with a live preview](https://opsai.chanl.ai/docs/design/human-tasks/images/task-type-editor.png)
 
 ## One renderer: reuse the chat widget kinds
 

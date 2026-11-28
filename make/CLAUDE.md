@@ -76,12 +76,20 @@ run records and knowledge pages have no delete route, so they stay. Code: `sdk/p
 | `dev.mk` | `up`, `down`, `restart`, `health`, `logs`, `ports`, `sample-team`, `sample-teams` (the first teams: Wealth, Lending, Risk), `demo`, `demo-walk`, `demo-model`, `demo-salesforce*`, `runner-wasm`, `reset-db` |
 | `checks.mk` | `checks` (the one list of checks; `STAGED=1` for those a staged path can change), `checks-list`; a check is a name in `CHECKS` with its `check-run.<name>` command and `check-paths.<name>` pattern |
 | `python.mk` | `test` (T= honoured by every service), `test-impacted` (BASE=, PLAN=1), `agent-guard`, `python-install`, `python-verify`, `sbom` |
-| `git.mk` | `commit`, `commit-hunks`, `my-hunks`, `whats-mine`, `unstage`, `git-rules`, `review` ([Commits](../CLAUDE.md#commits)) |
+| `git.mk` | `commit`, `commit-hunks`, `my-hunks`, `whats-mine`, `unstage`, `git-rules`, `review`, `review-dry-run` (a read-only `make -n` in a `git archive` export; `scripts/in_export_only.py` refuses any checkout) ([Commits](../CLAUDE.md#commits)) |
 | `usecase.mk` | `usecase-test`, `usecase-report`, `usecase-list`, `usecase-show`, `usecase-coverage`, `usecase-new`, `usecase-reset`, `usecase-runner-test` |
 | `sdk.mk`, `docs.mk` | `openapi`, `sdk`, `sdk-verify`, `sdk-check`; `docs-verify`, `docs-guides-check` |
-| `db.mk`, `db-scripts.mk` | `db-up`, `db-down`, `db-shell`, `db-sweep`, `migrate`, `migration`; the DBA scripts ([deploy/CLAUDE.md](../deploy/CLAUDE.md)); `mssql-remote-*`, the shared SQL Server on Fly for tests from a Mac |
+| `db.mk`, `db-scripts.mk` | `db-up`, `db-down` (both skip under `OPS_INFRA=external` or `shared`), `db-shell`, `db-sweep`, `migrate`, `migration`; the DBA scripts ([deploy/CLAUDE.md](../deploy/CLAUDE.md)); `mssql-remote-*`, the shared SQL Server on Fly for tests from a Mac |
+| `usecase.mk` adds `usecase-pick` and `quarantine` | Which use cases CI runs for a diff; the flaky list |
 | `release.mk` (`release-cut`, `release-pr`, `release-version`, `release-tag`, `release-main`, `hotfix-cut`: [docs/deploy/release.md](../docs/deploy/release.md)), `staging.mk`, `deps.mk`, `setup.mk`, `experiments.mk` | Releases, staging, dependency locks and mirrors, machine setup, agents-service experiments |
 | `services.mk` | The generated `<verb>-<svc>` pass-throughs, for example `test-tools` runs `make -C services/tools-service test` |
+
+## Known traps
+
+- `OPS_INFRA=shared` with the default stack down => The postgres and OPA ports are the default stack's; an offset stack finds nothing there. Run `make up` on the default stack first. Offset 0 with `shared` is refused
+- `next dev` started from a Claude session => Next 16.4 exits on a security-upgrade nudge when `AI_AGENT`, `CLAUDECODE` or `CLAUDE_CODE_ENTRYPOINT` is set; `scripts/stack.sh` unsets all three for the console and embed
+- `make -n` on a recipe line holding `$(MAKE)` => Make runs the whole line even on a dry run, so its other commands run too; so a marker written after a sub-make goes on a recipe line of its own with no `$(MAKE)`, which `-n` skips (`sample-install` in `make/dev.mk`)
+- A fresh worktree's console => `pnpm install` (with scripts) must run once, or `@chanl-ai/ops-ai` is unbuilt and the console answers 500
 
 ## Engineering standards
 

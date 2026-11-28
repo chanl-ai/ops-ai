@@ -289,6 +289,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
     const blocked = blockedText(f);
     return {
       ...r,
+      source: null,
       versions: f.versions,
       references: f.references.map((x) => (blocked ? { ...x, blocked } : x)),
       audit: [...live, uploaded].sort((a, b) => b.at.localeCompare(a.at)),

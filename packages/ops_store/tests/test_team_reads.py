@@ -121,6 +121,18 @@ def unscoped_reads(source: str, marked: set[str], where: str = "<source>") -> li
             for root in _names(a.value) & marked
             if isinstance(a.value, ast.Name | ast.Attribute)
         }
+        # A column list built from one (`cols = [c for c in t.c if ...]`, then `sa.select(*cols)`) reads it too.
+        alias |= {
+            target.id: root
+            for a in ast.walk(fn)
+            if isinstance(a, ast.Assign) and id(a) not in inner and isinstance(a.value, ast.ListComp | ast.GeneratorExp)
+            for target in a.targets
+            if isinstance(target, ast.Name)
+            for gen in a.value.generators
+            for n in _names(gen.iter)
+            for root in [n if n in marked else alias.get(n)]
+            if root is not None
+        }
         read: dict[str, int] = {}
         for c in calls:
             name = _func_name(c)
@@ -207,6 +219,11 @@ def union_one_branch(engine):
         sa.select(registry_skills.c.id),
     ).subquery("u")
     return engine.execute(sa.select(both))
+
+def by_columns(engine):
+    t = registry_agents
+    cols = [c for c in t.c if c.name != "tenant_id"]
+    return engine.execute(sa.select(*cols))
 """
     # A list over several sources (ops_store.listing) is scoped in each branch of its union.
     assert unscoped_reads(planted, {"registry_agents", "registry_skills"}) == [
@@ -214,4 +231,5 @@ def union_one_branch(engine):
         "<source>:9 joined registry_agents",
         "<source>:12 by_method registry_agents",
         "<source>:24 union_one_branch registry_skills",
+        "<source>:31 by_columns registry_agents",
     ]

@@ -11,6 +11,7 @@ import { idColumn } from '@/components/shared/id-column';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { countLabel, SavedViewTabs } from '@/components/shared/saved-view-tabs';
+import { ListCell } from '@/components/shared/table-cells';
 import { Badge } from '@/components/ui/badge';
 import { useToolGrants } from '@/hooks/tool-module-queries';
 import { useListParams } from '@/hooks/use-list-params';
@@ -44,7 +45,7 @@ const COLUMNS: ColumnDef<Row>[] = [
   },
   { accessorKey: 'status', header: 'Status', cell: ({ row }) => <Badge variant={row.original.status === 'approved' ? 'secondary' : 'outline'}>{STATUS[row.original.status]}</Badge> },
   { id: 'expires', header: 'Ends', cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{row.original.expiresAt ? relativeTime(row.original.expiresAt) : 'No end'}</span> },
-  { id: 'access', header: 'May call', cell: ({ row }) => <span className="text-muted-foreground">{row.original.operations.join(', ') || 'Every operation'}</span> },
+  { id: 'access', header: 'May call', cell: ({ row }) => <span className="text-muted-foreground"><ListCell values={row.original.operations} shown={2} empty="Every operation" label="Operations" /></span> },
   { accessorKey: 'environment', header: 'Environment', cell: ({ row }) => <span className="capitalize">{row.original.environment}</span> },
   { id: 'decided', header: 'Decided by', cell: ({ row }) => <span className="text-muted-foreground">{row.original.decidedBy ?? '—'}</span> },
 ];

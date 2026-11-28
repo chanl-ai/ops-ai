@@ -11,6 +11,7 @@ import { request } from 'node:https';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
+import { chooseMatchedTool, findMatchedTool, showHeldTools } from '../../lib/tools_picker.mjs';
 import { AGENTS_PORT, KB_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack, required } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
@@ -170,7 +171,6 @@ try {
           const ok = await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 }).then(() => true, (e) => (attempt === 2 ? Promise.reject(e) : false));
           if (ok) break;
         }
-        const picker = page.getByTestId('agent-tools-picker');
 
         await step('16 the tools picker finds a Salesforce tool by its title', async () => {
           // agents-service keeps the grantable tools for 30 s and the console keeps a search's answer, so the picker is
@@ -178,24 +178,23 @@ try {
           const james = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
           const offered = await until(() => call(agents, 'GET', '/v1/tools/options?search=find%20cases&limit=5', james), (r) => (r.data?.data ?? []).some((o) => o.label === 'Find cases'), 60);
           await page.goto(`${consoleUrl}/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-          await picker.getByRole('button', { name: 'Grant tools' }).click({ timeout: 90_000 });
-          await page.getByPlaceholder('Search tools by name or system…').fill('find cases');
-          const option = page.getByRole('option', { name: /^Find cases/ });
-          const shown = await option.first().waitFor({ timeout: 30_000 }).then(() => true, () => false);
-          const raw = await page.getByRole('option', { name: /salesforce_find_cases/ }).count();
+          const option = await findMatchedTool(page, 'find cases', 'salesforce_find_cases');
+          const shown = await option.getByText('Find cases', { exact: true }).waitFor({ timeout: 30_000 }).then(() => true, () => false);
+          const raw = await page.getByRole('dialog').getByText(/salesforce_find_cases/).count();
           await page.screenshot({ path: join(SHOTS, 'tools-picker-1280.png') });
           check('16 the tools picker finds a Salesforce tool by its title', shown && raw === 0, { shown, raw, offered: offered.text });
-          if (shown) await option.first().click();
-          await page.keyboard.press('Escape');
+          if (shown) await chooseMatchedTool(page, option);
+          else await page.keyboard.press('Escape');
         }, page);
 
         await step('17 granted and saved, the agent page names the tool by its title', async () => {
           // The agent page saves a change as it is made, so the grant is read back rather than saved by a button.
           const stored = await until(async () => required(await call(agents, 'GET', `/v1/agents/${agent.id}`, priya), 'read the agent'), (a) => (a.toolIds ?? []).includes('salesforce_find_cases'), 30);
           await page.reload({ waitUntil: 'domcontentloaded' });
-          const chip = picker.getByText('Find cases', { exact: true });
-          const named = await chip.waitFor({ timeout: 60_000 }).then(() => true, () => false);
-          const raw = await picker.getByText('salesforce_find_cases').count();
+          await showHeldTools(page);
+          const rows = page.getByTestId('agent-tools-rows');
+          const named = await rows.getByText('Find cases', { exact: true }).first().waitFor({ timeout: 60_000 }).then(() => true, () => false);
+          const raw = await rows.getByText('salesforce_find_cases').count();
           await page.screenshot({ path: join(SHOTS, 'agent-tools-1280.png') });
           check('17 granted and saved, the agent page names the tool by its title', named && raw === 0 && (stored.toolIds ?? []).includes('salesforce_find_cases'), { named, raw, toolIds: stored.toolIds });
         }, page);

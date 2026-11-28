@@ -1,18 +1,26 @@
 # Workflows
 
-Status: current. Rows marked planned are designed and not built.
+Status: current.
 
-Some work should run the same way every time and leave a record: open a case for each court order, place a hold only
-after a person approves, reply on the channel the request came in on. A workflow is a versioned graph of typed steps
-that does that. Each step's input and output is saved as it runs, so a crash or a restart loses nothing and a write is
-never made twice. Some steps are AI (an agent, a classification, an extraction); the rest are rules, tool calls and
-people deciding.
+## A process that depends on who is at the desk
 
-## Try it
+Suppose you must open a case for each court order, place a hold only after a person approves it, and reply on the
+channel the request arrived on. If people do these steps by hand, each step varies with who does it, and the record ends
+up in an email thread. If a script does them, a crash halfway can repeat a change to a customer's account.
+
+## What it costs to leave it manual
+
+Without a workflow, every request is retyped across systems, approvals get lost between inboxes, and someone rebuilds
+the audit answer by hand. A workflow is a versioned graph of typed steps that removes that work. Each step's input and
+output is saved as it runs, so a crash or a restart loses nothing and a write is never made twice. Some steps run an AI task,
+such as an agent, a classification or an extraction. The other steps apply rules, call tools or wait for a person to decide. Rows marked
+planned on this page are designed and not yet built.
+
+## Route a support message with an AI step
 
 The [Quickstart](quickstart.md#run-your-first-workflow) writes a three-step workflow and runs it. This one adds an AI
-step: it puts a support message into billing or technical, and leaves by `otherwise` below a confidence of 0.6. Save it
-as `route.yaml`:
+step. It sorts a support message into billing or technical, and sends it out by `otherwise` when its confidence is below
+0.6. Save it as `route.yaml`:
 
 ```yaml
 schemaVersion: 2
@@ -49,12 +57,20 @@ opsai workflows apply route.yaml
 opsai workflows run route_support_message --wait --input '{"text": "I was charged twice this month."}'
 ```
 
-The run ends with the outcome `billing`. A model answer outside the categories leaves by `error` and ends as
+```mermaid caption="Where each support message ends: a clear category goes to its own end, anything unsure goes to Other, and a model error ends as failed"
+flowchart TD
+  A[Message arrives] --> B[Classify]
+  B -->|Billing| C[billing]
+  B -->|Technical| D[technical]
+  B -->|Below 0.6| E[other]
+```
+
+The sample message ends with the outcome `billing`. A model answer outside the categories leaves by `error` and ends as
 `classify_failed`. `opsai workflows types` lists every step type with its ports and settings.
 
-You do not need the console to build a workflow, but it shows and edits the same graph under **Build › Workflows**.
+You do not need the console to build a workflow, but it shows and edits the same graph under **Build › Workflows**. [Open a workflow step and pick a field](edit-a-workflow-step.md) shows how to read and fill one step there.
 
-## Lifecycle
+## From draft to live run
 
 Every command reads its address and sign-in from your profile ([Install the command line](install-cli.md#sign-in)).
 
@@ -73,7 +89,7 @@ Every command reads its address and sign-in from your profile ([Install the comm
 | Redrive | `opsai runs redrive <run-id>`, `opsai runs bulk redrive --code tool_failed` | Runs a Failed or Stuck run again from the step that failed, on the version it started on, once you have fixed the cause. Steps that finished return what they recorded and run nothing. A failed write is sent again, on its earlier approval, only when its answer proves it did nothing; any other is settled by the gateway's record first ([recovery and redrive](../security/recovery-and-redrive.md)). `bulk` redrives or cancels every run of your team that a filter matches (workflow, kind, code, time) |
 | Replay, fork, evaluate | `opsai workflows replay`, `fork`, `eval` | Planned |
 
-From Python; TypeScript has the same method names on `ops.workflows`, taking a parsed object or JSON:
+From Python, it looks like this. TypeScript has the same method names on `ops.workflows`, and they take a parsed object or JSON:
 
 ```python
 from ops_ai import OpsAI
@@ -89,7 +105,7 @@ run = ops.workflows.run(draft["workflowId"], input={"customerEmail": "ada@exampl
 > [!NOTE]
 > A new run is a test run unless you ask for a live one (`mode="live"`, or `--live`). A test run signs in with the
 > app's sandbox account when it has one, and with its live account otherwise
-> ([Tools and apps](apps.md#accounts-the-teams-and-your-own)).
+> ([Tools and apps](apps.md#who-signs-in-the-teams-login-or-each-persons)).
 
 A run keeps the version it started on. Publishing a new version changes only the runs that start after it.
 
@@ -121,12 +137,49 @@ A definition has an `id`, a `name`, a list of `nodes` and a list of `connections
 | A parent workflow | Built |
 | A chat, from the assistant's start card or an agent that has the workflow as a tool | Built |
 | A due time on the platform clock; the same key runs once | Built |
-| A recurring schedule, a signed incoming webhook, polling another system | Planned |
+| A recurring schedule on a trigger (every N minutes, hours or days, on chosen weekdays) | Built |
+| A signed incoming webhook, polling another system | Planned |
+
+## Run a workflow on a schedule
+
+In the console, see [Schedule a workflow or an agent](schedule-a-workflow.md). From a terminal or a script:
+
+A workflow that starts with the Schedule trigger can run by itself: every 15 minutes, every day at 07:30, or weekdays
+between 07:00 and 18:00 in a time zone. The schedule is saved on the trigger step, outside the workflow's versions, so
+it applies to the live version at once with no publish. A tick whose last scheduled run is still going is skipped and
+shown in the trigger's log with the reason. Pause stops the ticks; Resume waits for the next slot. A scheduled run
+sends only `dueAt`, so the trigger's input schema may require nothing else (a save naming another field is refused with
+422), and the workflow needs a team. The shortest interval is the install's `schedule_floor_minutes`, 5 by default, and a rule under it is refused with "At least 5 minutes on this install.";
+raising it leaves saved schedules running, and each is refused at its next save. After the clock was down, the latest
+slot runs once, marked late, if it is within half the smaller gap to the slot before or after it (and at least 90
+seconds); an older one is shown as missed. A rule saved just before its slot runs that slot. Reading a schedule needs the right to view the team's workflows; clearing one works even when a newer version
+dropped the step, and the workflow's view says when a schedule is idle and why.
+
+From a script or a terminal (`step` is the trigger step's id):
+
+```bash
+opsai workflows schedule kinds                                  # the rule kinds and their labels
+opsai workflows schedule preview --kind every --set every=15 --set unit=minutes --set tz=Europe/London
+opsai workflows schedule save held_wires --step start --kind every \
+  --set every=15 --set unit=minutes --set start=07:00 --set tz=Europe/London \
+  --set 'days=["mon","tue","wed","thu","fri"]'
+opsai workflows schedule show held_wires --step start           # the rule in words, the next runs, the last outcome
+opsai workflows schedule clear held_wires --step start
+```
+
+`--rule '{"kind": "every", ...}'` (or `@file.json`) passes the whole rule instead of `--kind` and `--set`. Each
+`--set` value is read as JSON when it parses, otherwise as text. The words and next runs come from the server, so the
+console and the command line say the same thing.
+
+## What success looks like
+
+A run ends with an outcome you named, and its timeline shows every step with its input and output. A step that needs a
+person pauses the run at no cost until they decide. A new version changes only the runs that start after it.
 
 ## Next
 
 <!-- site: cards -->
-- **[Build with Ops AI](build-with-ops-ai.md)**: nineteen example workflows, from mapping one field to a child workflow per record.
+- **[Build with Ops AI](build-with-ops-ai.md)**: work through nineteen example workflows, from mapping one field to a child workflow per record.
 - **[Workflow examples](examples/workflows.md)**: check, publish, run, decide and fix a workflow in Python, TypeScript and the command line.
 - **[Human tasks and approvals](human-tasks.md)**: pause a run for a person.
 - **[Cases](cases.md)**: open a case from a run.

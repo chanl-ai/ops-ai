@@ -23,7 +23,7 @@ It does not own agents or their grants: "used by" asks agents-service (`agents.p
 | `src/ops_kb/query_steps.py` | Rerank and question rewrite around a search, through models-service on a chat-model alias |
 | `src/ops_kb/files.py` | Where a source's files are kept, through files-service |
 | `src/ops_kb/readings.py` | A file's reading from documents-service and its split; `POST /v1/events` takes `reading.finished` and `reading.failed`, and the knowledge schedule asks again for items still `reading` |
-| `src/ops_kb/tool_sources.py`, `schedule.py` | Knowledge read through a connection's tools, and the beat that syncs them on schedule |
+| `src/ops_kb/tool_sources.py`, `schedule.py` | Knowledge read through a connection's tools (the loop is `packages/ops_sources`; this file is its knowledge state and what a fetched item becomes), and the beat that syncs them on schedule |
 | `src/ops_kb/seed.py`, `seed/` | The banker demo's two knowledge bases (markdown rendered to PDFs), seeded when a dev kb-service starts |
 | `src/ops_kb/store/` | All database code; `store/knowledge.py:34` names the tenant role `ops_kb_tenant` |
 | `scripts/seed_demo_knowledge.py` | Seeds the demo through the API against a running stack (`--agents` also wires the agents) |
@@ -63,6 +63,15 @@ To check a cited answer end to end, attach a base to a chat turn: `make chat AS=
 | Files through files-service | A file added to a source must be the team's and scanned clean; adding it records a reference so files-service keeps it |
 | No weak passages | Below the score floor nothing is returned, so an unanswerable question gets no citation |
 | Versions | A known name with new content is its next version, written in the transaction that withdraws the old chunks |
+
+## Known traps
+
+- A stored schedule value read in a loop => skip a bad one per source; one strict parse that raises ends the pass for every tenant
+- A reply that gains a field => run once with `KB_REPIN=1`, read the fixture diff, commit it
+- A list route that accepts `search` => pass the search columns to `list_page`
+- A startup probe of files-service => give it a short per-try timeout so a slow neighbour does not hold the start
+- A new `GET` route => add its row to `budgets.toml`, and open no second transaction in its session check; `tests/test_statement_budget.py` fails any route without a row
+- A store change (tables, repositories, migrations, queries) pushed after `make ci-local` alone => ci-local lists `store-mssql` as skipped, so run `deploy/database/mssql_remote.sh test services/kb-service -q <tests>` before the push
 
 ## Reference docs
 

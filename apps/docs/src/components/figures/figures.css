@@ -1,0 +1,382 @@
+/*
+ * Visual language (set 2026-11-26 from the Strands Agents docs' diagram style, redrawn here): flat paper, hairline
+ * 1px strokes, 6-8px corners, no shadows or gradients. Zones are a barely tinted field with a hairline edge; nodes are
+ * paper with a line stroke; the one focal node takes an accent tint and accent stroke; edges are muted 1.25px with
+ * small solid heads; small mono uppercase eyebrows name groups; the caption sits under the frame in muted small text.
+ * The tokens below are the single place this look is set, so every figure type follows it.
+ *
+ * The figure library (this folder). A stage with one quiet accent wash, product fragments lifted off it, numbered pins
+ * that match the notes beside them. Colours come only from the theme variables in app/global.css; sizes inside a
+ * figure follow its own width through container queries, so a figure behaves the same in the page and the gallery.
+ */
+.ops-fig {
+  --ops-lift: none;
+  --ops-zone: color-mix(in oklab, var(--ops-fg) 3%, var(--ops-card));
+  --ops-zone-line: color-mix(in oklab, var(--ops-fg) 16%, transparent);
+  --ops-edge: var(--ops-muted);
+  --ops-eyebrow-font: var(--ops-mono);
+  margin: 32px 0; padding: 0; overflow: hidden; border: 0; border-radius: 0; background: none;
+}
+.ops-fig figcaption {
+  margin: 12px 0 0; padding: 0; border: 0;
+  color: var(--ops-muted); font-size: 0.8rem; line-height: 1.5;
+}
+.ops-fig-stage {
+  container-type: inline-size;
+  padding: 20px 16px;
+  border: 1px solid var(--ops-zone-line); border-radius: 8px;
+  background: var(--ops-zone);
+}
+
+/* A fragment of a product screen. */
+.ops-ui {
+  border: 1px solid var(--ops-line);
+  border-radius: 6px;
+  background: var(--ops-card);
+  box-shadow: var(--ops-lift);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--ops-fg);
+  min-width: 0;
+}
+.ops-ui-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--ops-hair);
+  color: var(--ops-muted);
+  font-size: 0.74rem; font-weight: 600; letter-spacing: 0.02em;
+}
+.ops-ui-icon { width: 14px; height: 14px; flex: none; color: var(--ops-accent); }
+.ops-ui-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.ops-ui-title { margin: 0; font-weight: 600; }
+.ops-ui-text { margin: 0; color: var(--ops-muted); }
+.ops-ui-fields { margin: 0; display: grid; gap: 4px; }
+.ops-ui-field { display: grid; grid-template-columns: minmax(84px, 34%) 1fr; gap: 10px; align-items: baseline; }
+.ops-ui-field dt { color: var(--ops-muted); display: flex; align-items: center; gap: 6px; }
+.ops-ui-field dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ops-ui-field-code { grid-template-columns: 1fr; gap: 4px; }
+.ops-ui-code {
+  margin: 0; padding: 8px 10px;
+  border-radius: 6px; background: var(--ops-code);
+  font-family: var(--ops-mono); font-size: 0.78rem; line-height: 1.5;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.ops-ui-actions { display: flex; align-items: center; gap: 8px; padding-top: 2px; }
+.ops-ui-btn {
+  display: inline-flex; align-items: center;
+  padding: 4px 12px; border-radius: 6px;
+  border: 1px solid var(--ops-line); background: var(--ops-card);
+  font-size: 0.8rem; font-weight: 600;
+}
+.ops-ui-btn-primary { background: var(--ops-accent); border-color: var(--ops-accent); color: var(--ops-card); }
+.ops-ui-lg { font-size: 0.9rem; }
+.ops-ui-lg .ops-ui-body { padding: 14px 16px 16px; gap: 12px; }
+.ops-ui-lg .ops-ui-title { font-size: 1.02rem; }
+.ops-ui-lg .ops-ui-fields { gap: 8px; }
+.ops-ui-lg .ops-ui-field { grid-template-columns: minmax(110px, 30%) 1fr; }
+.ops-ui-lg .ops-ui-field-code { grid-template-columns: 1fr; }
+
+/* Numbered pins: the same number on the screen and in the notes. */
+.ops-pin {
+  display: inline-grid; place-items: center; flex: none;
+  width: 18px; height: 18px; border-radius: 999px;
+  background: var(--ops-accent); color: var(--ops-card);
+  font-size: 0.68rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+
+/* Journey: a numbered path down the left, a screen and what it means on each step. */
+.ops-journey { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.ops-journey-step { position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr); column-gap: 12px; row-gap: 8px; }
+.ops-node {
+  position: relative; z-index: 1;
+  display: grid; place-items: center; width: 26px; height: 26px; border-radius: 999px;
+  background: var(--ops-card); color: var(--ops-fg);
+  border: 1px solid var(--ops-line);
+  font-size: 0.78rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.ops-journey-step > .ops-node { grid-row: 1 / span 2; }
+/* The path: a hairline from each node to the next. */
+.ops-journey-step:not(:last-child)::before {
+  content: ''; position: absolute; left: 12.5px; top: 26px; bottom: -14px; width: 1px;
+  background: var(--ops-zone-line);
+}
+.ops-journey-ui, .ops-journey-callout { grid-column: 2; min-width: 0; }
+.ops-journey-callout { font-size: 0.88rem; line-height: 1.5; color: var(--ops-muted); }
+.ops-journey-callout p { margin: 0; }
+.ops-journey-callout-title { color: var(--ops-fg); font-weight: 600; margin-bottom: 2px !important; }
+@media (min-width: 640px) {
+  .ops-fig-stage { padding: 28px; }
+}
+@container (min-width: 640px) {
+  .ops-journey { gap: 18px; }
+  .ops-journey-step { grid-template-columns: 26px minmax(0, 1.25fr) minmax(0, 1fr); column-gap: 18px; }
+  .ops-journey-step:not(:last-child)::before { bottom: -18px; }
+  .ops-journey-step > .ops-node { grid-row: 1; }
+  .ops-journey-ui { grid-column: 2; }
+  .ops-journey-callout { grid-column: 3; align-self: center; }
+}
+
+/* Annotated: one screen drawn large, its numbered protections beside it. */
+.ops-annotated { display: grid; gap: 20px; }
+/* Notes in pin order, beside a screen (annotated, widget, preview). */
+.ops-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; align-content: start; }
+.ops-notes li { display: grid; grid-template-columns: 18px 1fr; gap: 10px; font-size: 0.88rem; line-height: 1.5; color: var(--ops-muted); }
+.ops-notes .ops-pin { margin-top: 2px; }
+.ops-notes p { margin: 0; }
+.ops-notes-label { color: var(--ops-fg); font-weight: 600; }
+.ops-notes-compact { gap: 8px; }
+.ops-notes-compact li { font-size: 0.82rem; }
+@container (min-width: 640px) {
+  .ops-annotated { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+}
+
+/* Layers: where work comes from, the platform's layers inside one frame, and where every call leaves to. */
+.ops-layers { display: flex; flex-direction: column; align-items: stretch; }
+.ops-layers-frame {
+  position: relative; display: flex; flex-direction: column;
+  padding: 28px 12px 12px; border-radius: 8px;
+  border: 1px dashed var(--ops-edge); background: none;
+}
+.ops-layers-frame-label {
+  position: absolute; top: 7px; left: 14px; margin: 0;
+  font-family: var(--ops-eyebrow-font); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ops-muted);
+}
+.ops-layers-row { display: flex; flex-direction: column; }
+.ops-band-arrow { align-self: center; width: 14px; height: 14px; margin: 6px 0; color: var(--ops-edge); }
+.ops-band {
+  display: grid; gap: 10px; padding: 12px 14px; border-radius: 6px;
+  background: var(--ops-card); border: 1px solid var(--ops-line);
+}
+.ops-band-outside { background: transparent; box-shadow: none; border-style: dashed; border-color: var(--ops-line); }
+.ops-band-exit { border-color: var(--ops-accent); background: color-mix(in oklab, var(--ops-accent) 9%, var(--ops-card)); }
+.ops-band-exit .ops-band-title { color: var(--ops-accent); }
+.ops-band-head p { margin: 0; }
+.ops-band-title { font-weight: 600; font-size: 0.92rem; }
+.ops-band-text { color: var(--ops-muted); font-size: 0.82rem; line-height: 1.45; }
+.ops-band-parts { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); }
+.ops-band-parts li {
+  display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 8px;
+  background: var(--ops-zone); border: 1px solid var(--ops-hair); font-size: 0.82rem; line-height: 1.4;
+}
+.ops-band-outside .ops-band-parts li { background: var(--ops-card); }
+.ops-band-part-title { font-weight: 600; }
+.ops-band-part-text { color: var(--ops-muted); }
+@container (min-width: 640px) {
+  .ops-band { grid-template-columns: minmax(150px, 0.32fr) 1fr; align-items: start; gap: 16px; }
+}
+
+/* Motion: a one-time reveal of a figure's steps, set only after hydration (./reveal.tsx). Transform and
+   opacity only; under reduced motion the steps fade without moving. */
+.ops-reveal[data-reveal] .ops-journey-step {
+  transition: opacity 260ms cubic-bezier(0.23, 1, 0.32, 1), transform 260ms cubic-bezier(0.23, 1, 0.32, 1);
+  transition-delay: calc(var(--i, 0) * 70ms);
+}
+.ops-reveal[data-reveal='waiting'] .ops-journey-step { opacity: 0; transform: translateY(8px); }
+@media (prefers-reduced-motion: reduce) {
+  .ops-reveal[data-reveal] .ops-journey-step { transition-property: opacity; transform: none; }
+}
+@media (hover: hover) and (pointer: fine) {
+  .ops-journey-ui .ops-ui { transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1); }
+  .ops-journey-step:hover .ops-ui { transform: translateY(-2px); }
+}
+@media print {
+  .ops-reveal[data-reveal] .ops-journey-step { opacity: 1; transform: none; }
+}
+
+/* Shared small parts: a status chip, and text kept for screen readers only. */
+.ops-chip {
+  display: inline-flex; align-items: center; white-space: nowrap;
+  padding: 1px 8px; border-radius: 999px;
+  font-size: 0.74rem; font-weight: 600; line-height: 1.5;
+  background: var(--ops-accent-soft); color: var(--ops-accent);
+}
+.ops-chip-done { background: var(--ops-new-soft); color: var(--ops-new); }
+.ops-chip-stop { background: var(--ops-drop-soft); color: var(--ops-drop); }
+.ops-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.ops-fig p { margin: 0; }
+
+/* Before and after: the first side muted and dashed, the second lifted with the accent. */
+.ops-pair { display: grid; gap: 12px; }
+.ops-pair-side { display: grid; gap: 8px; align-content: start; padding: 14px 16px; border-radius: 6px; font-size: 0.88rem; line-height: 1.5; }
+.ops-pair-before { border: 1px dashed var(--ops-line); color: var(--ops-muted); }
+.ops-pair-after { background: color-mix(in oklab, var(--ops-accent) 9%, var(--ops-card)); border: 1px solid var(--ops-accent); }
+.ops-pair-label { font-family: var(--ops-eyebrow-font); font-size: 0.68rem; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; }
+.ops-pair-after .ops-pair-label { color: var(--ops-accent); }
+.ops-pair-points { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.ops-pair-points li { position: relative; padding-left: 14px; }
+.ops-pair-points li::before { content: ''; position: absolute; left: 0; top: 0.62em; width: 5px; height: 5px; border-radius: 999px; background: currentColor; opacity: 0.45; }
+.ops-pair-after .ops-pair-points li::before { background: var(--ops-accent); opacity: 1; }
+@container (min-width: 560px) { .ops-pair { grid-template-columns: 1fr 1fr; gap: 16px; } }
+
+/* Sequence: narrow, rows naming both ends; wide, lifelines with arrows between them. */
+.ops-seq { position: relative; display: grid; gap: 12px; }
+.ops-seq-actors { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.ops-seq-actors li {
+  padding: 4px 10px; border-radius: 8px; background: var(--ops-card); border: 1px solid var(--ops-hair);
+  box-shadow: var(--ops-lift); font-size: 0.8rem; font-weight: 600; text-align: center;
+}
+.ops-seq-lifelines { display: none; }
+.ops-seq-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ops-seq-msg { display: grid; gap: 2px; padding: 8px 10px; border-radius: 8px; background: var(--ops-card); border: 1px solid var(--ops-hair); font-size: 0.86rem; line-height: 1.45; }
+.ops-seq-ends { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.76rem; font-weight: 600; color: var(--ops-muted); }
+.ops-seq-to { width: 13px; height: 13px; color: var(--ops-edge); }
+.ops-seq-num { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 999px; background: var(--ops-accent-soft); color: var(--ops-accent); font-size: 0.68rem; font-weight: 700; font-variant-numeric: tabular-nums; flex: none; }
+.ops-seq-num-wide, .ops-seq-line { display: none; }
+.ops-seq-note { color: var(--ops-muted); font-size: 0.8rem; }
+@container (min-width: 640px) {
+  .ops-seq { gap: 0; }
+  .ops-seq-actors { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 10px; margin-bottom: 6px; position: relative; z-index: 1; }
+  .ops-seq-lifelines { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 10px; position: absolute; inset: 0; pointer-events: none; }
+  .ops-seq-lifelines span { justify-self: center; width: 0; border-left: 1px dashed var(--ops-zone-line); }
+  .ops-seq-steps { grid-template-columns: repeat(var(--n), minmax(0, 1fr)); column-gap: 10px; row-gap: 4px; position: relative; }
+  .ops-seq-step { display: contents; }
+  .ops-seq-msg {
+    position: relative; grid-column-end: auto; padding: 4px calc(100% / var(--k) / 2) 10px;
+    background: none; border: 0; border-radius: 0; text-align: center; gap: 0; z-index: 1;
+  }
+  .ops-seq-ends { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .ops-seq-text { display: flex; justify-content: center; align-items: baseline; gap: 6px; font-size: 0.8rem; padding: 0 6px; }
+  .ops-seq-num-wide { display: inline-grid; transform: translateY(2px); }
+  .ops-seq-line {
+    display: block; position: relative; height: 0; margin-top: 4px;
+    border-top: 1.25px solid var(--ops-edge);
+  }
+  .ops-seq-line::after {
+    content: ''; position: absolute; top: -5px; width: 8px; height: 8px;
+    border-top: 1.25px solid var(--ops-edge); border-right: 1.25px solid var(--ops-edge);
+  }
+  .ops-seq-right .ops-seq-line::after { right: 0; transform: rotate(45deg); }
+  .ops-seq-left .ops-seq-line::after { left: 0; transform: rotate(-135deg); }
+  .ops-seq-self .ops-seq-line { border-top-style: dashed; }
+  .ops-seq-self .ops-seq-line::after { display: none; }
+  .ops-seq-note {
+    margin: 6px auto 2px !important; padding: 4px 8px; max-width: 34ch; border-radius: 6px;
+    background: var(--ops-card); border: 1px solid var(--ops-hair); font-size: 0.76rem;
+  }
+}
+
+/* State: the states that move on, in order, then the ends set apart. */
+.ops-states { display: grid; gap: 14px; }
+.ops-states-flow { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ops-state { padding: 10px 12px; border-radius: 6px; background: var(--ops-card); border: 1px solid var(--ops-line); font-size: 0.86rem; line-height: 1.45; display: grid; gap: 4px; }
+.ops-state-name { font-weight: 600; }
+.ops-state-text { color: var(--ops-muted); }
+.ops-state-next { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; }
+.ops-state-next li { display: grid; grid-template-columns: 14px 1fr; gap: 6px; align-items: start; font-size: 0.82rem; color: var(--ops-muted); }
+.ops-state-arrow { width: 14px; height: 14px; margin-top: 2px; color: var(--ops-edge); }
+.ops-state-when { margin-right: 2px; }
+.ops-states-ends { display: grid; gap: 8px; }
+.ops-states-ends-label { font-family: var(--ops-eyebrow-font); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ops-muted); }
+.ops-states-ends ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
+.ops-state-end { box-shadow: none; }
+.ops-state-done { border-color: color-mix(in oklab, var(--ops-new) 40%, var(--ops-hair)); }
+.ops-state-done .ops-state-name { color: var(--ops-new); }
+.ops-state-stop { border-color: color-mix(in oklab, var(--ops-drop) 40%, var(--ops-hair)); }
+.ops-state-stop .ops-state-name { color: var(--ops-drop); }
+@container (min-width: 640px) {
+  .ops-states-flow { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+}
+
+/* Decision: a question, its answers, each an outcome or one more question. */
+.ops-ask { display: grid; gap: 10px; }
+.ops-ask-q { padding: 10px 12px; border-radius: 6px; background: var(--ops-card); border: 1px solid var(--ops-accent); background: color-mix(in oklab, var(--ops-accent) 9%, var(--ops-card)); font-size: 0.88rem; line-height: 1.45; }
+.ops-ask-title { font-weight: 600; }
+.ops-ask-text { color: var(--ops-muted); font-size: 0.84rem; }
+.ops-ask-branches { list-style: none; margin: 0; padding: 0 0 0 14px; display: grid; gap: 10px; border-left: 1px solid var(--ops-zone-line); margin-left: 12px; }
+.ops-ask-branch { display: grid; gap: 6px; align-content: start; }
+.ops-ask-branch > .ops-chip { justify-self: start; }
+.ops-ask-outcome { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--ops-line); background: var(--ops-card); font-size: 0.86rem; line-height: 1.45; }
+.ops-ask-outcome-lead { border: 0; background: none; padding: 0 2px; color: var(--ops-muted); font-size: 0.82rem; }
+@container (min-width: 640px) {
+  .ops-fig-stage > .ops-ask > .ops-ask-branches { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+}
+
+/* Compare: options side by side, rows aligned across them with subgrid; stacked on a phone. */
+.ops-compare { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.ops-compare-option { display: grid; gap: 8px; align-content: start; padding: 12px 14px; border-radius: 6px; border: 1px solid var(--ops-hair); background: var(--ops-card); font-size: 0.86rem; line-height: 1.45; }
+.ops-compare-pick { border-color: var(--ops-accent); background: color-mix(in oklab, var(--ops-accent) 9%, var(--ops-card)); }
+.ops-compare-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+.ops-compare-name { font-weight: 600; font-size: 0.94rem; }
+.ops-compare-text { color: var(--ops-muted); }
+.ops-compare-row { margin: 0; padding-top: 8px; border-top: 1px solid var(--ops-hair); display: grid; gap: 2px; }
+.ops-compare-row dt { color: var(--ops-muted); font-size: 0.76rem; font-weight: 600; }
+.ops-compare-row dd { margin: 0; }
+@container (min-width: 560px) {
+  .ops-compare { grid-template-columns: repeat(var(--n), minmax(0, 1fr)); grid-template-rows: repeat(var(--rows), auto); }
+  .ops-compare-option { grid-row: span var(--rows); grid-template-rows: subgrid; }
+}
+
+/* Timeline: moments on one track, down on a phone and across on a wide page. */
+.ops-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+.ops-moment { position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 12px; align-content: start; font-size: 0.86rem; line-height: 1.45; }
+.ops-moment:not(:last-child)::before { content: ''; position: absolute; left: 12.5px; top: 26px; bottom: -14px; width: 1px; background: var(--ops-zone-line); }
+.ops-moment-body { display: grid; gap: 2px; padding-top: 3px; align-content: start; }
+.ops-moment-when { font-weight: 700; color: var(--ops-accent); font-variant-numeric: tabular-nums; }
+.ops-moment-note { color: var(--ops-muted); font-size: 0.8rem; }
+@container (min-width: 640px) {
+  .ops-timeline { grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 14px; }
+  .ops-moment { grid-template-columns: 1fr; gap: 10px; }
+  .ops-moment:not(:last-child)::before { left: 26px; right: -14px; top: 12.5px; bottom: auto; width: auto; height: 1px; }
+}
+
+/* Exchange: a request and its response as two panels, side by side when there is room. */
+.ops-exchange { display: grid; gap: 6px; justify-items: stretch; }
+.ops-exchange-arrow { justify-self: center; width: 16px; height: 16px; color: var(--ops-muted); }
+.ops-exchange-status { margin-left: auto; }
+.ops-exchange-code {
+  margin: 0; padding: 10px 12px; background: none;
+  font-family: var(--ops-mono); font-size: 0.78rem; line-height: 1.55;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.ops-exchange-response .ops-exchange-code { background: var(--ops-code); border-radius: 0 0 10px 10px; }
+@container (min-width: 720px) {
+  .ops-exchange { grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr); align-items: start; gap: 10px; }
+  .ops-exchange-arrow { transform: rotate(-90deg); align-self: center; }
+}
+
+/* Widget: one panel at its natural size, beside the paragraph after it on a wide page. */
+.ops-widget .ops-fig-stage { display: grid; gap: 12px; padding: 16px; }
+@media (min-width: 1100px) {
+  .ops-widget { float: right; width: 320px; margin: 4px 0 12px 24px; }
+}
+
+/* Preview: a whole screen sized in em, its font set from the figure's width so it scales as one picture. */
+.ops-preview { container-type: inline-size; }
+.ops-preview-wide { display: none; }
+.ops-preview-crop { display: grid; gap: 14px; }
+@container (min-width: 600px) {
+  .ops-preview-wide { display: grid; gap: 18px; }
+  .ops-preview-crop { display: none; }
+}
+.ops-preview-screen {
+  --u: calc(100cqw / 62);
+  font-size: min(13px, var(--u));
+  display: grid; grid-template-columns: 11.5em minmax(0, 1fr);
+  border: 1px solid var(--ops-line); border-radius: 0.6em; overflow: hidden;
+  background: var(--ops-card); color: var(--ops-fg); line-height: 1.4;
+}
+.ops-preview-side { padding: 1em 0.7em; border-right: 1px solid var(--ops-hair); background: var(--ops-soft); display: grid; gap: 0.9em; align-content: start; }
+.ops-preview-group { display: grid; gap: 0.15em; }
+.ops-preview-group-label { padding: 0 0.6em 0.2em; font-size: 0.75em; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ops-muted); }
+.ops-preview-item { display: flex; align-items: center; gap: 0.55em; padding: 0.3em 0.6em; border-radius: 0.45em; font-size: 0.9em; color: var(--ops-muted); white-space: nowrap; }
+.ops-preview-item svg { width: 1.1em; height: 1.1em; flex: none; }
+.ops-preview-item-on { background: var(--ops-card); color: var(--ops-fg); font-weight: 600; box-shadow: 0 0 0 1px var(--ops-hair); }
+.ops-preview-item-on svg { color: var(--ops-accent); }
+.ops-preview-page { padding: 1.2em 1.4em 1.4em; display: grid; gap: 0.35em; align-content: start; min-width: 0; }
+.ops-preview-crumbs { font-size: 0.82em; color: var(--ops-muted); }
+.ops-preview-title { font-size: 1.35em; font-weight: 650; }
+.ops-preview-text { color: var(--ops-muted); font-size: 0.92em; }
+.ops-preview-body { margin-top: 0.8em; display: grid; gap: 1.1em; align-items: start; }
+.ops-preview-body-split { grid-template-columns: minmax(0, 1fr) 19em; }
+.ops-preview-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+.ops-preview-table th { text-align: left; font-weight: 600; font-size: 0.86em; color: var(--ops-muted); padding: 0.5em 0.6em; border-bottom: 1px solid var(--ops-hair); }
+.ops-preview-table td { padding: 0.6em; border-bottom: 1px solid var(--ops-hair); font-variant-numeric: tabular-nums; }
+.ops-preview-table td:first-child { display: flex; align-items: center; gap: 0.5em; font-weight: 550; }
+.ops-preview-row-on td { background: var(--ops-accent-soft); }
+.ops-preview-table .ops-chip { font-size: 0.85em; }
+.ops-preview-screen .ops-pin { width: 1.45em; height: 1.45em; font-size: 0.78em; }
+.ops-preview-panel .ops-ui { font-size: 0.92em; box-shadow: none; }
+.ops-preview-panel .ops-ui-bar { font-size: 0.85em; }
+.ops-preview-panel .ops-ui-icon { width: 1.1em; height: 1.1em; }
+.ops-preview-panel .ops-ui-btn { font-size: 0.9em; padding: 0.3em 0.9em; }
+.ops-preview-panel .ops-ui-field { grid-template-columns: minmax(6em, 38%) 1fr; }

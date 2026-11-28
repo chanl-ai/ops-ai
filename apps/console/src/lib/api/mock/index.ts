@@ -18,6 +18,7 @@ import type {
   Workflow,
   WorkflowDetail,
   WorkflowGraph,
+  InstructionSectionList,
 } from '@/lib/types/domain';
 import type { ConnectionActivity, ConnectionRef, Dependant } from '@/lib/types/integrations';
 
@@ -37,6 +38,7 @@ import { createOAuthMock } from './oauth';
 import { currentMockUser, registerMockUser, setMockPassword, verifyMockStepUp } from './auth';
 import { createAccountMock } from './sessions';
 import { createMockWorkspacePolicies } from './workspace-policies';
+import { createMockModelAliases, mockKnobs, mockSettingProblem } from './model-aliases';
 import { createMockProviderConnections } from './provider-connections';
 import { createMockProviderKeys } from './provider-keys';
 import { createMockSignInProviders } from './sign-in-providers';
@@ -44,6 +46,7 @@ import { createMockWorkspaceTeams } from './workspace-teams';
 import { createToolModulesMock } from './tool-modules';
 import { createEgressMock } from './egress';
 import { createChannelsMock } from './channels';
+import { createSchedulesMock } from './schedules';
 import { createEngineMock } from './engine';
 import { createConnectionsMock } from './connections';
 import { createWidgetsMock } from './widgets';
@@ -59,7 +62,9 @@ import { createAssuranceMock } from './assurance';
 import { createAgentPublishMock, createAgentVersionStore } from './agent-publish';
 import { createMcpLinksMock } from './mcp-links';
 import { createReferencesMock } from './references';
-import { composeBrief, publishCheckOf, SEED_BRIEF } from './references/agent-brief';
+import { sectionProblem, titled } from '@/lib/brief-sections';
+import { checkedSectionList, defaultSectionList } from './references/agent-instruction-sections';
+import { composeBrief, neverSection, publishCheckOf, SEED_BRIEF } from './references/agent-brief';
 import { createAgentWrappers } from './agent-wrappers';
 import { createWikiMock } from './wiki';
 import { auditSink } from './governance';
@@ -83,13 +88,17 @@ function pushVersion(list: Version[], version: number, note: string, changes: st
 
 /** In-memory implementation of OpsApi for demos and UI review. Transport behaviour lives in ./runtime. */
 export function createMockApi(): OpsApi {
+  const mockAliases = createMockModelAliases();
+  const mockKeys = createMockProviderKeys();
+  // The workspace's saved agent instruction list; none means the default.
+  let savedSections: InstructionSectionList | null = null;
   const policies: GatePolicy[] = F.POLICIES.map((p) => ({ ...p, workflowName: '' }));
   const workflows = F.WORKFLOWS.map((w) => ({ ...w }));
   const graphs: Record<string, WorkflowGraph> = Object.fromEntries(Object.entries(SEED_GRAPHS).map(([k, g]) => [k, { workflowId: k, ...g }]));
   const agents = F.AGENTS.map((a) => ({ ...a, guardrails: { ...a.guardrails } }));
   // One agent is written as a brief; the others are legacy text, as agents saved before briefs are.
   const briefAgent = agents.find((a) => a.id === 'ag_dispute');
-  if (briefAgent) Object.assign(briefAgent, { brief: SEED_BRIEF, promptMode: 'brief' as const, role: SEED_BRIEF.purpose, instructions: composeBrief(SEED_BRIEF) });
+  if (briefAgent) Object.assign(briefAgent, { brief: SEED_BRIEF, promptMode: 'brief' as const, role: SEED_BRIEF.purpose, instructions: composeBrief(briefAgent.name, SEED_BRIEF, defaultSectionList().sections) });
   // Which agent version is published; graph pins and agent rows read it, the agent publish flow writes it.
   const agentStore = createAgentVersionStore(agents);
   // Agent wrapper workflows and console chat deployments; assigned once the stores they read exist, read at request time.
@@ -166,7 +175,13 @@ export function createMockApi(): OpsApi {
       policy: { id: p.id, name: p.name, condition: p.condition, reviewers: p.reviewers, sla: p.sla, onTimeout: p.onTimeout, fourEyes: p.fourEyes },
       slaMinutes: s.slaMinutes,
       assignee: s.assignee,
-      approvals: [],
+      approvals: s.approvals ?? [],
+      approvalsNeeded: s.approvalsNeeded ?? (p.fourEyes ? 2 : 1),
+      caseId: s.caseId,
+      caseTitle: s.caseTitle,
+      actionLabel: s.actionLabel,
+      consequence: s.consequence,
+      actionFields: s.actionFields,
       status: s.status,
       createdAt: F.reviewCreatedAt(s.createdMinutesAgo),
       decidedAt: isOpen(s as unknown as Review) ? undefined : F.reviewCreatedAt(s.createdMinutesAgo - 20),
@@ -178,7 +193,14 @@ export function createMockApi(): OpsApi {
 
   // Approving a call whose operation needs two approvers asks for a step-up, as agents-service does.
   const needsStepUp = (r: Review) => !!r.actionTool && F.TWO_APPROVER_TOOLS.has(r.actionTool);
-  const withAgentName = (r: Review): Review => ({ ...r, agentName: agents.find((a) => a.slug === r.agentSlug)?.name, stepUp: needsStepUp(r) });
+  // What the service sends per person (hitl_facade.with_rights), so the console reads rights and never works them out:
+  // a task nobody decides carries none, and Return is offered where a task has someone to go back to.
+  const rightsOf = (r: Review): Pick<Review, 'canAssign' | 'canReassign' | 'canReturn'> => {
+    const decides = isOpen(r) && r.canDecide !== false;
+    const returnable = (r.kind === 'publish_request' || r.kind === 'agent_publish' || r.kind === 'skill_publish' || r.kind === 'template_submission' || !r.runId) && r.kind !== 'egress_host';
+    return { canAssign: decides && r.assignee !== me, canReassign: decides && !!r.assignee, canReturn: r.canReturn ?? (decides && returnable) };
+  };
+  const withAgentName = (r: Review): Review => ({ ...r, ...rightsOf(r), agentName: agents.find((a) => a.slug === r.agentSlug)?.name, stepUp: needsStepUp(r) });
   /** 422 unless the token came from a re-authentication by the signed-in person in the last 5 minutes. */
   const requireStepUp = (token?: string) => {
     const v = verifyMockStepUp(token ?? '');
@@ -311,7 +333,7 @@ export function createMockApi(): OpsApi {
     const controls = { channels: ['voice', 'chat', 'email', 'api'] as Channel[], guardrails: ['redactPii', 'maxToolCallsPerTurn', 'whenUnsure', 'blockedTopics'] as (keyof AgentGuardrails)[], evals: true };
     const uses = { tools: a.toolIds.length, knowledgeBases: a.collections.length, skills: a.brief ? 1 : 0, agents: 0, workflows: 0 };
     // Changes with every save, as the service's digest of the stored agent does.
-    return { ...a, digest: digestOf(JSON.stringify(a)), brief: a.brief ?? null, promptMode: a.promptMode ?? null, patterns: a.patterns ?? { thinking: 'default' as const, parallelReads: true }, uses, limits: { ...limits, publicKeyMay: [...limits.publicKeyMay] }, controls, staleToolIds, publishedVersion, availability: a.paused ? ('paused' as const) : publishedVersion !== null ? ('published' as const) : ('not_published' as const), usedIn, workflowIds: usedIn.map((u) => u.workflowId), wrapperWorkflowId: wrappers?.wrapperOf(a.id) };
+    return { ...a, digest: digestOf(JSON.stringify(a)), brief: a.brief ? { ...a.brief, sections: a.brief.sections ?? [] } : null, promptMode: a.promptMode ?? null, patterns: a.patterns ?? { thinking: 'default' as const, parallelReads: true }, uses, limits: { ...limits, publicKeyMay: [...limits.publicKeyMay] }, controls, staleToolIds, publishedVersion, availability: a.paused ? ('paused' as const) : publishedVersion !== null ? ('published' as const) : ('not_published' as const), usedIn, workflowIds: usedIn.map((u) => u.workflowId), wrapperWorkflowId: wrappers?.wrapperOf(a.id) };
   };
 
   const policyRow = (p: GatePolicy): GatePolicy => ({ ...p, workflowName: wfName(p.workflowId) });
@@ -426,6 +448,8 @@ export function createMockApi(): OpsApi {
       policy: PUBLISH_POLICY,
       slaMinutes: 480,
       approvals: [],
+      // A publish request is the one kind a decider returns to who asked (the service's canReturn).
+      canReturn: true,
       status: 'pending',
       createdAt: new Date().toISOString(),
       reasoning: changes.length ? changes : ['Only positions changed'],
@@ -790,8 +814,15 @@ export function createMockApi(): OpsApi {
           if (baseVersion !== a.version || baseDigest !== digestOf(JSON.stringify(a))) throw new ApiError('The draft was saved after it was read; reload and try again.', 409, undefined, 'stale_base', { version: a.version, savedBy: me, savedAt: a.updatedAt });
           // As the service answers: a brief agent's prompt is written from its brief, so text sent without one is refused.
           if (a.promptMode === 'brief' && !fields.brief && fields.promptMode !== 'full' && (fields.instructions !== undefined || fields.role !== undefined)) throw new ApiError('This agent’s prompt is written from its brief. Edit the brief, or switch to plain text.', 422, undefined, 'brief_owns_prompt');
-          if (fields.brief) Object.assign(fields, { role: fields.brief.purpose, instructions: composeBrief(fields.brief), promptMode: fields.promptMode ?? 'brief' });
-          else if (fields.promptMode === 'brief' && a.brief) Object.assign(fields, { role: a.brief.purpose, instructions: composeBrief(a.brief) });
+          if (fields.brief) {
+            // As the service answers: sections that break a rule are refused whole, and a menu section is saved under its fixed title.
+            const list = savedSections ?? defaultSectionList();
+            const problem = sectionProblem(fields.brief.sections ?? [], list.sections, list.customMax);
+            if (problem) throw new ApiError(problem, 422, undefined, 'validation_failed');
+            fields.brief = { ...fields.brief, sections: (fields.brief.sections ?? []).map((x) => titled(x, list.sections)) };
+            Object.assign(fields, { role: fields.brief.purpose, instructions: composeBrief(a.name, fields.brief, list.sections), promptMode: fields.promptMode ?? 'brief' });
+          } else if (fields.promptMode === 'brief' && a.brief) Object.assign(fields, { role: a.brief.purpose, instructions: composeBrief(a.name, a.brief, (savedSections ?? defaultSectionList()).sections) });
+          if (fields.modelSettings) mockSettingProblem(mockAliases.rows(), fields.model ?? a.model, fields.modelSettings);
           if (fields.toolIds) for (const t of tools) t.grantedAgentIds = fields.toolIds.includes(t.id) ? [...new Set([...t.grantedAgentIds, aid])] : t.grantedAgentIds.filter((x) => x !== aid);
           const list = versionsOf(aid, a.version, 'agent');
           // One draft: rewrite the newest version unless it is published or a publish request names it.
@@ -826,8 +857,18 @@ export function createMockApi(): OpsApi {
       promptView: (aid) =>
         respond(() => {
           const a = agentOr404(aid);
-          const never = a.brief?.never.length ? `\n\n# Never\n${a.brief.never.map((r) => `- ${r}`).join('\n')}` : '';
-          return { version: a.version, text: `${a.instructions}${never}` };
+          return { version: a.version, text: `${a.instructions}${neverSection(a.brief)}` };
+        }),
+      instructionSections: () => respond(() => structuredClone(savedSections ?? defaultSectionList())),
+      saveInstructionSections: (list) =>
+        respond(() => {
+          savedSections = checkedSectionList(list);
+          return structuredClone(savedSections);
+        }),
+      resetInstructionSections: () =>
+        respond(() => {
+          savedSections = null;
+          return defaultSectionList();
         }),
       draftBrief: (aid, description) =>
         respond(() => {
@@ -871,7 +912,69 @@ export function createMockApi(): OpsApi {
         respond(() => tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, name: t.name, server: t.module ?? t.system, moduleId: null, description: t.description, access: t.access, inputSchema: {}, requiresApproval: t.access !== 'read' || !!t.requiresReview, approval: t.requiresReview ? 'Review before it runs' : null }))),
       // The mock's apps have no catalog to add from, so nothing waits on a Tools tab.
       toolOptions: (p) => respond(() => ({ ...pageOptions(tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, label: t.name, hint: t.module ?? t.system })), p), notAdded: [] })),
+      // The mock answers as agents-service does: apps from the tools' systems (all connected, nothing left to turn on), a
+      // search matching an app's name or its tools' words with the matches sorted, a group `other` for the agent's grants
+      // nothing offers (a paused agent's), `granted` keeping the apps holding a tool (true) or still missing one (false).
+      toolApps: (aid, p) =>
+        respond(() => {
+          const held = new Set(agentOr404(aid).toolIds);
+          const q = (p.search ?? '').trim().toLowerCase();
+          const offered = tools.filter((t) => t.enabled && !t.workflow);
+          const text = (t: Tool) => `${t.name} ${t.description}`.toLowerCase();
+          const sorted = (l: Tool[]) => [...l].sort((x, y) => x.name.toLowerCase().localeCompare(y.name.toLowerCase()) || x.id.localeCompare(y.id));
+          const groups = [...new Set(offered.map((t) => t.system))].map((name) => ({
+            id: `app:${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+            name,
+            kind: 'custom' as const,
+            own: offered.filter((t) => t.system === name),
+          }));
+          const unoffered = [...held].filter((id) => !offered.some((t) => t.id === id) && /^(agent|workflow):/.test(id));
+          const rows = [
+            ...groups,
+            ...(unoffered.length ? [{ id: 'other', name: 'Other', kind: 'other' as const, own: unoffered.map((id) => ({ id, name: id, description: '', access: 'unknown' }) as unknown as Tool) }] : []),
+          ]
+            .filter((g) => !q || g.name.toLowerCase().includes(q) || g.own.some((t) => text(t).includes(q)))
+            .map((g) => ({
+              id: g.id,
+              name: g.name,
+              kind: g.kind,
+              connected: true,
+              appState: g.kind === 'other' ? null : 'connected',
+              appGroup: g.kind === 'other' ? null : 'on',
+              signIn: g.kind === 'other' ? null : 'Team account',
+              toolsTotal: g.own.length,
+              toolsOffered: g.own.length,
+              toolsGranted: g.own.filter((t) => held.has(t.id)).length,
+              notAdded: 0,
+              matches: q ? sorted(g.own.filter((t) => text(t).includes(q))).slice(0, 5).map((t) => ({ id: t.id, label: t.name, access: t.access, granted: held.has(t.id) })) : [],
+            }))
+            .filter((a) => p.granted === undefined || (p.granted ? a.toolsGranted > 0 : a.toolsGranted < a.toolsOffered))
+            .sort((x, y) => x.name.toLowerCase().localeCompare(y.name.toLowerCase()) || x.id.localeCompare(y.id));
+          const limit = p.limit ?? 25;
+          const offset = Number(p.cursor ?? 0) || 0;
+          return { data: rows.slice(offset, offset + limit), nextCursor: offset + limit < rows.length ? String(offset + limit) : null };
+        }),
+      toolAppTools: (aid, appId, p) =>
+        respond(() => {
+          const held = new Set(agentOr404(aid).toolIds);
+          const q = (p.search ?? '').trim().toLowerCase();
+          const offered = tools.filter((t) => t.enabled && !t.workflow);
+          const slug = (t: Tool) => `app:${t.system.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+          const own =
+            appId === 'other'
+              ? [...held].filter((id) => !offered.some((t) => t.id === id) && /^(agent|workflow):/.test(id)).map((id) => ({ id, label: id, description: '', access: 'unknown', requiresApproval: false, approval: null }))
+              : offered.filter((t) => slug(t) === appId).map((t) => ({ id: t.id, label: t.name, description: t.description, access: t.access as string, requiresApproval: t.access !== 'read' || !!t.requiresReview, approval: t.requiresReview ? 'Review before it runs' : null }));
+          if (!own.length) notFound('App');
+          const rows = own
+            .filter((t) => `${t.label} ${t.description}`.toLowerCase().includes(q) && (p.granted === undefined || held.has(t.id) === p.granted))
+            .sort((x, y) => x.label.toLowerCase().localeCompare(y.label.toLowerCase()) || x.id.localeCompare(y.id))
+            .map((t) => ({ ...t, granted: held.has(t.id) }));
+          const limit = p.limit ?? 25;
+          const offset = Number(p.cursor ?? 0) || 0;
+          return { data: rows.slice(offset, offset + limit), nextCursor: offset + limit < rows.length ? String(offset + limit) : null };
+        }),
       modelAliases: () => respond(() => F.MODEL_ALIASES.map((a) => ({ ...a }))),
+      modelAliasKnobs: (name) => respond(() => mockKnobs(mockAliases.rows(), name)),
       test: (aid, message) => respond(() => ({ reply: `${agents.find((a) => a.id === aid)?.name ?? 'The agent'} would answer “${message}” here.`, tookMs: 0, citations: [], toolCalls: [] })),
       bulkUpdate: (ids, patch) =>
         respond(() =>
@@ -1207,13 +1310,15 @@ export function createMockApi(): OpsApi {
     workspacePolicies: createMockWorkspacePolicies(),
     workspaceTeams: createMockWorkspaceTeams(),
     signInProviders: createMockSignInProviders(),
-    providerKeys: createMockProviderKeys(),
-    providerConnections: createMockProviderConnections(),
+    providerKeys: mockKeys,
+    providerConnections: createMockProviderConnections(mockKeys),
+    modelAliases: mockAliases,
     toolModules: toolModules.api,
     egress: createEgressMock({ me: F.CURRENT_USER.name, inUse: toolModules.hostsInUse }),
     connections: createConnectionsMock({ me: F.CURRENT_USER.name }),
     engine: createEngineMock(),
     channels: createChannelsMock(),
+    schedules: createSchedulesMock(),
     integrations: integrationsApi,
     files: files.api,
     skills: skills.api,

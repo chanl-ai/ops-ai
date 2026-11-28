@@ -2,10 +2,39 @@
 
 Status: current. Checked against the release's models service and agents service.
 
-Every model call in Ops AI, from an agent's turn, a workflow's AI step or a document read, goes through one internal
-service: the AI gateway (models-service). It knows which key is calling, what that key may still spend, which model a
-name points at, and how sensitive the data is that the model may receive. Services hold a model key; none holds your
-provider's credential.
+This page shows you how to point every agent at your own model endpoint, and how to cap what each agent may spend and
+which data it may receive.
+
+## Why one provider key per agent is hard to manage
+
+If your team gives each agent its own provider key, you cannot easily tell what one chat cost, which agent used up the
+budget, or whether a confidential document went to a model that was never cleared for it. Teams also want different
+models for different work. A lending team may want a private model for borrower files, while a marketing team is happy
+with a cheaper public one. And when a key leaks, rotating it means finding every agent that held it.
+
+Ops AI avoids this by sending every model call through one internal service, the AI gateway (models-service). That
+covers an agent's turn, a workflow's AI step and a document read alike. For each call, the gateway knows which key is
+calling, what that key may still spend, which model a name points at, and how sensitive the data is that the model may
+receive. Each service holds a model key, and no service holds your provider's credential.
+
+## How to set it up
+
+<!-- site: steps -->
+1. **Connect your endpoint.** Your operator binds an alias such as `default` to a model on any OpenAI-compatible
+   endpoint, and records its price and the highest data level it may receive.
+2. **Save the provider's key once.** Your account admin saves it under **Settings › Model providers**. No team can see
+   it after that.
+3. **Issue a capped key per caller.** Agents, documents and each workflow get their own model key, each with its own
+   budget and rate limit.
+4. **Read the call log.** Every call records its tokens, cost, latency and outcome. The log never stores the prompt or
+   the answer text.
+
+## Trying it before you have a provider
+
+You can try the platform without a provider or a key, because the release package includes a
+[test model](#the-test-model) that answers from fixed rules. When you are ready for a real endpoint, your operator binds
+the alias with the connect-model command ([Connect a model](../deploy/compose.md#connect-a-model)). The command prints a
+model key once, so save it when it appears.
 
 ```mermaid
 flowchart TB
@@ -23,14 +52,21 @@ flowchart TB
   S --> LOG[("Call log: tokens, cost, latency, outcome.<br/>No prompt or answer text")]:::store
 ```
 
-*A refusal at any check answers with a code (for example `key_budget_exhausted`) and is logged like a call.*
+*When a call fails any of these checks, the gateway answers with a code (for example `key_budget_exhausted`) and logs
+the refusal in the same way as a call.*
 
 ## Aliases
 
 An alias is a name such as `default` that agents, workflows and document types use instead of a provider's model id.
-Each alias has versions; the newest current version serves. A version names the provider connection, the provider's
-model, its price per million input and output tokens, the highest data sensitivity it is cleared for, and whether it may
-receive images and files. Moving an alias to another model is a new version; no agent changes.
+Each alias has versions, and the newest current version is the one that serves calls. A version records:
+
+- the provider connection and the provider's model
+- its price per million input and output tokens
+- the highest data sensitivity it is cleared for
+- whether it may receive images and files
+
+To move an alias to another model, you add a new version. No agent needs to change, because agents refer to the alias
+rather than the model.
 
 | Item | Status |
 |---|---|
@@ -39,9 +75,10 @@ receive images and files. Moving an alias to another model is a new version; no 
 | Embeddings through the same keys, budgets and clearance as chat (`POST /v1/models/embeddings`) | Built |
 | One embedding model per environment (`OPS_EMBEDDING_ALIAS`, `OPS_EMBEDDING_WIDTH`, at most 1,998 wide) | Built |
 | Binding an alias at install with the connect-model command | Built |
-| Anthropic's own API as a provider | Planned: a connection can be registered, but the gateway does not serve it yet |
+| OpenAI, Anthropic, Google Gemini, Azure OpenAI and Amazon Bedrock as provider types, each with its own fields | Built: the console's Connect a provider lists them from the registry |
 | Failover between providers | Planned |
-| A console page for aliases and keys | Planned: today the operator manages them with the connect-model command |
+| Live calls to Amazon Bedrock, Google Gemini and Anthropic | **Unverified**: these adapters were tested against fakes only and never called with a real key; try one with a real key before relying on it |
+| A console page for connections, aliases and keys | Built: Settings › Workspace › Models (Connections, Aliases; only the workspace owner changes aliases, since they apply to every team); an agent's Model dialog offers only the settings its alias's model takes, with defaults and Reset |
 
 ## Keys, budgets and spend caps
 
@@ -58,9 +95,10 @@ receive images and files. Moving an alias to another model is a new version; no 
 
 ## Data sensitivity
 
-Each alias version is cleared for a level: public, internal, confidential or restricted. A call may name the level of
-the data it carries, and the gateway refuses it when the alias is not cleared for that level. Images and file parts are
-refused by an alias not cleared for them, and every call records how many it carried.
+Each alias version is cleared for one level: public, internal, confidential or restricted. A call may name the level of
+the data it carries, and the gateway refuses the call when the alias is not cleared for that level. The same applies to
+images and file parts: an alias that is not cleared for them refuses them. Every call records how many images and files
+it carried.
 
 | Item | Status |
 |---|---|
@@ -68,12 +106,25 @@ refused by an alias not cleared for them, and every call records how many it car
 | Callers marking each call with the level of its data | Planned: today every call is treated as internal, so an alias must be cleared for internal to serve |
 | Page images for document reads only where the document type, the team's policy and the alias all allow them | Built |
 
+## When it is working
+
+Once the gateway is set up, your agents answer through the alias `default`. When you move that alias to another model,
+you add one new version and no agent changes. When a key reaches its cap, the gateway refuses the next call with
+`key_budget_exhausted` and logs it. If a reviewer asks what a chat cost, you can answer from the call log, and the
+provider's key is held in one place.
+
+## The risk of giving agents provider keys directly
+
+Without the gateway, each agent holds a provider key. A single leaked key then exposes the whole provider account. You
+also cannot cap spend per caller, and nothing checks whether confidential data is going to a model that was never
+cleared for it.
+
 ## The test model
 
-The release package includes a stand-in model endpoint that speaks the same OpenAI-compatible API and answers from
-fixed rules: plain text, or a tool call when a rule matches the message. It calls no provider and costs nothing. Use
-it to try the platform before your model endpoint is ready, and for automated checks; it is not for production. The
-automated use cases of each release run on it, so no real model call is made in testing.
+The release package includes a stand-in model endpoint. It speaks the same OpenAI-compatible API and answers from fixed
+rules, either with plain text or with a tool call when a rule matches the message. Because it calls no provider, it
+costs nothing. Use it to try the platform before your model endpoint is ready, and for automated checks, but not in
+production. Each release's automated use cases run on it, so testing makes no real model calls.
 
 | It answers | When |
 |---|---|
@@ -82,4 +133,5 @@ automated use cases of each release run on it, so no real model call is made in 
 | The gist of a tool's result | The last message is a tool's result and no rule follows it |
 | A sentence naming the agent and the message | Anything else |
 
-A new tool needs no rule to be tried: `call <tool> {json}` in a chat with an agent that holds it.
+You can try a new tool without writing a rule for it. Open a chat with an agent that holds the tool and type
+`call <tool> {json}`.

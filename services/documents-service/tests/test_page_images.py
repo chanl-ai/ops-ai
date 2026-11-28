@@ -26,11 +26,14 @@ TYPE = {"id": "supplier_invoice", "name": "Supplier invoice", "fields": FIELDS}
 
 class FakeModels:
     """models-service's completions: answers each field with OTHER's printed value, keeps every request, and refuses an
-    image part with 403 images_not_cleared when the alias is not cleared."""
+    image part with 403 images_not_cleared when the alias is not cleared. `bound` False answers only the `default`
+    alias, as models-service does before an `extract` alias is added."""
 
-    def __init__(self, *, cleared: bool = True) -> None:
+    def __init__(self, *, cleared: bool = True, bound: bool = True) -> None:
         self.cleared = cleared
+        self.bound = bound
         self.calls: list[tuple[str, int]] = []
+        self.aliases: list[str] = []
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
@@ -38,6 +41,10 @@ class FakeModels:
         parts = cast(list[dict[str, Any]], content) if isinstance(content, list) else []
         images = sum(1 for p in parts if p.get("type") == "image_url")
         self.calls.append((request.headers["X-Step-Id"], images))
+        self.aliases.append(body["model"])
+        if not self.bound and body["model"] != "default":
+            error = {"code": "alias_not_found", "message": f"No alias {body['model']}."}
+            return httpx.Response(404, json={"success": False, "error": error})
         if images and not self.cleared:
             error = {"code": "images_not_cleared", "message": "not cleared"}
             return httpx.Response(403, json={"success": False, "error": error})
@@ -183,3 +190,20 @@ async def test_an_alias_not_cleared_for_images_reads_on_text_only_and_says_why(m
         got = await read(s, c, scan(form(OTHER, INVOICE_LABELS)), ocr=True)
     assert got["status"] == "done" and models.calls[:2] == [("extract", 1), ("extract", 0)], models.calls
     assert "not cleared for page images" in got["imageRefused"] and "imageCalls" not in got, got
+
+
+@pytest.mark.parametrize("cleared", [True, False])
+async def test_a_read_on_the_default_alias_names_that_alias_for_its_images(make: Make, cleared: bool) -> None:
+    needs_ocr()
+    models = FakeModels(cleared=cleared, bound=False)
+    s = served(make, models, Policy(True))
+    async with s.client as c:
+        await typed(c)
+        got = await read(s, c, scan(form(OTHER, INVOICE_LABELS)), ocr=True)
+    assert got["status"] == "done", got
+    if cleared:
+        assert {c["alias"] for c in got["imageCalls"]} == {"default"}, got
+    else:
+        assert "alias default is not cleared" in got["imageRefused"], got
+        # The text-only ask goes straight to the alias that answered, not back through the unbound one.
+        assert models.aliases[:3] == ["extract", "default", "default"], models.aliases

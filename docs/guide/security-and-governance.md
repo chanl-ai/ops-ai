@@ -2,9 +2,48 @@
 
 Status: current. Checked against the release's sign-in, gateway, policy and storage code.
 
-Ops AI is built so that software can draft any change and only a person can let one through. The controls below are
-layered: who you are (sign-in), what you may do in a team (roles), what a single write needs (approvals), where a call
-may go (the gateways and the allow-list), and what is kept as evidence (audit).
+When your risk review looks at an agent, it will want to know who signed in, what they were allowed to do, what an
+action that changes data needed before it ran, where a call was allowed to go and what was kept as evidence. This page
+shows you where each of those answers lives in Ops AI.
+
+## The pilot works, then the risk review asks
+
+Picture a card team whose agent drafts dispute credits well. Then the reviewer asks who approved the credit, what the
+agent could reach, which hosts it called and where the record is kept. A claims team and a lender will be asked the
+same questions. If the answers live in each agent's code, every new use case has to wait for its own review. Worse, a
+single unreviewed change to a customer's account can be enough to end the programme.
+
+Ops AI is designed so that software can draft any change, but only a person can let it through. The controls build on
+one another:
+
+- Sign-in establishes who you are.
+- Roles set what you may do in a team.
+- Approvals decide what a single action that changes data needs before it runs.
+- The gateways and the allow-list control where a call may go.
+- The audit records keep the evidence.
+
+## Setting up the controls
+
+<!-- site: steps -->
+1. **Sign people in** with your identity provider, or with a password if you have no provider.
+2. **Give each person a role in each team.** The role's grid says what that person may do.
+3. **Choose which actions wait** for a person, and how many approvers each one needs.
+4. **Allow only the hosts your agents need.** The outbound list starts empty, so nothing is reachable until you add a host.
+5. **Hand the reviewer the evidence.** Together, the audit log, the tool call log and the run journal show who did what, and when.
+
+## Check your own access
+
+Start by seeing who you are signed in as and what your role allows, then look at which open tasks are waiting for a
+decision.
+
+```bash
+opsai people me
+opsai people roles
+opsai tasks list --view open
+```
+
+In the console you will find the same views in three places. **Govern › Access** shows roles and tool access,
+**Govern › Policies** holds approvals and the allow-list, and **Settings › Approvals** holds the approval settings.
 
 ## Sign-in and SSO
 
@@ -18,15 +57,17 @@ may go (the gateways and the allow-list), and what is kept as evidence (audit).
 | Fresh sign-in for sensitive decisions (step-up) | A payment approval needs a sign-in less than five minutes old, by password or through the same identity provider; the decision keeps a fingerprint of it | Built |
 | Invites | An admin invites by email; the invite holds a hashed single-use token; a person who already has an account signs in first | Built |
 
-Sessions: platform-service signs a short-lived access token (Ed25519, 15 minutes) and renews it with a rotating
-refresh token for a session of 8 hours. A reused refresh token is refused and recorded in the audit log. Every service
-checks tokens itself against platform-service's published public keys.
+Once you are signed in, platform-service issues you a short-lived access token, signed with Ed25519 and valid for 15
+minutes. It renews that token with a rotating refresh token, so your session lasts 8 hours in total. If a refresh token
+is ever used a second time, it is refused and the attempt is recorded in the audit log. Every service checks tokens for
+itself against the public keys that platform-service publishes, rather than trusting another service's word.
 
 ## Roles
 
-A person holds a role in each team they belong to. A role is a grid of 19 areas (agents, workflows, tools, secrets and
-egress, files, documents, reviews, cases, settings, access, audit and others) by 8 actions (view, create, edit, publish,
-delete, run, decide, manage). Every check in every service goes through that grid; no code checks a role's name.
+Each person holds a role in every team they belong to. A role is a grid that crosses 19 areas (agents, workflows,
+tools, secrets and egress, files, documents, reviews, cases, settings, access, audit and others) with 8 actions (view,
+create, edit, publish, delete, run, decide, manage). Every permission check in every service reads that grid. Because
+no code looks at a role's name, what a role may do is always what its grid says.
 
 | Role | What it may do in the team |
 |---|---|
@@ -58,13 +99,13 @@ delete, run, decide, manage). Every check in every service goes through that gri
 
 ### Approval settings
 
-Every approval behaviour is a setting or a permission. The full list, with each setting's default, who changes it,
-where, and the code that owns it, is in [Roles and permissions › Approvals](../architecture/roles-and-permissions.md#approvals).
+Every way approvals behave is controlled by a setting or a permission. For the full list, with each setting's default,
+who can change it, where they change it and the code that owns it, see [Roles and permissions › Approvals](../architecture/roles-and-permissions.md#approvals).
 
 ## The tool gateway
 
-Every call to one of your systems, read or write, goes through the tools service. Agents and workflows hold no
-credentials and open no connections of their own.
+Every call to one of your systems, whether it reads data or changes it, goes through the tools service. Agents and
+workflows hold no credentials of their own and cannot open their own connections, so each call meets the same checks.
 
 ```mermaid
 flowchart TB
@@ -82,13 +123,14 @@ flowchart TB
   E -.->|refused| X
 ```
 
-*A refusal lists every condition that failed. An agent sees it as a tool error and can explain it to the person.*
+*When a call is refused, the refusal lists every condition that failed. The agent receives it as a tool error, so it
+can explain to the person what stopped the call.*
 
 | Control | What holds | Status |
 |---|---|---|
 | Registry | Operations come from tool modules: imported from OpenAPI 3.0 or 3.1, discovered from an MCP server, or written by a builder. A module's major change opens a Security review; calls keep the published shape until the new version is published | Built |
 | Connections | How the platform signs in to a system, one account at a time: API key, basic or bearer, OAuth client credentials, OAuth authorization code with PKCE, either OAuth kind proving the app with a signed client assertion instead of a secret, a signed service-account JWT grant (DocuSign, Google), client certificate (mutual TLS). The signing key is sealed like a client secret and never read back; reads show the certificate's thumbprint and expiry. Tokens are stored encrypted and refreshed one at a time | Built |
-| Each person signing in to a system with their own account | Tools a person runs, and agents acting for them, use that person's own account of the App; a run waiting for an account it does not have becomes a Human Task ([Apps](apps.md#accounts-the-teams-and-your-own)) | Built |
+| Each person signing in to a system with their own account | Tools a person runs, and agents acting for them, use that person's own account of the App; a run waiting for an account it does not have becomes a Human Task ([Apps](apps.md#who-signs-in-the-teams-login-or-each-persons)) | Built |
 | Test and live runs | Live runs and chats use an app's default account; test runs use its test account when it has one. A write on a test account never waits, whatever the team holds; a test run's write on a live account meets the rules a live write meets. A test run with a saved mock answer for its input gets that answer instead | Built |
 | Ask before changes | A newly added app has every tool on. When a team asks the person in the chat, each write of an app asks that person first with Allow, Deny and Allow for this chat; only the person who asked answers it. A write on a test account never asks. Writes any approval holds go to a reviewer as before; workflows and agent runs with nobody in them are not asked; a tool the team turned off is refused with Turn on <tool> for an admin and Ask an admin for anyone else | Built |
 | Outbound allow-list | HTTPS only, to hosts on your tenant's list. Every address a host resolves to is checked inside the connection, so DNS cannot be used to redirect a call. Private ranges are allowed only when listed; loopback, link-local and cloud metadata addresses never. No redirects are followed and no cookies kept. The list starts empty: nothing is reachable until a Security admin adds a host | Built |
@@ -101,13 +143,13 @@ flowchart TB
 | Item | What holds | Status |
 |---|---|---|
 | Credentials for your systems | Entered once by a Security admin in the console; encrypted with AES-256-GCM under `OPS_SECRETS_KEY`, bound to the tenant and the credential's name; never returned by any API; scrubbed from answers and logs; every create, rotate, delete and use audited; limited to the teams it is shared with | Built |
-| The model provider's key | Saved by an account admin on Settings > Model providers, encrypted by the AI gateway and read by it alone at call time; no team sees it. Outside development the AI gateway refuses provider keys from its environment | Built |
+| The model provider's key | Saved by an account admin on Settings > Models > Connections, encrypted by the AI gateway and read by it alone at call time; no team sees it. Outside development the AI gateway refuses provider keys from its environment | Built |
 | Storage credentials | Sealed with the same key | Built |
 | Where credential values are kept | Every value above, and each person's own sign-ins and the model provider keys, is written and read through one credential store; each row keeps only its reference. By default (`OPS_CREDENTIAL_STORE=sealed`) the reference is the value sealed into the row, so nothing is held outside the database. Keeping values in your own key vault is a new adapter behind the same store, with no change to tables or callers | Store built; vault adapter planned |
 | Installation keys | One signing key per service, the sign-in token key, the approval key and the secrets key, generated at install. Each service receives only the keys it uses; each may be a file under `/run/secrets` | Built |
 | A hardware or cloud key manager for these keys | | Planned |
 
-Keep `OPS_SECRETS_KEY` with your backups: stored credentials cannot be read without it.
+Keep `OPS_SECRETS_KEY` with your backups. Without it, nobody can read the stored credentials.
 
 ## Data masking
 
@@ -120,9 +162,28 @@ Keep `OPS_SECRETS_KEY` with your backups: stored credentials cannot be read with
 
 ## Audit and evidence
 
-Every security-relevant change and every call to the outside is recorded: the audit log, the tool call log, the
-credential, allow-list, connection and storage audits, the run journal, each review decision and the model call log.
-Details and status are in [Data and database](data-and-database.md#the-audit-trail).
+Ops AI records every security-relevant change and every call to an outside system. The records are:
+
+- the audit log
+- the tool call log
+- the credential, allow-list, connection and storage audits
+- the run journal
+- each review decision
+- the model call log
+
+When someone saves or clears a workflow's schedule, the audit log shows the old and the new schedule written out in
+words. For the details of each record and its status, see [Data and database](data-and-database.md#the-audit-trail).
+
+## When the review goes well
+
+When a reviewer asks who approved a change and which hosts the agent reached, you can answer by pointing to a row in a
+log instead of searching through code. Each action that changes data waits for a named person, who approves the exact
+input they saw. No host is reachable until a Security admin adds it to the list.
+
+## Without these controls
+
+If you leave these controls out, each agent has to be reviewed on its own. A single unreviewed change to a customer's
+account could be enough to end the pilot, and answering an auditor's question could take days of reading code.
 
 ## Platform hardening
 

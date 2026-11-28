@@ -269,6 +269,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-252 | agents-service | A builder archives a workflow: it starts no run and leaves both lists, its run kept; restored, it serves its live version again | api, ui | passing |
 | uc-400 | agents-service | A workflow forks into two checks and a Join: the step after it runs once with both by the step they came from; a skipped branch is null; a fork meeting at a plain step is warned | api, ui | passing |
 | uc-401 | agents-service | A never-run workflow's steps list their output fields by port, from type, settings, answer or operation; a misspelt mapping is warned on save | api | passing |
+| uc-512 | agents-service | A builder reads a workflow step in plain words, sees what it receives with the last run values, and picks a field by name that the next run reads | api, sdk, ui | new |
 | uc-402 | agents-service | A parent reads three attachments in children two at a time, one fails, and goes on once with every result in item order | api, ui | passing |
 | uc-403 | agents-service | A workflow waits two seconds, waits until a date or goes on when it is past or not a date, and a waiting review is reminded in Activity until decided | api, ui | passing |
 | uc-331 | files-service | A file is read with Detect from the Files page | api, ui | passing |
@@ -280,7 +281,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-445 | console | Start a run opens the chosen workflow's form at once, names fields by their titles, offers choices as selects, and uploads or picks a file | ui | passing |
 | uc-466 | console | Start run draws the trigger's start form: a test email runs as a mailbox email does and reaches a Human Task; Files starts a workflow with a file; sub-workflows are not offered; a re-upload under another purpose reuses the file | ui | passing |
 | uc-469 | console | A person lands on Chat's home, asks what needs them, approves a Human Task from its card and sees the run move on | ui | failing |
-| uc-460 | console | A reviewer works Human Tasks grouped by case, decides beside a fixed decision panel with step-up and options, moves to the case's next task, reassigns, and every old task link opens there | ui | passing |
+| uc-460 | console | A reviewer works Human Tasks grouped by case, decides beside a fixed decision panel with step-up and options, moves to the case's next task, reassigns, and every old task link opens there; each task says its step in words, the approvals it needs and what the reader may do, and search runs on the server | api, ui | passing |
 | uc-477 | console | An email-started run's page tells the email, the read beside the document and a row per run it started, named, with its case and Human Task; an unmatched debtor gets a No customer matched case and task | ui | passing |
 | uc-500 | console | A case says what is left, on whom and by when, how its work began (form, email or by hand), one timer, and one feed of what happened in the run page's sentences | ui | passing |
 | uc-508 | console | Activity, a Human Task's write preview, the case list's first response and the run page read a step in the API's words: no tool, node or workflow id, the outcome in words | ui | passing |
@@ -380,7 +381,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-750 | agents-service | An admin limits what the menu offers | api | page |
 | uc-723 | console | The console lists every area as an open sidebar section, offered only by what the person may open: admin, builder, reviewer, viewer, a chat-only person and a person in two teams; with the area_tabs flag on, the area tabs come back | ui | passing |
 | uc-722 | console | The areas rest on server facts: the seeded people hold the cells the areas are built from, and the tool-call list shows one call by its id | api | failing |
-| uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due, the same tick key starts no second run, and a tick due later stays queued | api, sdk | failing |
+| uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due and once per key, and a saved schedule starts one run at each slot from the worker's clock | api, sdk, cli | passing |
 | uc-workflows-2 | agents-service | A builder reads why a test run failed: its kind, code, the failed step, a sentence for an end user and the End it stopped at | api, sdk, cli | passing |
 | uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | passing |
 | uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, ui | draft |
@@ -390,7 +391,8 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-755 | tools-service | A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it | api, ui | works |
 | uc-756 | agents-service | A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record | api, ui | works |
 | uc-757 | agents-service | A builder writes a skill with steps and an agent brief, and a chat follows the steps | api, sdk, cli, ui | draft |
-| uc-761 | console | A builder edits a workflow that saves itself, publishes it past its problems and compares its versions | ui | current |
+| uc-948 | agents-service | A builder edits an agent's brief and what it uses on one page; a viewer and a member read it | api, sdk, cli, ui | current |
+| uc-761 | console | A builder edits a workflow that saves itself, publishes it past its problems and compares its versions | sdk, cli, ui | current |
 | uc-762 | agents-service | A builder tries one path of a skill: reads run, a write is planned and sent once only when confirmed, and nothing is stored | api, ui | current |
 | uc-763 | agents-service | A run outlives a killed worker and redrives from its failed step | api | works |
 | uc-764 | console | An agent page shows its save state, its model, knowledge, tools and skills on the main page, and a channels tab | ui | draft |
@@ -405,3 +407,8 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-772 | kb-service | Search a long document's pieces on the server | api | draft |
 | uc-782 | agents-service | Only a person who may decide a review decides, resumes or replays it | api | current |
 | uc-790 | tools-service | A chat user never chooses between their own login and the team's | api, ui | current |
+| uc-779 | files-service | A watched folder brings files in | api, ui | draft |
+| uc-780 | console | A long list or text in a table cell stays inside its column | ui | draft |
+| uc-791 | models-service | A provider type added as a file shows in the add list | api, ui | current |
+| uc-792 | models-service | An admin connects Anthropic and an agent's model settings reach its chat | api, ui | current |
+| uc-agents-1 | agents-service | An agent's tools are chosen by app: searched, opened, all of an app's tools added in one save, and listed by app with counts | api, ui | draft |

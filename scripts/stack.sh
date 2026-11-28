@@ -197,7 +197,7 @@ cmd_of() {
     # The worker also reads the workflows' mailboxes (Email received) and stores their attachments in files-service.
     worker) echo "$(auth_env)env $AGENTS_URLS $MAILBOX_ENV OPS_EMAIL_POLL_SECONDS=3 uv run --directory services/agents-service python -m ops_agents.api.worker" ;;
     # Seeds the openai-local connection at the fake on start; agents reach it with the dev runtime key it seeds.
-    models) echo "$(auth_env)env OPS_MODELS_PORT=$MODELS_PORT OPS_MODELS_FAKE_OPENAI_URL=http://127.0.0.1:$FAKE_OPENAI_PORT/v1 uv run --directory services/models-service python -m ops_models" ;;
+    models) echo "$(auth_env)env OPS_MODELS_PORT=$MODELS_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_FAKE_OPENAI_URL=http://127.0.0.1:$FAKE_OPENAI_PORT/v1 uv run --directory services/models-service python -m ops_models" ;;
     fakeai) echo "env FAKE_OPENAI_PORT=$FAKE_OPENAI_PORT uv run --directory services/models-service/scripts --project .. python -m fake_openai $PWD/services/models-service/seed/demo-fake-openai" ;;
     fakebank) echo "env FAKE_BANK_PORT=$FAKE_BANK_PORT uv run --directory services/tools-service/scripts --project .. python -m fake_bank $RUN_ABS/fake-bank" ;;
     apidocs) echo "env OPS_API_DOCS_PORT=$API_DOCS_PORT OPS_PLATFORM_PORT=$PLATFORM_PORT OPS_AGENTS_PORT=$AGENTS_PORT OPS_TOOLS_PORT=$TOOLS_PORT OPS_MODELS_PORT=$MODELS_PORT OPS_KB_PORT=$KB_PORT OPS_FILES_PORT=$FILES_PORT OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT python3 scripts/api_docs.py" ;;
@@ -205,19 +205,20 @@ cmd_of() {
     # Plugin knowledge sources are read through tools-service's gateway, when the plugins folder holds any.
     kb) echo "$(auth_env)env OPS_KB_PORT=$KB_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_kb OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_DOCUMENTS_URL=http://127.0.0.1:$DOCUMENTS_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT OPS_TOOLS__TIMEOUT_S=60 OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT uv run --directory services/kb-service python -m ops_kb" ;;
     # Local backend under .data/files, bytes through its proxy routes; scanning off marks files clean (dev only).
-    # files-service delivers its service events (file.deleted, file.read_requested) to agents-service.
-    files) echo "$(auth_env)env OPS_FILES_PORT=$FILES_PORT OPS_FILES_SCANNING=off OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT uv run --directory services/files-service python -m ops_files" ;;
+    # files-service delivers its service events (file.deleted, file.read_requested) to agents-service, and refuses to
+    # start without tools-service's address, which its watched folders read apps through.
+    files) echo "$(auth_env)env OPS_FILES_PORT=$FILES_PORT OPS_FILES_SCANNING=off OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT uv run --directory services/files-service python -m ops_files" ;;
     # documents-service extracts on its own models-service key, whatever key the root .env hands agents.
     documents) echo "$(auth_env)env OPS_DOCUMENTS_PORT=$DOCUMENTS_PORT OPS_FILES_URL=http://127.0.0.1:$FILES_PORT OPS_KB_URL=http://127.0.0.1:$KB_PORT OPS_TOOLS_URL=http://127.0.0.1:$TOOLS_PORT OPS_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_MODELS_URL=http://127.0.0.1:$MODELS_PORT OPS_MODELS_KEY=mk_dev_extract uv run --directory services/documents-service python -m ops_documents" ;;
     console)
       # OPS_CONSOLE_MODE=prod (cloud boxes) serves a production build; see scripts/console-prod.sh. Local dev keeps next dev.
       if [[ "${OPS_CONSOLE_MODE:-dev}" == prod ]]; then CONSOLE_RUN="env NEXT_PUBLIC_OPS_DEMO_SIGNIN=1 bash scripts/console-prod.sh $CONSOLE_PORT"
-      else CONSOLE_RUN="pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"; fi
+      else CONSOLE_RUN="env -u AI_AGENT -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT pnpm --filter @ops-ai/console exec next dev -p $CONSOLE_PORT"; fi
       echo "env $(console_auth)NEXT_PUBLIC_UI_FEEDBACK=$(ui_feedback) NEXT_PUBLIC_OPS_CHAT_API_URL=$(api_url agents "$AGENTS_PORT") NEXT_PUBLIC_OPS_CASES_API_URL=$(api_url agents "$AGENTS_PORT") NEXT_PUBLIC_OPS_REGISTRY_API_URL=$(api_url agents "$AGENTS_PORT") NEXT_PUBLIC_OPS_TOOLS_API_URL=$(api_url tools "$TOOLS_PORT") NEXT_PUBLIC_OPS_KNOWLEDGE_API_URL=$(api_url kb "$KB_PORT") NEXT_PUBLIC_OPS_FILES_API_URL=$(api_url files "$FILES_PORT") NEXT_PUBLIC_OPS_DOCUMENTS_API_URL=$(api_url documents "$DOCUMENTS_PORT") NEXT_PUBLIC_OPS_MODELS_API_URL=$(api_url models "$MODELS_PORT") NEXT_PUBLIC_OPS_EMBED_URL=http://localhost:$EMBED_PORT NODE_OPTIONS=--max-old-space-size=${OPS_CONSOLE_HEAP_MB:-3072} ${CONSOLE_RUN}"
       ;;
     # The console's preview frame is the only page it allows to frame it besides a deployment's own sites.
     embed)
-      echo "env OPS_EMBED_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT pnpm --filter @ops-ai/embed exec next dev -p $EMBED_PORT"
+      echo "env OPS_EMBED_AGENTS_URL=http://127.0.0.1:$AGENTS_PORT OPS_CONSOLE_URL=http://localhost:$CONSOLE_PORT env -u AI_AGENT -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT pnpm --filter @ops-ai/embed exec next dev -p $EMBED_PORT"
       ;;
   esac
 }

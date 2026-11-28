@@ -14,8 +14,9 @@ These documents design an operational AI platform for banks and describe the con
 | Deploy and operate | `deploy-and-operate.md` | The operator's tab: choose a deployment, install, the database, upgrade, back up and monitor |
 | Security | `security/README.md` | The security reviewer's tab: isolation, sign-in, approvals and audit, data handling, model calls |
 | Reference | `reference/README.md` | The HTTP API, the SDKs, the CLI and MCP, and the changelog |
-| Contributing | `contributing.md` | How Ops AI is built: architecture, standards, services, packages, the use-case catalogue, designs, agent skills, releases |
-| Background | `background/problem-statement.md` | Why bank AI workflows stall and what the platform needs |
+| Contributing | `contributing/README.md` | How Ops AI is built: architecture, standards, services, packages, the use-case catalogue, designs, agent skills, releases |
+| Background | `contributing/figure-guide.md` | Which figure fits which content, the tokens, caption and size rules, and how a figure reads at 390 wide |
+| `background/problem-statement.md` | Why bank AI workflows stall and what the platform needs |
 | Architecture | `architecture/README.md` | The system as built: services, runtime, human in the loop, identity, data, operations, and the decision records in `architecture/decisions/` |
 | Design, by area | The design table below | Proposed and approved designs with their wireframes and mocks: workflows and agents, tools, human tasks, cases, chat, data, and the prior-art research behind them |
 | Console | `console/page-plan.md` | Console pages, the UI standard, user guides, and screens approved (`console/approved/`) or waiting for approval (`console/proposed/`) |
@@ -61,13 +62,15 @@ shared list: the shareable guide built from `guide/*.md` is meant to present the
 | `> [!NOTE]` whose first words are `**Upcoming.**` | The callout that marks a section about a feature that is not in the current release |
 | `<!-- site: cards -->` directly above a table or a list | Summary cards: a table row or list item each; the first cell, or the item's opening **bold** or link, is the title |
 | `<!-- site: steps -->` directly above a numbered list | Numbered steps |
+| `<!-- site: <figure> caption="..." -->` (journey, annotated, widget, preview, layers, before-after, sequence, state, decision, compare, timeline, exchange), directly above a list or two code blocks | That figure from the figure library; every kind with its markdown is on [Figures](contributing/figures.md) |
 | `> [!NOTE]`, `> [!WARNING]` (GitHub alerts) | A callout |
-| A ```` ```mermaid ```` block (flowchart, sequence, state, ER) | The diagram in the site's theme |
-| `![caption](../diagrams/<name>.svg)` where `diagrams/<name>.yaml` exists | The live architecture diagram drawn from that data file; GitHub shows the exported SVG |
+| A ```` ```mermaid ```` block (flowchart, sequence, state, ER); `caption="..."` after the fence adds a caption | The diagram in the site's theme |
+| `![caption](https://opsai.chanl.ai/docs/diagrams/<name>.svg)` where `diagrams/<name>.yaml` exists | The live architecture diagram drawn from that data file; GitHub shows the exported SVG |
 | Any other image alone in a paragraph | A framed figure with the alt text as its caption |
+| An image named by its site URL, `https://opsai.chanl.ai/docs/<path under docs/>` | The image from this commit, read from the repository; GitHub loads the same URL from the site, which publishes every image under `docs/` at that path |
 | A relative link, or a code span naming a file (`services/x/y.py:42`) | A link to the page here, or to the file on GitHub |
 
-A link to a page or file that does not exist fails the site build, and so does a diagram SVG that no longer matches
+A markdown image anywhere in the repository names its site URL: `make checks` refuses a relative image or a raw.githubusercontent.com one, and `python3 scripts/check_md_images.py --fix` rewrites relative ones. A link to a page or file that does not exist fails the site build, and so does a diagram SVG that no longer matches
 its data file. The sidebar is the list `SITE` in `apps/docs/src/lib/nav.mjs`: five tabs (Docs, Deploy and operate,
 Security, Reference, Contributing), each with groups in the order a reader needs them. Internals (architecture,
 standards, services, packages, use cases, designs, plans) go only in Contributing. On a Docs, Security or Reference
@@ -79,7 +82,7 @@ names it or a folder it takes whole, and a page it does not place fails the site
 
 | Reader | Read in this order |
 |---|---|
-| Engineer | `background/problem-statement.md` → `architecture/README.md` → `architecture/service-map.md` → the topic spec for the area you work on → `contributing.md` |
+| Engineer | `background/problem-statement.md` → `architecture/README.md` → `architecture/service-map.md` → the topic spec for the area you work on → `contributing/README.md` |
 | Architect | `background/problem-statement.md` → `architecture/enterprise-architecture.md` → `architecture/platform-choices.md` (the current choice per area; `architecture/decisions/` keeps the options behind each) → [tool system design](design/tools/tool-system.md) → `architecture/service-map.md` |
 | Risk reviewer | `background/problem-statement.md` → `architecture/enterprise-architecture.md` → `architecture/delivery.md` (what is proven, open questions) → [ADR-0012 Assurance: governance and testing as one system](architecture/decisions/assurance.md) → ADR-0005 |
 
@@ -200,6 +203,8 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `guide/how-work-flows.md` | A chat turn with a tool approval, a workflow with a human task, and a court order notice emailed to a team mailbox |
 | `guide/build-with-ops-ai.md` | Developer landing: the example folders in order, how agents and workflows call each other, and the same operations on every surface |
 | `guide/workflows.md` | Author, validate, publish and test-run workflows from the Python SDK, TypeScript SDK and `opsai workflows` |
+| `guide/edit-a-workflow-step.md` | Open a workflow step in the console, read it in plain words, fix its problems and pick a field from an earlier step by name |
+| `guide/schedule-a-workflow.md` | Set a schedule on a workflow's Schedule trigger in the console, read what its panel says, and put an agent on a schedule from its Channels tab |
 | `guide/agents.md` | Author, publish and chat with agents from the SDK and `opsai agents` |
 | `guide/examples/README.md` | Examples for builders: who each page is for, how to connect, and how to read the examples |
 | `guide/examples/agents.md` | Agent examples per surface: create and publish, chat, knowledge, tools, test a draft, run modes, scoring with cases |
@@ -222,6 +227,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `guide/apps-setup.md` | Set up an app: its states, turning it on, the first time for a plugin's app, auth configs and secrets, a run waiting for a person, turning it off |
 | `guide/whats-built-today.md` | Built, partial or planned, capability by capability |
 | `guide/knowledge.md` | Knowledge: bases, sources, presets and sync settings, and what is not enforced yet |
+| `guide/watch-a-folder.md` | Watch a folder: pick an app's folders, what arrives in Files, versions, failed files and what to do, Check now, stopping, and who may do it |
 | `guide/human-tasks.md` | Human tasks and approvals: pausing for a person, task types, approval settings and their defaults |
 | `guide/cases.md` | Cases: the record of one piece of work, opened by a workflow or the API, and what a case page shows |
 | `guide/teams-and-access.md` | Teams and access: teams as the data boundary, the built-in roles, the roles grid and its limits |
@@ -240,6 +246,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `guide/skills/ops-debug.md` | Developer skill for Claude Code and GitHub Copilot (ops-debug): find why a service fails; generated into `.claude/skills/ops-debug/SKILL.md` and `.github/prompts/ops-debug.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-mirror.md` | Developer skill for Claude Code and GitHub Copilot (ops-mirror): work behind a company mirror; generated into `.claude/skills/ops-mirror/SKILL.md` and `.github/prompts/ops-mirror.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-fix-the-class.md` | Developer skill for Claude Code and GitHub Copilot (ops-fix-the-class): fix every place with the same fault before committing a fix, and state the sweep in a `Siblings:` trailer; generated into `.claude/skills/ops-fix-the-class/SKILL.md` and `.github/prompts/ops-fix-the-class.prompt.md` by `scripts/agent_skills.py` |
+| `guide/skills/ops-handback.md` | Developer skill for Claude Code and GitHub Copilot (ops-handback): a builder's last step, stop its preview, push, remove its worktree and pass `make agent-handback-check`; generated into `.claude/skills/ops-handback/SKILL.md` and `.github/prompts/ops-handback.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-commit.md` | Developer skill for Claude Code and GitHub Copilot (ops-commit): pass the commit checks with a What's new entry; generated into `.claude/skills/ops-commit/SKILL.md` and `.github/prompts/ops-commit.prompt.md` by `scripts/agent_skills.py` |
 | `guide/skills/ops-database.md` | Developer skill for Claude Code and GitHub Copilot (ops-database): switch the database; generated into `.claude/skills/ops-database/SKILL.md` and `.github/prompts/ops-database.prompt.md` by `scripts/agent_skills.py` |
 | `guide/plugins.md` | Building a plugin: the manifest and request templates, paging, sign-in steps, settings, Python tools, knowledge sources, `opsai plugin validate` and `test`, and trying it on a local stack against a fake |
@@ -475,6 +482,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `usecases/agents-service/archive-a-workflow.md` | uc-252: A builder archives a workflow: it starts no run and leaves both lists, its run kept; restored, it serves its live version again |
 | `usecases/agents-service/branches-join.md` | uc-400: A workflow's branches join before the next step, the step after the Join running once |
 | `usecases/agents-service/step-output-shapes.md` | uc-401: A workflow's step outputs are known before it runs, and a misspelt mapping is warned |
+| `usecases/agents-service/step-sheet-plain-words.md` | uc-512: A workflow step reads in plain words, with what it receives and a field picker |
 | `usecases/agents-service/wait-for-children.md` | uc-402: A workflow waits for its children and uses their results |
 | `usecases/agents-service/wait-and-reminders.md` | uc-403: A workflow waits for a time or date and reminds a person |
 | `usecases/agents-service/an-account-admin-sees-every-background-process.md` | uc-516: An account admin sees every background process and what it did |
@@ -550,6 +558,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `services/files-service/tests.md` | files-service failure modes and the test guarding each |
 | `services/runner-service/overview.md` | runner-service on :8770: code tools' Python on WASM, its walls, `ops.call` back through tools-service |
 | `services/documents-service/overview.md` | documents-service on :8760: extractions, document types, samples and test runs, reading bytes through files-service; the sample documents as requirements |
+| `packages/ops_sources/overview.md` | Source reading library: changes since a saved place with every page read, paced fetches, the state port |
 | `packages/ops_ingest/overview.md` | Knowledge ingestion library: parsing, splitting, metadata, dedupe, source rules |
 | `packages/ops_ingest/tests.md` | Knowledge ingestion failure modes and the test guarding each |
 | `packages/ops_email/overview.md` | Email library: mail in and out behind two protocols, providers picked by settings |
@@ -573,6 +582,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `security/recovery-and-redrive.md` | Security: what a crash repeats and never repeats, Retry, Redrive, bulk actions and dead letters |
 | `guide/ops-assistant.md` | The Ops Assistant: checklist, Connect card, Think harder, Save read-back, reused reads, suggestion chips, memories |
 | `guide/whats-new.md` | What's new: every change a person would notice, newest first, built from the changelog |
+| `guide/use-cases/build-an-agent.md` | Use case: write an agent, try the draft, give it knowledge and a tool, publish it and chat, with SDK, CLI and HTTP samples in tabs |
 | `guide/use-cases/card-disputes.md` | Use case: card disputes, from the request to the approved credit, with SDK code |
 | `guide/use-cases/chat-and-human-tasks.md` | Use case: start the day from the chat home and decide Human Tasks, with SDK code |
 | `guide/use-cases/answer-from-documents.md` | Use case: put a manual into a knowledge base and get cited answers, in the console, CLI and SDK |
@@ -598,6 +608,7 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/a-builder-asks-the-first-three.md` | uc-622: A builder asks the first three published agents |
 | `usecases/agents-service/a-builder-validates-applies-and-test.md` | uc-623: A builder validates, applies and test-runs the three-node workflow |
 | `usecases/agents-service/a-builder-reads-why-a-test-run-failed.md` | uc-workflows-2: A builder reads why a test run failed, at the API, the SDK and the CLI |
+| `usecases/agents-service/an-agents-tools-are-chosen-by-app.md` | uc-agents-1: An agent's tools are chosen by app, at the API and in the console |
 | `usecases/agents-service/a-builder-runs-the-two-composition.md` | uc-624: A builder runs the two composition Examples |
 | `usecases/tools-service/sign-in-return-any-window.md` | uc-625: Connect comes back Connected in any window, for every sign-in app |
 | `usecases/tools-service/apps-screens-for-each-role.md` | uc-626: Apps screens offer only what you may do, in plain words |
@@ -650,6 +661,7 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/tools-service/a-team-holding-only-a-workflow.md` | uc-755: A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it |
 | `usecases/agents-service/a-shared-form-filled-in-signed.md` | uc-756: A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record |
 | `usecases/agents-service/a-builder-writes-a-skill-with.md` | uc-757: A builder writes a skill with steps and an agent brief, and a chat follows the steps |
+| `usecases/agents-service/agent-page-in-one-editor.md` | uc-948: an agent's brief, tools, knowledge, skills, channels and versions on one page that a builder edits and a viewer and a member read, on api, sdk, cli and ui |
 | `usecases/agents-service/a-builder-tries-one-skill-path.md` | uc-762: A builder tries one path of a skill, and no write runs until they confirm |
 | `usecases/agents-service/a-run-outlives-a-killed-worker.md` | uc-763: A run outlives a killed worker and redrives from its failed step |
 | `usecases/console/agent-page-settings-and-channels.md` | uc-764: An agent page shows its save state, its model, knowledge, tools and skills on the main page, and a channels tab |
@@ -659,7 +671,11 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/console/name-limits-on-a-form.md` | uc-768: One create form holds a name to the same rule the server keeps |
 | `usecases/console/my-apps-page.md` | uc-769: My apps is a page of its own, the same for an admin and a member |
 | `usecases/console/editor-page-layout.md` | uc-781: Record editors and list pages share one header, one tab strip and one section style |
+| `usecases/console/long-values-in-tables.md` | uc-780: A long list or text in a table cell stays inside its column |
 | `usecases/tools-service/admins-see-people-s-app-sign.md` | uc-770: Admins see people's app sign-ins and end one |
 | `usecases/agents-service/a-builder-takes-a-new-skill.md` | uc-771: A builder takes a new skill to its first publish in under ten minutes |
 | `usecases/kb-service/search-a-long-document-s-pieces.md` | uc-772: Search a long document's pieces on the server |
 | `usecases/agents-service/only-a-person-who-may-decide.md` | uc-782: Only a person who may decide a review decides, resumes or replays it |
+| `usecases/files-service/a-watched-folder-brings-files-in.md` | uc-779: A watched folder brings files in |
+| `usecases/models-service/a-provider-type-added-as-a.md` | uc-791: A provider type added as a file shows in the add list |
+| `usecases/models-service/an-admin-connects-anthropic-and-an.md` | uc-792: An admin connects Anthropic and an agent's model settings reach its chat |

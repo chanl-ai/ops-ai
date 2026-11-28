@@ -95,3 +95,23 @@ export function mimeLabel(mime: string) {
 export function titleWithoutCount(title: string) {
   return title.replace(/\s*\(\d+\)\s*$/, '').trim();
 }
+
+/** A time as it reads on the wall of `tz` (a time zone name), falling back to the browser's own for a name it cannot read. */
+export function dateTimeIn(iso: string, tz?: string) {
+  const at = new Date(iso);
+  const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false };
+  try {
+    return at.toLocaleString('en-CA', { ...opts, timeZone: tz || undefined });
+  } catch {
+    return at.toLocaleString('en-CA', opts);
+  }
+}
+
+/** The browser's time zone, where a new schedule opens; UTC when the browser will not say. */
+export const localTimeZone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+};

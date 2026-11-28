@@ -272,12 +272,16 @@ def isolation_kind(table: sa.Table) -> IsolationKind | None:
 
 
 def tenant_column(table: sa.Table) -> sa.Column[Any]:
-    """The column a tenant-scoped table is isolated by: tenant_id, or a tenant table's own single-column key."""
+    """The column a tenant-scoped table is isolated by: tenant_id, or the tenants table's own single-column key. A
+    migration's stand-in for `tenants` must carry that key: SQL Server's policy names the column, and dbo.tenants has
+    no tenant_id."""
+    key = list(table.primary_key.columns)
+    if table.name == "tenants":
+        if len(key) == 1:
+            return key[0]
+        raise ValueError("tenants is isolated by its own key; give its stand-in table that primary key")
     if "tenant_id" in table.c:
         return table.c.tenant_id
-    key = list(table.primary_key.columns)
-    if table.name == "tenants" and len(key) == 1:
-        return key[0]
     raise ValueError(f"{table.name} is TENANT_SCOPED but has no tenant_id column")
 
 
@@ -350,7 +354,9 @@ def role_ddl(name: str, *, bypass: bool = False) -> str:
     """PostgreSQL: a role with no login a migration grants tables to; `bypass` makes it a system role that row-level
     security does not apply to. Roles are cluster-wide, so one made by another database is left as it is."""
     attrs = "NOLOGIN BYPASSRLS" if bypass else "NOLOGIN"
-    return f"DO $$ BEGIN CREATE ROLE {name} {attrs}; EXCEPTION WHEN duplicate_object THEN NULL; END $$"
+    return (
+        f"DO $$ BEGIN CREATE ROLE {name} {attrs}; EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL; END $$"
+    )
 
 
 def member_ddl(role: str, login: str) -> str:
@@ -393,6 +399,9 @@ def backfill_ddl(
     SQL Server: a security policy filters every login but a chain's system user, and the migrator is none, so each
     table's policy is dropped before and created again after; the predicate functions stay."""
     marked = list(tables)
+    for t in marked:
+        # PostgreSQL's statements never name the tenant column, so a wrong stand-in fails here on both databases.
+        tenant_column(t)
     if dialect == "postgresql":
         before = [f"ALTER TABLE {t.name} NO FORCE ROW LEVEL SECURITY" for t in marked]
         return before, [f"ALTER TABLE {t.name} FORCE ROW LEVEL SECURITY" for t in marked]

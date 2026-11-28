@@ -1,0 +1,38 @@
+{
+  "id": "anthropic",
+  "label": "Anthropic",
+  "icon": "anthropic",
+  "adapter": "openai-compatible",
+  "catalog": "anthropic",
+  "baseUrl": "https://api.anthropic.com/v1",
+  "connection": {
+    "type": "object",
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "title": "Base URL",
+        "description": "Leave empty for Anthropic's own API; set it for a proxy that speaks Anthropic's OpenAI-compatible API.",
+        "format": "uri",
+        "x-column": "base_url",
+        "default": "https://api.anthropic.com/v1"
+      },
+      "apiKey": {
+        "type": "string",
+        "title": "API key",
+        "description": "Saved sealed as the account's provider key; never shown again.",
+        "x-secret": true
+      }
+    },
+    "required": [
+      "apiKey"
+    ]
+  },
+  "modelList": {
+    "path": "/models",
+    "auth": "x-api-key",
+    "headers": {
+      "anthropic-version": "2023-06-01"
+    }
+  },
+  "test": "modelList"
+}

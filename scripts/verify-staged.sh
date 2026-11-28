@@ -13,9 +13,13 @@ fi
 root="$(git rev-parse --show-toplevel)"
 git_dir="$(git -C "$root" rev-parse --absolute-git-dir)"
 # A fresh worktree has no .venv; every Python check below would then fail with a missing-interpreter error that the
-# scrub check's own message would hide. Name the cause and stop.
+# scrub check's own message would hide. The main checkout's environments are linked in (scripts/lane.sh, as `make lane`
+# does); only a main checkout that has none itself is refused.
 if [ ! -x "$root/.venv/bin/python" ]; then
-  echo "verify-staged: this worktree has no .venv; run pnpm install (and uv sync) in $root, then commit again"
+  bash "$root/scripts/lane.sh" --link "$root" || true
+fi
+if [ ! -x "$root/.venv/bin/python" ]; then
+  echo "verify-staged: no .venv here or in the main checkout; run pnpm install (and uv sync) in $root, then commit again"
   exit 1
 fi
 index="${GIT_INDEX_FILE:-$git_dir/index}"

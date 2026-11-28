@@ -18,6 +18,7 @@ secret, names no host outside its manifest, and runs only through tools-service.
    `docs/guide/plugins.md` (the manifest, paging, sign-in steps, writing a Python tool, check and test),
    `packages/ops_plugin_sdk/CLAUDE.md`, `docs/architecture/tool-lifecycle.md`, `docs/architecture/integrations.md`
    and `builtin-plugins/README.md`.
+4. Before your first edit in a folder, read the nearest `CLAUDE.md`'s "Known traps" section and `docs/architecture/standards/delivery.md` DL2; run the DL2 local gate before the pull request leaves draft.
 
 ## Owns
 | Paths | What |
@@ -90,6 +91,19 @@ check enforces it. Edited only through a reviewed pull request, never by this ag
 ## Fixes
 Fixes follow the ops-fix-the-class skill (`docs/guide/skills/ops-fix-the-class.md`): sweep for the same fault, fix every place once in the layer that owns the job, and end the commit with a `Siblings:` trailer.
 
+## Finish
+The last step of every hand-back, when you made the worktree (ops-handback skill, `docs/guide/skills/ops-handback.md`).
+A specialist working in another agent's worktree leaves it to that agent.
+1. `make wt-stop BRANCH=<branch>` if you started a preview; 2. `git push` the branch; 3. `git status --porcelain`
+prints nothing; 4. from the main checkout, `git worktree remove <path>` (no `--force`, the branch stays); 5. from the
+main checkout, `make agent-handback-check BRANCH=<branch>` prints `ok:`, and that line goes in the report. New
+worktrees start from `origin/develop`; the main checkout is the shared local develop and only the release keeper
+updates it. Changes asked for in review re-create the worktree from the pushed branch.
+
 ## Report (at most 10 lines)
 Commits; the plugins or tools added or changed with their manifest versions; the pin changes; tests seen failing and what
 they printed; `make plugins-check` output; anything not run.
+
+## Known traps
+
+Before the first edit in a folder, read the "Known traps" section of the nearest CLAUDE.md and follow it. When you fix a red that could happen again, add one "- trigger => fix" line there in the same commit (public repo: no card ids, session links or customer names).

@@ -1,13 +1,18 @@
 # Agents
 
-Status: current. Rows marked planned are designed and not built.
+Status: current.
 
-Some work does not follow the same steps twice: a staff member asks a question, a request needs a few lookups before
-anyone knows what to do. An agent is a model with instructions, tools, knowledge, skills, guardrails and a budget. Inside
-those limits it chooses its own next step. People reach it through chat, other systems through the API, and a workflow
-through an Agent step.
+## Some work never follows the same steps twice
 
-## Try it
+A staff member asks a question, or a request needs a few lookups before anyone knows what to do. A fixed script cannot
+cover that, and a loose chatbot with no limits cannot be trusted near a customer's account. Without something in
+between, the team keeps answering the same questions by hand.
+
+An agent is a model with instructions, tools, knowledge, skills, guardrails and a budget, and inside those limits it
+chooses its own next step. You can reach it through chat or the API, and a workflow can call it with an agent step. If you give an agent no budget, no approval on its writes and no access to your documents, it has to guess. A risk
+review will stop a guess that changes a customer's account.
+
+## Write and test your first agent
 
 Save this as `agent.yaml`:
 
@@ -19,7 +24,7 @@ memory:
   enabled: false
 ```
 
-Then save it as a draft and try it, before anyone publishes it:
+Then save it as a draft and test it before anyone publishes it:
 
 ```bash
 opsai agents validate agent.yaml
@@ -31,6 +36,8 @@ The same agent opens under **Build › Agents** in the console, where its **Test
 
 ## What an agent is made of
 
+Rows marked planned are designed and not yet built.
+
 | Part | What it does | Status |
 |---|---|---|
 | Instructions | What the agent is for and how it answers | built |
@@ -41,7 +48,38 @@ The same agent opens under **Build › Agents** in the console, where its **Test
 | Guardrails | Topics it must refuse, checked on the question and on the answer; the reply names the guardrail | built for blocked topics. Other kinds planned |
 | Budget | The most model calls and tool calls in one turn; the reply says when it stopped | built |
 
-## Lifecycle
+## Write the instructions as a brief
+
+The agent page writes the prompt from headings, so each kind of instruction has one place. Job, How to answer,
+Hand off when, Examples and Never are always there. How to answer holds what an answer includes and how it is
+formatted; tone goes in its own section.
+
+**Add section** opens a searchable list. Sections sit in groups (Voice and style, Context, Behaviour), each with an
+example line, and one already added is greyed out and checked. The workspace decides what the list holds: Personality,
+Tone, Environment, Context, Tool use, Error handling and Escalation wording to start, and a section you do not fill in
+is left out of the prompt. Tone and Personality offer preset chips (Warm, Neutral, Formal, Concise, Plain-spoken):
+pressing one writes its sentence into the section as ordinary text you can edit.
+**Add custom section** asks for a name first and adds a heading of your own, up to five. A custom name cannot repeat
+a heading the brief already has or another custom name, and it is marked prompt text only: nothing else reads it.
+People who can only view an agent see the sections and no Add section or Remove controls.
+
+An admin changes the list under Settings, Agent instructions: rename a section, move it up or down, hide it from Add
+section, add one, and edit its hint, example line, menu group and presets, then Save. Reset to default puts the
+first list back. Changing the list never rewrites an agent already saved; the new labels and order apply the next time
+that agent's brief is saved. People without the settings manage right read the list and have no controls.
+
+**View prompt** shows what the model receives, in this order: Who you are, Goal, Personality, Tone, Environment,
+Context, How to answer, Tool use, Error handling, your own sections in the order you keep them, Hand off when,
+Escalation wording, Examples, and Never last, when the list is the default; an admin's order replaces it. Escalation wording sits straight after Hand off when so the moment and
+the words stay together, and Context sits straight after Environment. An agent saved before sections reads and runs
+exactly as it did.
+
+Sources for the headings (what each gave us):
+- ElevenLabs, https://elevenlabs.io/docs/agents-platform/best-practices/prompting-guide: separate Personality, Environment, Tone, Goal, Tools, Error handling and Escalation sections; tone kept in one place.
+- Vapi, https://docs.vapi.ai/prompting-guide: identity, response guidelines, context and examples that include an error case.
+- OpenAI, https://developers.openai.com/api/docs/guides/prompt-engineering: identity, instructions, examples and context under markdown headers.
+
+## From draft to published agent
 
 | Step | Command | What it does |
 |---|---|---|
@@ -70,30 +108,41 @@ ops.agents.chat(draft["id"], "What documents open a business account?")
 and the run and eval methods in the TypeScript SDK, are planned.
 
 A background run lives in the program that started it and is lost if that program exits before the reply is on the
-thread. `opsai agents run --mode background` exits as soon as it prints the ids, so its run is lost; use it from a
+thread. `opsai agents run --mode background` exits as soon as it prints the ids, so its run is lost. Use background mode from a
 program that keeps running. Runs that carry on without the caller are planned.
 
-`ops.agents.schedule(id, message, due_at=...)` arms one run at a due time; the same key runs once. Repeating schedules
+`ops.agents.schedule(id, message, due_at=...)` arms one run for a due time, and the same key runs only once. Repeating schedules
 are planned.
 
 [Agent examples](examples/agents.md) shows each of these in Python, TypeScript and the command line.
 
-## Agent or workflow
+## Choosing between an agent and a workflow
 
-| Situation | Use |
-|---|---|
-| A person asks questions and the steps vary | An agent in chat |
-| The same steps every time, with a record and a person deciding | A [workflow](workflows.md) |
-| A process with one judgement step in the middle | A workflow with an Agent step; the step returns what the agent's output schema says |
-| An agent that should be able to start a governed process | Publish the workflow and give it to the agent as a tool |
+<!-- site: decision caption="Whether a piece of work is an agent in chat or a workflow" -->
+- **Are the steps the same every time?**
+  - **No, a person asks and the steps vary**: An agent in chat.
+    - **Should it be able to start a governed process?**
+      - **Yes**: Publish the workflow and give it to the agent as a tool.
+      - **No**: The agent in chat is enough.
+  - **Yes, with a record and a person deciding**: A workflow.
+  - **Mostly, with one judgement in the middle**: A workflow with an Agent step; the step returns what the agent's output schema says.
 
 When an agent drafts a write that needs approval, the chat shows Approve and Reject, and approving may ask for your
 password again ([Human tasks and approvals](human-tasks.md)).
 
+## What success looks like
+
+Your agent answers from its instructions and cites the page and section of your documents. A change that needs approval
+waits for a person before it reaches your system. Your published version stays as it was while you edit the next one.
+
+## Run an agent on a schedule
+
+An agent runs on a schedule through a workflow with the agent as its step: from the agent's Channels tab, Schedule (Run on a schedule) makes that workflow and saves its schedule, and publishing it starts the runs. There is no separate schedule route for an agent, so a script makes the same workflow. The steps are in [Schedule a workflow or an agent](schedule-a-workflow.md#run-an-agent-on-a-schedule).
+
 ## Next
 
 <!-- site: cards -->
-- **[Build with Ops AI](build-with-ops-ai.md)**: example agents from one question to one that starts a workflow.
+- **[Build with Ops AI](build-with-ops-ai.md)**: work through example agents, from one question to one that starts a workflow.
 - **[Knowledge](knowledge.md)**: give the agent your team's documents.
-- **[Tools and apps](apps.md)**: let the agent read and write your systems.
-- **[Chat and channels](ops-assistant.md)**: where people talk to it.
+- **[Tools and apps](apps.md)**: let the agent read and change your systems.
+- **[Chat and channels](ops-assistant.md)**: see where people talk to it.

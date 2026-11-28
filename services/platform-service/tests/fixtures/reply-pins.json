@@ -115,6 +115,60 @@
       "personId": "<usr>",
       "teams": [
         {
+          "heldInTeam": [
+            {
+              "action": "decide",
+              "area": "secrets_egress",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": true
+            },
+            {
+              "action": "manage",
+              "area": "secrets_egress",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": true
+            },
+            {
+              "action": "view",
+              "area": "settings",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": true
+            },
+            {
+              "action": "manage",
+              "area": "settings",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": true
+            }
+          ],
           "permissions": [
             {
               "action": "view",
@@ -1224,6 +1278,110 @@
             {
               "action": "manage",
               "area": "files",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "view",
+              "area": "watches",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "create",
+              "area": "watches",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "edit",
+              "area": "watches",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "publish",
+              "area": "watches",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "delete",
+              "area": "watches",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "run",
+              "area": "watches",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "decide",
+              "area": "watches",
+              "roles": [
+                {
+                  "id": "admin",
+                  "name": "Admin",
+                  "via": "person"
+                }
+              ],
+              "scope": "all",
+              "securityTeamOnly": false
+            },
+            {
+              "action": "manage",
+              "area": "watches",
               "roles": [
                 {
                   "id": "admin",
@@ -3816,6 +3974,110 @@
         },
         {
           "action": "view",
+          "area": "watches",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "create",
+          "area": "watches",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "edit",
+          "area": "watches",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "publish",
+          "area": "watches",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "delete",
+          "area": "watches",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "run",
+          "area": "watches",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "decide",
+          "area": "watches",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "manage",
+          "area": "watches",
+          "roles": [
+            {
+              "id": "admin",
+              "name": "Admin",
+              "via": "person"
+            }
+          ],
+          "scope": "all",
+          "securityTeamOnly": false
+        },
+        {
+          "action": "view",
           "area": "documents",
           "roles": [
             {
@@ -5389,6 +5651,60 @@
     "personId": "<usr>",
     "teams": [
       {
+        "heldInTeam": [
+          {
+            "action": "decide",
+            "area": "secrets_egress",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": true
+          },
+          {
+            "action": "manage",
+            "area": "secrets_egress",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": true
+          },
+          {
+            "action": "view",
+            "area": "settings",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": true
+          },
+          {
+            "action": "manage",
+            "area": "settings",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": true
+          }
+        ],
         "permissions": [
           {
             "action": "view",
@@ -6498,6 +6814,110 @@
           {
             "action": "manage",
             "area": "files",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "view",
+            "area": "watches",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "create",
+            "area": "watches",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "edit",
+            "area": "watches",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "publish",
+            "area": "watches",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "delete",
+            "area": "watches",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "run",
+            "area": "watches",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "decide",
+            "area": "watches",
+            "roles": [
+              {
+                "id": "admin",
+                "name": "Admin",
+                "via": "person"
+              }
+            ],
+            "scope": "all",
+            "securityTeamOnly": false
+          },
+          {
+            "action": "manage",
+            "area": "watches",
             "roles": [
               {
                 "id": "admin",
@@ -9090,6 +9510,110 @@
       },
       {
         "action": "view",
+        "area": "watches",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "create",
+        "area": "watches",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "edit",
+        "area": "watches",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "publish",
+        "area": "watches",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "delete",
+        "area": "watches",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "run",
+        "area": "watches",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "decide",
+        "area": "watches",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "manage",
+        "area": "watches",
+        "roles": [
+          {
+            "id": "admin",
+            "name": "Admin",
+            "via": "person"
+          }
+        ],
+        "scope": "all",
+        "securityTeamOnly": false
+      },
+      {
+        "action": "view",
         "area": "documents",
         "roles": [
           {
@@ -10622,6 +11146,7 @@
             "skills": "cxdemprv",
             "tools": "cxdemprv",
             "usage": "cxdemprv",
+            "watches": "cxdemprv",
             "webhooks": "cxdemprv",
             "widgets": "cxdemprv",
             "workflows": "cxdemprv"
@@ -10647,6 +11172,7 @@
             "secrets_egress": "v",
             "skills": "cxdemprv",
             "tools": "cxdemprv",
+            "watches": "cxdemprv",
             "widgets": "cxdemprv",
             "workflows": "cxdemprv"
           },
@@ -10655,6 +11181,7 @@
             "memory": "E"
           },
           "owner": {
+            "install": "m",
             "workspace": "m"
           },
           "reviewer": {
@@ -10899,6 +11426,19 @@
           "run": "all",
           "view": "all"
         },
+        "area": "watches"
+      },
+      {
+        "actions": {
+          "create": "all",
+          "decide": "all",
+          "delete": "all",
+          "edit": "all",
+          "manage": "all",
+          "publish": "all",
+          "run": "all",
+          "view": "all"
+        },
         "area": "documents"
       },
       {
@@ -11082,13 +11622,26 @@
           "view": null
         },
         "area": "workspace"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "install"
       }
     ],
     "id": "builder",
     "lockedReason": null,
     "name": "Builder",
     "notHeld": [],
-    "permissionCount": 148,
+    "permissionCount": 156,
     "permissions": [
       {
         "action": "view",
@@ -11752,6 +12305,46 @@
       },
       {
         "action": "create",
+        "area": "watches",
+        "scope": "all"
+      },
+      {
+        "action": "decide",
+        "area": "watches",
+        "scope": "all"
+      },
+      {
+        "action": "delete",
+        "area": "watches",
+        "scope": "all"
+      },
+      {
+        "action": "edit",
+        "area": "watches",
+        "scope": "all"
+      },
+      {
+        "action": "manage",
+        "area": "watches",
+        "scope": "all"
+      },
+      {
+        "action": "publish",
+        "area": "watches",
+        "scope": "all"
+      },
+      {
+        "action": "run",
+        "area": "watches",
+        "scope": "all"
+      },
+      {
+        "action": "view",
+        "area": "watches",
+        "scope": "all"
+      },
+      {
+        "action": "create",
         "area": "widgets",
         "scope": "all"
       },
@@ -11992,6 +12585,19 @@
           "run": null,
           "view": null
         },
+        "area": "watches"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
         "area": "documents"
       },
       {
@@ -12175,6 +12781,19 @@
           "view": null
         },
         "area": "workspace"
+      },
+      {
+        "actions": {
+          "create": null,
+          "decide": null,
+          "delete": null,
+          "edit": null,
+          "manage": null,
+          "publish": null,
+          "run": null,
+          "view": null
+        },
+        "area": "install"
       }
     ],
     "id": "<role>",
@@ -12191,7 +12810,8 @@
       "secrets_egress.manage",
       "settings.view",
       "settings.manage",
-      "workspace.manage"
+      "workspace.manage",
+      "install.manage"
     ],
     "permissionCount": 1,
     "permissions": [
@@ -12254,7 +12874,7 @@
         "description": "Everything in the team: every area and action. Actions held in the Security team still need a role there.",
         "id": "admin",
         "name": "Admin",
-        "permissionCount": 200
+        "permissionCount": 208
       },
       {
         "assignmentCount": 0,
@@ -12262,7 +12882,7 @@
         "description": "Everything in the team except people and access and the workspace's settings.",
         "id": "builder",
         "name": "Builder",
-        "permissionCount": 148
+        "permissionCount": 156
       },
       {
         "assignmentCount": 0,
@@ -12299,10 +12919,10 @@
       {
         "assignmentCount": 0,
         "builtin": true,
-        "description": "Transfers, closes and restores the workspace. One person holds it, and only a transfer moves it.",
+        "description": "Transfers, closes and restores the workspace, and changes the model aliases every team runs on. One person holds it, and only a transfer moves it.",
         "id": "owner",
         "name": "Owner",
-        "permissionCount": 1
+        "permissionCount": 2
       }
     ],
     "facets": {},
@@ -12434,6 +13054,7 @@
             "skills": "cxdemprv",
             "tools": "cxdemprv",
             "usage": "cxdemprv",
+            "watches": "cxdemprv",
             "webhooks": "cxdemprv",
             "widgets": "cxdemprv",
             "workflows": "cxdemprv"
@@ -12459,6 +13080,7 @@
             "secrets_egress": "v",
             "skills": "cxdemprv",
             "tools": "cxdemprv",
+            "watches": "cxdemprv",
             "widgets": "cxdemprv",
             "workflows": "cxdemprv"
           },
@@ -12467,6 +13089,7 @@
             "memory": "E"
           },
           "owner": {
+            "install": "m",
             "workspace": "m"
           },
           "reviewer": {

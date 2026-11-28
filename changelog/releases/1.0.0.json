@@ -1,0 +1,66 @@
+{
+  "version": "1.0.0",
+  "date": "2026-11-19",
+  "entries": [
+    {
+      "title": "Agents are written as a brief",
+      "description": "An agent's page now holds its purpose, goal, how to answer and never rules as one document: type @ to add a tool, a knowledge base or a skill, and the agent gets it. The test chat shows which step of a skill the agent is on, and a publish that cannot go ahead names the field that blocks it.",
+      "tag": "new"
+    },
+    {
+      "title": "Keep a look-up to one step of a skill",
+      "description": "A skill builder can now mark a step's tool as only for that step, so the agent cannot use it outside the skill even when it only reads.",
+      "tag": "new"
+    },
+    {
+      "title": "Skills can hold numbered steps",
+      "description": "A skill's page now has when to use it, notes and numbered steps in one place: type @ to name a tool, a knowledge base or another skill, and add a check to a step. A publish that cannot go ahead names the step that blocks it, and tests, versions, files and the agents that use the skill open from the page header instead of tabs.",
+      "tag": "new"
+    },
+    {
+      "title": "A skill's actions run only through its steps",
+      "description": "An agent can no longer use a skill's write action without the skill: the action is reached only at its step, and a check that fails ends the skill for that reply with the reason. A step that changes something needs a check written as a rule, and the publish check points at a step that names a tool without running it.",
+      "tag": "improved"
+    },
+    {
+      "title": "Agent changes run one at a time",
+      "description": "When an agent makes several changes in one reply, they now run one after another instead of side by side, on every agent. A skill loaded in a chat now replaces the one loaded by the reply before, so skills no longer pile up as a conversation goes on.",
+      "tag": "improved"
+    },
+    {
+      "title": "Agents that ask other agents share one budget",
+      "description": "When an agent asks another agent, both spend from the first conversation's budget, which is now checked before every model call: an agent asked at the cap stops and the first agent gives one closing answer. A scheduled run can ask the agents it was granted, and start workflows, in its own team only.",
+      "tag": "improved"
+    },
+    {
+      "title": "Chats show where a skill is and how it ended",
+      "description": "Every chat now shows the step a skill is on and, under the reply it ended in, whether it finished, was blocked or stopped, with the reason. On a skill's page the tool you pick anywhere in a step becomes the tool that step runs, marked \"runs\".",
+      "tag": "improved"
+    },
+    {
+      "title": "Reconnect notices name the environment",
+      "description": "The notice admins get when an app's team account stops working now says whether it is the sandbox or the production account.",
+      "tag": "fix"
+    },
+    {
+      "title": "Refused events show in the team's Activity",
+      "description": "When an event does not match a workflow's inputs, the team's Activity and its account admins' Background page list a failed job saying which workflow did not run and which field was wrong.",
+      "tag": "fix"
+    },
+    {
+      "title": "Reloading a skill keeps what you typed",
+      "description": "When someone else saves a skill before you, Reload now shows their version with your unsaved changes kept on top, ready to save. It used to drop them.",
+      "tag": "fix"
+    },
+    {
+      "title": "Run inputs are checked against their declared types",
+      "description": "A workflow no longer starts with an input of the wrong type or a required field missing: the start is refused and names the field and the reason. A number typed as text, in a form, a spreadsheet or on the command line, is read as the number.",
+      "tag": "fix"
+    },
+    {
+      "title": "Scheduled agent runs no longer ask other agents",
+      "description": "A run with no person behind it, such as a scheduled one, is not offered the agents it was granted, and its run log records which ones were withheld. Chats with a person work as before.",
+      "tag": "fix"
+    }
+  ]
+}
