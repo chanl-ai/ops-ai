@@ -23,13 +23,15 @@ ROOT = Path(__file__).resolve().parents[2]
 CLEAN_MAKE_ENV = {k: v for k, v in os.environ.items() if k not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL")}
 
 
-def plan(tmp_path: Path, *changed: str, ref: str = "", full: str = "", event: str = "") -> dict[str, str]:
+def plan(
+    tmp_path: Path, *changed: str, ref: str = "", full: str = "", event: str = "", tested: str = ""
+) -> dict[str, str]:
     listed = tmp_path / "changed.txt"
     listed.write_text("\n".join(changed) + "\n", encoding="utf-8")
     out = subprocess.run(
         ["bash", "scripts/ci-plan.sh", str(listed)],
         cwd=ROOT,
-        env={**CLEAN_MAKE_ENV, "GITHUB_REF": ref, "CI_FULL": full, "GITHUB_EVENT_NAME": event},
+        env={**CLEAN_MAKE_ENV, "GITHUB_REF": ref, "CI_FULL": full, "GITHUB_EVENT_NAME": event, "CI_TESTED": tested},
         capture_output=True,
         text=True,
         check=True,
@@ -226,13 +228,42 @@ def test_a_pull_request_skips_the_slow_jobs_that_the_merge_queue_and_develop_run
     assert _runs("repo", plan(tmp_path, "make/env.mk", event="pull_request", full="true"))
 
 
-def test_the_script_tests_and_release_proof_wait_for_heavy_and_a_pull_request_still_gets_ci_ok() -> None:
+def test_release_proof_waits_for_heavy_and_a_pull_request_still_gets_ci_ok() -> None:
     jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
     script_step = next(s for s in jobs["checks"]["steps"] if s.get("name") == "Script tests")
-    assert "outputs.heavy == 'true'" in script_step["if"], script_step
+    assert "heavy" not in script_step["if"], script_step
     assert "outputs.heavy == 'true'" in jobs["release-proof"]["if"], jobs["release-proof"]["if"]
     # Skipped jobs pass the gate.
     assert _gate({"plan": "success", "repo": "skipped", "store-mssql": "skipped", "release-proof": "skipped"}) == 0
+
+
+def test_a_develop_push_of_a_commit_the_queue_tested_plans_no_test_job(tmp_path: Path) -> None:
+    develop = "refs/heads/develop"
+    p = plan(tmp_path, "services/kb-service/src/ops_kb/app.py", ref=develop, event="push", tested="true")
+    assert all(
+        not _runs(j, p) for j in ("checks", "service", "package", "console", "docs", "repo", "store-mssql", "usecases")
+    ), p
+    # The workflow sets it only from a green merge_group run of the pushed sha.
+    run = _plan_step()["run"]
+    assert "event=merge_group&head_sha=$GITHUB_SHA&status=success" in run and "CI_TESTED=true" in run, run
+    # Without that run (a direct push) the plan is made as before.
+    p = plan(tmp_path, "services/kb-service/src/ops_kb/app.py", ref=develop, event="push")
+    assert p["services"] != "[]" and _runs("service", p), p
+
+
+def test_a_release_or_main_push_runs_every_job_even_when_told_it_was_tested(tmp_path: Path) -> None:
+    for ref in ("refs/heads/release/1.2.0", "refs/heads/hotfix/1.2.1", "refs/heads/main"):
+        p = plan(tmp_path, "docs/deploy/release.md", ref=ref, event="push", tested="true")
+        assert (p["docs"], p["full"]) == ("true", "false" if ref.endswith("main") else "true"), (ref, p)
+
+
+def test_a_pull_request_that_changes_scripts_or_a_workflow_runs_the_script_tests(tmp_path: Path) -> None:
+    jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
+    step = next(s for s in jobs["checks"]["steps"] if s.get("name") == "Script tests")
+    for changed in ("scripts/pr_flow.py", ".github/workflows/ci.yml"):
+        p = plan(tmp_path, changed, event="pull_request")
+        assert ci_local.condition(step["if"], p) is True, (changed, p)
+    assert ci_local.condition(step["if"], plan(tmp_path, "apps/console/src/x.ts", event="pull_request")) is False
 
 
 def test_the_repo_job_is_one_matrix_entry_per_suite_and_check(tmp_path: Path) -> None:
