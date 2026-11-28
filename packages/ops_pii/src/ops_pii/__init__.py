@@ -26,7 +26,9 @@ from typing import Any, cast
 # Longer than the longest pattern that may contain a space (a spaced card number, a spaced phone number).
 HOLD = 32
 
-_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+# The name before the @ is read up to 64 characters, the longest a mailbox name may be: with no bound, the search
+# takes time that grows with the square of a long run of such characters that has no @ after it.
+_EMAIL = re.compile(r"[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _SSN = re.compile(r"(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)")
 _CARD = re.compile(r"(?<![\w-])(?:\d[ -]?){12,18}\d(?![\w-])")
 _PHONE = re.compile(r"(?<![\d+])(?:\+\d{1,3}[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]\d{3}[ .-]\d{4}(?!\d)")

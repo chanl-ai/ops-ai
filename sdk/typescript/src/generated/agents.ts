@@ -10099,10 +10099,21 @@ export interface components {
             agentSlug: string;
             /** Approvals */
             approvals: string[];
+            /**
+             * Approvalsneeded
+             * @default 1
+             */
+            approvalsNeeded: number;
             /** Assignee */
             assignee?: string | null;
+            /** Canassign */
+            canAssign?: boolean | null;
             /** Candecide */
             canDecide?: boolean | null;
+            /** Canreassign */
+            canReassign?: boolean | null;
+            /** Canreturn */
+            canReturn?: boolean | null;
             /** Confidence */
             confidence: number;
             /** Createdat */
@@ -10151,6 +10162,8 @@ export interface components {
             /** Title */
             title: string;
             toolModule?: components["schemas"]["ToolModuleReviewRef"] | null;
+            /** Viewerapproved */
+            viewerApproved?: boolean | null;
             /** Workflowid */
             workflowId: string;
             /** Workflowname */
@@ -12878,6 +12891,8 @@ export interface components {
         ThreadReview: {
             /** Actionfields */
             actionFields?: components["schemas"]["ActionField"][];
+            /** Actionlabel */
+            actionLabel?: string | null;
             /** Actiontool */
             actionTool: string;
             /** Agentslug */
@@ -12886,14 +12901,25 @@ export interface components {
             amount?: number | null;
             /** Approvals */
             approvals: string[];
+            /**
+             * Approvalsneeded
+             * @default 1
+             */
+            approvalsNeeded: number;
             /** Assignee */
             assignee?: string | null;
             /** Calls */
             calls?: {
                 [key: string]: components["schemas"]["JsonValue"];
             } | null;
+            /** Canassign */
+            canAssign?: boolean | null;
             /** Candecide */
             canDecide?: boolean | null;
+            /** Canreassign */
+            canReassign?: boolean | null;
+            /** Canreturn */
+            canReturn?: boolean | null;
             /** Caseid */
             caseId?: string | null;
             /** Casetitle */
@@ -12976,6 +13002,8 @@ export interface components {
             task?: components["schemas"]["TypedTask"] | null;
             /** Title */
             title: string;
+            /** Viewerapproved */
+            viewerApproved?: boolean | null;
             /** Workflowid */
             workflowId: string;
             /** Workflowname */
