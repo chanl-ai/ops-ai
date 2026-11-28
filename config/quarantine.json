@@ -49,6 +49,34 @@
       "expires": "2026-12-26",
       "reason": "registry row marked failing before the nightly existed; owner to fix or remove",
       "added": "2026-11-26"
+    },
+    {
+      "id": "uc-621",
+      "owner": "ops-release",
+      "expires": "2026-12-26",
+      "reason": "needs a running local stack at OPS_BASE_URL (make up); a hosted runner starts none",
+      "added": "2026-11-27"
+    },
+    {
+      "id": "uc-622",
+      "owner": "ops-release",
+      "expires": "2026-12-26",
+      "reason": "needs a running local stack at OPS_BASE_URL (make up); a hosted runner starts none",
+      "added": "2026-11-27"
+    },
+    {
+      "id": "uc-624",
+      "owner": "ops-release",
+      "expires": "2026-12-26",
+      "reason": "needs a running local stack at OPS_BASE_URL (make up); a hosted runner starts none",
+      "added": "2026-11-27"
+    },
+    {
+      "id": "uc-668",
+      "owner": "ops-release",
+      "expires": "2026-12-26",
+      "reason": "needs the ops-ai-plugins repository beside the checkout; the hosted job does not clone it",
+      "added": "2026-11-27"
     }
   ]
 }
