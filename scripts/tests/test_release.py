@@ -1,11 +1,10 @@
-"""`make release-pr`, `release-cut`, `hotfix-cut` and `release-version` (scripts/release.py) driven through their
-command line on a scratch repository with a fake `gh` and a fake `make`.
+"""`make release-start`, `hotfix-start`, `release-rc` and the finish step (scripts/release.py) on a scratch repository
+with a fake `gh`, and the release doctor (scripts/release_doctor.py) on planted input.
 
-Failure modes: a release PR opens on a train whose `make ci-local` is red, that lacks commits of develop, whose
-checkout is not its head or whose version file is not the release's; a hotfix PR opens on a head whose CI or staging
-deploy with its click walk did not succeed; the body leaves out the merged pull requests or the SDK version; a cut
-drops commits of the train that develop does not hold, or does not create a missing train; a hotfix branch is cut from
-anywhere but a tag."""
+Failure modes: a release starts while another branch exists, on a tag that exists or a red develop tip; the start
+commit leaves out a version field or is cut from the wrong base; a hotfix is cut from develop instead of the tag; a
+candidate is tagged before its staging deploy passed; a merged branch is tagged with a version its name disagrees with;
+the doctor misses a stale mention, a version that differs, a missing tag, a missing merge-back or an unarmed one."""
 
 from __future__ import annotations
 
@@ -18,7 +17,11 @@ from typing import Any
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[1] / "release.py"
+SCRIPTS = Path(__file__).resolve().parents[1]
+SCRIPT = SCRIPTS / "release.py"
+sys.path.insert(0, str(SCRIPTS))
+import release  # noqa: E402
+import release_doctor  # noqa: E402
 
 FAKE_GH = """#!/usr/bin/env python3
 import json, os, sys
@@ -62,60 +65,45 @@ def git(repo: Path, *args: str) -> str:
 
 
 def release_repo(tmp: Path) -> Path:
-    """origin with main and develop at 1.0.0, a tag v1.0.0 on develop, and release/current holding one merged pull
-    request that raised the SDK version and the version file to 1.1.0; the checkout is at the train's head."""
+    """origin with main at 1.0.0 tagged v1.0.0, and develop one commit ahead of it; the checkout is on develop."""
     remote, work = tmp / "remote.git", tmp / "work"
     subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(remote)], check=True)
     subprocess.run(["git", "clone", "-q", str(remote), str(work)], check=True, capture_output=True)
-    (work / "sdk/python").mkdir(parents=True)
-    (work / "sdk/typescript").mkdir(parents=True)
-    (work / "sdk/python/pyproject.toml").write_text('[project]\nname = "ops-ai"\nversion = "1.0.0"\n')
-    (work / "sdk/typescript/package.json").write_text('{"name": "@chanl-ai/ops-ai", "version": "1.0.0"}\n')
-    (work / "deploy/release").mkdir(parents=True)
-    (work / "deploy/release/version").write_text("1.0.0\n")
+    for path, text in {
+        "sdk/python/pyproject.toml": '[project]\nname = "ops-ai"\nversion = "1.0.0"\n',
+        "sdk/python/src/ops_ai/__init__.py": '__version__ = "1.0.0"\n',
+        "sdk/typescript/package.json": '{\n  "name": "@chanl-ai/ops-ai",\n  "version": "1.0.0"\n}\n',
+        "deploy/release/version": "1.0.0\n",
+    }.items():
+        (work / path).parent.mkdir(parents=True, exist_ok=True)
+        (work / path).write_text(text)
     git(work, "add", ".")
     git(work, "commit", "-q", "-m", "first")
     git(work, "push", "-q", "origin", "HEAD:main", "HEAD:develop")
     git(work, "tag", "v1.0.0")
     git(work, "push", "-q", "origin", "v1.0.0")
-    git(work, "checkout", "-q", "-b", "feature")
-    (work / "sdk/python/pyproject.toml").write_text('[project]\nname = "ops-ai"\nversion = "1.1.0"\n')
-    (work / "sdk/typescript/package.json").write_text('{"name": "@chanl-ai/ops-ai", "version": "1.1.0"}\n')
-    (work / "deploy/release/version").write_text("1.1.0\n")
-    git(work, "commit", "-q", "-am", "feat(sdk): add runs.cancel")
-    git(work, "checkout", "-q", "-b", "release/current", "v1.0.0")
-    git(work, "merge", "-q", "--no-ff", "feature", "-m", "Merge pull request #12 from chanl-ai/feat/sdk-runs-cancel")
-    git(
-        work,
-        "commit",
-        "-q",
-        "--amend",
-        "-m",
-        "Merge pull request #12 from chanl-ai/feat/sdk-runs-cancel",
-        "-m",
-        "feat(sdk): add runs.cancel",
-    )
-    git(work, "push", "-q", "origin", "release/current")
+    (work / "feature").write_text("x")
+    git(work, "add", "feature")
+    git(work, "commit", "-q", "-m", "feat: a feature")
+    git(work, "push", "-q", "origin", "HEAD:develop")
     git(work, "fetch", "-q", "origin")
     return work
 
 
-def release_pr(
-    work: Path, tmp: Path, gh_state: dict[str, Any] | None = None, command: str = "pr", **env_changes: str
+GREEN: dict[str, Any] = {"runs": {"ci.yml": [{"databaseId": 1, "conclusion": "success", "status": "completed"}]}}
+STAGING_JOB = {"name": "staging / deploy", "conclusion": "success", "databaseId": 11}
+DEPLOYED: dict[str, Any] = {**GREEN, "jobs": {"1": [STAGING_JOB]}, "log": "stg-deploy: click walk (41 OK, 0 FAIL)"}
+
+
+def release_cmd(
+    work: Path, tmp: Path, gh_state: dict[str, Any] | None = None, command: str = "start", **env_changes: str
 ) -> subprocess.CompletedProcess[str]:
     bin_dir = tmp / "bin"
     bin_dir.mkdir(exist_ok=True)
-    for name, text in (("gh", FAKE_GH), ("make", FAKE_MAKE)):
-        (bin_dir / name).write_text(text)
-        (bin_dir / name).chmod(0o755)
-    env = {
-        **os.environ,
-        **IDENT,
-        "PATH": f"{bin_dir}:{os.environ['PATH']}",
-        "V": "1.1.0",
-        "FAKE_GH": json.dumps(gh_state or {}),
-        "FAKE_LOG": str(tmp / "calls.log"),
-    }
+    (bin_dir / "gh").write_text(FAKE_GH)
+    (bin_dir / "gh").chmod(0o755)
+    env = {**os.environ, **IDENT, "PATH": f"{bin_dir}:{os.environ['PATH']}", "V": "1.1.0"}
+    env |= {"FAKE_GH": json.dumps(gh_state if gh_state is not None else GREEN), "FAKE_LOG": str(tmp / "calls.log")}
     env.update(env_changes)
     return subprocess.run(
         [sys.executable, str(SCRIPT), command], cwd=work, capture_output=True, text=True, env=env, check=False
@@ -127,156 +115,162 @@ def calls(tmp: Path) -> str:
     return log.read_text() if log.exists() else ""
 
 
-def advance(work: Path, branch: str, name: str) -> str:
-    """One more commit on origin's `branch`, made from a throwaway branch so the checkout stays where it is."""
-    git(work, "checkout", "-q", "-b", "tmp-advance", f"origin/{branch}")
-    (work / name).write_text(name)
-    git(work, "add", name)
-    git(work, "commit", "-q", "-m", name)
-    git(work, "push", "-q", "origin", f"HEAD:{branch}")
-    git(work, "checkout", "-q", "release/current")
-    git(work, "branch", "-q", "-D", "tmp-advance")
-    git(work, "fetch", "-q", "origin")
-    return git(work, "rev-parse", f"origin/{branch}").strip()
+def branches(work: Path) -> str:
+    return git(work, "ls-remote", "--heads", "origin")
 
 
-def test_the_train_pr_runs_ci_local_and_opens_into_develop_with_the_release_title(tmp_path: Path) -> None:
+def test_start_pushes_one_version_commit_from_develop_and_opens_the_pull_request_into_main(tmp_path: Path) -> None:
     work = release_repo(tmp_path)
-    dry = release_pr(work, tmp_path)
-    assert dry.returncode == 0, dry.stderr
-    assert "release: 1.1.0 into develop" in dry.stdout and "dry run" in dry.stdout
-    assert "ci-local" not in calls(tmp_path)
-    run = release_pr(work, tmp_path, DRY="0")
-    assert run.returncode == 0, run.stderr
-    assert "make -C" in calls(tmp_path) and "ci-local BASE=origin/develop" in calls(tmp_path)
-    create = next(line for line in calls(tmp_path).splitlines() if line.startswith("gh "))
-    args = json.loads(create[3:])
-    assert args[args.index("--base") + 1] == "develop" and args[args.index("--head") + 1] == "release/current"
-    assert args[args.index("--title") + 1] == "release: 1.1.0 into develop"
-    body = args[args.index("--body") + 1]
-    assert "#12 feat(sdk): add runs.cancel" in body and "sdk/**: changed" in body
-    assert "python ops-ai 1.0.0 -> 1.1.0" in body and "typescript @chanl-ai/ops-ai 1.0.0 -> 1.1.0" in body
-    assert "make ci-local green" in body and "no pull request to main" in body
-
-
-def test_it_refuses_a_red_ci_local_and_opens_nothing(tmp_path: Path) -> None:
-    run = release_pr(release_repo(tmp_path), tmp_path, DRY="0", FAKE_MAKE_RC="1")
-    assert run.returncode == 1 and "ci-local is red" in run.stderr
-    assert "gh " not in calls(tmp_path)
-
-
-def test_it_refuses_a_train_that_lacks_develop_a_checkout_off_the_head_or_a_dirty_one(tmp_path: Path) -> None:
-    work = release_repo(tmp_path)
-    advance(work, "develop", "hotfix-landed")
-    behind = release_pr(work, tmp_path, DRY="0")
-    assert behind.returncode == 1 and "lacks commits of origin/develop" in behind.stderr
-    git(work, "merge", "-q", "--no-ff", "origin/develop", "-m", "chore: merge develop")
-    git(work, "push", "-q", "origin", "release/current")
-    (work / "dirty").write_text("x")
-    git(work, "add", "dirty")
-    dirty = release_pr(work, tmp_path, DRY="0")
-    assert dirty.returncode == 1 and "uncommitted" in dirty.stderr
-    git(work, "reset", "-q", "--hard", "HEAD~1")
-    stale = release_pr(work, tmp_path, DRY="0")
-    assert stale.returncode == 1 and "not at origin/release/current" in stale.stderr
-    assert "ci-local" not in calls(tmp_path)
-
-
-def test_a_version_file_that_is_not_the_release_blocks_the_pr_and_set_version_fixes_it(tmp_path: Path) -> None:
-    work = release_repo(tmp_path)
-    wrong = release_pr(work, tmp_path, V="1.2.0")
-    assert wrong.returncode == 1 and "says 1.1.0, not 1.2.0" in wrong.stderr
-    done = release_pr(work, tmp_path, command="set-version", V="1.2.0", DRY="0")
+    preview = release_cmd(work, tmp_path)
+    assert preview.returncode == 0 and "release/1.1.0" not in branches(work), preview.stderr
+    done = release_cmd(work, tmp_path, DRY="0")
     assert done.returncode == 0, done.stderr
     git(work, "fetch", "-q", "origin")
-    assert git(work, "show", "origin/release/current:deploy/release/version") == "1.2.0\n"
-    again = release_pr(work, tmp_path, command="set-version", V="1.2.0", DRY="0")
-    assert "already says 1.2.0" in again.stdout
-
-
-def test_the_cut_fast_forwards_the_train_to_develop_after_a_release_and_never_drops_its_commits(tmp_path: Path) -> None:
-    work = release_repo(tmp_path)
-    dropped = release_pr(work, tmp_path, command="cut", DRY="0")
-    assert dropped.returncode == 1 and "holds commits origin/develop lacks" in dropped.stderr
-    git(work, "push", "-q", "origin", "release/current:develop")
-    develop = advance(work, "develop", "after-release")
-    done = release_pr(work, tmp_path, command="cut", DRY="0")
-    assert done.returncode == 0, done.stderr
-    git(work, "fetch", "-q", "origin")
-    assert git(work, "rev-parse", "origin/release/current").strip() == develop
-
-
-def test_the_cut_creates_a_missing_train_at_develop(tmp_path: Path) -> None:
-    work = release_repo(tmp_path)
-    git(work, "push", "-q", "origin", "--delete", "release/current")
-    assert "is missing" in release_pr(work, tmp_path, command="cut").stdout
-    done = release_pr(work, tmp_path, command="cut", DRY="0")
-    assert done.returncode == 0, done.stderr
-    git(work, "fetch", "-q", "origin")
-    assert git(work, "rev-parse", "origin/release/current").strip() == git(work, "rev-parse", "origin/develop").strip()
-
-
-def test_a_hotfix_is_cut_from_the_tag_with_the_version_set_and_needs_a_name(tmp_path: Path) -> None:
-    work = release_repo(tmp_path)
-    advance(work, "develop", "unreleased")
-    assert release_pr(work, tmp_path, command="hotfix-cut", V="1.0.1", DRY="0").returncode == 1
-    run = release_pr(work, tmp_path, command="hotfix-cut", V="1.0.1", HOTFIX="login-loop", DRY="0")
-    assert run.returncode == 0, run.stderr
-    git(work, "fetch", "-q", "origin")
-    assert git(work, "show", "origin/hotfix/login-loop:deploy/release/version") == "1.0.1\n"
-    assert git(work, "rev-parse", "origin/hotfix/login-loop^").strip() == git(work, "rev-parse", "v1.0.0").strip()
-
-
-STAGING_JOB = {"name": "staging / deploy", "conclusion": "success", "databaseId": 11}
-READY: dict[str, Any] = {
-    "runs": {"ci.yml": [{"databaseId": 1, "conclusion": "success", "status": "completed"}]},
-    "jobs": {"1": [STAGING_JOB]},
-    "log": "stg-deploy: click walk (41 OK, 0 FAIL)",
-}
-
-
-def ready(**changes: Any) -> dict[str, Any]:
-    return {**READY, **changes}
-
-
-def hotfix_branch(work: Path) -> None:
-    advance(work, "develop", "unreleased")
-    done = release_pr(work, work.parent, command="hotfix-cut", V="1.0.1", HOTFIX="login-loop", DRY="0")
-    assert done.returncode == 0, done.stderr
-    git(work, "fetch", "-q", "origin")
-    advance(work, "hotfix/login-loop", "the-fix")
+    assert git(work, "rev-parse", "origin/release/1.1.0^") == git(work, "rev-parse", "origin/develop")
+    for path in ("deploy/release/version", "sdk/python/src/ops_ai/__init__.py"):
+        assert "1.1.0" in git(work, "show", f"origin/release/1.1.0:{path}")
+    assert '"version": "1.1.0"' in git(work, "show", "origin/release/1.1.0:sdk/typescript/package.json")
+    assert 'version = "1.1.0"' in git(work, "show", "origin/release/1.1.0:sdk/python/pyproject.toml")
+    pr = calls(tmp_path)
+    assert '"--base", "main"' in pr and '"--title", "release: 1.1.0"' in pr
 
 
 @pytest.mark.parametrize(
-    ("state", "named"),
+    ("setup", "state", "named"),
     [
-        (
-            ready(
-                runs={**READY["runs"], "ci.yml": [{"databaseId": 1, "conclusion": "failure", "status": "completed"}]}
-            ),
-            "ci.yml",
-        ),
-        (ready(jobs={"1": []}), "no staging deploy"),
-        (ready(jobs={"1": [{**STAGING_JOB, "conclusion": "failure"}]}), "failure"),
-        (ready(log="stg-deploy: click walk skipped (SKIP_WALK=1)"), "click walk"),
-        (ready(log="stg-deploy: click walk (40 OK, 1 FAIL)"), "1 FAIL"),
+        ("branch", None, "release/1.0.5 exists"),
+        ("tag", None, "v1.1.0 exists"),
+        ("older", None, "not above the newest release"),
+        ("", {"runs": {"ci.yml": [{"databaseId": 1, "conclusion": "failure", "status": "completed"}]}}, "failure"),
     ],
 )
-def test_a_hotfix_pr_is_refused_unless_ci_and_the_staging_deploy_with_its_walk_succeeded(
-    tmp_path: Path, state: dict[str, Any], named: str
+def test_start_refuses_another_branch_a_used_or_lower_version_and_a_red_develop(
+    tmp_path: Path, setup: str, state: dict[str, Any] | None, named: str
 ) -> None:
     work = release_repo(tmp_path)
-    hotfix_branch(work)
-    run = release_pr(work, tmp_path, state, V="1.0.1", HOTFIX="login-loop")
-    assert run.returncode == 1
-    assert named in run.stderr
-    assert "hotfix: 1.0.1" not in run.stdout
+    if setup == "branch":
+        git(work, "push", "-q", "origin", "HEAD:refs/heads/release/1.0.5")
+    if setup == "tag":
+        git(work, "tag", "v1.1.0")
+        git(work, "push", "-q", "origin", "v1.1.0")
+    env = {"V": "0.9.0"} if setup == "older" else {}
+    run = release_cmd(work, tmp_path, state, DRY="0", **env)
+    assert run.returncode == 1 and named in run.stderr, run.stderr
+    assert "release/1.1.0" not in branches(work) and "pr" not in calls(tmp_path)
 
 
-def test_a_hotfix_pr_is_titled_for_develop_and_lists_only_the_fix(tmp_path: Path) -> None:
+def test_a_hotfix_is_cut_from_the_newest_tag_not_develop_and_needs_a_name(tmp_path: Path) -> None:
     work = release_repo(tmp_path)
-    hotfix_branch(work)
-    run = release_pr(work, tmp_path, READY, V="1.0.1", HOTFIX="login-loop")
+    assert release_cmd(work, tmp_path, command="hotfix-start", V="1.0.1", DRY="0").returncode == 1
+    run = release_cmd(work, tmp_path, command="hotfix-start", V="1.0.1", NAME="login-loop", DRY="0")
     assert run.returncode == 0, run.stderr
-    assert "hotfix: 1.0.1 into develop" in run.stdout and "the-fix" in run.stdout
-    assert "unreleased" not in run.stdout and "sdk/**: unchanged" in run.stdout
+    git(work, "fetch", "-q", "origin")
+    assert git(work, "rev-parse", "origin/hotfix/login-loop^") == git(work, "rev-parse", "v1.0.0^{commit}")
+    assert git(work, "show", "origin/hotfix/login-loop:deploy/release/version") == "1.0.1\n"
+    assert '"--title", "hotfix: 1.0.1"' in calls(tmp_path)
+
+
+def test_a_candidate_is_tagged_only_after_its_staging_deploy_and_walk_passed(tmp_path: Path) -> None:
+    work = release_repo(tmp_path)
+    assert release_cmd(work, tmp_path, DRY="0").returncode == 0
+    unseen = release_cmd(work, tmp_path, {**GREEN, "jobs": {"1": []}}, command="rc", DRY="0")
+    assert unseen.returncode == 1 and "no staging deploy" in unseen.stderr
+    assert "-rc" not in git(work, "ls-remote", "--tags", "origin")
+    for n in (1, 2):
+        done = release_cmd(work, tmp_path, DEPLOYED, command="rc", DRY="0")
+        assert done.returncode == 0, done.stderr
+        assert f"v1.1.0-rc.{n}" in git(work, "ls-remote", "--tags", "origin")
+
+
+def test_a_merged_branch_is_tagged_only_with_the_version_its_name_says() -> None:
+    assert release.finish_tag("release/1.2.1", "1.2.1", ["v1.2.0"]) == "v1.2.1"
+    assert release.finish_tag("hotfix/login-loop", "1.2.2", ["v1.2.1"]) == "v1.2.2"
+    assert release.finish_tag("release/1.2.1", "1.2.1", ["v1.2.0", "v1.2.1"], existing=True) == "v1.2.1"
+    with pytest.raises(release.Refusal):
+        release.finish_tag("release/1.2.1", "1.2.0", ["v1.2.0"], existing=True)
+    for branch, have, tags in (
+        ("release/1.2.1", "1.2.0", []),
+        ("release/1.2.1", "1.2.1", ["v1.2.1"]),
+        ("release/1.2.1", "1.2.1", ["v1.3.0"]),
+        ("hotfix/x", "1.2.0", ["v1.2.1"]),
+        ("feature/x", "1.2.1", []),
+    ):
+        with pytest.raises(release.Refusal):
+            release.finish_tag(branch, have, tags)
+
+
+def test_the_doctor_finds_a_stale_mention_a_differing_version_and_a_page_that_names_a_missing_target() -> None:
+    texts = {
+        "docs/a.md": "Open release/current and run release-intake.\nPlain line.",
+        "make/x.mk": "Run `make verify` before every commit.",
+        ".github/workflows/y.yml": "# BASE=origin/main",
+    }
+    assert [h.split(" says ")[0] for h in release_doctor.banned_hits(texts)] == [
+        ".github/workflows/y.yml:1",
+        "docs/a.md:1",
+        "make/x.mk:1",
+    ]
+    assert release_doctor.version_problems("1.2.1", "1.0.0", "1.2.1", "1.2.1")
+    assert not release_doctor.version_problems("1.2.1", "1.2.1", "1.2.1", None)
+    mk = "release-start: x\nrelease-rc: y\nrelease-package: z\n"
+    assert release_doctor.doc_problems("make release-start and make release-gone", {"release-start"}, mk) == [
+        "docs/deploy/release.md names `make release-gone`, which does not exist. Fix: edit the page or add the target",
+        "docs/deploy/release.md does not list `make release-rc`. Fix: add it to the five steps",
+    ]
+
+
+def test_the_live_doctor_names_the_missing_tag_merge_back_and_arming_with_the_command_that_fixes_each() -> None:
+    state: dict[str, Any] = {
+        "branches": {"release/1.2.2": "1.2.2", "hotfix/x": "1.2.1"},
+        "tags": ["v1.2.0", "v1.2.1-rc.1"],
+        "off_main": ["v1.2.2"],
+        "main_version": "1.2.1",
+        "develop_has_main": False,
+        "proofs": {"release/1.2.2": ("release-proof of the push run is skipped, not success", "99")},
+        "merge_backs": [{"number": 7, "head": "merge-back/release-1.2.1", "armed": False}],
+    }
+    out = release_doctor.judge_live(state)
+    assert [line.split(" ")[0] for line in out] == [
+        "more",
+        "v1.2.2",
+        "main's",
+        "develop",
+        "release/1.2.2:",
+        "merge-back",
+    ], out
+    assert "git push origin :refs/tags/v1.2.2" in out[1]
+    assert "gh workflow run release-finish.yml -f branch=release/1.2.1" in out[2]
+    assert "has no green release-proof" in out[4] and "gh run rerun 99 --failed" in out[4]
+    assert "gh pr merge --auto --merge 7" in out[5]
+    assert (
+        release_doctor.judge_live(
+            {
+                **state,
+                "branches": {},
+                "tags": ["v1.2.1"],
+                "off_main": [],
+                "develop_has_main": True,
+                "proofs": {},
+                "merge_backs": [],
+            }
+        )
+        == []
+    )
+
+
+def test_the_upgrade_starts_at_the_newest_release_on_main_and_only_a_passing_proof_makes_it_mergeable() -> None:
+    tags = ["v1.0.0", "v1.1.0", "v1.2.0", "v1.2.1-rc.1", "v1.2.2", "v2026-10-23.1"]
+    assert release.latest_release(tags, lambda t: t != "v1.2.2") == "v1.2.0"
+    assert release.latest_release(tags, lambda t: False) is None
+    ran = {"name": "release-proof", "conclusion": "success"}
+    deployed = {"name": "staging / deploy", "conclusion": "success"}
+    assert release.proof_problem([ran, deployed]) is None
+    for jobs in (
+        [],
+        [deployed],
+        [ran],
+        [{**ran, "conclusion": "skipped"}, deployed],
+        [ran, {**deployed, "conclusion": "failure"}],
+        [ran, {**deployed, "conclusion": None, "status": "in_progress"}],
+    ):
+        assert release.proof_problem(jobs)

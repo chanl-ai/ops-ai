@@ -10,7 +10,31 @@ permissions:
   contents: read
 
 jobs:
+  trivial:
+    # A pull request that changes no file (scripts/ci_trivial.py) has nothing to scan: the merge-back of a release that
+    # develop already holds.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      trivial: ${{ steps.diff.outputs.trivial }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          trivial=false
+          if [ "$EVENT" = pull_request ]; then trivial=$(python3 scripts/ci_trivial.py "$BASE" HEAD); fi
+          echo "trivial=$trivial" >> "$GITHUB_OUTPUT"
+
   scan:
+    needs: trivial
+    # Fails closed: the scan is skipped only when the trivial job succeeded and said true; a failed or cancelled
+    # trivial job, or any other answer, runs it.
+    if: ${{ always() && !(needs.trivial.result == 'success' && needs.trivial.outputs.trivial == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

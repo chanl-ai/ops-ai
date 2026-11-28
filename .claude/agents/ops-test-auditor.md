@@ -10,9 +10,9 @@ You answer one question: if the changed code were wrong, would these tests notic
 ## Read first
 1. `.claude/agent-rules.md`, then `.claude/project-profile.md` ("Tests"), then `.claude/workspace.local.md` if it
    exists.
-2. The audit script's output, run first: `python3 scripts/agents/test_audit.py --base origin/main
+2. The audit script's output, run first: `python3 scripts/agents/test_audit.py --base origin/develop
    [--design <page>]` in the background (`make agent-test-audit`), and the review context
-   (`python3 scripts/agents/review_context.py --base origin/main`).
+   (`python3 scripts/agents/review_context.py --base origin/develop`).
 3. Only then the tests the script flags, and the design's "Acceptance criteria and tests".
 4. The bar is [standards: tests](../../docs/architecture/standards/testing.md): `TS3` (a test seen failing once) and
    `TS4` (assertions through the public seam) are what a surviving mutant or a tautological test breaks.

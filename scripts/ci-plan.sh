@@ -15,7 +15,11 @@
 set -euo pipefail
 base=${1:?usage: ci-plan.sh <base sha | file of changed paths>}
 cd "$(git rev-parse --show-toplevel)"
-if [ "${CI_TESTED:-}" = true ] && [ "${GITHUB_REF:-}" = refs/heads/develop ] && [ "${CI_FULL:-}" != true ]; then
+# CI_TRIVIAL=true (ci.yml, from scripts/ci_trivial.py: the pull request changes no file against its base) plans nothing
+# for a pull request or a queue group, so a merge-back of a release that develop already holds is green in about a minute.
+trivial=false
+case "${GITHUB_EVENT_NAME:-}" in pull_request | merge_group) [ "${CI_TRIVIAL:-}" = true ] && trivial=true ;; esac
+if { [ "${CI_TESTED:-}" = true ] && [ "${GITHUB_REF:-}" = refs/heads/develop ] || [ "$trivial" = true ]; } && [ "${CI_FULL:-}" != true ]; then
   for k in full heavy release console docs scripts code mssql store; do echo "$k=false"; done
   for k in repo_jobs services packages service_jobs; do echo "$k=[]"; done
   echo "repo_pool="

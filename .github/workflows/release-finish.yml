@@ -1,0 +1,132 @@
+# What happens when a release/X.Y.Z or hotfix/* pull request merges into main (docs/deploy/release.md, step 4); the
+# owner clicks merge and nothing else. One job, in this order:
+#   1. tags the merge commit vX.Y.Z, the version in deploy/release/version on main (scripts/release.py finish refuses
+#      when it disagrees with the branch name) and starts sdk-publish.yml and release-images.yml on the tag: a tag
+#      pushed with the workflow token starts no workflow of its own;
+#   2. opens the merge-back pull request merge-back/<branch> into develop (a branch cut from main with develop merged
+#      in; main itself is protected and is not a head that can be merged) and arms auto-merge, so it enters the merge queue by
+#      itself. The branch is pushed over the deploy key, because a push made with the workflow token starts no checks
+#      (.github/actions/push-key). A merge-back whose diff is empty or only the version files runs no test job
+#      (scripts/ci_trivial.py);
+#   3. deletes the release branch.
+# Start it by hand for a merge that was missed: gh workflow run release-finish.yml -f branch=release/X.Y.Z. A rerun
+# does what is left: a tag that already names the merge commit is validated against the branch and kept, and the two
+# publish workflows start only for a tag this run made; a merge-back branch that exists is continued, not recreated;
+# the release branch is deleted whenever the tag is good, even when the merge-back needs a person.
+name: release-finish
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: The merged release or hotfix branch, for example release/1.2.1
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-finish-${{ github.event.pull_request.head.ref || inputs.branch }}
+  cancel-in-progress: false
+
+jobs:
+  finish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+      (startsWith(github.event.pull_request.head.ref, 'release/') || startsWith(github.event.pull_request.head.ref, 'hotfix/')))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write # the tag, and the merge-back branch when there is no deploy key
+      actions: write # starts sdk-publish.yml and release-images.yml on the tag
+      pull-requests: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: ${{ github.event.pull_request.head.ref || inputs.branch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: ./.github/actions/push-key
+        with:
+          key: ${{ secrets.RELEASE_MAIN_DEPLOY_KEY }}
+      - name: What merged
+        id: merged
+        env:
+          EVENT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          sha=$EVENT_SHA
+          if [ -z "$sha" ]; then sha=$(gh pr list --head "$BRANCH" --base main --state merged --json mergeCommit --jq '.[0].mergeCommit.oid // empty'); fi
+          [ -n "$sha" ] || { echo "::error::no merged pull request from $BRANCH into main"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Tag the merge commit
+        id: tag
+        env:
+          SHA: ${{ steps.merged.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch -q --tags origin
+          have=$(git show "$SHA:deploy/release/version" | tr -d '[:space:]')
+          if [ "$(git rev-list -n 1 "v$have" 2>/dev/null || true)" = "$SHA" ]; then
+            # Left by an earlier run: still the version this branch says, and above the releases before it.
+            tag=$(EXISTING=1 python3 scripts/release.py finish)
+            echo "$tag already names $SHA"
+            made=false
+          else
+            tag=$(python3 scripts/release.py finish)
+            git tag "$tag" "$SHA"
+            git push -q origin "refs/tags/$tag"
+            made=true
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if [ "$made" = true ]; then
+            gh workflow run sdk-publish.yml --ref "$tag"
+            gh workflow run release-images.yml --ref "$tag"
+          fi
+      - name: Open the merge-back pull request and arm it
+        env:
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          branch="merge-back/${BRANCH//\//-}"
+          git fetch -q origin develop
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            # An earlier run made it: continue from where it is, so the push below stays a fast-forward.
+            git fetch -q origin "$branch"
+            git checkout -q -B "$branch" "origin/$branch"
+          else
+            git push -q "$PUSH_URL" "HEAD:refs/heads/$branch"
+            git checkout -q -B "$branch"
+          fi
+          url=$(gh pr list --head "$branch" --base develop --json url --jq '.[0].url // empty')
+          [ -n "$url" ] || url=$(gh pr create --base develop --head "$branch" \
+            --title "chore(release): merge $BRANCH back into develop" \
+            --body "Merges what the release put on main back into develop. Opened and armed by release-finish.yml; it enters the merge queue by itself.")
+          echo "merge back: $url"
+          if git merge --no-edit -m "Merge branch 'develop' into $branch" origin/develop; then
+            # Already holding develop: an empty commit, so the key's push still starts the checks.
+            [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ] || git commit -q --allow-empty -m "chore(release): start the checks of the merge back"
+            git push -q "$PUSH_URL" "HEAD:refs/heads/$branch"
+          else
+            files=$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')
+            git merge --abort
+            gh label create needs-merge --force --color B60205 --description "develop no longer merges cleanly into this branch" || true
+            gh pr edit "$url" --add-label needs-merge
+            gh pr comment "$url" --body "develop does not merge into this branch. Conflicting files:"$'\n\n'"$files"$'\n\n'"Merge develop in by hand (never a rebase) and push; the push starts the checks, then run: gh pr merge --auto --merge $url"
+            echo "::error title=Merge-back needs a person::develop does not merge into $branch; the files are in the comment on $url"
+            exit 1
+          fi
+          gh pr merge "$url" --auto --merge
+      - name: Delete the release branch
+        # The tag is good, so the branch has done its job; a merge-back that needs a person must not keep staging frozen
+        # and release-start refused.
+        if: ${{ always() && steps.tag.outcome == 'success' }}
+        run: git push "$PUSH_URL" --delete "$BRANCH" || echo "$BRANCH is already gone"

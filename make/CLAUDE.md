@@ -81,7 +81,7 @@ run records and knowledge pages have no delete route, so they stay. Code: `sdk/p
 | `sdk.mk`, `docs.mk` | `openapi`, `sdk`, `sdk-verify`, `sdk-check`; `docs-verify`, `docs-guides-check` |
 | `db.mk`, `db-scripts.mk` | `db-up`, `db-down` (both skip under `OPS_INFRA=external` or `shared`), `db-shell`, `db-sweep`, `migrate`, `migration`; the DBA scripts ([deploy/CLAUDE.md](../deploy/CLAUDE.md)); `mssql-remote-*`, the shared SQL Server on Fly for tests from a Mac |
 | `usecase.mk` adds `usecase-pick` and `quarantine` | Which use cases CI runs for a diff; the flaky list |
-| `release.mk` (`release-cut`, `release-pr`, `release-version`, `release-tag`, `release-main`, `hotfix-cut`: [docs/deploy/release.md](../docs/deploy/release.md)), `staging.mk`, `deps.mk`, `setup.mk`, `experiments.mk` | Releases, staging, dependency locks and mirrors, machine setup, agents-service experiments |
+| `release.mk` (`release-start`, `hotfix-start`, `release-rc`, `release-doctor`: [docs/deploy/release.md](../docs/deploy/release.md)), `staging.mk`, `deps.mk`, `setup.mk`, `experiments.mk` | Releases, staging, dependency locks and mirrors, machine setup, agents-service experiments |
 | `services.mk` | The generated `<verb>-<svc>` pass-throughs, for example `test-tools` runs `make -C services/tools-service test` |
 
 ## Known traps

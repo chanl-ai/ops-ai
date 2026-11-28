@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Picks the test files a change can affect and runs only those, printing what it picked and why.
 
-  make test-impacted BASE=origin/main          # run the picks
-  make test-impacted BASE=origin/main PLAN=1   # print the picks only
+  make test-impacted BASE=origin/develop          # run the picks
+  make test-impacted BASE=origin/develop PLAN=1   # print the picks only
 
 The pick, by changed file:
 - a test file: itself;
@@ -170,7 +170,7 @@ def commands(py: dict[str, list[str]], node: list[tuple[str, str]]) -> list[tupl
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--base", default="origin/main")
+    ap.add_argument("--base", default="origin/develop")
     ap.add_argument("--list", action="store_true", help="print the picks and stop")
     ap.add_argument("--files", nargs="*", help="use these changed files instead of git (for checks)")
     args = ap.parse_args(argv)

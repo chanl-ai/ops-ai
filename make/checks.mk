@@ -30,7 +30,7 @@ CHECKS = \
   store-inventory roles-matrix sbom k8s-base \
   ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards known-traps \
   downgrades migration-heads token-lifetime cross-service standards service-standards service-standards-self-test list-routes gateway-routes \
-  ci-steps ci-steps-self-test ci-local-self-test new-migration-self-test builder-watch-self-test usecase-outputs \
+  release-doctor ci-trivial-self-test ci-steps ci-steps-self-test ci-local-self-test new-migration-self-test builder-watch-self-test usecase-outputs \
   staging-hold-tests quarantine quarantine-self-test ci-usecases-self-test pr-flow-self-test lane-self-test md-images md-images-self-test
 
 # Access decided outside can(), the exceptions each lane may still hold, and the trailer a new line needs.
@@ -209,6 +209,12 @@ check-paths.ci-local-self-test = ^scripts/ci_local\.py$$|^\.github/workflows/ci\
 
 check-run.new-migration-self-test = $(PY) scripts/new_migration.py --self-test
 check-paths.new-migration-self-test = ^scripts/new_migration\.py$$
+# The release is one flow (docs/deploy/release.md): no stale mention of the old ones, matching versions, the page lists
+# the targets that exist. `make release-doctor LIVE=1` adds the checks that read GitHub.
+check-run.release-doctor = $(PY) scripts/release_doctor.py
+check-paths.release-doctor = ^(docs/deploy/release\.md|make/release\.mk|scripts/release.*|deploy/release/version|sdk/typescript/package\.json|sdk/python/pyproject\.toml|sdk/python/src/ops_ai/__init__\.py|uv\.lock|\.github/workflows/.*)$$
+check-run.ci-trivial-self-test = $(PY) scripts/ci_trivial.py --self-test
+check-paths.ci-trivial-self-test = ^scripts/ci_trivial\.py$$
 check-run.pr-flow-self-test = $(PY) scripts/pr_flow.py --self-test
 check-paths.pr-flow-self-test = ^scripts/pr_flow\.py$$
 check-run.lane-self-test = bash scripts/lane.sh --self-test

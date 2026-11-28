@@ -6,7 +6,7 @@ on:
   schedule:
     - cron: "17 3 * * *"
   push:
-    tags: ["v*"]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
   workflow_dispatch:
 
 permissions:

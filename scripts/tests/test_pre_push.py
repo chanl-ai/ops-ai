@@ -147,16 +147,16 @@ def console_push(repo: Path, tmp_path: Path, local: str, _since: str) -> tuple[i
 
 
 def console_repo(tmp_path: Path, change: str) -> tuple[Path, str, str]:
-    """A repo whose origin/main is the base and whose origin/develop holds one console change on top of it."""
+    """A repo whose origin/develop is the base and whose origin/feat/console holds one console change on top of it."""
     repo, base = make_repo(tmp_path)
-    git(repo, "update-ref", "refs/remotes/origin/main", base)
+    git(repo, "update-ref", "refs/remotes/origin/develop", base)
     (repo / "apps/console/src").mkdir(parents=True)
     (repo / "apps/console/src/a.ts").write_text("export const a = 1\n")
     (repo / "bad.py").write_text(change)
     git(repo, "add", ".")
     git(repo, "commit", "-qm", "console change")
     head = git(repo, "rev-parse", "HEAD")
-    git(repo, "update-ref", "refs/remotes/origin/develop", head)
+    git(repo, "update-ref", "refs/remotes/origin/feat/console", head)
     return repo, base, head
 
 
@@ -215,9 +215,9 @@ def test_a_remote_branch_named_for_the_process_is_refused_and_a_named_change_pus
     assert ok.returncode == 0, ok.stdout
 
 
-def test_the_train_and_a_hotfix_branch_push_under_their_own_names(tmp_path: Path) -> None:
-    # release/current and hotfix/<what> do not follow <type>/<scope>-<what>; a hotfix is named for its fix.
+def test_a_release_and_a_hotfix_branch_push_under_their_own_names(tmp_path: Path) -> None:
+    # release/1.2.1 and hotfix/<what> do not follow <type>/<scope>-<what>; a hotfix is named for its fix.
     repo, base = make_repo(tmp_path)
-    ok = [push_to(repo, base, base, b) for b in ("release/current", "hotfix/login-loop", "hotfix/1.2.1")]
+    ok = [push_to(repo, base, base, b) for b in ("release/1.2.1", "hotfix/login-loop", "hotfix/1.2.2")]
     assert all(r.returncode == 0 for r in ok), [r.stdout for r in ok]
     assert push_to(repo, base, base, "hotfixes/login").returncode == 1

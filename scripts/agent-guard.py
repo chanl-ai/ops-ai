@@ -20,7 +20,7 @@ import shlex
 import sys
 
 MAX_WAIT = 60
-PYTEST_INSTEAD = "Run `make test PKG=<member> T=<file>` or `make test-impacted BASE=origin/main`."
+PYTEST_INSTEAD = "Run `make test PKG=<member> T=<file>` or `make test-impacted BASE=origin/develop`."
 WAIT_INSTEAD = f"Keep a sleep to {MAX_WAIT}s or less; wait on a named check (`make test PKG=<member> T=<file>`)."
 
 
@@ -104,7 +104,7 @@ def check_make(w: list[str]) -> str | None:
 def check_pnpm(w: list[str]) -> str | None:
     if w[1:2] == ["verify"] or w[1:3] == ["run", "verify"]:
         return (
-            "Refused: a whole `pnpm verify` outside a commit. Run `make test-impacted BASE=origin/main`, "
+            "Refused: a whole `pnpm verify` outside a commit. Run `make test-impacted BASE=origin/develop`, "
             "or `pnpm --filter @ops-ai/console exec node --test <file>`; `git commit` runs the gates on what you stage."
         )
     return None
@@ -173,7 +173,7 @@ def self_test() -> int:
         ("make test PKG=services/platform-service T=", True),
         ("make -C services/kb-service test", True),
         ("make -C services/kb-service test T=tests/test_a.py", False),
-        ("make test-impacted BASE=origin/main", False),
+        ("make test-impacted BASE=origin/develop", False),
         ("make test", False),
         ("pnpm verify", True),
         ("pnpm run verify", True),

@@ -4,13 +4,14 @@ name: ci
 
 on:
   pull_request:
-    # labeled: adding ci:full starts a run of every job without a new push.
+    # No `labeled`: a label restarts the run, and the concurrency group cancels the one in progress, which leaves its ready and
+    # ci-ok failed on the same commit. ci:full counts on the next push; `make gha-verify BRANCH=` runs everything on demand.
     # ready_for_review: a draft runs no job (plan is skipped, and so is everything that needs it); marking it ready starts
     # the run, and later pushes run as usual.
-    types: [opened, synchronize, reopened, labeled, ready_for_review]
-    # A pull request into a release branch runs nothing: the release's own pull request to develop runs CI once
-    # (docs/deploy/release.md).
-    branches: [develop, main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    # A pull request into a release or hotfix branch runs the changed-files plan like one into develop; the push that
+    # merges it runs every job. The release's own pull request into main runs release-gate, which reports that push run.
+    branches: [develop, main, "release/[0-9]*", "hotfix/**"]
   # The merge queue on develop: the queue's temporary branch (develop plus the queued pull requests) runs the same jobs
   # as a pull request, planned from the queue's base, so ci-ok reports on it and the queue merges only on green.
   merge_group:
@@ -46,8 +47,10 @@ env:
 
 jobs:
   plan:
+    # The pull request of a release or hotfix branch into main plans nothing: the push to that branch already ran every
+    # job on the same commit, and ci-ok below reports that run's result instead of starting a second one.
     # A draft pull request runs nothing; ci-ok below still reports (success), so no required check stays pending.
-    if: github.event.pull_request.draft != true
+    if: ${{ github.event.pull_request.draft != true && !(github.base_ref == 'main' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'hotfix/'))) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -67,6 +70,7 @@ jobs:
       mssql: ${{ steps.plan.outputs.mssql }}
       heavy: ${{ steps.plan.outputs.heavy }}
       repo_jobs: ${{ steps.plan.outputs.repo_jobs }}
+      trivial: ${{ steps.plan.outputs.trivial }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -93,6 +97,10 @@ jobs:
               | scripts/ci-last-green.sh "$GITHUB_SHA" || true)
             if [ -n "$green" ]; then BASE_SHA=$green; else export CI_FULL=true; fi
           fi
+          if [ "$GITHUB_EVENT_NAME" = pull_request ] || [ "$GITHUB_EVENT_NAME" = merge_group ]; then
+            if [ "$(python3 scripts/ci_trivial.py "$BASE_SHA" HEAD)" = true ]; then export CI_TRIVIAL=true; fi
+          fi
+          echo "trivial=${CI_TRIVIAL:-false}" >> "$GITHUB_OUTPUT"
           base=$(git merge-base "$BASE_SHA" HEAD)
           scripts/ci-plan.sh "$base" | tee -a "$GITHUB_OUTPUT"
 
@@ -371,9 +379,9 @@ jobs:
           exit $failed
 
   release-proof:
-    # A pull request into main is a release: the branch's version file matches its name, the upgrade from the last tag's
-    # schema on a seeded database, and a fresh install through ./install.sh. A push to a release or hotfix branch runs it
-    # too. Both come before the vX.Y.Z tag publishes the images, so the install pulls images built from this commit from
+    # A release or hotfix branch: its version file matches its name, the upgrade from the offline floor and from the
+    # latest release on a seeded database, and a fresh install through ./install.sh, on every push to it. The pull
+    # request into main is not mergeable unless this job succeeded on its head (ci-ok reads the push run). Both come before the vX.Y.Z tag publishes the images, so the install pulls images built from this commit from
     # a registry inside the runner (BUILD=1); the pull from ghcr.io is a check after the tag
     # (docs/deploy/release.md). Needs the whole history and its tags.
     needs: plan
@@ -395,17 +403,17 @@ jobs:
         env:
           BRANCH: ${{ github.head_ref || github.ref_name }}
         run: python3 scripts/release.py check-version
-      - name: The upgrade from the last release
+      - name: The upgrade from the offline floor
+        # The oldest supported install (docs/deploy/database.md), reported apart from the upgrade most installs make.
+        run: make db-scripts-proof FROM="$(sed -n 's/^FLOOR=//p' deploy/database/proof.sh)"
+      - name: The upgrade from the latest release
+        # The newest vX.Y.Z tag reachable from main (scripts/release.py latest; rc tags and date tags are not releases).
         run: |
-          last=$(git tag --list 'v20*' --sort=-v:refname | head -1)
-          [ -n "$last" ] || { echo "::error title=No release tag::The upgrade proof needs the last release's tag."; exit 1; }
+          last=$(python3 scripts/release.py latest)
           floor=$(sed -n 's/^FLOOR=//p' deploy/database/proof.sh)
-          if git merge-base --is-ancestor "$floor" "$last"; then from=$last; else
-            from=$floor
-            echo "$last is before $floor, the offline-upgrade floor (docs/deploy/database.md); proving from $floor"
-          fi
-          echo "upgrade from $from"
-          make db-scripts-proof FROM="$from"
+          if git merge-base --is-ancestor "$last" "$floor"; then echo "$last is not after $floor, which the step above proved"; exit 0; fi
+          echo "upgrade from $last"
+          make db-scripts-proof FROM="$last"
       - name: A fresh install
         run: make install-proof BUILD=1
 
@@ -599,12 +607,13 @@ jobs:
           git push -q "$PUSH_URL" "HEAD:refs/heads/$HEAD_REF"
 
   ready:
-    # Whether the merge queue may take this: every other job passed and CodeQL is green on the pull request's head. The
-    # queue tests the pull request on develop's tip, so how far behind develop it is does not matter. A queue group and
+    # Whether the merge queue may take this: every other job passed and CodeQL is green on the pull request's head; in the
+    # queue's own run also that the entry's pull request was labelled `reviewed` by a maintainer after its last push. The
+    # queue tests the pull request on develop's tip, so a stale base does not matter. A queue group and
     # a push are built on develop, and CodeQL reports on pull requests, so there only the jobs are judged.
     # scripts/pr_flow.py ready; its --self-test is in make checks.
     name: ready
-    if: always() && github.event.pull_request.draft != true
+    if: always() && github.event.pull_request.draft != true && !(github.base_ref == 'main' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'hotfix/')))
     needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, usecases, maintainer-review]
     runs-on: ubuntu-24.04
     # CodeQL may still be running when the last job ends; this waits for it (codeql.yml allows it 45 minutes).
@@ -614,11 +623,25 @@ jobs:
       checks: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: The base revision's copy of the gate
+        # The queue's run judges the review with scripts/pr_flow.py; the pull request being merged must not be able to
+        # edit the check that judges it, so the queue run uses develop's copy (as maintainer-review does for its gate).
+        if: github.event_name == 'merge_group'
+        env:
+          BASE: ${{ github.event.merge_group.base_sha }}
+        run: |
+          git fetch -q --depth=1 origin "$BASE"
+          git show "$BASE:scripts/pr_flow.py" > scripts/pr_flow.py
+          echo "scripts/pr_flow.py taken from $BASE"
       - name: Ready for the queue
         env:
           NEEDS: ${{ toJSON(needs) }}
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # A pull request that changes no file runs no CodeQL; only then does ready not wait for it.
+          TRIVIAL: ${{ needs.plan.outputs.trivial }}
+          # In the merge queue, the pull request of this entry must carry a valid `reviewed` label (pr_flow.py review_problems).
+          GROUP_REF: ${{ github.event.merge_group.head_ref }}
         run: python3 scripts/pr_flow.py ready
 
   ci-ok:
@@ -630,7 +653,7 @@ jobs:
     if: always()
     needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, usecases, maintainer-review, generated, generated-commit, ready]
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - env:
           NEEDS: ${{ toJSON(needs) }}
@@ -640,11 +663,43 @@ jobs:
           if [ "$DRAFT" = true ]; then echo "draft pull request: no job ran; the checks start when it is marked ready"; exit 0; fi
           echo "every check that ran passed"
 
+  release-gate:
+    # The release or hotfix pull request into main reports the push run of its commit: that run holds every job, the
+    # release-proof (the upgrade from the newest release, 90 minutes at most) and the staging deploy with its click walk.
+    # It has its own name because the push run's ci-ok sits on the same commit; branch protection requires this one on main.
+    # Red, cancelled, skipped, missing or timed out all fail it. The wait is 150 minutes and the job allows 170, so the last
+    # error line always prints.
+    if: github.event_name == 'pull_request' && github.base_ref == 'main' && (startsWith(github.head_ref, 'release/') || startsWith(github.head_ref, 'hotfix/'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 170
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Wait for the push run of this commit and read its release-proof and staging deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          for _ in $(seq 300); do
+            found=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=push&head_sha=$SHA&per_page=1" --jq '.workflow_runs[0] | "\(.id) \(.status) \(.conclusion)"' 2>/dev/null || true)
+            id=${found%% *}; run=${found#* }
+            case "$run" in
+              "completed success")
+                gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/jobs?per_page=100" | python3 scripts/release.py proof && exit 0
+                echo "::error title=Release not proven::the push run of $SHA has no passing release-proof and staging deploy"; exit 1 ;;
+              "completed "*) echo "::error title=Candidate not green::the push run of $SHA ended: $run"; exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "::error title=Candidate not tested::no finished push run of $SHA after 150 minutes; push the branch or re-run this job"; exit 1
+
   staging:
     # Every merge to develop, and every push to a release or hotfix branch, goes to staging once ci-ok passed for that
     # commit, so the owner tests the real combination. Pull requests and pushes to main never reach this job.
     # deploy-staging.yml holds the deploy, the freeze rules (a release or hotfix branch on origin, or STAGING_HOLD, skips
-    # a develop deploy and fails the job red), the checks, the rollback and the summary.
+    # a develop deploy and skips the deploy with a notice), the checks, the rollback and the summary.
     needs: ci-ok
     if: ${{ !cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/heads/hotfix/')) && needs.ci-ok.result == 'success' }}
     permissions:

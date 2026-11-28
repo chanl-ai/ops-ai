@@ -1,0 +1,51 @@
+# The kanban's move from Reviewed to the merge queue, done by this workflow and not by a person
+# (docs/architecture/delivery.md, "From draft to main"). A convenience, not the guarantee: a pull request into develop
+# is armed for the queue (auto-merge, which the queue takes) when it is not a draft, carries the label `reviewed`, has no
+# `hold` and comes from this repository; a push takes `reviewed` off and disarms (best effort); a `reviewed` label from
+# someone without write rights is removed. What stops an unreviewed change is `ready` in the merge queue's run
+# (scripts/pr_flow.py review_problems): it reads the label's timeline, so a dropped event or a failed removal here lets
+# nothing merge. The merge-back that release-finish.yml opens is armed there and left alone. Decisions:
+# scripts/pr_flow.py auto-queue; its --self-test is in make checks.
+#
+# pull_request_target runs this file from develop with write access, so it checks out develop only (never the pull
+# request's head) and calls the API with the event's pull request number. Permissions: pull-requests write for labels
+# and comments; contents write because enabling auto-merge goes through the GraphQL mutation that asks for it
+# (unverified: the minimum that works has not been measured on this repository).
+name: auto-queue
+
+on:
+  pull_request_target:
+    types: [labeled, unlabeled, ready_for_review, converted_to_draft, synchronize, edited]
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to re-judge
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-queue-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: false
+
+jobs:
+  judge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+          ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
+          ACTOR: ${{ github.event.sender.login }}
+        run: python3 scripts/pr_flow.py auto-queue --pr "$PR" --action "$ACTION" --label "$LABEL" --actor "$ACTOR"

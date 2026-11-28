@@ -18,7 +18,7 @@ endif
 
 # Tests never run on the stack's database: each make run makes its own throwaway one (OPS_TEST_DATABASE_URL, make/env.mk)
 # on the stack's PostgreSQL, so no second stack is needed beside `make up`.
-test: db-up ## Tests on a throwaway database: PKG=packages/<x>|services/<x> runs that member's (T= some files, PAR=<n> on n workers where proven); no PKG runs what changed since origin/main
+test: db-up ## Tests on a throwaway database: PKG=packages/<x>|services/<x> runs that member's (T= some files, PAR=<n> on n workers where proven); no PKG runs what changed since origin/develop
 ifdef PKG
 	@[ -d "$(PKG)" ] || { echo "make test: no folder $(PKG)"; exit 2; }
 ifneq ($(wildcard $(PKG)/Makefile),)
@@ -27,13 +27,13 @@ else
 	@$(TEST_DB) uv run --directory "$(PKG)" pytest -q $(or $(T),tests)
 endif
 else
-	@scripts/verify-changed.sh "$$(git merge-base origin/main HEAD)"
+	@scripts/verify-changed.sh "$$(git merge-base origin/develop HEAD)"
 endif
 
 # What a builder runs while working: only the tests the change can affect, with the pick and the reason printed.
 # PLAN=1 prints the pick and stops. CI and nightly keep the whole suites (`make verify`).
-test-impacted: ## Run only the tests a change since BASE (default origin/main) can affect; PLAN=1 prints the pick only
-	@uv run python scripts/impacted_tests.py --base "$(or $(BASE),origin/main)" $(if $(PLAN),--list)
+test-impacted: ## Run only the tests a change since BASE (default origin/develop) can affect; PLAN=1 prints the pick only
+	@uv run python scripts/impacted_tests.py --base "$(or $(BASE),origin/develop)" $(if $(PLAN),--list)
 
 # Registered like git-rules.py: one PreToolUse hook on Bash in the checkout's own Claude Code project settings (not tracked).
 agent-guard: ## Check the agent wait guard and print the hook entry that registers it

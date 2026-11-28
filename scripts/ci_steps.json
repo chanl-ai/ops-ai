@@ -5,7 +5,7 @@
       {"step": "Plan the jobs", "no_local_twin": "Picks which jobs a pull request runs; `bash scripts/ci-plan.sh <base>` prints that plan and a local run always takes every twin."}
     ],
     "checks": [
-      {"step": "Lint and format the changed Python", "twin": "base=$(git merge-base \"${BASE_SHA:-origin/main}\" HEAD); files=$(git diff --name-only --diff-filter=ACMR \"$base\" HEAD -- '*.py'); [ -z \"$files\" ] || { uv run ruff format --check $files && uv run ruff check $files; }"},
+      {"step": "Lint and format the changed Python", "twin": "base=$(git merge-base \"${BASE_SHA:-origin/develop}\" HEAD); files=$(git diff --name-only --diff-filter=ACMR \"$base\" HEAD -- '*.py'); [ -z \"$files\" ] || { uv run ruff format --check $files && uv run ruff check $files; }"},
       {"step": "Types of the packages", "twin": "uv run python scripts/check_tests_typecheck.py packages"},
       {"step": "make -s checks", "twin": "make -s checks"},
       {"step": "Script tests", "twin": "uv run pytest -q -n auto --dist loadfile scripts/tests"}
@@ -36,7 +36,8 @@
     ],
     "release-proof": [
       {"step": "The version file matches the branch", "no_local_twin": "Reads the branch name GitHub gives the run; run `BRANCH=release/X.Y.Z python3 scripts/release.py check-version` by hand."},
-      {"step": "The upgrade from the last release", "no_local_twin": "Needs Docker and the release tags; run `make db-scripts-proof FROM=<last tag>` by hand."},
+      {"step": "The upgrade from the offline floor", "no_local_twin": "Needs Docker; run `make db-scripts-proof FROM=<the FLOOR in deploy/database/proof.sh>` by hand."},
+      {"step": "The upgrade from the latest release", "no_local_twin": "Needs Docker and the release tags; run `make db-scripts-proof FROM=$(python3 scripts/release.py latest)` by hand."},
       {"step": "A fresh install", "no_local_twin": "Builds the commit's images into a local registry and installs through ./install.sh; run `make install-proof BUILD=1` by hand."}
     ],
     "maintainer-review": [
@@ -51,10 +52,14 @@
       {"step": "Commit the generated files to the branch", "no_local_twin": "Pushes the regenerated files to the pull request's branch; locally `make openapi` and a commit do the same."}
     ],
     "ready": [
-      {"step": "Ready for the queue", "no_local_twin": "Reads the other jobs' results, CodeQL's check runs and the distance from develop on GitHub; `python3 scripts/pr_flow.py --self-test` proves the decisions."}
+      {"step": "The base revision's copy of the gate", "no_local_twin": "Takes develop's scripts/pr_flow.py inside the merge queue's run on GitHub."},
+      {"step": "Ready for the queue", "no_local_twin": "Reads the other jobs' results, CodeQL's check runs on GitHub; `python3 scripts/pr_flow.py --self-test` proves the decisions."}
     ],
     "staging-scan": [
       {"step": "ZAP baseline scan of staging", "no_local_twin": "Scans the staging app after a release or hotfix branch's deploy; the same docker command runs against any origin."}
+    ],
+    "release-gate": [
+      {"step": "Wait for the push run of this commit and read its release-proof and staging deploy", "no_local_twin": "Reads the push run of a release branch on GitHub; `make release-doctor LIVE=1` reports the same verdict."}
     ],
     "ci-ok": [
       {"step": "if grep -qE '\"result\": \"(failure|cancelled)\"' <<<\"$NEEDS\"; then echo \"$NEEDS\"; exit 1; fi", "no_local_twin": "Reads the other jobs' results on GitHub."}

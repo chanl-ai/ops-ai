@@ -55,9 +55,9 @@ quarantine: ## Flaky use cases CI runs but does not gate on: make quarantine | q
 	elif [ -n "$(CHECK)" ]; then python3 scripts/quarantine.py check; \
 	else python3 scripts/quarantine.py list; fi
 
-uc-impacted: ## The core UI use cases plus the ones the change since BASE touches, run by WORKERS exports that share the list, one summary line each: make uc-impacted [BASE=origin/main] [MAX=8] [WORKERS=4 when free memory is above 30%, else 2] [UC_IDS="uc-1 uc-2"] [VERBOSE=1]
-	@python3 scripts/uc_impacted.py --base $(or $(BASE),origin/main) $(if $(MAX),--max $(MAX))
-	@ids="$(UC_IDS)"; [ -n "$$ids" ] || ids="$$(python3 scripts/uc_impacted.py --base $(or $(BASE),origin/main) $(if $(MAX),--max $(MAX)) --ids)"; \
+uc-impacted: ## The core UI use cases plus the ones the change since BASE touches, run by WORKERS exports that share the list, one summary line each: make uc-impacted [BASE=origin/develop] [MAX=8] [WORKERS=4 when free memory is above 30%, else 2] [UC_IDS="uc-1 uc-2"] [VERBOSE=1]
+	@python3 scripts/uc_impacted.py --base $(or $(BASE),origin/develop) $(if $(MAX),--max $(MAX))
+	@ids="$(UC_IDS)"; [ -n "$$ids" ] || ids="$$(python3 scripts/uc_impacted.py --base $(or $(BASE),origin/develop) $(if $(MAX),--max $(MAX)) --ids)"; \
 	  free=$$(memory_pressure -Q 2>/dev/null | grep -o '[0-9]*%' | tr -d %); n=$(WORKERS); \
 	  [ -n "$$n" ] || { if [ "$${free:-0}" -gt 30 ]; then n=4; else n=2; fi; }; echo "workers: $$n (free memory $${free:-unknown}%)"; \
 	  out=$${UC_OUT:-/tmp/uc-impacted}; rm -rf "$$out"; mkdir -p "$$out"; \

@@ -55,7 +55,7 @@ make target each (`make/agents.mk`). Every path and command the scripts use come
 
 | Target | What it writes |
 |---|---|
-| `make agent-review-context [BASE=origin/main]` | `.logs/agents/review-context.md`: diff stat, changed files by layer with the docs to read, tests added, new routes, models, migrations and console routes, and the leak scan, public-path, docs and lint results on the changed files |
+| `make agent-review-context [BASE=origin/develop]` | `.logs/agents/review-context.md`: diff stat, changed files by layer with the docs to read, tests added, new routes, models, migrations and console routes, and the leak scan, public-path, docs and lint results on the changed files |
 | `make agent-test-audit [BASE=] [DESIGN=docs/design/<area>/<topic>.md] [PATHS="…"]` | `.logs/agents/test-audit.md`: the mutation score on the changed lines (each fault runs only the tests that reach its line, found with coverage contexts; faults no test reaches are listed apart), every surviving fault with its file and line, tests that cannot fail (no assertion, always true, mock-only, duplicates), fixed waits, and the design's acceptance rows no test names |
 | `make agent-ui-walk ROUTES="/a /b" [AS=admin,member] [WIDTHS=1440,390] [STATES=1]` | `.logs/agents/ui-walk/`: a screenshot per route, role and width, and a report of page errors, console errors, failed requests, sideways overflow, error text and unnamed controls; `STATES=1` adds the `?mock=slow\|error\|empty` variants |
 | `make agent-canary [COUNT=6] [SEED=n]`, `make agent-canary-score REPORT= KEY=` | A throwaway worktree branch with five to eight known bugs planted from a catalogue (a role gate removed, a wrong plural, a fixed width that clips at 390, a raw id shown, a swallowed error, an empty state never reached, an unguarded write route, a tautological test, a team filter dropped); the answer key lands in `.logs/agents/canary-keys/`, outside the finder's reach; the planted commits skip the hooks (`--no-verify`) because a planted bug is meant to fail them, and the branch is deleted after scoring; the score lists caught, missed and false findings with recall and precision |
@@ -100,10 +100,10 @@ than reading the other checks one by one; a red `ci-ok` names the failed job in 
 
 | Step | Command |
 |---|---|
-| Start a change | `git switch -c <type>/<scope>-<change> origin/main`, for example `fix/tools-own-account-run` |
+| Start a change | `git switch -c <type>/<scope>-<change> origin/develop`, for example `fix/tools-own-account-run` |
 | Commit | `git commit` on your branch, as often as you like; the pre-commit hook runs the checks the staged files need |
 | Open the PR | `git push -u origin HEAD`, then `gh pr create`; one change per PR, small enough to review in one sitting |
-| Keep up with main | `git rebase origin/main` (or merge it) on your own branch |
+| Keep up with main | `git rebase origin/develop` (or merge it) on your own branch |
 
 One branch is one concern. A name says what changed, never who asked or which ticket. `git stash`, `git push --force`
 and pushes straight to `main` are refused by the hooks.
@@ -118,7 +118,7 @@ branch in your checkout, and test with `make up`.
 | Run your branch | `make up`: migrates, then restarts only the services whose code changed since they started |
 | Try someone's branch | `make review BRANCH=<name>`: checks it out in the review worktree beside your checkout (`../ops-ai-review`, made on first use), installs, and runs the stack from there on the same ports. Your checkout and branch stay as they are; it refuses when the review worktree has uncommitted changes |
 | Go back to your branch | `make up` in your checkout |
-| Run tests | `make test PKG=packages/<name>` or `PKG=services/<name>` for one, `make test` for what changed since `origin/main`; `make usecase-test UC=<id>` for a use case |
+| Run tests | `make test PKG=packages/<name>` or `PKG=services/<name>` for one, `make test` for what changed since `origin/develop`; `make usecase-test UC=<id>` for a use case |
 
 Tests and use cases never run on the stack's database: each run makes its own throwaway database on the stack's
 PostgreSQL, and a use case starts the services it needs on free ports, so neither needs a second stack. A branch made
@@ -135,7 +135,7 @@ Conventional commits: `type(scope): subject`.
 | Scope | The area changed, for example `console`, `specs`, `contracts` |
 | Subject | Imperative, lowercase after the colon, no trailing period, under 72 characters; describes the change |
 | Body | What was wrong before and why, then how the change was verified (the command run and its result). At most three lines and 320 characters (`scripts/commit-message-check.mjs`); no headings, tables or code blocks |
-| Changelog | A feat that changes `apps/` or `services/` names its What's new entry in a `Changelog: <topic>` trailer, for `changelog/<topic>.json` staged in the same commit: a title of at most 10 words, one or two sentences of at most 25 words. A fix needs one only when a console user would notice it. `make release-version` folds the fragments into `changelog/releases/<version>.json` |
+| Changelog | A feat that changes `apps/` or `services/` names its What's new entry in a `Changelog: <topic>` trailer, for `changelog/<topic>.json` staged in the same commit: a title of at most 10 words, one or two sentences of at most 25 words. A fix needs one only when a console user would notice it. `make release-start` folds the fragments into `changelog/releases/<version>.json` |
 | Siblings | A `fix` that changes `services/`, `apps/`, `packages/` or `sdk/` ends with `Siblings: <N> fixed via <owner>` or `Siblings: none, searched <pattern>`, after the sweep in `docs/guide/skills/ops-fix-the-class.md`; docs-only, test-only and `fix(qa)` commits are exempt |
 
 ## Everything here is public
@@ -233,5 +233,5 @@ the backend: one test per failure mode, and each new test is seen failing once b
 | Fixtures | Only under a service's `tests/fixtures/` |
 | Routes | Every route is authenticated, except health and the OpenAPI document |
 | Model calls in tests | Scripted model only; real calls are capped at 10 per experiment unless a maintainer approves more |
-| Gate | `make verify` before every commit |
+| Gate | `make test` for the files you touched, then push; the hosted run gates ([what runs when](docs/architecture/delivery.md)) |
 | Names | A name or comment says what the thing is. Do not cite a card id, a board slice (`A2`, `W1`, `R7`) or a path into the private planning board. A public checkout does not have the board |

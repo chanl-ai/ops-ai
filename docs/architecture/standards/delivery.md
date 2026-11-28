@@ -40,7 +40,7 @@ it, its packages or a shared package changes; the console job on `apps/` or `sdk
 under `services/`, `packages/` or `deploy/database/`. A skipped job counts as passed in
 `ci-ok`. `[ci full]` in the pull request title, or the `ci:full` label, runs every job.
 
-Before a pull request leaves draft and before it enters the merge queue, `make ci-local FULL=1` passes in a `git archive` export of develop merged with the branch, not in a live checkout, plus `store-mssql` on the shared SQL Server when store, migrations, `ops_store` or `deploy/database` change.
+Before a pull request is pushed, the tests of the files it touches pass (`make test`, which selects from `origin/develop`); the hosted run gates, and the merge queue runs the heavy jobs. `make ci-local FULL=1` reproduces a red heavy job locally.
 
 Check: `.github/workflows/ci.yml` job `ci-ok`; `make checks`; `scripts/tests/test_checks_list.py` (every check named
 in it runs from `make checks`, and every place that checks calls it). Needed: make `scan` and CodeQL required.
@@ -79,13 +79,13 @@ Rule: production deploys only a tag `vX.Y.Z` on a commit staging ran; migrations
 start; rollback redeploys the previous image; migrations only add (`DA10`).
 Why: promotion is repeatable and reversible.
 
-Today: `.github/workflows/release-tag.yml` tags the develop merge of a release or hotfix pull request and fast-forwards `main` to it (`docs/deploy/release.md`); no workflow deploys the tag. A workflow returns once
+Today: `.github/workflows/release-finish.yml` tags the merge of a release or hotfix pull request into `main` (`docs/deploy/release.md`); no workflow deploys the tag. A workflow returns once
 the owner has made the `production` environment (`docs/deploy/fly-staging.md`, "Production on GitHub"). `release-images.yml`
 has never built from a merged commit.
 
 Pattern (`make stg-rollback`, `deploy/fly/stg_deploy.sh`): the staging path is the production path with another target.
 
-Check: `.github/workflows/release-tag.yml`; `make stg-rollback`. Needed: the production deploy workflow, after the
+Check: `.github/workflows/release-finish.yml`; `make stg-rollback`. Needed: the production deploy workflow, after the
 owner's set-up in `docs/deploy/fly-staging.md` ("Production on GitHub").
 
 ## DL6 An upgrade from the previous release is proven

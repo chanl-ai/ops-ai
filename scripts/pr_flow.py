@@ -3,9 +3,13 @@
 
   verify --branch B     `make gha-verify`: start verify-full.yml on B, watch it, print each failed job's first error
   failures --run ID     each failed job of a run with its first error line
-  ready                 ci.yml job `ready`: fails when CodeQL is red or a job is red
+  ready                 ci.yml job `ready`: fails when CodeQL or a job is red; in the merge queue also when a pull
+                        request of the group has no valid `reviewed` label (review_problems)
   queue-failure         queue-retry.yml: a failed merge queue run reruns its failed jobs once; a second failure
                         comments each failed job and its first error line; a green rerun queues the request again
+  auto-queue --pr N     auto-queue.yml: arms or disarms the merge queue for one pull request into develop by its labels
+                        (`reviewed` arms it, `hold` or a draft, a fork or a stacked base keeps it out); a push takes
+                        `reviewed` off and disarms. A convenience: the queue's `ready` is what enforces the review
   --self-test           every decision below on planted input
 
 The decisions are pure functions (first_error, ready_reasons, queue_step); the commands around them only read
@@ -21,10 +25,13 @@ import re
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 
 WORKFLOW = "verify-full.yml"
 RED = ("failure", "cancelled", "timed_out")
 STAMP = re.compile(r"^\S*\d{4}-\d\d-\d\dT[\d:.]+Z ?")
+WRITERS = ("admin", "maintain", "write")
+WORKFLOW_AUTHOR = "github-actions[bot]"
 QUEUE_BRANCH = re.compile(r"^gh-readonly-queue/[^/]+(?:/.+)?/pr-(\d+)-[0-9a-f]+$")
 
 
@@ -53,9 +60,7 @@ def ready_reasons(needs: dict[str, dict[str, str]], codeql: dict[str, str]) -> l
     """Why a pull request is not ready for the queue; empty when it is."""
     reasons = [f"job {name} is {job.get('result')}" for name, job in sorted(needs.items()) if job.get("result") in RED]
     reasons += [
-        f"CodeQL {name} is {result}"
-        for name, result in sorted(codeql.items())
-        if result not in ("success", "neutral", "skipped")
+        f"CodeQL {name} is {result}" for name, result in sorted(codeql.items()) if result not in ("success", "neutral")
     ]
     return reasons
 
@@ -72,6 +77,21 @@ def queue_step(attempt: int, conclusion: str) -> str:
 def queue_pr(branch: str) -> int | None:
     m = QUEUE_BRANCH.match(branch)
     return int(m.group(1)) if m else None
+
+
+def auto_queue_step(pr: dict) -> str:
+    """What the kanban asks of one pull request: `arm`, `disarm` or `nothing`. Armed is ready for the merge queue: not
+    a draft, labelled `reviewed` (the reviewer's label; approvals cannot be used, one account authors every pull
+    request), without `hold`, into develop, from this repository. The release workflow arms its own merge-back."""
+    if str(pr["head"]).startswith("merge-back/"):
+        return "nothing"
+    labels = set(pr["labels"])
+    ok = (
+        pr["base"] == "develop" and not pr["draft"] and not pr["fork"] and "reviewed" in labels and "hold" not in labels
+    )
+    if ok and not pr["armed"]:
+        return "arm"
+    return "disarm" if pr["armed"] and not ok else "nothing"
 
 
 def failure_comment(failed: list[tuple[str, str]], url: str) -> str:
@@ -173,13 +193,101 @@ def cmd_verify(branch: str) -> int:
     return 1
 
 
+def review_problems(pr: dict, events: list[dict], pushed_at: str, permission: Callable[[str], str]) -> list[str]:
+    """Why a pull request into develop may not enter the merge queue; empty when it may. It needs a `reviewed` label
+    that was given after its head was pushed (the last `labeled` or `unlabeled` event of that label decides), by
+    someone with write access, and no `hold`. The merge-back that release-finish.yml opens (its author is the
+    workflow's) is the one exemption. Times are the API's UTC `...Z` strings, which sort as text."""
+    if "hold" in pr["labels"]:
+        return ["it carries `hold`"]
+    if pr["head"].startswith("merge-back/") and pr["author"] == WORKFLOW_AUTHOR and not pr["fork"]:
+        return []
+    marks = sorted(
+        (e for e in events if e["event"] in ("labeled", "unlabeled") and e["label"] == "reviewed"),
+        key=lambda e: e["at"],
+    )
+    last = marks[-1] if marks else None
+    if last is None or last["event"] != "labeled" or "reviewed" not in pr["labels"]:
+        return ["it has no `reviewed` label given by a person (or the label was taken off)"]
+    out = []
+    if last["at"] <= pushed_at:
+        out.append(f"`reviewed` was given at {last['at']}, not after the head was pushed at {pushed_at}")
+    access = permission(last["actor"])
+    if access not in WRITERS:
+        out.append(f"{last['actor']} gave `reviewed` with {access or 'no'} access, not write")
+    return out
+
+
+def permission_of(actor: str) -> str:
+    done = subprocess.run(
+        ["gh", "api", f"repos/{repo()}/collaborators/{actor}/permission", "--jq", ".permission"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def pushed_at(branch: str, sha: str) -> str:
+    """When `sha` was pushed to `branch`: the timestamp of the newest repository activity entry for that branch whose
+    `after` is the sha (GET /repos/{owner}/{repo}/activity lists pushes newest first, force pushes included). A commit
+    first pushed to a side branch counts from its push to this one. No entry for the sha, or any API error, raises."""
+    raw = gh(
+        "api", f"repos/{repo()}/activity?ref=refs/heads/{branch}&per_page=100", "--jq", "[.[] | {after, timestamp}]"
+    )
+    for entry in json.loads(raw):
+        if entry["after"] == sha:
+            return str(entry["timestamp"])
+    raise ValueError(f"no push of {sha[:8]} to {branch} among its latest 100")
+
+
+def review_facts(number: int) -> tuple[dict, list[dict], str]:
+    """One pull request's facts: the pull request, the timeline events of the `reviewed` label, and when its head was
+    pushed to its branch."""
+    info = json.loads(gh("api", f"repos/{repo()}/pulls/{number}"))
+    raw = gh(
+        "api",
+        "--paginate",
+        f"repos/{repo()}/issues/{number}/timeline?per_page=100",
+        "--jq",
+        '[.[] | select(.event | IN("labeled","unlabeled"))'
+        ' | {event, label: (.label.name // ""), actor: (.actor.login // ""), at: .created_at}]',
+    )
+    events = [e for line in raw.splitlines() if line.strip() for e in json.loads(line)]
+    pr = {
+        "base": info["base"]["ref"],
+        "labels": [x["name"] for x in info["labels"]],
+        "head": info["head"]["ref"],
+        "author": info["user"]["login"],
+        "fork": info["head"]["repo"] is None or info["head"]["repo"]["full_name"] != info["base"]["repo"]["full_name"],
+    }
+    return pr, events, pushed_at(info["head"]["ref"], info["head"]["sha"])
+
+
+def queue_review_reasons() -> list[str]:
+    """In a queue entry's run, the pull request that entry is (named by its branch, gh-readonly-queue/develop/pr-N-sha)
+    must hold a valid review. Every entry of a group has its own run and the queue merges only when each is green, so
+    judging only the named pull request covers the group. A failure to read any of it fails. A pull request's own run
+    cannot judge this: a label starts no run, so it would stay red until a push."""
+    try:
+        number = queue_pr(os.environ.get("GROUP_REF", "").removeprefix("refs/heads/"))
+        if number is None:
+            return ["the queue branch names no pull request"]
+        pr, events, pushed = review_facts(number)
+        reasons = [] if pr["base"] == "develop" else [f"its base is {pr['base']}, not develop"]
+        reasons += review_problems(pr, events, pushed, permission_of)
+        return [f"#{number}: {why}" for why in reasons]
+    except (SystemExit, KeyError, ValueError, TypeError) as err:
+        return [f"the review could not be checked ({err}); the queue run fails closed"]
+
+
 def cmd_ready() -> int:
     needs = json.loads(os.environ.get("NEEDS") or "{}")
     sha, event = os.environ.get("HEAD_SHA", ""), os.environ.get("GITHUB_EVENT_NAME", "")
     codeql = {}
-    # The merge queue tests a pull request on develop's tip, so being behind develop is not checked here; CodeQL
-    # reports on pull requests only (codeql.yml).
-    if event == "pull_request" and sha:
+    # The merge queue tests a pull request on develop's tip, so a stale base is not checked here; CodeQL
+    # reports on pull requests only (codeql.yml). A pull request that changes no file runs no CodeQL (TRIVIAL).
+    if event == "pull_request" and sha and os.environ.get("TRIVIAL") != "true":
         deadline = time.time() + int(os.environ.get("CODEQL_WAIT", "2400"))
         while True:
             runs = json.loads(
@@ -197,6 +305,8 @@ def cmd_ready() -> int:
         if not codeql:
             codeql = {"analysis": "missing"}
     reasons = ready_reasons(needs, codeql)
+    if event == "merge_group":
+        reasons += queue_review_reasons()
     for r in reasons:
         print(f"::error title=Not ready::{r}")
     print("ready: " + ("no, see above" if reasons else "every job passed, CodeQL is green"))
@@ -216,8 +326,103 @@ def cmd_queue_failure(run: str, attempt: int, conclusion: str, *, branch: str, u
         gh("run", "rerun", run, "--failed")
     elif step == "comment":
         gh("pr", "comment", str(pr), "--body", failure_comment(failures(run), url))
+        gh("pr", "edit", str(pr), "--add-label", "queue-failed")
     elif step == "requeue":
         gh("pr", "merge", str(pr), "--auto", "--merge")
+    return 0
+
+
+def gh_ok(*args: str) -> bool:
+    return subprocess.run(["gh", *args], capture_output=True, text=True, check=False).returncode == 0
+
+
+def drop_review(number: int, dry: bool) -> int:
+    """Any push after the review takes `reviewed` off and disarms auto-merge, with no exception for a merge of develop.
+    The label comes off first and the disarm is tried whatever happened to it; a failure of either fails the job, so a
+    pull request is never left armed by a run that could not tell."""
+    print(f"#{number}: a push, so `reviewed` comes off and auto-merge is disarmed")
+    if dry:
+        return 0
+    removed = gh_ok("pr", "edit", str(number), "--remove-label", "reviewed")
+    disarmed = gh_ok("pr", "merge", str(number), "--disable-auto") or not armed(number)
+    if not (removed and disarmed):
+        print(f"::error title=Review not dropped::#{number}: could not remove `reviewed` or disarm; do it by hand")
+        return 1
+    return 0
+
+
+def armed(number: int) -> bool:
+    """Whether auto-merge is on; an unreadable answer counts as on."""
+    out = subprocess.run(
+        ["gh", "api", f"repos/{repo()}/pulls/{number}", "--jq", ".auto_merge != null"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return out.returncode != 0 or out.stdout.strip() == "true"
+
+
+def label_refused(number: int, actor: str, dry: bool) -> int | None:
+    """`reviewed` counts only from someone with write, maintain or admin rights. None when the label stands; otherwise
+    the label comes off with one comment and the answer is the exit code (1 when the removal failed)."""
+    if permission_of(actor) in WRITERS:
+        return None
+    print(f"#{number}: {actor} may not label a pull request `reviewed`")
+    if dry:
+        return 0
+    removed = gh_ok("pr", "edit", str(number), "--remove-label", "reviewed")
+    gh_ok(
+        "pr",
+        "comment",
+        str(number),
+        "--body",
+        "`reviewed` comes from a maintainer with write access; the label was removed.",
+    )
+    return 0 if removed else 1
+
+
+def cmd_auto_queue(number: int, action: str, dry: bool, *, label: str = "", actor: str = "") -> int:
+    """Only the API is called with the event's pull request number, never the pull request's code. `action` is
+    empty for a hand-started run, which judges a pull request into develop and leaves every other base alone."""
+    if action == "synchronize":
+        # The merge-back that release-finish.yml arms is pushed to once, by the workflow, and is exempt from review.
+        head = subprocess.run(
+            ["gh", "api", f"repos/{repo()}/pulls/{number}", "--jq", ".head.ref"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ).stdout.strip()
+        if head.startswith("merge-back/"):
+            print(f"#{number}: a merge-back, left armed")
+            return 0
+        return drop_review(number, dry)
+    info = json.loads(gh("api", f"repos/{repo()}/pulls/{number}"))
+    if not action and info["base"]["ref"] != "develop":
+        print(f"#{number}: base {info['base']['ref']}, not judged by hand")
+        return 0
+    labels = [x["name"] for x in info["labels"]]
+    if action == "labeled" and label == "reviewed" and "reviewed" in labels:
+        refused = label_refused(number, actor, dry)
+        if refused is not None:
+            return refused
+    pr = {
+        "base": info["base"]["ref"],
+        "head": info["head"]["ref"],
+        "draft": info["draft"],
+        "fork": info["head"]["repo"] is None or info["head"]["repo"]["full_name"] != info["base"]["repo"]["full_name"],
+        "labels": labels,
+        "armed": info.get("auto_merge") is not None,
+    }
+    step = auto_queue_step(pr)
+    print(f"#{number}: {step}")
+    if dry or step == "nothing":
+        return 0
+    if step == "arm":
+        gh("pr", "merge", str(number), "--auto", "--merge")
+        if "queue-failed" in labels:
+            gh("pr", "edit", str(number), "--remove-label", "queue-failed", check=False)
+    else:
+        gh("pr", "merge", str(number), "--disable-auto")
     return 0
 
 
@@ -293,6 +498,32 @@ def self_test() -> int:
             True,
         ),
     ]
+    base = {"base": "develop", "head": "fix/x", "draft": False, "fork": False, "labels": ["reviewed"], "armed": False}
+    cases += [
+        (
+            "a reviewed, ready pull request into develop is armed; hold, draft, fork, stacked base, no label are not",
+            [
+                auto_queue_step(base),
+                auto_queue_step({**base, "labels": ["reviewed", "hold"]}),
+                auto_queue_step({**base, "draft": True}),
+                auto_queue_step({**base, "fork": True}),
+                auto_queue_step({**base, "base": "feat/y"}),
+                auto_queue_step({**base, "labels": []}),
+            ],
+            ["arm", "nothing", "nothing", "nothing", "nothing", "nothing"],
+        ),
+        (
+            "an armed pull request that loses its label, goes draft or gets `hold` is disarmed; a merge-back is not",
+            [
+                auto_queue_step({**base, "armed": True, "labels": []}),
+                auto_queue_step({**base, "armed": True, "draft": True}),
+                auto_queue_step({**base, "armed": True, "labels": ["reviewed", "hold"]}),
+                auto_queue_step({**base, "armed": True}),
+                auto_queue_step({**base, "head": "merge-back/release-1.2.1", "labels": [], "armed": True}),
+            ],
+            ["disarm", "disarm", "disarm", "nothing", "nothing"],
+        ),
+    ]
     bad = [f"{name}: got {got!r}, expected {want!r}" for name, got, want in cases if got != want]
     for b in bad:
         print(f"pr_flow self-test FAILED: {b}")
@@ -303,7 +534,7 @@ def self_test() -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", nargs="?", choices=["verify", "failures", "ready", "queue-failure"])
+    ap.add_argument("command", nargs="?", choices=["verify", "failures", "ready", "queue-failure", "auto-queue"])
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--branch", default="")
     ap.add_argument("--run", default="")
@@ -311,6 +542,10 @@ def main() -> int:
     ap.add_argument("--conclusion", default="failure")
     ap.add_argument("--url", default="")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--pr", type=int, default=0)
+    ap.add_argument("--action", default="")
+    ap.add_argument("--label", default="")
+    ap.add_argument("--actor", default="")
     a = ap.parse_args()
     if a.self_test:
         return self_test()
@@ -320,6 +555,10 @@ def main() -> int:
         return 1 if print_failures(a.run or sys.exit("usage: pr_flow.py failures --run <id>")) else 0
     if a.command == "ready":
         return cmd_ready()
+    if a.command == "auto-queue":
+        return cmd_auto_queue(
+            a.pr or sys.exit("usage: pr_flow.py auto-queue --pr N"), a.action, a.dry_run, label=a.label, actor=a.actor
+        )
     if a.command == "queue-failure":
         return cmd_queue_failure(a.run, a.attempt, a.conclusion, branch=a.branch, url=a.url, dry=a.dry_run)
     ap.print_help()

@@ -3,9 +3,9 @@
 #   - anyone with write access runs it by hand (Actions, deploy-staging, Run workflow, or `make stg-deploy-ci REF=`)
 #     with a branch, tag or commit.
 # A merge to develop is not deployed while staging is frozen: a release/X.Y.Z or hotfix/* branch exists on origin (a
-# release under test must not be overwritten; the permanent train, release/current, does not freeze it, and the owner
-# sets STAGING_HOLD while a hand-started deploy of the train is under test) or the repository variable STAGING_HOLD is set (`X.Y.Z: reason`; it is ignored once tag vX.Y.Z exists, and a skipped deploy fails the job). A push
-# to a release or hotfix branch is deployed, and so is a hand-started run, which says in the summary what it overrode.
+# release under test must not be overwritten) or the repository variable STAGING_HOLD is set (`X.Y.Z: reason`; it is
+# ignored once tag vX.Y.Z exists). The skipped deploy ends the job green with a notice naming the branch. A push to a
+# release or hotfix branch is deployed, and so is a hand-started run, which says in the summary what it overrode.
 #
 # The deploy is .github/actions/stg-deploy (`make stg-deploy REF=<sha>`): build once per commit, migrate, grants, every
 # process up, OCR, plugins, a signed-in request, then the click walk and the smoke check (skip_walk leaves both out). When a step fails
@@ -117,7 +117,7 @@ jobs:
             echo "::warning title=Staging pin overridden::$note"
           elif [ -n "$pin" ]; then
             go=false
-            note="Not deployed: $pin. Clear STAGING_HOLD, or merge the release or hotfix branch and delete it; the next merge to develop deploys."
+            note="Not deployed: $pin. Clear STAGING_HOLD, or finish the release or hotfix (its merge deletes the branch); the next merge to develop deploys."
             echo "::notice title=Staging not deployed::$note"
           else
             note=""
@@ -203,12 +203,12 @@ jobs:
               if [ -n "$failures" ]; then printf '\n%s\n%s\n%s\n' "$fence" "$failures" "$fence"; fi
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: A freeze or hold that skipped the deploy is a red job
-        # Green must mean deployed. A deploy skipped by a release or hotfix branch or by STAGING_HOLD fails the job with the hold text, so a stale
-        # variable or branch cannot sit behind a green run (a hand-started run overrides the pin and never gets here).
+      - name: A freeze or hold that skipped the deploy is a notice
+        # A deploy skipped by a release or hotfix branch or by STAGING_HOLD ends the job green with a notice naming the
+        # reason: develop keeps merging while a release is under test, and the next merge after it ends deploys.
         if: always() && steps.plan.outputs.go == 'false' && steps.plan.outputs.held == 'true'
         env:
           NOTE: ${{ steps.plan.outputs.hold_note }}
         run: |
-          echo "::error title=Staging not deployed::$NOTE"
-          exit 1
+          echo "::notice title=Staging not deployed::$NOTE"
+          echo "Staging not deployed: $NOTE" >> "$GITHUB_STEP_SUMMARY"

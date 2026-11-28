@@ -16,7 +16,7 @@ an install on a bank's machine in the [install guide](../deploy/install-guide.md
 | Follow one service | `make logs SVC=agents` (or `tools`, `console`) |
 | Stop | `make down` (`KEEP_DB=1` keeps PostgreSQL and OPA) |
 | Try another branch on the same ports | `make review BRANCH=<name>` (one stack per machine; `make up` in your checkout moves it back) |
-| Before committing | `make verify` (runs with model keys unset) |
+| Before pushing | `make test` (runs with model keys unset); the hosted run gates |
 
 Ports for the shared, isolated and use case stacks are in [make.md](make.md#ports).
 

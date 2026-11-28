@@ -5,7 +5,8 @@ name: codeql
 
 on:
   pull_request:
-    branches: [develop, main]
+    # A pull request into a release or hotfix branch runs ci.yml, whose `ready` waits for these checks.
+    branches: [develop, main, "release/[0-9]*", "hotfix/**"]
   push:
     # A release or hotfix branch is scanned on every push, with the rest of its security scans (release-security.yml).
     branches: [main, "release/[0-9]*", "hotfix/**"]
@@ -21,7 +22,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  trivial:
+    # A pull request that changes no file (scripts/ci_trivial.py) has nothing to scan: the merge-back of a release that
+    # develop already holds.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      trivial: ${{ steps.diff.outputs.trivial }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          trivial=false
+          if [ "$EVENT" = pull_request ]; then trivial=$(python3 scripts/ci_trivial.py "$BASE" HEAD); fi
+          echo "trivial=$trivial" >> "$GITHUB_OUTPUT"
+
   analyze:
+    needs: trivial
+    # Fails closed: the scan is skipped only when the trivial job succeeded and said true; a failed or cancelled
+    # trivial job, or any other answer, runs it.
+    if: ${{ always() && !(needs.trivial.result == 'success' && needs.trivial.outputs.trivial == 'true') }}
     name: analyze ${{ matrix.language }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45

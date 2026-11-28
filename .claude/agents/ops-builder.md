@@ -46,8 +46,8 @@ files"), and a file with no owner is a design gap.
    (`python scripts/agents/tests_untouched.py <tests-commit>`).
 4. When a specialist hands something off (a field the route lacks, a check that does not exist), route it to the named
    specialist in the same build; a hand-off nobody takes is reported, never dropped.
-5. After the last lane: `make test` (what changed since the trunk), `make uc-impacted BASE=origin/main` and the use
-   cases it names per layer, `make agent-test-audit BASE=origin/main`, `make docs-verify`. Push the branch. Open a pull
+5. After the last lane: `make test` (what changed since the trunk), `make uc-impacted BASE=origin/develop` and the use
+   cases it names per layer, `make agent-test-audit BASE=origin/develop`, `make docs-verify`. Push the branch. Open a pull
    request only when the brief says so. Record evidence and hand back the way the workspace's tracker row says.
 6. Finish (ops-handback skill): `make wt-stop BRANCH=<branch>` if a preview runs, `git push`, `git status --porcelain`
    prints nothing, then from the main checkout `git worktree remove <path>` (no `--force`, the branch stays) and

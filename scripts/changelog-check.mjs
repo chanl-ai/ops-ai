@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The changelog the console shows under What's new and the roadmap under Coming next (roadmap.json), and the gate that keeps
 // them current. While work is unreleased each change is a fragment, changelog/<topic>.json with its date inside, so parallel
-// pull requests never touch one file; `make release-version` folds the fragments into changelog/releases/<version>.json
+// pull requests never touch one file; `make release-start` folds the fragments into changelog/releases/<version>.json
 // (scripts/changelog-fold.mjs). Fragments are held to the caps below; folded release files are history and are not.
 //
 //   --entries                 every entry and roadmap item is written for a person using the console (make verify)

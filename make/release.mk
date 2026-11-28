@@ -1,6 +1,6 @@
 # The release package a client team installs from (docs/deploy/release-package.md): images for linux/amd64 saved as one
 # bundle, compose files, the env template, PostgreSQL and Azure SQL scripts and the install guide, from `git archive TAG`.
-.PHONY: release-package release-proof install-proof release-tag release-main release-cut release-pr release-version hotfix-cut release-intake
+.PHONY: release-package release-proof install-proof release-start hotfix-start release-rc release-doctor
 
 ##@ Release
 
@@ -12,26 +12,17 @@ release-proof: ## Install a package from its tarball alone and walk it (PACKAGE=
 	@test -n "$(PACKAGE)" || { echo "release-proof: set PACKAGE to dist/ops-ai-<version>.tar.gz"; exit 2; }
 	sh $(ROOT)/deploy/release/proof.sh "$(PACKAGE)"
 
-release-tag: ## Tag the develop commit of a merged `release: X.Y.Z into develop` (or hotfix) PR vX.Y.Z and push it (REF, REMOTE=origin, VERSION; DRY=1 prints the name)
-	sh $(ROOT)/scripts/release-tag.sh
+release-start: ## release/V from origin/develop with one version commit and a PR into main (V=X.Y.Z; DRY=1 prints, DRY=0 pushes and opens)
+	DRY=$(or $(DRY),1) python3 $(ROOT)/scripts/release.py start
 
-release-intake: ## Take every open feature PR into the train and run ci-local (TRAIN=release/1.1.0, PRS=1,2 to pick and order, REPORT=<file>.json, RESUME=1 or RERUN=<report> to finish a left worktree; DRY=1 prints the plan, DRY=0 acts); exit 0 green, 1 red, 2 a conflict for a person
-	DRY=$(or $(DRY),1) python3 $(ROOT)/scripts/release.py intake
+hotfix-start: ## hotfix/NAME from the newest vX.Y.Z tag with one version commit and a PR into main (V=X.Y.Z NAME=<what>; DRY=0 pushes and opens)
+	DRY=$(or $(DRY),1) python3 $(ROOT)/scripts/release.py hotfix-start
 
-release-cut: ## After a release landed: fast-forward release/current to origin/develop, or create it (DRY=1 is the default, DRY=0 pushes)
-	DRY=$(or $(DRY),1) python3 $(ROOT)/scripts/release.py cut
+release-rc: ## Tag the release or hotfix branch's tip vX.Y.Z-rc.N once its staging deploy and walk passed (DRY=0 pushes the tag)
+	DRY=$(or $(DRY),1) python3 $(ROOT)/scripts/release.py rc
 
-hotfix-cut: ## hotfix/<what> from the newest vX.Y.Z tag (FROM=<tag>), version file set to V (V=X.Y.Z HOTFIX=<what>; DRY=0 pushes)
-	DRY=$(or $(DRY),1) python3 $(ROOT)/scripts/release.py hotfix-cut
-
-release-version: ## One commit on release/current (or hotfix/<what>) that sets deploy/release/version to V (V=X.Y.Z; HOTFIX=<what>; DRY=0 pushes)
-	DRY=$(or $(DRY),1) python3 $(ROOT)/scripts/release.py set-version
-
-release-pr: ## PR release/current into develop titled `release: V into develop`; refuses unless develop is merged in, the version file says V and make ci-local is green on the head (V=X.Y.Z; HOTFIX=<what> for a hotfix; DRY=1 prints, DRY=0 opens)
-	DRY=$(or $(DRY),1) python3 $(ROOT)/scripts/release.py pr
-
-release-main: ## Fast-forward main to a tagged develop commit with a plain push, never forced (REF=<commit>, REMOTE=origin; DRY=1 prints)
-	sh $(ROOT)/scripts/release-main.sh
+release-doctor: ## Check the release flow is one path: stale mentions, matching versions, the docs' targets (LIVE=1 also reads GitHub: branches, tags, merge-back)
+	python3 $(ROOT)/scripts/release_doctor.py $(if $(LIVE),--live)
 
 install-proof: ## A fresh clone, ./install.sh on images pulled from GHCR, walk, rerun, upgrade, backup, restore, DBA mode (SOURCE, REF; BUILD=1 builds the commit's images into a local registry first)
 	BUILD=$(or $(BUILD),0) bash $(ROOT)/deploy/release/install_proof.sh "$(or $(SOURCE),$(ROOT))" "$(or $(REF),HEAD)"

@@ -24,14 +24,21 @@ CLEAN_MAKE_ENV = {k: v for k, v in os.environ.items() if k not in ("MAKEFLAGS", 
 
 
 def plan(
-    tmp_path: Path, *changed: str, ref: str = "", full: str = "", event: str = "", tested: str = ""
+    tmp_path: Path, *changed: str, ref: str = "", full: str = "", event: str = "", tested: str = "", trivial: str = ""
 ) -> dict[str, str]:
     listed = tmp_path / "changed.txt"
     listed.write_text("\n".join(changed) + "\n", encoding="utf-8")
     out = subprocess.run(
         ["bash", "scripts/ci-plan.sh", str(listed)],
         cwd=ROOT,
-        env={**CLEAN_MAKE_ENV, "GITHUB_REF": ref, "CI_FULL": full, "GITHUB_EVENT_NAME": event, "CI_TESTED": tested},
+        env={
+            **CLEAN_MAKE_ENV,
+            "GITHUB_REF": ref,
+            "CI_FULL": full,
+            "GITHUB_EVENT_NAME": event,
+            "CI_TESTED": tested,
+            "CI_TRIVIAL": trivial,
+        },
         capture_output=True,
         text=True,
         check=True,
@@ -114,11 +121,12 @@ def _ci_ok() -> tuple[dict[str, Any], set[str]]:
     jobs: dict[str, Any] = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
     # A job that needs ci-ok (the staging deploy) runs after the gate, so the gate cannot wait for it.
     after = {name for name, j in jobs.items() if "ci-ok" in (j.get("needs") or [])}
-    return jobs["ci-ok"], set(jobs) - {"ci-ok"} - after
+    # release-gate is its own required check on a release pull request into main and waits for the push run.
+    return jobs["ci-ok"], set(jobs) - {"ci-ok", "release-gate"} - after
 
 
 def _gate(needs: dict[str, str]) -> int:
-    script = _ci_ok()[0]["steps"][0]["run"]
+    script = _ci_ok()[0]["steps"][-1]["run"]
     env = {"NEEDS": json.dumps({k: {"result": v} for k, v in needs.items()}, indent=2), "PATH": os.environ["PATH"]}
     return subprocess.run(["bash", "-c", script], env=env, capture_output=True, check=False).returncode
 
@@ -282,7 +290,7 @@ def test_a_draft_pull_request_runs_no_job_but_ci_ok_still_reports() -> None:
     assert "pull_request.draft != true" in jobs["ready"]["if"], jobs["ready"]["if"]
     # Every other job waits on the plan (or on a job that does), so skipping the plan skips them; ci-ok alone runs.
     for name, job in jobs.items():
-        if name in ("plan", "ready", "ci-ok", "staging", "staging-scan", "generated-commit"):
+        if name in ("plan", "ready", "ci-ok", "release-gate", "staging", "staging-scan", "generated-commit"):
             continue
         assert "plan" in job["needs"] and "always()" not in str(job.get("if")), name
     assert jobs["ci-ok"]["if"] == "always()" and jobs["ci-ok"]["needs"][0] == "plan"
@@ -336,3 +344,39 @@ def test_the_repo_job_is_one_matrix_entry_per_suite_and_check(tmp_path: Path) ->
     parts = [e["part"] for e in json.loads(p["repo_jobs"])]
     assert parts == [*p["repo_pool"].split(), "checks", "scripts", "sdk"], parts
     assert len(parts) >= 8 and plan(tmp_path, "docs/guide/plugins.md")["repo_jobs"] == "[]"
+
+
+def test_a_merge_back_of_version_fields_plans_no_job_but_a_release_branch_push_still_runs_all(tmp_path: Path) -> None:
+    jobs = ("checks", "service", "package", "console", "docs", "repo", "store-mssql", "usecases")
+    for event in ("pull_request", "merge_group"):
+        p = plan(tmp_path, "deploy/release/version", event=event, trivial="true")
+        assert all(not _runs(j, p) for j in jobs), (event, p)
+    full = plan(tmp_path, "deploy/release/version", ref="refs/heads/release/1.2.1", event="push", trivial="true")
+    assert full["full"] == "true", full
+    # The decision is made from the diff in the plan step, never from the branch name.
+    run = _plan_step()["run"]
+    assert "ci_trivial.py" in run and "CI_TRIVIAL=true" in run and "head_ref" not in run, run
+
+
+def test_the_release_pull_request_runs_release_gate_alone_and_a_frozen_staging_is_a_notice() -> None:
+    ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
+    for job in ("plan", "ready"):
+        cond = str(ci[job]["if"])
+        assert "base_ref == 'main'" in cond and "startsWith(github.head_ref, 'release/')" in cond, (job, cond)
+        assert "draft != true" in cond, (job, cond)
+    gate = ci["release-gate"]
+    assert "base_ref == 'main'" in gate["if"] and "needs" not in gate, gate
+    # The wait (300 x 30 s) ends before the job's timeout, so the last error line prints.
+    wait = next(s for s in gate["steps"] if "push run" in s.get("name", ""))
+    assert "event=push&head_sha=$SHA" in wait["run"] and "seq 300" in wait["run"] and gate["timeout-minutes"] > 150, (
+        gate
+    )
+    # ci-ok no longer waits for anything outside the suite.
+    assert not any("push run" in s.get("name", "") for s in ci["ci-ok"]["steps"]), ci["ci-ok"]["steps"]
+    trigger = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())[True]["pull_request"]
+    assert {"develop", "main", "release/[0-9]*", "hotfix/**"} <= set(trigger["branches"]), trigger
+    # A label restarts the run and cancels the one in progress, leaving its ci-ok failed on the same commit.
+    assert "labeled" not in trigger["types"], trigger
+    staging = yaml.safe_load((ROOT / ".github/workflows/deploy-staging.yml").read_text())["jobs"]
+    held = next(s for j in staging.values() for s in j["steps"] if "freeze or hold" in s.get("name", ""))
+    assert "::notice" in held["run"] and "exit 1" not in held["run"], held

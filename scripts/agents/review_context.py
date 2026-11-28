@@ -7,8 +7,8 @@ of the checks the profile lists (leak scan, public paths, docs, lint), each run 
 (`.claude/project-profile.md`, sections "Layers", "Public surface" and "Checks a review runs first") owns every path
 and pattern here; this script owns none.
 
-  python3 scripts/agents/review_context.py --base origin/main            markdown to stdout
-  python3 scripts/agents/review_context.py --base origin/main --json     the same facts as JSON
+  python3 scripts/agents/review_context.py --base origin/develop            markdown to stdout
+  python3 scripts/agents/review_context.py --base origin/develop --json     the same facts as JSON
   python3 scripts/agents/review_context.py --self-test                   the grouping and surface rules on fixtures
 """
 
@@ -321,7 +321,7 @@ def self_test() -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--base", default="origin/main", help="the branch or sha the change is measured from")
+    parser.add_argument("--base", default="origin/develop", help="the branch or sha the change is measured from")
     parser.add_argument("--profile", help="the profile file (default: OPS_AGENT_PROFILE or .claude/project-profile.md)")
     parser.add_argument("--json", action="store_true", help="print JSON instead of markdown")
     parser.add_argument("--no-checks", action="store_true", help="skip the leak scan, docs and lint runs")

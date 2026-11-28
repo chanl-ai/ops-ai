@@ -35,7 +35,7 @@ designs live, and how to check a change. Setting up, branching, commit messages 
 
 | Command | What it runs |
 |---|---|
-| `make verify` | Everything a commit must pass: console, docs, Python and SDK checks. Run it before each commit |
+| `make verify` | Every check of the hosted run in one local run: console, docs, Python and SDK. Optional; `make test` and the hosted run are the gate |
 | `make test` | The tests for what changed since the main branch; `make test PKG=services/<name>` runs one |
 | `make usecase-test UC=<id>` | One use case end to end, optionally one layer with `LAYER=api`, `sdk`, `cli` or `ui` (needs `make db-up`) |
 | `make help` | Every target |
