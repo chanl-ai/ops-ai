@@ -29,7 +29,7 @@ CHECKS = \
   isolation-markings isolation-sites \
   store-inventory roles-matrix sbom k8s-base \
   ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards known-traps \
-  downgrades migration-heads token-lifetime cross-service standards service-standards service-standards-self-test list-routes gateway-routes \
+  downgrades owner-fills migration-heads token-lifetime cross-service standards service-standards service-standards-self-test list-routes gateway-routes \
   ci-steps ci-steps-self-test ci-local-self-test new-migration-self-test builder-watch-self-test usecase-outputs \
   staging-hold-tests quarantine quarantine-self-test ci-usecases-self-test pr-flow-self-test lane-self-test md-images md-images-self-test
 
@@ -124,6 +124,10 @@ check-paths.known-traps = (^|/)CLAUDE\.md$$|^scripts/check-known-traps\.mjs$$
 # A migration whose downgrade() does nothing, beyond scripts/downgrades-waiting.txt, which only shrinks.
 check-run.downgrades = $(PY) scripts/check_downgrades.py --all
 check-paths.downgrades = /migrations/versions/.*\.py$$|^scripts/(check_downgrades\.py|downgrades-waiting\.txt)$$
+# A migration that switches row_security off for a fill, which PostgreSQL refuses for a migrator that owns a FORCEd
+# table but is no superuser; beyond scripts/row-security-off-waiting.txt (revisions before the upgrade floor), which only shrinks.
+check-run.owner-fills = $(PY) scripts/check_owner_fills.py
+check-paths.owner-fills = /migrations/versions/.*\.py$$|^scripts/(check_owner_fills\.py|row-security-off-waiting\.txt)$$
 # A migration chain with two heads (two revisions after the same one), which Alembic refuses at the deploy.
 check-run.migration-heads = $(PY) scripts/check_migration_heads.py
 check-paths.migration-heads = /migrations/versions/.*\.py$$|^scripts/check_migration_heads\.py$$

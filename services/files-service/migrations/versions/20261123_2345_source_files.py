@@ -7,7 +7,8 @@ with the source's id and path beside it, when the source stopped listing it, and
 (null when the source never said, [] when it listed nobody). Each version keeps the source's tag and its own scan
 status, so a new version can wait on its scan while older ones still download.
 
-Backfill: every file is an upload keyed by its id; every version takes its file's scan status. Downgrade drops the
+Backfill: every file is an upload keyed by its id; every version takes its file's scan status, written over every
+tenant's rows as the tables' owner with both tables' row policies set aside (`backfill_ddl`). Downgrade drops the
 columns and the index.
 
 Revision ID: 20261123_2345_source_files
@@ -19,6 +20,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import TENANT_SCOPED, backfill_ddl, team_owned
+
 revision = "20261123_2345_source_files"
 down_revision = "files_0017"
 branch_labels = None
@@ -27,12 +30,28 @@ depends_on = None
 FILE_COLUMNS = ("source_scope", "source_key_hash", "source_id", "source_path", "removed_at", "access_list",
                 "access_read_at")  # fmt: skip
 VERSION_COLUMNS = ("source_tag", "scan_status", "scan_at")
+CHAIN = "files"
+
+
+def _marked(name: str) -> sa.Table:
+    """A files team table as far as its policy needs, as of this revision (files_0011)."""
+    return sa.Table(
+        name,
+        sa.MetaData(),
+        sa.Column("tenant_id", sa.String(64)),
+        sa.Column("team", sa.String(64)),
+        info={**TENANT_SCOPED, **team_owned("team")},
+    )
 
 
 def upgrade() -> None:
-    if op.get_context().dialect.name == "postgresql":
-        # The migrating role may own the tables; with FORCE on, row-level security would hide rows from the backfill.
-        op.execute("SET LOCAL row_security = off")
+    # The migrator owns both tables but is no superuser: with FORCE on, PostgreSQL refuses its fill outright when
+    # row_security is off, and SQL Server's policies hide every row from it. The version fill reads files too.
+    before, after = backfill_ddl(
+        [_marked("files"), _marked("file_versions")], op.get_context().dialect.name, chain=CHAIN
+    )
+    for statement in before:
+        op.execute(statement)
     with op.batch_alter_table("files") as b:
         b.add_column(sa.Column("source_scope", sa.String(16)))
         b.add_column(sa.Column("source_key_hash", sa.String(64)))
@@ -59,6 +78,8 @@ def upgrade() -> None:
     op.execute(sa.update(v).values(scan_status=sa.func.coalesce(of_file, "pending")))
     with op.batch_alter_table("file_versions") as b:
         b.alter_column("scan_status", existing_type=sa.String(16), nullable=False)
+    for statement in after:
+        op.execute(statement)
 
 
 def downgrade() -> None:
